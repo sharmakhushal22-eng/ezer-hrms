@@ -82,3 +82,51 @@ export async function loadAttendance(from: string, to: string): Promise<AttRecor
     .order('attendance_date', { ascending: false })
   return (data || []) as AttRecord[]
 }
+
+// ── Leave backdating window (migration 132) ─────────────────────────────────
+//
+// Lives here because HR sets it from Attendance & Shifts, alongside the other
+// things on that screen. It is READ by the ESS leave route and enforced there
+// too — this module is only the admin side of it.
+
+export interface BackdateConfig {
+  company_id: string
+  window_days: number
+  updated_at?: string | null
+}
+
+/** THROUGH A ROUTE, NOT THE BROWSER CLIENT.
+ *
+ *  Unlike every other helper in this file, these two do not touch Supabase
+ *  directly. leave_backdate_config carries a deny-all RLS policy for anon and
+ *  authenticated (migration 132), because it decides how far back anybody in a
+ *  company may rewrite their attendance — the browser has no business writing
+ *  it. The first version of this file did exactly that and every Save failed
+ *  with "new row violates row-level security policy".
+ *
+ *  app/api/attendance/settings holds the service-role key and gates on
+ *  requireModule('Attendance', ...). */
+async function bearer(): Promise<Record<string, string>> {
+  const { authToken } = await import('@/lib/rms/client')
+  const t = await authToken()
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
+export async function loadBackdateWindows(): Promise<BackdateConfig[]> {
+  const res = await fetch('/api/attendance/settings', { headers: await bearer() })
+  if (!res.ok) return []
+  const j = await res.json().catch(() => ({}))
+  return (j.windows || []) as BackdateConfig[]
+}
+
+/** Returns { error } like the Supabase helpers above, so the caller's existing
+ *  error handling keeps working unchanged. */
+export async function saveBackdateWindow(company_id: string, window_days: number) {
+  const res = await fetch('/api/attendance/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await bearer()) },
+    body: JSON.stringify({ company_id, window_days }),
+  })
+  const j = await res.json().catch(() => ({}))
+  return res.ok ? { data: j.window, error: null } : { data: null, error: { message: j?.error || `Save failed (${res.status}).` } }
+}

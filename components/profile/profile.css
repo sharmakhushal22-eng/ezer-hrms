@@ -275,6 +275,42 @@
 .ezp .btn.ghost { background: none; color: var(--ez-ink-soft); border-color: var(--ez-line); }
 .ezp .btn.wide { width: 100%; }
 
+/* The printable-card button.
+ *
+ * It was `btn ghost`: transparent fill, muted ink, hairline border — the
+ * lowest-emphasis style in the system, sitting directly under a saturated
+ * ID card. Next to that it read as disabled, which is why nobody could see it.
+ *
+ * Every colour here is a token, not a literal: --ez-brand-deep is documented
+ * as "pressed, gradient end" and --ez-shadow-brand exists precisely for a
+ * brand-coloured lift, so this is the system's own vocabulary rather than a
+ * new one. Both are redefined for dark, where the ramp inverts (brand is the
+ * darker of the two) and --ez-on-accent flips to dark ink — so the fill stays
+ * legible in either theme without a second rule. */
+.ezp .btn.getcard {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 12px 16px;
+  font-size: 13.5px; font-weight: 650; letter-spacing: -.005em;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--ez-brand), var(--ez-brand-deep));
+  border-color: var(--ez-brand-deep);
+  box-shadow: var(--ez-shadow-brand);
+  transition: transform 120ms ease, box-shadow 160ms ease, filter 120ms ease;
+}
+.ezp .btn.getcard:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--ez-shadow-floating);
+  filter: saturate(1.06);
+}
+.ezp .btn.getcard:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--ez-shadow-flat);
+}
+/* The glyph carries no colour of its own — currentColor keeps it correct in
+   both themes, where the ink on an accent fill flips from white to near-black. */
+.ezp .btn.getcard svg { flex: 0 0 auto; }
+.ezp .btn.getcard:disabled { box-shadow: none; }
+
 @media (max-width: 560px) {
   .ezp .idcard { margin: -46px 6px 0; padding: 14px; }
   .ezp .face { width: 60px; height: 60px; margin-top: -28px; font-size: 19px; }
@@ -428,7 +464,12 @@
    the crop maths reads that number, so the two must not drift. */
 .ezp .ez-stage {
   position: relative;
-  width: 184px; height: 184px;
+  /* MEASURED at runtime by PhotoUploader, so this declaration is the single
+     source of truth. It used to be duplicated as a BOX constant in the
+     component, with a comment asking the two not to drift; now they cannot.
+     260 rather than 184 because you are expected to work in here — pinch,
+     rotate, straighten — and 184 was a postage stamp. */
+  width: 260px; height: 260px;
   margin: 0 auto;
   display: grid; place-items: center;
   overflow: hidden;
@@ -450,11 +491,59 @@
   pointer-events: none;
   border-radius: 14px;
   box-shadow: inset 0 0 0 999px rgba(15, 23, 42, .34);
-  -webkit-mask: radial-gradient(circle at 50% 50%, #000 66px, rgba(0,0,0,.55) 67px);
-          mask: radial-gradient(circle at 50% 50%, #000 66px, rgba(0,0,0,.55) 67px);
+  /* 130px = half the 260px stage, i.e. the circle inscribed in exactly what
+     gets saved. It used to be 66px — a 132px circle inside a 184px crop — so
+     the ring under-promised by 39%: you framed a face to fill the circle and
+     got it back at 72% size with a ring of background around it. The ring is
+     supposed to be a promise about the output, so it has to match it. */
+  -webkit-mask: radial-gradient(circle at 50% 50%, #000 130px, rgba(0,0,0,.55) 131px);
+          mask: radial-gradient(circle at 50% 50%, #000 130px, rgba(0,0,0,.55) 131px);
 }
 
-.ezp .ez-slider { width: 100%; margin-top: 14px; accent-color: var(--ez-brand); }
+/* Rule of thirds, shown only while you are actually moving something — a
+   permanent grid is clutter, and a grid that appears under your finger is the
+   one phone-camera affordance everybody already knows. */
+.ezp .ez-grid {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  background-image:
+    linear-gradient(rgba(255,255,255,.45) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.45) 1px, transparent 1px);
+  background-size: 100% 33.3333%, 33.3333% 100%;
+}
+.ezp .ez-stage.ez-live .ez-grid { opacity: 1; }
+
+.ezp .ez-tools {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 12px;
+}
+.ezp .ez-tools .ez-grow { flex: 1 1 auto; }
+
+.ezp .ez-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 10px;
+  font-size: 12px; color: var(--ez-muted);
+}
+.ezp .ez-row > span { flex: 0 0 74px; }
+.ezp .ez-row > b {
+  flex: 0 0 46px; text-align: right;
+  font-variant-numeric: tabular-nums;      /* or the width jitters while dragging */
+  color: var(--ez-ink-soft); font-weight: 650;
+}
+
+.ezp .ez-slider { width: 100%; margin: 0; accent-color: var(--ez-brand); }
+
+@media (max-width: 560px) {
+  /* The stage is measured, so it may shrink freely — but the ring's mask is a
+     fixed radius, so both move together or the promise breaks again. */
+  .ezp .ez-stage { width: 220px; height: 220px; }
+  .ezp .ez-cring {
+    -webkit-mask: radial-gradient(circle at 50% 50%, #000 110px, rgba(0,0,0,.55) 111px);
+            mask: radial-gradient(circle at 50% 50%, #000 110px, rgba(0,0,0,.55) 111px);
+  }
+}
 
 .ezp .ez-prog {
   height: 5px; margin-top: 12px; overflow: hidden;
@@ -501,5 +590,8 @@
 @media (prefers-reduced-motion: reduce) {
   .ezp .face .facebtn,
   .ezp .ez-prog i,
+  .ezp .btn.getcard,
   .ezp .ez-btn { transition: none; }
+  /* The lift is motion too, not just the fade into it. */
+  .ezp .btn.getcard:hover:not(:disabled) { transform: none; }
 }

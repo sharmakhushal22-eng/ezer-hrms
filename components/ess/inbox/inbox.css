@@ -34,7 +34,10 @@
 .ib .sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
 .ib svg.i{width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0}
 /* ---------- shell ---------- */
-.ib{max-width:1480px; margin:14px auto 24px; padding:0 22px;
+/* Was max-width:1480px — a fourth distinct cap (the portal used 1100, HRIS
+   1160). Full width now, like every other section; the margin keeps the
+   vertical rhythm and the padding keeps the gutters. */
+.ib{margin:14px auto 24px; padding:0 22px;
   display:grid; grid-template-rows:auto 1fr; gap:14px;
   /* The pre-hydration fallback. useInboxOffset() measures the real value and
      overrides both, because UiScale's `zoom` on <html> scales dvh too. */

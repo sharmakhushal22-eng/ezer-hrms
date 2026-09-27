@@ -6,13 +6,15 @@ import {
   loadCompanies, loadEmployees, loadShifts, createShift, setShiftActive, deleteShift,
   loadActiveAssignments, assignShift, loadAttendance, loadLocations, loadDepartments, SHIFT_TYPES,
   type Shift, type ShiftAssignment, type AttRecord, type CompanyLite, type EmpLite,
+  loadBackdateWindows, saveBackdateWindow, type BackdateConfig,
   type LocationLite, type DeptLite,
 } from '@/lib/supabase-shift'
+import LeaveRulesTab from '@/components/attendance/LeaveRulesTab'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import { useGrant } from '@/lib/rms/client'
-import { canSeeScreen } from '@/lib/rms/resolve'
+import { canSeeScreen, scopedCompanies } from '@/lib/rms/resolve'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
@@ -205,9 +207,9 @@ function RecordsTab({ employees, records, from, to, onFrom, onTo }: {
 // ══════════════════════════════════════════════════════════════════
 export default function AttendancePage() {
   const { grant } = useGrant()
-  const [tab, setTab] = useState<'shifts' | 'assign' | 'records'>('shifts')
+  const [tab, setTab] = useState<'shifts' | 'assign' | 'records' | 'leaverules'>('shifts')
   useEffect(() => {
-    const vis = (['shifts','assign','records'] as const).filter(k => canSeeScreen(grant, 'attendance.'+k))
+    const vis = (['shifts','assign','records','leaverules'] as const).filter(k => canSeeScreen(grant, 'attendance.'+k))
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [loading, setLoading] = useState(true)
@@ -223,12 +225,20 @@ export default function AttendancePage() {
   const [fromDate, setFromDate] = useState(new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10))
   const [toDate, setToDate] = useState(new Date().toISOString().slice(0, 10))
   const [records, setRecords] = useState<AttRecord[]>([])
+  const [windows, setWindows] = useState<BackdateConfig[]>([])
+  const [savingWindow, setSavingWindow] = useState(false)
 
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [c, e, s, a, lo, de] = await Promise.all([loadCompanies(), loadEmployees(), loadShifts(), loadActiveAssignments(), loadLocations(), loadDepartments()])
-      setCompanies(c); setEmployees(e); setShifts(s); setAssignments(a); setLocations(lo); setDepartments(de)
+      // Backdate windows are loaded tolerantly: migration 132 may not have run,
+      // and a missing table must not take the whole Attendance screen down with
+      // it. An empty list renders as 0 everywhere, which is the safe default.
+      const [c, e, s, a, lo, de, bw] = await Promise.all([
+        loadCompanies(), loadEmployees(), loadShifts(), loadActiveAssignments(), loadLocations(), loadDepartments(),
+        loadBackdateWindows().catch(() => [] as BackdateConfig[]),
+      ])
+      setCompanies(c); setEmployees(e); setShifts(s); setAssignments(a); setLocations(lo); setDepartments(de); setWindows(bw)
     } catch (err: any) { notify('Load failed: ' + (err?.message || 'check migration 036'), 'error') }
     setLoading(false)
   }, [])
@@ -248,7 +258,22 @@ export default function AttendancePage() {
     notify(`Shift assigned to ${ids.length} employee(s).`); reload()
   }
 
-  const tabs: [typeof tab, string][] = [['shifts', 'Shifts'], ['assign', 'Assign'], ['records', 'Attendance Records']]
+  async function doSaveWindow(company_id: string, window_days: number) {
+    setSavingWindow(true)
+    const { error } = await saveBackdateWindow(company_id, window_days) as { error: { message: string } | null }
+    setSavingWindow(false)
+    // Report what the server said, and nothing else. This used to append
+    // "(has migration 132 been run?)" to EVERY failure, so a 403 about company
+    // scope read as a missing migration — it sent a real investigation down
+    // the wrong path. The route already says when 132 is the problem.
+    if (error) return notify('Could not save: ' + error.message, 'error')
+    notify(window_days > 0
+      ? `Employees can now claim absences up to ${window_days} day${window_days === 1 ? '' : 's'} back.`
+      : 'Backdating turned off — only today and future dates.')
+    reload()
+  }
+
+  const tabs: [typeof tab, string][] = [['shifts', 'Shifts'], ['assign', 'Assign'], ['records', 'Attendance Records'], ['leaverules', 'Leave Rules']]
 
   return (
     <div style={{ ...T.page, padding:'20px 24px' }}>
@@ -263,6 +288,11 @@ export default function AttendancePage() {
             {tab === 'shifts' && <ShiftsTab companies={companies} locations={locations} departments={departments} shifts={shifts} onCreate={doCreate} onToggle={doToggle} onDelete={doDelete} />}
             {tab === 'assign' && <AssignTab shifts={shifts} employees={employees} assignments={assignments} onAssign={doAssign} />}
             {tab === 'records' && <RecordsTab employees={employees} records={records} from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />}
+            {/* Only the companies this caller may actually write. scopedCompanies
+                is the same helper the Employee Master uses; without it the tab
+                listed all three for everyone and Save returned 403 on two of
+                them — a button that cannot work is worse than no button. */}
+            {tab === 'leaverules' && <LeaveRulesTab companies={scopedCompanies(grant, companies)} windows={windows} onSave={doSaveWindow} saving={savingWindow} />}
           </>
         )}
       </div>

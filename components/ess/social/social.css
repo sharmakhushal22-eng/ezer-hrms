@@ -99,11 +99,12 @@
 .soc button { font-family: inherit; cursor: pointer; }
 .soc :focus-visible { outline: 2px solid var(--kind-ink, var(--ez-brand)); outline-offset: 2px; }
 
-/* The portal already caps its content column at 1100px and pads it, so this
-   adds width of its own only in the preview harness. container-type is what
-   the breakpoints at the bottom measure against — the section renders beside a
-   200-260px rail, where a viewport query still reads "large". */
-.soc .page { container-type: inline-size; container-name: soc; max-width: 1100px; margin: 0 auto; }
+/* The portal no longer caps its content column — every ESS section is full
+   width and padded — so this carries no width of its own either. container-type
+   stays, because it is what the breakpoints at the bottom measure against: the
+   section renders beside a 200-260px rail, where a viewport query still reads
+   "large". Both are below 780px, so a wider container changes nothing they do. */
+.soc .page { container-type: inline-size; container-name: soc; }
 
 /* ── ENTRANCE ──────────────────────────────────────────────────────────────
    Short and without stagger. At .5s with 70/140/200ms delays this re-ran on
@@ -273,22 +274,22 @@
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding-top: 11px; border-top: 1px solid var(--ez-line);
 }
-.soc .rx {
+.soc .soc-rx {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
   border: 1px solid var(--ez-line); background: var(--ez-surface);
   font-size: 13px; font-weight: 600; color: var(--ez-muted);
   transition: transform .14s cubic-bezier(.34,1.56,.64,1), border-color .14s, background .14s, color .14s;
 }
-.soc .rx:hover { transform: translateY(-1px); border-color: var(--kind-ink); }
-.soc .rx:active { transform: scale(.95); }
-.soc .rx[data-mine="1"] {
+.soc .soc-rx:hover { transform: translateY(-1px); border-color: var(--kind-ink); }
+.soc .soc-rx:active { transform: scale(.95); }
+.soc .soc-rx[data-mine="1"] {
   background: var(--kind-tint); border-color: var(--kind-ink); color: var(--kind-ink);
   animation: socPop .3s cubic-bezier(.34,1.56,.64,1);
 }
 @keyframes socPop { 0% { transform: scale(1) } 45% { transform: scale(1.13) } 100% { transform: scale(1) } }
-.soc .rx .n { font-variant-numeric: tabular-nums; font-size: 12px; }
-.soc .rx.add { color: var(--ez-faint); padding: 0 9px; }
-.soc .rx.add svg { width: 16px; height: 16px; }
+.soc .soc-rx .n { font-variant-numeric: tabular-nums; font-size: 12px; }
+.soc .soc-rx.add { color: var(--ez-faint); padding: 0 9px; }
+.soc .soc-rx.add svg { width: 16px; height: 16px; }
 
 .soc .pick {
   position: absolute; z-index: 20; bottom: calc(100% + 9px); left: 0;
@@ -324,7 +325,7 @@
 .soc .cm .cmhead .nm { font-size: 12.5px; font-weight: 600; color: var(--ez-ink); }
 .soc .cm .tx { font-size: 13px; color: var(--ez-ink-soft); margin-top: 3px; line-height: 1.58; max-width: 66ch; overflow-wrap: anywhere; }
 .soc .cm .mini { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
-.soc .cm .mini .rx { height: 25px; padding: 0 8px; font-size: 12px; }
+.soc .cm .mini .soc-rx { height: 25px; padding: 0 8px; font-size: 12px; }
 
 .soc .write { display: flex; gap: 9px; align-items: flex-start; margin-top: 13px; }
 .soc .write textarea {
@@ -526,9 +527,9 @@
 @media (prefers-reduced-motion: reduce) {
   .soc .card, .soc .sheet, .soc .pick { animation: none !important; }
   .soc .gift .glyph { animation: none !important; }
-  .soc .card:hover, .soc .tab:hover, .soc .btn:hover, .soc .rx:hover,
+  .soc .card:hover, .soc .tab:hover, .soc .btn:hover, .soc .soc-rx:hover,
   .soc .gift:hover { transform: none !important; }
-  .soc .rx[data-mine="1"] { animation: none !important; }
+  .soc .soc-rx[data-mine="1"] { animation: none !important; }
   .soc * { transition-duration: .01ms !important; }
 }
 
@@ -540,7 +541,7 @@
    does not name. Anything added later that is not a 10px rectangle needs a
    line here. */
 .soc .tab          { border-radius: 999px !important; }
-.soc .rx           { border-radius: 999px !important; }
+.soc .soc-rx           { border-radius: 999px !important; }
 .soc .scope        { border-radius: 999px !important; }
 .soc .pick button  { border-radius: 10px  !important; }
 .soc .btn          { border-radius: 10px  !important; }

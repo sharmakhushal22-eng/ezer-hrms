@@ -13,18 +13,75 @@ import { supabase } from '@/lib/supabase'
 import { authToken } from '@/lib/rms/client'
 import { WAGE_CATS } from '@/lib/recruitment/min-wages'
 import { jobCodePrefix, newMrfNumber } from '@/lib/recruitment/job-code'
+import { C as TK, E } from '@/lib/ui'
 
-// ── ESS-portal palette (matches components/ess/RoleTabs.tsx) ─────────────────
+// ── Palette ──────────────────────────────────────────────────────────────────
+//
+// THESE WERE HEX LITERALS, AND THAT WAS THE BUG. Opening "New MRF" while the
+// product was in dark mode gave a white form with near-black text on it: the
+// page around it repainted and this did not, because a literal cannot respond
+// to anything.
+//
+// Every value now resolves through lib/ui/theme.css, so one attribute on <html>
+// repaints this form with everything else. The names are kept — `purple`,
+// `card`, `locked` — so the ~200 call sites below did not have to change, and
+// the diff stays reviewable.
+//
+// NOTE: these are `var(...)` strings, not hex. Do not concatenate an alpha
+// suffix onto one (`C.purple + '20'` produces nothing) — use a tint token.
 const C = {
-  ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
-  purple: '#7C3AED', purpleD: '#6D28D9', soft: 'rgba(124,58,237,0.08)', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', red: '#DC2626', redBg: '#FEF2F2', bg: '#F5F3FF', locked: '#F3F1FB',
+  ink: TK.ink, muted: TK.muted, faint: TK.faint, border: TK.line, card: TK.surface,
+  purple: TK.brand, purpleD: TK.brandDeep, soft: TK.brandTint, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, red: TK.critical, redBg: TK.criticalTint, bg: TK.canvas, locked: TK.sunken,
+}
+// ── The redesign vocabulary, ported by hand ──────────────────────────────────
+//
+// These numbers are the Recruitment redesign's (.rx-input, .rx-label, .rx-btn,
+// .rx-mod), but they CANNOT be taken by using those classes. The stylesheet
+// that defines them, lib/ui/recruitment.redesign.css, is imported in exactly
+// one place — app/dashboard/recruitment/layout.tsx — and this form has two
+// live call sites, only one of which is under that layout. The other is
+// RoleTabs.tsx:270, inside HrisShell, whose design system is `.hx`. A class
+// this form does not own would style it on one screen and leave it naked on
+// the other, so the values are inlined instead.
+//
+// One rx number is deliberately NOT reproduced: the 11px button radius.
+// UIKeyframes ships `button { border-radius:10px !important }` globally, and
+// nothing outside `.rx` can outrank it — the radius below is honest about
+// that being a request the browser will round to 10.
+const inputBase: React.CSSProperties = {
+  width: '100%', height: 42, padding: '0 13px',
+  // surface, not sunken: the redesign lifts fields ONTO the card rather than
+  // sinking wells into it, and pairs that with the stronger hairline.
+  // (The old note here was right for its time: sunken replaced '#FAFAF8', and
+  // brandEdge replaced '#DDD6FE', a light-mode lilac. Both were tokens; this
+  // is a design change, not a dark-mode fix.)
+  background: TK.surface, border: `1px solid ${TK.lineStrong}`, borderRadius: 11,
+  color: TK.ink, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
 }
 const st = {
-  label: { fontSize: 11, fontWeight: 600, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  input: { width: '100%', padding: '9px 11px', background: '#FAFAF8', border: '1px solid #DDD6FE', borderRadius: 7, color: C.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
-  btn: { padding: '9px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: C.purple, color: '#fff', whiteSpace: 'nowrap' } as React.CSSProperties,
-  btnO: { padding: '9px 16px', borderRadius: 7, border: '1px solid #DDD6FE', cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: C.purpleD, whiteSpace: 'nowrap' } as React.CSSProperties,
+  // 12.5px sentence-case ink-soft. The uppercase 11px brandDeep label was the
+  // old product's signature and is what made this form read as a different
+  // application from the one it opens inside.
+  label: { fontSize: 12.5, fontWeight: 600, color: TK.inkSoft, display: 'block', marginBottom: 6 } as React.CSSProperties,
+  input: inputBase,
+  // A fixed height cannot hold a textarea; these get their padding back.
+  area: { ...inputBase, height: 'auto', padding: '10px 13px', resize: 'vertical' } as React.CSSProperties,
+  // onAccent, not '#fff'. White on a filled button is correct in light and
+  // fails in dark, where every accent lightens and white falls to ~2.5:1.
+  btn: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 40, padding: '0 16px', borderRadius: 11, border: `1px solid ${TK.brandDeep}`,
+    cursor: 'pointer', fontSize: 13.5, fontWeight: 600, fontFamily: 'inherit',
+    background: `linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})`,
+    color: TK.onAccent, boxShadow: E.brand, whiteSpace: 'nowrap',
+  } as React.CSSProperties,
+  btnO: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 40, padding: '0 16px', borderRadius: 11, border: `1px solid ${TK.lineStrong}`,
+    cursor: 'pointer', fontSize: 13.5, fontWeight: 600, fontFamily: 'inherit',
+    background: TK.surface, color: TK.inkSoft, whiteSpace: 'nowrap',
+  } as React.CSSProperties,
 }
 const g2: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }
 
@@ -76,8 +133,13 @@ async function api(path: string, employeeId: string, init?: RequestInit) {
 // ── Sub-components (OUTSIDE the parent — no focus loss) ───────────────────────
 function SectionLine({ n, title }: { n: string; title: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 0 8px' }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.08em', whiteSpace: 'nowrap' }}>{n} · {title}</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '22px 0 12px' }}>
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 22, height: 22, borderRadius: 7, flexShrink: 0,
+        background: TK.brandTint, color: TK.brand, fontSize: 11, fontWeight: 700,
+      }}>{n}</span>
+      <span style={{ fontSize: 13.5, fontWeight: 700, color: TK.ink, letterSpacing: '-.01em', whiteSpace: 'nowrap' }}>{title}</span>
       <span style={{ flex: 1, height: 1, background: C.border }} />
     </div>
   )
@@ -114,7 +176,13 @@ function Field({ label, required, hint, children }: { label: string; required?: 
 function Locked({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <Field label={label} hint={hint || 'auto · locked'}>
-      <div style={{ ...st.input, background: C.locked, color: C.ink, display: 'flex', alignItems: 'center', minHeight: 38 }}>{value || '—'}</div>
+      {/* height:'auto' + minHeight rather than inputBase's fixed 42. MEASURED,
+          not assumed: the longest value on screen ("Sharma Retail Solutions
+          Pvt Ltd") wraps to two lines and still fits inside 42px, so this is
+          defence against a three-line value, not a fix for a visible clip.
+          Padding is deliberately NOT overridden — adding vertical padding here
+          would push this box taller than the single-line fields beside it. */}
+      <div style={{ ...st.input, background: C.locked, color: C.ink, display: 'flex', alignItems: 'center', height: 'auto', minHeight: 42 }}>{value || '—'}</div>
     </Field>
   )
 }
@@ -137,8 +205,10 @@ function ChannelPicker({ value, onChange, opts }: { value: string[]; onChange: (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
       {opts.map(o => (
         <button key={o.code} type="button" onClick={() => toggle(o.label)}
-          style={{ padding: '5px 11px', borderRadius: 99, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
-            border: `1px solid ${on(o.label) ? C.purple : '#DDD6FE'}`, background: on(o.label) ? C.purple : '#fff', color: on(o.label) ? '#fff' : C.purpleD }}>
+          style={{ height: 30, padding: '0 12px', borderRadius: 9, fontSize: 12.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+            border: `1px solid ${on(o.label) ? TK.brandDeep : TK.line}`,
+            background: on(o.label) ? `linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})` : TK.sunken,
+            color: on(o.label) ? TK.onAccent : TK.inkSoft }}>
           {o.label}
         </button>
       ))}
@@ -170,7 +240,7 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill, placeholder
       {selected.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
           {selected.map(s => (
-            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 99, background: C.soft, color: C.purpleD, fontWeight: 500, display: 'inline-flex', alignItems: 'center' }}>
+            <span key={s} style={{ fontSize: 11.5, height: 24, padding: '0 9px', borderRadius: 8, background: C.soft, color: C.purple, border: `1px solid ${TK.brandEdge}`, fontWeight: 500, display: 'inline-flex', alignItems: 'center' }}>
               {s}<span onClick={() => remove(s)} style={{ cursor: 'pointer', marginLeft: 5, fontWeight: 700 }}>×</span>
             </span>
           ))}
@@ -181,12 +251,18 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill, placeholder
           placeholder={placeholder || "Click to pick a skill, or type to search / add custom"}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (matches[0]) add(matches[0]); else if (q.trim() && !exact) addCustom() } }} />
         {open && (matches.length > 0 || q.trim()) && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #DDD6FE', borderRadius: 7, marginTop: 2, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 6px 18px rgba(0,0,0,.14)' }}>
-            {matches.map(s => <div key={s} onClick={() => add(s)} style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: C.ink }}>{s}</div>)}
+          // zIndex 50 is LEFT ALONE deliberately. The Z scale jumps sticky:30 →
+          // nav:60 with nothing between, and this dropdown belongs exactly
+          // there: over a page's sticky header, under the global nav. Z.sticky
+          // would tie it with the header it must cover and Z.nav would float a
+          // form's dropdown above the app bar, so tokenising here would trade
+          // correct stacking for a tidier baseline.
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: C.card, border: `1px solid ${TK.line}`, borderRadius: 11, marginTop: 6, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: E.floating }}>
+            {matches.map(s => <div key={s} onClick={() => add(s)} style={{ padding: '9px 13px', cursor: 'pointer', fontSize: 13.5, color: C.ink }}>{s}</div>)}
             {q.trim() && !exact && (
-              <div onClick={addCustom} style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: C.purple, fontWeight: 600, borderTop: matches.length ? '1px solid #F3F0FF' : 'none' }}>+ Add custom: “{q.trim()}”</div>
+              <div onClick={addCustom} style={{ padding: '9px 13px', cursor: 'pointer', fontSize: 13.5, color: C.purple, fontWeight: 600, borderTop: matches.length ? `1px solid ${C.border}` : 'none' }}>+ Add custom: “{q.trim()}”</div>
             )}
-            {matches.length === 0 && !q.trim() && <div style={{ padding: '8px 11px', fontSize: 12, color: C.faint }}>Type to search or add a skill…</div>}
+            {matches.length === 0 && !q.trim() && <div style={{ padding: '9px 13px', fontSize: 12.5, color: C.faint }}>Type to search or add a skill…</div>}
           </div>
         )}
       </div>
@@ -412,8 +488,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
 
   // ── Success screen ─────────────────────────────────────────────────────────
   if (done) return (
-    <div style={{ border: `2px solid ${C.green}`, borderRadius: 12, padding: '32px 24px', marginBottom: 12, background: C.greenBg, textAlign: 'center' }}>
-      <div style={{ width: 64, height: 64, borderRadius: '50%', background: C.green, color: '#fff', fontSize: 36, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
+    <div style={{ border: `1px solid ${TK.positiveEdge}`, borderRadius: 20, padding: '32px 24px', marginBottom: 12, background: C.greenBg, boxShadow: E.raised, textAlign: 'center' }}>
+      <div style={{ width: 64, height: 64, borderRadius: '50%', background: C.green, color: TK.onAccent, fontSize: 36, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
       <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>You have successfully raised the MRF</div>
       {done.mrf_number && <div style={{ display: 'inline-block', marginTop: 8, fontSize: 13, fontWeight: 700, color: C.purpleD, background: C.soft, borderRadius: 99, padding: '4px 14px', letterSpacing: '.03em' }}>Requisition ID: {done.mrf_number}</div>}
       <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
@@ -429,7 +505,19 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   )
 
   return (
-    <div style={{ border: `2px solid ${readOnly ? C.green : C.purple}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12, background: '#fff' }}>
+    <div className="ez-mrf" style={{ border: `1px solid ${TK.line}`, borderRadius: 20, padding: '20px 22px', marginBottom: 12, background: TK.surface, boxShadow: E.raised }}>
+      {/* :focus and ::placeholder cannot be expressed inline, and this form
+          cannot reach a stylesheet — recruitment.redesign.css is imported by
+          one layout and the ESS side imports no CSS at all. One scoped block,
+          the same trick UIKeyframes uses, gives every field the redesign's
+          focus ring on BOTH screens. */}
+      {/* !important on border-color only, and it is load-bearing: the border is
+          set INLINE (this repo styles inline by rule), and an inline
+          declaration outranks any stylesheet rule without it. Measured — the
+          ring landed and the border stayed grey until this was added. The
+          box-shadow needs no such help; nothing sets it inline. */}
+      <style>{`.ez-mrf input:focus,.ez-mrf select:focus,.ez-mrf textarea:focus{border-color:${TK.brand}!important;box-shadow:0 0 0 4px ${TK.brandTint}}
+.ez-mrf input::placeholder,.ez-mrf textarea::placeholder{color:${TK.faint}}`}</style>
       {readOnly && (
         <div style={{ fontSize: 12.5, color: C.ink, background: C.greenBg, border: `1px solid ${C.green}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10, fontWeight: 600 }}>
           Reviewing this requisition — read only. Use the buttons at the bottom to Approve, Send back, or Reject.
@@ -437,24 +525,27 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       )}
       <div style={{ pointerEvents: readOnly ? 'none' : undefined }}>
       {replaceRef && (
-        <div style={{ fontSize: 12, color: C.amber, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '8px 11px', marginBottom: 10, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 12.5, color: TK.warning, background: TK.warningTint, border: `1px solid ${TK.warningEdge}`, borderRadius: 11, padding: '10px 13px', marginBottom: 12, lineHeight: 1.55 }}>
           <b>Editing / resubmitting.</b> When you submit, the previous requisition is scrapped and this corrected one goes for approval afresh.
         </div>
       )}
       {/* Quick Hire / Full MRF toggle */}
-      <div style={{ display: 'flex', gap: 0, border: `1px solid ${C.purple}`, borderRadius: 8, overflow: 'hidden', marginBottom: 4 }}>
+      <div style={{ display: 'flex', gap: 4, border: `1px solid ${TK.line}`, background: TK.sunken, borderRadius: 13, padding: 4, marginBottom: 4 }}>
         {(['Quick Hire', 'Full MRF'] as const).map(t => (
           <button key={t} type="button" onClick={() => F('mrf_type', t)}
-            style={{ flex: 1, padding: '9px 8px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-              background: form.mrf_type === t ? C.purple : '#F5F3FF', color: form.mrf_type === t ? '#fff' : C.purpleD }}>
+            style={{ flex: 1, height: 36, border: '1px solid transparent', borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+              background: form.mrf_type === t ? `linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})` : 'transparent',
+              borderColor: form.mrf_type === t ? TK.brandDeep : 'transparent',
+              boxShadow: form.mrf_type === t ? E.brand : 'none',
+              color: form.mrf_type === t ? TK.onAccent : TK.muted }}>
             {t} ({t === 'Quick Hire' ? 'CTC ≤ ₹6L' : 'CTC > ₹6L'})
           </button>
         ))}
       </div>
       {laneMismatch && (
-        <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '7px 10px', margin: '8px 0', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12.5, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalEdge}`, borderRadius: 11, padding: '9px 12px', margin: '10px 0', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>This budget suits <b>{laneShouldBe}</b>.</span>
-          <button type="button" style={{ ...st.btnO, padding: '4px 10px', fontSize: 12 }} onClick={() => F('mrf_type', laneShouldBe)}>Switch to {laneShouldBe}</button>
+          <button type="button" style={{ ...st.btnO, height: 30, padding: '0 12px', fontSize: 12.5 }} onClick={() => F('mrf_type', laneShouldBe)}>Switch to {laneShouldBe}</button>
         </div>
       )}
 
@@ -494,7 +585,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
 
       {/* 4 · Budget & Cost */}
       <SectionLine n="4" title="Budget & Cost" />
-      <div style={{ fontSize: 12, color: C.purpleD, background: C.soft, borderRadius: 7, padding: '7px 10px', margin: '2px 0 8px' }}>
+      <div style={{ fontSize: 12.5, color: TK.inkSoft, background: C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 11, padding: '9px 12px', margin: '2px 0 12px' }}>
         {form.employment_type} → paid as <b>{comp.label.toLowerCase()}</b>, quoted <b>{perLabel(comp.period)}</b>
       </div>
       <div style={g2}>
@@ -531,7 +622,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Reason for Exit"><MasterSel value={form.exit_reason} onChange={v => F('exit_reason', v)} opts={isReplacement ? (masters.separation_reason || []) : []} placeholder={isReplacement ? 'Select Reason' : '— N/A —'} /></Field>
       </div>
       <div style={{ marginTop: 10 }}>
-        <Field label="Business Justification"><textarea style={{ ...st.input, minHeight: 80, resize: 'vertical' }} value={form.business_justification} onChange={e => F('business_justification', e.target.value)} placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" /></Field>
+        <Field label="Business Justification"><textarea style={{ ...st.area, minHeight: 80 }} value={form.business_justification} onChange={e => F('business_justification', e.target.value)} placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" /></Field>
       </div>
 
       {/* 6 · Timeline */}
@@ -554,14 +645,14 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
           <Field label="Mandatory Skills"><SkillsMultiSelect value={form.skills_required} onChange={v => F('skills_required', v)} allSkills={skills} onAddSkill={addSkill} /></Field>
           <Field label="Good-to-have Skills"><SkillsMultiSelect value={form.good_to_have_skills} onChange={v => F('good_to_have_skills', v)} allSkills={skills} onAddSkill={addSkill} placeholder="Search good-to-have skills, or add custom" /></Field>
-          <Field label="Job Description"><textarea style={{ ...st.input, minHeight: 120, resize: 'vertical' }} value={form.job_description} onChange={e => F('job_description', e.target.value)} placeholder="Role summary, responsibilities, must-haves…" /></Field>
+          <Field label="Job Description"><textarea style={{ ...st.area, minHeight: 120 }} value={form.job_description} onChange={e => F('job_description', e.target.value)} placeholder="Role summary, responsibilities, must-haves…" /></Field>
           <Field label="Questions to ask the candidate" hint="optional · every interviewer sees these on the feedback form"><QuestionsList value={form.ctq_questions || []} onChange={v => F('ctq_questions', v)} /></Field>
         </div>
       </>}
 
       {/* 8 · Approval Workflow (fixed ESS routing) */}
       <SectionLine n="8" title="Approval Workflow" />
-      <div style={{ fontSize: 12.5, color: C.muted, background: C.soft, borderRadius: 7, padding: '10px 12px', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 12.5, color: C.muted, background: C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 11, padding: '12px 14px', lineHeight: 1.6 }}>
         On submit this routes through your reporting chain, company-scoped:
         <div style={{ marginTop: 4, color: C.ink, fontWeight: 500 }}>You ({auto?.code}) → RM2 {auto?.rm2 !== '—' ? `· ${auto.rm2}` : '(if set)'} → HR Head</div>
       </div>
@@ -608,7 +699,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 22, paddingTop: 18, borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
           <button type="button" style={st.btnO} disabled={saving} onClick={() => save('DRAFT')}>Save Draft</button>
           <button type="button" style={st.btn} disabled={saving} onClick={() => save('SUBMITTED')}>{saving ? 'Submitting…' : 'Submit for Approval'}</button>
           <button type="button" style={{ ...st.btnO, marginLeft: 'auto' }} disabled={saving} onClick={onCancel}>Cancel</button>

@@ -61,6 +61,19 @@
   color: var(--fz-ink);
   font-variant-numeric: tabular-nums;
   -webkit-tap-highlight-color: transparent;
+
+  /* The section's own page padding.
+     Fun Zone and HRIS are the two tabs the portal renders without a wrapper
+     (EmployeePortal.tsx: `<div>{renderView()}</div>`), because both draw their
+     own header band and would otherwise get a second one. HRIS brings its own
+     padding — .hx-head-in / .hx-main at 22px — but Fun Zone brought none, so it
+     alone sat flush against the window while every other section had a gutter.
+     Both of its top surfaces are rounded cards (.fz-hero and .fz-stage, 24px
+     radius, 1.5px border), and their corners were being clipped by the viewport
+     edge, which is what actually read as "inconsistent".
+     18px 22px is the portal's standard measure — EmployeePortal's wrapper uses
+     it, and HRIS agrees at 22px. */
+  padding: 18px 22px;
 }
 
 /* ── category accents ─────────────────────────────────────────────────────
@@ -772,6 +785,11 @@
 
 /* ── responsive ───────────────────────────────────────────────────────── */
 @media (max-width: 560px) {
+  /* Matches the portal's own narrow measure (14px 12px). Deliberately hung off
+     Fun Zone's existing 560px breakpoint rather than the portal's `isMobile`
+     JS flag, so the section has ONE definition of "narrow" instead of two that
+     can disagree at the edges. */
+  .fz { padding: 14px 12px; }
   .fz .fz-hero { padding: 22px 18px 20px; border-radius: 20px; }
   .fz .fz-hero-meta { text-align: left; }
   .fz .fz-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

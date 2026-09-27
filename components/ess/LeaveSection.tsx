@@ -39,7 +39,21 @@ interface LeaveType {
 interface Payload {
   year: string; fyLabel: string
   balances: any[]; types: LeaveType[]; applications: any[]; holidays: any[]
-  diagnostics: { noBalances: boolean; noHolidays: boolean; noApprover: boolean }
+  // The employee's own configured weekly offs, resolved server-side from
+  // weekly_off_config. `weekly_offs` is exact for a rolling year from today;
+  // `weekly_off_weekdays` is the weekday fallback beyond that window.
+  weekly_offs: string[]; weekly_off_weekdays: number[]
+  /**
+   * How many days back this employee may apply, from leave_backdate_config via
+   * the server. 0 means no backdating — which is the old behaviour, now a
+   * choice rather than a hardcoded assumption.
+   *
+   * Optional so an older server that does not send it still renders: the client
+   * falls back to 0, which refuses past dates exactly as it always did. A
+   * missing field must not become an unbounded window.
+   */
+  backdate_days?: number
+  diagnostics: { noBalances: boolean; noHolidays: boolean; noApprover: boolean; noWeeklyOffs: boolean }
 }
 
 const BLANK = { leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' }
@@ -78,19 +92,24 @@ const rangeLabel = (f: string, t: string) => {
  *
  * NOTE: this is the CLIENT half of the rule. app/api/ess/leave/route.ts does
  * not enforce it (it checks only that the date is not before joining), so a
- * crafted POST can still file a backdated request. See REDESIGN.md §4.5 for
- * the server guard that closes it.
+ * crafted POST could still file a backdated request. That guard now exists —
+ * route.ts §4b refuses anything older than the same window this uses.
  *
- * If a type ever needs to be backdatable — sick leave applied the morning
- * after, typically — make this per-type rather than removing it.
+ * BACKDATING IS NOW CONFIGURED, NOT FORBIDDEN. The old version returned today
+ * and nothing else, which made the commonest real case impossible: somebody was
+ * absent on Tuesday and needs to claim it as sick leave on Wednesday. HR sets
+ * the window per company from Attendance & Shifts (migration 132).
+ *
+ * Counted back from today INCLUSIVE — a window of 30 means today and the
+ * previous 29 days. 0, the default and the answer before the migration runs,
+ * reproduces the old behaviour exactly, so nothing changes until HR chooses it.
  */
-const earliestApplyDate = () => iso(new Date())
-
-// Display-only. The server is authoritative: it calls resolve_weekly_offs()
-// and resolve_holidays() and returns the real figure on the POST response.
-// The live config is a single global "weekday 0 / EVERY" row, which is why
-// Sunday is the assumption here — change this constant if that ever changes.
-const WEEKLY_OFF_DOW = [0]
+const earliestApplyDate = (backdateDays?: number) => {
+  const d = new Date()
+  const n = Math.max(0, Math.floor(Number(backdateDays) || 0))
+  if (n > 1) d.setDate(d.getDate() - (n - 1))
+  return iso(d)
+}
 
 /**
  * Counts a figure up once, the first time it lands. Never on a re-render, and
@@ -164,7 +183,12 @@ export default function LeaveSection({ emp, notify }: {
   const sel = useMemo(() => types.find(t => t.id === form.leave_type_id) || null, [types, form.leave_type_id])
 
   const today = iso(new Date())
-  const floor = earliestApplyDate()
+  // Every past-date gate in this file derives from `floor` — the day-tap
+  // handler, both typed-input clamps, arrow-key navigation, `min=` on the two
+  // date fields, the disabled previous-month button and each day cell. Pointing
+  // it at the configured window opens all seven at once; there is deliberately
+  // no second place that decides what "past" means.
+  const floor = earliestApplyDate(data?.backdate_days)
   const floorDate = fromIso(floor)
   // Nothing to go back to: the month holding the first selectable day is as
   // far back as the calendar goes.
@@ -179,6 +203,36 @@ export default function LeaveSection({ emp, notify }: {
     for (const h of holidays) if (!m.has(h.holiday_date)) m.set(h.holiday_date, h)
     return m
   }, [holidays])
+
+  // ── Weekly offs, from the configuration rather than from an assumption ───
+  //
+  // This file used to carry `const WEEKLY_OFF_DOW = [0]`. It was right only
+  // because the one live rule is a single global "weekday 0 / EVERY" row — the
+  // moment a branch is configured for Friday, or for alternate Saturdays, the
+  // calendar would have shaded days the server does not agree are offs, and the
+  // estimate would have disagreed with the billed figure.
+  //
+  // The route now resolves the employee's real offs and sends them.
+  const offSet = useMemo(() => new Set<string>(data?.weekly_offs || []), [data])
+  const offDows = useMemo(() => data?.weekly_off_weekdays || [], [data])
+  const offWindowEnd = useMemo(() => iso(addDays(new Date(), 366)), [])
+
+  /**
+   * Inside the resolver's one-year window the dates are exact — which matters
+   * for an NTH rule, where "2nd Saturday only" means the other Saturdays are
+   * ordinary working days. Beyond it the weekday is the best available answer,
+   * and the server still has the final say on submit.
+   */
+  const isWeeklyOff = useCallback((key: string) =>
+    (key >= today && key <= offWindowEnd)
+      ? offSet.has(key)
+      : offDows.includes(fromIso(key).getDay()),
+  [offSet, offDows, today, offWindowEnd])
+
+  /** A day that cannot be claimed as leave: a weekly off, or any holiday.
+   *  Optional holidays are included — see the note in route.ts. */
+  const isNonWorking = useCallback((key: string) =>
+    isWeeklyOff(key) || holByDate.has(key), [isWeeklyOff, holByDate])
 
   const totalAvailable = useMemo(
     () => (data?.balances || []).reduce((s: number, b: any) => s + avail(b), 0),
@@ -208,12 +262,12 @@ export default function LeaveSection({ emp, notify }: {
       span++
       const key = iso(d)
       const h = holByDate.get(key)
-      if (WEEKLY_OFF_DOW.includes(d.getDay())) offs++
-      else if (h && !h.is_optional) { offs++; hols.push(h) }
+      if (isWeeklyOff(key)) offs++
+      else if (h) { offs++; hols.push(h) }   // optional holidays count too
     }
     const working = form.half_day ? 0.5 : Math.max(0, span - offs)
     return { span, offs, hols, working }
-  }, [form.from_date, form.to_date, form.half_day, holByDate])
+  }, [form.from_date, form.to_date, form.half_day, holByDate, isWeeklyOff])
 
   const balanceAfter = useMemo(() => {
     if (!sel || sel.available == null || !estimate) return null
@@ -248,7 +302,18 @@ export default function LeaveSection({ emp, notify }: {
    * very first tap, so the calendar always reacts and Submit is valid at once.
    */
   const pickDay = (key: string) => {
-    if (key < floor) return                       // past dates are not selectable
+    if (key < floor) return                       // outside the backdating window
+    // Leave may SPAN a holiday or a weekly off, but may not start or end on
+    // one — you cannot claim as leave a day the company has already given you.
+    // route.ts §7 enforces this; refusing the tap here means the employee finds
+    // out while choosing rather than after submitting.
+    if (isNonWorking(key)) {
+      const h = holByDate.get(key)
+      const when = fromIso(key).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
+      setTypeNote(`${when} is ${h ? h.description : 'a weekly off'} — leave cannot start or end on it.`)
+      return
+    }
+    setTypeNote('')
     setHover('')
     setForm(f => {
       if (f.from_date === key && f.to_date === key) return { ...f, from_date: '', to_date: '' }
@@ -544,10 +609,10 @@ export default function LeaveSection({ emp, notify }: {
                       const dow = fromIso(key).getDay()
                       // The same test the estimate uses, so the band and the
                       // day count can never tell different stories.
-                      const noCount = WEEKLY_OFF_DOW.includes(dow) || (!!h && !h.is_optional)
+                      const noCount = isNonWorking(key)
                       const cls = [
                         'ezlv-day',
-                        WEEKLY_OFF_DOW.includes(dow) ? 'is-off' : '',
+                        isWeeklyOff(key) ? 'is-off' : '',
                         past ? 'is-past' : '',
                         key === today ? 'is-today' : '',
                         h ? 'has-hol' : '',

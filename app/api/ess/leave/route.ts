@@ -22,7 +22,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden, notify, audit, fmtDate } from '@/lib/ess/session'
-import { leaveYearOf, leaveFyLabel } from '@/lib/ess/leave-year'
+import { leaveYearOf, leaveFyLabel, leaveFyStartYear, leavePolicyFy } from '@/lib/ess/leave-year'
+import { balanceFor, normaliseMode, type LeaveApplicationLike } from '@/lib/leave/accrual'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,34 +59,57 @@ function eachDay(from: Date, to: Date): string[] {
 const availOf = (b: any) =>
   (Number(b?.opening || 0) + Number(b?.accrued || 0)) - Number(b?.used || 0) - Number(b?.encashed || 0)
 
+/** A date that cannot be claimed as leave, and why. */
+type NonWorking = { date: string; kind: 'WEEKLY_OFF' | 'HOLIDAY'; label: string }
+
 /**
- * Working days in a range: calendar days minus weekly-offs minus holidays.
+ * Every non-working date in a range, from the configured calendar.
  *
- * The old client counted calendar days, so a Friday-to-Monday request was
- * billed as 4. resolve_weekly_offs() has existed since migration 026 and was
- * never called from Leave. Verified live: it returns the four Sundays for
- * September 2026 from a single global `weekday 0 / EVERY` config row.
+ * This is the join between ESS Leave and Holiday & Weekly-off Configuration.
+ * Both resolvers have existed since migration 026:
+ *   resolve_weekly_offs() reads weekly_off_config, scoped company/branch/
+ *     employment_type, and understands EVERY and NTH modes.
+ *   resolve_holidays()    reads the employee's mapped PUBLISHED calendar,
+ *     scoped by holiday_applicability (company × branch).
+ * Nothing here is hardcoded — no weekday constant, no holiday list.
  *
- * Falls back to calendar days if either resolver errors — under-counting a
- * request is worse than over-counting it, but silently failing the whole
- * application because a holiday table is misconfigured is worse than both.
+ * OPTIONAL HOLIDAYS COUNT AS HOLIDAYS.
+ * This reverses the previous rule. A day the company has declared a holiday is
+ * not a day an employee can spend leave on, and the config UI's "employee
+ * picks" promise was never implemented — there is no pick table, route or
+ * screen anywhere, so an optional holiday was simply a working day wearing a
+ * holiday's label. Treating it as a real holiday is what the configuration
+ * actually says.
+ *
+ * ERRORS ARE NOT SWALLOWED.
+ * supabase-js .rpc() resolves with { data: null, error } rather than throwing,
+ * so the previous `try/catch` never fired for a Postgres error — it destructured
+ * `data` only, got null, built an empty off-set and counted EVERY calendar day
+ * as working. A Friday-to-Monday request was then billed as 4 days instead of 2
+ * and the employee was silently over-charged. A resolver that cannot be read is
+ * now a refusal, not a guess.
  */
-async function workingDays(employeeId: string, from: Date, to: Date): Promise<{ days: number; offs: string[] }> {
-  const all = eachDay(from, to)
-  try {
-    const [{ data: offRows }, { data: holRows }] = await Promise.all([
-      sb.rpc('resolve_weekly_offs', { p_employee_id: employeeId, p_from: iso(from), p_to: iso(to) }),
-      sb.rpc('resolve_holidays', { p_employee_id: employeeId }),
-    ])
-    const off = new Set<string>((offRows || []).map((r: any) => String(r.off_date)))
-    // Optional holidays are the employee's to take or skip, so they still cost
-    // a leave day. Only mandatory ones are excluded.
-    for (const h of (holRows || []) as any[]) if (!h.is_optional) off.add(String(h.holiday_date))
-    const working = all.filter(d => !off.has(d))
-    return { days: working.length, offs: all.filter(d => off.has(d)) }
-  } catch {
-    return { days: all.length, offs: [] }
+async function nonWorkingDays(
+  employeeId: string, from: Date, to: Date,
+): Promise<{ map: Map<string, NonWorking>; failed: boolean }> {
+  const [offRes, holRes] = await Promise.all([
+    sb.rpc('resolve_weekly_offs', { p_employee_id: employeeId, p_from: iso(from), p_to: iso(to) }),
+    sb.rpc('resolve_holidays', { p_employee_id: employeeId }),
+  ])
+  const map = new Map<string, NonWorking>()
+  if (offRes.error || holRes.error) return { map, failed: true }
+
+  for (const r of (offRes.data || []) as any[]) {
+    const d = String(r.off_date)
+    map.set(d, { date: d, kind: 'WEEKLY_OFF', label: 'a weekly off' })
   }
+  // A holiday overwrites a weekly off for the same date: if the company has
+  // named the day, the name is the more useful thing to tell the employee.
+  for (const h of (holRes.data || []) as any[]) {
+    const d = String(h.holiday_date)
+    map.set(d, { date: d, kind: 'HOLIDAY', label: String(h.description || 'a holiday') })
+  }
+  return { map, failed: false }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -97,9 +121,19 @@ export async function GET(req: NextRequest) {
   const me = r.ctx.caller.employeeId
   const year = leaveYearOf()
 
-  const [{ data: emp }, { data: balances }, { data: types }, { data: apps }, { data: hols }] = await Promise.all([
+  // The calendar the tab draws needs the employee's REAL weekly offs, not a
+  // weekday constant. resolve_weekly_offs takes a range, so this asks for a
+  // rolling year from today — comfortably past any date somebody can apply for,
+  // and a few dozen dates on the wire.
+  const winFrom = iso(new Date())
+  const winTo = iso(new Date(Date.now() + 366 * 86400000))
+
+  const [{ data: emp }, { data: balances }, { data: types }, { data: apps }, { data: hols }, { data: offRows }, { data: fyApps }] = await Promise.all([
     sb.from('employees')
-      .select('gender, company_doj, group_doj, confirmation_status, l1_manager_id, hr_manager_id')
+      // date_of_leaving and company_id are for the balance: the first weights a
+      // leaving month pro-rata, the second resolves the quota through
+      // leave_policy rather than assuming the catalogue value.
+      .select('gender, company_doj, group_doj, date_of_leaving, company_id, confirmation_status, l1_manager_id, hr_manager_id')
       .eq('id', me).maybeSingle(),
     sb.from('leave_balances').select('*, leave_types(short_name, name)').eq('employee_id', me).eq('year', year),
     sb.from('leave_types').select('*').eq('is_active', true).neq('application_mode', 'HR_MARK').order('sort_order'),
@@ -107,10 +141,77 @@ export async function GET(req: NextRequest) {
       .select('*, leave_types(short_name, name)')
       .eq('employee_id', me).order('applied_at', { ascending: false }).limit(10),
     sb.rpc('resolve_holidays', { p_employee_id: me }),
+    sb.rpc('resolve_weekly_offs', { p_employee_id: me, p_from: winFrom, p_to: winTo }),
+    // `used` comes from HERE, not from `apps` above. That one is the recent
+    // strip the tab renders and is capped at 10 rows — deriving consumption
+    // from it would silently undercount anybody who has applied more than ten
+    // times, which is a wrong balance that looks entirely plausible.
+    //
+    // APPROVED only, and bounded to the financial year, so the query returns
+    // what it means rather than everything the employee has ever filed.
+    sb.from('leave_applications')
+      .select('leave_type_id, status, from_date, days')
+      .eq('employee_id', me)
+      .eq('status', 'APPROVED')
+      .gte('from_date', `${leaveFyStartYear(year)}-04-01`)
+      .lte('from_date', `${leaveFyStartYear(year) + 1}-03-31`),
   ])
+
+  const weeklyOffs = ((offRows || []) as { off_date: string }[]).map(r => String(r.off_date)).sort()
+  // The weekdays those dates land on, so the client can shade a month outside
+  // the window without a second call. Derived from the resolver, never assumed:
+  // a branch configured Fri+Sat, or an NTH rule, shows up here correctly.
+  const weeklyOffWeekdays = [...new Set(weeklyOffs.map((d: string) => new Date(d + 'T00:00:00Z').getUTCDay()))].sort()
 
   const balByType = new Map<string, any>()
   for (const b of balances || []) balByType.set(b.leave_type_id, b)
+
+  // ── QUOTA: resolved, not assumed ──────────────────────────────────────────
+  //
+  // resolve_leave_quota prefers a branch policy, then the company default, then
+  // the leave_types catalogue. Reading t.annual_quota directly would skip the
+  // first two — and this database HAS company policy rows, so the catalogue is
+  // not the answer for EL.
+  //
+  // Needs emp.company_id, so it cannot join the Promise.all above. branch is
+  // null deliberately: there is no branches table here (employees carry
+  // location_id), and every live leave_policy row has branch_id NULL, so null
+  // is what resolves to the company default rather than a guess.
+  //
+  // It does NOT return `accrual` — confirmed against the live function, whose
+  // columns stop at annual_quota/max_carry_forward/source. So the mode still
+  // comes from the catalogue below. A per-branch accrual override would be
+  // silently ignored today; extending the RPC is a follow-up, and nothing is
+  // configured that way yet because 130 set every quota-bearing type MONTHLY.
+  const quotaByType = new Map<string, { annual_quota: number; max_carry_forward: number }>()
+  if (emp?.company_id) {
+    const { data: quotas } = await sb.rpc('resolve_leave_quota', {
+      p_company_id: emp.company_id,
+      p_branch_id: null,
+      p_fy: leavePolicyFy(year),
+    })
+    for (const q of (quotas || []) as Record<string, string>[]) {
+      quotaByType.set(String(q.leave_type_id), {
+        annual_quota: Number(q.annual_quota) || 0,
+        max_carry_forward: Number(q.max_carry_forward) || 0,
+      })
+    }
+  }
+
+  const fyStartYear = leaveFyStartYear(year)
+  const approved = (fyApps || []) as LeaveApplicationLike[]
+
+  // How far back this employee may apply, set by HR per company (migration
+  // 132). Resolved through the function rather than read from the table, so
+  // this and the POST guard below answer the identical question — a UI that
+  // offers a date the server then refuses is worse than no backdating at all.
+  // 0 (the default, and the answer when the migration has not run) reproduces
+  // exactly the old behaviour: nothing before today.
+  let backdateDays = 0
+  if (emp?.company_id) {
+    const { data: win } = await sb.rpc('resolve_backdate_window', { p_company_id: emp.company_id })
+    backdateDays = Number(win) || 0
+  }
 
   // Annotate each type with whether THIS employee may take it, and why not.
   // The old dropdown offered all ten to all 398 — including Maternity Leave to
@@ -165,7 +266,29 @@ export async function GET(req: NextRequest) {
       allow_half_day: !!t.allow_half_day,          // ← the client no longer hardcodes this
       allow_without_balance: !!t.allow_without_balance,
       approval_by: t.approval_by,
-      available: bal ? availOf(bal) : null,
+      // COMPUTED, not read. leave_balances holds 0 rows for all 398 employees,
+      // so `bal ? availOf(bal) : null` reported null for every type for
+      // everybody — an empty Leave tab that looked like a loading state.
+      //
+      // The engine accrues monthly from the quota, weights the joining and
+      // leaving months pro-rata, and derives `used` from APPROVED applications
+      // in this FY. The stored row now supplies only what cannot be computed:
+      // `opening` (carried in from last FY) and `encashed`. Both default to 0,
+      // which is correct for a first year.
+      available: balanceFor({
+        // Parenthesised deliberately: `a ?? b || c` is ambiguous enough that
+        // TypeScript refuses it (TS5076). The meaning is the resolved policy
+        // quota when there is one, otherwise the catalogue value, otherwise 0.
+        annualQuota: quotaByType.get(t.id)?.annual_quota ?? (Number(t.annual_quota) || 0),
+        fyStartYear,
+        doj,
+        lwd: emp?.date_of_leaving ?? null,
+        opening: Number(bal?.opening || 0),
+        encashed: Number(bal?.encashed || 0),
+        applications: approved,
+        leaveTypeId: t.id,
+        mode: normaliseMode(t.accrual),
+      }).available,
       eligible: reasons.length === 0,
       reason: reasons[0] || null,
     }
@@ -178,12 +301,25 @@ export async function GET(req: NextRequest) {
     types: annotated,
     applications: apps || [],
     holidays: hols || [],
+    // The employee's own configured weekly offs, for the calendar. The tab used
+    // to hardcode Sunday, which was right only because the single live rule is a
+    // global "weekday 0 / EVERY" row — it would have shaded the wrong days the
+    // moment a branch was configured differently.
+    weekly_offs: weeklyOffs,
+    weekly_off_weekdays: weeklyOffWeekdays,
+    // The calendar's earliest selectable day is computed from this. Sent rather
+    // than assumed client-side, because the same number gates the POST.
+    backdate_days: backdateDays,
     // Surfaced so the tab can say WHY a card is empty instead of implying the
     // employee simply has nothing — the two are indistinguishable today.
     diagnostics: {
       noBalances: !(balances || []).length,
       noHolidays: !(hols || []).length,
       noApprover: !emp?.l1_manager_id && !emp?.hr_manager_id,
+      // True when no weekly-off rule matches this employee at all. Distinct
+      // from "no holidays": one means HR has published no calendar, the other
+      // means every day of the week is a working day for them.
+      noWeeklyOffs: !weeklyOffs.length,
     },
   })
 }
@@ -234,7 +370,7 @@ export async function POST(req: NextRequest) {
 
   // ── 4. The employee, and the eligibility rules that were never enforced ──
   const { data: emp } = await sb.from('employees')
-    .select('full_name, gender, company_doj, group_doj, confirmation_status, l1_manager_id, hr_manager_id')
+    .select('full_name, gender, company_doj, group_doj, company_id, confirmation_status, l1_manager_id, hr_manager_id')
     .eq('id', me).maybeSingle()
   if (!emp) return bad('Employee record not found.', 404)
 
@@ -271,6 +407,32 @@ export async function POST(req: NextRequest) {
     return bad('That date is before your joining date.')
   }
 
+  // ── 4b. Backdating, within the window HR configured ─────────────────────
+  //
+  // THE GUARD THE CLIENT COMMENT PROMISED AND NOBODY WROTE. Until now there was
+  // no past-date check here at all: the calendar refused past dates, so nothing
+  // server-side did, and a hand-crafted POST could file leave for any date back
+  // to the employee's joining. Now that the calendar deliberately offers past
+  // dates, that hole would be reachable from the UI itself.
+  //
+  // Counted back from today INCLUSIVE, matching what the calendar offers: a
+  // window of 30 means today and the previous 29 days. 0 refuses every past
+  // date, which is the default and the old behaviour.
+  {
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
+    if (from < startOfToday) {
+      const { data: win } = await sb.rpc('resolve_backdate_window', { p_company_id: emp.company_id })
+      const days = Number(win) || 0
+      const earliest = new Date(startOfToday.getTime() - Math.max(0, days - 1) * 86400000)
+      if (days <= 0) {
+        return bad('Leave cannot be applied for a past date. Ask HR if you need to claim an absence.')
+      }
+      if (from < earliest) {
+        return bad(`Leave can only be backdated ${days} day${days === 1 ? '' : 's'} — the earliest you can claim is ${fmtDate(iso(earliest))}.`)
+      }
+    }
+  }
+
   // ── 5. Overlap with an existing request ─────────────────────────────────
   // Two requests covering the same day used to be perfectly acceptable.
   const { data: clashes } = await sb.from('leave_applications')
@@ -292,8 +454,35 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 7. Days — working days, not calendar days ───────────────────────────
-  const { days: wd, offs } = await workingDays(me, from, to)
+  // ── 7. Days — working days, and the days that may not be claimed ────────
+  //
+  // Holidays and weekly offs are the company's own configuration, so a leave
+  // request may SPAN them (a Friday-to-Monday absence legitimately covers the
+  // weekend) but may not BEGIN or END on one. That is the whole rule: an
+  // employee cannot claim as leave a day the company has already given them.
+  const { map: nonWorking, failed } = await nonWorkingDays(me, from, to)
+
+  // A resolver that cannot be read must not be treated as "no holidays" — that
+  // silently over-charges the employee. Refuse and say so.
+  if (failed) {
+    return bad('The holiday and weekly-off calendar could not be read just now, so this request cannot be counted correctly. Please try again in a moment.', 503)
+  }
+
+  const startsOn = nonWorking.get(iso(from))
+  if (startsOn) {
+    return bad(`${fmtDate(iso(from))} is ${startsOn.label}, so leave cannot start on it.${halfDay ? '' : ' Pick the next working day.'}`)
+  }
+  // A half day always has from === to, so the check above already covers it —
+  // which is the hole this closes. `days` used to be forced to 0.5 BEFORE the
+  // emptiness guard, so a half day on a Sunday or on Diwali passed every check
+  // and was filed and billed at 0.5.
+  const endsOn = nonWorking.get(iso(to))
+  if (endsOn) {
+    return bad(`${fmtDate(iso(to))} is ${endsOn.label}, so leave cannot end on it. Pick the previous working day.`)
+  }
+
+  const offs = eachDay(from, to).filter(d => nonWorking.has(d))
+  const wd = daysBetween(from, to) + 1 - offs.length
   const days = halfDay ? 0.5 : wd
   if (days <= 0) return bad('That range contains only weekly-offs and holidays.')
 

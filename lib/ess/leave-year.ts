@@ -44,3 +44,28 @@ export function leaveFyLabel(yearKey: string): string {
   if (!Number.isFinite(y)) return yearKey;
   return `FY ${y}-${String((y + 1) % 100).padStart(2, '0')}`;
 }
+
+/**
+ * The `leave_policy.fy` key: '2026' → '2026-27'.
+ *
+ * A THIRD format for the same year, and the reason this lives here rather than
+ * at a call site. The leave feature already had its year expressed three ways
+ * (see the note at the top of this file); quota adds a fourth shape because
+ * leave_policy.fy and resolve_leave_quota(p_fy) both want '2026-27' while
+ * leave_balances.year wants '2026'.
+ *
+ * Deriving one from the other in one named place is what stops a route
+ * querying FY 2026-27 quota against FY 2026 balances and getting a plausible,
+ * wrong answer — the same class of bug as the Friday-to-Monday day count.
+ */
+export function leavePolicyFy(yearKey: string = leaveYearOf()): string {
+  const y = Number(yearKey);
+  if (!Number.isFinite(y)) return yearKey;
+  return `${y}-${String((y + 1) % 100).padStart(2, '0')}`;
+}
+
+/** The FY's start year as a number, for the accrual engine. '2026' → 2026. */
+export function leaveFyStartYear(yearKey: string = leaveYearOf()): number {
+  const y = Number(yearKey);
+  return Number.isFinite(y) ? y : new Date().getFullYear();
+}

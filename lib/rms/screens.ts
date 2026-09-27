@@ -83,6 +83,7 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'shifts', label: 'Shifts' },
       { key: 'assign', label: 'Assign' },
       { key: 'records', label: 'Attendance Records' },
+      { key: 'leaverules', label: 'Leave Rules' },
     ],
   },
   {

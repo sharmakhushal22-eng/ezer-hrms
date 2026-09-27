@@ -22,14 +22,33 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import InterviewFeedbackForm, { type Feedback, bandOf } from './InterviewFeedbackForm'
 import { type Decision, DECISION_LABEL, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
+// Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
+import { C as TK, E, F, Z } from '@/lib/ui'
 
+// ── Palette ──────────────────────────────────────────────────────────────────
+//
+// THESE WERE HEX LITERALS, AND THAT WAS THE BUG. Opening this modal with the
+// product in dark mode gave a white card with near-black ink floating on a
+// dark app — measured: page canvas rgb(15,18,22), modal card rgb(255,255,255),
+// ink rgb(30,27,75). They were also the OLD purple brand (#7C3AED, #1E1B4B),
+// which the product stopped using at the rebrand.
+//
+// THE RATCHET NEVER SAW ANY OF THIS. theme-audit counts hex on colour-bearing
+// PROPERTIES; these were plain values in a const, so the scanner scored this
+// file 6 (six `color:'#fff'`) while every surface in it was frozen. Fixing
+// only what the tool counts would have taken it to zero and left the bug.
+//
+// The KEY NAMES are unchanged, so the call sites below did not have to move.
+// NOTE: these are `var(...)` strings now. Never concatenate an alpha suffix
+// onto one — `C.purple + '18'` produces nothing at all. Use a tint token.
 const C = {
-  navy:'#1E1B4B', ink:'#1E1B4B', purple:'#7C3AED', pdark:'#3C3489', brandTint:'#EDE9FE',
-  card:'#FFFFFF', bg:'#F5F3FF', sunken:'#F7F6FD', line:'#E9E7F5', muted:'#6B6890', faint:'#9C99B8',
-  ok:'#059669', okbg:'#ECFDF5', warn:'#D97706', warnbg:'#FFFBEB', info:'#2563EB', infobg:'#EFF6FF', dang:'#DC2626',
+  navy:TK.ink, ink:TK.ink, purple:TK.brand, pdark:TK.brandDeep, brandTint:TK.brandTint,
+  card:TK.surface, bg:TK.canvas, sunken:TK.sunken, line:TK.line, muted:TK.muted, faint:TK.faint,
+  ok:TK.positive, okbg:TK.positiveTint, warn:TK.warning, warnbg:TK.warningTint, info:TK.info, infobg:TK.infoTint, dang:TK.critical,
 }
-const font = '"DM Sans","Segoe UI",sans-serif'
+const font = F.family
 const DECISION_COLOR: Record<Decision, string> = { HOLD: C.warn, REJECT: C.dang, SHORTLIST: C.ok }
+const DECISION_BG: Record<Decision, string> = { HOLD: C.warnbg, REJECT: TK.criticalTint, SHORTLIST: C.okbg }
 
 // Telephonic is the default first round and is never scheduled — the recruiter records it.
 const DEFAULT_ROUNDS = ['Telephonic']
@@ -277,11 +296,11 @@ export default function CandidateInterviewModal({
     <Shell onClose={onClose}>
       {/* header */}
       <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:14 }}>
-        <div style={{ width:46, height:46, borderRadius:13, background:C.purple, color:'#fff', display:'grid', placeItems:'center', fontWeight:800, fontSize:15, flexShrink:0 }}>{initials}</div>
+        <div style={{ width:46, height:46, borderRadius:13, background:C.purple, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:15, flexShrink:0 }}>{initials}</div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <div style={{ fontSize:17, fontWeight:800 }}>{candidate.full_name}</div>
-            <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background:C.sunken, color: stageText[stageNow] || C.muted }}>{stageNow}</span>
+            <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, border:`1px solid ${C.line}`, lineHeight:1.45, color: stageText[stageNow] || C.muted }}>{stageNow}</span>
           </div>
           <div style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{subLine || '—'}</div>
         </div>
@@ -304,10 +323,10 @@ export default function CandidateInterviewModal({
         <span style={{ fontSize:11, color:C.faint }}>{decidedRounds.length} of {ROUNDS_BEFORE_SHORTLIST} rounds decided</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
           {canShortlist && (
-            <button onClick={() => setConfirmShortlist(true)} style={{ ...btn.small, background:C.ok, color:'#fff', border:'none' }}>★ Shortlist</button>
+            <button onClick={() => setConfirmShortlist(true)} style={{ ...btn.small, background:C.ok, color:TK.onAccent, border:'none' }}>★ Shortlist</button>
           )}
           <button onClick={() => { if (canAddRound) { setNewRound(''); setShowAddRound(true) } }} disabled={!canAddRound} title={canAddRound ? '' : addRoundHint}
-            style={{ ...btn.small, background:C.brandTint, color:C.pdark, border:`1px solid ${C.purple}44`, opacity: canAddRound ? 1 : .45, cursor: canAddRound ? 'pointer' : 'not-allowed' }}>+ Add round</button>
+            style={{ ...btn.small, background:C.brandTint, color:C.pdark, border:`1px solid ${TK.brandEdge}`, opacity: canAddRound ? 1 : .45, cursor: canAddRound ? 'pointer' : 'not-allowed' }}>+ Add round</button>
         </div>
       </div>
       {!canAddRound && addRoundHint && (
@@ -324,14 +343,15 @@ export default function CandidateInterviewModal({
           const complete = roundComplete(r)
           const scheduled = rows.length > 0
           const direct = DIRECT_ROUNDS.has(r.toLowerCase())
-          const [statLabel, statColor] = decision ? [DECISION_LABEL[decision], DECISION_COLOR[decision]] : complete ? ['Feedback in', C.ok] : scheduled ? ['Scheduled', C.info] : ['Not scheduled', C.faint]
+          // Pill carries its own tint (a var() colour + '18' is invalid CSS).
+          const [statLabel, statColor, statBg] = decision ? [DECISION_LABEL[decision], DECISION_COLOR[decision], DECISION_BG[decision]] : complete ? ['Feedback in', C.ok, C.okbg] : scheduled ? ['Scheduled', C.info, C.infobg] : ['Not scheduled', C.faint, C.sunken]
           const isOpen = openRound === r
           const panelists = shown.filter(i => !isMain(i))
           const remark = main?.decision_remark || main?.feedback?.decision_remark || null
           return (
             <div key={r} style={{ border:`1px solid ${isOpen ? C.purple : C.line}`, borderRadius:12, overflow:'hidden' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 13px', background: decision === 'REJECT' ? '#FEF2F2' : complete ? C.okbg : C.card }}>
-                <div style={{ width:30, height:30, borderRadius:8, background: decision ? DECISION_COLOR[decision] : complete ? C.ok : scheduled ? C.info : C.sunken, color: scheduled || complete ? '#fff' : C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{decision === 'REJECT' ? '✕' : complete ? '✓' : idx + 1}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 13px', background: decision === 'REJECT' ? TK.criticalTint : complete ? C.okbg : C.card }}>
+                <div style={{ width:30, height:30, borderRadius:8, background: decision ? DECISION_COLOR[decision] : complete ? C.ok : scheduled ? C.info : C.sunken, color: scheduled || complete ? TK.onAccent : C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{decision === 'REJECT' ? '✕' : complete ? '✓' : idx + 1}</div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:13.5, fontWeight:700 }}>{r}{direct && !scheduled ? <span style={{ fontSize:10, color:C.faint, fontWeight:600, marginLeft:8 }}>no scheduling — record feedback directly</span> : ''}</div>
                   <div style={{ fontSize:11, color:C.muted }}>
@@ -341,11 +361,11 @@ export default function CandidateInterviewModal({
                       : `${shown.length} acknowledged · awaiting the main interviewer's feedback`}
                   </div>
                 </div>
-                <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statColor + '18', color: statColor }}>{statLabel}</span>
+                <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statBg, color: statColor }}>{statLabel}</span>
                 {!complete && direct && !scheduled ? (
-                  <button onClick={() => setFbRound(r)} style={{ ...btn.small, background:C.purple, color:'#fff', border:'none' }}>Give feedback</button>
+                  <button onClick={() => setFbRound(r)} style={{ ...btn.small, background:C.purple, color:TK.onAccent, border:'none' }}>Give feedback</button>
                 ) : !complete && !scheduled ? (
-                  <button onClick={() => (isOpen ? setOpenRound(null) : openScheduleFor(r))} style={{ ...btn.small, background: isOpen ? C.sunken : C.purple, color: isOpen ? C.ink : '#fff', border: isOpen ? `1px solid ${C.line}` : 'none' }}>
+                  <button onClick={() => (isOpen ? setOpenRound(null) : openScheduleFor(r))} style={{ ...btn.small, background: isOpen ? C.sunken : C.purple, color: isOpen ? C.ink : TK.onAccent, border: isOpen ? `1px solid ${C.line}` : 'none' }}>
                     {isOpen ? 'Close' : 'Schedule'}
                   </button>
                 ) : null}
@@ -374,7 +394,7 @@ export default function CandidateInterviewModal({
                       {i.status === 'submitted' && i.feedback ? (
                         <>
                           <span style={{ fontSize:10, fontWeight:800, color: bandOf(i.feedback.pct)[1] }}>{i.feedback.total}/80</span>
-                          <button onClick={() => setViewing(i)} style={{ ...btn.small, background:C.info, color:'#fff', border:'none' }}>View feedback</button>
+                          <button onClick={() => setViewing(i)} style={{ ...btn.small, background:C.info, color:TK.onAccent, border:'none' }}>View feedback</button>
                         </>
                       ) : (
                         <span style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:99, background:C.sunken, color: isMain(i) ? C.info : C.muted }}>
@@ -428,8 +448,8 @@ export default function CandidateInterviewModal({
               title={isBack ? 'Pipeline moves forward only' : reason ? `Complete the ${reason} round first` : ''}
               style={{ fontFamily:font, fontSize:11, fontWeight:600, padding:'5px 11px', borderRadius:8, cursor: disabled ? 'not-allowed' : 'pointer',
                 background: current ? (stageColor[s] || C.purple) : C.sunken,
-                color: current ? '#fff' : (stageColor[s] || C.muted),
-                border: current ? 'none' : `1px solid ${(stageColor[s] || C.line)}30`,
+                color: current ? TK.onAccent : (stageText[s] || C.muted),
+                border: current ? 'none' : `1px solid ${C.line}`,
                 opacity: disabled && !current ? .4 : 1, textDecoration: isBack ? 'line-through' : 'none' }}>
               {s}{reason && !isBack && !current ? ' 🔒' : ''}
             </button>
@@ -526,7 +546,7 @@ function PeoplePicker({ label, hint, single, emps, value, exclude, onChange, pla
 const lbl: React.CSSProperties = { fontSize:11, fontWeight:700, color:C.muted, marginBottom:4, display:'block' }
 const inp: React.CSSProperties = { width:'100%', padding:'9px 11px', fontFamily:font, fontSize:13, border:`1px solid ${C.line}`, borderRadius:8, outline:'none', color:C.ink, background:C.card, boxSizing:'border-box' }
 const btn = {
-  pri: { padding:'9px 18px', borderRadius:9, border:'none', background:C.purple, color:'#fff', fontFamily:font, fontSize:13, fontWeight:700, cursor:'pointer' } as React.CSSProperties,
+  pri: { padding:'9px 18px', borderRadius:9, border:'none', background:C.purple, color:TK.onAccent, fontFamily:font, fontSize:13, fontWeight:700, cursor:'pointer' } as React.CSSProperties,
   ghost: { padding:'7px 13px', borderRadius:8, border:`1px solid ${C.line}`, background:C.card, color:C.ink, fontFamily:font, fontSize:12.5, fontWeight:600, cursor:'pointer' } as React.CSSProperties,
   small: { padding:'6px 12px', borderRadius:8, fontFamily:font, fontSize:11.5, fontWeight:700, cursor:'pointer' } as React.CSSProperties,
 }
@@ -537,16 +557,16 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function Popup({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:C.card, borderRadius:14, width:'min(440px, 100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.35)' }}>{children}</div>
+      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:C.card, borderRadius:14, width:'min(440px, 100%)', padding:'18px 20px', boxShadow:E.overlay }}>{children}</div>
     </div>
   )
 }
 function Shell({ children, onClose, wide }: { children: React.ReactNode; onClose: () => void; wide?: boolean }) {
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px', fontFamily:font, color:C.ink }}>
-      <div style={{ background:C.card, borderRadius:16, width: wide ? 'min(1000px, 100%)' : 'min(720px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', padding:'18px 20px', margin:'0 auto' }}>
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.drawer, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px', fontFamily:font, color:C.ink }}>
+      <div style={{ background:C.card, borderRadius:16, width: wide ? 'min(1000px, 100%)' : 'min(720px, 100%)', boxShadow:E.overlay, padding:'18px 20px', margin:'0 auto' }}>
         {children}
       </div>
     </div>

@@ -34,6 +34,26 @@
 :root {
   color-scheme: light;
 
+  /* Stacking, for stylesheets.
+     Z in lib/ui/tokens.ts is the scale, but a .css file cannot import it, so a
+     raw number there is a guess — which is how this repo once reached 37 of
+     them. These mirror Z exactly and are theme-independent, so unlike a colour
+     they are defined once rather than in all four blocks.
+
+     `local` covers layering INSIDE one component (a fill over its own track),
+     where the number never competes outside its stacking context. `popover`
+     is deliberately its own tier rather than a copy of sticky: two tiers
+     sharing a value leaves their order undefined, which is precisely the bug
+     the z-index ratchet was written after. */
+  --ez-z-under:    -1;   /* decorative underlay within a component  */
+  --ez-z-raised:    1;   /* Z.raised                                */
+  --ez-z-local-1:   5;   /* component-local layering, lower         */
+  --ez-z-local-2:   6;   /* component-local layering, upper         */
+  --ez-z-rail:     20;   /* below Z.sticky(30) and Z.nav(60)        */
+  --ez-z-band:     25;   /* page header band, still below sticky    */
+  --ez-z-popover:  28;   /* its own tier, NOT a tie with sticky      */
+  --ez-z-modal:  1000;   /* Z.modal                                 */
+
   /* Text.
      Every value below clears WCAG AA (4.5:1) against BOTH white cards and the
      canvas — measured, not eyeballed. The previous set did not: --ez-faint at
@@ -102,6 +122,30 @@
   --ez-critical-tint: #FEF2F2;
   --ez-info:          #0369A1;   /*  5.93 / 5.43 */
   --ez-info-tint:     #F0F9FF;
+
+  /* Edges for a tinted state surface — the border on every Badge, Stat tile
+     and Notice in the app.
+
+     These were four hex literals inside tone() in tokens.ts, which meant they
+     could not change with the theme: a pale mint border stayed pale mint on a
+     near-black card at night. Being literals they were also invisible to the
+     colour ratchet's per-file counting while being reused everywhere.
+
+     Derived, not picked: each sits between its tint and its colour, so the
+     edge reads as the same family as the fill it encloses.
+
+     DEEPENED after measuring. The values carried over from tone() separated
+     from their own tint by only 1.22 (positive), 1.25 (info) and 1.26
+     (warning) — a pale mint line around a near-white mint fill, which is
+     barely a border at all. Critical was the only one that cleared, at 1.30.
+     These are one step deeper, which is enough for a 1px rule to read without
+     the chip turning into an outlined box. Night needed no such change: it
+     already separates at 1.39–1.63, because a light edge on a dark tint has
+     more room to work in. */
+  --ez-positive-edge: #A9DCC7;
+  --ez-warning-edge:  #E8CB94;
+  --ez-critical-edge: #EFB4B7;
+  --ez-info-edge:     #AFCBF6;
 
   /* The navigation rail.
      White, with a hairline separating it from the canvas — the lighter, more
@@ -191,7 +235,12 @@
    --------------------------------------------------------------------------- */
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-ez-theme="light"]) {
+  /* BOTH attributes must be able to turn dark OFF, not just on.
+     The explicit-dark block below honours data-ez-theme AND data-theme, but
+     this guard only ever excluded data-ez-theme — so a light choice written to
+     the other attribute alone could never defeat it, and the OS won anyway.
+     That asymmetry is half of "light is selected but the screen is dark". */
+  :root:not([data-ez-theme="light"]):not([data-theme="light"]) {
     color-scheme: dark;
 
     --ez-ink:           #F3F4F6;
@@ -257,6 +306,14 @@
     --ez-critical-tint: #2A1414;
     --ez-info:          #7DD3FC;
     --ez-info-tint:     #10222B;
+    
+    /* Edges, night. Lightened from the tint rather than darkened from the
+       colour: at night the tinted surface is the dark thing and the border has
+       to lift off it. Mirrors how the header band inverts. */
+    --ez-positive-edge: #1E4A3C;
+    --ez-warning-edge:  #4A3A18;
+    --ez-critical-edge: #542626;
+    --ez-info-edge:     #1D4257;
 
     /* On dark the rail is the surface colour, one step above the canvas —
        separation comes from that difference rather than from a border. */
@@ -368,6 +425,14 @@
   --ez-critical-tint: #2A1414;
   --ez-info:          #7DD3FC;
   --ez-info-tint:     #10222B;
+  
+  /* Edges, night. Lightened from the tint rather than darkened from the
+     colour: at night the tinted surface is the dark thing and the border has
+     to lift off it. Mirrors how the header band inverts. */
+  --ez-positive-edge: #1E4A3C;
+  --ez-warning-edge:  #4A3A18;
+  --ez-critical-edge: #542626;
+  --ez-info-edge:     #1D4257;
 
   --ez-rail:             #171B21;
   --ez-rail-text:        #F3F4F6;
@@ -561,6 +626,14 @@ html, body {
     --ez-critical-tint: #2A1414;
     --ez-info:          #7DD3FC;
     --ez-info-tint:     #10222B;
+    
+    /* Edges, night. Lightened from the tint rather than darkened from the
+       colour: at night the tinted surface is the dark thing and the border has
+       to lift off it. Mirrors how the header band inverts. */
+    --ez-positive-edge: #1E4A3C;
+    --ez-warning-edge:  #4A3A18;
+    --ez-critical-edge: #542626;
+    --ez-info-edge:     #1D4257;
 
     /* On dark the rail is the surface colour, one step above the canvas —
        separation comes from that difference rather than from a border. */

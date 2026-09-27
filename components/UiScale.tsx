@@ -1,8 +1,15 @@
 'use client'
-// Global UI auto-fit. Scales the whole app to the viewport width using CSS `zoom`
-// so it fills the screen and reads comfortably on any monitor. Auto by default
-// (recomputes on resize); a small control lets the user nudge it, and the choice
-// persists in localStorage. Disabled on the public onboarding portal.
+// Global UI scale. A small control sets the whole app's size using CSS `zoom`.
+//
+// THE DEFAULT IS 100%. It used to auto-fit the viewport on every load, which
+// meant a 1440px monitor opened the app at 125% and a wider one at 150% — the
+// readout said so, but nobody reads a readout, so the app simply looked bigger
+// than it was designed to be and no two machines agreed. 100% is now what you
+// get unless you ask for something else.
+//
+// Auto-fit is still here, one click away on the readout, and any choice — a
+// nudge or auto — persists in localStorage. Disabled on the public onboarding
+// portal.
 import { useEffect, useState, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 // Design tokens, aliased as TK — many of these files already declare
@@ -12,6 +19,9 @@ import { C as TK } from '@/lib/ui'
 const KEY = 'ezer_ui_scale'      // saved value: a number (manual) or 'auto'
 const BASE = 1150                 // design width at which zoom = 1
 const MIN = 0.8, MAX = 1.6
+// What a fresh browser gets. The design width IS 1150, so 1 is the size every
+// spacing and type token was chosen against.
+const DEFAULT_SCALE = 1
 
 /**
  * Auto-fit, snapped to quarter steps.
@@ -44,12 +54,18 @@ export default function UiScale() {
     ;(document.documentElement.style as any).zoom = String(v)
   }, [])
 
-  // initialise from saved preference or auto-fit
+  // Initialise from the saved preference, else 100%.
+  //
+  // `manual` means "do not re-fit on resize". A fresh browser is therefore
+  // manual-at-100%, not auto — otherwise the resize handler below would drag it
+  // back up to the auto-fit size the moment the window changed, and the default
+  // would only hold until somebody moved the window.
   useEffect(() => {
     if (!enabled) { (document.documentElement.style as any).zoom = ''; return }
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(KEY) : null
-    if (saved && saved !== 'auto') { setManual(true); apply(parseFloat(saved) || autoScale()) }
-    else { setManual(false); apply(autoScale()) }
+    if (saved === 'auto') { setManual(false); apply(autoScale()) }
+    else if (saved) { setManual(true); apply(parseFloat(saved) || DEFAULT_SCALE) }
+    else { setManual(true); apply(DEFAULT_SCALE) }   // ← the default: 100%
   }, [enabled, apply])
 
   // re-fit on window resize while in auto mode

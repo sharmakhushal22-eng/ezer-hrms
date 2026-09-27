@@ -196,7 +196,7 @@ function ReactionBar({ list, onToggle, compact }: {
     <div className={compact ? 'mini' : 'bar'}>
       {list.map(r => (
         <button
-          key={r.emoji} type="button" className="rx" data-mine={r.mine ? '1' : '0'}
+          key={r.emoji} type="button" className="soc-rx" data-mine={r.mine ? '1' : '0'}
           onClick={() => onToggle(r.emoji)}
           aria-pressed={r.mine}
           aria-label={`${r.emoji} ${r.count}${r.mine ? ', including you' : ''}`}
@@ -206,7 +206,7 @@ function ReactionBar({ list, onToggle, compact }: {
       ))}
       <span className="rxwrap">
         <button
-          type="button" className="rx add" onClick={() => setOpen(o => !o)}
+          type="button" className="soc-rx add" onClick={() => setOpen(o => !o)}
           aria-expanded={open} aria-label="Add a reaction"
         >
           <AddReaction />

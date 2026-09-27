@@ -18,8 +18,31 @@ import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/Recrui
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
 import {
-  C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle,
+  C, F, W, R, E, S, M, tone, eyebrow, numeric, inputStyle,
+  TableWrap, Th, Td, Tr, Empty,
 } from '@/lib/ui'
+
+// The Recruitment redesign kit. Presentation only — nothing here fetches, and
+// the adapters reshape rows loadAll has already loaded. See
+// docs/recruitment-redesign/01-WHAT-STAYS-THE-SAME.md for the contract.
+import {
+  TabRail, TAB_META, type RailTab,
+  toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
+  DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
+  Segmented, SearchBox, Help,
+  type ScreenResult,
+} from '@/components/recruitment/rx'
+
+/**
+ * The type scale under a name this file does not shadow.
+ *
+ * Two components here declare their own `const F = (k, v) => setForm(...)`
+ * field setter — MRFTab at ~1759 and NegotiationTab at ~4283 — which shadows
+ * the imported `F` typography scale for their whole body. Inside them `F.micro`
+ * is not 11px, it is a property lookup on a function, and it fails as a type
+ * error rather than anything visible. Use TYPE inside those two components.
+ */
+const TYPE = F
 
 // ── TYPES ────────────────────────────────────────────────────────
 interface Company { id:string; company_code:string; company_name?:string }
@@ -85,22 +108,55 @@ const SOURCES = ['Direct','Naukri','LinkedIn','Referral','Campus','WhatsApp','Co
 // is decided.
 const T = {
   page: { background:C.canvas, minHeight:'100vh', color:C.ink, fontFamily:F.family } as React.CSSProperties,
-  card: { background:C.surface, borderRadius:R.lg, border:`1px solid ${C.line}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
-  cardPurple: { background:C.surface, borderRadius:R.lg, border:`2px solid ${C.brand}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.floating } as React.CSSProperties,
-  label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
+  // ── SURFACES ────────────────────────────────────────────────────────────
+  // Twenty-pixel corners and twenty pixels of air, with structure coming from
+  // elevation rather than outline: the border is still present but recedes,
+  // so a page of cards reads as a stack of planes instead of a grid of boxes.
+  // 14x16 padding was dense enough that every card felt like a table cell.
+  card: { background:C.surface, borderRadius:R.xl, border:`1px solid ${C.line}`,
+          padding:S.xl, marginBottom:S.lg, boxShadow:E.raised,
+          transition:`box-shadow ${M.ease}, border-color ${M.ease}` } as React.CSSProperties,
+
+  // Emphasis as a tinted plane, which is how the rest of the system says
+  // "this one" — a 2px brand outline drawn around an otherwise identical card
+  // shouts at the same volume whatever it is applied to.
+  cardPurple: { background:C.brandTint, borderRadius:R.xl, border:`1px solid ${C.brandEdge}`,
+                padding:S.xl, marginBottom:S.lg, boxShadow:E.brand } as React.CSSProperties,
+
+  label: { ...eyebrow, display:'block', marginBottom:6 } as React.CSSProperties,
   input: { ...inputStyle() } as React.CSSProperties,
   select: { ...inputStyle(), cursor:'pointer' } as React.CSSProperties,
   textarea: { ...inputStyle(), height:'auto', minHeight:90, padding:'9px 11px', resize:'vertical' as const, lineHeight:1.5 } as React.CSSProperties,
-  btn: { height:36, padding:'0 16px', borderRadius:R.md, border:'none', cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  btnPrimary: { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, boxShadow:E.brand, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  btnOutline: { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  // ── CONTROLS ────────────────────────────────────────────────────────────
+  // 38px with 18px of side padding. btn was 36 and btnOutline 34 — two button
+  // heights sitting side by side in the same toolbar. Raising them to 38 then
+  // left them a step ABOVE inputStyle()'s 36, so that was lifted to 38 too:
+  // buttons and inputs now share one height, which is what makes a filter row
+  // like "Search […] [Apply]" sit on a single line rather than nearly one.
+  // UIKeyframes already gives every button its press, hover and transition.
+  btn: { height:38, padding:'0 18px', borderRadius:R.md, border:'none', cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', letterSpacing:'-.005em', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  btnPrimary: { height:38, padding:'0 18px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', letterSpacing:'-.005em', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, boxShadow:E.brand, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  btnOutline: { height:38, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat, whiteSpace:'nowrap' as const } as React.CSSProperties,
   // Fixed 2/3/4-column grids collapsed badly on a laptop at the app's 130%
   // zoom. auto-fit lets each row find its own column count instead.
-  g2: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:S.md } as React.CSSProperties,
-  g3: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:S.md } as React.CSSProperties,
-  g4: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:S.md } as React.CSSProperties,
-  row: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${C.line}` } as React.CSSProperties,
-  section: { ...eyebrow, marginBottom:S.md, marginTop:S.xs, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
+  g2: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:S.lg } as React.CSSProperties,
+  g3: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:S.lg } as React.CSSProperties,
+  g4: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:S.lg } as React.CSSProperties,
+  row: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:`${S.sm}px 0`, borderBottom:`1px solid ${C.line}`, gap:S.md } as React.CSSProperties,
+
+  // ── SECTION HEADING ─────────────────────────────────────────────────────
+  // This was an 11px uppercase grey eyebrow — the quietest type in the system
+  // doing the job of a heading, which is why every panel read as one flat
+  // sheet with no hierarchy. It is a real heading now: 15px, bold, primary
+  // ink, with a short brand rule in front of it so the eye finds the start of
+  // a section without reading a word.
+  // The brand rule is the heading's own left border rather than a <span>, so
+  // all ~40 headings gain it without a single JSX edit — and there is no
+  // accent component that call sites could forget to render.
+  section: { fontSize:F.lead, fontWeight:W.bold, color:C.ink, letterSpacing:'-.01em',
+             borderLeft:`3px solid ${C.brand}`, paddingLeft:S.sm,
+             marginBottom:S.md, marginTop:S.xs, display:'flex', alignItems:'center', gap:S.sm,
+             lineHeight:1.3 } as React.CSSProperties,
 }
 
 // ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
@@ -114,47 +170,6 @@ function deptLabel(d:any, list:any[], companies:any[]) {
   return `${d.dept_name} — ${co?.company_name||co?.company_code||'—'}`
 }
 
-// `f` shape: { company, department, position, location } — all '' means "All".
-function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
-  return (
-    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Company</label>
-        <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
-          <option value="">All companies</option>
-          {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Department</label>
-        <select style={T.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
-          <option value="">All departments</option>
-          {(() => {
-            const vis = (departments||[]).filter((d:any)=>!f.company||d.company_id===f.company)
-            return vis.map((d:any)=><option key={d.id} value={d.id}>{deptLabel(d, vis, companies||[])}</option>)
-          })()}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Position</label>
-        <select style={T.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
-          <option value="">All positions</option>
-          {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Location</label>
-        <select style={T.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
-          <option value="">All locations</option>
-          {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
-        </select>
-      </div>
-      {(f.company||f.department||f.position||f.location) && (
-        <button style={T.btnOutline} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
-      )}
-    </div>
-  )
-}
 
 // True unless a set filter excludes the candidate. Department & location resolve via the candidate's MRF.
 function candidateMatchesFilters(c:any, mrfs:any[], f:any): boolean {
@@ -185,17 +200,24 @@ function Badge({ text }:{ text:string }) {
     'Revised Offer':[C.warningTint,C.warning], 'Blacklisted':[C.criticalTint,C.critical],
   }
   const [bg,c] = map[text] || [C.brandTint,C.brandDeep]
-  return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{text}</span>
+  // 11px, not 10. F.micro is the floor the rest of the system holds to, and a
+  // status is the word that tells you what a row IS — it was being set smaller
+  // than the table's own column heads. Same defect as the 9px stage labels.
+  return <span style={{ fontSize:F.micro, padding:'3px 10px', borderRadius:R.pill,
+                        background:bg, color:c, fontWeight:W.semi, lineHeight:1.45,
+                        whiteSpace:'nowrap' as const, display:'inline-block' }}>{text}</span>
 }
 
 function Toast({ msg, type, onClose }:{ msg:string, type:'success'|'error', onClose:()=>void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
   return (
-    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999,
+    // Radius, shadow and spacing off the scales rather than hand-picked. The
+    // shadow was a literal rgba, so a toast kept its light-theme cast in dark.
+    <div style={{ position:'fixed', bottom:S.xl, right:S.xl, zIndex:9999,
       background:type==='success'?C.positive:C.critical, color:C.onAccent,
-      borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500,
-      boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:10 }}>
-      {type==='success'?'':''} {msg}
+      borderRadius:R.md, padding:`${S.md}px ${S.lg}px`, fontSize:F.small, fontWeight:W.medium,
+      boxShadow:E.overlay, display:'flex', alignItems:'center', gap:S.sm }}>
+      {msg}
       <button onClick={onClose} style={{ background:'none', border:'none', color:C.onAccentDim, cursor:'pointer', fontSize:16, padding:'0 4px' }}>×</button>
     </div>
   )
@@ -203,9 +225,17 @@ function Toast({ msg, type, onClose }:{ msg:string, type:'success'|'error', onCl
 
 function SectionLine({ title }:{ title:string }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:10, margin:'14px 0 10px' }}>
-      <div style={{ fontSize:11, fontWeight:600, color:C.brand, textTransform:'uppercase' as const, letterSpacing:'.06em', whiteSpace:'nowrap' as const }}>{title}</div>
-      <div style={{ flex:1, height:1, background:C.brandTint }} />
+    // The step headers inside every form ("3 · Employment details"). They were
+    // an 11px brand-coloured eyebrow trailing a tint hairline — quieter than
+    // the field labels beneath them, so a long form read as one undivided run
+    // of inputs with no sense of where a step began. Now they speak with the
+    // same voice as T.section: ink, bold, a brand rule at the head. The
+    // trailing line stays, on C.line so it reads as structure and not accent.
+    <div style={{ display:'flex', alignItems:'center', gap:S.md, margin:`${S.xl}px 0 ${S.md}px` }}>
+      <div style={{ fontSize:F.small, fontWeight:W.bold, color:C.ink, letterSpacing:'-.01em',
+                    borderLeft:`3px solid ${C.brand}`, paddingLeft:S.sm,
+                    lineHeight:1.3, whiteSpace:'nowrap' as const }}>{title}</div>
+      <div style={{ flex:1, height:1, background:C.line }} />
     </div>
   )
 }
@@ -308,6 +338,50 @@ export default function RecruitmentPage() {
   const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
   const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId, mrfInitialSub: mrfDeep.sub, mrfFocusId: mrfDeep.id, canEditAnyMrf: !!(grant.isSuperAdmin || grant.legacy) }
 
+  // ── Redesign wiring ───────────────────────────────────────────────────
+  // Adapters only reshape the rows loadAll already put in state. No query is
+  // added, no handler changes, and the rail is built from the SAME visibleTabs
+  // filter that already decides which tabs exist.
+  //
+  // nameOf stays a stub HERE, and that is correct rather than pending: the
+  // employee roster (`people`) is fetched inside MRFTab, and the Dashboard
+  // renders no recruiter initials. MRFTab builds its own view models with a
+  // real resolver (see nameOf/budgetLabelOf there). Hoisting the roster fetch
+  // to page level to share it would run that query on every tab instead of on
+  // the one that needs it — a data-flow change the redesign brief rules out.
+  //
+  // The adapters take an index-signature row shape; this file's own interfaces
+  // (MRF, Candidate, Department…) do not declare one, so each array is cast at
+  // the boundary. Cast narrowly, per array, rather than blanket-casting the
+  // context object — a genuinely wrong shape should still fail here.
+  type RxRow = Record<string, unknown>
+  const rxCtx = {
+    departments: departments as unknown as RxRow[],
+    locations: locations as unknown as RxRow[],
+    candidates: candidates as unknown as RxRow[],
+    companies: companies as unknown as RxRow[],
+    quickHireCap: QUICK_HIRE_CAP,
+    nameOf: () => '',
+  }
+  const mrfVMs = useMemo(() => mrfs.map(r => toMrfVM(r as unknown as RxRow, rxCtx)), [mrfs, candidates, departments, locations]) // eslint-disable-line react-hooks/exhaustive-deps
+  const candVMs = useMemo(() => candidates.map(c => toCandidateVM(c as unknown as RxRow)), [candidates])
+
+  // DashTab's own figure, lifted verbatim — same formula, same arrays. It reads
+  // created_at, not a joining date; that is the existing definition and this
+  // redesign does not change what the tile counts.
+  const joinedThisMonth = useMemo(
+    () => candidates.filter((c:Candidate) => c.stage==='Joined' && new Date(c.created_at).getMonth()===new Date().getMonth()).length,
+    [candidates])
+
+  // TABS here uses `k`/`l`, not `key`/`label` as the kit's example assumes.
+  const railTabs: RailTab[] = visibleTabs.map(t => ({
+    key: t.k, label: t.l, ...TAB_META[t.k],
+    count: t.k === 'mrf' ? mrfs.length
+         : t.k === 'pipeline' ? candVMs.filter(c => c.stage !== 'Rejected').length
+         : null,
+  }))
+  const rail = <TabRail tabs={railTabs} active={tab} onSelect={k => setTab(k as typeof tab)} />
+
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
       <div style={{ color:C.brand, fontSize:14, fontWeight:500 }}>Loading...</div>
@@ -316,127 +390,72 @@ export default function RecruitmentPage() {
 
   return (
     <div style={T.page}>
-      {/* Header */}
-      <div className="ez-page-head ez-page-head-bleed">
-        <h1 style={{ margin:0, fontSize:F.page, fontWeight:W.bold, color:C.ink, letterSpacing:'-.02em' }}>
-          Recruitment &amp; ATS
-        </h1>
-        <div style={{ marginTop:5, fontSize:F.small, color:C.muted }}>
-          MRF → AI Screening → Pipeline → Negotiation → Offer → Pre-onboarding
-        </div>
-      </div>
+      {/* All eleven tabs now render their own frame: RxPage supplies the
+          padding and the sticky rail, RecruitmentHeader the title and crumb.
+          The legacy page header, the pill bar and the 1300px width wrapper
+          that used to sit here are gone — they existed only for tabs that had
+          not been converted yet, and there are none left. */}
 
-      {/* Tabs */}
-      {/* Wraps rather than scrolls. Eleven pills need 1061px in the 1036px this
-          bar gets at 1280 — a 25px overrun, which is the worst kind: the bar
-          looks complete while quietly clipping "Job Status" behind a scrollbar,
-          so a whole destination is invisible unless you think to drag it. A
-          second row costs 30px and hides nothing at any width. */}
-      <div style={{ background:C.surface, display:'flex', flexWrap:'wrap', gap:6, rowGap:6,
-                    padding:`10px ${S.xl}px`,
-                    borderTop:`1px solid ${C.line}`, borderBottom:`1px solid ${C.line}`,
-                    position:'sticky', top:0, zIndex:30, boxShadow:E.flat }}>
-        {visibleTabs.map(t => {
-          const on = tab === t.k
-          return (
-            // Pill tabs — same shape as the Onboarding page's join-window buttons.
-            // Inactive pills sit back — a hairline on the page ground rather
-            // than a filled chip. Eleven filled chips all claimed the eye
-            // equally, so the one that mattered, the active tab, had to fight
-            // the other ten. Now it is the only filled thing in the bar.
-            <button key={t.k} onClick={() => setTab(t.k as any)}
-              className="ez-tab" data-on={on ? '1' : '0'}
-              style={{ padding:'6px 13px', borderRadius:99,
-                border:'1px solid '+(on?C.brand:C.line),
-                cursor:'pointer', fontSize:12, fontWeight:on?600:500, fontFamily:'inherit',
-                background:on?C.brand:'transparent', color:on?C.onAccent:C.muted,
-                whiteSpace:'nowrap', flexShrink:0 }}>
-              {t.l}
-            </button>
-          )
-        })}
-      </div>
-
-      <div style={{ padding:'18px 24px', maxWidth:1300 }}>
-        {tab==='dashboard' && <DashTab {...props} />}
-        {tab==='mrf' && <MRFTab {...props} />}
-        {tab==='screening' && <ScreeningTab {...props} />}
-        {tab==='pipeline' && <PipelineTab {...props} />}
-        {tab==='negotiation' && <NegotiationTab {...props} />}
-        {tab==='offerapproval' && <OfferApprovalTab {...props} />}
-        {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
-        {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
-        {tab==='offers' && <OffersTab {...props} />}
-        {tab==='preonboarding' && <PreOnboardTab {...props} />}
-        {tab==='jobstatus' && <JobStatusTab {...props} />}
-      </div>
+      {tab==='dashboard' && (
+        <DashboardView
+          rail={rail}
+          mrfs={mrfVMs}
+          candidates={candVMs}
+          stages={STAGES}
+          joinedThisMonth={joinedThisMonth}
+          todos={dashboardTodos({ mrfs: mrfVMs, viewerName: grant.name ?? '' })}
+          onTab={k => setTab(k as typeof tab)}
+          /* No page-level handler exists for either of these: setSelCand lives
+             inside PipelineTab and setShowForm inside MRFTab. Routing through
+             setTab keeps every handler where it is rather than lifting state. */
+          onOpenCandidate={() => setTab('pipeline')}
+          onRaiseMrf={() => setTab('mrf')}
+        />
+      )}
+      {/* Job Status keeps its own component: it carries ten pieces of state
+          and eight UI blocks, six of which JobStatusView has no slot for.
+          Per Step 6 of the guide it is restyled in place inside RxPage
+          rather than replaced by the view. */}
+      {tab==='jobstatus' && <JobStatusTab {...props} rail={rail} />}
+      {/* MRF renders MrfListView, which is a genuine fit here in a way
+          JobStatusView was not: it has a passthrough slot for the existing
+          filter bar and its actions map one-to-one onto the tab's handlers.
+          The tab keeps its create/edit form, its detail drawer, its approval
+          modal and its delete dialog. */}
+      {tab==='mrf' && <MRFTab {...props} rail={rail} />}
+      {/* Pipeline renders PipelineView. No drag-and-drop by design: every
+          stage move still goes through the modal, so moveStage's forward-only
+          rule and the modal's own feedback gate cannot be bypassed. */}
+      {tab==='pipeline' && <PipelineTab {...props} rail={rail} />}
+      {/* AI Screening is a WRAP, not a replace: the kit has no ScreeningView.
+          The tab keeps its upload flow and handlers; only the result rows
+          move to ScreeningResultCard, with the API's field names mapped. */}
+      {tab==='screening' && <ScreeningTab {...props} rail={rail} />}
+      {/* Negotiation is a WRAP. The payroll calculator's table and maths are
+          untouched on purpose: restyling statutory EPF/ESIC/PT presentation
+          risks real numbers for cosmetic gain. Only the frame, the list and
+          the panel containers change. */}
+      {tab==='negotiation' && <NegotiationTab {...props} rail={rail} />}
+      {/* Offer Approval has TWO component returns -- the list, and an early
+          return for the selected candidate. Both are wrapped, or the screen
+          loses its chrome the moment a request is created. */}
+      {tab==='offerapproval' && <OfferApprovalTab {...props} rail={rail} />}
+      {/* Offers: the letter body and the Send flow are deliberately not
+          restyled -- that text reaches a real candidate. Only the frame,
+          the list and the panel container change. */}
+      {tab==='offers' && <OffersTab {...props} rail={rail} />}
+      {/* Pre-onboarding: render-only restyle. Every control here writes,
+          deletes or emails a real candidate (sendAcceptance posts to
+          send-letter), so the frame changed and the handlers did not. */}
+      {tab==='preonboarding' && <PreOnboardTab {...props} rail={rail} />}
+      {/* HR Head lives in offer-flow-components.tsx, which has its own style
+          objects and its own RecFilterBar/SearchBar. Only this component was
+          converted; CreateOfferApproval and AuditTrailViewer in that file are
+          untouched, since the Offer Approval tab renders both. */}
+      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} rail={rail} />}
+      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} rail={rail} />}
 
       {notify && <Toast msg={notify.msg} type={notify.type} onClose={() => setNotify(null)} />}
-    </div>
-  )
-}
-
-// ── DASHBOARD ─────────────────────────────────────────────────────
-function DashTab({ mrfs, candidates }:any) {
-  const approved = mrfs.filter((m:MRF)=>m.status==='APPROVED')
-  const openings = approved.reduce((s:number,m:MRF)=>s+(m.no_of_openings||m.openings||0),0)
-  const joined = candidates.filter((c:Candidate)=>c.stage==='Joined'&&new Date(c.created_at).getMonth()===new Date().getMonth())
-  const stageCount = STAGES.reduce((a:any,s)=>{ a[s]=candidates.filter((c:Candidate)=>c.stage===s).length; return a },{})
-
-  return (
-    <div>
-      <div style={T.g4}>
-        {[{l:'Total MRFs',v:mrfs.length,c:C.ink},
-          {l:'Active Openings',v:openings,c:C.ink},
-          {l:'In Pipeline',v:candidates.length,c:C.brandDeep},
-          {l:'Joined This Month',v:joined.length,c:C.positive}].map(s=>(
-          <div key={s.l} style={{ ...T.card, boxShadow:E.flat }}>
-            <div style={{ ...eyebrow, lineHeight:1.3, minHeight:27 }}>{s.l}</div>
-            <div style={{ fontSize:F.display, fontWeight:W.bold, color:s.c, marginTop:4,
-                          letterSpacing:'-.02em', lineHeight:1.05, ...numeric }}>{s.v}</div>
-          </div>
-        ))}
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>Pipeline Overview</div>
-        {/* Eleven stages, six columns — a deliberate 6+5. auto-fit stranded the
-            last stage alone on the second row; eleven across does not fit the
-            content column at the app's 130% zoom. */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(6, minmax(0, 1fr))', gap:8 }}>
-          {STAGES.map(s=>(
-            <div key={s} style={{ background:C.surface, borderRadius:R.md, padding:'9px 12px',
-                                  textAlign:'center' as const, minWidth:76,
-                                  border:`1px solid ${C.line}`,
-                                  borderTop:`2px solid ${STAGE_COLOR[s]}` }}>
-              <div style={{ fontSize:F.title, fontWeight:W.bold, color:STAGE_TEXT[s], ...numeric }}>{stageCount[s]||0}</div>
-              <div style={{ fontSize:9, color:C.muted, marginTop:2, lineHeight:1.3 }}>{s}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={T.g2}>
-        <div style={T.card}>
-          <div style={T.section}>Recent MRFs</div>
-          {mrfs.slice(0,5).map((m:MRF)=>(
-            <div key={m.id} style={T.row}>
-              <div>
-                <div style={{ fontSize:13, fontWeight:500 }}>{m.designation||m.position||'—'}</div>
-                <div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{m.employment_type} · {m.no_of_openings||m.openings||0} openings</div>
-              </div>
-              <Badge text={m.status} />
-            </div>
-          ))}
-        </div>
-        <div style={T.card}>
-          <div style={T.section}>MRF Status</div>
-          {['DRAFT','SUBMITTED','APPROVED','CLOSED','REJECTED'].map(st=>(
-            <div key={st} style={T.row}>
-              <Badge text={st} />
-              <span style={{ fontSize:14, fontWeight:600, color:C.ink }}>{mrfs.filter((m:MRF)=>m.status===st).length}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }
@@ -465,7 +484,7 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
         </div>
       )}
       <div style={{ position:'relative' as const }}>
-        <input style={T.input} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search skills — type e.g. 'py' then pick, or add custom"
+        <input className="rx-input" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search skills — type e.g. 'py' then pick, or add custom"
           onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); if(matches[0]) add(matches[0]); else if(q.trim()&&!exact) addCustom() } }} />
         {q.trim() && (matches.length>0 || !exact) && (
           <div style={{ position:'absolute' as const, top:'100%', left:0, right:0, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:7, marginTop:2, zIndex:20, maxHeight:200, overflowY:'auto' as const, boxShadow:'0 6px 18px rgba(0,0,0,.1)' }}>
@@ -473,7 +492,7 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
               <div key={s} onClick={()=>add(s)} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:C.ink }}>{s}</div>
             ))}
             {!exact && q.trim() && (
-              <div onClick={addCustom} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:C.brand, fontWeight:600, borderTop:matches.length?'1px solid #F3F0FF':'none' }}>+ Add custom: “{q.trim()}”</div>
+              <div onClick={addCustom} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:C.brand, fontWeight:600, borderTop:matches.length?`1px solid ${C.line}`:'none' }}>+ Add custom: “{q.trim()}”</div>
             )}
           </div>
         )}
@@ -482,18 +501,6 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
   )
 }
 
-// ── Reusable search: type, then press Apply (or Enter). Clear resets it. ──
-function SearchBar({ placeholder, onApply, width=300 }:{ placeholder:string; onApply:(q:string)=>void; width?:number }) {
-  const [draft, setDraft] = useState('')
-  return (
-    <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
-      <input style={{ ...T.input, maxWidth:width }} value={draft} placeholder={placeholder}
-        onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
-      <button style={T.btnPrimary} onClick={()=>onApply(draft.trim())}>Apply</button>
-      {draft && <button style={T.btnOutline} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
-    </div>
-  )
-}
 
 // Close an MRF automatically once offers sent (Offer Sent + Joined) reach its openings.
 async function closeMrfIfFilled(supabase:any, mrfId?:string) {
@@ -514,7 +521,9 @@ async function reopenMrf(supabase:any, mrfId?:string) {
 
 // ── MRF HELPERS ───────────────────────────────────────────────────
 // Field taxonomy follows mrf-module-spec.md §2 (sections 1–10).
-const MRF_STATUSES = ['DRAFT','SUBMITTED','ON_HOLD','APPROVED','REJECTED','CLOSED']
+// The MRF_STATUSES list that sat here is gone with MrfOverview, its only
+// consumer. MrfListView carries its own ordered status list, and MRF_LABEL /
+// MRF_TONE in the kit's primitives cover all six of the same keys.
 // Quick Hire is the ≤ ₹6L lane; Full MRF carries any CTC, with no floor.
 const QUICK_HIRE_CAP = 600000
 // §1 Requisition type · §3 Work mode · §9 Sourcing mode
@@ -536,9 +545,6 @@ const CTQ_TYPES = [
 // so a different chain can be used per department without a code change.
 const DEFAULT_CHAIN_ROLES = ['Reporting Manager','Department Head','HR','Finance']
 
-const URGENCY_STYLE:Record<string,[string,string]> = {
-  HIGH:[C.criticalTint,C.critical], MEDIUM:[C.warningTint,C.warning], LOW:[C.positiveTint,C.positive],
-}
 const CUR_SYMBOL:Record<string,string> = { INR:'₹', USD:'$', GBP:'£', EUR:'€', AED:'AED ', SGD:'S$' }
 const money  = (n?:number|null, cur='INR') => n==null ? '—' : (CUR_SYMBOL[cur]||'')+Number(n).toLocaleString('en-IN')
 const lakhs  = (n?:number|null, cur='INR') => n==null ? '—' : cur==='INR' ? '₹'+(Number(n)/100000).toFixed(1)+'L' : money(n,cur)
@@ -652,10 +658,15 @@ async function logMrfAudit(supabase:any, mrf:{id:string; company_id?:string}, ac
 function Field({ label, error, required, hint, children }:{ label:string; error?:string; required?:boolean; hint?:string; children:React.ReactNode }) {
   return (
     <div>
-      <label style={T.label}>{label}{required && <span style={{ color:C.critical }}> *</span>}</label>
+      {/* rx-label, not T.label. Every field in the ten-step MRF form goes
+          through here, so this one line moves all 43 of them off the 11px
+          uppercase eyebrow and onto the redesign's 12.5px sentence-case
+          label — the same one MrfForm and the SearchBox above it use.
+          The required marker is <em>, which is what .rx-label styles. */}
+      <label className="rx-label" style={{ display:'block', marginBottom:6 }}>{label}{required && <em> *</em>}</label>
       {children}
       {error ? <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>⚠ {error}</div>
-             : hint ? <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{hint}</div> : null}
+             : hint ? <div style={{ fontSize:F.micro, color:C.muted, marginTop:S.xs }}>{hint}</div> : null}
     </div>
   )
 }
@@ -663,7 +674,7 @@ function Field({ label, error, required, hint, children }:{ label:string; error?
 function MrfMeta({ label, value }:{ label:string; value:React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
+      <div style={{ ...eyebrow }}>{label}</div>
       <div style={{ fontSize:13, color:C.ink, marginTop:2 }}>{value ?? '—'}</div>
     </div>
   )
@@ -676,7 +687,7 @@ function MrfMeta({ label, value }:{ label:string; value:React.ReactNode }) {
 // back to "Select…" every time somebody picked a currency.
 function MasterSelect({ options, value, onChange, placeholder, style, useCode }:any) {
   return (
-    <select style={style||T.select} value={value||''} onChange={e=>onChange(e.target.value)}>
+    <select className="rx-input" style={style} value={value||''} onChange={e=>onChange(e.target.value)}>
       <option value="">{options?.length ? (placeholder||'Select…') : 'No options configured'}</option>
       {(options||[]).map((o:any)=>
         <option key={o.code} value={useCode ? o.code : o.label}>{o.label}</option>)}
@@ -714,7 +725,7 @@ function PersonSearchSelect({ people, value, onChange, placeholder }:{ people:an
   return (
     <div ref={boxRef} style={{ position:'relative' }}>
       <input
-        style={{ ...T.input, paddingRight: value ? 28 : undefined }}
+        className="rx-input" style={{ paddingRight: value ? 28 : undefined }}
         value={open ? q : (selected ? `${selected.full_name}${selected.designation?` — ${selected.designation}`:''}` : '')}
         onChange={e=>setQ(e.target.value)}
         onFocus={()=>{ setOpen(true); setQ('') }}
@@ -722,22 +733,31 @@ function PersonSearchSelect({ people, value, onChange, placeholder }:{ people:an
       />
       {value && !open && (
         <button type="button" onClick={()=>onChange('')} title="Clear"
-          style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', border:'none', background:'transparent', color:'#9CA3AF', cursor:'pointer', fontSize:13, padding:2, lineHeight:1 }}
+          style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', border:'none', background:'transparent', color:C.faint, cursor:'pointer', fontSize:13, padding:2, lineHeight:1 }}
         >✕</button>
       )}
+      {/* Every colour below was a literal, which meant this dropdown stayed
+          white-on-white in dark mode: background '#fff', ink '#1E1B4B', and a
+          '#F5F3FF' hover painted straight onto the node. The hover stays
+          imperative — it is set on a DOM element, not in React state — but it
+          can still read from a token.
+
+          This sits ABOVE the open-guard rather than inside it. A JSX comment
+          in an expression slot is not a comment at all but a second expression
+          container, and that is only legal as a child of an element. */}
       {open && (
-        <div style={{ position:'absolute', zIndex:20, top:'calc(100% + 4px)', left:0, right:0, maxHeight:220, overflowY:'auto', background:'#fff', border:'1px solid #DDD6FE', borderRadius:7, boxShadow:'0 6px 20px rgba(30,27,75,0.12)' }}>
+        <div style={{ position:'absolute', zIndex:20, top:'calc(100% + 4px)', left:0, right:0, maxHeight:220, overflowY:'auto', background:C.surface, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, boxShadow:E.floating }}>
           {filtered.length===0 ? (
-            <div style={{ padding:'10px 12px', fontSize:12, color:'#9CA3AF' }}>No match</div>
+            <div style={{ padding:'10px 12px', fontSize:F.tiny, color:C.faint }}>No match</div>
           ) : filtered.map((p:any)=>(
             <div key={p.id}
               onMouseDown={e=>{ e.preventDefault(); onChange(p.id); setOpen(false); setQ('') }}
-              style={{ padding:'8px 12px', fontSize:12.5, cursor:'pointer', color:'#1E1B4B', borderBottom:'1px solid #F3F0FF' }}
-              onMouseEnter={e=>{ (e.currentTarget as HTMLDivElement).style.background='#F5F3FF' }}
-              onMouseLeave={e=>{ (e.currentTarget as HTMLDivElement).style.background='#fff' }}
+              style={{ padding:`${S.sm}px ${S.md}px`, fontSize:F.small, cursor:'pointer', color:C.ink, borderBottom:`1px solid ${C.line}` }}
+              onMouseEnter={e=>{ (e.currentTarget as HTMLDivElement).style.background=C.brandTint }}
+              onMouseLeave={e=>{ (e.currentTarget as HTMLDivElement).style.background=C.surface }}
             >
-              <div style={{ fontWeight:600 }}>{p.full_name}</div>
-              <div style={{ fontSize:10.5, color:'#9CA3AF' }}>{p.emp_code||'—'}{p.designation?` · ${p.designation}`:''}</div>
+              <div style={{ fontWeight:W.semi }}>{p.full_name}</div>
+              <div style={{ fontSize:F.micro, color:C.faint }}>{p.emp_code||'—'}{p.designation?` · ${p.designation}`:''}</div>
             </div>
           ))}
         </div>
@@ -770,20 +790,22 @@ function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }
         <div key={q.id||i} style={{ border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'10px 12px', marginBottom:8, background:C.sunken }}>
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
             <span style={{ fontSize:11, fontWeight:700, color:C.brandDeep, minWidth:22 }}>Q{i+1}</span>
-            <input style={{ ...T.input, flex:1 }} value={q.question||''} placeholder="e.g. Do you have a valid B.Tech degree?"
+            <input className="rx-input" style={{ flex:1 }} value={q.question||''} placeholder="e.g. Do you have a valid B.Tech degree?"
               onChange={e=>set(i,{ question:e.target.value })} />
-            <button onClick={()=>del(i)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11 }}></button>
+            {/* Was contentless — an empty red box with no label and no
+                accessible name. Same stripped-glyph bug as MrfCard's Delete. */}
+            <button onClick={()=>del(i)} style={{ ...T.btn, height:32, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalEdge}`, fontSize:F.tiny }}>Remove</button>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:8, alignItems:'center' }}>
-            <select style={T.select} value={q.type||'YES_NO'} onChange={e=>set(i,{ type:e.target.value, expected: e.target.value==='YES_NO'?'Yes':'' })}>
+            <select className="rx-input" value={q.type||'YES_NO'} onChange={e=>set(i,{ type:e.target.value, expected: e.target.value==='YES_NO'?'Yes':'' })}>
               {CTQ_TYPES.map(t=><option key={t.k} value={t.k}>{t.label}</option>)}
             </select>
             {q.type==='YES_NO' ? (
-              <select style={T.select} value={q.expected||'Yes'} onChange={e=>set(i,{ expected:e.target.value })}>
+              <select className="rx-input" value={q.expected||'Yes'} onChange={e=>set(i,{ expected:e.target.value })}>
                 <option value="Yes">Expected: Yes</option><option value="No">Expected: No</option>
               </select>
             ) : (
-              <input style={T.input} value={q.expected||''} placeholder={q.type==='NUMBER_MIN'?'Minimum value':'Expected answer'}
+              <input className="rx-input" value={q.expected||''} placeholder={q.type==='NUMBER_MIN'?'Minimum value':'Expected answer'}
                 onChange={e=>set(i,{ expected:e.target.value })} />
             )}
             <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:C.muted, whiteSpace:'nowrap' as const }}>
@@ -822,9 +844,13 @@ function ApprovalChainEditor({ chain, onChange }:{ chain:any[]; onChange:(v:any[
           <span style={{ fontSize:13, fontWeight:600, flex:1 }}>{s.role}</span>
           {s.status && s.status!=='PENDING' && <Badge text={s.status} />}
           {s.actor && <span style={{ fontSize:11, color:C.faint }}>{s.actor}</span>}
-          <button onClick={()=>move(i,-1)} disabled={i===0} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11, opacity:i===0?.4:1 }}></button>
-          <button onClick={()=>move(i,1)} disabled={i===chain.length-1} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11, opacity:i===chain.length-1?.4:1 }}></button>
-          <button onClick={()=>del(i)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, fontSize:11 }}></button>
+          {/* All three rendered with no content: reordering and removing an
+              approver were unlabelled boxes, unreachable by screen reader and
+              unguessable by sight. Words, not glyphs — a stripped emoji is
+              exactly how they ended up empty. */}
+          <button onClick={()=>move(i,-1)} disabled={i===0} title="Move earlier" style={{ ...T.btn, height:32, background:C.brandTint, color:C.brandDeep, border:`1px solid ${C.brandEdge}`, fontSize:F.tiny, opacity:i===0?.4:1 }}>Up</button>
+          <button onClick={()=>move(i,1)} disabled={i===chain.length-1} title="Move later" style={{ ...T.btn, height:32, background:C.brandTint, color:C.brandDeep, border:`1px solid ${C.brandEdge}`, fontSize:F.tiny, opacity:i===chain.length-1?.4:1 }}>Down</button>
+          <button onClick={()=>del(i)} style={{ ...T.btn, height:32, background:C.criticalTint, color:C.critical, border:`1px solid ${C.criticalEdge}`, fontSize:F.tiny }}>Remove</button>
         </div>
       ))}
       <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginTop:6 }}>
@@ -847,7 +873,7 @@ function ChannelPicker({ options, value, onChange }:{ options:any[]; value:strin
         const on = value.includes(o.label)
         return (
           <button key={o.code} onClick={()=>toggle(o.label)} style={{ ...T.btn, fontSize:11,
-            background:on?C.brand: C.surface, color:on?C.surface:C.brandDeep, border:on?'none':'1px solid #DDD6FE' }}>
+            background:on?C.brand: C.surface, color:on?C.onAccent:C.brandDeep, border:`1px solid ${on?C.brandDeep:C.brandEdge}` }}>
             {on?'✓ ':''}{o.label}
           </button>
         )
@@ -890,7 +916,7 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
   return (
     <div>
       <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap' as const, alignItems:'center' }}>
-        <select style={{ ...T.select, maxWidth:230 }} value={kind} onChange={e=>setKind(e.target.value)}>
+        <select className="rx-input" style={{ maxWidth:230 }} value={kind} onChange={e=>setKind(e.target.value)}>
           {ATTACH_KINDS.map(a=><option key={a.k} value={a.k}>{a.label}</option>)}
         </select>
         <input ref={inputRef} type="file" style={{ display:'none' }}
@@ -902,7 +928,7 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
       </div>
       {attachments.length===0 && <div style={{ fontSize:12, color:C.faint }}>No documents attached.</div>}
       {attachments.map((a:any)=>(
-        <div key={a.path} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${C.brandEdge}`, gap:10 }}>
+        <div key={a.path} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${C.line}`, gap:10 }}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{a.name}</div>
             <div style={{ fontSize:11, color:C.faint }}>
@@ -920,270 +946,6 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
   )
 }
 
-// ── MRF OVERVIEW ──────────────────────────────────────────────────
-// Headline position maths plus a clickable status breakdown. "Available" is
-// the number still to hire on live requisitions — openings on APPROVED MRFs
-// that no offer has been made against yet, which is what a recruiter is
-// actually working from.
-const STATUS_TONE:Record<string,[string,string]> = {
-  DRAFT:[C.sunken,C.muted], SUBMITTED:[C.warningTint,C.warning], ON_HOLD:[C.warningTint,C.critical],
-  APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical], CLOSED:[C.sunken,C.inkSoft],
-}
-const STATUS_HELP:Record<string,string> = {
-  DRAFT:'Not yet submitted', SUBMITTED:'Waiting on approval', ON_HOLD:'Paused by an approver',
-  APPROVED:'Open for hiring', REJECTED:'Turned down', CLOSED:'Filled or withdrawn',
-}
-
-function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:any) {
-  const filledFor = (m:MRF) => candidates.filter((c:Candidate)=>
-    c.mrf_id===m.id && (c.stage==='Offer Sent'||c.stage==='Joined')).length
-  const openingsOf = (m:MRF) => m.no_of_openings || m.openings || 0
-
-  const live      = mrfs.filter((m:MRF)=>m.status==='APPROVED')
-  const totalOpen = live.reduce((s:number,m:MRF)=>s+openingsOf(m), 0)
-  const totalFill = live.reduce((s:number,m:MRF)=>s+Math.min(filledFor(m), openingsOf(m)), 0)
-  const available = Math.max(0, totalOpen - totalFill)
-  const counts = Object.fromEntries(MRF_STATUSES.map(s=>[s, mrfs.filter((m:MRF)=>m.status===s).length]))
-  const expiring = mrfs.filter((m:MRF)=>{
-    const v = (m as any).validity_date
-    if (!v || ['CLOSED','REJECTED'].includes(m.status)) return false
-    const days = Math.ceil((+new Date(v) - +new Date(new Date().toDateString()))/86400000)
-    return days <= 14
-  }).length
-
-  const Tile = ({ label, value, sub, color }:any) => (
-    <div style={{ background:C.surface, border:'1px solid var(--ez-line)', borderRadius:10, padding:'11px 13px' }}>
-      <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
-      <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||C.ink }}>{value}</div>
-      {sub && <div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{sub}</div>}
-    </div>
-  )
-
-  return (
-    <div style={{ ...T.card, padding:'14px 16px' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:11, gap:10, flexWrap:'wrap' as const }}>
-        <div style={T.section}>Requisition Overview</div>
-        <div style={{ display:'flex', gap:6 }}>
-          {[['cards','Cards'],['table','List']].map(([k,l])=>(
-            <button key={k} onClick={()=>onView(k)} style={{ ...T.btn, fontSize:11,
-              background:view===k?C.brand: C.surface, color:view===k?C.surface:C.brandDeep,
-              border:view===k?'none':'1px solid #DDD6FE' }}>{l}</button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:9, marginBottom:13 }}>
-        <Tile label="Total MRFs" value={mrfs.length} color={C.brand} />
-        <Tile label="Open Positions" value={totalOpen} sub="on approved MRFs" color={C.info} />
-        <Tile label="Available to Hire" value={available} sub={`${totalFill} already filled`} color={available?C.positive:C.faint} />
-        <Tile label="Pending Approval" value={counts.SUBMITTED} sub={counts.ON_HOLD?`${counts.ON_HOLD} on hold`:'awaiting sign-off'} color={counts.SUBMITTED?C.warning:C.faint} />
-        <Tile label="Approved" value={counts.APPROVED} sub="live requisitions" color={C.positive} />
-        {expiring>0 && <Tile label="Expiring Soon" value={expiring} sub="within 14 days" color={C.critical} />}
-      </div>
-
-      {/* Proportional bar — the shape of the pipeline at a glance. */}
-      {mrfs.length>0 && (
-        <div style={{ display:'flex', height:7, borderRadius:99, overflow:'hidden', marginBottom:10, background:C.brandTint }}>
-          {MRF_STATUSES.filter(s=>counts[s]>0).map(s=>(
-            <div key={s} title={`${s.replace('_',' ')}: ${counts[s]}`}
-              style={{ width:`${(counts[s]/mrfs.length)*100}%`, background:STATUS_TONE[s][1] }} />
-          ))}
-        </div>
-      )}
-
-      <div style={{ display:'flex', gap:7, flexWrap:'wrap' as const }}>
-        <button onClick={()=>onPickStatus('')} style={{ ...T.btn, fontSize:11,
-          background: fStatus===''?C.brand: C.surface, color: fStatus===''?C.surface:C.brandDeep,
-          border: fStatus===''?'none':'1px solid #DDD6FE' }}>
-          All <span style={{ fontWeight:700 }}>{mrfs.length}</span>
-        </button>
-        {MRF_STATUSES.map(s=>{
-          const on = fStatus===s
-          const [bg,fg] = STATUS_TONE[s]
-          return (
-            <button key={s} onClick={()=>onPickStatus(on?'':s)} title={STATUS_HELP[s]}
-              style={{ ...T.btn, fontSize:11, display:'flex', alignItems:'center', gap:6,
-                background:on?fg:bg, color:on?C.surface:fg, border:'1px solid '+(on?fg:'transparent'),
-                opacity: counts[s]===0 && !on ? .55 : 1 }}>
-              {s.replace('_',' ')}<span style={{ fontWeight:700 }}>{counts[s]}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── MRF TABLE (list view) ─────────────────────────────────────────
-function MrfTable({ rows, orgOf, candidates, onOpen, onReview }:any) {
-  const th:React.CSSProperties = { fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase',
-    letterSpacing:'.05em', textAlign:'left', padding:'8px 10px', borderBottom: `1px solid ${C.brandEdge}`, whiteSpace:'nowrap' }
-  const td:React.CSSProperties = { fontSize:12, color:C.ink, padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}`, verticalAlign:'middle' }
-  return (
-    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
-      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:900 }}>
-        <thead>
-          <tr>
-            <th style={th}>MRF No.</th><th style={th}>Position</th><th style={th}>Department</th>
-            <th style={th}>Type</th><th style={{ ...th, textAlign:'center' }}>Openings</th>
-            <th style={{ ...th, textAlign:'center' }}>Filled</th><th style={th}>Status</th>
-            <th style={th}>Recruiter</th><th style={th}>Target</th><th style={th}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((m:MRF)=>{
-            const org = orgOf(m)
-            const openings = m.no_of_openings||m.openings||0
-            const filled = candidates.filter((c:Candidate)=>c.mrf_id===m.id && (c.stage==='Offer Sent'||c.stage==='Joined')).length
-            return (
-              <tr key={m.id} style={{ cursor:'pointer' }} onClick={()=>onOpen(m)}>
-                <td style={{ ...td, color:C.muted, whiteSpace:'nowrap' }}>{m.mrf_number||'—'}</td>
-                <td style={td}>
-                  <div style={{ fontWeight:600 }}>{(m as any).job_title||m.designation||m.position||'Untitled'}</div>
-                  {(m as any).grade && <div style={{ fontSize:11, color:C.faint }}>{(m as any).grade}</div>}
-                </td>
-                <td style={{ ...td, color:C.muted }}>{org.dept}</td>
-                <td style={{ ...td, color:C.muted, whiteSpace:'nowrap' }}>
-                  {m.employment_type||'—'}{(m as any).work_mode?` · ${(m as any).work_mode}`:''}
-                </td>
-                <td style={{ ...td, textAlign:'center', fontWeight:600 }}>{openings}</td>
-                <td style={{ ...td, textAlign:'center', color: filled>=openings&&openings>0?C.positive:C.muted }}>{filled}</td>
-                <td style={td}><Badge text={m.status} /></td>
-                <td style={{ ...td, color:C.muted }}>{m.assigned_recruiter||'—'}</td>
-                <td style={{ ...td, color:C.muted, whiteSpace:'nowrap' }}>{fmtDay((m as any).target_joining_date)}</td>
-                <td style={{ ...td, textAlign:'right', whiteSpace:'nowrap' }}>
-                  {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
-                    <button onClick={e=>{ e.stopPropagation(); onReview(m) }}
-                      style={{ ...T.btn, background:C.brand, color:C.onAccent, fontSize:11 }}>Review</button>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {rows.length===0 && (
-        <div style={{ padding:26, textAlign:'center', color:C.faint, fontSize:13 }}>No requisitions match.</div>
-      )}
-    </div>
-  )
-}
-
-// ── MRF CARD ──────────────────────────────────────────────────────
-// Friendly labels for the roles that appear in an MRF's approval chain.
-const ROLE_LABEL: Record<string,string> = {
-  RM1:'Reporting Manager', RM2:'RM2 / Skip-level', HOD:'HOD', HR_HEAD:'HR Head', HR_MANAGER:'HR Manager',
-  'Reporting Manager':'Reporting Manager', 'Department Head':'Department Head', HR:'HR', Finance:'Finance',
-}
-
-function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, onReopen, canEdit, canSendBack, onSendBack }:any) {
-  const openings = m.no_of_openings || m.openings || 0
-  const filled = cands.filter((c:Candidate)=>c.stage==='Offer Sent'||c.stage==='Joined').length
-  const pct = openings ? Math.min(100, (filled/openings)*100) : 0
-  const [ubg,uc] = URGENCY_STYLE[m.urgency] || [C.brandTint,C.brandDeep]
-  const chain = asArray(m.approval_chain)
-  const doneSteps = chain.filter((s:any)=>s.status==='APPROVED').length
-  // §6 — flag a requisition that has run past its validity date.
-  const expired = m.validity_date && new Date(m.validity_date) < new Date(new Date().toDateString())
-    && !['CLOSED','REJECTED'].includes(m.status)
-  return (
-    <div style={T.card}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
-        <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={()=>onOpen(m)}>
-          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' as const }}>
-            <span style={{ fontSize:14, fontWeight:600, color:C.ink }}>{m.job_title||m.designation||m.position||'Untitled'}</span>
-            <Badge text={m.status} />
-            {m.mrf_type && <Badge text={m.mrf_type} />}
-            {m.urgency && <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, background:ubg, color:uc, fontWeight:600 }}>{m.urgency}</span>}
-            {expired && <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, background:C.criticalTint, color:C.critical, fontWeight:600 }}>EXPIRED</span>}
-          </div>
-          <div style={{ fontSize:11, color:C.faint, marginBottom:6 }}>
-            {m.mrf_number || 'No MRF number'} · {org.company} · {org.dept} · {org.loc}
-            {m.business_unit?` · ${m.business_unit}`:''}
-          </div>
-          <div style={{ fontSize:12, color:C.faint, display:'flex', gap:14, flexWrap:'wrap' as const }}>
-            <span>👥 {openings} opening{openings===1?'':'s'}</span>
-            <span>💼 {m.employment_type||'—'}</span>
-            {m.work_mode && <span>🏢 {m.work_mode}</span>}
-            {m.grade && <span>🏷 {m.grade}</span>}
-            {m.experience_required && <span>⏱ {m.experience_required}</span>}
-            {m.budget_max && <span>💰 {compOf(m.employment_type).label} {payAmount(m.budget_max, m.currency, compOf(m.employment_type).period)} max</span>}
-            {m.duration_months && <span>⏳ {m.duration_months} month{m.duration_months===1?'':'s'}</span>}
-            {m.target_joining_date && <span>📅 by {fmtDay(m.target_joining_date)}</span>}
-            <span style={{ color:C.brand }}>🧑 {cands.length} candidate{cands.length===1?'':'s'}</span>
-            {m.assigned_recruiter && <span>👤 {m.assigned_recruiter}</span>}
-          </div>
-          {m.skills_required && (
-            <div style={{ fontSize:11, color:C.brandDeep, marginTop:5 }}>Skills: {m.skills_required}</div>
-          )}
-          {m.status==='REJECTED' && m.remarks && (
-            <div style={{ fontSize:11, color:C.critical, marginTop:5 }}>Rejected: {m.remarks}</div>
-          )}
-          {chain.length>0 && m.status!=='CLOSED' && (
-            <div style={{ marginTop:6 }}>
-              {(() => {
-                const pending = chain.find((s:any)=>s.status==='PENDING')
-                return pending ? (
-                  <div style={{ fontSize:11.5, color:C.warning, fontWeight:600, marginBottom:4 }}>
-                    ⏳ Waiting on: {pending.approver_name || pending.actor || '—'}{pending.approver_code?` (${pending.approver_code})`:''} — {ROLE_LABEL[pending.role]||pending.role}
-                  </div>
-                ) : m.status==='APPROVED' ? (
-                  <div style={{ fontSize:11.5, color:C.positive, fontWeight:600, marginBottom:4 }}>✓ Fully approved</div>
-                ) : null
-              })()}
-              <div style={{ fontSize:10.5, color:C.faint, marginBottom:3 }}>Approval chain · {doneSteps}/{chain.length} done</div>
-              <div style={{ display:'flex', flexWrap:'wrap' as const, gap:5 }}>
-                {chain.map((s:any,i:number)=>{
-                  const col = s.status==='APPROVED'?C.positive : s.status==='REJECTED'?C.critical : s.status==='PENDING'?C.warning : C.muted
-                  const bg  = s.status==='APPROVED'?C.positiveTint : s.status==='REJECTED'?C.criticalTint : s.status==='PENDING'?C.warningTint : C.sunken
-                  const mark= s.status==='APPROVED'?'✓' : s.status==='REJECTED'?'✗' : s.status==='PENDING'?'⏳' : '•'
-                  return (
-                    <span key={i} style={{ fontSize:10, padding:'3px 9px', borderRadius:99, background:bg, color:col, fontWeight:600, border:`1px solid ${col}22` }}>
-                      {mark} {ROLE_LABEL[s.role]||s.role}: {s.approver_name || s.actor || '—'} · {s.status||'PENDING'}
-                    </span>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-          {openings > 0 && (m.status==='APPROVED'||m.status==='CLOSED') && (
-            <div style={{ marginTop:8, maxWidth:260 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:C.faint, marginBottom:3 }}>
-                <span>Positions filled</span><span>{filled} / {openings}</span>
-              </div>
-              <div style={{ background:C.brandTint, borderRadius:99, height:5, overflow:'hidden' }}>
-                <div style={{ width:`${pct}%`, height:'100%', background: pct>=100?C.positive:C.brand, borderRadius:99 }} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center', flexWrap:'wrap' as const, justifyContent:'flex-end', maxWidth:290 }}>
-          <button onClick={()=>onOpen(m)} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>View</button>
-          {(m.status==='SUBMITTED'||m.status==='ON_HOLD')&&(
-            <button onClick={()=>onReview(m)} style={{ ...T.btn, background:C.brand, color:C.onAccent, fontSize:11 }}>Review & Approve</button>
-          )}
-          {m.status==='APPROVED' && (
-            <button onClick={()=>onClose(m)} style={{ ...T.btn, background:C.sunken, color:C.inkSoft, border: `1px solid ${C.line}`, fontSize:11 }}>Close MRF</button>
-          )}
-          {m.status==='CLOSED' && (
-            <button onClick={()=>onReopen(m)} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}`, fontSize:11 }}>Re-open</button>
-          )}
-          {canSendBack && (
-            <button onClick={()=>onSendBack(m)} style={{ ...T.btn, background:C.warningTint, color:C.warning, border: `1px solid ${C.warningTint}`, fontSize:11 }}>↩ Send back</button>
-          )}
-          {/* Only the raiser (or a super admin) may edit / delete — see canEditMrf in MRFTab */}
-          {canEdit && (<>
-          <button onClick={()=>onEdit(m)} style={{ ...T.btn, background:C.infoTint, color:C.info, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>Edit</button>
-          <button onClick={()=>onDelete(m.id)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11 }}></button>
-          </>)}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── MRF DETAIL ────────────────────────────────────────────────────
 function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onReview, onChanged, showNotify, canEdit, canSendBack, onSendBack }:any) {
   const [logs, setLogs] = useState<any[]>([])
   const [loadingLogs, setLoadingLogs] = useState(true)
@@ -1220,8 +982,8 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
           <div style={{ display:'flex', gap:7, marginTop:10, flexWrap:'wrap' as const }}>
             <Badge text={m.status} />
             {m.mrf_type && <Badge text={m.mrf_type} />}
-            {m.urgency && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:600 }}>{m.urgency} priority</span>}
-            {m.work_mode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:600 }}>{m.work_mode}</span>}
+            {m.urgency && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:W.semi, lineHeight:1.45 }}>{m.urgency} priority</span>}
+            {m.work_mode && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:W.semi, lineHeight:1.45 }}>{m.work_mode}</span>}
           </div>
         </div>
 
@@ -1335,7 +1097,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             </div>
             {m.skills_required && (
               <div style={{ marginBottom:10 }}>
-                <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Mandatory Skills</div>
+                <div style={{ ...eyebrow, marginBottom:5 }}>Mandatory Skills</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
                   {String(m.skills_required).split(',').map((s:string)=>s.trim()).filter(Boolean).map((s:string)=>(
                     <span key={s} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.brandTint, color:C.brandDeep, fontWeight:500 }}>{s}</span>
@@ -1345,7 +1107,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             )}
             {m.good_to_have_skills && (
               <div>
-                <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Good-to-have Skills</div>
+                <div style={{ ...eyebrow, marginBottom:5 }}>Good-to-have Skills</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
                   {String(m.good_to_have_skills).split(',').map((s:string)=>s.trim()).filter(Boolean).map((s:string)=>(
                     <span key={s} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.infoTint, color:C.info, fontWeight:500 }}>{s}</span>
@@ -1360,7 +1122,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             <div style={T.card}>
               <div style={T.section}>Screening (CTQ) Questions</div>
               {ctq.map((q:any,i:number)=>(
-                <div key={q.id||i} style={{ padding:'8px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+                <div key={q.id||i} style={{ padding:'8px 0', borderBottom: `1px solid ${C.line}` }}>
                   <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>Q{i+1}. {q.question}</div>
                   <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>
                     {CTQ_TYPES.find(t=>t.k===q.type)?.label||q.type} · expected: <b>{q.expected||'—'}</b>
@@ -1380,7 +1142,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             </div>
             {chain.length===0 && <div style={{ fontSize:12, color:C.faint }}>No approval chain configured — single-step approval.</div>}
             {chain.map((s:any,i:number)=>(
-              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'8px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'8px 0', borderBottom: `1px solid ${C.line}` }}>
                 <span style={{ width:22, height:22, borderRadius:'50%', flexShrink:0, fontSize:11, fontWeight:700,
                   display:'flex', alignItems:'center', justifyContent:'center',
                   background: s.status==='APPROVED'?C.positiveTint: s.status==='REJECTED'?C.criticalTint:C.brandTint,
@@ -1412,7 +1174,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             </div>
             {channels.length>0 && (
               <div>
-                <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Preferred Channels</div>
+                <div style={{ ...eyebrow, marginBottom:5 }}>Preferred Channels</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
                   {channels.map((c:string)=>(
                     <span key={c} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive, fontWeight:500 }}>{c}</span>
@@ -1467,7 +1229,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
               <div style={{ fontSize:12, color:C.faint }}>No activity recorded against this MRF yet.</div>
             )}
             {logs.map((l:any)=>(
-              <div key={l.id} style={{ display:'flex', gap:10, padding:'7px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+              <div key={l.id} style={{ display:'flex', gap:10, padding:'7px 0', borderBottom: `1px solid ${C.line}` }}>
                 <div style={{ width:7, height:7, borderRadius:'50%', background:C.brand, marginTop:5, flexShrink:0 }} />
                 <div style={{ minWidth:0, flex:1 }}>
                   <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{String(l.action_type||'').replace(/_/g,' ')}</div>
@@ -1476,7 +1238,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
                       {Object.entries(l.details).map(([k,v])=>`${k}: ${v}`).join(' · ')}
                     </div>
                   )}
-                  <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>
+                  <div style={{ fontSize:F.micro, color:C.muted, marginTop:2 }}>
                     {fmtDT(l.created_at)}{l.actor_email?` · ${l.actor_email}`:''}
                   </div>
                 </div>
@@ -1490,7 +1252,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
 }
 
 // ── MRF TAB ───────────────────────────────────────────────────────
-function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId, mrfInitialSub, mrfFocusId, canEditAnyMrf }:any) {
+function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId, mrfInitialSub, mrfFocusId, canEditAnyMrf, rail }:any) {
   const EMPTY = {
     // §1 Requisition Meta
     mrf_type:'Full MRF', hiring_type:'New Hire', urgency:'MEDIUM',
@@ -1583,14 +1345,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   }
   const [errors, setErrors] = useState<Record<string,string>>({})
   const [saving, setSaving] = useState(false)
-  const [mrfQ, setMrfQ] = useState('')
   const [fCompany, setFCompany] = useState('')
   const [fDept, setFDept] = useState('')
   const [fLoc, setFLoc] = useState('')
   const [fPos, setFPos] = useState('')
   const [fStatus, setFStatus] = useState('')
   const [sortBy, setSortBy] = useState('newest')
-  const [view, setView] = useState<'cards'|'table'>('cards')
   const mrfPositions = Array.from(new Set(mrfs.map((m:MRF)=>m.designation||m.position).filter(Boolean))).sort() as string[]
   const [aiLoading, setAiLoading] = useState(false)
   const [approvalModal, setApprovalModal] = useState<MRF|null>(null)
@@ -1633,7 +1393,11 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   const filtLocs = form.company_id ? locations.filter((l:Location)=>l.company_id===form.company_id) : locations
   const filtDepts = form.company_id ? departments.filter((d:Department)=>d.company_id===form.company_id) : departments
   const F = (k:string,v:any) => { setForm((f:any)=>({...f,[k]:v})); setErrors(e=> e[k] ? { ...e, [k]:'' } : e) }
-  const eb = (k:string) => errors[k] ? { ...T.input, border: `1px solid ${C.criticalTint}`, background:C.criticalTint } : T.input
+  // Returns ONLY the error override now — .rx-input carries the base, so
+  // spreading T.input back over it would undo the class. undefined when the
+  // field is valid, which React treats as no inline style at all.
+  const eb = (k:string): React.CSSProperties | undefined =>
+    errors[k] ? { borderColor: C.critical, background: C.criticalTint } : undefined
 
   const isQuick = form.mrf_type === 'Quick Hire'
   const isReplacement = form.hiring_type==='Replacement' || form.hiring_type==='Backfill'
@@ -1646,6 +1410,22 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     dept: departments.find((d:Department)=>d.id===m.department_id)?.dept_name || '—',
     loc: locations.find((l:Location)=>l.id===m.location_id)?.location_name || '—',
   })
+
+  // The same resolver MrfDetail already uses. It lives HERE, not at page level,
+  // because the employee roster is fetched in this tab — lifting the fetch up to
+  // share it would run that query on every tab instead of on this one, which
+  // changes the data flow rather than the design.
+  const nameOf = (id?:string) => people.find((p:any)=>p.id===id)?.full_name || '—'
+
+  // The card's budget chip, formatted by THIS file's helpers. Budget wording
+  // depends on employment type (salary p.a. vs stipend/fees per month) and on
+  // six currency symbols; the kit's formatLakh knows neither, so letting it
+  // format would mislabel every intern, contractor and consultant requisition.
+  const budgetLabelOf = (row:Record<string,unknown>) => {
+    if (row.budget_max == null) return null
+    const c = compOf(row.employment_type as string|undefined)
+    return `${c.label} ${payAmount(Number(row.budget_max), (row.currency as string)||'INR', c.period)} max`
+  }
 
   function openEdit(m:MRF) {
     setEditMRF(m); setErrors({})
@@ -1864,15 +1644,15 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     showNotify('MRF deleted'); setDeleteConfirm(null); onRefresh()
   }
 
+  // Search and status are NOT filtered here any more: MrfListView owns the
+  // search box, and status is passed to it as a CONTROLLED filter so the
+  // "awaiting approval · Show them" banner can still set it from outside.
+  // Filtering twice would leave the overview counts disagreeing with the list.
   const visible = mrfs.filter((m:MRF)=>
-    (!mrfQ || (m.designation||(m as any).position||'').toLowerCase().includes(mrfQ.toLowerCase())
-           || ((m as any).job_title||'').toLowerCase().includes(mrfQ.toLowerCase())
-           || (m.mrf_number||'').toLowerCase().includes(mrfQ.toLowerCase())) &&
     (!fCompany || m.company_id===fCompany) &&
     (!fDept || m.department_id===fDept) &&
     (!fLoc || m.location_id===fLoc) &&
-    (!fPos || (m.designation||m.position)===fPos) &&
-    (!fStatus || m.status===fStatus)
+    (!fPos || (m.designation||m.position)===fPos)
   ).sort((a:MRF,b:MRF)=>{
     if (sortBy==='oldest')   return +new Date(a.created_at) - +new Date(b.created_at)
     if (sortBy==='openings') return (b.no_of_openings||b.openings||0) - (a.no_of_openings||a.openings||0)
@@ -1881,10 +1661,485 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     return +new Date(b.created_at) - +new Date(a.created_at)
   })
 
+  // filledStages is ['Offer Sent','Joined'] on purpose: that is what this tab's
+  // card and overview have always counted as a filled position. The adapter
+  // defaults to 'Joined' alone (which is what the Dashboard uses), and taking
+  // that default here would quietly drop every candidate holding an offer out
+  // of the filled ring — a number going down with nothing on screen to explain it.
+  const mrfVMs = visible.map((m:MRF) => toMrfVM(m as unknown as Record<string, unknown>, {
+    departments: departments as unknown as Record<string, unknown>[],
+    locations: locations as unknown as Record<string, unknown>[],
+    candidates: candidates as unknown as Record<string, unknown>[],
+    companies: companies as unknown as Record<string, unknown>[],
+    quickHireCap: QUICK_HIRE_CAP,
+    filledStages: ['Offer Sent', 'Joined'],
+    nameOf,
+    budgetLabelOf,
+  }))
+
   const pendingCount = mrfs.filter((m:MRF)=>m.status==='SUBMITTED').length
 
+  const bannerNode = pendingCount>0 ? (
+    <div style={{ fontSize:12, color:C.warning, background:C.warningTint, border: `1px solid ${C.warningTint}`,
+      borderRadius:7, padding:'8px 12px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
+      ⏳ {pendingCount} requisition{pendingCount===1?'':'s'} awaiting approval
+      <button onClick={()=>setFStatus('SUBMITTED')} style={{ ...T.btn, background:C.warning, color:C.onAccent, fontSize:11 }}>
+        Show them
+      </button>
+    </div>
+  ) : null
+
+  // Passed through to MrfListView unchanged, so these five controls behave
+  // exactly as before. Search and status are absent deliberately — the view
+  // owns the search box and status is controlled above.
+  const filterBar = (
+    <>
+      <select value={fCompany} onChange={e=>setFCompany(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
+        <option value="">All Companies</option>
+        {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+      </select>
+      <select value={fDept} onChange={e=>setFDept(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
+        <option value="">All Departments</option>
+        {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+      </select>
+      <select value={fLoc} onChange={e=>setFLoc(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
+        <option value="">All Locations</option>
+        {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+      </select>
+      <select value={fPos} onChange={e=>setFPos(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
+        <option value="">All Positions</option>
+        {mrfPositions.map((p:string)=><option key={p} value={p}>{p}</option>)}
+      </select>
+      <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="openings">Most openings</option>
+        <option value="urgency">Most urgent</option>
+        <option value="joining">Earliest joining</option>
+      </select>
+      {(fCompany||fDept||fLoc||fPos||fStatus)&&<button onClick={()=>{setFCompany('');setFDept('');setFLoc('');setFPos('');setFStatus('')}} style={T.btnOutline}>Clear filters</button>}
+    </>
+  )
+
+  const formNode = (
+    <>
+      {/* New MRF → the same auto-filling form as ESS "Raise MRF" (MrfForm): company,
+          department and reporting line (RM1/RM2/HOD) prefill from the raiser, and it
+          routes through the reporting chain to the HR Head. Editing an existing MRF (or a
+          legacy login with no employee record) still uses the detailed form below. */}
+      {showForm && !editMRF && employeeId && (
+        <div style={T.cardPurple}>
+          <MrfForm employeeId={employeeId} notify={showNotify}
+            onDone={() => { setShowForm(false); onRefresh() }}
+            onCancel={() => setShowForm(false)} />
+        </div>
+      )}
+
+      {showForm && (editMRF || !employeeId) && (
+        <div style={T.cardPurple}>
+          {/* A segmented control on a sunken track, matching MrfForm — the ESS
+              twin that fills this exact slot when the login resolves an
+              employeeId. Two hard-split brand-filled halves read as two
+              competing buttons; a track with one raised half reads as one
+              control with a current choice. */}
+          <div style={{ display:'flex', gap:4, border:`1px solid ${C.line}`, background:C.sunken,
+                        borderRadius:13, padding:4, marginBottom:16 }}>
+            {['Quick Hire','Full MRF'].map(type=>(
+              <button key={type} onClick={()=>F('mrf_type',type)} style={{ flex:1, height:36,
+                border:'1px solid transparent', borderRadius:9, cursor:'pointer', fontSize:13,
+                fontWeight:W.semi, fontFamily:'inherit',
+                background:form.mrf_type===type?`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`:'transparent',
+                borderColor:form.mrf_type===type?C.brandDeep:'transparent',
+                boxShadow:form.mrf_type===type?E.brand:'none',
+                color:form.mrf_type===type?C.onAccent:C.muted }}>
+                {type==='Quick Hire'?'Quick Hire (CTC ≤ ₹6L)':'Full MRF (CTC > ₹6L)'}
+              </button>
+            ))}
+          </div>
+
+          {/* Live read on the ₹6L split, so the wrong lane is caught before
+              submit. Monthly stipends/fees are annualised to compare like
+              with like. Quick Hire ≤ ₹6L · Full MRF > ₹6L. */}
+          {(()=>{
+            const bMax = Number(form.budget_max)||0
+            if (!bMax) return null
+            const annual = comp.period==='ANNUAL' ? bMax : bMax*12
+            const shouldBe = annual > QUICK_HIRE_CAP ? 'Full MRF' : 'Quick Hire'
+            const asYearly = comp.period==='ANNUAL'
+              ? lakhs(bMax, form.currency)
+              : `${money(bMax, form.currency)}/mo = ${lakhs(annual, form.currency)} a year`
+            if (shouldBe === form.mrf_type) return (
+              <div style={{ background:C.positiveTint, border: `1px solid ${C.positiveEdge}`, borderRadius:11, padding:'9px 12px',
+                marginBottom:14, fontSize:12.5, color:C.positive }}>
+                ✓ {asYearly} — correct lane for {form.mrf_type}.
+              </div>
+            )
+            return (
+              <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalEdge}`, borderRadius:11, padding:'9px 12px',
+                marginBottom:14, fontSize:12.5, color:C.critical, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
+                <span>
+                  {asYearly} — {shouldBe==='Full MRF'
+                    ? 'above ₹6L, so this belongs on a Full MRF.'
+                    : 'at or below ₹6L, so this belongs on a Quick Hire.'}
+                </span>
+                <button onClick={()=>F('mrf_type', shouldBe)} style={{ ...T.btn, background:C.critical, color:C.onAccent, fontSize:11 }}>
+                  Switch to {shouldBe}
+                </button>
+              </div>
+            )
+          })()}
+
+          {/* ── §1 Requisition Meta ── */}
+          <SectionLine title="1 · Requisition Meta" />
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Requisition Type">
+              <select className="rx-input" value={form.hiring_type} onChange={e=>F('hiring_type',e.target.value)}>
+                {REQ_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Priority">
+              <select className="rx-input" value={form.urgency} onChange={e=>F('urgency',e.target.value)}>
+                <option value="HIGH">High / Urgent</option>
+                <option value="MEDIUM">Medium / Normal</option>
+                <option value="LOW">Low</option>
+              </select>
+            </Field>
+            <Field label="Requisition ID" hint={editMRF?undefined:'Generated on save'}>
+              <input className="rx-input" style={{ background:C.sunken, color:C.ink, fontWeight:700 }} value={(editMRF as any)?.mrf_number||form.mrf_number||'Auto-generated'} readOnly />
+            </Field>
+          </div>
+          <div style={{ ...T.g2, marginBottom:10 }}>
+            <Field label="Raised By — Name">
+              <input className="rx-input" value={form.raised_by_name} onChange={e=>F('raised_by_name',e.target.value)} placeholder="Your name" />
+            </Field>
+            <Field label="Raised By — Role">
+              <input className="rx-input" value={form.raised_by_role} onChange={e=>F('raised_by_role',e.target.value)} placeholder="e.g. Department Head" />
+            </Field>
+          </div>
+
+          {/* ── §2 Position Details ── */}
+          <SectionLine title="2 · Position Details" />
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Company" required error={errors.company_id}>
+              <select className="rx-input" style={eb('company_id')} value={form.company_id} onChange={e=>F('company_id',e.target.value)}>
+                <option value="">Select Company</option>
+                {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+              </select>
+            </Field>
+            <Field label="Department / Function" error={errors.department_id}>
+              <select className="rx-input" style={eb('department_id')} value={form.department_id} onChange={e=>F('department_id',e.target.value)}>
+                <option value="">Select Department</option>
+                {filtDepts.map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+              </select>
+            </Field>
+            <Field label="Business Unit">
+              <MasterSelect options={masters.business_unit} value={form.business_unit} onChange={(v:string)=>F('business_unit',v)} />
+            </Field>
+          </div>
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Job Title">
+              <input className="rx-input" value={form.job_title} onChange={e=>F('job_title',e.target.value)} placeholder="e.g. Backend Engineer II" />
+            </Field>
+            <Field label="Designation" required error={errors.designation}>
+              <input className="rx-input" style={eb('designation')} value={form.designation} onChange={e=>F('designation',e.target.value)} placeholder="e.g. Senior Engineer" />
+            </Field>
+            <Field label="No. of Openings" error={errors.no_of_openings}>
+              <input className="rx-input" style={eb('no_of_openings')} type="number" min={1} value={form.no_of_openings} onChange={e=>F('no_of_openings',e.target.value)} />
+            </Field>
+          </div>
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Grade / Band">
+              <MasterSelect options={masters.grade} value={form.grade} onChange={(v:string)=>F('grade',v)} />
+            </Field>
+            <Field label="Job Code" hint="Position-based staffing only">
+              <input className="rx-input" value={form.job_code} onChange={e=>F('job_code',e.target.value)} placeholder={`${jobCodePrefix(departments.find((x:Department)=>x.id===form.department_id)?.dept_code, departments.find((x:Department)=>x.id===form.department_id)?.dept_name, form.designation||form.job_title||'')}## (auto)`} />
+            </Field>
+          </div>
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="RM1 — Reporting Manager"
+              hint={people.find((p:any)=>p.id===form.reporting_manager_id)?.designation
+                ? `Reports to: ${people.find((p:any)=>p.id===form.reporting_manager_id)?.designation}` : undefined}>
+              <PersonSearchSelect people={people} value={form.reporting_manager_id} onChange={(id:string)=>F('reporting_manager_id',id)} />
+            </Field>
+            <Field label="RM2 — Skip-level Manager">
+              <PersonSearchSelect people={people} value={form.rm2_id} onChange={(id:string)=>F('rm2_id',id)} />
+            </Field>
+            <Field label="HOD — Department Head">
+              <PersonSearchSelect people={people} value={form.hod_id} onChange={(id:string)=>F('hod_id',id)} />
+            </Field>
+          </div>
+
+          {/* ── §3 Employment Details ── */}
+          <SectionLine title="3 · Employment Details" />
+          <div style={{ ...T.g4, marginBottom:10 }}>
+            <Field label="Employment Type">
+              <select className="rx-input" value={form.employment_type} onChange={e=>F('employment_type',e.target.value)}>
+                {EMP_TYPES.map(t=><option key={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Work Mode">
+              <select className="rx-input" value={form.work_mode} onChange={e=>F('work_mode',e.target.value)}>
+                {WORK_MODES.map(w=><option key={w} value={w}>{w}</option>)}
+              </select>
+            </Field>
+            <Field label="Work Location">
+              <select className="rx-input" value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
+                <option value="">Select Location</option>
+                {filtLocs.map((l:Location)=><option key={l.id} value={l.id}>{l.location_name||l.location_code}</option>)}
+              </select>
+            </Field>
+            <Field label="Shift / Schedule">
+              <MasterSelect options={masters.shift_type} value={form.shift_schedule} onChange={(v:string)=>F('shift_schedule',v)} />
+            </Field>
+          </div>
+
+          {/* ── §4 Budget & Cost ── */}
+          <SectionLine title="4 · Budget & Cost" />
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Cost Center">
+              <MasterSelect options={masters.cost_center} value={form.cost_center} onChange={(v:string)=>F('cost_center',v)} />
+            </Field>
+            <Field label="Budgeted Position">
+              <select className="rx-input" value={form.is_budgeted} onChange={e=>F('is_budgeted',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="yes">Yes — budgeted</option>
+                <option value="no">No — unbudgeted</option>
+              </select>
+            </Field>
+            <Field label="Approved Headcount Ref." hint="Link to the headcount plan record">
+              <input className="rx-input" value={form.headcount_ref} onChange={e=>F('headcount_ref',e.target.value)} placeholder="e.g. HCP-2026-014" />
+            </Field>
+          </div>
+          {/* Labels follow the employment type: employees draw a salary,
+              interns/apprentices a stipend, contractors and consultants fees. */}
+          <div style={{ background:C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:C.brandDeep }}>
+            <b>{form.employment_type}</b> → paid as <b>{comp.label.toLowerCase()}</b>, quoted <b>{perLabel(comp.period)}</b>
+            {comp.fixedTerm && <> · fixed-term engagement, duration required</>}
+          </div>
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Currency">
+              {masters.currency?.length
+                ? <MasterSelect useCode options={masters.currency} value={form.currency} onChange={(v:string)=>F('currency', v)} />
+                : <input className="rx-input" value={form.currency} onChange={e=>F('currency',e.target.value)} />}
+            </Field>
+            <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}>
+              <input className="rx-input" type="number" value={form.budget_min} onChange={e=>F('budget_min',e.target.value)} placeholder={comp.ph[0]} />
+            </Field>
+            <Field label={`${comp.label} Range — Max`} error={errors.budget_max} hint={errors.budget_max?undefined:perLabel(comp.period)}>
+              <input className="rx-input" style={eb('budget_max')} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder={comp.ph[1]} />
+            </Field>
+            <Field label="Worker / Skill Category" hint="Sets the minimum wage applied in salary negotiation">
+              <select style={T.select} value={form.wage_category||''} onChange={e=>F('wage_category',e.target.value)}>
+                <option value="">Select category…</option>
+                {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
+              </select>
+            </Field>
+          </div>
+          {form.budget_min && form.budget_max && !errors.budget_max && (
+            <div style={{ fontSize:11, color:C.brandDeep, marginBottom:10 }}>
+              {comp.label} band: {payAmount(Number(form.budget_min), form.currency, comp.period)} — {payAmount(Number(form.budget_max), form.currency, comp.period)}
+              {comp.period==='MONTHLY' && form.duration_months && (
+                <> · total over {form.duration_months} month{Number(form.duration_months)===1?'':'s'}: {' '}
+                  {money(Number(form.budget_max)*Number(form.duration_months), form.currency)}</>
+              )}
+            </div>
+          )}
+
+          {/* Fixed-term engagements run for a defined period. */}
+          {(comp.fixedTerm || comp.period==='MONTHLY') && (
+            <div style={{ ...T.g3, marginBottom:10 }}>
+              <Field label={`${comp.kind==='STIPEND' && form.employment_type==='Intern' ? 'Internship' : 'Engagement'} Duration (months)`}
+                required={comp.fixedTerm} error={errors.duration_months}
+                hint={errors.duration_months?undefined:(comp.fixedTerm?'Required for this employment type':'Optional')}>
+                <input className="rx-input" style={eb('duration_months')} type="number" min={1} max={60} value={form.duration_months}
+                  onChange={e=>F('duration_months',e.target.value)} placeholder="e.g. 6" />
+              </Field>
+              <Field label="Expected End Date"
+                hint={form.target_joining_date ? 'Derived from joining date + duration' : 'Set the target joining date first'}>
+                <input className="rx-input" style={{ background:C.sunken, color:C.muted }} readOnly
+                  value={addMonths(form.target_joining_date, form.duration_months) ? fmtDay(addMonths(form.target_joining_date, form.duration_months)) : '—'} />
+              </Field>
+              <div />
+            </div>
+          )}
+
+          {/* ── §5 Justification ── */}
+          <SectionLine title="5 · Justification" />
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Reason for Hire" error={errors.reason}>
+              <select className="rx-input" style={eb('reason')} value={form.reason} onChange={e=>F('reason',e.target.value)}>
+                <option value="">Select Reason</option>
+                <option value="New position">New position</option>
+                <option value="Replacement">Replacement</option>
+                <option value="Expansion">Expansion</option>
+                <option value="Attrition">Attrition</option>
+              </select>
+            </Field>
+            <Field label="Outgoing Employee" error={errors.outgoing_employee_id}
+              hint={isReplacement?undefined:'Only for Replacement / Backfill'}>
+              <select className="rx-input" style={{ ...eb('outgoing_employee_id'), opacity:isReplacement?1:.55 }} disabled={!isReplacement}
+                value={form.outgoing_employee_id} onChange={e=>F('outgoing_employee_id',e.target.value)}>
+                <option value="">Select Employee</option>
+                {people.map((p:any)=><option key={p.id} value={p.id}>{p.full_name} ({p.emp_code})</option>)}
+              </select>
+            </Field>
+            <Field label="Reason for Exit">
+              <select className="rx-input" style={{ opacity:isReplacement?1:.55 }} disabled={!isReplacement}
+                value={form.exit_reason} onChange={e=>F('exit_reason',e.target.value)}>
+                <option value="">Select Reason</option>
+                {(masters.separation_reason||[]).map(o=><option key={o.code} value={o.label}>{o.label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <Field label="Business Justification">
+              <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={form.business_justification}
+                onChange={e=>F('business_justification',e.target.value)}
+                placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" />
+            </Field>
+          </div>
+
+          {/* ── §6 Timeline ── */}
+          <SectionLine title="6 · Timeline" />
+          <div style={{ ...T.g2, marginBottom:10 }}>
+            <Field label="Target Joining Date" error={errors.target_joining_date}>
+              <input type="date" className="rx-input" style={eb('target_joining_date')} value={form.target_joining_date} onChange={e=>F('target_joining_date',e.target.value)} />
+            </Field>
+            <Field label="Requisition Validity / Expiry" error={errors.validity_date} hint="Auto-flagged as expired if unfilled past this date">
+              <input type="date" className="rx-input" style={eb('validity_date')} value={form.validity_date} onChange={e=>F('validity_date',e.target.value)} />
+            </Field>
+          </div>
+
+          {/* ── §7 Candidate Requirements ── */}
+          {!isQuick && (
+            <>
+              <SectionLine title="7 · Candidate Requirements" />
+              <div style={{ ...T.g2, marginBottom:10 }}>
+                <Field label="Experience — Min (years)">
+                  <input className="rx-input" type="number" min="0" value={form.experience_min} onChange={e=>F('experience_min',e.target.value)} placeholder="e.g. 3" />
+                </Field>
+                <Field label="Experience — Max (years)" error={errors.experience_max}>
+                  <input className="rx-input" style={eb('experience_max')} type="number" min="0" value={form.experience_max} onChange={e=>F('experience_max',e.target.value)} placeholder="e.g. 5" />
+                </Field>
+              </div>
+              <div style={{ ...T.g3, marginBottom:10 }}>
+                <Field label="Education — Minimum">
+                  <select className="rx-input" value={form.education_min} onChange={e=>F('education_min',e.target.value)}>
+                    <option value="">Any</option>
+                    {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
+                  </select>
+                </Field>
+                <Field label="Education — Maximum">
+                  <select className="rx-input" value={form.education_max} onChange={e=>F('education_max',e.target.value)}>
+                    <option value="">Any</option>
+                    {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
+                  </select>
+                </Field>
+                <Field label="Previous Company Preference">
+                  <select className="rx-input" value={form.previous_company_preference} onChange={e=>F('previous_company_preference',e.target.value)}>
+                    <option value="">Select Preference</option>
+                    <option value="MNC">MNC</option>
+                    <option value="STARTUP">Startup</option>
+                  </select>
+                </Field>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <Field label="Mandatory Skills" error={errors.skills_required}>
+                  <SkillsMultiSelect value={form.skills_required} onChange={(v:string)=>F('skills_required',v)} allSkills={skills} onAddSkill={addSkill} />
+                </Field>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <Field label="Good-to-have Skills">
+                  <SkillsMultiSelect value={form.good_to_have_skills} onChange={(v:string)=>F('good_to_have_skills',v)} allSkills={skills} onAddSkill={addSkill} />
+                </Field>
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                  <label className="rx-label" style={{ marginBottom:0 }}>Job Description</label>
+                  <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>
+                    {aiLoading?'Generating...':'Generate JD with AI'}
+                  </button>
+                </div>
+                <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:150 }} value={form.job_description}
+                  onChange={e=>F('job_description',e.target.value)}
+                  placeholder="Write a job description or generate it with the AI button..." />
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Screening (CTQ) Questions</label>
+                <CtqEditor items={form.ctq_questions} onChange={(v:any[])=>F('ctq_questions',v)} />
+              </div>
+            </>
+          )}
+
+          {/* ── §8 Approval Workflow — auto-routed, same as ESS Raise MRF ── */}
+          <SectionLine title="8 · Approval Workflow" />
+          <div style={{ ...T.card, background:C.sunken, marginBottom:14 }}>
+            <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.6 }}>
+              On <b>Submit</b>, this requisition is routed for approval automatically — the same flow as ESS “Raise MRF”. Each approver sees it in their <b>ESS → Tasks &amp; Approvals</b>.
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:S.sm, flexWrap:'wrap' as const, marginTop:S.md, fontSize:TYPE.small }}>
+              <span style={{ fontWeight:600, padding:'4px 10px', borderRadius:99, background:C.brandTint, color:C.brandDeep }}>
+                1 · RM2 — {people.find((p:any)=>p.id===(form.rm2_id||form.reporting_manager_id))?.full_name || <span style={{ color:C.critical }}>pick RM2 / Reporting Manager in §2</span>}
+              </span>
+              <span style={{ color:C.faint }}>→</span>
+              <span style={{ fontWeight:600, padding:'4px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>2 · HR Head (auto)</span>
+            </div>
+          </div>
+
+          {/* ── §9 Sourcing ── */}
+          {!isQuick && (
+            <>
+              <SectionLine title="9 · Sourcing" />
+              <div style={{ ...T.g2, marginBottom:10 }}>
+                <Field label="Internal vs External">
+                  <select className="rx-input" value={form.sourcing_mode} onChange={e=>F('sourcing_mode',e.target.value)}>
+                    {SOURCING_MODES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </Field>
+                <Field label="Assigned Recruiter" hint="Set on approval, or enter here">
+                  <input className="rx-input" style={{ background:C.sunken, color:C.muted }}
+                    value={(editMRF as any)?.assigned_recruiter||'Assigned at approval'} readOnly />
+                </Field>
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Preferred Sourcing Channels</label>
+                <ChannelPicker options={masters.candidate_source} value={form.sourcing_channels}
+                  onChange={(v:string[])=>F('sourcing_channels',v)} />
+              </div>
+            </>
+          )}
+
+          {/* ── §10 Attachments ── */}
+          <SectionLine title="10 · Attachments" />
+          <div style={{ marginBottom:14 }}>
+            {editMRF ? (
+              <AttachmentsPanel mrfId={editMRF.id} attachments={asArray((editMRF as any).attachments)}
+                onChanged={onRefresh} showNotify={showNotify} supabase={supabase} />
+            ) : (
+              <div style={{ fontSize:12, color:C.faint }}>
+                Save the requisition first — files attach to a saved MRF.
+              </div>
+            )}
+          </div>
+
+          {Object.values(errors).filter(Boolean).length>0 && (
+            <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'9px 12px', marginBottom:12, fontSize:12, color:C.critical }}>
+              {Object.values(errors).filter(Boolean).length} field(s) need attention before this can be saved.
+            </div>
+          )}
+
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={()=>saveMRF('DRAFT')} disabled={saving} style={T.btnOutline}>Save Draft</button>
+            <button onClick={()=>saveMRF('SUBMITTED')} disabled={saving} style={T.btnPrimary}>Submit for Approval</button>
+          </div>
+        </div>
+      )}
+
+    </>
+  )
+
   return (
-    <div>
+    <>
       {/* MRF sub-tabs — Requisitions (the list/create) and Approvals (chain approvals). */}
       <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' as const }}>
         <button onClick={()=>{ setMrfSub('requisitions'); setReviewMrf(null) }} style={{ ...T.btnOutline, ...(mrfSub==='requisitions'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>Requisitions</button>
@@ -1939,487 +2194,25 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             ))}
           </div>
         )
-      ) : (<>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' as const }}>
-        <div style={{ fontSize:15, fontWeight:600, color:C.ink }}>Manpower Requisitions ({mrfs.length})</div>
-        <button onClick={()=>{setEditMRF(null);setForm({ ...EMPTY, mrf_number:(()=>{ for(let i=0;i<6;i++){ const n=newMrfNumber(); if(!mrfs.some((m:MRF)=>m.mrf_number===n)) return n } return '' })() });setErrors({});setShowForm(!showForm)}} style={T.btnPrimary}>
-          {showForm?'Cancel':'+ New MRF'}
-        </button>
-      </div>
-
-      <MrfOverview mrfs={mrfs} candidates={candidates} fStatus={fStatus}
-        onPickStatus={setFStatus} view={view} onView={setView} />
-
-      {pendingCount>0 && (
-        <div style={{ fontSize:12, color:C.warning, background:C.warningTint, border: `1px solid ${C.warningTint}`,
-          borderRadius:7, padding:'8px 12px', marginBottom:12, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
-          ⏳ {pendingCount} requisition{pendingCount===1?'':'s'} awaiting approval
-          <button onClick={()=>setFStatus('SUBMITTED')} style={{ ...T.btn, background:C.warning, color:C.onAccent, fontSize:11 }}>
-            Show them
-          </button>
-        </div>
+      ) : (
+      <MrfListView
+        rail={rail}
+        mrfs={mrfVMs}
+        filterBar={filterBar}
+        banner={bannerNode}
+        form={formNode}
+        quickHireCap={QUICK_HIRE_CAP}
+        status={fStatus || '*'}
+        onStatusChange={(v:string)=>setFStatus(v==='*' ? '' : v)}
+        onCreate={()=>{ setEditMRF(null); setForm({ ...EMPTY, mrf_number:(()=>{ for(let i=0;i<6;i++){ const n=newMrfNumber(); if(!mrfs.some((m:MRF)=>m.mrf_number===n)) return n } return '' })() }); setErrors({}); setShowForm(!showForm) }}
+        onEdit={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) openEdit(m) }}
+        onView={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setDetailMRF(m) }}
+        onReview={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setApprovalModal(m) }}
+        onCloseMrf={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setMrfStatus(m,'CLOSED','MRF_CLOSED') }}
+        onReopen={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setMrfStatus(m,'APPROVED','MRF_REOPENED') }}
+        onDelete={(id:string)=>setDeleteConfirm(id)}
+      />
       )}
-
-      {/* New MRF → the same auto-filling form as ESS "Raise MRF" (MrfForm): company,
-          department and reporting line (RM1/RM2/HOD) prefill from the raiser, and it
-          routes through the reporting chain to the HR Head. Editing an existing MRF (or a
-          legacy login with no employee record) still uses the detailed form below. */}
-      {showForm && !editMRF && employeeId && (
-        <div style={T.cardPurple}>
-          <MrfForm employeeId={employeeId} notify={showNotify}
-            onDone={() => { setShowForm(false); onRefresh() }}
-            onCancel={() => setShowForm(false)} />
-        </div>
-      )}
-
-      {showForm && (editMRF || !employeeId) && (
-        <div style={T.cardPurple}>
-          <div style={{ display:'flex', gap:10, marginBottom:16 }}>
-            {['Quick Hire','Full MRF'].map(type=>(
-              <button key={type} onClick={()=>F('mrf_type',type)} style={{ ...T.btn, flex:1, padding:'10px',
-                background:form.mrf_type===type?C.brand:C.brandTint, color:form.mrf_type===type?C.surface:C.brandDeep,
-                border:form.mrf_type===type?'none':'1px solid #DDD6FE', fontSize:13 }}>
-                {type==='Quick Hire'?'Quick Hire (CTC ≤ ₹6L)':'Full MRF (CTC > ₹6L)'}
-              </button>
-            ))}
-          </div>
-
-          {/* Live read on the ₹6L split, so the wrong lane is caught before
-              submit. Monthly stipends/fees are annualised to compare like
-              with like. Quick Hire ≤ ₹6L · Full MRF > ₹6L. */}
-          {(()=>{
-            const bMax = Number(form.budget_max)||0
-            if (!bMax) return null
-            const annual = comp.period==='ANNUAL' ? bMax : bMax*12
-            const shouldBe = annual > QUICK_HIRE_CAP ? 'Full MRF' : 'Quick Hire'
-            const asYearly = comp.period==='ANNUAL'
-              ? lakhs(bMax, form.currency)
-              : `${money(bMax, form.currency)}/mo = ${lakhs(annual, form.currency)} a year`
-            if (shouldBe === form.mrf_type) return (
-              <div style={{ background:C.positiveTint, border: `1px solid ${C.positiveTint}`, borderRadius:7, padding:'8px 12px',
-                marginBottom:14, fontSize:12, color:C.positive }}>
-                ✓ {asYearly} — correct lane for {form.mrf_type}.
-              </div>
-            )
-            return (
-              <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'9px 12px',
-                marginBottom:14, fontSize:12, color:C.critical, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
-                <span>
-                  {asYearly} — {shouldBe==='Full MRF'
-                    ? 'above ₹6L, so this belongs on a Full MRF.'
-                    : 'at or below ₹6L, so this belongs on a Quick Hire.'}
-                </span>
-                <button onClick={()=>F('mrf_type', shouldBe)} style={{ ...T.btn, background:C.critical, color:C.onAccent, fontSize:11 }}>
-                  Switch to {shouldBe}
-                </button>
-              </div>
-            )
-          })()}
-
-          {/* ── §1 Requisition Meta ── */}
-          <SectionLine title="1 · Requisition Meta" />
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <Field label="Requisition Type">
-              <select style={T.select} value={form.hiring_type} onChange={e=>F('hiring_type',e.target.value)}>
-                {REQ_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Priority">
-              <select style={T.select} value={form.urgency} onChange={e=>F('urgency',e.target.value)}>
-                <option value="HIGH">High / Urgent</option>
-                <option value="MEDIUM">Medium / Normal</option>
-                <option value="LOW">Low</option>
-              </select>
-            </Field>
-            <Field label="Requisition ID" hint={editMRF?undefined:'Generated on save'}>
-              <input style={{ ...T.input, background:C.sunken, color:C.ink, fontWeight:700 }} value={(editMRF as any)?.mrf_number||form.mrf_number||'Auto-generated'} readOnly />
-            </Field>
-          </div>
-          <div style={{ ...T.g2, marginBottom:10 }}>
-            <Field label="Raised By — Name">
-              <input style={T.input} value={form.raised_by_name} onChange={e=>F('raised_by_name',e.target.value)} placeholder="Your name" />
-            </Field>
-            <Field label="Raised By — Role">
-              <input style={T.input} value={form.raised_by_role} onChange={e=>F('raised_by_role',e.target.value)} placeholder="e.g. Department Head" />
-            </Field>
-          </div>
-
-          {/* ── §2 Position Details ── */}
-          <SectionLine title="2 · Position Details" />
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <Field label="Company" required error={errors.company_id}>
-              <select style={eb('company_id')} value={form.company_id} onChange={e=>F('company_id',e.target.value)}>
-                <option value="">Select Company</option>
-                {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
-              </select>
-            </Field>
-            <Field label="Department / Function" error={errors.department_id}>
-              <select style={eb('department_id')} value={form.department_id} onChange={e=>F('department_id',e.target.value)}>
-                <option value="">Select Department</option>
-                {filtDepts.map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
-              </select>
-            </Field>
-            <Field label="Business Unit">
-              <MasterSelect options={masters.business_unit} value={form.business_unit} onChange={(v:string)=>F('business_unit',v)} />
-            </Field>
-          </div>
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <Field label="Job Title">
-              <input style={T.input} value={form.job_title} onChange={e=>F('job_title',e.target.value)} placeholder="e.g. Backend Engineer II" />
-            </Field>
-            <Field label="Designation" required error={errors.designation}>
-              <input style={eb('designation')} value={form.designation} onChange={e=>F('designation',e.target.value)} placeholder="e.g. Senior Engineer" />
-            </Field>
-            <Field label="No. of Openings" error={errors.no_of_openings}>
-              <input style={eb('no_of_openings')} type="number" min={1} value={form.no_of_openings} onChange={e=>F('no_of_openings',e.target.value)} />
-            </Field>
-          </div>
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <Field label="Grade / Band">
-              <MasterSelect options={masters.grade} value={form.grade} onChange={(v:string)=>F('grade',v)} />
-            </Field>
-            <Field label="Job Code" hint="Position-based staffing only">
-              <input style={T.input} value={form.job_code} onChange={e=>F('job_code',e.target.value)} placeholder={`${jobCodePrefix(departments.find((x:Department)=>x.id===form.department_id)?.dept_code, departments.find((x:Department)=>x.id===form.department_id)?.dept_name, form.designation||form.job_title||'')}## (auto)`} />
-            </Field>
-          </div>
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <Field label="RM1 — Reporting Manager"
-              hint={people.find((p:any)=>p.id===form.reporting_manager_id)?.designation
-                ? `Reports to: ${people.find((p:any)=>p.id===form.reporting_manager_id)?.designation}` : undefined}>
-              <PersonSearchSelect people={people} value={form.reporting_manager_id} onChange={(id:string)=>F('reporting_manager_id',id)} />
-            </Field>
-            <Field label="RM2 — Skip-level Manager">
-              <PersonSearchSelect people={people} value={form.rm2_id} onChange={(id:string)=>F('rm2_id',id)} />
-            </Field>
-            <Field label="HOD — Department Head">
-              <PersonSearchSelect people={people} value={form.hod_id} onChange={(id:string)=>F('hod_id',id)} />
-            </Field>
-          </div>
-
-          {/* ── §3 Employment Details ── */}
-          <SectionLine title="3 · Employment Details" />
-          <div style={{ ...T.g4, marginBottom:10 }}>
-            <Field label="Employment Type">
-              <select style={T.select} value={form.employment_type} onChange={e=>F('employment_type',e.target.value)}>
-                {EMP_TYPES.map(t=><option key={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Work Mode">
-              <select style={T.select} value={form.work_mode} onChange={e=>F('work_mode',e.target.value)}>
-                {WORK_MODES.map(w=><option key={w} value={w}>{w}</option>)}
-              </select>
-            </Field>
-            <Field label="Work Location">
-              <select style={T.select} value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
-                <option value="">Select Location</option>
-                {filtLocs.map((l:Location)=><option key={l.id} value={l.id}>{l.location_name||l.location_code}</option>)}
-              </select>
-            </Field>
-            <Field label="Shift / Schedule">
-              <MasterSelect options={masters.shift_type} value={form.shift_schedule} onChange={(v:string)=>F('shift_schedule',v)} />
-            </Field>
-          </div>
-
-          {/* ── §4 Budget & Cost ── */}
-          <SectionLine title="4 · Budget & Cost" />
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <Field label="Cost Center">
-              <MasterSelect options={masters.cost_center} value={form.cost_center} onChange={(v:string)=>F('cost_center',v)} />
-            </Field>
-            <Field label="Budgeted Position">
-              <select style={T.select} value={form.is_budgeted} onChange={e=>F('is_budgeted',e.target.value)}>
-                <option value="">Not specified</option>
-                <option value="yes">Yes — budgeted</option>
-                <option value="no">No — unbudgeted</option>
-              </select>
-            </Field>
-            <Field label="Approved Headcount Ref." hint="Link to the headcount plan record">
-              <input style={T.input} value={form.headcount_ref} onChange={e=>F('headcount_ref',e.target.value)} placeholder="e.g. HCP-2026-014" />
-            </Field>
-          </div>
-          {/* Labels follow the employment type: employees draw a salary,
-              interns/apprentices a stipend, contractors and consultants fees. */}
-          <div style={{ background:C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:C.brandDeep }}>
-            <b>{form.employment_type}</b> → paid as <b>{comp.label.toLowerCase()}</b>, quoted <b>{perLabel(comp.period)}</b>
-            {comp.fixedTerm && <> · fixed-term engagement, duration required</>}
-          </div>
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <Field label="Currency">
-              {masters.currency?.length
-                ? <MasterSelect useCode options={masters.currency} value={form.currency} onChange={(v:string)=>F('currency', v)} />
-                : <input style={T.input} value={form.currency} onChange={e=>F('currency',e.target.value)} />}
-            </Field>
-            <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}>
-              <input style={T.input} type="number" value={form.budget_min} onChange={e=>F('budget_min',e.target.value)} placeholder={comp.ph[0]} />
-            </Field>
-            <Field label={`${comp.label} Range — Max`} error={errors.budget_max} hint={errors.budget_max?undefined:perLabel(comp.period)}>
-              <input style={eb('budget_max')} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder={comp.ph[1]} />
-            </Field>
-            <Field label="Worker / Skill Category" hint="Sets the minimum wage applied in salary negotiation">
-              <select style={T.select} value={form.wage_category||''} onChange={e=>F('wage_category',e.target.value)}>
-                <option value="">Select category…</option>
-                {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
-              </select>
-            </Field>
-          </div>
-          {form.budget_min && form.budget_max && !errors.budget_max && (
-            <div style={{ fontSize:11, color:C.brandDeep, marginBottom:10 }}>
-              {comp.label} band: {payAmount(Number(form.budget_min), form.currency, comp.period)} — {payAmount(Number(form.budget_max), form.currency, comp.period)}
-              {comp.period==='MONTHLY' && form.duration_months && (
-                <> · total over {form.duration_months} month{Number(form.duration_months)===1?'':'s'}: {' '}
-                  {money(Number(form.budget_max)*Number(form.duration_months), form.currency)}</>
-              )}
-            </div>
-          )}
-
-          {/* Fixed-term engagements run for a defined period. */}
-          {(comp.fixedTerm || comp.period==='MONTHLY') && (
-            <div style={{ ...T.g3, marginBottom:10 }}>
-              <Field label={`${comp.kind==='STIPEND' && form.employment_type==='Intern' ? 'Internship' : 'Engagement'} Duration (months)`}
-                required={comp.fixedTerm} error={errors.duration_months}
-                hint={errors.duration_months?undefined:(comp.fixedTerm?'Required for this employment type':'Optional')}>
-                <input style={eb('duration_months')} type="number" min={1} max={60} value={form.duration_months}
-                  onChange={e=>F('duration_months',e.target.value)} placeholder="e.g. 6" />
-              </Field>
-              <Field label="Expected End Date"
-                hint={form.target_joining_date ? 'Derived from joining date + duration' : 'Set the target joining date first'}>
-                <input style={{ ...T.input, background:C.sunken, color:C.muted }} readOnly
-                  value={addMonths(form.target_joining_date, form.duration_months) ? fmtDay(addMonths(form.target_joining_date, form.duration_months)) : '—'} />
-              </Field>
-              <div />
-            </div>
-          )}
-
-          {/* ── §5 Justification ── */}
-          <SectionLine title="5 · Justification" />
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <Field label="Reason for Hire" error={errors.reason}>
-              <select style={eb('reason')} value={form.reason} onChange={e=>F('reason',e.target.value)}>
-                <option value="">Select Reason</option>
-                <option value="New position">New position</option>
-                <option value="Replacement">Replacement</option>
-                <option value="Expansion">Expansion</option>
-                <option value="Attrition">Attrition</option>
-              </select>
-            </Field>
-            <Field label="Outgoing Employee" error={errors.outgoing_employee_id}
-              hint={isReplacement?undefined:'Only for Replacement / Backfill'}>
-              <select style={{ ...eb('outgoing_employee_id'), opacity:isReplacement?1:.55 }} disabled={!isReplacement}
-                value={form.outgoing_employee_id} onChange={e=>F('outgoing_employee_id',e.target.value)}>
-                <option value="">Select Employee</option>
-                {people.map((p:any)=><option key={p.id} value={p.id}>{p.full_name} ({p.emp_code})</option>)}
-              </select>
-            </Field>
-            <Field label="Reason for Exit">
-              <select style={{ ...T.select, opacity:isReplacement?1:.55 }} disabled={!isReplacement}
-                value={form.exit_reason} onChange={e=>F('exit_reason',e.target.value)}>
-                <option value="">Select Reason</option>
-                {(masters.separation_reason||[]).map(o=><option key={o.code} value={o.label}>{o.label}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div style={{ marginBottom:10 }}>
-            <Field label="Business Justification">
-              <textarea style={{ ...T.textarea, minHeight:80 }} value={form.business_justification}
-                onChange={e=>F('business_justification',e.target.value)}
-                placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" />
-            </Field>
-          </div>
-
-          {/* ── §6 Timeline ── */}
-          <SectionLine title="6 · Timeline" />
-          <div style={{ ...T.g2, marginBottom:10 }}>
-            <Field label="Target Joining Date" error={errors.target_joining_date}>
-              <input type="date" style={eb('target_joining_date')} value={form.target_joining_date} onChange={e=>F('target_joining_date',e.target.value)} />
-            </Field>
-            <Field label="Requisition Validity / Expiry" error={errors.validity_date} hint="Auto-flagged as expired if unfilled past this date">
-              <input type="date" style={eb('validity_date')} value={form.validity_date} onChange={e=>F('validity_date',e.target.value)} />
-            </Field>
-          </div>
-
-          {/* ── §7 Candidate Requirements ── */}
-          {!isQuick && (
-            <>
-              <SectionLine title="7 · Candidate Requirements" />
-              <div style={{ ...T.g2, marginBottom:10 }}>
-                <Field label="Experience — Min (years)">
-                  <input style={T.input} type="number" min="0" value={form.experience_min} onChange={e=>F('experience_min',e.target.value)} placeholder="e.g. 3" />
-                </Field>
-                <Field label="Experience — Max (years)" error={errors.experience_max}>
-                  <input style={eb('experience_max')} type="number" min="0" value={form.experience_max} onChange={e=>F('experience_max',e.target.value)} placeholder="e.g. 5" />
-                </Field>
-              </div>
-              <div style={{ ...T.g3, marginBottom:10 }}>
-                <Field label="Education — Minimum">
-                  <select style={T.select} value={form.education_min} onChange={e=>F('education_min',e.target.value)}>
-                    <option value="">Any</option>
-                    {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
-                  </select>
-                </Field>
-                <Field label="Education — Maximum">
-                  <select style={T.select} value={form.education_max} onChange={e=>F('education_max',e.target.value)}>
-                    <option value="">Any</option>
-                    {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
-                  </select>
-                </Field>
-                <Field label="Previous Company Preference">
-                  <select style={T.select} value={form.previous_company_preference} onChange={e=>F('previous_company_preference',e.target.value)}>
-                    <option value="">Select Preference</option>
-                    <option value="MNC">MNC</option>
-                    <option value="STARTUP">Startup</option>
-                  </select>
-                </Field>
-              </div>
-              <div style={{ marginBottom:10 }}>
-                <Field label="Mandatory Skills" error={errors.skills_required}>
-                  <SkillsMultiSelect value={form.skills_required} onChange={(v:string)=>F('skills_required',v)} allSkills={skills} onAddSkill={addSkill} />
-                </Field>
-              </div>
-              <div style={{ marginBottom:10 }}>
-                <Field label="Good-to-have Skills">
-                  <SkillsMultiSelect value={form.good_to_have_skills} onChange={(v:string)=>F('good_to_have_skills',v)} allSkills={skills} onAddSkill={addSkill} />
-                </Field>
-              </div>
-              <div style={{ marginBottom:14 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
-                  <label style={{ ...T.label, marginBottom:0 }}>Job Description</label>
-                  <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>
-                    {aiLoading?'Generating...':'Generate JD with AI'}
-                  </button>
-                </div>
-                <textarea style={{ ...T.textarea, minHeight:150 }} value={form.job_description}
-                  onChange={e=>F('job_description',e.target.value)}
-                  placeholder="Write a job description or generate it with the AI button..." />
-              </div>
-              <div style={{ marginBottom:14 }}>
-                <label style={T.label}>Screening (CTQ) Questions</label>
-                <CtqEditor items={form.ctq_questions} onChange={(v:any[])=>F('ctq_questions',v)} />
-              </div>
-            </>
-          )}
-
-          {/* ── §8 Approval Workflow — auto-routed, same as ESS Raise MRF ── */}
-          <SectionLine title="8 · Approval Workflow" />
-          <div style={{ ...T.card, background:C.sunken, marginBottom:14 }}>
-            <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.6 }}>
-              On <b>Submit</b>, this requisition is routed for approval automatically — the same flow as ESS “Raise MRF”. Each approver sees it in their <b>ESS → Tasks &amp; Approvals</b>.
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const, marginTop:10, fontSize:12.5 }}>
-              <span style={{ fontWeight:600, padding:'4px 10px', borderRadius:99, background:C.brandTint, color:C.brandDeep }}>
-                1 · RM2 — {people.find((p:any)=>p.id===(form.rm2_id||form.reporting_manager_id))?.full_name || <span style={{ color:C.critical }}>pick RM2 / Reporting Manager in §2</span>}
-              </span>
-              <span style={{ color:C.faint }}>→</span>
-              <span style={{ fontWeight:600, padding:'4px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>2 · HR Head (auto)</span>
-            </div>
-          </div>
-
-          {/* ── §9 Sourcing ── */}
-          {!isQuick && (
-            <>
-              <SectionLine title="9 · Sourcing" />
-              <div style={{ ...T.g2, marginBottom:10 }}>
-                <Field label="Internal vs External">
-                  <select style={T.select} value={form.sourcing_mode} onChange={e=>F('sourcing_mode',e.target.value)}>
-                    {SOURCING_MODES.map(s=><option key={s} value={s}>{s}</option>)}
-                  </select>
-                </Field>
-                <Field label="Assigned Recruiter" hint="Set on approval, or enter here">
-                  <input style={{ ...T.input, background:C.sunken, color:C.muted }}
-                    value={(editMRF as any)?.assigned_recruiter||'Assigned at approval'} readOnly />
-                </Field>
-              </div>
-              <div style={{ marginBottom:14 }}>
-                <label style={T.label}>Preferred Sourcing Channels</label>
-                <ChannelPicker options={masters.candidate_source} value={form.sourcing_channels}
-                  onChange={(v:string[])=>F('sourcing_channels',v)} />
-              </div>
-            </>
-          )}
-
-          {/* ── §10 Attachments ── */}
-          <SectionLine title="10 · Attachments" />
-          <div style={{ marginBottom:14 }}>
-            {editMRF ? (
-              <AttachmentsPanel mrfId={editMRF.id} attachments={asArray((editMRF as any).attachments)}
-                onChanged={onRefresh} showNotify={showNotify} supabase={supabase} />
-            ) : (
-              <div style={{ fontSize:12, color:C.faint }}>
-                Save the requisition first — files attach to a saved MRF.
-              </div>
-            )}
-          </div>
-
-          {Object.values(errors).filter(Boolean).length>0 && (
-            <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'9px 12px', marginBottom:12, fontSize:12, color:C.critical }}>
-              {Object.values(errors).filter(Boolean).length} field(s) need attention before this can be saved.
-            </div>
-          )}
-
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={()=>saveMRF('DRAFT')} disabled={saving} style={T.btnOutline}>Save Draft</button>
-            <button onClick={()=>saveMRF('SUBMITTED')} disabled={saving} style={T.btnPrimary}>Submit for Approval</button>
-          </div>
-        </div>
-      )}
-
-      <SearchBar placeholder="Search by job title, role or MRF number…" onApply={setMrfQ} />
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const, marginBottom:12, alignItems:'center' }}>
-        <select value={fCompany} onChange={e=>setFCompany(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="">All Companies</option>
-          {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
-        </select>
-        <select value={fDept} onChange={e=>setFDept(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="">All Departments</option>
-          {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
-        </select>
-        <select value={fLoc} onChange={e=>setFLoc(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="">All Locations</option>
-          {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
-        </select>
-        <select value={fPos} onChange={e=>setFPos(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="">All Positions</option>
-          {mrfPositions.map((p:string)=><option key={p} value={p}>{p}</option>)}
-        </select>
-        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="openings">Most openings</option>
-          <option value="urgency">Most urgent</option>
-          <option value="joining">Earliest joining</option>
-        </select>
-        {(fCompany||fDept||fLoc||fPos||fStatus)&&<button onClick={()=>{setFCompany('');setFDept('');setFLoc('');setFPos('');setFStatus('')}} style={T.btnOutline}>Clear filters</button>}
-      </div>
-
-      {visible.length>0 && (
-        <div style={{ fontSize:12, color:C.faint, marginBottom:8 }}>
-          Showing {visible.length} of {mrfs.length} requisition{mrfs.length===1?'':'s'}
-          {fStatus?` · ${fStatus.replace('_',' ')}`:''}
-        </div>
-      )}
-
-      {visible.length===0 && (
-        <div style={{ ...T.card, textAlign:'center' as const, padding:34, color:C.faint }}>
-          <div style={{ fontSize:30, marginBottom:8 }}></div>
-          <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>No requisitions match</div>
-          <div style={{ fontSize:13, marginTop:5 }}>
-            {mrfs.length ? 'Try clearing the filters above.' : 'Create your first MRF with the + New MRF button.'}
-          </div>
-        </div>
-      )}
-
-      {view==='table' && visible.length>0 && (
-        <MrfTable rows={visible} orgOf={orgOf} candidates={candidates}
-          onOpen={setDetailMRF} onReview={setApprovalModal} />
-      )}
-
-      {view==='cards' && visible.map((m:MRF)=>(
-        <MrfCard key={m.id} m={m} org={orgOf(m)}
-          cands={candidates.filter((c:Candidate)=>c.mrf_id===m.id)}
-          onOpen={setDetailMRF} onEdit={openEdit} onDelete={setDeleteConfirm}
-          onReview={setApprovalModal} canEdit={canEditMrf(m)} canSendBack={canSendBackMrf(m)} onSendBack={setSendBackFor}
-          onClose={(x:MRF)=>setMrfStatus(x,'CLOSED','MRF_CLOSED')}
-          onReopen={(x:MRF)=>setMrfStatus(x,'APPROVED','MRF_REOPENED')} />
-      ))}
 
       {detailMRF && (
         <MrfDetail supabase={supabase} mrf={mrfs.find((x:MRF)=>x.id===detailMRF.id)||detailMRF} org={orgOf(detailMRF)}
@@ -2456,8 +2249,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           </div>
         </div>
       )}
-      </>)}
-    </div>
+    </>
   )
 }
 
@@ -2502,25 +2294,25 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
         )}
 
         <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-          <button onClick={()=>setMode('approve')} style={{ ...T.btn, flex:1, background:mode==='approve'?C.positiveTint:C.sunken, color:mode==='approve'?C.positive:C.faint, border:mode==='approve'?'1px solid #A7F3D0':'1px solid #E5E7EB' }}>Approve</button>
-          <button onClick={()=>setMode('hold')} style={{ ...T.btn, flex:1, background:mode==='hold'?C.warningTint:C.sunken, color:mode==='hold'?C.warning:C.faint, border:mode==='hold'?'1px solid #FDE68A':'1px solid #E5E7EB' }}>Hold</button>
-          <button onClick={()=>setMode('reject')} style={{ ...T.btn, flex:1, background:mode==='reject'?C.criticalTint:C.sunken, color:mode==='reject'?C.critical:C.faint, border:mode==='reject'?'1px solid #FCA5A5':'1px solid #E5E7EB' }}>Reject</button>
+          <button onClick={()=>setMode('approve')} style={{ ...T.btn, flex:1, background:mode==='approve'?C.positiveTint:C.sunken, color:mode==='approve'?C.positive:C.faint, border:mode==='approve'?`1px solid ${C.positiveEdge}`:'1px solid var(--ez-line)' }}>Approve</button>
+          <button onClick={()=>setMode('hold')} style={{ ...T.btn, flex:1, background:mode==='hold'?C.warningTint:C.sunken, color:mode==='hold'?C.warning:C.faint, border:mode==='hold'?`1px solid ${C.warningEdge}`:'1px solid var(--ez-line)' }}>Hold</button>
+          <button onClick={()=>setMode('reject')} style={{ ...T.btn, flex:1, background:mode==='reject'?C.criticalTint:C.sunken, color:mode==='reject'?C.critical:C.faint, border:mode==='reject'?`1px solid ${C.criticalEdge}`:'1px solid var(--ez-line)' }}>Reject</button>
         </div>
 
-        <label style={T.label}>Approver name</label>
-        <input style={{ ...T.input, marginBottom:11 }} value={actor} onChange={e=>setActor(e.target.value)}
+        <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Approver name</label>
+        <input className="rx-input" style={{ marginBottom:11 }} value={actor} onChange={e=>setActor(e.target.value)}
           placeholder="Your name" />
 
         {mode==='approve'?(
           <>
-            <label style={T.label}>Assign Recruiter Email</label>
-            <input style={{ ...T.input, marginBottom:4, ...(emailOk?{}:{ border: `1px solid ${C.criticalTint}`, background:C.criticalTint }) }}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Assign Recruiter Email</label>
+            <input className="rx-input" style={{ marginBottom:4, ...(emailOk?{}:{ border: `1px solid ${C.criticalTint}`, background:C.criticalTint }) }}
               value={recruiter} onChange={e=>setRecruiter(e.target.value)} placeholder="recruiter@company.com" />
             <div style={{ fontSize:11, color: emailOk?C.faint:C.critical, marginBottom:11 }}>
               {emailOk ? 'Optional — the MRF can be approved and assigned later.' : 'That does not look like a valid email.'}
             </div>
-            <label style={T.label}>Approver comments</label>
-            <textarea style={{ ...T.textarea, marginBottom:16, minHeight:70 }} value={comments}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Approver comments</label>
+            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', marginBottom:16, minHeight:70 }} value={comments}
               onChange={e=>setComments(e.target.value)} placeholder="Optional note for the record" />
             <button onClick={()=>emailOk && go(()=>onApprove(mrf.id, recruiter.trim(), comments.trim(), actor.trim()))} disabled={busy||!emailOk}
               style={{ ...T.btnPrimary, width:'100%', opacity: busy||!emailOk?.6:1 }}>
@@ -2529,8 +2321,8 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
           </>
         ):mode==='hold'?(
           <>
-            <label style={T.label}>Reason for hold *</label>
-            <textarea style={{ ...T.textarea, marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Reason for hold *</label>
+            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
               placeholder="Why is this requisition being paused?" rows={3} />
             <button onClick={()=>comments.trim() && go(()=>onHold(mrf.id, comments.trim()))} disabled={busy||!comments.trim()}
               style={{ ...T.btn, background:C.warning, color:C.onAccent, width:'100%', opacity: busy||!comments.trim()?.6:1 }}>
@@ -2539,8 +2331,8 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
           </>
         ):(
           <>
-            <label style={T.label}>Rejection Reason *</label>
-            <textarea style={{ ...T.textarea, marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Rejection Reason *</label>
+            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
               placeholder="Why is this requisition being rejected?" rows={3} />
             <button onClick={()=>comments.trim() && go(()=>onReject(mrf.id, comments.trim(), actor.trim()))} disabled={busy||!comments.trim()}
               style={{ ...T.btn, background:C.critical, color:C.onAccent, width:'100%', opacity: busy||!comments.trim()?.6:1 }}>
@@ -2655,8 +2447,8 @@ function fillTone(rate:number|null) {
 function JobFlag({ flag }:{ flag:string }) {
   const f = JOB_FLAGS[flag] || JOB_FLAGS.NO_DEADLINE
   return (
-    <span title={f.help} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:f.bg, color:f.fg,
-      fontWeight:600, whiteSpace:'nowrap' as const }}>{f.icon} {f.label}</span>
+    <span title={f.help} style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:f.bg, color:f.fg,
+      fontWeight:W.semi, lineHeight:1.45, whiteSpace:'nowrap' as const }}>{f.label}</span>
   )
 }
 
@@ -2664,65 +2456,63 @@ function JobFlag({ flag }:{ flag:string }) {
 function DeadlineBoard({ rows, orgOf }:any) {
   if (!rows.length) return (
     <div style={{ ...T.card, textAlign:'center' as const, padding:26, color:C.faint, fontSize:13 }}>
-      No live requisitions with a deadline. ✅
+      No live requisitions with a deadline.
     </div>
   )
   return (
-    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
-      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:820 }}>
-        <thead>
-          <tr>
-            {['Requisition','Department','Recruiter','Openings','Progress','Deadline','Days Left','Flag'].map((h,i)=>(
-              <th key={h} style={{ fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase' as const,
-                letterSpacing:'.05em', textAlign: i>=3&&i<=6 ? 'center':'left', padding:'8px 10px',
-                borderBottom: `1px solid ${C.brandEdge}`, whiteSpace:'nowrap' as const }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ m, js }:any)=>{
-            const org = orgOf(m)
-            const pct = js.openings ? Math.min(100,(js.filledCount/js.openings)*100) : 0
-            const late = js.daysLeft!=null && js.daysLeft < 0
-            return (
-              <tr key={m.id}>
-                <td style={{ fontSize:12, padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}` }}>
-                  <div style={{ fontWeight:600 }}>{m.job_title||m.designation||m.position}</div>
-                  <div style={{ fontSize:11, color:C.faint }}>{m.mrf_number||'—'}</div>
-                </td>
-                <td style={{ fontSize:12, color:C.muted, padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}` }}>{org.dept}</td>
-                <td style={{ fontSize:12, color:C.muted, padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}` }}>{m.assigned_recruiter||'— unassigned'}</td>
-                <td style={{ fontSize:12, textAlign:'center', padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}` }}>{js.openings}</td>
-                <td style={{ padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}`, minWidth:110 }}>
-                  <div style={{ fontSize:11, color:C.faint, textAlign:'center', marginBottom:3 }}>{js.filledCount}/{js.openings}</div>
-                  <div style={{ background:C.brandTint, borderRadius:99, height:5, overflow:'hidden' }}>
-                    <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?C.positive:C.brand }} />
-                  </div>
-                </td>
-                <td style={{ fontSize:12, color:C.muted, textAlign:'center', padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}`, whiteSpace:'nowrap' as const }}>{fmtDay(js.deadline)}</td>
-                <td style={{ fontSize:13, fontWeight:700, textAlign:'center', padding:'9px 10px',
-                  borderBottom: `1px solid ${C.brandEdge}`, color: late?C.critical: js.daysLeft<=DUE_CRITICAL?C.critical:C.positive, whiteSpace:'nowrap' as const }}>
-                  {js.daysLeft==null ? '—' : late ? `${Math.abs(js.daysLeft)}d over` : `${js.daysLeft}d`}
-                </td>
-                <td style={{ padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}` }}><JobFlag flag={js.flag} /></td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    // Every one of the eight cells repeated `borderBottom: 1px solid C.line`
+    // by hand — that rule is what Td carries for you. The header's per-column
+    // textAlign, computed from the index, becomes Th's align prop. No row
+    // click here, so Tr takes no handler and stays non-interactive.
+    <TableWrap minWidth={820} style={{ marginBottom:S.md }}>
+      <thead>
+        <tr>
+          {['Requisition','Department','Recruiter','Openings','Progress','Deadline','Days Left','Flag'].map((h,i)=>(
+            <Th key={h} align={i>=3&&i<=6 ? 'center':'left'}>{h}</Th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({ m, js }:any)=>{
+          const org = orgOf(m)
+          const pct = js.openings ? Math.min(100,(js.filledCount/js.openings)*100) : 0
+          const late = js.daysLeft!=null && js.daysLeft < 0
+          return (
+            <Tr key={m.id}>
+              <Td>
+                <div style={{ fontWeight:W.semi, color:C.ink }}>{m.job_title||m.designation||m.position}</div>
+                <div style={{ fontSize:F.micro, color:C.faint }}>{m.mrf_number||'—'}</div>
+              </Td>
+              <Td style={{ color:C.muted }}>{org.dept}</Td>
+              <Td style={{ color:C.muted }}>{m.assigned_recruiter||'— unassigned'}</Td>
+              <Td align="center">{js.openings}</Td>
+              <Td style={{ minWidth:110 }}>
+                <div style={{ fontSize:F.micro, color:C.faint, textAlign:'center', marginBottom:3, ...numeric }}>{js.filledCount}/{js.openings}</div>
+                <div style={{ background:C.brandTint, borderRadius:R.pill, height:5, overflow:'hidden' }}>
+                  <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?C.positive:C.brand,
+                                transition:`width ${M.ease}` }} />
+                </div>
+              </Td>
+              <Td align="center" style={{ color:C.muted, whiteSpace:'nowrap' }}>{fmtDay(js.deadline)}</Td>
+              <Td align="center" style={{ fontWeight:W.bold,
+                color: late?C.critical: js.daysLeft<=DUE_CRITICAL?C.critical:C.positive, whiteSpace:'nowrap' }}>
+                {js.daysLeft==null ? '—' : late ? `${Math.abs(js.daysLeft)}d over` : `${js.daysLeft}d`}
+              </Td>
+              <Td><JobFlag flag={js.flag} /></Td>
+            </Tr>
+          )
+        })}
+      </tbody>
+    </TableWrap>
   )
 }
 
 // ── Recruiter performance table ───────────────────────────────────
 function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:any) {
-  const th = (k:string, label:string, num=false):React.CSSProperties => ({
-    fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase', letterSpacing:'.05em',
-    textAlign: num?'right':'left', padding:'9px 10px', borderBottom: `1px solid ${C.brandEdge}`,
-    cursor:'pointer', whiteSpace:'nowrap',
-  })
-  const td:React.CSSProperties = { fontSize:13, padding:'10px', borderBottom: `1px solid ${C.brandEdge}` }
-  const num:React.CSSProperties = { ...td, textAlign:'right' }
+  // th/td/num are gone: Th and Td carry those styles, and Th now takes an
+  // onClick so a sortable header stays a <th> rather than becoming a button
+  // nested inside one. Td align="right" also brings tabular numerals, which
+  // these count columns were not getting before.
   const arrow = (k:string) => sortKey===k ? (sortDir==='asc'?' ▲':' ▼') : ''
   const COLS:[string,string,boolean][] = [
     ['name','Recruiter',false], ['total','MRFs',true], ['filled','Filled',true],
@@ -2730,59 +2520,58 @@ function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:a
     ['ttf','Avg Days to Fill',true], ['ttc','Avg Days to 1st CV',true],
   ]
   return (
-    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
-      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:860 }}>
-        <thead>
-          <tr>{COLS.map(([k,l,n])=>(
-            <th key={k} style={th(k,l,n)} onClick={()=>onSort(k)}>{l}{arrow(k)}</th>
-          ))}</tr>
-        </thead>
-        <tbody>
-          {rows.map((r:any)=>{
-            const [bg,fg] = fillTone(r.rate)
-            const on = selected===r.key
-            return (
-              <tr key={r.key} onClick={()=>onSelect(on?null:r.key)}
-                style={{ cursor:'pointer', background: on?C.brandTint:'transparent' }}>
-                <td style={td}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ width:26, height:26, borderRadius:'50%', background:C.brandTint, color:C.brandDeep,
-                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0 }}>
-                      {r.name.slice(0,2).toUpperCase()}
-                    </span>
-                    <div style={{ minWidth:0 }}>
-                      <div style={{ fontWeight:600 }}>{r.name}</div>
-                      {r.unassigned && <div style={{ fontSize:10, color:C.warning }}>no recruiter assigned</div>}
-                    </div>
-                  </div>
-                </td>
-                <td style={num}>{r.total}</td>
-                <td style={{ ...num, color:C.positive, fontWeight:600 }}>{r.filled}</td>
-                <td style={{ ...num, color: r.expired?C.critical:C.faint, fontWeight: r.expired?600:400 }}>{r.expired}</td>
-                <td style={num}>{r.open}</td>
-                <td style={num}>
-                  <span style={{ fontWeight:700, padding:'3px 10px', borderRadius:99, fontSize:12, background:bg, color:fg }}>
-                    {r.rate==null ? '—' : r.rate+'%'}
+    <TableWrap minWidth={860} style={{ marginBottom:S.md }}>
+      <thead>
+        <tr>{COLS.map(([k,l,n])=>(
+          <Th key={k} align={n?'right':'left'} onClick={()=>onSort(k)}
+              title={`Sort by ${l}`}>{l}{arrow(k)}</Th>
+        ))}</tr>
+      </thead>
+      <tbody>
+        {rows.length===0 && (
+          <tr><td colSpan={COLS.length}>
+            <Empty title="No requisitions in this period"
+                   hint="Widen the period, or clear the company and department filters." />
+          </td></tr>
+        )}
+        {rows.map((r:any)=>{
+          const [bg,fg] = fillTone(r.rate)
+          const on = selected===r.key
+          return (
+            <Tr key={r.key} onClick={()=>onSelect(on?null:r.key)} selected={on}>
+              <Td>
+                <div style={{ display:'flex', alignItems:'center', gap:S.sm }}>
+                  <span style={{ width:26, height:26, borderRadius:'50%', background:C.brandTint, color:C.brandDeep,
+                    display:'flex', alignItems:'center', justifyContent:'center', fontSize:F.micro, fontWeight:W.bold, flexShrink:0 }}>
+                    {r.name.slice(0,2).toUpperCase()}
                   </span>
-                </td>
-                <td style={num}>{r.ttf==null?'—':r.ttf}</td>
-                <td style={num}>{r.ttc==null?'—':r.ttc}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {rows.length===0 && (
-        <div style={{ padding:26, textAlign:'center', color:C.faint, fontSize:13 }}>
-          No requisitions in this period.
-        </div>
-      )}
-    </div>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontWeight:W.semi, color:C.ink }}>{r.name}</div>
+                    {r.unassigned && <div style={{ fontSize:F.micro, color:C.warning }}>no recruiter assigned</div>}
+                  </div>
+                </div>
+              </Td>
+              <Td align="right">{r.total}</Td>
+              <Td align="right" style={{ color:C.positive, fontWeight:W.semi }}>{r.filled}</Td>
+              <Td align="right" style={{ color: r.expired?C.critical:C.faint, fontWeight: r.expired?W.semi:W.regular }}>{r.expired}</Td>
+              <Td align="right">{r.open}</Td>
+              <Td align="right">
+                <span style={{ fontWeight:W.bold, padding:'3px 10px', borderRadius:R.pill, fontSize:F.tiny, background:bg, color:fg }}>
+                  {r.rate==null ? '—' : r.rate+'%'}
+                </span>
+              </Td>
+              <Td align="right">{r.ttf==null?'—':r.ttf}</Td>
+              <Td align="right">{r.ttc==null?'—':r.ttc}</Td>
+            </Tr>
+          )
+        })}
+      </tbody>
+    </TableWrap>
   )
 }
 
 // ── JOB STATUS TAB ────────────────────────────────────────────────
-function JobStatusTab({ companies, locations, departments, mrfs, candidates, showNotify, supabase }:any) {
+function JobStatusTab({ companies, locations, departments, mrfs, candidates, showNotify, supabase, rail }:any) {
   const [fCompany, setFCompany] = useState('')
   const [fLoc, setFLoc] = useState('')
   const [fDept, setFDept] = useState('')
@@ -2879,7 +2668,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
 
   const Tile = ({ label, value, sub, color }:any) => (
     <div style={{ background:C.surface, border:'1px solid var(--ez-line)', borderRadius:10, padding:'11px 13px' }}>
-      <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
+      <div style={{ ...eyebrow }}>{label}</div>
       <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||C.ink }}>{value}</div>
       {sub && <div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{sub}</div>}
     </div>
@@ -3009,27 +2798,26 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
   }
 
   return (
-    <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' as const }}>
-        <div>
-          <div style={{ fontSize:15, fontWeight:600, color:C.ink }}>Job Status &amp; Recruiter Performance</div>
-          <div style={{ fontSize:12, color:C.faint, marginTop:2 }}>
-            MRF deadlines, expiries and whether hiring is closing before requisitions lapse
-          </div>
-        </div>
-        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' as const }}>
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Job status"
+        subtitle="MRF deadlines, expiries and whether hiring is closing before requisitions lapse."
+        actions={<>
+          {/* The same three controls, the same state, the same handlers.
+              downloadReport still builds the workbook through XLSX and
+              shareReport still POSTs to share-report — only the frame changed. */}
           <select value={exportFmt} onChange={e=>{ setExportFmt(e.target.value); setShareUrl('') }}
-            style={{ ...T.select, width:'auto', padding:'7px 10px', fontSize:12 }}>
+            className="rx-input" style={{ width:'auto', padding:'7px 10px', fontSize:12 }}>
             <option value="xlsx">Excel (.xlsx)</option>
             <option value="xls">Excel 97–2003 (.xls)</option>
             <option value="csv">CSV (.csv)</option>
           </select>
-          <button onClick={downloadReport} style={T.btnPrimary}>⬇ Export Report</button>
-          <button onClick={shareReport} disabled={sharing} style={{ ...T.btnOutline, opacity: sharing?.6:1 }}>
+          <button type="button" className="rx-btn" onClick={shareReport} disabled={sharing}>
             {sharing ? 'Preparing…' : 'Share link'}
           </button>
-        </div>
-      </div>
+          <button type="button" className="rx-btn p" onClick={downloadReport}>Export report</button>
+        </>}
+      />}>
 
       {shareUrl && (
         <div style={{ ...T.card, background:C.positiveTint, border: `1px solid ${C.positiveTint}` }}>
@@ -3038,7 +2826,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' as const }}>
             <input readOnly value={shareUrl} onFocus={e=>e.currentTarget.select()}
-              style={{ ...T.input, flex:'1 1 340px', fontSize:12, background:C.surface }} />
+              className="rx-input" style={{ flex:'1 1 340px', fontSize:12, background:C.surface }} />
             <button onClick={()=>{ navigator.clipboard?.writeText(shareUrl); showNotify('Link copied') }} style={T.btnOutline}>Copy</button>
             <a href={shareUrl} target="_blank" rel="noreferrer" style={{ ...T.btnOutline, textDecoration:'none' }}>Open</a>
             <button onClick={()=>setShareUrl('')} style={{ ...T.btnOutline, color:C.muted }}>Dismiss</button>
@@ -3059,31 +2847,31 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
         <div style={T.section}>Filters</div>
         <div style={{ ...T.g4 }}>
           <div>
-            <label style={T.label}>Company</label>
-            <select style={T.select} value={fCompany} onChange={e=>{ setFCompany(e.target.value); setFLoc(''); setFDept('') }}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Company</label>
+            <select className="rx-input" value={fCompany} onChange={e=>{ setFCompany(e.target.value); setFLoc(''); setFDept('') }}>
               <option value="">All companies</option>
               {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
             </select>
           </div>
           <div>
-            <label style={T.label}>Branch / Location</label>
-            <select style={T.select} value={fLoc} onChange={e=>setFLoc(e.target.value)}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Branch / Location</label>
+            <select className="rx-input" value={fLoc} onChange={e=>setFLoc(e.target.value)}>
               <option value="">All branches</option>
               {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=>(
                 <option key={l.id} value={l.id}>{l.location_name}</option>))}
             </select>
           </div>
           <div>
-            <label style={T.label}>Department</label>
-            <select style={T.select} value={fDept} onChange={e=>setFDept(e.target.value)}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Department</label>
+            <select className="rx-input" value={fDept} onChange={e=>setFDept(e.target.value)}>
               <option value="">All departments</option>
               {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=>(
                 <option key={d.id} value={d.id}>{d.dept_name}</option>))}
             </select>
           </div>
           <div>
-            <label style={T.label}>Raised Within</label>
-            <select style={T.select} value={period} onChange={e=>setPeriod(e.target.value)}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Raised Within</label>
+            <select className="rx-input" value={period} onChange={e=>setPeriod(e.target.value)}>
               <option value="all">All time</option>
               <option value="30">Last 30 days</option>
               <option value="90">Last 90 days</option>
@@ -3133,7 +2921,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
       {/* Recruiter performance */}
       <div style={{ ...T.section, marginTop:14, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
         <span>Recruiter Performance</span>
-        <span style={{ fontSize:10, color:C.faint, textTransform:'none' as const, letterSpacing:0, fontWeight:400 }}>
+        <span style={{ fontSize:F.micro, color:C.muted, textTransform:'none' as const, letterSpacing:0, fontWeight:W.regular }}>
           Fill rate = filled ÷ (filled + breached). Live requisitions are excluded — they are neither yet.
         </span>
       </div>
@@ -3153,7 +2941,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
             .sort((a:any,b:any)=>+new Date(b.m.created_at) - +new Date(a.m.created_at))
             .map(({ m, js }:any)=>(
             <div key={m.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
-              padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}`, gap:10, flexWrap:'wrap' as const }}>
+              padding:'9px 0', borderBottom: `1px solid ${C.line}`, gap:10, flexWrap:'wrap' as const }}>
               <div style={{ minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600 }}>
                   {m.job_title||m.designation||m.position} <span style={{ fontSize:11, color:C.faint }}>{m.mrf_number||''}</span>
@@ -3175,12 +2963,12 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
           ))}
         </div>
       )}
-    </div>
+    </RxPage>
   )
 }
 
 // ── AI SCREENING ──────────────────────────────────────────────────
-function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
+function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   const [selMRF, setSelMRF] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [screening, setScreening] = useState(false)
@@ -3277,117 +3065,109 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
   const partial = results.filter(r=>r.match_tag==='PARTIAL')
   const notSuitable = results.filter(r=>r.match_tag==='NOT_SUITABLE')
 
+  // screen-resumes returns snake_case under DIFFERENT names than the kit card
+  // expects, so map explicitly. The kit's own comment claimed the shapes already
+  // matched; they do not (candidate_name/file_name/match_tag/matched_skills/
+  // missing_skills/interview_questions), and trusting it would have blanked
+  // every chip and question on every result.
+  //
+  // `error` is deliberately NOT set. The card's error branch collapses the row
+  // to one line, but this tab has always shown a failed screen as a full row
+  // whose reasoning carries the explanation ("Network/parse error",
+  // "GEMINI_API_KEY is not configured on the server"). Leaving error undefined
+  // keeps that behaviour.
+  const toScreenResult = (r:any):ScreenResult => ({
+    fileName:        r.file_name || '',
+    name:            r.candidate_name || null,
+    score:           Number(r.score) || 0,
+    tag:             r.match_tag==='STRONG' ? 'STRONG' : r.match_tag==='PARTIAL' ? 'PARTIAL' : 'NOT_SUITABLE',
+    matched:         Array.isArray(r.matched_skills) ? r.matched_skills : [],
+    missing:         Array.isArray(r.missing_skills) ? r.missing_skills : [],
+    questions:       Array.isArray(r.interview_questions) ? r.interview_questions : [],
+    reasoning:       r.reasoning ?? null,
+    atsScore:        typeof r.ats_score==='number' ? r.ats_score : null,
+    experienceMatch: r.experience_match ?? null,
+    educationMatch:  r.education_match ?? null,
+    added:           !!r.added,
+  })
+
+  const ordered = [...strong, ...partial, ...notSuitable]
+
   return (
-    <div>
-      <div style={T.cardPurple}>
-        <div style={T.section}>AI Resume Screening — Bulk Upload</div>
-        <div style={{ ...T.g2, marginBottom:12 }}>
-          <div>
-            <label style={T.label}>Select Job Opening *</label>
-            <select style={T.select} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
-              <option value="">Select MRF (approved)</option>
-              {mrfs.filter((m:MRF)=>m.status==='APPROVED').map((m:MRF)=>(
-                <option key={m.id} value={m.id}>{m.designation||m.position} — {m.no_of_openings||m.openings||0} openings</option>
-              ))}
-            </select>
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="AI resume screening"
+        subtitle="Score a batch of resumes against one approved opening, then send the strong ones straight into the pipeline."
+        actions={results.length>0
+          ? <button type="button" className="rx-btn" onClick={downloadExcel}>Export to Excel</button>
+          : undefined}
+      />}>
+      <div className="rx-grid rx-stag">
+        <section className="rx-mod s12">
+          <div className="rx-mod-h"><div className="rx-mod-t">Screen a batch</div></div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16, marginBottom:14 }}>
+            <div>
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Job opening <em>*</em></label>
+              <select className="rx-input" value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
+                <option value="">Select an approved MRF</option>
+                {mrfs.filter((m:MRF)=>m.status==='APPROVED').map((m:MRF)=>(
+                  <option key={m.id} value={m.id}>{m.designation||m.position} — {m.no_of_openings||m.openings||0} openings</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Resumes (PDF, Word or text)</label>
+              <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv"
+                onChange={e=>setFiles(Array.from(e.target.files||[]))} style={{ display:'none' }} />
+              <button type="button" className="rx-btn" style={{ width:'100%', justifyContent:'flex-start' }}
+                onClick={()=>fileRef.current?.click()}>
+                {files.length>0?`${files.length} file${files.length===1?'':'s'} selected`:'Choose files…'}
+              </button>
+            </div>
           </div>
-          <div>
-            <label style={T.label}>Upload Resumes (PDF/Word/TXT)</label>
-            <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv" onChange={e=>setFiles(Array.from(e.target.files||[]))} style={{ display:'none' }} />
-            <button onClick={()=>fileRef.current?.click()} style={{ ...T.btnOutline, width:'100%', textAlign:'left' as const }}>
-              📂 {files.length>0?`${files.length} files selected`:'Choose Files'}
+          <div className="rx-row" style={{ gap:10, flexWrap:'wrap' }}>
+            <button type="button" className="rx-btn p" onClick={runScreening} disabled={screening||!selMRF||!files.length}>
+              {screening?`Screening… ${progress}% (${results.length}/${files.length})`:'Start AI screening'}
             </button>
+            {strong.filter(r=>!r.added).length>0 && (
+              <button type="button" className="rx-btn ok" onClick={addAllStrong}>
+                Add all strong ({strong.filter(r=>!r.added).length})
+              </button>
+            )}
           </div>
-        </div>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          <button onClick={runScreening} disabled={screening||!selMRF||!files.length} style={{ ...T.btnPrimary, padding:'9px 20px', opacity:screening||!selMRF||!files.length?0.5:1 }}>
-            {screening?`⏳ ${progress}% (${results.length}/${files.length})` :'Start AI Screening'}
-          </button>
-          {results.length>0&&<button onClick={downloadExcel} style={{ ...T.btn, background:C.positive, color:C.onAccent }}>Excel Download</button>}
-          {strong.filter(r=>!r.added).length>0&&(
-            <button onClick={addAllStrong} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}` }}>Add All Strong ({strong.filter(r=>!r.added).length})
-            </button>
-          )}
-        </div>
-        {screening&&(
-          <div style={{ marginTop:10, background:C.brandTint, borderRadius:99, height:6, overflow:'hidden' }}>
-            <div style={{ background:C.brand, height:'100%', width:`${progress}%`, transition:'width .3s', borderRadius:99 }} />
+          {/* The kit's own progress track. The hand-rolled one this replaces had
+              a documented regression (a brandTint fill on a brandTint plane, 1.0
+              contrast); .rx-track carries its own fill and hairline so that
+              cannot recur. */}
+          {screening && <div className="rx-track" style={{ marginTop:14 }}><i style={{ width:`${progress}%` }} /></div>}
+        </section>
+
+        {results.length>0 && (
+          <div className="s12 rx-bar" style={{ gap:8 }}>
+            <span className="rx-b b-pos">Strong {strong.length}</span>
+            <span className="rx-b b-warn">Partial {partial.length}</span>
+            <span className="rx-b b-crit">Not suitable {notSuitable.length}</span>
+            <span className="rx-b b-mute nodot">Total {results.length}</span>
           </div>
         )}
-      </div>
 
-      {results.length>0&&(
-        <>
-          <div style={{ display:'flex', gap:16, fontSize:13, marginBottom:10 }}>
-            <span style={{ color:C.positive, fontWeight:500 }}>Strong: {strong.length}</span>
-            <span style={{ color:C.warning, fontWeight:500 }}>Partial: {partial.length}</span>
-            <span style={{ color:C.critical, fontWeight:500 }}>Not Suitable: {notSuitable.length}</span>
-            <span style={{ color:C.faint }}>Total: {results.length}</span>
+        {ordered.map((r, i)=>(
+          <div className="s12" key={(r.file_name||'')+i}>
+            <ScreeningResultCard r={toScreenResult(r)} onAdd={()=>addToBank(results.indexOf(r))} />
           </div>
-          {[...strong,...partial,...notSuitable].map((r,i)=>(
-            <div key={i} style={{ ...T.card, display:'flex', gap:12, alignItems:'flex-start' }}>
-              <div style={{ width:46, height:46, borderRadius:99, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:700,
-                background:r.match_tag==='STRONG'?C.positiveTint:r.match_tag==='PARTIAL'?C.warningTint:C.criticalTint,
-                color:r.match_tag==='STRONG'?C.positive:r.match_tag==='PARTIAL'?C.warning:C.critical }}>
-                {r.score}
-              </div>
-              <div style={{ flex:1 }}>
-                <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' as const }}>
-                  <span style={{ fontSize:13, fontWeight:600, color:C.ink }}>{r.candidate_name}</span>
-                  <Badge text={r.match_tag} />
-                  {r.added&&<span style={{ fontSize:10, color:C.positive, fontWeight:500 }}>Added to pipeline</span>}
-                </div>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>{r.reasoning}</div>
-                {typeof r.ats_score==='number'&&(
-                  <div style={{ fontSize:11, color:C.brandDeep, marginBottom:4 }}>ATS skills match: <b>{r.ats_score}%</b> · Overall: <b>{r.score}</b></div>
-                )}
-                {(r.matched_skills?.length||r.missing_skills?.length)?(
-                  <div style={{ display:'flex', flexWrap:'wrap' as const, gap:4, marginBottom:6 }}>
-                    {(r.matched_skills||[]).map((s:string,si:number)=>(
-                      <span key={'m'+si} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:C.positiveTint, color:C.positive, fontWeight:500 }}>✓ {s}</span>
-                    ))}
-                    {(r.missing_skills||[]).map((s:string,si:number)=>(
-                      <span key={'x'+si} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:C.criticalTint, color:C.critical, fontWeight:500 }}>✕ {s}</span>
-                    ))}
-                  </div>
-                ):null}
-                {(r.experience_match||r.education_match)&&(
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>
-                    {r.experience_match&&<span>⏱ {r.experience_match}</span>}
-                    {r.experience_match&&r.education_match&&<span> · </span>}
-                    {r.education_match&&<span>🎓 {r.education_match}</span>}
-                  </div>
-                )}
-                {r.interview_questions?.length>0&&(
-                  <details style={{ cursor:'pointer' }}>
-                    <summary style={{ fontSize:11, color:C.brandDeep, fontWeight:500 }}>View {r.interview_questions.length} Interview Questions</summary>
-                    {r.interview_questions.map((q:string,qi:number)=>(
-                      <div key={qi} style={{ fontSize:11, padding:'3px 0 3px 12px', color:C.muted }}>{qi+1}. {q}</div>
-                    ))}
-                  </details>
-                )}
-              </div>
-              {!r.added&&(
-                <button onClick={()=>addToBank(results.indexOf(r))} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, flexShrink:0, fontSize:11 }}>+ Pipeline</button>
-              )}
-            </div>
-          ))}
-        </>
-      )}
-    </div>
+        ))}
+      </div>
+    </RxPage>
   )
 }
 
 // ── PIPELINE ──────────────────────────────────────────────────────
-function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId }:any) {
+function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId, rail }:any) {
   const [interviewCand, setInterviewCand] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [selMRF, setSelMRF] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
   const [selCand, setSelCand] = useState<Candidate|null>(null)
-  const [aiQs, setAiQs] = useState<string[]>([])
-  const [aiQLoading, setAiQLoading] = useState(false)
-  const [aiFbLoading, setAiFbLoading] = useState(false)
   // Full Add-candidate form. Core identity fields map to their own candidates
   // columns; everything else rides along in application_details (migration 121).
   const EMPTY_C = {
@@ -3523,14 +3303,21 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   }
   const missingCount = Object.values(missing).filter(Boolean).length
   const errStyle = { borderColor:C.critical, background:C.criticalTint } as React.CSSProperties
-  const inp = (k:string):React.CSSProperties => ({ ...T.input, ...(bad(k)?errStyle:{}) })
-  const sel = (k:string):React.CSSProperties => ({ ...T.select, ...(bad(k)?errStyle:{}) })
+  // These return ONLY the error override now — .rx-input carries the base, so
+  // spreading T.input back over it would undo the class. Same shape as eb() in
+  // MRFTab. undefined when valid, which React treats as no inline style.
+  //
+  // These two are why the first census of this tab was wrong: they are style
+  // FACTORIES, not style props, so scanning for the inline style prop never
+  // saw the twelve fields that route through them. (This sentence used to
+  // quote that prop verbatim — and the bulk rewrite duly edited the comment
+  // along with the code, which is how the site count came out one too high.)
+  const inp = (k:string):React.CSSProperties|undefined => (bad(k)?errStyle:undefined)
+  const sel = (k:string):React.CSSProperties|undefined => (bad(k)?errStyle:undefined)
   const reqMark = <span style={{ color:C.critical }}> *</span>
   const approvedMRFs = mrfs.filter((m:MRF)=>m.status==='APPROVED')
-  const [pipeQ, setPipeQ] = useState('')
   const [stageF, setStageF] = useState('')   // '' = all stages
   const baseList = (selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF))
-    .filter((c:Candidate)=>!pipeQ || c.full_name.toLowerCase().includes(pipeQ.toLowerCase()) || (c.current_company||'').toLowerCase().includes(pipeQ.toLowerCase()) || (c.designation||'').toLowerCase().includes(pipeQ.toLowerCase()))
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
   const filtered = stageF ? baseList.filter((c:Candidate)=>c.stage===stageF) : baseList
 
@@ -3615,131 +3402,93 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     setSelCand(c=>c?{...c,stage}:null); onRefresh()
   }
 
-  async function saveNotes(id:string, notes:string) {
-    const { error } = await supabase.from('candidates').update({ interview_notes:notes }).eq('id',id)
-    if (error) { showNotify('Save failed','error'); return }
-    showNotify('Notes saved!')
-    onRefresh()
+  const [showRejected, setShowRejected] = useState(false)
+
+  // What this tab can HONESTLY say about a next step. interview_rounds is not
+  // loaded here at all -- the rounds live in interview_invites and
+  // CandidateInterviewModal fetches them per candidate when it opens. So
+  // candidateNextStep(c, []) would print "Schedule the next round" over people
+  // who already have one booked: a NEW claim, and a false one. The cards say
+  // nothing about next steps today, so inventing one would be a regression in
+  // truthfulness, not a restyle. These branches are what the stage alone proves.
+  const nextStepFor = (c:any) => {
+    if (c.stage === 'Joined')      return { text:'Joined', tone:'pos' as const, icon:'check' as const }
+    if (c.stage === 'Offer Sent')  return { text:'Waiting for the candidate to reply', tone:'mute' as const, icon:'clock' as const }
+    if (c.stage === 'Shortlisted') return { text:'Start salary negotiation', tone:'' as const, icon:'coin' as const }
+    return { text:`At ${c.stage}`, tone:'' as const, icon:'flow' as const }
   }
 
-  async function getAIQuestions(c:Candidate) {
-    setAiQLoading(true); setAiQs([])
-    const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-    try {
-      const res = await fetch('/api/recruitment/interview-ai', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ type:'questions', designation:mrf?.designation||c.designation||'Role', round:c.stage, candidate_summary:`${c.experience_years}yr, ${c.current_company}, ${c.designation}` })
-      })
-      const { result } = await res.json()
-      const parsed = JSON.parse(result.replace(/```json|```/g,'').trim())
-      const qs = parsed.map((q:any)=>q.question||q)
-      setAiQs(qs)
-      await supabase.from('candidates').update({ ai_questions:qs }).eq('id',c.id)
-      onRefresh()
-    } catch { showNotify('Could not generate questions','error') }
-    setAiQLoading(false)
-  }
+  const candVMs = filtered.map((c:Candidate) => toCandidateVM(c as unknown as Record<string, unknown>))
+  const rejectedVMs = baseList.filter((c:Candidate)=>c.stage===REJECTED)
+    .map((c:Candidate) => toCandidateVM(c as unknown as Record<string, unknown>))
 
-  async function getAIFeedback(c:Candidate, notes:string) {
-    if (!notes.trim()) { showNotify('Please write notes first','error'); return }
-    setAiFbLoading(true)
-    const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-    try {
-      const res = await fetch('/api/recruitment/interview-ai', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ type:'feedback', designation:mrf?.designation||c.designation||'Role', round:c.stage, existing_notes:notes })
-      })
-      const { result } = await res.json()
-      const newNotes = notes+'\n\n--- AI FEEDBACK ---\n'+result
-      await saveNotes(c.id, newNotes)
-      setSelCand(c2=>c2?{...c2,interview_notes:newNotes}:null)
-    } catch { showNotify('Could not generate feedback','error') }
-    setAiFbLoading(false)
-  }
+  const openingSelect = (
+    <select className="rx-input" style={{ width:280 }} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
+      <option value="all">All Openings ({candidates.length} candidates)</option>
+      {approvedMRFs.map((m:MRF)=>(
+        <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
+      ))}
+    </select>
+  )
+
+  // These four controls are inline rather than the old shared RecFilterBar.
+  // That component's root carried inline position:sticky; top:0; zIndex:30, and
+  // the redesign's rail is sticky at --ez-z-rail (20) -- the token's own comment
+  // says the rail sits "below Z.sticky(30)" -- so dropped into this frame it
+  // scrolled up over the rail, and inline sticky cannot be unset by a parent.
+  // Same `f` state, same setF, same behaviour. It no longer exists in this file;
+  // offer-flow-components.tsx keeps its own copy for the two unconverted tabs.
+  const filterBar = (
+    <>
+      <select className="rx-input" style={{ maxWidth:170 }} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+        <option value="">All Companies</option>
+        {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+      </select>
+      <select className="rx-input" style={{ maxWidth:170 }} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
+        <option value="">All Departments</option>
+        {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+      </select>
+      <select className="rx-input" style={{ maxWidth:170 }} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
+        <option value="">All Locations</option>
+        {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+      </select>
+      <select className="rx-input" style={{ maxWidth:170 }} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
+        <option value="">All Positions</option>
+        {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+      </select>
+      {/* Stage filter, minus Rejected. The board already shows every flow stage
+          as its own column, but this still filters the List view. Rejected is
+          excluded because PipelineView drops it unconditionally -- leaving it
+          selectable would hand the view a list it then empties completely. */}
+      <select className="rx-input" style={{ maxWidth:170 }} value={stageF} onChange={e=>setStageF(e.target.value)}>
+        <option value="">All stages</option>
+        {STAGES.filter((s:string)=>s!==REJECTED).map((s:string)=>(
+          <option key={s} value={s}>{s} ({baseList.filter((c:Candidate)=>c.stage===s).length})</option>
+        ))}
+      </select>
+    </>
+  )
 
   return (
-    <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-        <select style={{ ...T.select, width:280 }} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
-          <option value="all">All Openings ({candidates.length} candidates)</option>
-          {approvedMRFs.map((m:MRF)=>(
-            <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
-          ))}
-        </select>
-        <button onClick={()=>{ setCForm({...EMPTY_C, hr_email:myEmail}); setAddStep(1); setTouched(false); setShowAdd(true) }} style={T.btnPrimary}>+ Add Candidate</button>
-      </div>
-      <SearchBar placeholder="Filter pipeline by candidate name…" onApply={setPipeQ} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
+    <>
+      <PipelineView
+        rail={rail}
+        candidates={candVMs}
+        stages={STAGES}
+        nextStepFor={nextStepFor}
+        openingSelect={openingSelect}
+        filterBar={filterBar}
+        onOpen={(id:string)=>{ const c = candidates.find((x:Candidate)=>x.id===id); if (c) setSelCand(c) }}
+        onAddCandidate={()=>{ setCForm({...EMPTY_C, hr_email:myEmail}); setAddStep(1); setTouched(false); setShowAdd(true) }}
+        onShowRejected={()=>setShowRejected(true)}
+      />
 
       {approvedMRFs.length===0&&(
-        <div style={{ ...T.card, textAlign:'center' as const, color:C.faint, padding:32 }}>
+        <div style={{ ...T.card, textAlign:'center' as const, color:C.faint, padding:32, margin:'0 24px 18px' }}>
           No approved MRF yet. Approve one in the MRF tab first.
         </div>
       )}
 
-      {/* Stage filter pills */}
-      <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginBottom:14 }}>
-        <button onClick={()=>setStageF('')} style={{ ...T.btn, fontSize:11, padding:'5px 12px', borderRadius:99,
-          background: stageF===''?C.brand: C.surface, color: stageF===''?C.surface:C.muted, border:`1px solid ${stageF===''?C.brand:C.brandTint}` }}>
-          All <span style={{ opacity:.8 }}>({baseList.length})</span>
-        </button>
-        {STAGES.map(stage=>{
-          const n = baseList.filter((c:Candidate)=>c.stage===stage).length
-          const on = stageF===stage
-          return (
-            <button key={stage} onClick={()=>setStageF(on?'':stage)} style={{ ...T.btn, fontSize:11, padding:'5px 12px', borderRadius:99,
-              background: on?STAGE_COLOR[stage]:C.sunken, color: on?C.onAccent:STAGE_TEXT[stage],
-              border:`1px solid ${on?STAGE_COLOR[stage]:C.line}` }}>
-              {stage} <span style={{ opacity:.85 }}>({n})</span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Candidate cards */}
-      {filtered.length===0 ? (
-        <div style={{ ...T.card, textAlign:'center' as const, color:C.faint, padding:36 }}>No candidates match your search / filters.</div>
-      ) : (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:12 }}>
-          {filtered.map((c:Candidate)=>{
-            const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-            const tag = c.ai_tag||c.ai_match_tag
-            const tagCol = tag==='STRONG'?C.positive:tag==='PARTIAL'?C.warning:C.critical
-            const initials = c.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
-            return (
-              <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}}
-                style={{ background:C.surface, borderRadius:14, padding:'14px 15px', cursor:'pointer', border: `1px solid ${C.brandEdge}`, boxShadow:'var(--ez-shadow-flat)', transition:'box-shadow .15s, transform .1s' }}
-                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 6px 18px rgba(37,99,235,0.14)'; e.currentTarget.style.transform='translateY(-1px)' }}
-                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='var(--ez-shadow-flat)'; e.currentTarget.style.transform='' }}>
-                {/* header */}
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                  <div style={{ width:40, height:40, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:14, fontWeight:700, color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:9, color:C.warning, fontWeight:600, marginLeft:5 }}></span>}</div>
-                    <div style={{ fontSize:11, color:C.faint, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.designation||mrf?.designation||'—'}{mrf?.mrf_number && <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mrf.mrf_number}</span>}</div>
-                  </div>
-                  <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, color:STAGE_TEXT[c.stage], whiteSpace:'nowrap' }}>{c.stage}</span>
-                </div>
-                {/* role / opening */}
-                {mrf && <div style={{ fontSize:11, color:C.brand, fontWeight:500, marginBottom:8 }}>🎯 {mrf.designation||mrf.position}</div>}
-                {/* detail rows */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 10px', fontSize:12, color:C.inkSoft }}>
-                  <div><span style={{ color:C.faint }}>Company</span><div style={{ fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.current_company||'—'}</div></div>
-                  <div><span style={{ color:C.faint }}>Experience</span><div style={{ fontWeight:600 }}>{c.experience_years||0} yr</div></div>
-                  <div><span style={{ color:C.faint }}>Expected CTC</span><div style={{ fontWeight:600, color:C.positive }}>{c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—'}</div></div>
-                  <div><span style={{ color:C.faint }}>Notice</span><div style={{ fontWeight:600 }}>{c.notice_period?`${c.notice_period}d`:'—'}</div></div>
-                </div>
-                {/* footer chips */}
-                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, flexWrap:'wrap' as const }}>
-                  {c.ai_score!=null&&<span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:99, background:tagCol+'14', color:tagCol }}>AI {c.ai_score}% {tag==='STRONG'?'':tag==='PARTIAL'?'':''}</span>}
-                  {c.source&&<span style={{ fontSize:10, color:C.faint, background:C.sunken, border: `1px solid ${C.brandEdge}`, borderRadius:99, padding:'2px 8px' }}>{c.source}</span>}
-                  <span style={{ marginLeft:'auto', fontSize:11, color:C.brand, fontWeight:600 }}>View →</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
 
       {/* Add Candidate — full form */}
       {showAdd&&(
@@ -3787,21 +3536,21 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <SectionLine title="Requisition" />
               <div style={{ ...T.g2, marginBottom:14 }}>
                 <div style={{ gridColumn:'1 / -1' }}>
-                  <label style={T.label}>For Opening (MRF){reqMark}</label>
-                  <select style={sel('mrf_id')} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
+                  <label className="rx-label" style={{ display:'block', marginBottom:6 }}>For Opening (MRF){reqMark}</label>
+                  <select className="rx-input" style={sel('mrf_id')} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
                     <option value="">Select an approved opening</option>
                     {approvedMRFs.map((m:MRF)=><option key={m.id} value={m.id}>{m.designation||m.position} ({m.no_of_openings||m.openings||0} openings){m.location_name?` · ${m.location_name}`:''}</option>)}
                   </select>
                   {approvedMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet — approve one in the MRF tab first.</div>}
                 </div>
-                <div><label style={T.label}>Company</label><input style={{ ...T.input, opacity:.7 }} value={mrfCompanyName(cMrf)||'—'} readOnly placeholder="Auto-filled from the opening" /></div>
-                <div><label style={T.label}>Department</label><input style={{ ...T.input, opacity:.7 }} value={mrfDeptName(cMrf)||'—'} readOnly /></div>
-                <div><label style={T.label}>Job location</label>
-                  <input style={T.input} value={cForm.job_location} onChange={e=>CF('job_location',e.target.value)} placeholder={mrfLocName(cMrf)||'City / Remote'} />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Company</label><input className="rx-input" style={{ opacity:.7 }} value={mrfCompanyName(cMrf)||'—'} readOnly placeholder="Auto-filled from the opening" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Department</label><input className="rx-input" style={{ opacity:.7 }} value={mrfDeptName(cMrf)||'—'} readOnly /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Job location</label>
+                  <input className="rx-input" value={cForm.job_location} onChange={e=>CF('job_location',e.target.value)} placeholder={mrfLocName(cMrf)||'City / Remote'} />
                 </div>
-                <div><label style={T.label}>Recruiter</label><input style={T.input} value={cForm.recruiter} onChange={e=>CF('recruiter',e.target.value)} placeholder="Recruiter name / email" /></div>
-                <div><label style={T.label}>Employment type</label>
-                  <select style={T.select} value={cForm.employment_type} onChange={e=>CF('employment_type',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Recruiter</label><input className="rx-input" value={cForm.recruiter} onChange={e=>CF('recruiter',e.target.value)} placeholder="Recruiter name / email" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Employment type</label>
+                  <select className="rx-input" value={cForm.employment_type} onChange={e=>CF('employment_type',e.target.value)}>
                     {Array.from(new Set([...EMP_TYPES, cForm.employment_type].filter(Boolean))).map(o=><option key={o as string}>{o as string}</option>)}
                   </select>
                 </div>
@@ -3810,22 +3559,22 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               {/* 2 · Personal */}
               <SectionLine title="Personal details" />
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>First name{reqMark}</label><input style={inp('first_name')} value={cForm.first_name} onChange={e=>CF('first_name',e.target.value)} /></div>
-                <div><label style={T.label}>Middle name</label><input style={T.input} value={cForm.middle_name} onChange={e=>CF('middle_name',e.target.value)} /></div>
-                <div><label style={T.label}>Last name{reqMark}</label><input style={inp('last_name')} value={cForm.last_name} onChange={e=>CF('last_name',e.target.value)} /></div>
-                <div><label style={T.label}>Date of birth</label><input style={T.input} type="date" max="2010-01-01" value={cForm.dob} onChange={e=>CF('dob',e.target.value)} /></div>
-                <div><label style={T.label}>Gender</label>
-                  <select style={T.select} value={cForm.gender} onChange={e=>CF('gender',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>First name{reqMark}</label><input className="rx-input" style={inp('first_name')} value={cForm.first_name} onChange={e=>CF('first_name',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Middle name</label><input className="rx-input" value={cForm.middle_name} onChange={e=>CF('middle_name',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Last name{reqMark}</label><input className="rx-input" style={inp('last_name')} value={cForm.last_name} onChange={e=>CF('last_name',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Date of birth</label><input className="rx-input" type="date" max="2010-01-01" value={cForm.dob} onChange={e=>CF('dob',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Gender</label>
+                  <select className="rx-input" value={cForm.gender} onChange={e=>CF('gender',e.target.value)}>
                     <option value="">Prefer not to say</option><option>Female</option><option>Male</option><option>Other</option>
                   </select>
                 </div>
-                <div><label style={T.label}>Marital status</label>
-                  <select style={T.select} value={cForm.marital_status} onChange={e=>CF('marital_status',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Marital status</label>
+                  <select className="rx-input" value={cForm.marital_status} onChange={e=>CF('marital_status',e.target.value)}>
                     <option value="">Select</option><option>Single</option><option>Married</option><option>Other</option>
                   </select>
                 </div>
-                <div><label style={T.label}>Nationality</label><input style={T.input} value={cForm.nationality} onChange={e=>CF('nationality',e.target.value)} /></div>
-                <div style={{ gridColumn:'span 2' }}><label style={T.label}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input style={T.input} value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Nationality</label><input className="rx-input" value={cForm.nationality} onChange={e=>CF('nationality',e.target.value)} /></div>
+                <div style={{ gridColumn:'span 2' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input className="rx-input" value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
               </div>
 
               </>)}
@@ -3833,35 +3582,35 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               {/* 3 · Contact */}
               <SectionLine title="Contact" />
               <div style={{ ...T.g2, marginBottom:14 }}>
-                <div><label style={T.label}>Personal email{reqMark}</label><input style={inp('email')} type="email" value={cForm.email} onChange={e=>CF('email',e.target.value)} placeholder="name@example.com" /></div>
-                <div><label style={T.label}>Mobile{reqMark} <span style={{ color:C.faint, fontWeight:400 }}>(10 digits)</span></label>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Personal email{reqMark}</label><input className="rx-input" style={inp('email')} type="email" value={cForm.email} onChange={e=>CF('email',e.target.value)} placeholder="name@example.com" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Mobile{reqMark} <span style={{ color:C.faint, fontWeight:400 }}>(10 digits)</span></label>
                   <div style={{ display:'flex', gap:6 }}>
-                    <select style={{ ...T.select, flex:'0 0 80px' }} value={cForm.dial_code} onChange={e=>CF('dial_code',e.target.value)}>{['+91','+971','+1','+44','+65'].map(o=><option key={o}>{o}</option>)}</select>
-                    <input style={{ ...inp('phone'), flex:1 }} inputMode="numeric" maxLength={10} value={cForm.phone} onChange={e=>CF('phone',e.target.value.replace(/\D/g,''))} placeholder="10 digits" />
+                    <select className="rx-input" style={{ flex:'0 0 80px' }} value={cForm.dial_code} onChange={e=>CF('dial_code',e.target.value)}>{['+91','+971','+1','+44','+65'].map(o=><option key={o}>{o}</option>)}</select>
+                    <input className="rx-input" style={{ ...inp('phone'), flex:1 }} inputMode="numeric" maxLength={10} value={cForm.phone} onChange={e=>CF('phone',e.target.value.replace(/\D/g,''))} placeholder="10 digits" />
                   </div>
                 </div>
-                <div><label style={T.label}>Alternate number</label><input style={T.input} inputMode="numeric" maxLength={10} value={cForm.alt_mobile} onChange={e=>CF('alt_mobile',e.target.value.replace(/\D/g,''))} /></div>
-                <div><label style={T.label}>Current city{reqMark}</label><input style={inp('current_city')} value={cForm.current_city} onChange={e=>CF('current_city',e.target.value)} placeholder="Gurugram" /></div>
-                <div><label style={T.label}>HR email (for follow-ups)</label><input style={T.input} value={cForm.hr_email} onChange={e=>CF('hr_email',e.target.value)} placeholder="hr@company.com" /></div>
-                <div><label style={T.label}>Willing to relocate</label>
-                  <select style={T.select} value={cForm.relocate} onChange={e=>CF('relocate',e.target.value)}><option>Not applicable</option><option>Yes</option><option>No</option></select>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Alternate number</label><input className="rx-input" inputMode="numeric" maxLength={10} value={cForm.alt_mobile} onChange={e=>CF('alt_mobile',e.target.value.replace(/\D/g,''))} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current city{reqMark}</label><input className="rx-input" style={inp('current_city')} value={cForm.current_city} onChange={e=>CF('current_city',e.target.value)} placeholder="Gurugram" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>HR email (for follow-ups)</label><input className="rx-input" value={cForm.hr_email} onChange={e=>CF('hr_email',e.target.value)} placeholder="hr@company.com" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Willing to relocate</label>
+                  <select className="rx-input" value={cForm.relocate} onChange={e=>CF('relocate',e.target.value)}><option>Not applicable</option><option>Yes</option><option>No</option></select>
                 </div>
                 <div style={{ gridColumn:'1 / -1' }}>
-                  <label style={T.label}>Permanent address</label>
-                  <input style={{ ...T.input, marginBottom:8 }} value={cForm.perm_line1} onChange={e=>CF('perm_line1',e.target.value)} placeholder="Address line 1 — house / flat, building, street" />
-                  <input style={{ ...T.input, marginBottom:8 }} value={cForm.perm_line2} onChange={e=>CF('perm_line2',e.target.value)} placeholder="Address line 2 — area / locality, landmark (optional)" />
+                  <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Permanent address</label>
+                  <input className="rx-input" style={{ marginBottom:8 }} value={cForm.perm_line1} onChange={e=>CF('perm_line1',e.target.value)} placeholder="Address line 1 — house / flat, building, street" />
+                  <input className="rx-input" style={{ marginBottom:8 }} value={cForm.perm_line2} onChange={e=>CF('perm_line2',e.target.value)} placeholder="Address line 2 — area / locality, landmark (optional)" />
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10 }}>
-                    <div><label style={T.label}>PIN code</label><input style={{ ...T.input, ...(pinLookup?.status==='fail'?{ borderColor:C.warning }:{}) }} inputMode="numeric" maxLength={6} value={cForm.perm_pincode} onChange={e=>CF('perm_pincode',e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="560011" />
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>PIN code</label><input className="rx-input" style={{ ...(pinLookup?.status==='fail'?{ borderColor:C.warning }:{}) }} inputMode="numeric" maxLength={6} value={cForm.perm_pincode} onChange={e=>CF('perm_pincode',e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="560011" />
                       {pinLookup && <div style={{ fontSize:10, marginTop:3, color: pinLookup.status==='ok'?C.positive:pinLookup.status==='fail'?C.warning:C.faint, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{pinLookup.status==='loading'?'Looking up…':pinLookup.status==='ok'?`✓ ${pinLookup.label}`:'PIN not found — fill manually'}</div>}
                     </div>
-                    <div><label style={T.label}>City</label><input style={T.input} value={cForm.perm_city} onChange={e=>CF('perm_city',e.target.value)} placeholder="Bengaluru" /></div>
-                    <div><label style={T.label}>State</label>
-                      <select style={T.select} value={cForm.perm_state} onChange={e=>CF('perm_state',e.target.value)}>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>City</label><input className="rx-input" value={cForm.perm_city} onChange={e=>CF('perm_city',e.target.value)} placeholder="Bengaluru" /></div>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>State</label>
+                      <select className="rx-input" value={cForm.perm_state} onChange={e=>CF('perm_state',e.target.value)}>
                         <option value="">Select state</option>
                         {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
                       </select>
                     </div>
-                    <div><label style={T.label}>Country</label><input style={T.input} value={cForm.perm_country} onChange={e=>CF('perm_country',e.target.value)} placeholder="India" /></div>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Country</label><input className="rx-input" value={cForm.perm_country} onChange={e=>CF('perm_country',e.target.value)} placeholder="India" /></div>
                   </div>
                 </div>
               </div>
@@ -3869,29 +3618,29 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               {/* 4 · Professional */}
               <SectionLine title="Professional background" />
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>Total experience — years{reqMark}</label><input style={inp('total_exp_years')} type="number" min={0} max={50} value={cForm.total_exp_years} onChange={e=>CF('total_exp_years',e.target.value)} /></div>
-                <div><label style={T.label}>Months</label><input style={T.input} type="number" min={0} max={11} value={cForm.total_exp_months} onChange={e=>CF('total_exp_months',e.target.value)} /></div>
-                <div><label style={T.label}>Relevant experience (yrs)</label><input style={T.input} type="number" min={0} max={50} step={0.5} value={cForm.relevant_exp} onChange={e=>CF('relevant_exp',e.target.value)} /></div>
-                <div><label style={T.label}>Current employer</label><input style={T.input} value={cForm.current_company} onChange={e=>CF('current_company',e.target.value)} placeholder="Blank if fresher" /></div>
-                <div><label style={T.label}>Current designation</label><input style={T.input} value={cForm.designation} onChange={e=>CF('designation',e.target.value)} /></div>
-                <div><label style={T.label}>Function</label>
-                  <select style={T.select} value={cForm.function} onChange={e=>CF('function',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Total experience — years{reqMark}</label><input className="rx-input" style={inp('total_exp_years')} type="number" min={0} max={50} value={cForm.total_exp_years} onChange={e=>CF('total_exp_years',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Months</label><input className="rx-input" type="number" min={0} max={11} value={cForm.total_exp_months} onChange={e=>CF('total_exp_months',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Relevant experience (yrs)</label><input className="rx-input" type="number" min={0} max={50} step={0.5} value={cForm.relevant_exp} onChange={e=>CF('relevant_exp',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current employer</label><input className="rx-input" value={cForm.current_company} onChange={e=>CF('current_company',e.target.value)} placeholder="Blank if fresher" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current designation</label><input className="rx-input" value={cForm.designation} onChange={e=>CF('designation',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Function</label>
+                  <select className="rx-input" value={cForm.function} onChange={e=>CF('function',e.target.value)}>
                     <option value="">Select</option>{['Payroll','HR Operations','HR Compliance','Talent Acquisition','Finance','Engineering','Sales','Other'].map(o=><option key={o}>{o}</option>)}
                   </select>
                 </div>
-                <div><label style={T.label}>Highest qualification{reqMark}</label>
-                  <select style={sel('qualification')} value={cForm.qualification} onChange={e=>CF('qualification',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Highest qualification{reqMark}</label>
+                  <select className="rx-input" style={sel('qualification')} value={cForm.qualification} onChange={e=>CF('qualification',e.target.value)}>
                     <option value="">Select</option>{['Diploma','Graduate','Post graduate','Professional — CA / CS / CMA','Doctorate'].map(o=><option key={o}>{o}</option>)}
                   </select>
                 </div>
-                <div><label style={T.label}>Specialization</label><input style={T.input} value={cForm.specialization} onChange={e=>CF('specialization',e.target.value)} placeholder="B.Com (Hons), MBA-HR" /></div>
-                <div><label style={T.label}>Year of passing</label><input style={T.input} type="number" min={1970} max={2035} value={cForm.passing_year} onChange={e=>CF('passing_year',e.target.value)} placeholder="2019" /></div>
-                <div style={{ gridColumn:'span 2' }}><label style={T.label}>Institute / university</label><input style={T.input} value={cForm.institute} onChange={e=>CF('institute',e.target.value)} /></div>
-                <div><label style={T.label}>Certifications</label><input style={T.input} value={cForm.certifications} onChange={e=>CF('certifications',e.target.value)} placeholder="SHRM-CP, Payroll (NPI)" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Specialization</label><input className="rx-input" value={cForm.specialization} onChange={e=>CF('specialization',e.target.value)} placeholder="B.Com (Hons), MBA-HR" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Year of passing</label><input className="rx-input" type="number" min={1970} max={2035} value={cForm.passing_year} onChange={e=>CF('passing_year',e.target.value)} placeholder="2019" /></div>
+                <div style={{ gridColumn:'span 2' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Institute / university</label><input className="rx-input" value={cForm.institute} onChange={e=>CF('institute',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Certifications</label><input className="rx-input" value={cForm.certifications} onChange={e=>CF('certifications',e.target.value)} placeholder="SHRM-CP, Payroll (NPI)" /></div>
               </div>
               {/* skills */}
               <div style={{ marginBottom:14 }}>
-                <label style={T.label}>Key skills</label>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Key skills</label>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:2 }}>
                   {['Payroll processing','Statutory compliance','PF / ESIC','Income tax — TDS','Advanced Excel','Recruitment','Stakeholder management','Communication'].concat(cForm.skills.filter((s:string)=>!['Payroll processing','Statutory compliance','PF / ESIC','Income tax — TDS','Advanced Excel','Recruitment','Stakeholder management','Communication'].includes(s))).map((s:string)=>{
                     const on = cForm.skills.includes(s)
@@ -3899,19 +3648,19 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   })}
                 </div>
                 <div style={{ display:'flex', gap:6, marginTop:8, maxWidth:340 }}>
-                  <input style={{ ...T.input, height:32 }} value={cForm.custom_skill} onChange={e=>CF('custom_skill',e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addCustomSkill() } }} placeholder="Add a custom skill…" />
+                  <input className="rx-input" style={{ height:32 }} value={cForm.custom_skill} onChange={e=>CF('custom_skill',e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addCustomSkill() } }} placeholder="Add a custom skill…" />
                   <button type="button" onClick={addCustomSkill} style={{ ...T.btnOutline, height:32 }}>Add</button>
                 </div>
               </div>
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>Notice period{reqMark}</label>
-                  <select style={sel('notice_period')} value={cForm.notice_period} onChange={e=>CF('notice_period',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Notice period{reqMark}</label>
+                  <select className="rx-input" style={sel('notice_period')} value={cForm.notice_period} onChange={e=>CF('notice_period',e.target.value)}>
                     <option value="">Select</option>{['Immediate','15 days','30 days','60 days','90 days','Serving notice'].map(o=><option key={o}>{o}</option>)}
                   </select>
                 </div>
-                {cForm.notice_period==='Serving notice' && <div><label style={T.label}>Last working day</label><input style={T.input} type="date" value={cForm.last_working_day} onChange={e=>CF('last_working_day',e.target.value)} /></div>}
-                <div><label style={T.label}>Buyout possible</label>
-                  <select style={T.select} value={cForm.buyout} onChange={e=>CF('buyout',e.target.value)}><option>No</option><option>Yes</option><option>To be discussed</option></select>
+                {cForm.notice_period==='Serving notice' && <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Last working day</label><input className="rx-input" type="date" value={cForm.last_working_day} onChange={e=>CF('last_working_day',e.target.value)} /></div>}
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Buyout possible</label>
+                  <select className="rx-input" value={cForm.buyout} onChange={e=>CF('buyout',e.target.value)}><option>No</option><option>Yes</option><option>To be discussed</option></select>
                 </div>
               </div>
 
@@ -3923,70 +3672,71 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <span style={{ fontSize:11, color:C.faint, whiteSpace:'nowrap' as const }}>All amounts in ₹ per year — type the full figure, e.g. 110000 for 1.1 LPA</span>
               </div>
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>Current fixed CTC{reqMark}</label><input style={inp('current_fixed')} type="number" min={0} step={1} value={cForm.current_fixed} onChange={e=>CF('current_fixed',e.target.value)} placeholder="e.g. 840000" />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current fixed CTC{reqMark}</label><input className="rx-input" style={inp('current_fixed')} type="number" min={0} step={1} value={cForm.current_fixed} onChange={e=>CF('current_fixed',e.target.value)} placeholder="e.g. 840000" />
                   {echo(cForm.current_fixed) && <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{echo(cForm.current_fixed)}</div>}
                 </div>
-                <div><label style={T.label}>Current variable</label><input style={T.input} type="number" min={0} step={1} value={cForm.current_variable} onChange={e=>CF('current_variable',e.target.value)} placeholder="e.g. 60000" />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current variable</label><input className="rx-input" type="number" min={0} step={1} value={cForm.current_variable} onChange={e=>CF('current_variable',e.target.value)} placeholder="e.g. 60000" />
                   {echo(cForm.current_variable) && <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{echo(cForm.current_variable)}</div>}
                 </div>
-                <div style={{ background:C.ink, color:C.onAccent, borderRadius:R.md, padding:'8px 12px', alignSelf:'end' }}>
-                  <div style={{ fontSize:10, color:C.onAccentDim }}>Total current CTC</div>
-                  <div style={{ fontSize:17, fontWeight:700 }}>{totalCurLpa>0 ? rsYr(totalCurLpa) : '₹0/yr'}</div>
-                  {totalCurLpa>0 && <div style={{ fontSize:10, color:C.onAccentDim }}>= {totalCurLpa.toFixed(2)} LPA</div>}
+                {/* C.dark/C.onDark: a surface meant to stay inverted in both themes (C.ink is a text token). */}
+                <div style={{ background:C.dark, color:C.onDark, borderRadius:R.md, padding:`${S.sm}px ${S.md}px`, alignSelf:'end' }}>
+                  <div style={{ fontSize:F.micro, color:C.onDarkMuted }}>Total current CTC</div>
+                  <div style={{ fontSize:F.title, fontWeight:W.bold, ...numeric }}>{totalCurLpa>0 ? rsYr(totalCurLpa) : '₹0/yr'}</div>
+                  {totalCurLpa>0 && <div style={{ fontSize:F.micro, color:C.onDarkMuted }}>= {totalCurLpa.toFixed(2)} LPA</div>}
                 </div>
-                <div><label style={T.label}>Expected CTC{reqMark}</label>
-                  <input style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={1} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder="e.g. 1100000" />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Expected CTC{reqMark}</label>
+                  <input className="rx-input" style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={1} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder="e.g. 1100000" />
                   {echo(cForm.expected_ctc) && <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{echo(cForm.expected_ctc)}</div>}
                   {expCtcOver
-                    ? <div style={{ fontSize:10, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>
-                    : cMrf?.budget_max ? <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>MRF budget: ₹{(Number(cMrf.budget_min||0)/100000).toFixed(1)}L – ₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L</div> : null}
+                    ? <div style={{ fontSize:F.micro, color:C.critical, marginTop:S.xs, fontWeight:W.semi }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>
+                    : cMrf?.budget_max ? <div style={{ fontSize:F.micro, color:C.muted, marginTop:S.xs }}>MRF budget: ₹{(Number(cMrf.budget_min||0)/100000).toFixed(1)}L – ₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L</div> : null}
                 </div>
-                <div><label style={T.label}>Negotiable</label>
-                  <select style={T.select} value={cForm.negotiable} onChange={e=>CF('negotiable',e.target.value)}><option>Yes</option><option>No</option><option>Depends on role</option></select>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Negotiable</label>
+                  <select className="rx-input" value={cForm.negotiable} onChange={e=>CF('negotiable',e.target.value)}><option>Yes</option><option>No</option><option>Depends on role</option></select>
                 </div>
                 <div style={{ background:C.sunken, borderRadius:R.md, padding:'8px 12px', alignSelf:'end', border:`1px solid ${C.line}` }}>
-                  <div style={{ fontSize:10, color:C.faint }}>Hike over current</div>
-                  <div style={{ fontSize:17, fontWeight:700, color: hikePct==null ? C.faint : hikePct<0 ? C.critical : C.positive }}>{hikePct==null ? '—' : `${hikePct>0?'+':''}${hikePct.toFixed(1)}%`}</div>
-                  {hikePct!=null && <div style={{ fontSize:10, color:C.faint }}>₹{totalCurLpa.toFixed(2)}L → ₹{expLpa.toFixed(2)}L</div>}
+                  <div style={{ fontSize:F.micro, color:C.muted }}>Hike over current</div>
+                  <div style={{ fontSize:F.title, fontWeight:W.bold, color: hikePct==null ? C.faint : hikePct<0 ? C.critical : C.positive, ...numeric }}>{hikePct==null ? '—' : `${hikePct>0?'+':''}${hikePct.toFixed(1)}%`}</div>
+                  {hikePct!=null && <div style={{ fontSize:F.micro, color:C.faint }}>₹{totalCurLpa.toFixed(2)}L → ₹{expLpa.toFixed(2)}L</div>}
                 </div>
-                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Offer in hand</label>
-                  <select style={{ ...T.select, maxWidth:200 }} value={cForm.offer_in_hand} onChange={e=>CF('offer_in_hand',e.target.value)}><option>No</option><option>Yes</option></select>
+                <div style={{ gridColumn:'1 / -1' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Offer in hand</label>
+                  <select className="rx-input" style={{ maxWidth:200 }} value={cForm.offer_in_hand} onChange={e=>CF('offer_in_hand',e.target.value)}><option>No</option><option>Yes</option></select>
                 </div>
                 {cForm.offer_in_hand==='Yes' && <>
-                  <div><label style={T.label}>Offering company</label><input style={T.input} value={cForm.offer_company} onChange={e=>CF('offer_company',e.target.value)} /></div>
-                  <div><label style={T.label}>Offered CTC</label><input style={T.input} type="number" min={0} step={1} value={cForm.offer_amount} onChange={e=>CF('offer_amount',e.target.value)} placeholder="e.g. 1200000" />
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Offering company</label><input className="rx-input" value={cForm.offer_company} onChange={e=>CF('offer_company',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Offered CTC</label><input className="rx-input" type="number" min={0} step={1} value={cForm.offer_amount} onChange={e=>CF('offer_amount',e.target.value)} placeholder="e.g. 1200000" />
                     {echo(cForm.offer_amount) && <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{echo(cForm.offer_amount)}</div>}
                   </div>
-                  <div><label style={T.label}>Joining deadline</label><input style={T.input} type="date" value={cForm.offer_deadline} onChange={e=>CF('offer_deadline',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Joining deadline</label><input className="rx-input" type="date" value={cForm.offer_deadline} onChange={e=>CF('offer_deadline',e.target.value)} /></div>
                 </>}
               </div>
 
               {/* 6 · Source */}
               <SectionLine title="Source" />
               <div style={{ ...T.g2, marginBottom:14 }}>
-                <div><label style={T.label}>Source{reqMark}</label>
-                  <select style={sel('source')} value={cForm.source} onChange={e=>CF('source',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Source{reqMark}</label>
+                  <select className="rx-input" style={sel('source')} value={cForm.source} onChange={e=>CF('source',e.target.value)}>
                     <option value="">Select</option>{SOURCES.map(s=><option key={s}>{s}</option>)}
                   </select>
                 </div>
                 {cForm.source==='Other' && (
-                  <div><label style={T.label}>Source remark{reqMark}</label>
-                    <input style={sel('source_remark')} value={cForm.source_remark} onChange={e=>CF('source_remark',e.target.value)} placeholder="Where did this candidate come from?" />
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Source remark{reqMark}</label>
+                    <input className="rx-input" style={sel('source_remark')} value={cForm.source_remark} onChange={e=>CF('source_remark',e.target.value)} placeholder="Where did this candidate come from?" />
                   </div>
                 )}
-                <div><label style={T.label}>Sourced on</label><input style={T.input} type="date" value={cForm.sourced_on} onChange={e=>CF('sourced_on',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Sourced on</label><input className="rx-input" type="date" value={cForm.sourced_on} onChange={e=>CF('sourced_on',e.target.value)} /></div>
                 {cForm.source==='Referral' && <>
-                  <div><label style={T.label}>Referring employee ID</label><input style={T.input} value={cForm.referrer_id} onChange={e=>CF('referrer_id',e.target.value)} placeholder="EMP-10234" /></div>
-                  <div><label style={T.label}>Referring employee name</label><input style={T.input} value={cForm.referrer_name} onChange={e=>CF('referrer_name',e.target.value)} /></div>
-                  <div><label style={T.label}>Relationship</label>
-                    <select style={T.select} value={cForm.referrer_relation} onChange={e=>CF('referrer_relation',e.target.value)}><option>Ex-colleague</option><option>Friend</option><option>Family</option><option>Other</option></select>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Referring employee ID</label><input className="rx-input" value={cForm.referrer_id} onChange={e=>CF('referrer_id',e.target.value)} placeholder="EMP-10234" /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Referring employee name</label><input className="rx-input" value={cForm.referrer_name} onChange={e=>CF('referrer_name',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Relationship</label>
+                    <select className="rx-input" value={cForm.referrer_relation} onChange={e=>CF('referrer_relation',e.target.value)}><option>Ex-colleague</option><option>Friend</option><option>Family</option><option>Other</option></select>
                   </div>
                 </>}
                 {cForm.source==='Consultancy' && <>
-                  <div><label style={T.label}>Vendor name</label><input style={T.input} value={cForm.vendor_name} onChange={e=>CF('vendor_name',e.target.value)} /></div>
-                  <div><label style={T.label}>Agreed fee (% of CTC)</label><input style={T.input} type="number" min={0} max={30} step={0.5} value={cForm.vendor_fee} onChange={e=>CF('vendor_fee',e.target.value)} placeholder="8.33" /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Vendor name</label><input className="rx-input" value={cForm.vendor_name} onChange={e=>CF('vendor_name',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Agreed fee (% of CTC)</label><input className="rx-input" type="number" min={0} max={30} step={0.5} value={cForm.vendor_fee} onChange={e=>CF('vendor_fee',e.target.value)} placeholder="8.33" /></div>
                 </>}
-                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Job portal / profile link</label><input style={T.input} type="url" value={cForm.portal_link} onChange={e=>CF('portal_link',e.target.value)} placeholder="https://" /></div>
+                <div style={{ gridColumn:'1 / -1' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Job portal / profile link</label><input className="rx-input" type="url" value={cForm.portal_link} onChange={e=>CF('portal_link',e.target.value)} placeholder="https://" /></div>
               </div>
 
               </>)}
@@ -3994,17 +3744,17 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               {/* 7 · Documents */}
               <SectionLine title="Documents" />
               <div style={{ ...T.g2, marginBottom:14 }}>
-                <div><label style={T.label}>Resume <span style={{ color:C.faint, fontWeight:400 }}>(PDF/DOCX)</span></label>
-                  <input style={{ ...T.input, padding:'7px 9px' }} type="file" accept=".pdf,.doc,.docx" onChange={e=>CF('resume_name',e.target.files?.[0]?.name||'')} />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Resume <span style={{ color:C.faint, fontWeight:400 }}>(PDF/DOCX)</span></label>
+                  <input className="rx-input" style={{ padding:'7px 9px' }} type="file" accept=".pdf,.doc,.docx" onChange={e=>CF('resume_name',e.target.files?.[0]?.name||'')} />
                   {cForm.resume_name && <div style={{ fontSize:11, color:C.positive, marginTop:3 }}>Attached: {cForm.resume_name}</div>}
                 </div>
-                <div><label style={T.label}>Photograph <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></label>
-                  <input style={{ ...T.input, padding:'7px 9px' }} type="file" accept="image/*" onChange={e=>CF('photo_name',e.target.files?.[0]?.name||'')} />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Photograph <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></label>
+                  <input className="rx-input" style={{ padding:'7px 9px' }} type="file" accept="image/*" onChange={e=>CF('photo_name',e.target.files?.[0]?.name||'')} />
                 </div>
-                <div><label style={T.label}>LinkedIn profile</label><input style={T.input} type="url" value={cForm.linkedin} onChange={e=>CF('linkedin',e.target.value)} placeholder="https://linkedin.com/in/" /></div>
-                <div><label style={T.label}>Portfolio / other link</label><input style={T.input} type="url" value={cForm.portfolio} onChange={e=>CF('portfolio',e.target.value)} placeholder="https://" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>LinkedIn profile</label><input className="rx-input" type="url" value={cForm.linkedin} onChange={e=>CF('linkedin',e.target.value)} placeholder="https://linkedin.com/in/" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Portfolio / other link</label><input className="rx-input" type="url" value={cForm.portfolio} onChange={e=>CF('portfolio',e.target.value)} placeholder="https://" /></div>
                 <div style={{ gridColumn:'1 / -1' }}>
-                  <label style={{ display:'flex', alignItems:'flex-start', gap:8, cursor:'pointer', fontSize:12.5, color:C.ink, ...(bad('consent')?{ color:C.critical }:{}) }}>
+                  <label style={{ display:'flex', alignItems:'flex-start', gap:S.sm, cursor:'pointer', fontSize:F.small, color:C.ink, ...(bad('consent')?{ color:C.critical }:{}) }}>
                     <input type="checkbox" checked={cForm.consent} onChange={e=>CF('consent',e.target.checked)} style={{ marginTop:2 }} />
                     <span>Candidate has consented to their data being stored and processed for this hiring process{reqMark}</span>
                   </label>
@@ -4015,23 +3765,23 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <SectionLine title="Screening" />
               <div style={{ marginBottom:10 }}>
                 <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:R.md, padding:'10px 12px', marginBottom:8 }}>
-                  <div style={{ fontSize:12.5, fontWeight:500, marginBottom:6 }}>Has the candidate independently run a monthly payroll cycle for 500+ employees?</div>
+                  <div style={{ fontSize:F.small, fontWeight:W.medium, marginBottom:S.sm }}>Has the candidate independently run a monthly payroll cycle for 500+ employees?</div>
                   <div style={{ display:'flex', gap:16 }}>{['Yes','No','Partially'].map(o=><label key={o} style={{ display:'flex', gap:5, alignItems:'center', fontSize:13 }}><input type="radio" name="q1" checked={cForm.q1===o} onChange={()=>CF('q1',o)} />{o}</label>)}</div>
                 </div>
                 <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:R.md, padding:'10px 12px' }}>
-                  <div style={{ fontSize:12.5, fontWeight:500, marginBottom:6 }}>Can the candidate join within the notice period stated above?</div>
+                  <div style={{ fontSize:F.small, fontWeight:W.medium, marginBottom:S.sm }}>Can the candidate join within the notice period stated above?</div>
                   <div style={{ display:'flex', gap:16 }}>{['Yes','No'].map(o=><label key={o} style={{ display:'flex', gap:5, alignItems:'center', fontSize:13 }}><input type="radio" name="q2" checked={cForm.q2===o} onChange={()=>CF('q2',o)} />{o}</label>)}</div>
                 </div>
-                {(cForm.q1==='No'||cForm.q2==='No') && <div style={{ fontSize:11.5, color:C.critical, marginTop:6, fontWeight:600 }}>A “No” on a knockout question will file this candidate under Rejected.</div>}
+                {(cForm.q1==='No'||cForm.q2==='No') && <div style={{ fontSize:F.tiny, color:C.critical, marginTop:S.sm, fontWeight:W.semi }}>A “No” on a knockout question will file this candidate under Rejected.</div>}
               </div>
               <div style={{ ...T.g2, marginBottom:6 }}>
-                <div><label style={T.label}>Stage</label>
-                  <select style={T.select} value={cForm.stage} onChange={e=>CF('stage',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Stage</label>
+                  <select className="rx-input" value={cForm.stage} onChange={e=>CF('stage',e.target.value)}>
                     {['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted'].map(s=><option key={s}>{s}</option>)}
                   </select>
                 </div>
-                <div><label style={T.label}>Interview availability</label><input style={T.input} value={cForm.availability} onChange={e=>CF('availability',e.target.value)} placeholder="Weekdays after 6 pm, Sat full day" /></div>
-                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Recruiter remarks <span style={{ color:C.faint, fontWeight:400 }}>(visible to hiring manager)</span></label><textarea style={{ ...T.textarea, minHeight:64 }} value={cForm.remarks} onChange={e=>CF('remarks',e.target.value)} placeholder="Screening call summary, red flags, why this profile fits" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Interview availability</label><input className="rx-input" value={cForm.availability} onChange={e=>CF('availability',e.target.value)} placeholder="Weekdays after 6 pm, Sat full day" /></div>
+                <div style={{ gridColumn:'1 / -1' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Recruiter remarks <span style={{ color:C.faint, fontWeight:400 }}>(visible to hiring manager)</span></label><textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:64 }} value={cForm.remarks} onChange={e=>CF('remarks',e.target.value)} placeholder="Screening call summary, red flags, why this profile fits" /></div>
               </div>
               </>)}
             </div>
@@ -4082,87 +3832,86 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
           }} />
         </div>
       )}
+
+      {/* Rejected candidates. PipelineView filters REJECTED out of the board
+          unconditionally, so they need their own surface -- this keeps them
+          reachable exactly as the old "Rejected" stage pill did. Fixed overlay,
+          the same pattern the add form and the interview modal already use. */}
+      {showRejected && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}
+          onMouseDown={e=>{ if(e.target===e.currentTarget) setShowRejected(false) }}>
+          <div style={{ background:C.surface, borderRadius:16, width:'min(900px, 100%)', boxShadow:'0 24px 70px rgba(0,0,0,0.28)', padding:20 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+              <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>Rejected candidates ({rejectedVMs.length})</div>
+              <button onClick={()=>setShowRejected(false)} style={{ ...T.btnOutline, marginLeft:'auto' }}>Close</button>
+            </div>
+            {rejectedVMs.length===0 ? (
+              <div style={{ textAlign:'center' as const, color:C.faint, padding:28 }}>No rejected candidates.</div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 }}>
+                {rejectedVMs.map((c:any)=>(
+                  <CandidateCard key={c.id} c={c} next={nextStepFor(c)}
+                    onOpen={()=>{ const full = candidates.find((x:Candidate)=>x.id===c.id); if (full) { setShowRejected(false); setSelCand(full) } }} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// Shared search / filter controls kept for the Negotiation tab (the other tabs inline theirs).
+function SearchBar({ placeholder, onApply, width=300 }:{ placeholder:string; onApply:(q:string)=>void; width?:number }) {
+  const [draft, setDraft] = useState('')
+  return (
+    <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
+      <input style={{ ...T.input, maxWidth:width }} value={draft} placeholder={placeholder}
+        onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
+      <button style={T.btnPrimary} onClick={()=>onApply(draft.trim())}>Apply</button>
+      {draft && <button style={T.btnOutline} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
     </div>
   )
 }
 
-function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNotes, aiQs, aiQLoading, onGetQuestions, aiFbLoading, onGetFeedback, onOpenInterviews }:any) {
-  const [notes, setNotes] = useState(c.interview_notes||'')
-  const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-
+function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
   return (
-    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:460, background:C.surface, borderLeft: `1px solid ${C.brandEdge}`, zIndex:200, overflowY:'auto', padding:20, boxShadow:'-4px 0 20px rgba(37,99,235,0.1)' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
-        <div>
-          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
-            <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
-            <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, color:STAGE_TEXT[c.stage] }}>{c.stage}</span>
-          </div>
-          <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
-          {c.email&&<div style={{ fontSize:11, color:C.faint, marginTop:1 }}>✉️ {c.email}</div>}
-          {mrf&&<div style={{ fontSize:11, color:C.brand, marginTop:3, fontWeight:600 }}>🎯 {mrf.designation||mrf.position}{c.source?` · Source: ${c.source}`:''}</div>}
-        </div>
-        <button onClick={onClose} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, padding:'4px 10px' }}></button>
+    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={T.label}>Company</label>
+        <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+          <option value="">All companies</option>
+          {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+        </select>
       </div>
-
-      {/* Stats */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14 }}>
-        {[['Current CTC',c.current_ctc?`₹${(c.current_ctc/100000).toFixed(1)}L`:'—',C.brand],['Expected CTC',c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—',C.positive],['Notice Period',c.notice_period?c.notice_period+' days':'—',C.warning],['AI Score',c.ai_score?c.ai_score+'%':'—',(c.ai_tag||c.ai_match_tag)==='STRONG'?C.positive:C.warning]].map(([l,v,col])=>(
-          <div key={l as string} style={{ background:C.sunken, borderRadius:7, padding:10, border: `1px solid ${C.brandEdge}` }}>
-            <div style={{ fontSize:10, color:C.faint, textTransform:'uppercase' as const, letterSpacing:'.04em' }}>{l}</div>
-            <div style={{ fontSize:14, fontWeight:600, color:col as string, marginTop:2 }}>{v}</div>
-          </div>
-        ))}
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={T.label}>Department</label>
+        <select style={T.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
+          <option value="">All departments</option>
+          {(() => {
+            const vis = (departments||[]).filter((d:any)=>!f.company||d.company_id===f.company)
+            return vis.map((d:any)=><option key={d.id} value={d.id}>{deptLabel(d, vis, companies||[])}</option>)
+          })()}
+        </select>
       </div>
-
-      {/* Stage Move */}
-      <SectionLine title="Stage Move" />
-      <div style={{ display:'flex', flexWrap:'wrap' as const, gap:5, marginBottom:14 }}>
-        {STAGES.map(s=>{
-          const isBack = STAGES.indexOf(s) < STAGES.indexOf(c.stage)
-          return (
-            <button key={s} onClick={()=>{ if(!isBack) onStageChange(c.id,s) }} disabled={isBack}
-              title={isBack?'Pipeline moves forward only — cannot return to an earlier round':''}
-              style={{ ...T.btn, fontSize:10, padding:'4px 9px',
-                background:c.stage===s?STAGE_COLOR[s]:C.sunken,
-                color:c.stage===s?C.surface:STAGE_COLOR[s],
-                border:c.stage===s?'none':`1px solid ${STAGE_COLOR[s]}30`,
-                opacity:isBack?0.35:1, cursor:isBack?'not-allowed':'pointer',
-                textDecoration:isBack?'line-through':'none' }}>
-              {s}
-            </button>
-          )
-        })}
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={T.label}>Position</label>
+        <select style={T.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
+          <option value="">All positions</option>
+          {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
+        </select>
       </div>
-
-      {/* Interview Pipeline */}
-      <SectionLine title="Interview Rounds" />
-      <button onClick={()=>onOpenInterviews && onOpenInterviews(c)}
-        style={{ ...T.btnPrimary, width:'100%', marginBottom:14, padding:10, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>Manage Interview Rounds →
-      </button>
-
-      {/* AI Questions */}
-      <SectionLine title="Interview Questions" />
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:7 }}>
-        <button onClick={()=>onGetQuestions(c)} disabled={aiQLoading} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>
-          {aiQLoading?'⏳...':'AI Questions Generate'}
-        </button>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={T.label}>Location</label>
+        <select style={T.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
+          <option value="">All locations</option>
+          {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+        </select>
       </div>
-      {(aiQs.length?aiQs:(c.ai_questions||[])).map((q:string,i:number)=>(
-        <div key={i} style={{ background:C.sunken, borderRadius:7, padding:'7px 10px', marginBottom:5, fontSize:11, color:C.ink, border: `1px solid ${C.brandEdge}` }}>
-          <span style={{ color:C.brand, marginRight:5, fontWeight:600 }}>{i+1}.</span>{q}
-        </div>
-      ))}
-
-      {/* Interview Notes & Feedback */}
-      <SectionLine title="Interview Notes & Feedback" />
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:6 }}>
-        <button onClick={()=>onGetFeedback(c,notes)} disabled={aiFbLoading} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}`, fontSize:11 }}>
-          {aiFbLoading?'⏳...':'AI Feedback Generate'}
-        </button>
-      </div>
-      <textarea style={{ ...T.textarea, minHeight:140 }} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Write interview notes..." />
-      <button onClick={()=>onSaveNotes(c.id,notes)} style={{ ...T.btnPrimary, marginTop:6 }}>Save Notes</button>
+      {(f.company||f.department||f.position||f.location) && (
+        <button style={T.btnOutline} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
+      )}
     </div>
   )
 }
@@ -4307,30 +4056,30 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
         <div style={{ fontSize:11, color:C.faint, marginBottom:14 }}>{mrf?.employment_type||'Non-employee'} engagement · {payLabel.toLowerCase()} only (no PF/HRA structure)</div>
         {!autoCompany && (
           <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
-            <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
-            <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
+            <select className="rx-input" value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
               <option value="">Select company…</option>
               {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
             </select>
           </div>
         )}
         <div style={{ ...T.g2, marginBottom:10 }}>
-          <div><label style={T.label}>State / UT</label>
-            <select style={T.select} value={mwState} onChange={e=>setMwState(e.target.value)} disabled={!!mrfState}>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>State / UT</label>
+            <select className="rx-input" value={mwState} onChange={e=>setMwState(e.target.value)} disabled={!!mrfState}>
               {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
             </select>
             <div style={{ fontSize:10.5, color:mrfState?C.positive:C.faint, marginTop:3 }}>{mrfState ? `Auto-filled from MRF branch: ${mrfLoc?.location_name||'branch'} → ${mrfState}` : 'No branch on the MRF — choose the state'}</div>
           </div>
-          <div><label style={T.label}>Worker Category</label>
-            <select style={T.select} value={mwCat} onChange={e=>setMwCat(e.target.value)} disabled={!!mrf?.wage_category}>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Worker Category</label>
+            <select className="rx-input" value={mwCat} onChange={e=>setMwCat(e.target.value)} disabled={!!mrf?.wage_category}>
               {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
             </select>
             <div style={{ fontSize:10.5, color:mrf?.wage_category?C.positive:C.faint, marginTop:3 }}>{mrf?.wage_category ? 'Auto-filled from the MRF' : 'Not set on the MRF — choose here'}</div>
           </div>
         </div>
         <div style={{ ...T.g2, marginBottom:10 }}>
-          <div><label style={T.label}>Monthly {payLabel} (₹) *</label>
-            <input style={{ ...T.input, ...((overBudget||belowMinWage)?{ borderColor:C.critical }:{}) }} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder={comp.ph?.[0]||'25000'} />
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Monthly {payLabel} (₹) *</label>
+            <input className="rx-input" style={{ ...((overBudget||belowMinWage)?{ borderColor:C.critical }:{}) }} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder={comp.ph?.[0]||'25000'} />
             {mrfStipendCapMonthly>0 && (
               overBudget
                 ? <div style={{ fontSize:10.5, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF budget ({money(mrfStipendCapMonthly)}/mo) — {payLabel.toLowerCase()} can’t be higher than the approved budget.</div>
@@ -4340,22 +4089,22 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
               ? <div style={{ fontSize:10.5, color:C.critical, marginTop:3, fontWeight:600 }}>Below minimum wage for {mwState} ({mwCat}): {money(mw.amount)}/mo — {payLabel.toLowerCase()} can’t be lower than this.</div>
               : <div style={{ fontSize:10.5, color:C.faint, marginTop:3 }}>Minimum wage · {mwState} · {mwCat}: <b style={{ color:C.ink }}>{money(mw.amount)}/mo</b> {mw.source==='master'?'(HR master)':mw.source==='default'?'(default table)':'(fallback)'}</div>}
           </div>
-          <div><label style={T.label}>TDS Applicable?</label>
-            <select style={T.select} value={tds?'Yes':'No'} onChange={e=>setTds(e.target.value==='Yes')}><option>No</option><option>Yes</option></select>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>TDS Applicable?</label>
+            <select className="rx-input" value={tds?'Yes':'No'} onChange={e=>setTds(e.target.value==='Yes')}><option>No</option><option>Yes</option></select>
           </div>
         </div>
-        {tds&&(<div style={{ marginBottom:10 }}><label style={T.label}>TDS %</label><input style={T.input} type="number" value={tdsPct} onChange={e=>setTdsPct(e.target.value)} placeholder="10" /></div>)}
+        {tds&&(<div style={{ marginBottom:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>TDS %</label><input className="rx-input" type="number" value={tdsPct} onChange={e=>setTdsPct(e.target.value)} placeholder="10" /></div>)}
 
         {/* Additional amount — one-off or recurring, with an optional remark */}
         <div style={{ ...T.g2, marginBottom:10 }}>
-          <div><label style={T.label}>Additional Amount (₹)</label><input style={T.input} type="number" value={addAmt} onChange={e=>setAddAmt(e.target.value)} placeholder="e.g. 5000" /></div>
-          <div><label style={T.label}>Frequency</label>
-            <select style={T.select} value={addFreq} onChange={e=>setAddFreq(e.target.value)}>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Additional Amount (₹)</label><input className="rx-input" type="number" value={addAmt} onChange={e=>setAddAmt(e.target.value)} placeholder="e.g. 5000" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Frequency</label>
+            <select className="rx-input" value={addFreq} onChange={e=>setAddFreq(e.target.value)}>
               {['One-time','Monthly','Quarterly','Half-yearly','Yearly'].map(o=><option key={o}>{o}</option>)}
             </select>
           </div>
         </div>
-        <div style={{ marginBottom:10 }}><label style={T.label}>Remark</label>
+        <div style={{ marginBottom:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Remark</label>
           <textarea style={{ ...T.textarea, minHeight:60 }} value={remark} onChange={e=>setRemark(e.target.value)} placeholder="Any note for the candidate (shown on the salary link)…" />
         </div>
 
@@ -4373,7 +4122,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
           <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 14px' }}>
             <div style={{ fontSize:11, fontWeight:600, color: C.brand, marginBottom:6 }}>CANDIDATE SALARY LINK</div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-              <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
+              <input readOnly value={savedLink} onFocus={e=>e.target.select()} className="rx-input" style={{ fontSize:11, fontFamily:'monospace' }} />
               <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:C.brand, color:C.onAccent, whiteSpace:'nowrap' as const }}>Copy</button>
             </div>
           </div>
@@ -4635,7 +4384,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   )
 }
 
-function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId }:any) {
+function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId, rail }:any) {
   // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
   // A revised offer moves the candidate back to 'Shortlisted', so they reappear here with the calculator.
   const finalCands = candidates.filter((c:Candidate)=>['Shortlisted'].includes(c.stage))
@@ -5240,7 +4989,7 @@ function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
 
 // ── OFFERS TAB ────────────────────────────────────────────────────
 // ── OFFER APPROVAL TAB (Recruiter → HR Head) ──────────────────────
-function OfferApprovalTab({ supabase, companies, departments, locations, candidates, mrfs, onRefresh }:any) {
+function OfferApprovalTab({ supabase, companies, departments, locations, candidates, mrfs, onRefresh, rail }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [neg, setNeg] = useState<any>(null)
@@ -5288,55 +5037,110 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
 
   if (sel) {
     return (
-      <div>
-        <button style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, marginBottom:12 }} onClick={()=>{setSel(null);setNeg(null)}}>Back to candidates</button>
-        {loading ? <div style={{ ...T.card, textAlign:'center' as const, color:C.brand }}>Loading negotiation…</div>
-          : neg ? (
-            <>
-              <CreateOfferApproval candidate={sel} negotiation={neg} mrf={mrf} onSubmitted={()=>{ onRefresh?.(); setSel(null); setNeg(null) }} />
-              <div style={{ maxWidth:700, margin:'16px auto 0' }}><AuditTrailViewer candidateId={sel.id} /></div>
-            </>
-          ) : (
-            <div style={{ ...T.card, color:C.warning, background:C.warningTint, border: `1px solid ${C.warningTint}` }}>
-              No CTC negotiation found for <b>{sel.full_name}</b>. Create one in the 💰 Negotiation tab first.
-            </div>
-          )}
-      </div>
+      <RxPage rail={rail} header={
+        <RecruitmentHeader
+          title="Offer approval"
+          subtitle="Send an offer to the HR Head for sign-off once the candidate has accepted their salary."
+          help={<Help label="Who appears here">
+            <p>A candidate reaches this list only after <b>accepting</b> the salary link sent from Negotiation.</p>
+            <p>One request per candidate: once sent, the row shows its status instead of the button. A rejected request can be re-created.</p>
+          </Help>}
+          actions={<button type="button" className="rx-btn" onClick={()=>{setSel(null);setNeg(null)}}>Back to candidates</button>}
+        />}>
+        <div className="rx-grid rx-stag">
+          <div className="s12">
+            {loading ? <div className="rx-mod" style={{ textAlign:'center' as const, padding:24 }}><span className="rx-meta">Loading negotiation…</span></div>
+              : neg ? (
+                <>
+                  <CreateOfferApproval candidate={sel} negotiation={neg} mrf={mrf} onSubmitted={()=>{ onRefresh?.(); setSel(null); setNeg(null) }} />
+                  <div style={{ maxWidth:700, margin:'16px auto 0' }}><AuditTrailViewer candidateId={sel.id} /></div>
+                </>
+              ) : (
+                <div className="rx-mod" style={{ borderColor:'var(--ez-warning-edge)' }}>
+                  <span className="rx-meta">No CTC negotiation found for <b>{sel.full_name}</b>. Create one in the Negotiation tab first.</span>
+                </div>
+              )}
+          </div>
+        </div>
+      </RxPage>
     )
   }
 
   return (
-    <div>
-      <div style={{ fontSize:13, color:C.muted, marginBottom:12 }}>Select a candidate to create an offer approval request for HR Head review.</div>
-      <SearchBar placeholder="Search candidate…" onApply={setOaQ} width={240} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
-      {shownEligible.length===0 ? (
-        <div style={{ ...T.card, textAlign:'center' as const, color:C.faint }}>{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</div>
-      ) : shownEligible.map((c:Candidate)=>{
-        const ar = activeReq(c.id)
-        return (
-        <div key={c.id} style={{ ...T.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
-          <div>
-            <div style={{ fontSize:14, fontWeight:600, display:'flex', gap:6, alignItems:'center' }}>{c.full_name}{c.offer_revised&&<Badge text="Revised Offer" />}</div>
-            <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.designation||'—'} · {c.stage}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
-          </div>
-          {ar ? (
-            <div style={{ textAlign:'right' as const, flexShrink:0 }}>
-              <div style={{ fontSize:12, fontWeight:600, color: ar.status==='HR_HEAD_REJECTED' ? C.critical : C.positive }}>
-                {ar.status==='SUBMITTED' ? '⏳ ' : ar.status==='OFFER_SENT' ? '📤 ' : '✅ '}{STATUS_LABEL[ar.status] || ar.status}
-              </div>
-              {ar.submitted_at && <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
-            </div>
-          ) : (
-            <button style={{ ...T.btn, background:C.brand, color:C.onAccent, flexShrink:0 }} onClick={()=>pick(c)}>Create Request →</button>
-          )}
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Offer approval"
+        subtitle="Send an offer to the HR Head for sign-off once the candidate has accepted their salary."
+        help={<Help label="Who appears here">
+          <p>A candidate reaches this list only after <b>accepting</b> the salary link sent from Negotiation.</p>
+          <p>One request per candidate: once sent, the row shows its status instead of the button. A rejected request can be re-created.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s12 rx-bar" style={{ gap:10 }}>
+          {/* SearchBox filters as you type; the old SearchBar needed Apply. */}
+          <SearchBox value={oaQ} onChange={setOaQ} placeholder="Search candidate…" label="Search candidates" />
+          {/* Inline rather than the old shared RecFilterBar, whose root
+              carried position:sticky; zIndex:30 and scrolled over the rail
+              (--ez-z-rail, 20); inline sticky cannot be unset by a parent. Same
+              four controls, same `f` state, same setF. */}
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
         </div>
-      )})}
-    </div>
+
+        {shownEligible.length===0 ? (
+          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:28 }}>
+            <span className="rx-meta">{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</span>
+          </div>
+        ) : shownEligible.map((c:Candidate)=>{
+          const ar = activeReq(c.id)
+          return (
+          <div className="s12" key={c.id}>
+            <div className="rx-mod" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+              <div style={{ minWidth:0 }}>
+                <div className="rx-row" style={{ gap:6 }}>
+                  <span className="rx-name">{c.full_name}</span>
+                  {c.offer_revised&&<Badge text="Revised Offer" />}
+                </div>
+                <div className="rx-meta" style={{ marginTop:2 }}>{c.designation||'—'} · {c.stage}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
+              </div>
+              {ar ? (
+                <div style={{ textAlign:'right' as const, flexShrink:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color: ar.status==='HR_HEAD_REJECTED' ? C.critical : C.positive }}>
+                    {STATUS_LABEL[ar.status] || ar.status}
+                  </div>
+                  {ar.submitted_at && <div className="rx-meta" style={{ marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
+                </div>
+              ) : (
+                <button type="button" className="rx-btn p" style={{ flexShrink:0 }} onClick={()=>pick(c)}>Create request</button>
+              )}
+            </div>
+          </div>
+        )})}
+      </div>
+    </RxPage>
   )
 }
 
-function OffersTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify }:any) {
+function OffersTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [letter, setLetter] = useState('')
@@ -5436,13 +5240,49 @@ HR Team`
   }
 
   return (
-    <div style={T.g2}>
-      <div>
-        <div style={{ fontSize:13, fontWeight:600, color:C.ink, marginBottom:10 }}>Shortlisted / Offer Stage ({shownOffered.length})</div>
-        <SearchBar placeholder="Search candidate…" onApply={setOffQ} width={240} />
-        <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Offer letters"
+        subtitle="Draft and send the letter once HR Head has approved the offer, then record how the candidate replied."
+        help={<Help label="Who appears here">
+          <p>A candidate reaches this list only after <b>HR Head approval</b>, or once an offer has already been sent. There is no bypass.</p>
+          <p>Picking someone builds their letter from the saved CTC negotiation. Nothing is sent until you press Send.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s4" style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div className="rx-label">Shortlisted / offer stage ({shownOffered.length})</div>
+          <SearchBox value={offQ} onChange={setOffQ} placeholder="Search candidate…" label="Search candidates" />
+          {/* Inline rather than the old shared RecFilterBar, whose root
+              carried position:sticky; zIndex:30 and scrolled over the rail
+              (--ez-z-rail, 20); inline sticky cannot be unset by a parent.
+              Same four controls, same `f` state, same setF. */}
+          <div className="rx-bar" style={{ gap:8 }}>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.company}
+              onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+              <option value="">All companies</option>
+              {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.department}
+              onChange={e=>setF({ ...f, department:e.target.value })}>
+              <option value="">All departments</option>
+              {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.location}
+              onChange={e=>setF({ ...f, location:e.target.value })}>
+              <option value="">All locations</option>
+              {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.position}
+              onChange={e=>setF({ ...f, position:e.target.value })}>
+              <option value="">All positions</option>
+              {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
         {shownOffered.map((c:Candidate)=>(
-          <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:sel?.id===c.id?C.brandTint: C.surface }}
+          <div key={c.id} className="rx-card" style={{ cursor:'pointer',
+              borderColor: sel?.id===c.id ? 'var(--ez-brand)' : undefined,
+              background:  sel?.id===c.id ? 'var(--ez-brand-tint)' : undefined }}
             onClick={()=>generateLetter(c)}>
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
@@ -5455,30 +5295,35 @@ HR Team`
               </div>
             )}
             {c.stage==='Offer Sent'&&c.offer_accepted&&(
-              <div style={{ fontSize:10, color:C.positive, marginTop:6, fontWeight:600 }}>Accepted — moved to Pre-onboarding</div>
+              <div style={{ fontSize:F.micro, color:C.positive, marginTop:S.sm, fontWeight:W.semi }}>Accepted — moved to Pre-onboarding</div>
             )}
           </div>
         ))}
-        {offeredCands.length===0&&<div style={{ ...T.card, color:C.faint, textAlign:'center' as const, padding:24 }}>No candidates</div>}
-      </div>
+        {offeredCands.length===0&&(
+          <div className="rx-mod" style={{ textAlign:'center' as const, padding:24 }}>
+            <span className="rx-meta">No candidates have reached the offer stage yet.</span>
+          </div>
+        )}
+        </div>
       {sel&&letter&&(
-        <div>
-          <div style={T.card}>
-            <div style={T.section}>Offer Letter</div>
-            <div style={{ marginBottom:8 }}><label style={T.label}>To Email</label><input style={T.input} value={toEmail} onChange={e=>setToEmail(e.target.value)} /></div>
-            <div style={{ marginBottom:8 }}><label style={T.label}>CC (comma separated)</label><input style={T.input} value={cc} onChange={e=>setCc(e.target.value)} placeholder="hr@co.com, md@co.com" /></div>
-            <div style={{ marginBottom:10 }}><label style={T.label}>Date of Joining</label><input style={T.input} type="date" value={doj} onChange={e=>setDoj(e.target.value)} /></div>
-            <textarea style={{ ...T.textarea, minHeight:300, fontFamily:'monospace', fontSize:11 }} value={letter} onChange={e=>setLetter(e.target.value)} />
+        <div className="s8">
+          <div className="rx-mod">
+            <div className="rx-mod-h"><div className="rx-mod-t">Offer letter</div></div>
+            <div style={{ marginBottom:8 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>To Email</label><input className="rx-input" value={toEmail} onChange={e=>setToEmail(e.target.value)} /></div>
+            <div style={{ marginBottom:8 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>CC (comma separated)</label><input className="rx-input" value={cc} onChange={e=>setCc(e.target.value)} placeholder="hr@co.com, md@co.com" /></div>
+            <div style={{ marginBottom:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Date of Joining</label><input className="rx-input" type="date" value={doj} onChange={e=>setDoj(e.target.value)} /></div>
+            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:300, fontFamily:'monospace', fontSize:11 }} value={letter} onChange={e=>setLetter(e.target.value)} />
             <button onClick={sendOffer} style={{ ...T.btnPrimary, width:'100%', marginTop:10, padding:10 }}>Send Offer Letter</button>
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </RxPage>
   )
 }
 
 // ── PRE-ONBOARDING ────────────────────────────────────────────────
-function PreOnboardTab({ supabase, candidates, companies, departments, locations, mrfs, onRefresh, showNotify }:any) {
+function PreOnboardTab({ supabase, candidates, companies, departments, locations, mrfs, onRefresh, showNotify, rail }:any) {
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [links, setLinks] = useState<any[]>([])
   const [busy, setBusy] = useState('')        // candidate_id being processed
@@ -5601,17 +5446,64 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
   const respStyle:Record<string,[string,string]> = { ACCEPTED:[C.positiveTint,C.positive], REVISE:[C.warningTint,C.warning], BACKOUT:[C.criticalTint,C.critical] }
 
   return (
-    <div>
-      <div style={T.section}>Pre-onboarding & Offer Response</div>
-      <SearchBar placeholder="Search candidate…" onApply={setPoQ} width={260} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
-      {shownOnboarding.length===0&&<div style={{ ...T.card, color:C.faint, textAlign:'center' as const, padding:24 }}>{poQ?'No matching candidate':'No offer-sent candidates yet.'}</div>}
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Pre-onboarding"
+        subtitle="Confirm how each candidate responded to their offer, set the joining date, and start their onboarding."
+        help={<Help label="Who appears here">
+          <p>Candidates who have <b>accepted an offer</b>, plus anyone already marked Joined.</p>
+          <p>Set an <b>HR email</b> so the joining reminder can be sent; the badge turns green three days out.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s12 rx-bar" style={{ gap:10 }}>
+          <SearchBox value={poQ} onChange={setPoQ} placeholder="Search candidate…" label="Search candidates" />
+          {/* Inline rather than the old shared RecFilterBar, whose root
+              carried position:sticky; zIndex:30 and scrolled over the rail
+              (--ez-z-rail, 20); inline sticky cannot be unset by a parent.
+              Same four controls, same `f` state, same setF. */}
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        {shownOnboarding.length===0&&(
+          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:24 }}>
+            <span className="rx-meta">{poQ?'No matching candidate':'No offer-sent candidates yet.'}</span>
+          </div>
+        )}
       {shownOnboarding.map((c:Candidate)=>{
         const row:any = linkByCand.get(c.id)
         const resp = row?.offer_response
         const [bg,fg] = resp ? respStyle[resp] : [C.surface,C.muted]
+        // Both halves of this border were broken. fg+'40' concatenates an
+        // alpha suffix onto a design token, giving "var(--ez-...)40", which is
+        // not a colour — so a card WITH a response had no border at all. And
+        // the fallback was a frozen rgba brand blue that could not follow the
+        // theme. A responded card now takes its state colour; the rest take
+        // the hairline.
+        //
+        // Line comment above the return, NOT a {} container after it — see the
+        // same note in PipelineTab. Third time I made that mistake today.
         return (
-          <div key={c.id} style={{ ...T.card, border:`1px solid ${resp?fg+'40':'rgba(37,99,235,0.12)'}` }}>
+          <div key={c.id} className="s12 rx-card"
+            style={{ borderColor: resp ? fg : undefined }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
                 <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>{c.full_name}</div>
@@ -5628,16 +5520,16 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
             {/* Onboarding date + HR email — drive the reminder emails */}
             <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:10, flexWrap:'wrap' as const }}>
               <label style={{ fontSize:11, color:C.brandDeep, fontWeight:600 }}>Onboarding date:</label>
-              <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} style={{ ...T.input, width:150, fontSize:12 }} />
+              <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} className="rx-input" style={{ width:150, fontSize:12 }} />
               <label style={{ fontSize:11, color:C.brandDeep, fontWeight:600 }}>HR email:</label>
-              <input value={hrVal(c)} onChange={e=>setHrEmails(m=>({...m,[c.id]:e.target.value}))} placeholder="hr@company.com" style={{ ...T.input, width:180, fontSize:12 }} />
+              <input value={hrVal(c)} onChange={e=>setHrEmails(m=>({...m,[c.id]:e.target.value}))} placeholder="hr@company.com" className="rx-input" style={{ width:180, fontSize:12 }} />
               <button onClick={()=>saveOnboarding(c)} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11 }}>Save</button>
               {(()=>{ const d=daysToJoin(c); if(d===null) return null
                 return d>=0 && d<=3
                   ? <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>Joining in {d} day{d===1?'':'s'} — start onboarding</span>
                   : <span style={{ fontSize:11, color:d<0?C.critical:C.faint }}>{d<0?'past joining date':`${d} days to join`}</span> })()}
             </div>
-            {!c.hr_email&&!hrEmails[c.id]&&<div style={{ fontSize:10, color:C.critical, marginTop:4 }}>Add an HR email so onboarding reminder mails can be sent.</div>}
+            {!c.hr_email&&!hrEmails[c.id]&&<div style={{ fontSize:F.micro, color:C.critical, marginTop:S.xs }}>Add an HR email so onboarding reminder mails can be sent.</div>}
 
             {!resp&&(
               choose===c.id ? (
@@ -5659,7 +5551,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
             )}
 
             {resp==='ACCEPTED'&&row?.acceptance_letter_sent_at&&(
-              <div style={{ marginTop:10, fontSize:11, color:C.positive }}>✉️ {row.candidate_type==='EXPERIENCED'?'Resignation Acceptance':'Joining Confirmation'} letter sent · {new Date(row.acceptance_letter_sent_at).toLocaleDateString('en-IN')}</div>
+              <div style={{ marginTop:S.md, fontSize:F.micro, color:C.positive }}>{row.candidate_type==='EXPERIENCED'?'Resignation Acceptance':'Joining Confirmation'} letter sent · {new Date(row.acceptance_letter_sent_at).toLocaleDateString('en-IN')}</div>
             )}
             {resp==='REVISE'&&row?.revise_note&&(
               <div style={{ marginTop:10, fontSize:11, color:C.warning, background:C.warningTint, borderRadius:7, padding:'6px 10px' }}>Revision note: {row.revise_note}</div>
@@ -5676,6 +5568,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
           </div>
         )
       })}
-    </div>
+      </div>
+    </RxPage>
   )
 }

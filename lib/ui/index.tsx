@@ -211,8 +211,19 @@ export function UIKeyframes() {
 
       /* Tab pills. Hover only lifts the inactive ones — the active pill is
          already filled, and lightening it on hover would read as deselecting. */
-      .ez-tab{transition:background .14s cubic-bezier(.4,0,.2,1),color .14s,border-color .14s}
+      .ez-tab{transition:background .14s cubic-bezier(.4,0,.2,1),color .14s,border-color .14s,box-shadow .14s}
       .ez-tab[data-on="0"]:hover{background:var(--ez-sunken);color:var(--ez-ink);border-color:var(--ez-line-strong)}
+      /* Inside a segmented track the well itself is --ez-sunken, so the hover
+         above would be invisible — an inactive tab lighting up to exactly the
+         colour it already sits on. There hover raises toward the surface
+         instead, which is the same direction the active tab moves. Scoped as a
+         descendant so it outscores the rule above WITHOUT touching the three
+         pages still using bare .ez-tab pills (letters, onboarding, profile).
+         Named ez-tabseg and NOT ez-seg, which ThemeToggle already owns: its
+         unscoped .ez-seg:hover/:active transforms would lift and shrink this
+         whole track. (No backticks in here — this comment sits inside the
+         template literal that builds the stylesheet, so one would end it.) */
+      .ez-tabseg .ez-tab[data-on="0"]:hover{background:var(--ez-surface);color:var(--ez-ink);border-color:var(--ez-line)}
       .ez-scroll::-webkit-scrollbar{width:9px;height:9px}
       .ez-scroll::-webkit-scrollbar-thumb{background:${C.lineStrong};border-radius:99px;border:2px solid transparent;background-clip:content-box}
       .ez-scroll::-webkit-scrollbar-thumb:hover{background:${C.faint};background-clip:content-box}
@@ -575,9 +586,14 @@ export function Field({ label, hint, error, required, children }: {
   );
 }
 
-/** Shared input skin. Spread onto <input>, <select> or <textarea>. */
+/** Shared input skin. Spread onto <input>, <select> or <textarea>.
+ *
+ *  38, not 36, so a control row lines up. Buttons are 38 across the system;
+ *  an input sitting beside one at 36 leaves a 2px step that reads as sloppy
+ *  rather than as a distinction, and a "Search […] [Apply]" pair shows it
+ *  most. The extra pixel of side padding goes with the height. */
 export const inputStyle = (invalid?: boolean): React.CSSProperties => ({
-  width: '100%', height: 36, padding: '0 11px', boxSizing: 'border-box',
+  width: '100%', height: 38, padding: '0 12px', boxSizing: 'border-box',
   fontSize: F.small, fontFamily: F.family, color: C.ink,
   background: C.surface, borderRadius: R.md,
   border: `1px solid ${invalid ? tone('critical').edge : C.lineStrong}`,
@@ -641,11 +657,21 @@ export function Tabs<T extends string>({ tabs, value, onChange }: {
 // ---------------------------------------------------------------------------
 
 /** Table in a card, scrolling horizontally inside its own bounds. */
-export function TableWrap({ children, style, stagger = true }: {
+export function TableWrap({ children, style, stagger = true, minWidth }: {
   children: React.ReactNode; style?: React.CSSProperties;
   /** Rows arrive as a wave rather than all at once, which makes their order
    *  legible. Turn it off for a table that re-renders on every keystroke. */
   stagger?: boolean;
+  /**
+   * Floor for the table itself, so columns scroll rather than crush.
+   *
+   * Without this a wide table squeezes ten columns into whatever width it is
+   * given and the cells wrap into unreadable stacks — the wrapper scrolls, but
+   * only once the table is actually wider than it. Every real HRMS table has
+   * such a floor; they were being written by hand on the <table> element,
+   * which is unreachable once the markup moves in here.
+   */
+  minWidth?: number;
 }) {
   return (
     <div className="ez-scroll" style={{
@@ -653,24 +679,42 @@ export function TableWrap({ children, style, stagger = true }: {
       boxShadow: E.raised, ...scrollX, ...style,
     }}>
       <table className={stagger ? 'ez-table-stagger' : undefined}
-             style={{ width: '100%', borderCollapse: 'collapse', fontSize: F.small }}>
+             style={{ width: '100%', borderCollapse: 'collapse', fontSize: F.small, minWidth }}>
         {children}
       </table>
     </div>
   );
 }
 
-export function Th({ children, align = 'left', width, style }: {
+export function Th({ children, align = 'left', width, style, onClick, title }: {
   children?: React.ReactNode; align?: 'left' | 'right' | 'center';
   width?: number | string; style?: React.CSSProperties;
+  /**
+   * Sortable column head. A <th> that sorts is a normal table pattern, and the
+   * alternative — a <button> nested inside a sticky header cell — fights the
+   * cell's own hover and focus styling and reads as two controls to a screen
+   * reader. The cursor changes only when a handler is actually passed.
+   */
+  onClick?: () => void;
+  title?: string;
 }) {
   return (
-    <th style={{
-      ...eyebrow, textAlign: align, padding: '9px 12px', width,
-      borderBottom: `1px solid ${C.line}`, background: C.sunken,
-      position: 'sticky', top: 0, zIndex: 1, whiteSpace: 'nowrap',
-      ...style,
-    }}>{children}</th>
+    <th
+      onClick={onClick}
+      title={title}
+      // Announced as a control only when it is one, so a plain column head is
+      // not read out as clickable.
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }) : undefined}
+      style={{
+        ...eyebrow, textAlign: align, padding: '9px 12px', width,
+        borderBottom: `1px solid ${C.line}`, background: C.sunken,
+        position: 'sticky', top: 0, zIndex: 1, whiteSpace: 'nowrap',
+        cursor: onClick ? 'pointer' : undefined,
+        userSelect: onClick ? 'none' : undefined,
+        ...style,
+      }}>{children}</th>
   );
 }
 

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
+import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help } from '@/components/recruitment/rx'
 
 // ── STYLES ───────────────────────────────────────────────────────
 // Bound to the design system. This file owns the name S, so the tokens are
@@ -34,46 +35,6 @@ function SecLine({ title }: { title: string }) {
   )
 }
 
-// ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
-// `f` shape: { company, department, position, location } — all '' means "All".
-function RecFilterBar({ companies, departments, locations, positions, f, setF }: any) {
-  const lbl = { fontSize:11, fontWeight:600 as const, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 }
-  return (
-    <div style={{ ...S.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end' }}>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={lbl}>Company</label>
-        <select style={S.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
-          <option value="">All companies</option>
-          {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={lbl}>Department</label>
-        <select style={S.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
-          <option value="">All departments</option>
-          {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={lbl}>Position</label>
-        <select style={S.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
-          <option value="">All positions</option>
-          {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={lbl}>Location</label>
-        <select style={S.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
-          <option value="">All locations</option>
-          {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
-        </select>
-      </div>
-      {(f.company||f.department||f.position||f.location) && (
-        <button style={{ ...S.btn(TK.surface,TK.brandDeep), border: `1px solid ${TK.brandEdge}` }} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
-      )}
-    </div>
-  )
-}
 
 // Generic matcher for a record carrying company_id/position + an mrf_id (department & location resolve via the MRF).
 // `position` is the record's own role string (designation/position); pass '' if none.
@@ -269,17 +230,17 @@ This document is confidential and for internal approval only.`
           This section is confidential — NOT shown to candidate. Only visible in HR approval request.
         </div>
         <div style={{ ...S.g2, marginBottom:10 }}>
-          <div><label style={S.label}>Previous Company Name *</label><input style={S.input} value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></div>
-          <div><label style={S.label}>Previous Company Address</label><input style={S.input} value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Company Name *</label><input className="rx-input" value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Company Address</label><input className="rx-input" value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></div>
         </div>
         <div style={{ ...S.g3, marginBottom:10 }}>
-          <div><label style={S.label}>Previous Total CTC (₹) *</label><input style={S.input} type="number" value={prevForm.prev_total_ctc} onChange={e=>P('prev_total_ctc',e.target.value)} placeholder="Annual" /></div>
-          <div><label style={S.label}>Fixed CTC (₹)</label><input style={S.input} type="number" value={prevForm.prev_fixed_ctc} onChange={e=>P('prev_fixed_ctc',e.target.value)} /></div>
-          <div><label style={S.label}>Variable (₹ Annual)</label><input style={S.input} type="number" value={prevForm.prev_variable} onChange={e=>P('prev_variable',e.target.value)} /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Total CTC (₹) *</label><input className="rx-input" type="number" value={prevForm.prev_total_ctc} onChange={e=>P('prev_total_ctc',e.target.value)} placeholder="Annual" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Fixed CTC (₹)</label><input className="rx-input" type="number" value={prevForm.prev_fixed_ctc} onChange={e=>P('prev_fixed_ctc',e.target.value)} /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Variable (₹ Annual)</label><input className="rx-input" type="number" value={prevForm.prev_variable} onChange={e=>P('prev_variable',e.target.value)} /></div>
         </div>
         <div style={{ ...S.g2, marginBottom:10 }}>
-          <div><label style={S.label}>TA / DA (₹ Monthly)</label><input style={S.input} type="number" value={prevForm.prev_ta_da} onChange={e=>P('prev_ta_da',e.target.value)} placeholder="0 if not applicable" /></div>
-          <div><label style={S.label}>Any Additional Payment</label><input style={S.input} value={prevForm.prev_additional} onChange={e=>P('prev_additional',e.target.value)} placeholder="e.g. Car allowance, Retention" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>TA / DA (₹ Monthly)</label><input className="rx-input" type="number" value={prevForm.prev_ta_da} onChange={e=>P('prev_ta_da',e.target.value)} placeholder="0 if not applicable" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Any Additional Payment</label><input className="rx-input" value={prevForm.prev_additional} onChange={e=>P('prev_additional',e.target.value)} placeholder="e.g. Car allowance, Retention" /></div>
         </div>
       </div>
 
@@ -287,10 +248,10 @@ This document is confidential and for internal approval only.`
       <div style={S.card}>
         <SecLine title="Joining Details" />
         <div style={{ ...S.g3, marginBottom:10 }}>
-          <div><label style={S.label}>Proposed Date of Joining *</label><input style={S.input} type="date" value={joining.proposed_doj} onChange={e=>J('proposed_doj',e.target.value)} /></div>
-          <div><label style={S.label}>Notice Period (Days)</label><input style={S.input} type="number" value={joining.notice_period_days} onChange={e=>J('notice_period_days',e.target.value)} /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Proposed Date of Joining *</label><input className="rx-input" type="date" value={joining.proposed_doj} onChange={e=>J('proposed_doj',e.target.value)} /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Notice Period (Days)</label><input className="rx-input" type="number" value={joining.notice_period_days} onChange={e=>J('notice_period_days',e.target.value)} /></div>
           <div style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
-            <label style={{ ...S.label, marginBottom:8 }}>Notice Period Buyout</label>
+            <label className="rx-label" style={{ marginBottom:8 }}>Notice Period Buyout</label>
             <div style={{ display:'flex', gap:12, alignItems:'center' }}>
               {['Yes','No'].map(opt => (
                 <label key={opt} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13 }}>
@@ -320,7 +281,7 @@ This document is confidential and for internal approval only.`
               ['Hike %', `${Number(negotiation.hike_pct||0).toFixed(1)}%`],
             ].map(([l,v]) => (
               <div key={l} style={{ background:TK.brandTint, borderRadius:10, padding:'10px 12px' }}>
-                <div style={{ fontSize:10, color:TK.faint }}>{l}</div>
+                <div style={{ ...eyebrow }}>{l}</div>
                 <div style={{ fontSize:14, fontWeight:500, color:TK.brandDeep, marginTop:2 }}>{v}</div>
               </div>
             ))}
@@ -333,13 +294,13 @@ This document is confidential and for internal approval only.`
       {/* HIRING MANAGER REMARK / ADDITIONAL */}
       <div style={S.card}>
         <SecLine title="Hiring Manager — Remark / Additional (e.g. Target)" />
-        <input style={S.input} value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for HR Head…" />
+        <input className="rx-input" value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for HR Head…" />
       </div>
 
       {/* RECRUITER COMMENTS */}
       <div style={S.card}>
         <SecLine title="Recruiter Comments (Optional)" />
-        <textarea style={{ ...S.textarea, minHeight:80 }} value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for HR Head..." />
+        <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for HR Head..." />
       </div>
 
       {/* ACTIONS */}
@@ -370,23 +331,10 @@ This document is confidential and for internal approval only.`
   )
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Reusable type-then-Apply search (matches the offer-flow S styles).
-function SearchBar({ placeholder, onApply, width=320 }:{ placeholder:string; onApply:(q:string)=>void; width?:number }) {
-  const [draft, setDraft] = useState('')
-  return (
-    <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
-      <input style={{ ...S.input, maxWidth:width }} value={draft} placeholder={placeholder}
-        onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
-      <button style={S.btn(TK.brand,TK.surface)} onClick={()=>onApply(draft.trim())}>Apply</button>
-      {draft && <button style={S.btn(TK.brandTint,TK.brandDeep)} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
-    </div>
-  )
-}
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup }: any = {}) {
+export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [requests, setRequests] = useState<any[]>([])
@@ -501,10 +449,46 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const fRequests = requests.filter((r:any)=>(!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation }, mrfLookup, f))
 
   return (
-    <div style={{ maxWidth:1100, margin:'0 auto', padding:16 }}>
-      <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Head — Approvals</div>
-      <SearchBar placeholder="Search by candidate / job role — filters all sections below…" onApply={setHq} width={420} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={positionOpts} f={f} setF={setF} />
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="HR Head approvals"
+        subtitle="Sign off new requisitions, decide on offers that recruiters have escalated, and re-enter rejected candidates."
+        help={<Help label="What lands here">
+          <p><b>MRF approvals</b> are requisitions waiting on your sign-off before hiring can start.</p>
+          <p><b>Offer approvals</b> arrive from the Offer Approval tab once a candidate has accepted their salary.</p>
+          <p><b>Rehire</b> puts a previously rejected candidate back into the pipeline at a stage you choose.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s12 rx-bar" style={{ gap:10 }}>
+          <SearchBox value={hq} onChange={setHq} placeholder="Search candidate or job role…" label="Search approvals" />
+          {/* CORRECTION to what step 10 said here: this file's RecFilterBar was
+              NOT sticky -- that was page.tsx's separate copy. The reason these
+              controls are inline is consistency with the other tabs, and it let
+              the duplicated component go once Send Offers stopped using it.
+              Same `f` state, same setF. */}
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {positionOpts.map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="s12">
 
       {/* MRF Approvals — HR Head approves new manpower requisitions here */}
       <div style={{ marginBottom:22 }}>
@@ -542,7 +526,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{c.designation || '—'}</div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
-              <select value={rehireStage[c.id] || ''} onChange={e=>setRehireStage(m=>({ ...m, [c.id]: e.target.value }))} style={{ ...S.input, width:160 }}>
+              <select value={rehireStage[c.id] || ''} onChange={e=>setRehireStage(m=>({ ...m, [c.id]: e.target.value }))} className="rx-input" style={{ width:160 }}>
                 <option value="">Place at stage…</option>
                 {REHIRE_STAGES.map(st => <option key={st} value={st}>{st}</option>)}
               </select>
@@ -553,13 +537,11 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       </div>
 
       <div style={{ fontSize:13, fontWeight:600, color:TK.brandDeep, margin:'4px 0 8px' }}>Offer Approvals</div>
-      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-        {(['pending','done'] as const).map(t => (
-          <button key={t} onClick={()=>{setTab(t);setSelected(null)}}
-            style={{ ...S.btn(tab===t?TK.brand: TK.surface, tab===t?TK.surface:TK.muted), border: tab===t?'none':'1px solid #DDD6FE' }}>
-            {t === 'pending' ? 'Pending Approval' : 'Approved'}
-          </button>
-        ))}
+      <div style={{ marginBottom:16 }}>
+        <Segmented label="Offer approvals" value={tab}
+          onChange={(v:'pending'|'done')=>{ setTab(v); setSelected(null) }}
+          options={[{ value:'pending' as const, label:`Pending (${fRequests.length})` },
+                    { value:'done' as const,    label:'Approved' }]} />
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
@@ -575,15 +557,15 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             const [bg, c] = statusColor(r.status)
             return (
               <div key={r.id} onClick={()=>setSelected(r)}
-                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:`1px solid ${TK.line}`, background:selected?.id===r.id?TK.brandTint: TK.surface }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
                     <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} CTC</div>
                     <div style={{ fontSize:11, color:TK.brand, marginTop:2 }}>Hike: {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}</div>
-                    {r.submitted_at && <div style={{ fontSize:10, color:TK.faint, marginTop:3 }}>Submitted: {new Date(r.submitted_at).toLocaleDateString('en-IN')}</div>}
+                    {r.submitted_at && <div style={{ fontSize:TF.micro, color:TK.muted, marginTop:SP.xs }}>Submitted: {new Date(r.submitted_at).toLocaleDateString('en-IN')}</div>}
                   </div>
-                  <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:bg, color:c, fontWeight:500 }}>{r.status.replace('_',' ')}</span>
+                  <span style={{ fontSize:TF.micro, padding:'3px 9px', borderRadius:R.pill, background:bg, color:c, fontWeight:W.medium, lineHeight:1.45 }}>{r.status.replace('_',' ')}</span>
                 </div>
               </div>
             )
@@ -614,7 +596,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                   ['Notice Period', `${selected.notice_period_days || '—'} days`],
                 ].map(([l,v]) => (
                   <div key={l} style={{ background:TK.sunken, borderRadius:7, padding:'9px 12px', border: `1px solid ${TK.brandEdge}` }}>
-                    <div style={{ fontSize:10, color:TK.faint }}>{l}</div>
+                    <div style={{ ...eyebrow }}>{l}</div>
                     <div style={{ fontSize:13, fontWeight:500, color:TK.ink, marginTop:2 }}>{v}</div>
                   </div>
                 ))}
@@ -634,14 +616,14 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               <div style={S.cardP}>
                 <div style={S.sec}>Your Decision</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?TK.positiveTint:TK.sunken, action==='approve'?TK.positive:TK.muted), border:action==='approve'?'2px solid #059669':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Approve
+                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?TK.positiveTint:TK.sunken, action==='approve'?TK.positive:TK.muted), border:action==='approve'?`2px solid ${TK.positive}`:`1px solid ${TK.line}`, padding:12, fontSize:13 }}>Approve
                   </button>
-                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?TK.criticalTint:TK.sunken, action==='reject'?TK.critical:TK.muted), border:action==='reject'?'2px solid #DC2626':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Reject
+                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?TK.criticalTint:TK.sunken, action==='reject'?TK.critical:TK.muted), border:action==='reject'?`2px solid ${TK.critical}`:`1px solid ${TK.line}`, padding:12, fontSize:13 }}>Reject
                   </button>
                 </div>
                 <div style={{ marginBottom:12 }}>
-                  <label style={S.label}>{action === 'reject' ? 'Rejection Reason *' : 'Comments (Optional)'}</label>
-                  <textarea style={{ ...S.textarea, minHeight:80 }} value={comment} onChange={e=>setComment(e.target.value)}
+                  <label className="rx-label" style={{ display:'block', marginBottom:6 }}>{action === 'reject' ? 'Rejection Reason *' : 'Comments (Optional)'}</label>
+                  <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={comment} onChange={e=>setComment(e.target.value)}
                     placeholder={action === 'reject' ? 'Reason clearly batao...' : 'Optional comments for HR Manager...'} />
                 </div>
                 <button onClick={processApproval} disabled={processing}
@@ -667,14 +649,16 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
           </div>
         )}
       </div>
-    </div>
+        </div>
+      </div>
+    </RxPage>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════
 // HR MANAGER: SEND OFFER LETTER
 // ═══════════════════════════════════════════════════════════════
-export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null }: any = {}) {
+export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null, rail }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [approved, setApproved] = useState<any[]>([])
@@ -821,14 +805,42 @@ ${company} — Human Resources`)
   const positionOpts = distinctSorted(approved.map((r:any)=>r.candidates?.designation || r.manpower_requisitions?.designation))
   const fApproved = approved.filter((r:any)=>(!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation || r.manpower_requisitions?.designation }, mrfLookup, f))
   return (
-    <div style={{ maxWidth:900, margin:'0 auto', padding:16 }}>
-      <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Manager — Send Offer Letters</div>
-      <div style={{ fontSize:12, color:TK.faint, marginBottom:16 }}>Requests approved by the HR Head — send the offer letter</div>
-      <SearchBar placeholder="Search candidate…" onApply={setSq} width={300} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={positionOpts} f={f} setF={setF} />
-
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
-        <div>
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Send offer letters"
+        subtitle="Requests the HR Head has approved. Review the letter, then send it to the candidate."
+        help={<Help label="Who appears here">
+          <p>Only requests already <b>approved by the HR Head</b>. Nothing reaches this list before that.</p>
+          <p>Sending emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s12 rx-bar" style={{ gap:10 }}>
+          <SearchBox value={sq} onChange={setSq} placeholder="Search candidate…" label="Search approved requests" />
+          {/* Inline for the same reason as the other tabs: one shared filter bar
+              per screen, and dropping the duplicate let this file's copy go. */}
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {positionOpts.map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="s4">
           {fApproved.length === 0 && (
             <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:32 }}>
               {sql ? 'No matching candidate' : 'No approved requests pending'}
@@ -836,7 +848,7 @@ ${company} — Human Resources`)
           )}
           {fApproved.map(r => (
             <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:`1px solid ${TK.line}`, background:selected?.id===r.id?TK.brandTint: TK.surface }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}
@@ -849,23 +861,23 @@ ${company} — Human Resources`)
         </div>
 
         {selected && (
-          <div style={S.cardP}>
+          <div className="s8" style={S.cardP}>
             <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <div style={{ marginBottom:8 }}>
-              <label style={S.label}>To *</label>
-              <input style={S.input} value={toEmail} onChange={e=>setToEmail(e.target.value)} />
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>To *</label>
+              <input className="rx-input" value={toEmail} onChange={e=>setToEmail(e.target.value)} />
             </div>
             <div style={{ marginBottom:8 }}>
-              <label style={S.label}>CC (comma separated)</label>
-              <input style={S.input} value={ccEmails} onChange={e=>setCcEmails(e.target.value)} placeholder="hr@company.com, md@company.com" />
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>CC (comma separated)</label>
+              <input className="rx-input" value={ccEmails} onChange={e=>setCcEmails(e.target.value)} placeholder="hr@company.com, md@company.com" />
             </div>
             <div style={{ marginBottom:8 }}>
-              <label style={S.label}>Subject</label>
-              <input style={S.input} value={subject} onChange={e=>setSubject(e.target.value)} />
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Subject</label>
+              <input className="rx-input" value={subject} onChange={e=>setSubject(e.target.value)} />
             </div>
             <div style={{ marginBottom:12 }}>
-              <label style={S.label}>Email Body</label>
-              <textarea style={{ ...S.textarea, minHeight:280 }} value={body} onChange={e=>setBody(e.target.value)} />
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Email Body</label>
+              <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:280 }} value={body} onChange={e=>setBody(e.target.value)} />
             </div>
             <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.brandDeep }}>
               This emails the offer letter to the candidate via Gmail, records it, and marks the candidate <b>Offer Sent</b> in the pipeline.
@@ -877,7 +889,7 @@ ${company} — Human Resources`)
           </div>
         )}
       </div>
-    </div>
+    </RxPage>
   )
 }
 
@@ -921,12 +933,12 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
       {logs.map((log, i) => {
         const [icon, label] = actionLabel[log.action_type] || ['', log.action_type]
         return (
-          <div key={log.id} style={{ display:'flex', gap:10, paddingBottom:12, borderBottom: i<logs.length-1 ? '1px solid #F3F0FF' : 'none', marginBottom:i<logs.length-1?12:0 }}>
+          <div key={log.id} style={{ display:'flex', gap:10, paddingBottom:12, borderBottom: i<logs.length-1 ? `1px solid ${TK.line}` : 'none', marginBottom:i<logs.length-1?12:0 }}>
             <div style={{ width:28, height:28, borderRadius:99, background:TK.brandTint, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>{icon}</div>
             <div>
               <div style={{ fontSize:12, fontWeight:500, color:TK.ink }}>{label}</div>
               {log.actor_email && <div style={{ fontSize:11, color:TK.faint, marginTop:1 }}>By: {log.actor_email}</div>}
-              <div style={{ fontSize:10, color:TK.faint, marginTop:1 }}>{new Date(log.created_at).toLocaleString('en-IN')}</div>
+              <div style={{ fontSize:TF.micro, color:TK.muted, marginTop:1 }}>{new Date(log.created_at).toLocaleString('en-IN')}</div>
             </div>
           </div>
         )

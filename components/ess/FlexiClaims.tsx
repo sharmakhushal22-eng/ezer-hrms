@@ -89,7 +89,7 @@ function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
         </div>
       )}
       <button onClick={onRemove} title="Remove"
-        style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', border: 'none', background: 'rgba(15,23,42,0.72)', color: '#fff', fontSize: 12, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+        style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', border: 'none', background: 'rgba(15,23,42,0.72)', color: TK.onDark, fontSize: 12, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
     </div>
   )
 }
@@ -292,9 +292,9 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
 
       {/* Window banner */}
       {win ? (
-        <div style={{ background: isOpen ? V.greenBg : V.redBg, border: `1px solid ${isOpen ? '#BBF7D0' : '#FCA5A5'}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ background: isOpen ? V.greenBg : V.redBg, border: `1px solid ${isOpen ? TK.positive : TK.critical}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 16 }}>{isOpen ? '🟢' : '🔴'}</span>
-          <div style={{ flex: 1, fontSize: 12, color: isOpen ? '#065F46' : '#991B1B' }}>
+          <div style={{ flex: 1, fontSize: 12, color: isOpen ? TK.positive : TK.critical }}>
             {isOpen ? <>Window open · submit bills by <b>{new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</b> · {Math.max(0, Math.ceil((new Date(win.closes_at).getTime() - Date.now()) / 86400000))} days left</> : 'Window closed · bills cannot be submitted right now'}
           </div>
         </div>
@@ -383,7 +383,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
             {noInv && <div style={{ marginTop: 10, fontSize: 11, color: V.muted, background: TK.sunken, borderRadius: 7, padding: '8px 10px' }}>Auto-claimed monthly — no bill submission required. Payroll processes this automatically.</div>}
 
             {exhausted && !noInv && (
-              <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', background: V.amberBg, border: `1px solid #FDE68A`, borderRadius: 10, padding: '8px 12px' }}>
+              <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', background: V.amberBg, border: `1px solid ${TK.warning}`, borderRadius: 10, padding: '8px 12px' }}>
                 <span style={{ fontSize: 12, color: V.amber, flex: 1 }}>Annual limit reached. You can request an increase from Payroll.</span>
                 <button onClick={() => setReqComp(lim.code)} style={{ padding: '5px 12px', background: V.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 11 }}>Request increase</button>
               </div>
@@ -396,11 +396,11 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
       })}
 
       {reqComp && (
-        <div style={{ background: V.amberBg, border: `1px solid #FDE68A`, borderRadius: 14, padding: 16, marginTop: 8 }}>
+        <div style={{ background: V.amberBg, border: `1px solid ${TK.warning}`, borderRadius: 14, padding: 16, marginTop: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: V.amber, marginBottom: 10 }}>Request limit increase — {limits.find(l => l.code === reqComp)?.name || reqComp}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Requested annual limit (₹)</label><input type="number" style={{ padding: '7px 8px', border: `1px solid #FDE68A`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqAmt} onChange={e => setReqAmt(e.target.value)} /></div>
-            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Reason (mandatory)</label><input type="text" placeholder="Official travel increased…" style={{ padding: '7px 8px', border: `1px solid #FDE68A`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqReason} onChange={e => setReqReason(e.target.value)} /></div>
+            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Requested annual limit (₹)</label><input type="number" style={{ padding: '7px 8px', border: `1px solid ${TK.warning}`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqAmt} onChange={e => setReqAmt(e.target.value)} /></div>
+            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Reason (mandatory)</label><input type="text" placeholder="Official travel increased…" style={{ padding: '7px 8px', border: `1px solid ${TK.warning}`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqReason} onChange={e => setReqReason(e.target.value)} /></div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}><button onClick={sendLimitRequest} style={{ padding: '7px 14px', background: V.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Send request</button><button onClick={() => setReqComp(null)} style={{ padding: '7px 12px', background: TK.surface, color: V.navy, border: `1px solid ${V.border}`, borderRadius: 7, cursor: 'pointer', fontSize: 12 }}>Cancel</button></div>
         </div>

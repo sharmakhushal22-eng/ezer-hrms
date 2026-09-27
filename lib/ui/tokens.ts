@@ -88,6 +88,17 @@ export const C = {
   info: 'var(--ez-info)',
   infoTint: 'var(--ez-info-tint)',
 
+  /** Borders on a tinted state surface — Badge, Stat, Notice.
+   *
+   *  These were four hex literals inside tone() below, which meant the border
+   *  on every status chip in the product could not change with the theme: a
+   *  pale mint edge stayed pale mint on a near-black card. Now tokens, defined
+   *  in all four theme blocks in theme.css. */
+  positiveEdge: 'var(--ez-positive-edge)',
+  warningEdge: 'var(--ez-warning-edge)',
+  criticalEdge: 'var(--ez-critical-edge)',
+  infoEdge: 'var(--ez-info-edge)',
+
   /** The navigation rail. White in light, one step above canvas in dark. */
   rail: 'var(--ez-rail)',
   railText: 'var(--ez-rail-text)',
@@ -187,6 +198,77 @@ export const M = {
   ease: '.26s cubic-bezier(.22,1,.36,1)',
   /** Layout shifts like the rail opening. */
   slow: '.34s cubic-bezier(.22,1,.36,1)',
+  /**
+   * Something completing — a step approved, a chip landing. Overshoots very
+   * slightly, which is what makes it read as a confirmation rather than a
+   * fade. Was written inline in UIKeyframes' ezPop; named here so the motion
+   * vocabulary lives in one place like every other scale.
+   */
+  spring: '.3s cubic-bezier(.22,1.4,.4,1)',
+  /**
+   * A whole section arriving. Deliberately shorter than `ease`: the data now
+   * lands in ~290ms, so anything longer makes the animation the thing you
+   * wait for rather than the thing that explains what moved.
+   */
+  page: '.22s cubic-bezier(.22,1,.36,1)',
+} as const;
+
+// ---------------------------------------------------------------------------
+// STACKING — one ladder, so a layer never has to guess
+//
+// There were 37 distinct z-index values in this repo and no scale:
+//   0,1,2,3,5,10,15,20,25,29,30,40,41,50,60,80,90,100,200,211,300,400,501,
+//   600,601,999,1000,1001,1200,1500,2000,3000,4000,5000,9999,99999,2147483000
+// with 19 separate files each hardcoding a toast at 9999 or 99999, and values
+// like 211, 601 and 2147483000 that can only have been produced by looking at
+// whatever was on top and going one higher.
+//
+// The bug that prompted this: opening a nav menu in ESS drew the page's own tab
+// row over it. The menu was not at fault — the nav BAR was 60 short of the
+// page's sticky header, and the menu is a descendant of the bar, so the bar is
+// the number that competes. Raising the menu would have changed nothing, which
+// is exactly the trap an ad-hoc number sets.
+//
+// Most values below are the ones already in use, written down rather than
+// renumbered, so adopting the scale is a no-op everywhere except the nav.
+// ---------------------------------------------------------------------------
+
+export const Z = {
+  /** Ordinary page content. */
+  base: 0,
+  /** Local layering within one component — a dot over an avatar. */
+  raised: 1,
+
+  /** A page's OWN sticky header or table head. The dashboard pages use 30. */
+  sticky: 30,
+
+  /**
+   * The application nav bar. ABOVE page content, deliberately: a global nav
+   * that a page's sticky header can cover is not acting as a nav bar.
+   *
+   * This was 25 against a page header of 30, which is the reported bug.
+   */
+  nav: 60,
+  /** Menus, popovers and the bell panel belonging to the nav. */
+  navMenu: 70,
+
+  /** Side panels and drawers. */
+  drawer: 200,
+  /** Full-screen scrims behind a focused surface. */
+  overlay: 300,
+  /** Dialogs sitting on a scrim. */
+  modal: 1000,
+  /** Transient messages. Above dialogs: a toast reporting a failure in a modal
+   *  is useless underneath it. */
+  toast: 9999,
+  /** Display controls that must stay reachable — interface size, eye comfort. */
+  dock: 99999,
+  /**
+   * The eye-comfort colour filter (lib/ui/EyeComfort.tsx). It tints the whole
+   * interface INCLUDING the dock, so it is deliberately the top layer and not
+   * a smell. Left at its original value rather than renumbered.
+   */
+  screenFilter: 2147483000,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -198,10 +280,10 @@ export type Tone = 'neutral' | 'brand' | 'positive' | 'warning' | 'critical' | '
 export const tone = (t: Tone): { fg: string; bg: string; edge: string } => ({
   neutral:  { fg: C.muted,     bg: C.sunken,        edge: C.line },
   brand:    { fg: C.brandDeep, bg: C.brandTint,    edge: C.brandEdge },
-  positive: { fg: C.positive,  bg: C.positiveTint,  edge: '#C9EADD' },
-  warning:  { fg: C.warning,   bg: C.warningTint,   edge: '#F2DFBE' },
-  critical: { fg: C.critical,  bg: C.criticalTint,  edge: '#F5CFD1' },
-  info:     { fg: C.info,      bg: C.infoTint,      edge: '#CFE0FC' },
+  positive: { fg: C.positive,  bg: C.positiveTint,  edge: C.positiveEdge },
+  warning:  { fg: C.warning,   bg: C.warningTint,   edge: C.warningEdge },
+  critical: { fg: C.critical,  bg: C.criticalTint,  edge: C.criticalEdge },
+  info:     { fg: C.info,      bg: C.infoTint,      edge: C.infoEdge },
 }[t]);
 
 // ---------------------------------------------------------------------------

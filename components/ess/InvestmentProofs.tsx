@@ -197,7 +197,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
               </div>
             ))}
             {deadline && (
-              <div style={{ background: overdue ? C.redBg : TK.sunken, border: `1px solid ${overdue ? '#FECACA' : C.border}`, borderRadius: 10, padding: '9px 14px' }}>
+              <div style={{ background: overdue ? C.redBg : TK.sunken, border: `1px solid ${overdue ? TK.critical : C.border}`, borderRadius: 10, padding: '9px 14px' }}>
                 <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Deadline</div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: overdue ? C.red : C.navy }}>{fmtDate(deadline)}</div>
               </div>

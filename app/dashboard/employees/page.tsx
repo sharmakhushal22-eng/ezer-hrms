@@ -18,6 +18,11 @@ import {
   C, F, W, S, R, E, M, numeric, eyebrow,
   IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown,
 } from '@/lib/ui'
+import IdCardsTab from '@/components/employees/IdCardsTab'
+// The same pure check the API route enforces with. Here it only decides whether
+// the tab is offered — the route refuses regardless, which is the arrangement
+// that matters, because hiding a button stops nobody who can open devtools.
+import { canExportIdCards } from '@/lib/idcard/authz'
 
 // ─── Types ────────────────────────────────────────────────────
 interface Employee {
@@ -839,6 +844,9 @@ export default function EmployeeMaster() {
   const [filterType, setFType]    = useState('')
   const [filterStatus, setFStatus]= useState('Active')
   const [filterGrade, setFGrade]  = useState('')
+  /** Which top-level view. The list is everything this page was; 'idcards' is
+   *  the HR-side ID card export, offered only to roles that may use it. */
+  const [view, setView]           = useState<'list' | 'idcards'>('list')
 
   // Shown on the Filters toggle, so a filter that is still applied is never
   // invisible just because the panel is closed.
@@ -1118,6 +1126,26 @@ export default function EmployeeMaster() {
           </>}
         />
 
+        {/* Top-level view. Only shown to roles that may export cards — an
+            employee list and an identity-document export are different
+            privileges, and the matrix grants Employees VIEW to recruiters and
+            finance who must not have the second. */}
+        {canExportIdCards(grant) && (
+          <div style={{ display:'flex', gap:6, marginBottom:S.md }}>
+            {([{ k:'list', label:'Employee list' }, { k:'idcards', label:'ID Cards' }] as const).map(v => (
+              <button key={v.k} onClick={()=>setView(v.k)} className="ez-press" style={{
+                height:34, padding:'0 14px', borderRadius:R.pill, cursor:'pointer', fontFamily:'inherit',
+                fontSize:F.small, fontWeight: view===v.k ? W.semi : W.medium,
+                background: view===v.k ? C.brand : C.surface,
+                color: view===v.k ? C.surface : C.muted,
+                border:`1px solid ${view===v.k ? C.brandDeep : C.line}`,
+                boxShadow: view===v.k ? E.brand : E.flat,
+              }}>{v.label}</button>
+            ))}
+          </div>
+        )}
+
+        {view === 'list' && (<>
         {/* These were eight equal stat cards. They are not statistics — they
             are filters, and exactly one is active at a time. A segmented bar
             says that; eight identical cards did not. */}
@@ -1348,6 +1376,9 @@ export default function EmployeeMaster() {
             </div>
           )}
         </div>
+        </>)}
+
+        {view === 'idcards' && canExportIdCards(grant) && <IdCardsTab />}
       </div>
 
       {/* ── PROFILE DRAWER — full screen, same page ── */}

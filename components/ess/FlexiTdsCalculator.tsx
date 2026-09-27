@@ -329,7 +329,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         return (
           <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button onClick={() => n <= step && setStep(n)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, border: `1px solid ${active ? P.purple : P.border}`, background: active ? P.purple : done ? P.purpleBg: TK.surface, color: active ? TK.surface : done ? P.purpleDark : P.muted, fontSize: 12, fontWeight: 600, cursor: n <= step ? 'pointer' : 'default', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-              <span style={{ width: 18, height: 18, borderRadius: 99, background: active ? '#fff' : done ? P.purple : P.border, color: active ? P.purple: TK.surface, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{done ? '' : n}</span>
+              <span style={{ width: 18, height: 18, borderRadius: 99, background: active ? TK.surface : done ? P.purple : P.border, color: active ? P.purple: TK.surface, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{done ? '' : n}</span>
               {lbl}
             </button>
             {i < 3 && <span style={{ width: 14, height: 2, background: step > n ? P.purple : P.border, borderRadius: 2 }} />}
@@ -576,7 +576,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <div style={{ fontSize: 14, fontWeight: 700, color: TK.critical }}>Old Regime Declaration</div>
           <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Std Deduction ₹50,000 | 80C max ₹1,50,000</div>
           {sal.hra > 0 && (
-            <div style={{ background: P.purpleBg, border: `1px solid #DDD6FE`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div style={{ background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: P.purpleDark, marginBottom: 6 }}>Your HRA — Annual {R(sal.hra)} · Monthly {R(sal.hra / 12)}</div>
               <button style={{ ...s.btn, padding: '5px 12px', fontSize: 11 }} onClick={() => setF(p => ({ ...p, rentM: String(Math.round(sal.hra / 12)), hra1From: '1', hra1To: '12' }))}>Apply suggested rent →</button>
             </div>
@@ -876,7 +876,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             </div>
           )}
           {isSubmitted && !editMode && (
-            <div style={{ background: P.purpleBg, border: `1px solid #DDD6FE`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.purpleDark, marginBottom: 10 }}>You submitted the <b>{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. Your regime is locked. {chosenRegime === 'OLD' ? 'Use Edit to change your flexi & investment declarations.' : 'Use Edit to change your flexi declaration (investment sections don’t apply to the New Regime).'}
+            <div style={{ background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.purpleDark, marginBottom: 10 }}>You submitted the <b>{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. Your regime is locked. {chosenRegime === 'OLD' ? 'Use Edit to change your flexi & investment declarations.' : 'Use Edit to change your flexi declaration (investment sections don’t apply to the New Regime).'}
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
@@ -891,7 +891,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                   background: sel ? (isOld ? TK.warningTint : P.greenBg) : TK.surface, opacity: regimeLocked && !sel ? .45 : 1,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 16, height: 16, borderRadius: 99, border: `2px solid ${sel ? (isOld ? '#C05621' : P.green) : P.border}`, background: sel ? (isOld ? '#C05621' : P.green) : '#fff', display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ width: 16, height: 16, borderRadius: 99, border: `2px solid ${sel ? (isOld ? '#C05621' : P.green) : P.border}`, background: sel ? (isOld ? '#C05621' : P.green) : TK.surface, display: 'inline-block', flexShrink: 0 }} />
                     <span style={{ fontSize: 14, fontWeight: 700, color: isOld ? '#9b2c2c' : '#1c4532' }}>{isOld ? 'Old Regime' : 'New Regime'}</span>
                     {rec === rg && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: P.purpleBg, color: P.purpleDark }}>Recommended</span>}
                     {regimeLocked && sel && <span style={{ fontSize: 10 }}></span>}
@@ -1012,9 +1012,9 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <button onClick={saveDraft} disabled={saving} style={{ ...s.ghost, opacity: saving ? .6 : 1, whiteSpace: 'nowrap' }}>Save Draft</button>
         )}
       </div>
-      {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? '#FCA5A5' : '#A7E3CE'}`, borderRadius: 10, padding: '8px 12px' }}>{draftMsg}</div>}
+      {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? TK.critical : TK.positive}`, borderRadius: 10, padding: '8px 12px' }}>{draftMsg}</div>}
       {defaultedByRule && !isSubmitted && (
-        <div style={{ marginBottom: 12, fontSize: 12, color: '#8a5a08', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '9px 12px' }}>
+        <div style={{ marginBottom: 12, fontSize: 12, color: P.amber, background: P.amberBg, border: `1px solid ${P.amber}`, borderRadius: 10, padding: '9px 12px' }}>
           <b>New Regime applied by default</b> — no regime was chosen by the 4th of the month{/^\d{4}-/.test(defaultedByRule) ? ` (set on ${new Date(defaultedByRule).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Payroll is taxing you on the New Regime. You can still submit your own choice here; submitting replaces the default.
         </div>
       )}

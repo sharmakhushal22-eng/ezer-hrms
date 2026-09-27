@@ -9,10 +9,11 @@ import {
   listCompanies, listBranches, listDepartments, listEmployees, listCompanyMaps, upsertCompanyMap,
   listHolidays, listApplicability, createHoliday, deleteHoliday,
   listWeeklyOffs, createWeeklyOff, deleteWeeklyOff, weekendConflict,
+  listActiveCalendars, activateCalendar, deactivateCalendar,
   resolveHolidays, resolveWeeklyOffs, WEEKDAYS, HOLIDAY_TYPES,
   type HolidayCalendar, type CompanyCalendarMap, type HolidayEntry, type HolidayApplicability,
   type WeeklyOff, type CompanyLite, type BranchLite, type DeptLite, type EmployeeLite,
-  type HolidayType, type WeeklyMode, type ResolvedHoliday,
+  type HolidayType, type WeeklyMode, type ResolvedHoliday, type ActiveCalendarRow,
 } from '@/lib/supabase-holidays'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -49,12 +50,15 @@ function Badge({ text, bg, color }: { text: string; bg: string; color: string })
 }
 
 // ══ TAB 1 · Calendars + company mapping ════════════════════════════
-function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete, onMap }: {
+function CalendarsTab({ calendars, companies, maps, active, onCreate, onStatus, onDelete, onMap, onActivate, onDeactivate }: {
   calendars: HolidayCalendar[]; companies: CompanyLite[]; maps: CompanyCalendarMap[]
+  active: ActiveCalendarRow[]
   onCreate: (i: { name: string; calendar_type: 'HOLIDAY' | 'LEAVE'; from_date: string; to_date: string }) => Promise<void>
   onStatus: (id: string, s: 'DRAFT' | 'PUBLISHED') => Promise<void>
   onDelete: (id: string) => Promise<void>
   onMap: (company_id: string, holiday: string | null, leave: string | null) => Promise<void>
+  onActivate: (company_id: string, calendar_id: string) => Promise<void>
+  onDeactivate: (company_id: string, calendar_id: string, name: string) => Promise<void>
 }) {
   const [name, setName] = useState('')
   const [type, setType] = useState<'HOLIDAY' | 'LEAVE'>('HOLIDAY')
@@ -101,19 +105,21 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
         ))}
       </div>
 
+      <ActivationPanel companies={companies} holCals={holCals} active={active}
+        onActivate={onActivate} onDeactivate={onDeactivate} />
+
       <div style={C.card}>
-        <div style={C.sec}>Company → calendar mapping</div>
-        <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>Which holiday + leave calendar each company follows. (The holiday resolver runs off this mapping.)</div>
+        <div style={C.sec}>Leave calendar mapping</div>
+        <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>
+          Which LEAVE calendar each company follows. Holiday calendars are chosen by activating
+          them above — a company can follow several at once, one per financial year.
+        </div>
         {companies.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No company found.</div>}
         {companies.map(co => {
           const m = maps.find(x => x.company_id === co.id)
           return (
-            <div key={co.id} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1fr', gap:10, alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
+            <div key={co.id} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:10, alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{co.company_name} <span style={{ fontSize:11, color:TK.faint }}>{co.company_code}</span></div>
-              <select style={C.input} value={m?.holiday_calendar_id || ''} onChange={e => onMap(co.id, e.target.value || null, m?.leave_calendar_id || null)}>
-                <option value="">— Holiday calendar —</option>
-                {holCals.map(hc => <option key={hc.id} value={hc.id}>{hc.name}</option>)}
-              </select>
               <select style={C.input} value={m?.leave_calendar_id || ''} onChange={e => onMap(co.id, m?.holiday_calendar_id || null, e.target.value || null)}>
                 <option value="">— Leave calendar —</option>
                 {leaveCals.map(lc => <option key={lc.id} value={lc.id}>{lc.name}</option>)}
@@ -123,6 +129,87 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
         })}
       </div>
     </>
+  )
+}
+
+// ══ Which holiday calendar each company is actually following ═══════
+//
+// Replaces the old single holiday-calendar dropdown. A company may follow
+// several calendars at once provided their date ranges do not overlap, so
+// next year can be activated without erasing this year — which is what made
+// the single mapping unusable for a second financial year.
+//
+// Defined OUTSIDE the parent, per CLAUDE.md §"React sub-components".
+function ActivationPanel({ companies, holCals, active, onActivate, onDeactivate }: {
+  companies: CompanyLite[]; holCals: HolidayCalendar[]; active: ActiveCalendarRow[]
+  onActivate: (company_id: string, calendar_id: string) => Promise<void>
+  onDeactivate: (company_id: string, calendar_id: string, name: string) => Promise<void>
+}) {
+  const [pick, setPick] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState('')
+
+  return (
+    <div style={C.card}>
+      <div style={C.sec}>Active holiday calendars</div>
+      <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>
+        Activating publishes the calendar and points the company at it in one step, and records
+        who did it. A date resolves against whichever active calendar covers it, so activating a
+        new financial year leaves earlier years intact.
+      </div>
+
+      {companies.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No company found.</div>}
+
+      {companies.map(co => {
+        const mine = active.filter(a => a.company_id === co.id)
+        const chosen = pick[co.id] || ''
+        return (
+          <div key={co.id} style={{ padding:'10px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
+            <div style={{ fontSize:13, fontWeight:600, marginBottom:6 }}>
+              {co.company_name} <span style={{ fontSize:11, color:TK.faint }}>{co.company_code}</span>
+            </div>
+
+            {mine.length === 0 ? (
+              <div style={{ fontSize:12, color:TK.critical, marginBottom:8 }}>
+                No active holiday calendar — employees of this company see no holidays at all.
+              </div>
+            ) : mine.map(a => (
+              <div key={a.calendar_id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
+                <span style={{ fontSize:12, fontWeight:600 }}>{a.calendar_name}</span>
+                <span style={{ fontSize:11, color:TK.faint }}>{fmt(a.from_date)} – {fmt(a.to_date)}</span>
+                {a.covers_today && <Badge text="CURRENT" bg={TK.brandTint} color={TK.brand} />}
+                {a.reaches_ess
+                  ? <Badge text="LIVE ON ESS" bg={TK.positiveTint} color={TK.positive} />
+                  : <Badge text="NOT PUBLISHED" bg={TK.criticalTint} color={TK.critical} />}
+                <span style={{ fontSize:10, color:TK.faint }}>
+                  by {a.activated_by || 'unknown'} · {fmt(a.activated_at.slice(0, 10))}
+                </span>
+                <button style={{ ...C.danger, marginLeft:'auto' }} disabled={busy === a.calendar_id}
+                  onClick={async () => { setBusy(a.calendar_id); await onDeactivate(co.id, a.calendar_id, a.calendar_name); setBusy('') }}>
+                  Deactivate
+                </button>
+              </div>
+            ))}
+
+            <div style={{ display:'flex', gap:8, marginTop:8 }}>
+              <select style={{ ...C.input, maxWidth:320 }} value={chosen}
+                onChange={e => setPick(p => ({ ...p, [co.id]: e.target.value }))}>
+                <option value="">— Activate a calendar —</option>
+                {holCals.filter(hc => !mine.some(a => a.calendar_id === hc.id))
+                  .map(hc => <option key={hc.id} value={hc.id}>{hc.name} ({fmt(hc.from_date)} – {fmt(hc.to_date)})</option>)}
+              </select>
+              <button style={{ ...C.pri, opacity: chosen ? 1 : 0.5 }} disabled={!chosen || busy === co.id}
+                onClick={async () => {
+                  setBusy(co.id)
+                  await onActivate(co.id, chosen)
+                  setPick(p => ({ ...p, [co.id]: '' })); setBusy('')
+                }}>
+                {busy === co.id ? '…' : 'Activate'}
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -475,6 +562,7 @@ export function HolidaysSection() {
   const [departments, setDepartments] = useState<DeptLite[]>([])
   const [employees, setEmployees] = useState<EmployeeLite[]>([])
   const [maps, setMaps] = useState<CompanyCalendarMap[]>([])
+  const [active, setActive] = useState<ActiveCalendarRow[]>([])
   const [weeklyOffs, setWeeklyOffs] = useState<WeeklyOff[]>([])
   // holidays tab
   const [selCal, setSelCal] = useState('')
@@ -484,11 +572,15 @@ export function HolidaysSection() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
+      // listActiveCalendars reads the company_active_calendars view (migration
+      // 129). It is caught separately so a database that has 026 but not 129
+      // still loads the rest of the screen instead of failing outright.
       const [c, co, b, d, e, mp, w] = await Promise.all([
         listCalendars(), listCompanies(), listBranches(), listDepartments(), listEmployees(), listCompanyMaps(), listWeeklyOffs(),
       ])
+      const act = await listActiveCalendars().catch(() => [] as ActiveCalendarRow[])
       // Non-cross-company users only ever see and configure their own company.
-      setCalendars(c); setCompanies(scopedCompanies(grant, co as any) as CompanyLite[]); setBranches(b); setDepartments(d); setEmployees(e); setMaps(mp); setWeeklyOffs(w)
+      setCalendars(c); setCompanies(scopedCompanies(grant, co as any) as CompanyLite[]); setBranches(b); setDepartments(d); setEmployees(e); setMaps(mp); setActive(act); setWeeklyOffs(w)
     } catch (err: any) { notify('Load failed: ' + (err?.message || 'check migration 026'), 'error') }
     setLoading(false)
   }, [grant])
@@ -507,6 +599,25 @@ export function HolidaysSection() {
   async function hStatus(id: string, s: 'DRAFT' | 'PUBLISHED') { const { error } = await setCalendarStatus(id, s); if (error) return notify('Failed: ' + error.message, 'error'); notify(s === 'PUBLISHED' ? 'Published — ESS pe live.' : 'Unpublished.'); reload() }
   async function hDeleteCal(id: string) { const { error } = await deleteCalendar(id); if (error) return notify('Failed: ' + error.message, 'error'); notify('Deleted.'); if (selCal === id) setSelCal(''); reload() }
   async function hMap(company_id: string, holiday: string | null, leave: string | null) { const { error } = await upsertCompanyMap({ company_id, holiday_calendar_id: holiday, leave_calendar_id: leave }); if (error) return notify('Failed: ' + error.message, 'error'); notify('Mapping saved.'); reload() }
+
+  // Who activated a calendar is worth recording properly — holiday_override_log
+  // writes the literal 'Admin', which tells a future reader nothing.
+  const actor = [grant.name, grant.empCode].filter(Boolean).join(' · ') || null
+
+  async function hActivate(company_id: string, calendar_id: string) {
+    const { data, error } = await activateCalendar(company_id, calendar_id, actor)
+    // The overlap guard raises with a sentence written to be shown as-is.
+    if (error) return notify(error.message, 'error')
+    const replaced = (data as { replaced?: string }[] | null)?.[0]?.replaced
+    notify(replaced ? `Activated — replaced ${replaced}.` : 'Activated and published — live on ESS.')
+    reload()
+  }
+  async function hDeactivate(company_id: string, calendar_id: string, name: string) {
+    if (!confirm(`Stop following "${name}"?\n\nEmployees of this company will see no holidays for the dates it covers until another calendar is activated for them.`)) return
+    const { error } = await deactivateCalendar(company_id, calendar_id, actor)
+    if (error) return notify('Failed: ' + error.message, 'error')
+    notify('Deactivated.'); reload()
+  }
   async function hAddHoliday(i: any) { const r = await createHoliday(i); if ((r as any).error) return notify('Failed: ' + (r as any).error.message, 'error'); notify('Holiday added.'); reloadHolidays(selCal) }
   async function hDeleteHoliday(id: string) { const { error } = await deleteHoliday(id); if (error) return notify('Failed: ' + error.message, 'error'); notify('Holiday deleted.'); reloadHolidays(selCal) }
   async function hAddWeekly(i: any) { const { error } = await createWeeklyOff(i); if (error) return notify('Failed: ' + error.message, 'error'); notify('Weekly-off rule added.'); reload() }
@@ -527,7 +638,7 @@ export function HolidaysSection() {
 
         {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>
-            {tab === 'cal' && <CalendarsTab calendars={calendars} companies={companies} maps={maps} onCreate={hCreateCal} onStatus={hStatus} onDelete={hDeleteCal} onMap={hMap} />}
+            {tab === 'cal' && <CalendarsTab calendars={calendars} companies={companies} maps={maps} active={active} onCreate={hCreateCal} onStatus={hStatus} onDelete={hDeleteCal} onMap={hMap} onActivate={hActivate} onDeactivate={hDeactivate} />}
             {tab === 'hol' && <HolidaysTab calendars={calendars} companies={companies} branches={branches} weeklyOffs={weeklyOffs} selCal={selCal} setSelCal={setSelCal} holidays={holidays} appl={appl} onAdd={hAddHoliday} onDelete={hDeleteHoliday} />}
             {tab === 'week' && <WeeklyOffTab calendars={calendars} companies={companies} branches={branches} departments={departments} weeklyOffs={weeklyOffs} onAdd={hAddWeekly} onDelete={hDeleteWeekly} />}
             {tab === 'prev' && <PreviewTab employees={employees} companies={companies} notify={notify} />}
