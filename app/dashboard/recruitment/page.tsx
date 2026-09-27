@@ -1941,7 +1941,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <input className="rx-input" style={eb('budget_max')} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder={comp.ph[1]} />
             </Field>
             <Field label="Worker / Skill Category" hint="Sets the minimum wage applied in salary negotiation">
-              <select style={T.select} value={form.wage_category||''} onChange={e=>F('wage_category',e.target.value)}>
+              <select className="rx-input" value={form.wage_category||''} onChange={e=>F('wage_category',e.target.value)}>
                 <option value="">Select category…</option>
                 {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
               </select>
@@ -2240,8 +2240,8 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <div style={{ background:C.surface, borderRadius:14, width:'min(440px,100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.3)' }}>
             <div style={{ fontSize:15, fontWeight:700, color:C.ink, marginBottom:4 }}>Send back to raiser</div>
             <div style={{ fontSize:12.5, color:C.faint, marginBottom:12 }}>{sendBackFor.designation||sendBackFor.position}{sendBackFor.mrf_number?` · ${sendBackFor.mrf_number}`:''} — the raiser will fix and resubmit; it re-enters approval from the top.</div>
-            <label style={T.label}>Remark — what should the raiser fix?</label>
-            <textarea autoFocus style={{ ...T.textarea, minHeight:80 }} value={sbNote} onChange={e=>setSbNote(e.target.value)} placeholder="e.g. Budget needs revision / openings count is wrong…" />
+            <label className="rx-label">Remark — what should the raiser fix?</label>
+            <textarea autoFocus className="rx-input" style={{ minHeight:80 }} value={sbNote} onChange={e=>setSbNote(e.target.value)} placeholder="e.g. Budget needs revision / openings count is wrong…" />
             <div style={{ display:'flex', gap:8, marginTop:14 }}>
               <button onClick={sendBackMrf} disabled={sbBusy||!sbNote.trim()} style={{ ...T.btn, background:C.warning, color:C.onAccent, flex:1, opacity:(sbBusy||!sbNote.trim())?.6:1 }}>{sbBusy?'Sending…':'Send back'}</button>
               <button onClick={()=>{ setSendBackFor(null); setSbNote('') }} disabled={sbBusy} style={{ ...T.btnOutline, flex:1 }}>Cancel</button>
@@ -3883,7 +3883,7 @@ function SearchBar({ placeholder, onApply, width=300 }:{ placeholder:string; onA
   const [draft, setDraft] = useState('')
   return (
     <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
-      <input style={{ ...T.input, maxWidth:width }} value={draft} placeholder={placeholder}
+      <input className="rx-input" style={{ maxWidth:width }} value={draft} placeholder={placeholder}
         onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
       <button style={T.btnPrimary} onClick={()=>onApply(draft.trim())}>Apply</button>
       {draft && <button style={T.btnOutline} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
@@ -3895,15 +3895,15 @@ function RecFilterBar({ companies, departments, locations, positions, f, setF }:
   return (
     <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:Z.sticky, boxShadow:'var(--ez-shadow-flat)' }}>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Company</label>
-        <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+        <label className="rx-label">Company</label>
+        <select className="rx-input" value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
           <option value="">All companies</option>
           {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
         </select>
       </div>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Department</label>
-        <select style={T.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
+        <label className="rx-label">Department</label>
+        <select className="rx-input" value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
           <option value="">All departments</option>
           {(() => {
             const vis = (departments||[]).filter((d:any)=>!f.company||d.company_id===f.company)
@@ -3912,15 +3912,15 @@ function RecFilterBar({ companies, departments, locations, positions, f, setF }:
         </select>
       </div>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Position</label>
-        <select style={T.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
+        <label className="rx-label">Position</label>
+        <select className="rx-input" value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
           <option value="">All positions</option>
           {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
         </select>
       </div>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Location</label>
-        <select style={T.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
+        <label className="rx-label">Location</label>
+        <select className="rx-input" value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
           <option value="">All locations</option>
           {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
         </select>
@@ -3957,7 +3957,7 @@ function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?
             <div style={{ fontSize:15, fontWeight:800 }}>Minimum wages — payroll master</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Monthly figures, currently effective · read-only here — HR maintains them under Payroll → Minimum Wages</div>
           </div>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search state…" style={{ ...T.input, width:200, marginLeft:'auto' }} />
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search state…" className="rx-input" style={{ width:200, marginLeft:'auto' }} />
           <button onClick={onClose} style={T.btnOutline}>Close</button>
         </div>
         {keys.length===0 ? (
@@ -4121,7 +4121,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
           </div>
         </div>
         <div style={{ marginBottom:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Remark</label>
-          <textarea style={{ ...T.textarea, minHeight:60 }} value={remark} onChange={e=>setRemark(e.target.value)} placeholder="Any note for the candidate (shown on the salary link)…" />
+          <textarea className="rx-input" style={{ minHeight:60 }} value={remark} onChange={e=>setRemark(e.target.value)} placeholder="Any note for the candidate (shown on the salary link)…" />
         </div>
 
         {s>0&&(
@@ -4292,9 +4292,9 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
           {mode==='send' && (
             <div>
-              <label style={T.label}>Candidate email</label>
-              <input style={T.input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="candidate@email.com" />
-              <label style={{ ...T.label, marginTop:12 }}>CC <span style={{ color:C.faint, fontWeight:400 }}>— search employees to add to the email</span></label>
+              <label className="rx-label">Candidate email</label>
+              <input className="rx-input" value={email} onChange={e=>setEmail(e.target.value)} placeholder="candidate@email.com" />
+              <label className="rx-label" style={{ marginTop:12 }}>CC <span style={{ color:C.faint, fontWeight:400 }}>— search employees to add to the email</span></label>
               {cc.length>0 && (
                 <div style={{ display:'flex', flexWrap:'wrap' as const, gap:6, marginBottom:6 }}>
                   {cc.map(c=>(
@@ -4305,7 +4305,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
                 </div>
               )}
               <div style={{ position:'relative' }}>
-                <input style={T.input} value={ccQ} onChange={e=>setCcQ(e.target.value)} placeholder="Type a name or emp code…" />
+                <input className="rx-input" value={ccQ} onChange={e=>setCcQ(e.target.value)} placeholder="Type a name or emp code…" />
                 {ccHits.length>0 && (
                   <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:C.surface, border:`1px solid ${C.line}`, borderRadius:8, marginTop:3, boxShadow:'0 8px 24px rgba(30,27,75,0.14)', maxHeight:220, overflowY:'auto' }}>
                     {ccHits.map((e:any)=>(
@@ -4752,36 +4752,43 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
             <button onClick={()=>setSel(null)} style={T.btnOutline}>Close</button>
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'minmax(300px, 5fr) minmax(360px, 7fr)', gap:12, alignItems:'start' }}>
+          {/* minmax(0,…), not minmax(300px,…)/minmax(360px,…). Those floors sum
+              to 672px plus the gap, and with the rail and page padding the
+              calculator has less than that at 1440px — so the right track held
+              its 360px and pushed the document to 1544px, a 104px horizontal
+              overhang, measured. A grid track containing wide content needs a
+              zero minimum or it cannot honour its container. The fr ratios are
+              untouched, so nothing moves at widths where the room exists. */}
+          <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 5fr) minmax(0, 7fr)', gap:12, alignItems:'start' }}>
             {/* ── Inputs & Rules Selection ── compact: two fields per row, the extras folded away ── */}
             <div style={{ ...T.cardPurple, padding:'12px 14px' }}>
               <div style={{ ...T.section, borderBottom:`1px solid ${C.brandEdge}`, paddingBottom:8, marginBottom:10 }}>Inputs &amp; Rules Selection</div>
               {!autoCompany && (
                 <div style={{ marginBottom:10, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
-                  <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
-                  <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
+                  <label className="rx-label">Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
+                  <select className="rx-input" value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
                     <option value="">Select company…</option>
                     {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
                   </select>
                 </div>
               )}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
-                <div><label style={T.label}>State / UT</label>
-                  <select style={T.select} value={form.state} onChange={e=>F('state',e.target.value)} disabled={!!mrfStateOf(selMrf)}>
+                <div><label className="rx-label">State / UT</label>
+                  <select className="rx-input" value={form.state} onChange={e=>F('state',e.target.value)} disabled={!!mrfStateOf(selMrf)}>
                     {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
                   </select>
                   <div style={{ fontSize:10, color:mrfStateOf(selMrf)?C.positive:C.faint, marginTop:2, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{mrfStateOf(selMrf) ? `From MRF branch: ${mrfLocOf(selMrf)?.location_name||'branch'}` : 'No branch on the MRF — choose'}</div>
                 </div>
-                <div><label style={T.label}>Worker Category</label>
-                  <select style={T.select} value={form.category} onChange={e=>F('category',e.target.value)} disabled={!!(selMrf as any)?.wage_category}>
+                <div><label className="rx-label">Worker Category</label>
+                  <select className="rx-input" value={form.category} onChange={e=>F('category',e.target.value)} disabled={!!(selMrf as any)?.wage_category}>
                     {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
                   </select>
                   <div style={{ fontSize:10, color:(selMrf as any)?.wage_category?C.positive:C.faint, marginTop:2 }}>{(selMrf as any)?.wage_category ? 'From the MRF' : 'Not set on the MRF — choose'}</div>
                 </div>
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:6 }}>
-                <div><label style={T.label}>Total CTC (Annual ₹) *</label>
-                  <input style={{ ...T.input, fontWeight:700, ...(ctcOutOfRange?{ borderColor:C.critical }:{}) }} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder={mrfBudgetMin>0?String(mrfBudgetMin):"600000"} />
+                <div><label className="rx-label">Total CTC (Annual ₹) *</label>
+                  <input className="rx-input" style={{ fontWeight:700, ...(ctcOutOfRange?{ borderColor:C.critical }:{}) }} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder={mrfBudgetMin>0?String(mrfBudgetMin):"600000"} />
                   {budgetRangeText && (
                     ctcOverBudget
                       ? <div style={{ fontSize:10, color:C.critical, marginTop:2, fontWeight:600 }}>Above the MRF budget range ({budgetRangeText}) — reduce to {lakh(mrfBudgetMax)} or less</div>
@@ -4790,7 +4797,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                       : <div style={{ fontSize:10, color: form.ctc!=='' ? C.positive : C.faint, marginTop:2 }}>{form.ctc!=='' ? '✓ Within ' : ''}MRF budget range: {budgetRangeText}</div>
                   )}
                 </div>
-                <div><label style={T.label}>Variable CTC (Annual ₹)</label><input style={{ ...T.input, fontWeight:700 }} type="number" value={form.varAmt} onChange={e=>F('varAmt',e.target.value)} placeholder="0" /></div>
+                <div><label className="rx-label">Variable CTC (Annual ₹)</label><input className="rx-input" style={{ fontWeight:700 }} type="number" value={form.varAmt} onChange={e=>F('varAmt',e.target.value)} placeholder="0" /></div>
               </div>
               <div style={{ fontSize:10.5, color:C.faint, margin:'2px 0 10px', lineHeight:1.5 }}>
                 Min wage · {form.state} · {form.category}: <b style={{ color:C.ink }}>₹{Math.round(mw.amount).toLocaleString('en-IN')}/mo</b>
@@ -4800,21 +4807,21 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
 
               <div style={{ ...T.section, borderTop:`1px solid ${C.brandEdge}`, paddingTop:10, marginBottom:8 }}>Statutory &amp; Benefit Rules</div>
               <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr 1fr', gap:8, marginBottom:10 }}>
-                <div><label style={T.label}>Gratuity in CTC?</label>
-                  <select style={T.select} value={form.gratuity} onChange={e=>F('gratuity',e.target.value)}>
+                <div><label className="rx-label">Gratuity in CTC?</label>
+                  <select className="rx-input" value={form.gratuity} onChange={e=>F('gratuity',e.target.value)}>
                     <option value="yes">Yes (4.81% of Basic)</option>
                     <option value="no">No (Over and above)</option>
                   </select>
                 </div>
-                <div><label style={T.label}>Bonus Rate</label>
-                  <select style={T.select} value={form.bonusPct} onChange={e=>F('bonusPct',e.target.value)}>
+                <div><label className="rx-label">Bonus Rate</label>
+                  <select className="rx-input" value={form.bonusPct} onChange={e=>F('bonusPct',e.target.value)}>
                     <option value="8.33">8.33% (Min)</option>
                     <option value="20">20% (Max)</option>
                     <option value="0">0% (N/A)</option>
                   </select>
                 </div>
-                <div><label style={T.label}>Bonus Mode</label>
-                  <select style={T.select} value={form.bonusMode} onChange={e=>F('bonusMode',e.target.value)}>
+                <div><label className="rx-label">Bonus Mode</label>
+                  <select className="rx-input" value={form.bonusMode} onChange={e=>F('bonusMode',e.target.value)}>
                     <option value="salary">With Salary</option>
                     <option value="ctc">Only in CTC</option>
                   </select>
@@ -4831,24 +4838,24 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                 </summary>
                 <div style={{ padding:'4px 12px 12px', borderTop:`1px solid ${C.brandEdge}` }}>
                   <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:8, marginTop:8 }}>
-                    <div><label style={T.label}>Joining Bonus (₹)</label><input style={T.input} type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
-                    <div><label style={T.label}>Paid</label>
-                      <select style={{ ...T.select, opacity: Number(form.joining_bonus)>0 ? 1 : .45, cursor: Number(form.joining_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.joining_bonus)>0)} value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
+                    <div><label className="rx-label">Joining Bonus (₹)</label><input className="rx-input" type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
+                    <div><label className="rx-label">Paid</label>
+                      <select className="rx-input" style={{ opacity: Number(form.joining_bonus)>0 ? 1 : .45, cursor: Number(form.joining_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.joining_bonus)>0)} value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
                         <option>With Salary</option><option>After 3 Months</option><option>After 6 Months</option><option>As per Policy</option>
                       </select>
                     </div>
-                    <div><label style={T.label}>Retention Bonus (₹)</label><input style={T.input} type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
-                    <div><label style={T.label}>Paid</label>
-                      <select style={{ ...T.select, opacity: Number(form.retention_bonus)>0 ? 1 : .45, cursor: Number(form.retention_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.retention_bonus)>0)} value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
+                    <div><label className="rx-label">Retention Bonus (₹)</label><input className="rx-input" type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
+                    <div><label className="rx-label">Paid</label>
+                      <select className="rx-input" style={{ opacity: Number(form.retention_bonus)>0 ? 1 : .45, cursor: Number(form.retention_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.retention_bonus)>0)} value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
                         <option>After 3 Months</option><option>After 6 Months</option><option>After 1 Year</option><option>As per Policy</option>
                       </select>
                     </div>
-                    <div><label style={T.label}>ESOP (₹ Grant Value)</label><input style={T.input} type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
-                    <div><label style={T.label}>ESOP Plan / Vesting</label><input style={T.input} value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr, 1 yr cliff" /></div>
+                    <div><label className="rx-label">ESOP (₹ Grant Value)</label><input className="rx-input" type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
+                    <div><label className="rx-label">ESOP Plan / Vesting</label><input className="rx-input" value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr, 1 yr cliff" /></div>
                   </div>
                   <div style={{ marginTop:8 }}>
-                    <label style={T.label}>Terms &amp; Conditions <span style={{ color:C.faint, fontWeight:400, textTransform:'none' as const, letterSpacing:0 }}>— shown on the salary link</span></label>
-                    <textarea style={{ ...T.textarea, minHeight:52 }} value={form.terms} onChange={e=>F('terms',e.target.value)} placeholder="e.g. Joining bonus is recoverable if the employee leaves within 12 months…" />
+                    <label className="rx-label">Terms &amp; Conditions <span style={{ color:C.faint, fontWeight:400, textTransform:'none' as const, letterSpacing:0 }}>— shown on the salary link</span></label>
+                    <textarea className="rx-input" style={{ minHeight:52 }} value={form.terms} onChange={e=>F('terms',e.target.value)} placeholder="e.g. Joining bonus is recoverable if the employee leaves within 12 months…" />
                   </div>
                   {/* Additional Amounts — add as many as needed (amount + frequency + remark) */}
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:10, marginBottom:6 }}>
@@ -4858,11 +4865,11 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   {addItems.length===0 && <div style={{ fontSize:10.5, color:C.faint }}>Optional — e.g. a monthly allowance or a quarterly incentive.</div>}
                   {addItems.map((r,i)=>(
                     <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1.4fr auto', gap:6, alignItems:'end', marginBottom:6, animation:'ezFadeUp .25s ease' }}>
-                      <div><label style={T.label}>Amount (₹)</label><input style={T.input} type="number" value={r.amount} onChange={e=>setRow(i,'amount',e.target.value)} placeholder="5000" /></div>
-                      <div><label style={T.label}>Frequency</label>
-                        <select style={T.select} value={r.freq} onChange={e=>setRow(i,'freq',e.target.value)}>{ADD_FREQS.map(o=><option key={o}>{o}</option>)}</select>
+                      <div><label className="rx-label">Amount (₹)</label><input className="rx-input" type="number" value={r.amount} onChange={e=>setRow(i,'amount',e.target.value)} placeholder="5000" /></div>
+                      <div><label className="rx-label">Frequency</label>
+                        <select className="rx-input" value={r.freq} onChange={e=>setRow(i,'freq',e.target.value)}>{ADD_FREQS.map(o=><option key={o}>{o}</option>)}</select>
                       </div>
-                      <div><label style={T.label}>Remark</label><input style={T.input} value={r.remark} onChange={e=>setRow(i,'remark',e.target.value)} placeholder="Optional note" /></div>
+                      <div><label className="rx-label">Remark</label><input className="rx-input" value={r.remark} onChange={e=>setRow(i,'remark',e.target.value)} placeholder="Optional note" /></div>
                       <button onClick={()=>delRow(i)} title="Remove" style={{ padding:'8px 10px', borderRadius:7, border:`1px solid ${C.criticalEdge}`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:700 }}>✕</button>
                     </div>
                   ))}
@@ -4881,7 +4888,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                 {savedLink&&(
                   <div style={{ marginTop:8, background:C.positiveTint, border:`1px solid ${C.positiveEdge}`, borderRadius:10, padding:'8px 10px', animation:'ezFadeUp .3s ease' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                      <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:10.5, fontFamily:'monospace', flex:1, padding:'7px 9px' }} />
+                      <input readOnly value={savedLink} onFocus={e=>e.target.select()} className="rx-input" style={{ fontSize:10.5, fontFamily:'monospace', flex:1, padding:'7px 9px' }} />
                       <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btnOutline, background:C.surface, borderColor:C.positive, color:C.positive, fontWeight:700, padding:'6px 10px', fontSize:11.5 }}>Copy</button>
                       <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.positive, color:C.onAccent, textDecoration:'none', padding:'6px 10px', fontSize:11.5 }}>Open ↗</a>
                     </div>
@@ -4988,7 +4995,14 @@ function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
     row:{}, sum:{ bg:C.sunken, weight:700 }, emp:{ color:C.brandDeep }, grat:{ color:C.positive }, bonus:{ color:C.info },
     muted:{ color:C.faint }, total:{ bg:C.brand, color:C.onAccent, weight:700 }, ded:{ color:C.critical }, net:{ bg:C.positive, color:C.onAccent, weight:700 },
   }
+  // The ₹ columns are nowrap and cannot shrink, so once the grid track above
+  // was allowed a zero minimum this table became the thing that would overflow.
+  // A table is permitted to be wider than the page — but inside its own
+  // scroller, not by dragging the whole document sideways. Comment sits above
+  // the return: a JSX comment after `return (` parses as an empty object
+  // literal and breaks the file.
   return (
+    <div style={{ overflowX:'auto' }}>
     <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:0 }}>
       <thead>
         <tr style={{ background:C.sunken }}>
@@ -5017,6 +5031,7 @@ function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
         })}
       </tbody>
     </table>
+    </div>
   )
 }
 
