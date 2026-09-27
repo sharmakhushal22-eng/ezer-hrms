@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
-import { ctcStatementRows, hasStatement, type StmtRow } from '@/lib/recruitment/ctc-statement'
+import { linkStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
 
 function fmt(n: number) { return Math.round(n).toLocaleString('en-IN') }
 const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -275,18 +275,19 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
 
   // Base salary values from DB
   const calc = data.calculation_data || {}
+  // The candidate's statement: EPF / ESIC on Basic, no PT / LWF / gratuity / bonus lines.
+  const link = linkStatementRows(calc, data.offered_ctc)
+  const stmtRows: StmtRow[] | null = link ? link.rows : null
   const basic = Math.round(calc.basic ?? data.basic_monthly ?? 0)
   const hra = Math.round(calc.hra ?? data.hra_monthly ?? 0)
-  const grossMonthly = Math.round(calc.gross || 0)
-  const epfEmp = Math.round(calc.epfEmployee ?? calc.epfEmp ?? data.epf_monthly ?? 0)
-  const esicEmp = Math.round(calc.esicEmployee ?? calc.esicEmp ?? 0)
-  // The statement — identical rows to the recruiter's Salary Breakdown Statement.
-  const stmtRows: StmtRow[] | null = hasStatement(calc) ? ctcStatementRows(calc, { state: calc.state || '' }) : null
+  const grossMonthly = Math.round(link ? link.gross : (calc.gross || 0))
+  const epfEmp = Math.round(link ? link.epfEmployee : (calc.epfEmployee ?? calc.epfEmp ?? data.epf_monthly ?? 0))
+  const esicEmp = Math.round(link ? link.esicEmployee : (calc.esicEmployee ?? calc.esicEmp ?? 0))
   // Hike is shown only when it is believable; a −100% from a corrupt current CTC is hidden.
   const hikeRaw = data.hike_pct == null ? null : Number(data.hike_pct)
   const hikeShown = hikeRaw != null && isFinite(hikeRaw) && hikeRaw > -90 && hikeRaw < 1000 ? hikeRaw : null
   const ptMonthly = Math.round(calc.ptMonthly || 0)
-  const inHand = Math.round(calc.inHand ?? data.net_monthly ?? 0)
+  const inHand = Math.round(link ? link.inHand : (calc.inHand ?? data.net_monthly ?? 0))
   const otherAllow = Math.round(calc.otherAllow || 0)
   // Conveyance + Special Allowance are the salary slip's own heads; fall back to
   // splitting the old flat "otherAllow" for negotiations saved before this existed.
@@ -449,7 +450,6 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
             <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginTop:10 }}>
               <span style={chipStyle}>✓ Statutory Minimum Wage</span>
               <span style={chipStyle}>✓ EPFO Compliant</span>
-              {gratuityIncluded && <span style={chipStyle}>Gratuity included in CTC</span>}
             </div>
           )}
         </div>
@@ -536,11 +536,9 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
         {hasAutoModel && (
           <div style={{ ...S.card, padding:'12px 14px', display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:8 }}>
             <Basis k="State / UT" v={calc.state || '—'} />
-            <Basis k="Worker Category" v={calc.category || '—'} />
+            <Basis k="Designation" v={designation || '—'} />
             <Basis k="Minimum Wage" v={`₹${fmt(minWage)}/month`} sub={calc.minWageSource === 'master' ? 'As per HR master' : calc.minWageSource === 'default' ? 'Pan-India default table' : undefined} />
             <Basis k="Basic Salary Rule" v="Higher of 50% of fixed CTC and the minimum wage" />
-            <Basis k="Gratuity" v={gratuityIncluded ? 'Included in CTC (4.81% of Basic)' : gratuityExcluded ? 'Over & above the CTC' : '—'} />
-            <Basis k="Statutory Bonus" v={bonusLabel} />
           </div>
         )}
 
@@ -558,13 +556,13 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
             </div>
           </div>
         )}
-        {gratuityExcluded && (
+        {false && gratuityExcluded && (
           <div style={{ background:TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:12, color:TK.info, lineHeight:1.6 }}>
             <strong>Note:</strong> Gratuity is Over and Above the mentioned CTC package as per The Payment of Gratuity Act, 1972.
           </div>
         )}
         {minWage > 0 && (
-          <div style={{ fontSize:11, color:TK.faint, margin:'-6px 2px 14px' }}>Basic salary meets the statutory minimum wage for {calc.state} ({calc.category}): ₹{fmt(minWage)}/month.</div>
+          <div style={{ fontSize:11, color:TK.faint, margin:'-6px 2px 14px' }}>Basic salary meets the statutory minimum wage for {calc.state}: ₹{fmt(minWage)}/month.</div>
         )}
 
         {/* CTC Summary (legacy links only; the statement carries the totals) */}
