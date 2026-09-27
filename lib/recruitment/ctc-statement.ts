@@ -16,7 +16,8 @@ export function hasStatement(calc:any): boolean {
 
 export function ctcStatementRows(calc:any, form:any): StmtRow[] {
   const ceil = Number(calc.epfCeiling||EPF_WAGE_CEILING)
-  const epfBase = calc.epfWageBase != null ? Number(calc.epfWageBase) : Math.min(calc.basic, ceil)   // PF wages: Basic + allowances (old saves: Basic)
+  // PF wages = Basic capped at the ceiling. Saves made while allowances were included keep their stored base.
+  const epfBase = calc.epfWageBase != null ? Number(calc.epfWageBase) : Math.min(calc.basic, ceil)
   const hraPct = Math.round((calc.hraMax || 0.5) * 100)
   const rows:StmtRow[] = [
     { kind:'row',  label:'Basic Salary', basis: calc.basicRule==='minwage' ? 'minimum wage floor' : '50% of fixed CTC', monthly:calc.basic, annual:calc.basic*12 },
@@ -26,7 +27,7 @@ export function ctcStatementRows(calc:any, form:any): StmtRow[] {
   if ((calc.conveyance||0)>0) rows.push({ kind:'row', label:'Conveyance Allowance', basis:'standard ₹1,600', monthly:calc.conveyance, annual:calc.conveyance*12 })
   rows.push({ kind:'row', label:'Special Allowance', basis:'balance of fixed CTC', monthly:calc.specialAllow||0, annual:(calc.specialAllow||0)*12 })
   rows.push({ kind:'sum', label:'Gross Earnings (A)', monthly:calc.gross, annual:calc.gross*12 })
-  rows.push({ kind:'emp', label:'Employer EPF', basis:`13% on PF wages ₹${Math.round(epfBase).toLocaleString('en-IN')} (Basic + allowances, ceiling ₹${ceil.toLocaleString('en-IN')})`, monthly:calc.epfEmployer, annual:calc.epfEmployer*12, remark:'In CTC' })
+  rows.push({ kind:'emp', label:'Employer EPF', basis:`13% on PF wages ₹${Math.round(epfBase).toLocaleString('en-IN')} (Basic, ceiling ₹${ceil.toLocaleString('en-IN')})`, monthly:calc.epfEmployer, annual:calc.epfEmployer*12, remark:'In CTC' })
   rows.push({ kind:'emp', label:'Employer ESIC', basis: (calc.esicEmployer||0)>0 ? '3.25% of gross (≤ ₹21,000)' : 'not applicable — gross > ₹21,000', monthly:calc.esicEmployer||0, annual:(calc.esicEmployer||0)*12, remark:'In CTC' })
   if (calc.gratuity==='yes') rows.push({ kind:'grat', label:'Gratuity', basis:'4.81% of Basic', monthly:calc.gratuityMonthly||0, annual:(calc.gratuityMonthly||0)*12, remark:'In CTC' })
   if (calc.bonusMode==='ctc' && (calc.bonusOverheadMonthly||0)>0) rows.push({ kind:'bonus', label:'Statutory Bonus (employer overhead)', basis:`${calc.bonusPct}% on ₹${Math.round(calc.bonusBase||calc.basic).toLocaleString('en-IN')}`, monthly:calc.bonusOverheadMonthly, annual:calc.bonusOverheadMonthly*12, remark:'In CTC' })

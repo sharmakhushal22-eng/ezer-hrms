@@ -5,12 +5,9 @@
 // all agree. Rules (verified Sep-2026):
 //
 //   Basic          MAX(50% of fixed CTC, state minimum wage for the worker category)
-//   PF wages       Basic + Conveyance + Special Allowance (every allowance paid to all
-//                  employees, per the Supreme Court in Vivekananda Vidyamandir, 2019) —
-//                  HRA and the statutory bonus stay out. Capped at ₹25,000 (w.e.f.
-//                  17-Sep-2026, S.O. 5109(E), Code on Social Security 2020; ₹15,000 before).
-//                  Special Allowance itself depends on employer EPF, so the two are solved
-//                  together by a short fixed-point loop.
+//   PF wages       Basic only (company policy — allowances are not part of PF wages),
+//                  capped at ₹25,000 (w.e.f. 17-Sep-2026, S.O. 5109(E), Code on Social
+//                  Security 2020; ₹15,000 before).
 //   Employer EPF   13% of PF wages — 12% EPF/EPS + 0.5% EDLI + 0.5% admin.
 //   Employer ESIC  3.25% of GROSS, only when gross ≤ ₹21,000/month (ESI Central Rules).
 //                  ESIC is on gross wages, not on Basic — solved algebraically because
@@ -173,31 +170,22 @@ export function computeCtc(i: CtcInput): CtcResult | CtcTooLow {
   const minReqFixedAnn = (minGross + epfAtMin + gratuityMonthly + bonusOverheadMonthly + esicOnMin) * 12
   if (fixedAnnual + 0.5 < minReqFixedAnn) return { ok: false, minReqFixedAnn, fixedAnnual, basic }
 
-  // PF wages = Basic + Conveyance + Special Allowance, but those allowances are what is
-  // left AFTER employer EPF — so iterate: guess the allowances, recompute EPF, repeat.
-  // The dependence is 13% of the allowance, so it converges in a handful of passes.
-  let allowGuess = 0
-  let epfWageBase = 0, epfEmployer = 0, gross = 0, esicEmployer = 0, hra = 0, otherAllow = 0, conveyance = 0, specialAllow = 0
-  for (let pass = 0; pass < 40; pass++) {
-    epfWageBase = Math.min(basic + allowGuess, epfCeiling)
-    epfEmployer = epfWageBase * EPF_EMPLOYER_RATE
-    // Gross = what is left after employer costs; employer ESIC (on gross) in closed form
-    const R = fixedMonthly - epfEmployer - gratuityMonthly - bonusOverheadMonthly
-    const grossWithEsic = R / (1 + ESIC_EMPLOYER_RATE)
-    const esicApplies = grossWithEsic <= ESIC_WAGE_CEILING
-    gross = esicApplies ? grossWithEsic : R
-    esicEmployer = esicApplies ? gross * ESIC_EMPLOYER_RATE : 0
-    // Allocation inside gross
-    const rem = Math.max(0, gross - basic - statBonus)
-    hra = Math.min(basic * hraMax, rem)
-    otherAllow = Math.max(0, rem - hra)
-    conveyance = Math.min(otherAllow, CONVEYANCE_STD)
-    specialAllow = Math.max(0, otherAllow - conveyance)
-    const next = conveyance + specialAllow
-    if (Math.abs(next - allowGuess) < 0.005) break
-    allowGuess = next
-  }
-  const esicApplies = esicEmployer > 0
+  // PF wages = Basic only (capped at the ceiling). Allowances do not enter EPF, so the
+  // package solves in one pass: employer costs come off the fixed CTC, the rest is gross.
+  const epfWageBase = Math.min(basic, epfCeiling)
+  const epfEmployer = epfWageBase * EPF_EMPLOYER_RATE
+  // Gross = what is left after employer costs; employer ESIC (on gross) in closed form
+  const R = fixedMonthly - epfEmployer - gratuityMonthly - bonusOverheadMonthly
+  const grossWithEsic = R / (1 + ESIC_EMPLOYER_RATE)
+  const esicApplies = grossWithEsic <= ESIC_WAGE_CEILING
+  const gross = esicApplies ? grossWithEsic : R
+  const esicEmployer = esicApplies ? gross * ESIC_EMPLOYER_RATE : 0
+  // Allocation inside gross
+  const rem = Math.max(0, gross - basic - statBonus)
+  const hra = Math.min(basic * hraMax, rem)
+  const otherAllow = Math.max(0, rem - hra)
+  const conveyance = Math.min(otherAllow, CONVEYANCE_STD)
+  const specialAllow = Math.max(0, otherAllow - conveyance)
   const esicNearCeiling = esicApplies && gross >= ESIC_WAGE_CEILING - 1000
 
   // Employee side
