@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { companyFilter, scopedCompanies, canSeeScreen } from '@/lib/rms/resolve'
@@ -3932,9 +3933,12 @@ function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?
   const keys = Object.keys(groups).sort((a,b)=>a.localeCompare(b))
   const rs = (n:any) => n==null||n==='' ? '—' : `₹${Math.round(Number(n)).toLocaleString('en-IN')}`
   const isCur = (r:any) => (r.state||'').toLowerCase()===(state||'').toLowerCase()
-  return (
+  if (typeof document === 'undefined') return null
+  // Portalled to <body>: inside the calculator column it sat under the nav band and the
+  // calculator's own sticky header (an ancestor's stacking context capped its z-index).
+  return createPortal(
     <div onMouseDown={e=>{ if (e.target===e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:320, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'28px 16px' }}>
+      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:1000, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'28px 16px' }}>
       <div style={{ background:C.surface, borderRadius:14, width:'min(960px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.35)', padding:'16px 18px', color:C.ink }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' as const }}>
           <div>
@@ -3981,7 +3985,8 @@ function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?
         )}
         <div style={{ fontSize:10.5, color:C.faint, marginTop:10 }}>{rates?.length||0} rows · the highlighted state is the one selected in this negotiation.</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -4645,6 +4650,16 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   const ceilingNote = `EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • Gratuity • Statutory bonus • Pan-India minimum wages`
 
   return (
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Salary negotiation"
+        subtitle="Clear the pre-negotiation checks first, then build the offer in the Automated CTC Calculator and share the salary link."
+        help={<Help label="How this screen works">
+          <p><b>Checks</b> holds shortlisted candidates whose documents are still being collected or verified.</p>
+          <p><b>CTC</b> holds the ones cleared for an offer. Picking a candidate opens the calculator (or the stipend / fees form for interns, apprentices, contractors and consultants).</p>
+          <p>Saving a negotiation produces the candidate's salary link — OTP-protected, valid for 7 days.</p>
+        </Help>}
+      />}>
     <div style={{ display:'grid', gridTemplateColumns: compact ? 'minmax(200px, 250px) minmax(0, 1fr)' : '1fr 1fr', gap:12, alignItems:'start', transition:'grid-template-columns .45s cubic-bezier(.4,0,.2,1)' }}>
       {/* ── Candidate column — full cards normally, compact list while the calculator is open ── */}
       <div style={{ minWidth:0 }}>
@@ -4944,6 +4959,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
         </div>
       )}
     </div>
+    </RxPage>
   )
 }
 
