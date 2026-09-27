@@ -1,9 +1,9 @@
 'use client'
 import { useState, useMemo, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { ctcStatementRows, hasStatement, type StmtRow } from '@/lib/recruitment/ctc-statement'
 
 function fmt(n: number) { return Math.round(n).toLocaleString('en-IN') }
 const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -71,8 +71,166 @@ function getSlab(ctc: number): number {
   return 0
 }
 
-// ── MAIN COMPONENT ────────────────────────────────────────────────
-export default function SalaryViewClient({ data, meta }: { data: any; meta?: { company_name?: string; branch?: string; department?: string; designation?: string } }) {
+type Meta = { company_name?: string; branch?: string; department?: string; designation?: string }
+type Gate = { candidateName: string; companyName: string; maskedEmail: string | null; isStipend: boolean }
+const ACCESS_HEADER = 'x-salary-access'
+const accessKey = (token: string) => `salary-access:${token}`
+
+// ── ENTRY: OTP login first, then the offer ─────────────────────────
+// The server page passes only the token and what the login card shows. The offer itself is
+// fetched from /api/salary-view/data once the candidate has verified the OTP sent to their
+// registered email. The access token is kept in sessionStorage so a refresh doesn't re-ask.
+export default function SalaryViewClient({ token, gate }: { token: string; gate: Gate }) {
+  const [access, setAccess] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState<{ data: any; meta: Meta } | null>(null)
+  const [loadErr, setLoadErr] = useState('')
+  const [checked, setChecked] = useState(false)
+
+  useEffect(() => { try { const a = sessionStorage.getItem(accessKey(token)); if (a) setAccess(a) } catch { /* ignore */ } setChecked(true) }, [token])
+  useEffect(() => {
+    if (!access) return
+    let alive = true
+    fetch(`/api/salary-view/data?token=${encodeURIComponent(token)}`, { headers: { [ACCESS_HEADER]: access }, cache: 'no-store' })
+      .then(async r => { const j = await r.json().catch(() => ({})); if (!alive) return; if (!r.ok) { try { sessionStorage.removeItem(accessKey(token)) } catch {} setAccess(null); setLoadErr(r.status === 401 ? '' : (j.error || 'Could not load your offer')); return } setLoaded({ data: j.data, meta: j.meta }) })
+      .catch(() => { if (alive) setLoadErr('Could not load your offer — please try again') })
+    return () => { alive = false }
+  }, [access, token])
+
+  if (!checked) return <div style={{ minHeight:'100vh', background:'#F5F3FF' }} />
+  if (!access) return <OtpGate token={token} gate={gate} error={loadErr} onVerified={a => { try { sessionStorage.setItem(accessKey(token), a) } catch {} setLoadErr(''); setAccess(a) }} />
+  if (!loaded) return (
+    <div style={{ minHeight:'100vh', background:'#F5F3FF', display:'grid', placeItems:'center', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:TK.faint, fontSize:13 }}>{loadErr || 'Opening your offer…'}</div>
+  )
+  return <SalaryViewBody data={loaded.data} meta={loaded.meta} token={token} access={access} />
+}
+
+// ── OTP LOGIN CARD ─────────────────────────────────────────────────
+function OtpGate({ token, gate, error, onVerified }: { token: string; gate: Gate; error?: string; onVerified: (access: string) => void }) {
+  const [step, setStep] = useState<'email' | 'otp'>('email')
+  const [otp, setOtp] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(error || '')
+  const [info, setInfo] = useState('')
+  const [sentTo, setSentTo] = useState(gate.maskedEmail || '')
+  const [debugOtp, setDebugOtp] = useState<string | null>(null)
+  const [cooldown, setCooldown] = useState(0)
+  useEffect(() => { if (cooldown <= 0) return; const id = setTimeout(() => setCooldown(c => c - 1), 1000); return () => clearTimeout(id) }, [cooldown])
+
+  async function post(body: any) {
+    const r = await fetch('/api/salary-view/otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, ...body }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || 'Something went wrong')
+    return j
+  }
+  async function sendOtp() {
+    setBusy(true); setErr(''); setInfo('')
+    try {
+      const j = await post({ action: 'request' })
+      setSentTo(j.sentTo || sentTo); setDebugOtp(j.debugOtp || null); setStep('otp'); setOtp(''); setCooldown(30)
+      setInfo(j.sent ? `We emailed a 6-digit code to ${j.sentTo}. It is valid for ${j.ttlMin || 10} minutes.` : `Email could not be sent right now${j.debugOtp ? ' (test mode)' : ' — please try again in a minute'}.`)
+    } catch (e: any) { setErr(e.message) }
+    setBusy(false)
+  }
+  async function verify() {
+    if (!/^\d{6}$/.test(otp)) { setErr('Enter the 6-digit code from your email.'); return }
+    setBusy(true); setErr('')
+    try { const j = await post({ action: 'verify', otp }); onVerified(j.access) }
+    catch (e: any) { setErr(e.message) }
+    setBusy(false)
+  }
+
+  const font = '"DM Sans","Segoe UI",sans-serif'
+  const inp: React.CSSProperties = { width:'100%', padding:'11px 12px', border:`1px solid ${TK.brandEdge}`, borderRadius:8, fontSize:15, fontFamily:font, color:TK.ink, background:TK.surface, outline:'none', boxSizing:'border-box' }
+  const btn = (bg: string, dis?: boolean): React.CSSProperties => ({ width:'100%', padding:'11px 14px', borderRadius:8, border:'none', background:bg, color:TK.onAccent, fontSize:14, fontWeight:600, fontFamily:font, cursor: dis ? 'not-allowed' : 'pointer', opacity: dis ? .6 : 1 })
+  return (
+    <div style={{ minHeight:'100vh', background:'#F5F3FF', display:'flex', alignItems:'center', justifyContent:'center', padding:16, fontFamily:font, color:TK.ink }}>
+      <div style={{ width:'min(420px, 100%)', background:TK.surface, borderRadius:16, border:`1px solid ${TK.brandEdge}`, boxShadow:'0 12px 40px rgba(124,58,237,0.10)', padding:'24px 22px' }}>
+        <div style={{ fontSize:11, color:TK.brandDeep, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em' }}>{gate.companyName || 'Your offer'}</div>
+        <div style={{ fontSize:20, fontWeight:700, marginTop:4 }}>{gate.isStipend ? 'Your stipend offer' : 'Your salary offer'}{gate.candidateName ? ` — ${gate.candidateName.split(' ')[0]}` : ''}</div>
+        <div style={{ fontSize:12.5, color:TK.inkSoft, marginTop:6, lineHeight:1.55 }}>To keep your offer private, please verify it is you. We will send a one-time code to your registered email.</div>
+
+        {!gate.maskedEmail ? (
+          <div style={{ marginTop:18, padding:'12px 14px', borderRadius:10, background:TK.criticalTint, color:TK.critical, fontSize:12.5, lineHeight:1.5 }}>No email is registered for this offer. Please contact your recruiter so they can update your details and resend the link.</div>
+        ) : step === 'email' ? (
+          <>
+            <label style={{ display:'block', fontSize:11, fontWeight:700, color:TK.brandDeep, textTransform:'uppercase', letterSpacing:'.06em', marginTop:18, marginBottom:5 }}>Registered email</label>
+            <input value={gate.maskedEmail} readOnly style={{ ...inp, background:'#F7F6FD', color:TK.inkSoft, letterSpacing:.5 }} />
+            <div style={{ fontSize:11, color:TK.faint, marginTop:5 }}>This is the email your recruiter has on record. Not yours? Contact your recruiter.</div>
+            {err && <div style={{ marginTop:12, padding:'9px 12px', borderRadius:8, background:TK.criticalTint, color:TK.critical, fontSize:12.5, fontWeight:600 }}>{err}</div>}
+            <button onClick={sendOtp} disabled={busy} style={{ ...btn(TK.brand, busy), marginTop:16 }}>{busy ? 'Sending…' : 'Send OTP'}</button>
+          </>
+        ) : (
+          <>
+            <div style={{ marginTop:16, padding:'10px 12px', borderRadius:8, background:TK.brandTint, color:TK.brandDeep, fontSize:12.5, lineHeight:1.5 }}>{info}</div>
+            {debugOtp && <div style={{ marginTop:8, fontSize:11, color:TK.warning }}>Test mode code: <b>{debugOtp}</b></div>}
+            <label style={{ display:'block', fontSize:11, fontWeight:700, color:TK.brandDeep, textTransform:'uppercase', letterSpacing:'.06em', marginTop:14, marginBottom:5 }}>Enter the 6-digit code</label>
+            <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={e => { if (e.key === 'Enter') verify() }}
+              inputMode="numeric" autoComplete="one-time-code" placeholder="••••••" autoFocus
+              style={{ ...inp, fontSize:24, fontWeight:700, letterSpacing:10, textAlign:'center' }} />
+            {err && <div style={{ marginTop:12, padding:'9px 12px', borderRadius:8, background:TK.criticalTint, color:TK.critical, fontSize:12.5, fontWeight:600 }}>{err}</div>}
+            <button onClick={verify} disabled={busy || otp.length !== 6} style={{ ...btn(TK.positive, busy || otp.length !== 6), marginTop:14 }}>{busy ? 'Verifying…' : 'Verify & open offer'}</button>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12, fontSize:12 }}>
+              <button onClick={() => { setStep('email'); setErr('') }} style={{ background:'none', border:'none', color:TK.inkSoft, cursor:'pointer', fontFamily:font, fontSize:12, padding:0 }}>← Back</button>
+              <button onClick={sendOtp} disabled={busy || cooldown > 0} style={{ background:'none', border:'none', color: cooldown > 0 ? TK.faint : TK.brandDeep, cursor: cooldown > 0 ? 'default' : 'pointer', fontFamily:font, fontSize:12, fontWeight:600, padding:0 }}>{cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}</button>
+            </div>
+          </>
+        )}
+        <div style={{ fontSize:10.5, color:TK.faint, marginTop:18, lineHeight:1.5, borderTop:`1px solid ${TK.brandEdge}`, paddingTop:10 }}>Sent to {sentTo || 'your registered email'}. The code expires in 10 minutes and works once.</div>
+      </div>
+    </div>
+  )
+}
+
+// ── SALARY STATEMENT CARD — the same rows the recruiter sees, monthly + annual ──
+function StatementCard({ rows, hikePct }: { rows: StmtRow[]; hikePct?: number | null }) {
+  const money = (n?: number | null) => n == null ? '' : `₹${fmt(n)}`
+  const tone: Record<string, { bg?: string; color?: string; weight?: number; labelColor?: string }> = {
+    row:   {},
+    sum:   { bg: TK.brandTint, color: TK.brandDeep, weight: 700 },
+    emp:   { color: TK.brandDeep },
+    grat:  { color: TK.positive },
+    bonus: { color: TK.info },
+    muted: { color: TK.faint, labelColor: TK.faint },
+    total: { bg: TK.brand, color: TK.onAccent, weight: 700, labelColor: TK.onAccent },
+    ded:   { color: TK.critical, labelColor: TK.critical },
+    net:   { bg: TK.positive, color: TK.onAccent, weight: 700, labelColor: TK.onAccent },
+  }
+  const grid: React.CSSProperties = { display:'grid', gridTemplateColumns:'minmax(0,1fr) 92px 104px', gap:6, alignItems:'center' }
+  return (
+    <div style={{ background:TK.surface, borderRadius:14, border:`1px solid ${TK.brandEdge}`, overflow:'hidden', marginBottom:14, boxShadow:'0 6px 22px rgba(30,27,75,0.06)' }}>
+      <div style={{ background:TK.brand, padding:'12px 16px', color:TK.onAccent, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
+        <div>
+          <div style={{ fontSize:14, fontWeight:700 }}>Salary Breakdown Statement</div>
+          <div style={{ fontSize:10.5, opacity:.8, marginTop:1 }}>Every component, monthly and annual</div>
+        </div>
+        {hikePct ? <span style={{ fontSize:11, fontWeight:700, background:'rgba(255,255,255,0.2)', padding:'4px 11px', borderRadius:99 }}>Hike {Number(hikePct).toFixed(1)}%</span> : null}
+      </div>
+      <div style={{ ...grid, padding:'7px 16px', background:TK.sunken, borderBottom:`1px solid ${TK.brandEdge}`, fontSize:9.5, fontWeight:700, color:TK.faint, textTransform:'uppercase' as const, letterSpacing:'.07em' }}>
+        <span>Component</span><span style={{ textAlign:'right' as const }}>Monthly (₹)</span><span style={{ textAlign:'right' as const }}>Annual (₹)</span>
+      </div>
+      {rows.map((r, i) => {
+        if (r.kind === 'head') return <div key={i} style={{ padding:'14px 16px 5px', fontSize:10.5, fontWeight:700, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' }}>{r.label}</div>
+        if (r.kind === 'note') return <div key={i} style={{ padding:'8px 16px', fontSize:10.5, color:TK.faint, lineHeight:1.5, background:TK.sunken }}>{r.label}</div>
+        const t = tone[r.kind] || {}
+        const big = r.kind === 'total' || r.kind === 'net'
+        const nil = (r.monthly || 0) === 0 && (r.kind === 'emp' || r.kind === 'ded')
+        return (
+          <div key={i} style={{ ...grid, padding: big ? '11px 16px' : '8px 16px', background: t.bg || 'transparent', borderBottom: t.bg ? 'none' : `1px solid ${TK.brandEdge}`, fontSize: big ? 14 : 12.5, opacity: nil ? .7 : 1 }}>
+            <span style={{ minWidth:0, color: t.labelColor || (t.weight ? (t.color || TK.ink) : TK.ink), fontWeight: t.weight || 500 }}>
+              {r.label}
+              {r.basis && <div style={{ fontSize:10, fontWeight:400, color: t.bg ? 'inherit' : TK.faint, opacity: t.bg ? .8 : 1, marginTop:1, lineHeight:1.35 }}>{r.basis}</div>}
+            </span>
+            <span style={{ textAlign:'right' as const, whiteSpace:'nowrap' as const, color: t.color || TK.ink, fontWeight: t.weight || 500, fontVariantNumeric:'tabular-nums' as const }}>{nil ? 'Nil' : money(r.monthly)}</span>
+            <span style={{ textAlign:'right' as const, whiteSpace:'nowrap' as const, color: t.color || TK.ink, fontWeight: t.weight ? 800 : 600, fontVariantNumeric:'tabular-nums' as const }}>{nil ? 'Nil' : money(r.annual)}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── THE OFFER (after login) ────────────────────────────────────────
+function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta; token: string; access: string }) {
   const [response, setResponse] = useState<string>(data.candidate_response || '')
   const [responding, setResponding] = useState(false)
   // ── 7-day validity — the offer link expires 7 days after it was (re)sent ──
@@ -97,11 +255,14 @@ export default function SalaryViewClient({ data, meta }: { data: any; meta?: { c
     if (r === 'REJECTED') { const n = window.prompt('Optionally, let us know why you are declining:'); if (n === null) return; note = n }
     else if (!window.confirm('Confirm you accept this offer?')) return
     setResponding(true)
-    const { error } = await supabase.from('ctc_negotiations')
-      .update({ candidate_response: r, response_at: new Date().toISOString(), response_note: note || null })
-      .eq('link_token', data.link_token)
+    let err = ''
+    try {
+      const res = await fetch('/api/salary-view/respond', { method: 'POST', headers: { 'Content-Type': 'application/json', [ACCESS_HEADER]: access }, body: JSON.stringify({ token, response: r, note: note || null }) })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) err = j.error || 'request failed'
+    } catch { err = 'network error' }
     setResponding(false)
-    if (error) { alert('Sorry, we could not record your response: ' + error.message); return }
+    if (err) { alert('Sorry, we could not record your response: ' + err); return }
     setResponse(r)
   }
   const [showCalc, setShowCalc] = useState(false)
@@ -114,13 +275,15 @@ export default function SalaryViewClient({ data, meta }: { data: any; meta?: { c
 
   // Base salary values from DB
   const calc = data.calculation_data || {}
-  const basic = Math.round(data.basic_monthly || calc.basic || 0)
-  const hra = Math.round(data.hra_monthly || calc.hra || 0)
+  const basic = Math.round(calc.basic ?? data.basic_monthly ?? 0)
+  const hra = Math.round(calc.hra ?? data.hra_monthly ?? 0)
   const grossMonthly = Math.round(calc.gross || 0)
-  const epfEmp = Math.round(data.epf_monthly || calc.epfEmp || 0)
-  const esicEmp = Math.round(calc.esicEmp || 0)
+  const epfEmp = Math.round(calc.epfEmployee ?? calc.epfEmp ?? data.epf_monthly ?? 0)
+  const esicEmp = Math.round(calc.esicEmployee ?? calc.esicEmp ?? 0)
+  // The statement — identical rows to the recruiter's Salary Breakdown Statement.
+  const stmtRows: StmtRow[] | null = hasStatement(calc) ? ctcStatementRows(calc, { state: calc.state || '' }) : null
   const ptMonthly = Math.round(calc.ptMonthly || 0)
-  const inHand = Math.round(data.net_monthly || calc.inHand || 0)
+  const inHand = Math.round(calc.inHand ?? data.net_monthly ?? 0)
   const otherAllow = Math.round(calc.otherAllow || 0)
   // Conveyance + Special Allowance are the salary slip's own heads; fall back to
   // splitting the old flat "otherAllow" for negotiations saved before this existed.
@@ -247,6 +410,19 @@ export default function SalaryViewClient({ data, meta }: { data: any; meta?: { c
     </div>
   )
 
+  // Three-column row for the breakdown table: label · monthly · annual.
+  const R2 = ({ l, m, a, red, green, bold, big, bg, sub }: { l: string; m: string; a: string; red?: boolean; green?: boolean; bold?: boolean; big?: boolean; bg?: string; sub?: string }) => (
+    <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1fr) 96px 110px', gap:6, alignItems:'center', padding: big ? '10px 16px' : '7px 16px', borderBottom:`1px solid ${TK.brandEdge}`, fontSize: big ? 14 : 12.5, background: bg || 'transparent' }}>
+      <span style={{ color: red ? TK.critical : green ? TK.positive : (bold || big) ? TK.brandDeep : TK.inkSoft, fontWeight: (bold || big) ? 600 : 400, minWidth:0 }}>
+        {l}{sub && <div style={{ fontSize:10, fontWeight:400, color:TK.faint, marginTop:1 }}>{sub}</div>}
+      </span>
+      <span style={{ textAlign:'right' as const, color: red ? TK.critical : green ? TK.positive : TK.ink, fontWeight:500, whiteSpace:'nowrap' as const }}>{m}</span>
+      <span style={{ textAlign:'right' as const, color: red ? TK.critical : green ? TK.positive : TK.ink, fontWeight: (bold || big) ? 700 : 500, whiteSpace:'nowrap' as const }}>{a}</span>
+    </div>
+  )
+  const rsm = (monthly: number) => `₹${fmt(monthly)}`
+  const rsa = (monthly: number) => `₹${fmt(monthly*12)}`
+
   return (
     <div style={S.page}>
       {/* Header */}
@@ -257,9 +433,15 @@ export default function SalaryViewClient({ data, meta }: { data: any; meta?: { c
             <div style={{ fontSize:11.5, color:TK.onAccentDim, marginTop:3 }}>{[meta?.branch, meta?.department].filter(Boolean).join(' · ')}</div>
           )}
           <div style={{ height:1, background:'rgba(255,255,255,0.22)', margin:'12px 0 10px' }} />
-          <div style={{ fontSize:20, fontWeight:600 }}>{isStipend ? `Your ${payLabel} Details` : 'Your Salary Structure'}</div>
-          {data.candidate_name && <div style={{ fontSize:13, color:TK.onAccentSoft, marginTop:3 }}>Dear {data.candidate_name}</div>}
-          {designation && <div style={{ fontSize:12, color:TK.onAccentDim, marginTop:1 }}>Designation: {designation}</div>}
+          <div style={{ fontSize:22, fontWeight:700, letterSpacing:-.2 }}>{isStipend ? `Your ${payLabel} Details` : 'Your Salary Structure'}</div>
+          {data.candidate_name && <div style={{ fontSize:13.5, color:TK.onAccentSoft, marginTop:4 }}>Dear {data.candidate_name}, here is the complete break-up of your offer.</div>}
+          {(designation || meta?.branch || meta?.department) && (
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginTop:10 }}>
+              {designation && <span style={{ ...chipStyle, background:'rgba(255,255,255,0.92)', color:TK.brandDeep }}>{designation}</span>}
+              {meta?.department && <span style={chipStyle}>{meta.department}</span>}
+              {meta?.branch && <span style={chipStyle}>{meta.branch}</span>}
+            </div>
+          )}
           {!isStipend && hasAutoModel && (
             <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginTop:10 }}>
               <span style={chipStyle}>✓ Statutory Minimum Wage</span>
@@ -293,17 +475,36 @@ export default function SalaryViewClient({ data, meta }: { data: any; meta?: { c
           </div>
         </div>
 
-        {/* In-Hand Highlight */}
-        <div style={{ background:TK.surface, borderRadius:14, border: `2px solid ${TK.brandEdge}`, padding:'18px 20px', marginBottom:14, textAlign:'center' as const }}>
-          <div style={{ fontSize:11, color:TK.faint, textTransform:'uppercase' as const, letterSpacing:'.08em', marginBottom:3 }}>{isStipend ? `Monthly ${payLabel} (In-Hand)` : 'Estimated Monthly In-Hand'}</div>
-          <div style={{ fontSize:38, fontWeight:700, color:TK.positive, letterSpacing:-1 }}>₹{fmt(isStipend ? stipendNet : inHand)}</div>
-          <div style={{ fontSize:11, color:TK.faint, marginTop:3 }}>{isStipend ? `Annual: ₹${fmt(stipendNet*12)}` : <>Annual: ₹{fmt(inHand*12)} &nbsp;|&nbsp; Excl. TDS</>}</div>
-          {data.hike_pct && (
-            <div style={{ background:TK.positiveTint, borderRadius:99, padding:'4px 14px', display:'inline-block', marginTop:8, border: `1px solid ${TK.positiveTint}` }}>
-              <span style={{ fontSize:13, fontWeight:600, color:TK.positive }}>Hike: {Number(data.hike_pct).toFixed(1)}%</span>
+        {/* Salary Breakdown — the first thing the candidate sees. Built from the SAME statement
+            rows as the recruiter's Salary Breakdown Statement (lib/recruitment/ctc-statement),
+            so every figure here matches the calculator to the rupee. */}
+        {!isStipend && stmtRows && (
+          <StatementCard rows={stmtRows} hikePct={data.hike_pct} />
+        )}
+        {!isStipend && !stmtRows && (
+          <div style={{ ...S.card, border:`2px solid ${TK.brandEdge}` }}>
+            <div style={{ background:TK.brand, padding:'10px 16px', color:TK.onAccent, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
+              <span style={{ fontSize:13, fontWeight:600 }}>Salary Breakdown</span>
+              {data.hike_pct ? <span style={{ fontSize:11, fontWeight:600, background:'rgba(255,255,255,0.2)', padding:'3px 10px', borderRadius:99 }}>Hike: {Number(data.hike_pct).toFixed(1)}%</span> : null}
             </div>
-          )}
-        </div>
+            <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1fr) 96px 110px', gap:6, padding:'7px 16px', background:TK.brandTint, borderBottom:`1px solid ${TK.brandEdge}`, fontSize:10, fontWeight:700, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' }}>
+              <span>Component</span><span style={{ textAlign:'right' as const }}>Monthly (₹)</span><span style={{ textAlign:'right' as const }}>Annual (₹)</span>
+            </div>
+            <R2 l="Basic" m={rsm(basic)} a={rsa(basic)} />
+            <R2 l="HRA" m={rsm(hra)} a={rsa(hra)} />
+            {conveyance > 0 && <R2 l="Conveyance" m={rsm(conveyance)} a={rsa(conveyance)} />}
+            {specialAllow > 0 && <R2 l="Special Allowance" m={rsm(specialAllow)} a={rsa(specialAllow)} />}
+            {statBonus > 0 && <R2 l={`Statutory Bonus${bonusPctVal > 0 ? ` (${bonusPctVal}% · with salary)` : ''}`} m={rsm(statBonus)} a={rsa(statBonus)} />}
+            <R2 l="Gross Earnings" m={rsm(grossMonthly)} a={rsa(grossMonthly)} bold bg={TK.brandTint} />
+            {epfEmp > 0 && <R2 l="(−) EPF Employee" m={rsm(epfEmp)} a={rsa(epfEmp)} red />}
+            <R2 l="(−) ESIC Employee" m={esicEmp > 0 ? rsm(esicEmp) : 'Nil'} a={esicEmp > 0 ? rsa(esicEmp) : 'Nil'} red={esicEmp > 0} bg={TK.criticalTint}
+              sub={esicEmp > 0 ? `Gross/mo ₹${fmt(grossMonthly)} ≤ ₹21,000 → 0.75%` : `Gross/mo ₹${fmt(grossMonthly)} > ₹21,000 → Not applicable`} />
+            {ptMonthly > 0 && <R2 l="(−) Professional Tax" m={rsm(ptMonthly)} a={rsa(ptMonthly)} red />}
+            {lwfMonthly > 0 && <R2 l="(−) LWF" m={rsm(lwfMonthly)} a={rsa(lwfMonthly)} red />}
+            <R2 l="Total Deductions" m={rsm(totalDed)} a={rsa(totalDed)} red bold bg={TK.criticalTint} />
+            <R2 l="In Hand" m={rsm(inHand)} a={rsa(inHand)} green big bg={TK.positiveTint} sub="Estimated · excl. TDS" />
+          </div>
+        )}
 
         {/* Stipend (intern / NATS / NAPS) — only the entered figures, nothing else */}
         {isStipend && (
@@ -340,49 +541,11 @@ export default function SalaryViewClient({ data, meta }: { data: any; meta?: { c
           </div>
         )}
 
-        {/* Salary Breakdown — ANNUAL */}
-        <div style={{ ...S.card }}>
-          <div style={{ background:TK.brand, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <span>Salary Breakdown</span>
-            <span style={{ fontSize:10, background:'rgba(255,255,255,0.2)', padding:'2px 8px', borderRadius:99 }}>Annual (₹)</span>
-          </div>
-          <Row l="Basic" v={`₹${fmt(basic*12)}`} />
-          <Row l="HRA" v={`₹${fmt(hra*12)}`} />
-          {conveyance > 0 && <Row l="Conveyance" v={`₹${fmt(conveyance*12)}`} />}
-          {specialAllow > 0 && <Row l="Special Allowance" v={`₹${fmt(specialAllow*12)}`} />}
-          {statBonus > 0 && <Row l={`Statutory Bonus${bonusPctVal > 0 ? ` (${bonusPctVal}% · with salary)` : ''}`} v={`₹${fmt(statBonus*12)}`} />}
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', background:TK.brandTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:14, fontWeight:600, color:TK.brandDeep }}>
-            <span>Gross Earnings (Annual)</span><span style={{ textAlign:'right' as const }}>₹{fmt(grossAnnual)}<div style={{ fontSize:10, fontWeight:500, color:TK.faint }}>≈ ₹{fmt(grossMonthly)}/mo</div></span>
-          </div>
-          {epfEmp > 0 && <Row l="(−) EPF Employee" v={`₹${fmt(epfEmp*12)}`} red />}
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 16px', background: TK.criticalTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
-            <div>
-              <span style={{ color: esicEmp > 0 ? TK.critical : TK.faint }}>(−) ESIC Employee</span>
-              <div style={{ fontSize:10, color:TK.faint, marginTop:1 }}>
-                {esicEmp > 0
-                  ? `Gross/mo ₹${fmt(grossMonthly)} ≤ ₹21,000 → 0.75% = ₹${fmt(esicEmp)}/mo`
-                  : `Gross/mo ₹${fmt(grossMonthly)} > ₹21,000 → Not applicable`}
-              </div>
-            </div>
-            <span style={{ fontWeight:500, color: esicEmp > 0 ? TK.critical : TK.positive }}>
-              {esicEmp > 0 ? `₹${fmt(esicEmp*12)}` : 'Nil'}
-            </span>
-          </div>
-          {ptMonthly > 0 && <Row l="(−) Professional Tax" v={`₹${fmt(ptMonthly*12)}`} red />}
-          {lwfMonthly > 0 && <Row l="(−) LWF" v={`₹${fmt(lwfMonthly*12)}`} red />}
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 16px', background: TK.criticalTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12, fontWeight:500, color: TK.critical }}>
-            <span>Total Deductions</span><span>₹{fmt(totalDed*12)}</span>
-          </div>
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', background:TK.positiveTint, fontSize:15, fontWeight:700, color: TK.positive }}>
-            <span>In Hand (Annual)</span><span>₹{fmt(inHand*12)}</span>
-          </div>
-        </div>
-
-        {/* Employer contributions — part of the CTC package (Automated CTC model) */}
-        {(epfEmployer > 0 || gratuityMonthly > 0 || bonusOverheadMonthly > 0) && (
+        {/* Employer contributions — part of the CTC package (legacy links only; the statement already lists them) */}
+        {!stmtRows && (epfEmployer > 0 || gratuityMonthly > 0 || bonusOverheadMonthly > 0) && (
           <div style={S.card}>
             <div style={{ background:TK.brandDeep, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>Employer Contributions — included in CTC (Annual)</div>
-            {epfEmployer > 0 && <Row l={`Employer EPF (13%, capped at ₹${fmt(calc.epfCeiling || 15000)} Basic)`} v={`₹${fmt(epfEmployer*12)}`} />}
+            {epfEmployer > 0 && <Row l={calc.epfWageBase != null ? `Employer EPF (13% on PF wages ₹${fmt(calc.epfWageBase)}, ceiling ₹${fmt(calc.epfCeiling || 25000)})` : `Employer EPF (13%, capped at ₹${fmt(calc.epfCeiling || 15000)} Basic)`} v={`₹${fmt(epfEmployer*12)}`} />}
             {esicEmployer > 0 && <Row l="Employer ESIC (3.25%)" v={`₹${fmt(esicEmployer*12)}`} />}
             {gratuityIncluded && gratuityMonthly > 0 && <Row l="Gratuity (4.81% of Basic)" v={`₹${fmt(gratuityMonthly*12)}`} green />}
             {bonusOverheadMonthly > 0 && <Row l="Statutory Bonus (Employer Overhead)" v={`₹${fmt(bonusOverheadMonthly*12)}`} />}
@@ -401,8 +564,8 @@ export default function SalaryViewClient({ data, meta }: { data: any; meta?: { c
           <div style={{ fontSize:11, color:TK.faint, margin:'-6px 2px 14px' }}>Basic salary meets the statutory minimum wage for {calc.state} ({calc.category}): ₹{fmt(minWage)}/month.</div>
         )}
 
-        {/* CTC Summary */}
-        <div style={S.card}>
+        {/* CTC Summary (legacy links only; the statement carries the totals) */}
+        {!stmtRows && <div style={S.card}>
           <div style={{ background:TK.brandDeep, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>CTC Summary — Annual</div>
           <Row l="Fixed Component" v={`₹${fmt(fixedAnnual)}`} />
           <Row l="Variable Component" v={`₹${fmt(varAnnual)}`} />
@@ -410,7 +573,7 @@ export default function SalaryViewClient({ data, meta }: { data: any; meta?: { c
             <span>Total CTC</span>
             <span style={{ textAlign:'right' as const }}>₹{fmt(ctcAnnual)}<div style={{ fontSize:10.5, fontWeight:500, color:TK.faint }}>≈ ₹{fmt(Math.round(ctcAnnual/12))}/mo</div></span>
           </div>
-        </div>
+        </div>}
 
         {/* One-time payments */}
         {(joiningBonus > 0 || retentionBonus > 0 || esopValue > 0) && (

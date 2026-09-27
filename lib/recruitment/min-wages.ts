@@ -24,7 +24,7 @@ export const DEFAULT_MIN_WAGES: Record<string, Record<WageCat, number>> = {
   'Dadra & Nagar Haveli and Daman & Diu': { 'Unskilled': 12900, 'Semi Skilled': 14100, 'Skilled': 15500, 'Highly Skilled': 17100 },
   'Delhi':                                { 'Unskilled': 18066, 'Semi Skilled': 19473, 'Skilled': 22411, 'Highly Skilled': 24356 },
   'Goa':                                  { 'Unskilled': 14500, 'Semi Skilled': 15900, 'Skilled': 17400, 'Highly Skilled': 19200 },
-  'Gujarat':                              { 'Unskilled': 13400, 'Semi Skilled': 14600, 'Skilled': 15900, 'Highly Skilled': 17200 },
+  'Gujarat':                              { 'Unskilled': 13325, 'Semi Skilled': 13585, 'Skilled': 13897, 'Highly Skilled': 13897 },   // Zone I, Apr–Sep 2026 (basic + VDA ₹60.50/day)
   'Haryana':                              { 'Unskilled': 15220, 'Semi Skilled': 16500, 'Skilled': 18000, 'Highly Skilled': 19500 },
   'Himachal Pradesh':                     { 'Unskilled': 12700, 'Semi Skilled': 13900, 'Skilled': 15300, 'Highly Skilled': 16900 },
   'Jammu & Kashmir':                      { 'Unskilled': 12300, 'Semi Skilled': 13500, 'Skilled': 14900, 'Highly Skilled': 16500 },

@@ -6,7 +6,7 @@
 //   • mode="view"  — the hiring manager reads back what an interviewer recorded,
 //                    inside the candidate popup.
 //
-// Eight parameters, each rated 1–10 with an optional per-parameter remark, one
+// Eight parameters, each rated 1–10 with a MANDATORY per-parameter remark, one
 // mandatory written assessment, and a DECISION — Hold / Reject / Shortlist —
 // where Hold and Reject require a remark. The score is out of 80
 // and lands in a band so two interviewers on the same round can be compared at
@@ -97,6 +97,8 @@ export default function InterviewFeedbackForm({
   function ready(): boolean {
     const missing = FEEDBACK_PARAMS.filter(p => !params[p.k])
     if (missing.length) { setErr(`${missing.length} parameter(s) not rated — all 8 must be rated.`); return false }
+    const noRemark = FEEDBACK_PARAMS.filter(p => !(remarks[p.k] || '').trim())
+    if (noRemark.length) { setErr(`Remarks are mandatory for every parameter — ${noRemark.length} missing: ${noRemark.map(p => p.n).join(', ')}.`); return false }
     if (!overall.trim()) { setErr('Detailed feedback is mandatory.'); return false }
     setErr(null); return true
   }
@@ -148,7 +150,7 @@ export default function InterviewFeedbackForm({
         {/* parameters */}
         <div style={{ background:C.card, border:`1px solid ${C.line}`, borderRadius:12, padding:16, marginBottom:12 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-            <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.muted }}>Rate all 8 parameters</div>
+            <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.muted }}>Rate all 8 parameters{!readOnly && <span style={{ color:C.dang, textTransform:'none', letterSpacing:0, fontWeight:600 }}> — score and remark are both mandatory</span>}</div>
             <span style={{ fontSize:10, fontWeight:800, padding:'2px 9px', borderRadius:20, background: done===8?C.okbg:C.bg, color: done===8?C.ok:C.muted, border: done===8?'none':`1px solid ${C.line}` }}>{done} of 8 rated</span>
           </div>
           {FEEDBACK_PARAMS.map((p, i) => {
@@ -171,8 +173,8 @@ export default function InterviewFeedbackForm({
                   ))}
                 </div>
                 {!readOnly ? (
-                  <input value={remarks[p.k]||''} onChange={e=>setRem(p.k,e.target.value)} placeholder="Remarks for this parameter (optional)"
-                    style={{ width:'100%', marginTop:9, padding:'8px 10px', fontFamily:font, fontSize:12.5, border:`1px solid ${C.line}`, borderRadius:8, outline:'none', color:C.navy, boxSizing:'border-box' }} />
+                  <input value={remarks[p.k]||''} onChange={e=>setRem(p.k,e.target.value)} placeholder="Remarks for this parameter — mandatory"
+                    style={{ width:'100%', marginTop:9, padding:'8px 10px', fontFamily:font, fontSize:12.5, border:`1px solid ${err && !(remarks[p.k]||'').trim() ? C.dang : C.line}`, borderRadius:8, outline:'none', color:C.navy, boxSizing:'border-box' }} />
                 ) : remarks[p.k] ? (
                   <div style={{ marginTop:8, fontSize:12, color:C.muted }}><b style={{ color:C.purple }}>Remark:</b> {remarks[p.k]}</div>
                 ) : null}
