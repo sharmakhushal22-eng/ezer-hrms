@@ -7,6 +7,7 @@
 // Everything is scoped to the raiser's company: the RM2 is the raiser's own
 // l1_manager, and the HR Head is whoever holds HR_HEAD in that company.
 import { NextRequest, NextResponse } from 'next/server'
+import { jobCodePrefix, nextJobCode } from '@/lib/recruitment/job-code'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden, notify } from '@/lib/ess/session'
 
@@ -20,6 +21,21 @@ async function empBrief(id: string): Promise<Brief | null> {
 }
 
 /** The HR Head of a company = whoever holds the HR_HEAD role and belongs to it. */
+// Job code — auto-generated when the raiser leaves it blank: DEPT-DESIG-NN, numbered
+// within the company so two departments never collide and the sequence stays readable.
+async function genJobCode(companyId: string | null, departmentId: string | null, designation: string): Promise<string> {
+  let deptCode: string | null = null, deptName: string | null = null
+  if (departmentId) {
+    const { data: d } = await sb.from('departments').select('dept_code, dept_name').eq('id', departmentId).maybeSingle()
+    deptCode = d?.dept_code || null; deptName = d?.dept_name || null
+  }
+  const prefix = jobCodePrefix(deptCode, deptName, designation)
+  let q = sb.from('manpower_requisitions').select('job_code').ilike('job_code', `${prefix}%`)
+  if (companyId) q = q.eq('company_id', companyId)
+  const { data: rows } = await q
+  return nextJobCode(prefix, (rows || []).map((r: any) => r.job_code))
+}
+
 async function hrHeadFor(companyId: string | null): Promise<Brief | null> {
   if (!companyId) return null
   const { data: role } = await sb.from('ess_roles').select('id').eq('role_code', 'HR_HEAD').maybeSingle()
@@ -64,9 +80,9 @@ export async function GET(req: NextRequest) {
   const canRaise = ctx.menu.is_rm || ctx.menu.is_hod || ctx.canApprovals
 
   // All independent reads in parallel — one round-trip's worth of latency, not six.
-  const [allRes, mineRes, deptsRes, hrOptions, meRes] = await Promise.all([
+  const [allRes, mineRes, deptsRes, hrOptions, meRes, peopleRes] = await Promise.all([
     sb.from('manpower_requisitions')
-      .select('id, mrf_number, designation, position, job_title, no_of_openings, openings, reason, reason_for_hire, urgency, status, approval_chain, raised_by_name, raised_by_role, department_id, company_id, location_id, created_at, requested_by, mrf_type, hiring_type, employment_type, work_mode, grade, job_code, business_unit, currency, budget_min, budget_max, pay_period, compensation_type, target_joining_date, validity_date, business_justification, skills_required, good_to_have_skills, experience_min, experience_max, education_min, education_max, cost_center, is_budgeted, headcount_ref, sourcing_mode, departments:department_id(dept_name), companies:company_id(company_name), locations:location_id(location_name)')
+      .select('id, mrf_number, designation, position, job_title, no_of_openings, openings, reason, reason_for_hire, urgency, status, approval_chain, raised_by_name, raised_by_role, department_id, company_id, location_id, created_at, requested_by, mrf_type, hiring_type, employment_type, work_mode, grade, job_code, business_unit, currency, budget_min, budget_max, wage_category, pay_period, compensation_type, target_joining_date, validity_date, business_justification, skills_required, good_to_have_skills, experience_min, experience_max, education_min, education_max, cost_center, is_budgeted, headcount_ref, sourcing_mode, ctq_questions, departments:department_id(dept_name), companies:company_id(company_name), locations:location_id(location_name)')
       .eq('status', 'SUBMITTED').order('created_at', { ascending: false }).limit(500),
     sb.from('manpower_requisitions')
       .select('*, departments:department_id(dept_name)')
@@ -74,6 +90,9 @@ export async function GET(req: NextRequest) {
     sb.from('departments').select('id, dept_name').eq('company_id', ctx.companyId).eq('status', 'Active').order('dept_name'),
     hrTeamFor(ctx.companyId),
     sb.from('employees').select('full_name, emp_code, l1_manager_id').eq('id', me).maybeSingle(),
+    // Everyone active in the caller's company — the HR Head searches these by code / name
+    // when assigning hiring managers (recruiters are flagged via hrOptions on the client).
+    sb.from('employees').select('id, full_name, emp_code, designation').eq('company_id', ctx.companyId).eq('employment_status', 'Active').order('full_name').limit(1000),
   ])
 
   const toApprove = (allRes.data || []).filter((m: any) => {
@@ -105,7 +124,7 @@ export async function GET(req: NextRequest) {
     myAssignments = (alt.data || []).map((m: any) => ({ ...m, acknowledged: false }))
   }
 
-  return NextResponse.json({ canRaise, toApprove, mine: mineRes.data || [], departments: deptsRes.data || [], hrOptions, raiser, myAssignments })
+  return NextResponse.json({ canRaise, toApprove, mine: mineRes.data || [], departments: deptsRes.data || [], hrOptions, companyPeople: peopleRes.data || [], raiser, myAssignments })
 }
 
 export async function POST(req: NextRequest) {
@@ -134,34 +153,51 @@ export async function POST(req: NextRequest) {
     const replaceId = String(body.replace_id || '')
     if (replaceId) {
       const { data: old } = await sb.from('manpower_requisitions').select('id, requested_by, status').eq('id', replaceId).maybeSingle()
+      // Only the raiser may edit / resubmit their own requisition — enforced here, not just in the UI.
+      if (old && old.requested_by !== me && !ctx.grant.isSuperAdmin) return forbidden('Only the raiser can edit this MRF.')
       if (old && old.requested_by === me && ['SUBMITTED', 'DRAFT', 'NEEDS_REVISION'].includes(String(old.status))) {
         await sb.from('manpower_requisitions').delete().eq('id', replaceId)
       }
     }
 
-    // Is the raiser an RM2 (a second-line manager)? Read it off the grant essRoute
-    // already loaded — no extra round trips. Then fetch the RM2 (raiser's manager) and
-    // the HR Head in parallel.
+    // The chain is ALWAYS RM2 (the raiser's own manager) → HR Head. A raiser who holds
+    // the L2_MANAGER role does NOT skip the RM2 step — their manager still approves first.
+    // (isRM2 is kept only to label raised_by_role.) Fetch RM2 + HR Head in parallel.
     const isRM2 = (ctx.grant.roles || []).some((r: any) => r.role_code === 'L2_MANAGER')
     const [rm2Brief, hh] = await Promise.all([
-      (!isRM2 && meRow.l1_manager_id) ? empBrief(meRow.l1_manager_id as string) : Promise.resolve(null),
+      meRow.l1_manager_id ? empBrief(meRow.l1_manager_id as string) : Promise.resolve(null),
       hrHeadFor(meRow.company_id as string),
     ])
 
     const chain: any[] = []
-    if (rm2Brief) {
+    if (rm2Brief && rm2Brief.id !== me) {
       chain.push({ order: 1, role: 'RM2', approver_id: rm2Brief.id, approver_name: rm2Brief.name, approver_code: rm2Brief.code, status: 'PENDING', acted_at: null, comment: null })
     }
-    if (hh && hh.id !== me) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
+    // HR Head is the final step — skipped only if they are the raiser or already the RM2 step.
+    if (hh && hh.id !== me && hh.id !== rm2Brief?.id) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
     if (status === 'SUBMITTED' && !chain.length) return NextResponse.json({ error: 'No approver could be found — your company has no HR Head / manager set. Please contact HR.' }, { status: 400 })
 
     const openings = Math.max(1, Number(body.openings) || 1)
     const nOrNull = (v: any) => (v === '' || v === null || v === undefined) ? null : (Number(v) || null)
+    // Salary / stipend range must be ordered — enforced server-side as well as in the form.
+    { const bMin = nOrNull(body.budget_min), bMax = nOrNull(body.budget_max)
+      if (bMin && bMax && bMin > bMax) return NextResponse.json({ error: `Budget minimum (₹${bMin.toLocaleString('en-IN')}) cannot be more than the maximum (₹${bMax.toLocaleString('en-IN')}).` }, { status: 400 }) }
     const sOrNull = (v: any) => { const s = String(v ?? '').trim(); return s || null }
     const isBudgeted = body.is_budgeted === '' || body.is_budgeted == null ? null : (body.is_budgeted === 'yes' || body.is_budgeted === true)
     const reason = sOrNull(body.reason)
 
-    const { data: created, error } = await sb.from('manpower_requisitions').insert({
+    const jobCode = sOrNull(body.job_code) || await genJobCode(meRow.company_id as string, meRow.department_id as string, designation)
+    // The form reserves an MRF number when it opens; honour it unless another row already took
+    // it (a resubmit deleted its old row above, so the same number is free again). Otherwise
+    // the DB default assigns one.
+    const wantedNo = sOrNull(body.mrf_number)
+    let reservedNo: string | null = null
+    if (wantedNo && /^MRF-\d{4}-\d{5}$/.test(wantedNo)) {
+      const { data: clash } = await sb.from('manpower_requisitions').select('id').eq('mrf_number', wantedNo).maybeSingle()
+      if (!clash) reservedNo = wantedNo
+    }
+    const mrfRow: Record<string, any> = {
+      ...(reservedNo ? { mrf_number: reservedNo } : {}),
       // company & department are LOCKED to the raiser — never taken from the client.
       company_id: meRow.company_id,
       department_id: meRow.department_id || null,
@@ -170,11 +206,13 @@ export async function POST(req: NextRequest) {
       no_of_openings: openings, openings,
       mrf_type: sOrNull(body.mrf_type), hiring_type: sOrNull(body.hiring_type),
       urgency: sOrNull(body.urgency) || 'MEDIUM',
-      business_unit: sOrNull(body.business_unit), grade: sOrNull(body.grade), job_code: sOrNull(body.job_code),
+      business_unit: sOrNull(body.business_unit), grade: sOrNull(body.grade), job_code: jobCode,
       employment_type: sOrNull(body.employment_type) || 'Employee',
       work_mode: sOrNull(body.work_mode), location_id: body.location_id || null, shift_schedule: sOrNull(body.shift_schedule),
       cost_center: sOrNull(body.cost_center), is_budgeted: isBudgeted, headcount_ref: sOrNull(body.headcount_ref),
       currency: sOrNull(body.currency) || 'INR', budget_min: nOrNull(body.budget_min), budget_max: nOrNull(body.budget_max),
+      wage_category: sOrNull(body.wage_category),   // Unskilled / Semi Skilled / Skilled / Highly Skilled — drives minimum wage in negotiation
+      ctq_questions: Array.isArray(body.ctq_questions) ? body.ctq_questions.map((q: any) => String(q).trim()).filter(Boolean) : [],   // questions interviewers should ask
       compensation_type: sOrNull(body.compensation_type), pay_period: sOrNull(body.pay_period), duration_months: nOrNull(body.duration_months),
       reason, reason_for_hire: reason,
       outgoing_employee_id: body.outgoing_employee_id || null, exit_reason: sOrNull(body.exit_reason),
@@ -194,18 +232,42 @@ export async function POST(req: NextRequest) {
       rm2_id: (meRow.l1_manager_id as string) || null, // new hire's RM2 = raiser's manager
       hod_id: body.hod_id || null,
       approval_chain: chain,
-    }).select('id').single()
+    }
+    let { data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single()
+    // Until migration 130 adds manpower_requisitions.wage_category, PostgREST rejects the
+    // unknown column — drop it and retry rather than blocking every MRF from being raised.
+    if (error && /wage_category/i.test(error.message || '')) {
+      delete mrfRow.wage_category
+      ;({ data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single())
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, id: created.id, status })
+    return NextResponse.json({ ok: true, id: created?.id, mrf_number: created?.mrf_number || null, status })
   }
 
   // ── Approve / reject / send back for revision ──────────────────────────────
   if (action === 'approve' || action === 'reject' || action === 'revise') {
     const id = String(body.id || '')
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
-    const { data: mrf } = await sb.from('manpower_requisitions').select('id, status, approval_chain, requested_by, designation, position, mrf_number').eq('id', id).maybeSingle()
+    const { data: mrf } = await sb.from('manpower_requisitions').select('id, status, approval_chain, requested_by, designation, position, mrf_number, assigned_recruiter_ids').eq('id', id).maybeSingle()
     if (!mrf) return NextResponse.json({ error: 'MRF not found' }, { status: 404 })
     const chain = Array.isArray(mrf.approval_chain) ? mrf.approval_chain.map((s: any) => ({ ...s })) : []
+
+    // ── Hiring-manager send-back: the assigned hiring manager can return an APPROVED MRF
+    //    to the raiser for changes — the same NEEDS_REVISION flow the approvers use. ──
+    if (action === 'revise' && mrf.status === 'APPROVED') {
+      const assigned: string[] = Array.isArray((mrf as any).assigned_recruiter_ids) ? (mrf as any).assigned_recruiter_ids : []
+      if (!assigned.includes(me) && !ctx.grant.isSuperAdmin) return forbidden('Only the assigned hiring manager can send this MRF back.')
+      const hmNote = String(body.note || '').trim()
+      if (!hmNote) return NextResponse.json({ error: 'Add a remark explaining what to fix.' }, { status: 400 })
+      const meB = await empBrief(me)
+      chain.push({ order: chain.length + 1, role: 'HIRING_MANAGER', approver_id: me, approver_name: meB?.name || null, approver_code: meB?.code || null, status: 'REVISION', acted_at: new Date().toISOString(), comment: hmNote })
+      await sb.from('manpower_requisitions').update({ approval_chain: chain, status: 'NEEDS_REVISION', remarks: hmNote }).eq('id', id)
+      const label = `${mrf.designation || mrf.position || 'your requisition'}${mrf.mrf_number ? ` (${mrf.mrf_number})` : ''}`
+      await notify(mrf.requested_by as string, 'MRF sent back by the hiring manager',
+        `${label} was sent back by ${meB?.name || 'the hiring manager'}: “${hmNote}”. Open Tasks & Approvals to edit and resubmit it.`, '/ess?tab=approvals', 'MRF')
+      return NextResponse.json({ ok: true, sentBack: true })
+    }
+
     const cur = chain.find((s: any) => s.status === 'PENDING')
     if (!cur) return NextResponse.json({ error: 'This MRF is not awaiting approval.' }, { status: 400 })
     if (cur.approver_id !== me && !ctx.grant.isSuperAdmin) return forbidden('This MRF is not waiting on you.')

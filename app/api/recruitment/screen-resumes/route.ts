@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
       throw new Error('Empty resume text after extraction')
     }
 
-    const apiKey = process.env.GEMINI_API_KEY
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_API_KEY
     if (!apiKey) {
       return NextResponse.json(
         { score: 0, ats_score: 0, match_tag: 'NOT_SUITABLE', matched_skills: [], missing_skills: [], reasoning: 'GEMINI_API_KEY is not configured on the server', candidate_name },
