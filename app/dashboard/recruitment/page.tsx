@@ -4411,8 +4411,19 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   const docsReceived = (c:Candidate) => docStatusMap[c.id]==='SUBMITTED'
   // Once documents are received, the candidate STAYS in Pre-negotiation Checks (with a
   // "Documents received" badge) rather than disappearing — the recruiter reviews them here.
+  // Latest salary-link response per candidate. An ACCEPTED candidate has left negotiation —
+  // they show up in Offer Approval instead, so the CTC list drops them.
+  const [respMap, setRespMap] = useState<Record<string,string>>({})
+  useEffect(()=>{
+    supabase.from('ctc_negotiations').select('candidate_id, candidate_response, created_at').order('created_at',{ascending:false})
+      .then(({data}:any)=>{
+        const m:Record<string,string> = {}
+        for (const r of data||[]) { if(!(r.candidate_id in m) && r.candidate_response) m[r.candidate_id]=r.candidate_response }
+        setRespMap(m)
+      })
+  },[candidates])
   const checksCands = finalCands.filter((c:Candidate)=>!c.pre_negotiation_done || docsReceived(c))
-  const ctcCands = finalCands.filter((c:Candidate)=>c.pre_negotiation_done)
+  const ctcCands = finalCands.filter((c:Candidate)=>c.pre_negotiation_done && respMap[c.id]!=='ACCEPTED')
   const activeList = subTab==='checks' ? checksCands : ctcCands
   const shownCands = activeList
     .filter((c:Candidate)=>!negQ || c.full_name.toLowerCase().includes(negQ.toLowerCase()))
@@ -4446,15 +4457,6 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   const [saving, setSaving] = useState(false)
   const [savedLink, setSavedLink] = useState<string|null>(null)
   const [loadedNeg, setLoadedNeg] = useState<any>(null)
-  const [respMap, setRespMap] = useState<Record<string,string>>({})
-  useEffect(()=>{
-    supabase.from('ctc_negotiations').select('candidate_id, candidate_response, created_at').order('created_at',{ascending:false})
-      .then(({data}:any)=>{
-        const m:Record<string,string> = {}
-        for (const r of data||[]) { if(!(r.candidate_id in m) && r.candidate_response) m[r.candidate_id]=r.candidate_response }
-        setRespMap(m)
-      })
-  },[candidates])
   async function rejectCand(c:Candidate, e:React.MouseEvent) {
     e.stopPropagation()
     if (!window.confirm(`Move ${c.full_name} to Rejected? They'll leave the negotiation list.`)) return

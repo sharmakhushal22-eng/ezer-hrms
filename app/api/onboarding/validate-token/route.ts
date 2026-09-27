@@ -18,12 +18,19 @@ export async function GET(req: NextRequest) {
       id, full_name, email, mobile, designation, department,
       employment_type, date_of_joining, offered_ctc, status,
       current_step, form_data, otp_verified, token_expires_at,
-      company_id, companies(company_name, company_code)
+      company_id
     `)
     .eq('magic_link_token', token)
     .single()
 
   if (error || !data) return NextResponse.json({ error: 'Invalid token' }, { status: 404 })
+  // onboarding_candidates.company_id has no foreign key, so PostgREST cannot embed companies —
+  // the old `companies(...)` join made EVERY magic link answer "Invalid token". Look it up.
+  let companies: { company_name: string | null; company_code: string | null } | null = null
+  if (data.company_id) {
+    const { data: co } = await supa.from('companies').select('company_name, company_code').eq('id', data.company_id).maybeSingle()
+    companies = co ? { company_name: co.company_name ?? null, company_code: co.company_code ?? null } : null
+  }
   if (new Date(data.token_expires_at) < new Date()) return NextResponse.json({ error: 'Link expired. Contact HR.' }, { status: 410 })
   if (data.status === 'EMPLOYEE_CREATED') return NextResponse.json({ error: 'ALREADY_COMPLETE', employee_code: true }, { status: 409 })
 
@@ -37,5 +44,5 @@ export async function GET(req: NextRequest) {
     user_agent:    req.headers.get('user-agent') || null,
   })
 
-  return NextResponse.json({ success: true, candidate: data })
+  return NextResponse.json({ success: true, candidate: { ...data, companies } })
 }

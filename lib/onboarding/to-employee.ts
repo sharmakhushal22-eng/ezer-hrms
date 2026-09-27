@@ -42,12 +42,6 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   const orNull = (v: any) => (v === '' || v === undefined || v === null) ? null : v
   const pin = (v: any) => { const d = String(v ?? '').replace(/\D/g, ''); return d || null }
   // Previous company = most recent prior employer (latest to_date, else first listed).
-  const prevCompany = (() => {
-    const emps = (em.prev_employers || []).filter((p: any) => p && p.company)
-    if (!emps.length) return em.prev_company || null
-    const sorted = [...emps].sort((a: any, b: any) => String(b.to || '').localeCompare(String(a.to || '')))
-    return sorted[0].company || null
-  })()
   const join = (...xs: any[]) => { const s = xs.filter(Boolean).join(', ').trim(); return s || null }
   // Residential = current address; if "same as permanent" was ticked, mirror the permanent block.
   const sameAddr = ct.same_address === true
@@ -137,7 +131,7 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     account_type:    st.account_type || null,
     // ── HR activation wizard fields ──
     grade:                  oc.grade || null,
-    reporting_manager_id:   oc.l1_manager_id || null,
+    l1_manager_id:          oc.l1_manager_id || null,   // employees.l1_manager_id (there is no reporting_manager_id column)
     tds_regime:             oc.tds_regime || 'NEW',
     pf_wage_type:           oc.pf_wage_type || 'BASIC_DA',
     pf_applicable:          oc.pf_applicable ?? true,
@@ -147,7 +141,7 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     induction_date:         oc.induction_date || null,
     team_name:              oc.team_name || null,
     work_location_type:     oc.work_location_type || 'Office',
-    previous_company:       prevCompany,
+    // previous employer: employees has no previous_company column — it lives in employee_experience (below)
   }
 
   const { data: ins, error } = await supa.from('employees').insert(row).select('id').single()
@@ -176,9 +170,12 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     })))
 
     const exp = (f.step_5?.prev_employers || []).filter((p: any) => p.company)
+    // from/to arrive as "YYYY-MM" from a month picker; the column is a date, and a bad
+    // value used to fail the whole (non-fatal) insert and silently drop every employer.
+    const asDate = (v: any) => { const t = String(v || '').trim(); return /^\d{4}-\d{2}$/.test(t) ? `${t}-01` : (t || null) }
     if (exp.length) await supa.from('employee_experience').insert(exp.map((p: any) => ({
       employee_id: empId, company: p.company || null, designation: p.designation || null,
-      from_date: p.from || null, to_date: p.to || null, reason_for_change: p.reason || null,
+      from_date: asDate(p.from), to_date: asDate(p.to), reason_for_change: p.reason || null,
     })))
 
     const ins0 = st.insurance || {}

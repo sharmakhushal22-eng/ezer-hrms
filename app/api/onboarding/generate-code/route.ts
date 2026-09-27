@@ -113,6 +113,21 @@ export async function POST(req: NextRequest) {
     try { employeeSync = await onboardingToEmployee(supa, onboarding_id, finalCode) }
     catch (e: any) { employeeSync = { error: e?.message || 'sync failed' } }
 
+    // The employee row IS the outcome. If it could not be written, put the onboarding back
+    // in HR review (the reserved number is never reused) and tell HR why, instead of
+    // reporting success with no employee in the master.
+    if (!employeeSync.ok) {
+      const why = employeeSync.error || 'employee record could not be created'
+      await supa.from('onboarding_candidates').update({
+        status: 'HR_REVIEW', employee_code: null, hr_notes: `Employee creation failed (${finalCode}): ${why}`,
+      }).eq('id', onboarding_id)
+      await supa.from('onboarding_audit_log').insert({
+        onboarding_id, action: 'EMPLOYEE_SYNC_FAILED', actor_type: 'HR', actor_id: approved_by || null,
+        details: { employee_code: finalCode, error: why },
+      })
+      return NextResponse.json({ error: `Employee record could not be created: ${why}. The onboarding is back in HR review — fix the data and generate the code again.`, employee_code: finalCode, employee_synced: false, sync_error: why }, { status: 500 })
+    }
+
     await supa.from('onboarding_statutory_enrollment').update({
       enrolled_at: new Date().toISOString(), enrolled_by: approved_by || null,
     }).eq('onboarding_id', onboarding_id)
