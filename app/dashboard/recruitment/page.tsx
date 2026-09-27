@@ -3554,6 +3554,8 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       const fixedRs = toRs(cForm.current_fixed) || null
       const varRs = toRs(cForm.current_variable) || null
       const expRs = toRs(cForm.expected_ctc) || null
+      const absurd = [fixedRs, varRs, expRs].find(v => v != null && (v > 1e8 || (v > 0 && v < 1000)))
+      if (absurd != null) { showNotify(`CTC ₹${absurd.toLocaleString('en-IN')} doesn’t look right — enter the full annual amount in rupees (e.g. 840000 for 8.4 LPA).`,'error'); return }
       // Knockout screening: a "No" on either question drops the candidate into Rejected.
       const knockedOut = cForm.q1==='No' || cForm.q2==='No'
       const stage = knockedOut ? 'Rejected' : cForm.stage
@@ -4742,7 +4744,10 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
     : ''
   const calc = useMemo(()=>{
     if (!model || !model.ok) return null
-    const hike = sel?.current_ctc ? ((model.ctcAnnual-sel.current_ctc)/sel.current_ctc*100).toFixed(1) : null
+    // Hike needs a believable current CTC (₹1,000 – ₹10 crore a year). Anything else is bad
+    // data (the old LPA-unit bug stored ₹2,000 crore) and would print a meaningless −100%.
+    const curCtc = Number(sel?.current_ctc)||0
+    const hike = curCtc >= 1000 && curCtc <= 1e8 ? ((model.ctcAnnual-curCtc)/curCtc*100).toFixed(1) : null
     return { ...model, hike,
       minWage:mw.amount, minWageSource:mw.source, state:form.state, category:form.category,
       gratuity:form.gratuity, bonusPct:Number(form.bonusPct)||0, bonusMode:form.bonusMode,

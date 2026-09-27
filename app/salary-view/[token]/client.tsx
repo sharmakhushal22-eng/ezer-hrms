@@ -282,6 +282,9 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
   const esicEmp = Math.round(calc.esicEmployee ?? calc.esicEmp ?? 0)
   // The statement — identical rows to the recruiter's Salary Breakdown Statement.
   const stmtRows: StmtRow[] | null = hasStatement(calc) ? ctcStatementRows(calc, { state: calc.state || '' }) : null
+  // Hike is shown only when it is believable; a −100% from a corrupt current CTC is hidden.
+  const hikeRaw = data.hike_pct == null ? null : Number(data.hike_pct)
+  const hikeShown = hikeRaw != null && isFinite(hikeRaw) && hikeRaw > -90 && hikeRaw < 1000 ? hikeRaw : null
   const ptMonthly = Math.round(calc.ptMonthly || 0)
   const inHand = Math.round(calc.inHand ?? data.net_monthly ?? 0)
   const otherAllow = Math.round(calc.otherAllow || 0)
@@ -479,13 +482,13 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
             rows as the recruiter's Salary Breakdown Statement (lib/recruitment/ctc-statement),
             so every figure here matches the calculator to the rupee. */}
         {!isStipend && stmtRows && (
-          <StatementCard rows={stmtRows} hikePct={data.hike_pct} />
+          <StatementCard rows={stmtRows} hikePct={hikeShown} />
         )}
         {!isStipend && !stmtRows && (
           <div style={{ ...S.card, border:`2px solid ${TK.brandEdge}` }}>
             <div style={{ background:TK.brand, padding:'10px 16px', color:TK.onAccent, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
               <span style={{ fontSize:13, fontWeight:600 }}>Salary Breakdown</span>
-              {data.hike_pct ? <span style={{ fontSize:11, fontWeight:600, background:'rgba(255,255,255,0.2)', padding:'3px 10px', borderRadius:99 }}>Hike: {Number(data.hike_pct).toFixed(1)}%</span> : null}
+              {hikeShown != null ? <span style={{ fontSize:11, fontWeight:600, background:'rgba(255,255,255,0.2)', padding:'3px 10px', borderRadius:99 }}>Hike: {hikeShown.toFixed(1)}%</span> : null}
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1fr) 96px 110px', gap:6, padding:'7px 16px', background:TK.brandTint, borderBottom:`1px solid ${TK.brandEdge}`, fontSize:10, fontWeight:700, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' }}>
               <span>Component</span><span style={{ textAlign:'right' as const }}>Monthly (₹)</span><span style={{ textAlign:'right' as const }}>Annual (₹)</span>
