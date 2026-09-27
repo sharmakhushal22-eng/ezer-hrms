@@ -32,7 +32,7 @@ import { C as TK, E } from '@/lib/ui'
 const C = {
   ink: TK.ink, muted: TK.muted, faint: TK.faint, border: TK.line, card: TK.surface,
   purple: TK.brand, purpleD: TK.brandDeep, soft: TK.brandTint, green: TK.positive, greenBg: TK.positiveTint,
-  amber: TK.warning, red: TK.critical, redBg: TK.criticalTint, bg: TK.canvas, locked: TK.sunken,
+  amber: TK.warning, amberEdge: TK.warningEdge, red: TK.critical, redEdge: TK.criticalEdge, redBg: TK.criticalTint, bg: TK.canvas, locked: TK.sunken,
 }
 // ── The redesign vocabulary, ported by hand ──────────────────────────────────
 //
@@ -156,7 +156,7 @@ function QuestionsList({ value, onChange }: { value: string[]; onChange: (v: str
         <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: C.faint, width: 18, textAlign: 'right' }}>{i + 1}.</span>
           <input style={{ ...st.input, flex: 1 }} value={q} onChange={e => set(i, e.target.value)} placeholder="e.g. Walk me through a project where you owned the outcome end-to-end" />
-          <button type="button" onClick={() => del(i)} style={{ border: `1px solid ${C.red}44`, background: C.redBg, color: C.red, borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>Remove</button>
+          <button type="button" onClick={() => del(i)} style={{ border: `1px solid ${C.redEdge}`, background: C.redBg, color: C.red, borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>Remove</button>
         </div>
       ))}
       <div><button type="button" onClick={() => onChange([...value, ''])} style={{ border: `1px solid ${C.purple}55`, background: C.soft, color: C.purpleD, borderRadius: 7, padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 }}>+ Add question</button></div>
@@ -692,7 +692,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
             ) : (
               <>
                 <button type="button" style={{ ...st.btnO, borderColor: C.red, color: C.red }} disabled={actionBusy} onClick={() => onReject?.(sbNote)}>Reject</button>
-                <button type="button" style={{ ...st.btnO, borderColor: '#FDE68A', color: C.amber }} disabled={actionBusy} onClick={() => setSbOpen(true)}>↩ Send back</button>
+                <button type="button" style={{ ...st.btnO, borderColor: C.amberEdge, color: C.amber }} disabled={actionBusy} onClick={() => setSbOpen(true)}>↩ Send back</button>
                 <button type="button" style={{ ...st.btn, background: C.green, marginLeft: 'auto' }} disabled={actionBusy} onClick={() => onApprove?.()}>{actionBusy ? 'Approving…' : 'Approve'}</button>
               </>
             )}

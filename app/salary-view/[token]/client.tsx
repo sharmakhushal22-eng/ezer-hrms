@@ -96,10 +96,10 @@ export default function SalaryViewClient({ token, gate }: { token: string; gate:
     return () => { alive = false }
   }, [access, token])
 
-  if (!checked) return <div style={{ minHeight:'100vh', background:'#F5F3FF' }} />
+  if (!checked) return <div style={{ minHeight:'100vh', background:TK.canvas }} />
   if (!access) return <OtpGate token={token} gate={gate} error={loadErr} onVerified={a => { try { sessionStorage.setItem(accessKey(token), a) } catch {} setLoadErr(''); setAccess(a) }} />
   if (!loaded) return (
-    <div style={{ minHeight:'100vh', background:'#F5F3FF', display:'grid', placeItems:'center', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:TK.faint, fontSize:13 }}>{loadErr || 'Opening your offer…'}</div>
+    <div style={{ minHeight:'100vh', background:TK.canvas, display:'grid', placeItems:'center', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:TK.faint, fontSize:13 }}>{loadErr || 'Opening your offer…'}</div>
   )
   return <SalaryViewBody data={loaded.data} meta={loaded.meta} token={token} access={access} />
 }
@@ -143,7 +143,7 @@ function OtpGate({ token, gate, error, onVerified }: { token: string; gate: Gate
   const inp: React.CSSProperties = { width:'100%', padding:'11px 12px', border:`1px solid ${TK.brandEdge}`, borderRadius:8, fontSize:15, fontFamily:font, color:TK.ink, background:TK.surface, outline:'none', boxSizing:'border-box' }
   const btn = (bg: string, dis?: boolean): React.CSSProperties => ({ width:'100%', padding:'11px 14px', borderRadius:8, border:'none', background:bg, color:TK.onAccent, fontSize:14, fontWeight:600, fontFamily:font, cursor: dis ? 'not-allowed' : 'pointer', opacity: dis ? .6 : 1 })
   return (
-    <div style={{ minHeight:'100vh', background:'#F5F3FF', display:'flex', alignItems:'center', justifyContent:'center', padding:16, fontFamily:font, color:TK.ink }}>
+    <div style={{ minHeight:'100vh', background:TK.canvas, display:'flex', alignItems:'center', justifyContent:'center', padding:16, fontFamily:font, color:TK.ink }}>
       <div style={{ width:'min(420px, 100%)', background:TK.surface, borderRadius:16, border:`1px solid ${TK.brandEdge}`, boxShadow:'0 12px 40px rgba(124,58,237,0.10)', padding:'24px 22px' }}>
         <div style={{ fontSize:11, color:TK.brandDeep, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em' }}>{gate.companyName || 'Your offer'}</div>
         <div style={{ fontSize:20, fontWeight:700, marginTop:4 }}>{gate.isStipend ? 'Your stipend offer' : 'Your salary offer'}{gate.candidateName ? ` — ${gate.candidateName.split(' ')[0]}` : ''}</div>
@@ -154,7 +154,7 @@ function OtpGate({ token, gate, error, onVerified }: { token: string; gate: Gate
         ) : step === 'email' ? (
           <>
             <label style={{ display:'block', fontSize:11, fontWeight:700, color:TK.brandDeep, textTransform:'uppercase', letterSpacing:'.06em', marginTop:18, marginBottom:5 }}>Registered email</label>
-            <input value={gate.maskedEmail} readOnly style={{ ...inp, background:'#F7F6FD', color:TK.inkSoft, letterSpacing:.5 }} />
+            <input value={gate.maskedEmail} readOnly style={{ ...inp, background:TK.sunken, color:TK.inkSoft, letterSpacing:.5 }} />
             <div style={{ fontSize:11, color:TK.faint, marginTop:5 }}>This is the email your recruiter has on record. Not yours? Contact your recruiter.</div>
             {err && <div style={{ marginTop:12, padding:'9px 12px', borderRadius:8, background:TK.criticalTint, color:TK.critical, fontSize:12.5, fontWeight:600 }}>{err}</div>}
             <button onClick={sendOtp} disabled={busy} style={{ ...btn(TK.brand, busy), marginTop:16 }}>{busy ? 'Sending…' : 'Send OTP'}</button>
@@ -471,7 +471,7 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
       <div style={{ maxWidth:680, margin:'0 auto', padding:'16px' }}>
 
         {/* Offer validity — 7 days from when the link was sent; Accept disappears after */}
-        <div style={{ background: offerExpired ? TK.criticalTint : validityUrgent ? TK.warningTint : TK.surface, border: `1px solid ${offerExpired ? '#FCA5A5' : validityUrgent ? '#FDE68A' : TK.brandEdge}`, borderRadius:14, padding:'12px 16px', marginBottom:14, boxShadow:'0 4px 14px rgba(30,27,75,0.06)' }}>
+        <div style={{ background: offerExpired ? TK.criticalTint : validityUrgent ? TK.warningTint : TK.surface, border: `1px solid ${offerExpired ? TK.criticalEdge : validityUrgent ? TK.warningEdge : TK.brandEdge}`, borderRadius:14, padding:'12px 16px', marginBottom:14, boxShadow:'0 4px 14px rgba(30,27,75,0.06)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' as const }}>
             <div style={{ fontSize:22 }}>{offerExpired ? '⌛' : validityUrgent ? '⏰' : '🗓️'}</div>
             <div style={{ flex:1, minWidth:180 }}>
@@ -486,7 +486,7 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
               {offerExpired ? 'Please contact your recruiter' : <>Valid till<br /><b style={{ color:TK.inkSoft }}>{expiresAtLabel}</b></>}
             </div>
           </div>
-          <div style={{ height:6, background:'#E9E7F5', borderRadius:99, overflow:'hidden', marginTop:10 }}>
+          <div style={{ height:6, background:TK.line, borderRadius:99, overflow:'hidden', marginTop:10 }}>
             <div style={{ width:`${mounted ? validityPct : 100}%`, height:'100%', background: offerExpired ? TK.critical : validityUrgent ? TK.warning : TK.brand, borderRadius:99, transition:'width .5s' }} />
           </div>
         </div>
@@ -629,7 +629,7 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
                 {(['new','old'] as const).map(r => (
                   <button key={r} onClick={() => { setRegime(r); setSelectedFBP(new Set()) }}
-                    style={{ padding:12, border:regime===r?'none':'1px solid #DDD6FE', borderRadius:10, cursor:'pointer', fontFamily:'inherit', background:regime===r?TK.brand:TK.sunken, color:regime===r?TK.surface:TK.muted, fontWeight:regime===r?600:400 }}>
+                    style={{ padding:12, border:regime===r?'none':`1px solid ${TK.brandEdge}`, borderRadius:10, cursor:'pointer', fontFamily:'inherit', background:regime===r?TK.brand:TK.sunken, color:regime===r?TK.surface:TK.muted, fontWeight:regime===r?600:400 }}>
                     <div style={{ fontSize:13 }}>{r==='new'?'New Regime':'Old Regime'}</div>
                     <div style={{ fontSize:10, marginTop:2, opacity:.8 }}>{r==='new'?'Default | 6 FBP components':'All 11 FBP components'}</div>
                   </button>
@@ -676,8 +676,8 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
                 const unaffordable = !isSelected && fbpCostOf(c.code, c.paired) > fbpRemaining
                 return (
                   <div key={c.code} onClick={() => toggleFBP(c.code, c.paired)} title={unaffordable ? 'Exceeds the Special Allowance balance' : undefined}
-                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:10, marginBottom:6, cursor: unaffordable ? 'not-allowed' : 'pointer', opacity: unaffordable ? .45 : 1, background:isSelected?TK.brandTint:TK.sunken, border:isSelected?'2px solid #2563EB':'1px solid #E5E7EB', transition:'all .15s' }}>
-                    <div style={{ width:18, height:18, borderRadius:7, border:isSelected?'none':'2px solid #DDD6FE', background:isSelected?TK.brand: TK.surface, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:10, marginBottom:6, cursor: unaffordable ? 'not-allowed' : 'pointer', opacity: unaffordable ? .45 : 1, background:isSelected?TK.brandTint:TK.sunken, border:isSelected?`2px solid ${TK.brand}`:`1px solid ${TK.line}`, transition:'all .15s' }}>
+                    <div style={{ width:18, height:18, borderRadius:7, border:isSelected?'none':`2px solid ${TK.brandEdge}`, background:isSelected?TK.brand: TK.surface, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
                       {isSelected && <span style={{ color:TK.onAccent, fontSize:12, fontWeight:700 }}></span>}
                     </div>
                     <div style={{ flex:1 }}>
@@ -805,7 +805,7 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
 
         {/* Accept / Reject the offer */}
         {response ? (
-          <div style={{ background: response==='ACCEPTED'?TK.positiveTint:TK.criticalTint, border:`1px solid ${response==='ACCEPTED'?'#A7F3D0':'#FCA5A5'}`, borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
+          <div style={{ background: response==='ACCEPTED'?TK.positiveTint:TK.criticalTint, border:`1px solid ${response==='ACCEPTED'?TK.positiveEdge:TK.criticalEdge}`, borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
             <div style={{ fontSize:26, marginBottom:8 }}>{response==='ACCEPTED'?'':''}</div>
             <div style={{ fontSize:15, fontWeight:600, color: response==='ACCEPTED'?TK.positive:TK.critical, marginBottom:4 }}>
               {response==='ACCEPTED' ? 'You have accepted this offer' : 'You have declined this offer'}
@@ -820,7 +820,7 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
           <div style={{ background:TK.canvas, border: `1px solid ${TK.brandEdge}`, borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
             <div style={{ fontSize:14, fontWeight:600, color: offerExpired ? TK.critical : TK.brandDeep, marginBottom:12 }}>{offerExpired ? 'Acceptance window closed' : 'Would you like to accept this offer?'}</div>
             {offerExpired ? (
-              <div style={{ background:TK.criticalTint, border:'1px solid #FCA5A5', borderRadius:10, padding:'10px 14px', fontSize:13, color:TK.critical, fontWeight:600, lineHeight:1.55 }}>
+              <div style={{ background:TK.criticalTint, border:`1px solid ${TK.criticalEdge}`, borderRadius:10, padding:'10px 14px', fontSize:13, color:TK.critical, fontWeight:600, lineHeight:1.55 }}>
                 This offer link expired on {expiresAtLabel}. The acceptance window has closed — please contact your recruiter for a fresh offer.
               </div>
             ) : mounted && (

@@ -4,7 +4,7 @@
 // localStorage session; MrfApprovals in focus mode opens the review popup directly.
 import { useEffect, useState } from 'react'
 import { MrfApprovals } from '@/components/ess/RoleTabs'
-import { C } from '@/lib/ui'
+import { C, Z } from '@/lib/ui'
 
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -30,8 +30,8 @@ export default function MrfApproveClient({ id }: { id: string }) {
   return (
     <div style={{ minHeight: '100vh', background: C.canvas, fontFamily: font }}>
       {/* top bar */}
-      <div style={{ background: `linear-gradient(135deg, ${C.brand}, #4F46E5)`, color: C.onAccent, padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={goBack} style={{ padding: '6px 13px', borderRadius: 7, border: '1px solid rgba(255,255,255,.3)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>← Back</button>
+      <div style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: C.onAccent, padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button onClick={goBack} style={{ padding: '6px 13px', borderRadius: 7, border: '1px solid rgba(255,255,255,.3)', background: 'transparent', color: C.onAccent, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>← Back</button>
         <div style={{ fontSize: 14, fontWeight: 700 }}>MRF Approval</div>
       </div>
 
@@ -40,7 +40,7 @@ export default function MrfApproveClient({ id }: { id: string }) {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: toast.t === 'error' ? C.critical : C.positive, color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, fontFamily: font, boxShadow: '0 8px 24px rgba(30,27,75,.3)' }}>{toast.m}</div>
+        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: Z.toast, background: toast.t === 'error' ? C.critical : C.positive, color: C.onAccent, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, fontFamily: font, boxShadow: '0 8px 24px rgba(0,0,0,.3)' }}>{toast.m}</div>
       )}
     </div>
   )

@@ -4,11 +4,25 @@
 // registered email (Get OTP → verify) before any documents are shown or accepted.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { COLLECT_DOCS, DOC_GROUPS } from '@/lib/recruitment/collect-docs'
+// Aliased: this file already declares its own C, the local naming shim below.
+import { C as TK } from '@/lib/ui'
 
+// Fourteen frozen literals, now fourteen tokens. The values were the whole
+// pre-rebrand purple family (#7C3AED / #4F46E5) over a #F5F3FF lilac page —
+// the palette the product stopped using at the rebrand. A hex resolves through
+// nothing, so this page could never follow the theme.
+//
+// WARNING for anyone editing below: these are now var() references, so a
+// value here can NO LONGER carry an alpha suffix. `${C.dang}44` used to build
+// a valid #DC262644; against a token it builds `var(--ez-critical)44`, which
+// is invalid CSS and makes the whole border shorthand vanish — silently, with
+// no console error and nothing for the colour ratchet to catch, because the
+// result contains no hex at all. Three sites in this file did exactly that and
+// were rewritten to the *Edge/*Tint tokens in the same change.
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', pdark: '#4F46E5', card: '#FFFFFF',
-  line: '#E9E7F5', muted: '#6B6890', faint: '#9C99B8', ok: '#059669', okbg: '#ECFDF5',
-  warn: '#B45309', warnbg: '#FEF3C7', dang: '#DC2626', dangbg: '#FEF2F2',
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, pdark: TK.brandDeep, card: TK.surface,
+  line: TK.line, muted: TK.muted, faint: TK.faint, ok: TK.positive, okbg: TK.positiveTint,
+  warn: TK.warning, warnbg: TK.warningTint, dang: TK.critical, dangbg: TK.criticalTint,
 }
 const font = '"DM Sans","Segoe UI",system-ui,sans-serif'
 
@@ -174,10 +188,10 @@ export default function CollectDocsClient({ token }: { token: string }) {
 
   // ── OTP login gate ──
   if (s.gate === 'otp' || !s.authed) {
-    const inp: React.CSSProperties = { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1px solid ${C.line}`, background: '#FAFAFF', fontSize: 15, fontFamily: font, color: C.navy, outline: 'none', boxSizing: 'border-box' }
+    const inp: React.CSSProperties = { width: '100%', padding: '12px 14px', borderRadius: 10, border: `1px solid ${C.line}`, background: TK.sunken, fontSize: 15, fontFamily: font, color: C.navy, outline: 'none', boxSizing: 'border-box' }
     return (
       <Page>
-        <div style={{ background: `linear-gradient(135deg, ${C.purple}, ${C.pdark})`, color: '#fff', padding: '26px 20px 30px' }}>
+        <div style={{ background: `linear-gradient(135deg, ${C.purple}, ${C.pdark})`, color: TK.onAccent, padding: '26px 20px 30px' }}>
           <div style={{ maxWidth: 480, margin: '0 auto' }}>
             <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', opacity: .85 }}>{s.company_name || 'EZER HRMS'}</div>
             <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>Document Submission</div>
@@ -185,7 +199,7 @@ export default function CollectDocsClient({ token }: { token: string }) {
           </div>
         </div>
         <div style={{ maxWidth: 480, margin: '-18px auto 0', padding: '0 16px' }}>
-          <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: '22px 20px', boxShadow: '0 6px 20px rgba(30,27,75,0.08)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: '22px 20px', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}>
             <div style={{ fontSize: 30, textAlign: 'center' }}>🔒</div>
             {otpStage === 'email' ? (
               <>
@@ -198,7 +212,7 @@ export default function CollectDocsClient({ token }: { token: string }) {
                 </div>
                 {otpMsg && <div style={{ fontSize: 12.5, color: C.dang, background: C.dangbg, borderRadius: 8, padding: '8px 12px', marginTop: 12, fontWeight: 600 }}>{otpMsg}</div>}
                 <button onClick={requestOtp} disabled={otpBusy}
-                  style={{ width: '100%', marginTop: 16, padding: 13, borderRadius: 11, border: 'none', fontFamily: font, fontSize: 15, fontWeight: 800, cursor: 'pointer', background: `linear-gradient(135deg, ${C.purple}, ${C.pdark})`, color: '#fff', opacity: otpBusy ? .6 : 1 }}>
+                  style={{ width: '100%', marginTop: 16, padding: 13, borderRadius: 11, border: 'none', fontFamily: font, fontSize: 15, fontWeight: 800, cursor: 'pointer', background: `linear-gradient(135deg, ${C.purple}, ${C.pdark})`, color: TK.onAccent, opacity: otpBusy ? .6 : 1 }}>
                   {otpBusy ? 'Sending…' : 'Get OTP'}
                 </button>
               </>
@@ -211,9 +225,9 @@ export default function CollectDocsClient({ token }: { token: string }) {
                   <input style={{ ...inp, marginTop: 6, letterSpacing: '.4em', textAlign: 'center', fontWeight: 800, fontSize: 22 }} inputMode="numeric" maxLength={6} placeholder="••••••"
                     value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))} onKeyDown={e => { if (e.key === 'Enter') verifyOtp() }} />
                 </div>
-                {otpMsg && <div style={{ fontSize: 12.5, color: otpMsg.startsWith('Dev code') ? C.purple : C.dang, background: otpMsg.startsWith('Dev code') ? '#EFEDFB' : C.dangbg, borderRadius: 8, padding: '8px 12px', marginTop: 12, fontWeight: 600 }}>{otpMsg}</div>}
+                {otpMsg && <div style={{ fontSize: 12.5, color: otpMsg.startsWith('Dev code') ? C.purple : C.dang, background: otpMsg.startsWith('Dev code') ? TK.brandTint : C.dangbg, borderRadius: 8, padding: '8px 12px', marginTop: 12, fontWeight: 600 }}>{otpMsg}</div>}
                 <button onClick={verifyOtp} disabled={otpBusy}
-                  style={{ width: '100%', marginTop: 16, padding: 13, borderRadius: 11, border: 'none', fontFamily: font, fontSize: 15, fontWeight: 800, cursor: 'pointer', background: `linear-gradient(135deg, ${C.purple}, ${C.pdark})`, color: '#fff', opacity: otpBusy ? .6 : 1 }}>
+                  style={{ width: '100%', marginTop: 16, padding: 13, borderRadius: 11, border: 'none', fontFamily: font, fontSize: 15, fontWeight: 800, cursor: 'pointer', background: `linear-gradient(135deg, ${C.purple}, ${C.pdark})`, color: TK.onAccent, opacity: otpBusy ? .6 : 1 }}>
                   {otpBusy ? 'Verifying…' : 'Verify & Continue'}
                 </button>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
@@ -236,7 +250,7 @@ export default function CollectDocsClient({ token }: { token: string }) {
         onChange={e => { const f = e.target.files?.[0]; if (f) upload(type, f); e.currentTarget.value = '' }} />
       <button onClick={() => fileRefs.current[type]?.click()} disabled={busy === type}
         style={{ padding: '7px 14px', borderRadius: 8, fontFamily: font, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
-          border: primary ? 'none' : `1px solid ${C.line}`, background: primary ? C.purple : C.card, color: primary ? '#fff' : C.purple, opacity: busy === type ? .6 : 1 }}>
+          border: primary ? 'none' : `1px solid ${C.line}`, background: primary ? C.purple : C.card, color: primary ? TK.onAccent : C.purple, opacity: busy === type ? .6 : 1 }}>
         {busy === type ? 'Uploading…' : label}
       </button>
     </>
@@ -245,7 +259,7 @@ export default function CollectDocsClient({ token }: { token: string }) {
   return (
     <Page>
       {/* header */}
-      <div style={{ background: `linear-gradient(135deg, ${C.purple}, ${C.pdark})`, color: '#fff', padding: '26px 20px 30px' }}>
+      <div style={{ background: `linear-gradient(135deg, ${C.purple}, ${C.pdark})`, color: TK.onAccent, padding: '26px 20px 30px' }}>
         <div style={{ maxWidth: 860, margin: '0 auto' }}>
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', opacity: .85 }}>{s.company_name || 'EZER HRMS'}</div>
           <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6, letterSpacing: '-.01em' }}>Congratulations{s.candidate_name ? `, ${s.candidate_name.split(' ')[0]}` : ''}! 🎉</div>
@@ -257,7 +271,7 @@ export default function CollectDocsClient({ token }: { token: string }) {
 
       <div style={{ maxWidth: 860, margin: '-18px auto 0', padding: '0 16px' }}>
         {/* countdown */}
-        <div style={{ background: urgent ? C.dangbg : C.card, border: `1px solid ${urgent ? C.dang + '55' : C.line}`, borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', boxShadow: '0 6px 20px rgba(30,27,75,0.08)' }}>
+        <div style={{ background: urgent ? C.dangbg : C.card, border: `1px solid ${urgent ? TK.criticalEdge : C.line}`, borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}>
           <div style={{ fontSize: 26 }}>{urgent ? '⏰' : '⏳'}</div>
           <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: urgent ? C.dang : C.muted }}>Time left to submit</div>
@@ -271,7 +285,7 @@ export default function CollectDocsClient({ token }: { token: string }) {
         {/* progress */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 2px 8px' }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>Documents</div>
-          <div style={{ flex: 1, height: 7, background: '#E9E7F5', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={{ flex: 1, height: 7, background: C.line, borderRadius: 99, overflow: 'hidden' }}>
             <div style={{ width: `${(doneCount / COLLECT_DOCS.length) * 100}%`, height: '100%', background: C.purple, borderRadius: 99, transition: 'width .3s' }} />
           </div>
           <div style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>{doneCount}/{COLLECT_DOCS.length}</div>
@@ -293,7 +307,7 @@ export default function CollectDocsClient({ token }: { token: string }) {
                   return (
                     <div key={d.type} style={{ padding: '11px 0', borderTop: `1px solid ${C.line}` }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 26, height: 26, borderRadius: 7, background: done ? C.ok : '#EFEDFB', color: done ? '#fff' : C.faint, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{done ? '✓' : '•'}</div>
+                        <div style={{ width: 26, height: 26, borderRadius: 7, background: done ? C.ok : TK.brandTint, color: done ? TK.onAccent : C.faint, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{done ? '✓' : '•'}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13.5, fontWeight: 600 }}>{d.label}{!d.mandatory && <span style={{ fontSize: 11, color: C.faint, fontWeight: 500 }}> · optional</span>}</div>
                           <div style={{ fontSize: 11, color: done ? C.ok : C.faint, fontWeight: 600 }}>{done ? `${files.length} file${files.length > 1 ? 's' : ''} uploaded` : 'You can upload more than one file'}</div>
@@ -322,14 +336,14 @@ export default function CollectDocsClient({ token }: { token: string }) {
                 // ── single-file doc ──
                 return (
                   <div key={d.type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: `1px solid ${C.line}` }}>
-                    <div style={{ width: 26, height: 26, borderRadius: 7, background: done ? C.ok : '#EFEDFB', color: done ? '#fff' : C.faint, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{done ? '✓' : '•'}</div>
+                    <div style={{ width: 26, height: 26, borderRadius: 7, background: done ? C.ok : TK.brandTint, color: done ? TK.onAccent : C.faint, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{done ? '✓' : '•'}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, fontWeight: 600 }}>{d.label}{!d.mandatory && <span style={{ fontSize: 11, color: C.faint, fontWeight: 500 }}> · optional</span>}</div>
                       {done && <div style={{ fontSize: 11, color: C.ok, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{files[0].file_name || 'Uploaded'} ✓</div>}
                     </div>
                     {done && (
                       <button onClick={() => removeFile(files[0].id)} disabled={removing === files[0].id}
-                        style={{ padding: '7px 12px', borderRadius: 8, fontFamily: font, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${C.dang}44`, background: C.dangbg, color: C.dang, opacity: removing === files[0].id ? .5 : 1 }}>
+                        style={{ padding: '7px 12px', borderRadius: 8, fontFamily: font, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${TK.criticalEdge}`, background: C.dangbg, color: C.dang, opacity: removing === files[0].id ? .5 : 1 }}>
                         {removing === files[0].id ? '…' : 'Remove'}
                       </button>
                     )}
@@ -341,13 +355,13 @@ export default function CollectDocsClient({ token }: { token: string }) {
           )
         })}
 
-        {note && <div style={{ fontSize: 13, color: C.dang, background: C.dangbg, border: `1px solid ${C.dang}33`, borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontWeight: 600 }}>{note}</div>}
+        {note && <div style={{ fontSize: 13, color: C.dang, background: C.dangbg, border: `1px solid ${TK.criticalEdge}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontWeight: 600 }}>{note}</div>}
 
         {/* submit */}
         <div style={{ position: 'sticky', bottom: 0, background: C.bg, padding: '12px 0 4px' }}>
           <button onClick={submit} disabled={!allMandatoryDone || submitting}
             style={{ width: '100%', padding: 14, borderRadius: 12, border: 'none', fontFamily: font, fontSize: 15, fontWeight: 800, cursor: allMandatoryDone && !submitting ? 'pointer' : 'not-allowed',
-              background: allMandatoryDone ? `linear-gradient(135deg, ${C.purple}, ${C.pdark})` : '#CBC7E6', color: '#fff', boxShadow: allMandatoryDone ? '0 8px 22px rgba(124,58,237,0.35)' : 'none' }}>
+              background: allMandatoryDone ? `linear-gradient(135deg, ${C.purple}, ${C.pdark})` : C.line, color: TK.onAccent, boxShadow: allMandatoryDone ? '0 8px 22px rgba(0,0,0,0.18)' : 'none' }}>
             {submitting ? 'Submitting…' : allMandatoryDone ? 'Submit all documents' : `Upload all required documents to submit (${mandatory.filter(d => uploaded.has(d.type)).length}/${mandatory.length})`}
           </button>
           <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8 }}>PDF, JPG, PNG or WEBP · up to 8 MB each · your information is kept confidential</div>

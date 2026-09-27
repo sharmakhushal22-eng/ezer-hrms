@@ -44,7 +44,11 @@ const S = {
   note: (tone: 'w' | 'd' | 'g' | 'i' = 'i') => ({
     fontSize: 12, lineHeight: 1.6, padding: '10px 12px', borderRadius: 8, marginTop: 10,
     background: tone === 'w' ? C.amberBg : tone === 'd' ? C.redBg : tone === 'g' ? C.greenBg : C.bg,
-    color: tone === 'w' ? '#8a5a08' : tone === 'd' ? '#9b1c1c' : tone === 'g' ? '#046c4e' : C.muted,
+    // The same triple the borderLeft below already uses. These were darker
+    // hand-picked inks (#8a5a08 / #9b1c1c / #046c4e) for text on a tint; the
+    // semantic fg tokens are exactly that pairing — see tone() in tokens.ts,
+    // where warning is { fg: C.warning, bg: C.warningTint, edge: warningEdge }.
+    color: tone === 'w' ? C.amber : tone === 'd' ? C.red : tone === 'g' ? C.green : C.muted,
     borderLeft: `3px solid ${tone === 'w' ? C.amber : tone === 'd' ? C.red : tone === 'g' ? C.green : C.purple}`,
   }) as React.CSSProperties,
 }
@@ -332,11 +336,11 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
         {d.toApprove.map((m: any) => (
           <div key={m.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '10px 0' }}>
             {/* Only a notification + a hyperlink here — the review & approve happens on the MRF screen. */}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 9, padding: '10px 12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: C.amberBg, border: `1px solid ${TK.warningEdge}`, borderRadius: 9, padding: '10px 12px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 18, flexShrink: 0 }}>📋</span>
               <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1} opening(s)</div>
-                <div style={{ fontSize: 11.5, color: '#8a5a08' }}>Needs your approval · raised by {m.raised_by_name || '—'}{m.raised_by_role ? ` (${m.raised_by_role})` : ''} · {m.urgency || 'Normal'}</div>
+                <div style={{ fontSize: 11.5, color: C.amber }}>Needs your approval · raised by {m.raised_by_name || '—'}{m.raised_by_role ? ` (${m.raised_by_role})` : ''} · {m.urgency || 'Normal'}</div>
               </div>
               <a href={`/ess-portal?module=recruitment&mrfSub=approvals&mrf=${m.id}`} style={{ ...S.btn, background: C.green, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>Open MRF to review &amp; approve →</a>
             </div>
@@ -361,7 +365,7 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
             </div>
             {needsRevision && (
               <div style={{ marginTop: 6, background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 7, padding: '8px 10px' }}>
-                {m.remarks && <div style={{ fontSize: 12, color: '#8a5a08', marginBottom: 6 }}>“{m.remarks}”</div>}
+                {m.remarks && <div style={{ fontSize: 12, color: C.amber, marginBottom: 6 }}>“{m.remarks}”</div>}
                 <button style={{ ...S.btn, background: C.amber }} onClick={() => setEditMrf(m)}>✎ Edit &amp; resubmit</button>
               </div>
             )}
@@ -403,7 +407,7 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
           <div onClick={closeReview} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,.5)', backdropFilter: 'blur(2px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: C.card, borderRadius: 14, width: 'min(620px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,.4)', overflow: 'hidden' }}>
               {/* Header */}
-              <div style={{ padding: '16px 22px 14px', background: `linear-gradient(135deg, ${C.purple}, #4F46E5)`, color: '#fff' }}>
+              <div style={{ padding: '16px 22px 14px', background: `linear-gradient(135deg, ${C.purple}, ${C.purpleD})`, color: TK.onAccent }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <div style={{ fontSize: 16, fontWeight: 700 }}>{m.designation || m.position}</div>
                   <span style={{ fontSize: 11, fontWeight: 700, background: 'rgba(255,255,255,.22)', borderRadius: 99, padding: '2px 9px' }}>{m.no_of_openings || m.openings || 1} opening{(m.no_of_openings || m.openings || 1) > 1 ? 's' : ''}</span>
@@ -412,7 +416,7 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
                 {isHrHead ? (
                   <div style={{ display: 'flex', gap: 6, marginTop: 9 }}>
                     {(['details', 'assign'] as const).map((s, i) => (
-                      <span key={s} style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: reviewStep === s ? '#fff' : 'rgba(255,255,255,.2)', color: reviewStep === s ? C.purple : 'rgba(255,255,255,.9)' }}>
+                      <span key={s} style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: reviewStep === s ? TK.onAccent : 'rgba(255,255,255,.2)', color: reviewStep === s ? C.purple : 'rgba(255,255,255,.9)' }}>
                         {i + 1}. {s === 'details' ? 'Review' : 'Assign Hiring Manager'}
                       </span>
                     ))}

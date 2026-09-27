@@ -4,6 +4,7 @@
 // (RECRUITER role) are suggested first; anyone in the company can be found by code.
 // Module-level component (never defined inside a parent) so typing never loses focus.
 import { useState } from 'react'
+import { C } from '@/lib/ui'
 
 export interface PickerPerson { id: string; name: string; code: string; designation?: string; is_recruiter?: boolean }
 
@@ -15,7 +16,19 @@ export function toPickerPeople(d: any): PickerPerson[] {
   return ((d?.hrOptions) || []).map((h: any) => ({ id: h.id, name: h.name, code: h.code, designation: 'Hiring Manager', is_recruiter: true }))
 }
 
-const P = { purple: '#7C3AED', purpleD: '#6D28D9', tint: 'rgba(124,58,237,0.08)', border: '#DDD6FE', ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', green: '#059669', greenBg: '#ECFDF5', sunken: '#FAFAF8', red: '#DC2626' }
+// Eleven frozen literals, now eleven tokens. The values were the pre-rebrand
+// purple (#7C3AED / #6D28D9), its lilac border (#DDD6FE) and a white-paper
+// sunken (#FAFAF8) — a palette the product stopped using at the rebrand. A hex
+// resolves through nothing, so this picker stayed light while the app around
+// it went dark: the same bug class as the CandidateInterviewModal palette.
+//
+// The colour ratchet scored this file 3, not 11, because it counts LINES that
+// carry a colour-bearing property, and ten of these values live in a const
+// where no such property appears. A low score here never meant a small problem.
+//
+// The keys keep their names, including `muted` and `red`, which nothing reads
+// today. They are tokens now, so an unused entry cannot freeze anything.
+const P = { purple: C.brand, purpleD: C.brandDeep, tint: C.brandTint, border: C.brandEdge, ink: C.ink, muted: C.muted, faint: C.faint, green: C.positive, greenBg: C.positiveTint, sunken: C.sunken, red: C.critical }
 
 export default function RecruiterPicker({ people, value, onChange, placeholder }: { people: PickerPerson[]; value: string[]; onChange: (ids: string[]) => void; placeholder?: string }) {
   const [q, setQ] = useState('')
@@ -34,7 +47,7 @@ export default function RecruiterPicker({ people, value, onChange, placeholder }
       {selected.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
           {selected.map(p => (
-            <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: P.greenBg, color: P.green, border: `1px solid #A7F3D0`, borderRadius: 99, padding: '4px 6px 4px 10px', fontSize: 12, fontWeight: 600 }}>
+            <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: P.greenBg, color: P.green, border: `1px solid ${C.positiveEdge}`, borderRadius: 99, padding: '4px 6px 4px 10px', fontSize: 12, fontWeight: 600 }}>
               {p.name} <span style={{ fontWeight: 500, opacity: .8 }}>({p.code})</span>
               <button type="button" onClick={() => remove(p.id)} aria-label={`Remove ${p.name}`} style={{ border: 'none', background: 'transparent', color: P.green, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px', fontFamily: 'inherit' }}>×</button>
             </span>
@@ -54,7 +67,7 @@ export default function RecruiterPicker({ people, value, onChange, placeholder }
         )}
         {hits.map((p, i) => (
           <button type="button" key={p.id} onClick={() => add(p.id)}
-            style={{ display: 'flex', width: '100%', gap: 11, alignItems: 'center', padding: '10px 14px', cursor: 'pointer', background: '#fff', border: 'none', borderTop: i ? `1px solid ${P.border}` : 'none', textAlign: 'left', fontFamily: 'inherit' }}>
+            style={{ display: 'flex', width: '100%', gap: 11, alignItems: 'center', padding: '10px 14px', cursor: 'pointer', background: C.surface, border: 'none', borderTop: i ? `1px solid ${P.border}` : 'none', textAlign: 'left', fontFamily: 'inherit' }}>
             <span style={{ width: 30, height: 30, borderRadius: '50%', background: P.tint, color: P.purpleD, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials(p.name)}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: P.ink }}>{p.name}</div>

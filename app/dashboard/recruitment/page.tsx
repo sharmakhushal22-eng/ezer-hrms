@@ -18,7 +18,7 @@ import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/Recrui
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
 import {
-  C, F, W, R, E, S, M, tone, eyebrow, numeric, inputStyle,
+  C, F, W, R, E, S, M, Z, tone, eyebrow, numeric, inputStyle,
   TableWrap, Th, Td, Tr, Empty,
 } from '@/lib/ui'
 
@@ -213,7 +213,7 @@ function Toast({ msg, type, onClose }:{ msg:string, type:'success'|'error', onCl
   return (
     // Radius, shadow and spacing off the scales rather than hand-picked. The
     // shadow was a literal rgba, so a toast kept its light-theme cast in dark.
-    <div style={{ position:'fixed', bottom:S.xl, right:S.xl, zIndex:9999,
+    <div style={{ position:'fixed', bottom:S.xl, right:S.xl, zIndex:Z.toast,
       background:type==='success'?C.positive:C.critical, color:C.onAccent,
       borderRadius:R.md, padding:`${S.md}px ${S.lg}px`, fontSize:F.small, fontWeight:W.medium,
       boxShadow:E.overlay, display:'flex', alignItems:'center', gap:S.sm }}>
@@ -977,7 +977,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
   // parenthesis takes exactly one element, so a JSX comment there parses as an
   // empty object literal and breaks the file.
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200, display:'flex', justifyContent:'flex-end' }}
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.drawer, display:'flex', justifyContent:'flex-end' }}
       onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{ background:C.canvas, width:'100%', maxWidth:760, height:'100%', overflowY:'auto', boxShadow:'-8px 0 30px rgba(0,0,0,0.25)' }}>
         {/* Header */}
@@ -1002,7 +1002,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
         <div style={{ padding:'16px 20px' }}>
           <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' as const }}>
             {canEdit && <button onClick={()=>{ onEdit(m); onClose() }} style={T.btnOutline}>Edit this MRF</button>}
-            {canSendBack && <button onClick={()=>{ onSendBack(m); onClose() }} style={{ ...T.btnOutline, borderColor:'#FDE68A', color:C.warning }}>↩ Send back to raiser</button>}
+            {canSendBack && <button onClick={()=>{ onSendBack(m); onClose() }} style={{ ...T.btnOutline, borderColor:C.warningEdge, color:C.warning }}>↩ Send back to raiser</button>}
             {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
               <button onClick={()=>{ onReview(m); onClose() }} style={T.btnPrimary}>Review & Approve</button>
             )}
@@ -2172,7 +2172,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
 
             {/* HR Head step: approving also assigns the hiring manager(s) who will run the hiring */}
             {assignOpen && (
-              <div onMouseDown={e=>{ if(e.target===e.currentTarget && !apprBusy) setAssignOpen(false) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+              <div onMouseDown={e=>{ if(e.target===e.currentTarget && !apprBusy) setAssignOpen(false) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
                 <div style={{ background:C.surface, borderRadius:14, width:'min(520px,100%)', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', overflow:'hidden' }}>
                   <div style={{ padding:'16px 20px 12px', borderBottom:`1px solid ${C.line}` }}>
                     <div style={{ fontSize:15, fontWeight:700, color:C.ink }}>Assign Hiring Manager(s)</div>
@@ -2236,7 +2236,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       {approvalModal&&<ApprovalModal mrf={approvalModal} org={orgOf(approvalModal)}
         onApprove={approveMRF} onReject={rejectMRF} onHold={holdMRF} onClose={()=>setApprovalModal(null)} />}
       {sendBackFor&&(
-        <div onMouseDown={e=>{ if(e.target===e.currentTarget && !sbBusy) setSendBackFor(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+        <div onMouseDown={e=>{ if(e.target===e.currentTarget && !sbBusy) setSendBackFor(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div style={{ background:C.surface, borderRadius:14, width:'min(440px,100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.3)' }}>
             <div style={{ fontSize:15, fontWeight:700, color:C.ink, marginBottom:4 }}>Send back to raiser</div>
             <div style={{ fontSize:12.5, color:C.faint, marginBottom:12 }}>{sendBackFor.designation||sendBackFor.position}{sendBackFor.mrf_number?` · ${sendBackFor.mrf_number}`:''} — the raiser will fix and resubmit; it re-enters approval from the top.</div>
@@ -2250,7 +2250,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         </div>
       )}
       {deleteConfirm&&(
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ background:C.surface, borderRadius:14, padding:24, width:340, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:8 }}>Delete MRF?</div>
             <div style={{ fontSize:13, color:C.faint, marginBottom:20 }}>This action cannot be undone. Linked candidates are kept but unlinked from this requisition.</div>
@@ -2283,7 +2283,7 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
   // own child as well as with the sibling modal. Comment above the return, not
   // inside it, for the same reason as MrfDetail.
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div style={{ background:C.surface, borderRadius:14, padding:24, width:'100%', maxWidth:480, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{mrf.job_title||mrf.designation||mrf.position}</div>
         <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>
@@ -3534,14 +3534,14 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <div style={{ display:'flex', gap:6, margin:'12px 0 6px', flexWrap:'wrap' as const }}>
                 {STEP_TITLES.map((t,i)=>{ const n=i+1, active=n===addStep, done=n<addStep; return (
                   <button key={n} type="button" onClick={()=>{ if (done) goToStep(n) }} disabled={!done && !active}
-                    style={{ display:'flex', alignItems:'center', gap:7, flex:'1 1 150px', padding:'7px 10px', borderRadius:9, border:`1px solid ${active?C.brand:done?'#A7F3D0':C.line}`, background:active?C.brandTint:done?C.positiveTint:C.surface, cursor:done?'pointer':'default', fontFamily:'inherit', textAlign:'left' as const }}>
+                    style={{ display:'flex', alignItems:'center', gap:7, flex:'1 1 150px', padding:'7px 10px', borderRadius:9, border:`1px solid ${active?C.brand:done?C.positiveEdge:C.line}`, background:active?C.brandTint:done?C.positiveTint:C.surface, cursor:done?'pointer':'default', fontFamily:'inherit', textAlign:'left' as const }}>
                     <span style={{ width:20, height:20, borderRadius:'50%', display:'grid', placeItems:'center', fontSize:11, fontWeight:800, background:active?C.brand:done?C.positive:C.sunken, color:(active||done)?C.onAccent:C.faint, flexShrink:0 }}>{done?'✓':n}</span>
                     <span style={{ fontSize:11.5, fontWeight:active?700:600, color:active?C.brandDeep:done?C.positive:C.faint, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{t}</span>
                   </button>
                 )})}
               </div>
               {parseNote && (
-                <div style={{ margin:'10px 0 4px', padding:'9px 12px', borderRadius:9, fontSize:12.5, lineHeight:1.5, background: parseNote.ok?C.positiveTint:C.criticalTint, color: parseNote.ok?C.positive:C.critical, border:`1px solid ${parseNote.ok?'#A7F3D0':'#FCA5A5'}` }}>
+                <div style={{ margin:'10px 0 4px', padding:'9px 12px', borderRadius:9, fontSize:12.5, lineHeight:1.5, background: parseNote.ok?C.positiveTint:C.criticalTint, color: parseNote.ok?C.positive:C.critical, border:`1px solid ${parseNote.ok?C.positiveEdge:C.criticalEdge}` }}>
                   <b>{parseNote.ok?'✓ Resume parsed.':'✗ Parse failed.'}</b> {parseNote.text}
                   {parseNote.ok && parseNote.missing && parseNote.missing.length>0 && <div style={{ marginTop:3, fontSize:11.5, opacity:.9 }}>Not found in the resume — fill manually: {parseNote.missing.map((k:string)=>k.replace(/_/g,' ')).join(', ')}</div>}
                 </div>
@@ -3832,7 +3832,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
 
       {/* ── Interview Pipeline full-screen overlay ── */}
       {interviewCand && (
-        <div style={{ position:'fixed', inset:0, background:C.canvas, zIndex:300, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
+        <div style={{ position:'fixed', inset:0, background:C.canvas, zIndex:Z.overlay, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
           <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'12px 20px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10 }}>
             <button onClick={()=>setInterviewCand(null)} style={{ padding:'6px 14px', borderRadius:7, border:'1px solid rgba(255,255,255,.3)', background:'transparent', color:C.onAccent, cursor:'pointer', fontSize:12, fontFamily:'inherit', fontWeight:500 }}>Back to Pipeline</button>
             <div style={{ fontSize:15, fontWeight:600, color:C.onAccent }}>Interview Pipeline — {interviewCand.full_name}</div>
@@ -3893,7 +3893,7 @@ function SearchBar({ placeholder, onApply, width=300 }:{ placeholder:string; onA
 
 function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
   return (
-    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
+    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:Z.sticky, boxShadow:'var(--ez-shadow-flat)' }}>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
         <label style={T.label}>Company</label>
         <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
@@ -3981,7 +3981,7 @@ function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?
                     return (
                       <tr key={`${k}-${r.category}-${i}`} style={{ background: exact ? C.brandTint : hl ? C.sunken : 'transparent' }}>
                         <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: i===0 ? 700 : 400, color: i===0 ? C.ink : 'transparent', whiteSpace:'nowrap' as const }}>{k}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: exact ? 700 : 500 }}>{MW_CAT_LABEL[r.category]||r.category}{exact && <span style={{ marginLeft:6, fontSize:9.5, fontWeight:700, color:C.brandDeep, background:C.surface, border:`1px solid ${C.brand}55`, borderRadius:99, padding:'1px 6px' }}>in use</span>}</td>
+                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: exact ? 700 : 500 }}>{MW_CAT_LABEL[r.category]||r.category}{exact && <span style={{ marginLeft:6, fontSize:9.5, fontWeight:700, color:C.brandDeep, background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:99, padding:'1px 6px' }}>in use</span>}</td>
                         <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', ...numeric }}>{rs(r.basic_amount)}</td>
                         <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', ...numeric }}>{rs(r.vda_amount)}</td>
                         <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', fontWeight:700, ...numeric }}>{rs(r.total_minimum_wage)}</td>
@@ -4247,7 +4247,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
   return (
     <div onMouseDown={e=>{ if(e.target===e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}>
+      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:Z.drawer, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}>
       <div style={{ background:C.surface, borderRadius:16, width:'min(560px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', padding:'18px 20px', margin:'0 auto' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
           <div style={{ fontSize:16, fontWeight:700, color:C.ink, flex:1 }}>CTC Negotiation — {candidate.full_name}{mrf?.mrf_number && <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mrf.mrf_number}</span>}</div>
@@ -4356,7 +4356,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
                       <div style={{ display:'flex', gap:5, flexShrink:0 }}>
                         <button onClick={()=>onView(d)} disabled={busyDoc===d.id} style={{ ...T.btnOutline, padding:'5px 9px', fontSize:11 }}>View</button>
                         <button onClick={()=>onDownload(d)} disabled={busyDoc===d.id} style={{ ...T.btnOutline, padding:'5px 9px', fontSize:11 }}>Download</button>
-                        <button onClick={()=>setRejecting(d)} disabled={busyDoc===d.id} style={{ padding:'5px 9px', fontSize:11, borderRadius:7, border:`1px solid ${C.critical}44`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Reject</button>
+                        <button onClick={()=>setRejecting(d)} disabled={busyDoc===d.id} style={{ padding:'5px 9px', fontSize:11, borderRadius:7, border:`1px solid ${C.criticalEdge}`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Reject</button>
                       </div>
                     </div>
                   ))}
@@ -4695,7 +4695,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
           return (
             <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
               style={{ ...T.card, cursor:'pointer', padding: compact ? '9px 11px' : T.card.padding, marginBottom: compact ? 6 : T.card.marginBottom,
-                border:on?'2px solid #2563EB':'1px solid var(--ez-line)', background:on?C.brandTint: C.surface, transition:'padding .3s, background .2s' }}>
+                border:on?`2px solid ${C.brand}`:'1px solid var(--ez-line)', background:on?C.brandTint: C.surface, transition:'padding .3s, background .2s' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
                 <div style={{ minWidth:0 }}>
                   <div style={{ fontSize:compact?12.5:13, fontWeight:600, color:C.ink, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}</div>
@@ -4863,7 +4863,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                         <select style={T.select} value={r.freq} onChange={e=>setRow(i,'freq',e.target.value)}>{ADD_FREQS.map(o=><option key={o}>{o}</option>)}</select>
                       </div>
                       <div><label style={T.label}>Remark</label><input style={T.input} value={r.remark} onChange={e=>setRow(i,'remark',e.target.value)} placeholder="Optional note" /></div>
-                      <button onClick={()=>delRow(i)} title="Remove" style={{ padding:'8px 10px', borderRadius:7, border:`1px solid ${C.critical}44`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:700 }}>✕</button>
+                      <button onClick={()=>delRow(i)} title="Remove" style={{ padding:'8px 10px', borderRadius:7, border:`1px solid ${C.criticalEdge}`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:700 }}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -4879,7 +4879,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   {saving?'Saving…':ctcOverBudget?'CTC exceeds MRF budget':ctcBelowBudget?'CTC below MRF budget':!calc?'Enter a valid CTC first':'Save Negotiation & Generate Link'}
                 </button>
                 {savedLink&&(
-                  <div style={{ marginTop:8, background:C.positiveTint, border:`1px solid ${C.positive}44`, borderRadius:10, padding:'8px 10px', animation:'ezFadeUp .3s ease' }}>
+                  <div style={{ marginTop:8, background:C.positiveTint, border:`1px solid ${C.positiveEdge}`, borderRadius:10, padding:'8px 10px', animation:'ezFadeUp .3s ease' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                       <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:10.5, fontFamily:'monospace', flex:1, padding:'7px 9px' }} />
                       <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btnOutline, background:C.surface, borderColor:C.positive, color:C.positive, fontWeight:700, padding:'6px 10px', fontSize:11.5 }}>Copy</button>
@@ -4898,15 +4898,15 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   <div style={{ fontSize:10.5, color:C.faint, marginTop:2 }}>Compliant with statutory minimum wage ({form.state} · {form.category}: ₹{Math.round(mw.amount).toLocaleString('en-IN')}/mo) &amp; EPFO regulations</div>
                 </div>
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                  <button onClick={()=>setShowMw(true)} style={{ ...T.btnOutline, background:C.brandTint, borderColor:`${C.brand}55`, color:C.brandDeep, fontWeight:700, fontSize:11.5 }}>Min wages</button>
-                  <button onClick={downloadExcel} disabled={!calc} style={{ ...T.btnOutline, background:C.positiveTint, borderColor:`${C.positive}55`, color:C.positive, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>Excel</button>
-                  <button onClick={printPdf} disabled={!calc} style={{ ...T.btnOutline, background:C.criticalTint, borderColor:`${C.critical}55`, color:C.critical, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>PDF</button>
+                  <button onClick={()=>setShowMw(true)} style={{ ...T.btnOutline, background:C.brandTint, borderColor:C.brandEdge, color:C.brandDeep, fontWeight:700, fontSize:11.5 }}>Min wages</button>
+                  <button onClick={downloadExcel} disabled={!calc} style={{ ...T.btnOutline, background:C.positiveTint, borderColor:C.positiveEdge, color:C.positive, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>Excel</button>
+                  <button onClick={printPdf} disabled={!calc} style={{ ...T.btnOutline, background:C.criticalTint, borderColor:C.criticalEdge, color:C.critical, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>PDF</button>
                 </div>
                 {showMw && <MinWagesPopup rates={mwRates} state={form.state} category={form.category} onClose={()=>setShowMw(false)} />}
               </div>
 
               {calcError&&(
-                <div style={{ background:C.criticalTint, border:`1px solid ${C.critical}55`, color:C.critical, fontSize:12, lineHeight:1.6, borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
+                <div style={{ background:C.criticalTint, border:`1px solid ${C.criticalEdge}`, color:C.critical, fontSize:12, lineHeight:1.6, borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
                   <b>Given CTC is too low!</b> {calcError}
                 </div>
               )}
@@ -4919,7 +4919,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   <CtcStatementTable rows={statementRows()} />
 
                   {calc.gratuity==='no'&&(
-                    <div style={{ marginTop:10, background:C.infoTint, border:`1px solid ${C.info}44`, borderRadius:10, padding:'9px 13px', fontSize:12, color:C.info, lineHeight:1.5 }}>
+                    <div style={{ marginTop:10, background:C.infoTint, border:`1px solid ${C.infoEdge}`, borderRadius:10, padding:'9px 13px', fontSize:12, color:C.info, lineHeight:1.5 }}>
                       <b>Note:</b> Gratuity is Over and Above the mentioned CTC package as per The Payment of Gratuity Act, 1972.
                     </div>
                   )}

@@ -37,7 +37,7 @@ import { C as TK, F } from '@/lib/ui'
 const C = {
   navy:TK.ink, purple:TK.brand, pdark:TK.brandDeep, card:TK.surface, bg:TK.sunken,
   line:TK.line, muted:TK.muted, faint:TK.faint, ok:TK.positive, okbg:TK.positiveTint,
-  warn:TK.warning, warnbg:TK.warningTint, dang:TK.critical, dangbg:TK.criticalTint, info:TK.info, infobg:TK.infoTint,
+  warn:TK.warning, warnbg:TK.warningTint, dang:TK.critical, dangbg:TK.criticalTint, dangEdge:TK.criticalEdge, info:TK.info, infobg:TK.infoTint, infoEdge:TK.infoEdge,
 }
 const font = F.family
 
@@ -66,6 +66,14 @@ export interface Feedback {
   decision_remark?: string | null
 }
 const DECISION_COLOR: Record<Decision, string> = { HOLD: C.warn, REJECT: C.dang, SHORTLIST: C.ok }
+// Companions to the above, for exactly the reason the band TINT a few lines
+// down exists. These values are var() references now, and a var() cannot carry
+// an alpha suffix: `DECISION_COLOR[d]+'18'` built `var(--ez-warning)18`, which
+// is invalid CSS, so the chip lost its fill and the panel lost its border —
+// silently, with nothing in the console and nothing for the colour ratchet to
+// see, because the result contains no hex at all.
+const DECISION_TINT: Record<Decision, string> = { HOLD: C.warnbg, REJECT: C.dangbg, SHORTLIST: C.okbg }
+const DECISION_EDGE: Record<Decision, string> = { HOLD: TK.warningEdge, REJECT: TK.criticalEdge, SHORTLIST: TK.positiveEdge }
 const RECOMM_FOR: Record<Decision, string> = { HOLD: 'Borderline — needs another view', REJECT: 'Do Not Recommend', SHORTLIST: 'Recommend' }
 
 // Third element is the TINT, added because the band chip used to fill itself
@@ -165,7 +173,7 @@ export default function InterviewFeedbackForm({
 
         {/* questions the MRF raiser wants asked */}
         {!readOnly && Array.isArray(questions) && questions.length > 0 && (
-          <div style={{ background:C.infobg, border:`1px solid ${C.info}33`, borderRadius:12, padding:'12px 16px', marginBottom:12 }}>
+          <div style={{ background:C.infobg, border:`1px solid ${C.infoEdge}`, borderRadius:12, padding:'12px 16px', marginBottom:12 }}>
             <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.info, marginBottom:8 }}>Questions to ask — from the requisition</div>
             <ol style={{ margin:0, paddingLeft:18, display:'grid', gap:4 }}>
               {questions.map((q, i) => <li key={i} style={{ fontSize:12.5, color:C.navy, lineHeight:1.5 }}>{q}</li>)}
@@ -225,7 +233,7 @@ export default function InterviewFeedbackForm({
               <label style={label}>Decision</label>
               {initial?.decision ? (
                 <>
-                  <span style={{ fontSize:11, fontWeight:800, padding:'3px 11px', borderRadius:20, color:DECISION_COLOR[initial.decision], background:DECISION_COLOR[initial.decision]+'18' }}>{DECISION_LABEL[initial.decision]}</span>
+                  <span style={{ fontSize:11, fontWeight:800, padding:'3px 11px', borderRadius:20, color:DECISION_COLOR[initial.decision], background:DECISION_TINT[initial.decision] }}>{DECISION_LABEL[initial.decision]}</span>
                   {initial.decision_remark && <div style={{ marginTop:8, fontSize:12.5, color:C.navy, whiteSpace:'pre-wrap' }}><b style={{ color:C.purple }}>Remark:</b> {initial.decision_remark}</div>}
                 </>
               ) : (
@@ -243,7 +251,7 @@ export default function InterviewFeedbackForm({
                   {onClose && <button type="button" onClick={onClose} style={{ padding:'11px 18px', borderRadius:9, border:`1px solid ${C.line}`, background:C.card, color:C.navy, fontFamily:font, fontSize:14, fontWeight:700, cursor:'pointer', marginLeft:'auto' }}>Cancel</button>}
                 </div>
               ) : (
-                <div style={{ border:`1px solid ${DECISION_COLOR[pending]}55`, background:DECISION_COLOR[pending]+'0D', borderRadius:11, padding:13 }}>
+                <div style={{ border:`1px solid ${DECISION_EDGE[pending]}`, background:DECISION_TINT[pending], borderRadius:11, padding:13 }}>
                   <div style={{ fontSize:13, fontWeight:800, color:DECISION_COLOR[pending], marginBottom:8 }}>{pending === 'HOLD' ? 'Put the candidate on hold' : 'Reject the candidate'} — add your remark</div>
                   <textarea autoFocus value={dRemark} onChange={e=>setDRemark(e.target.value)} placeholder={pending === 'HOLD' ? 'Why on hold, and what would change the call (e.g. waiting on a comparison, notice period, budget)…' : 'Why the candidate is not a fit for this role…'}
                     style={{ width:'100%', minHeight:70, padding:'9px 11px', fontFamily:font, fontSize:13, border:`1px solid ${C.line}`, borderRadius:8, outline:'none', color:C.navy, resize:'vertical', boxSizing:'border-box', background:C.card }} />
@@ -256,7 +264,7 @@ export default function InterviewFeedbackForm({
             </div>
           )}
 
-          {err && <div style={{ marginTop:12, fontSize:12.5, color:C.dang, background:C.dangbg, border:`1px solid ${C.dang}33`, borderRadius:8, padding:'9px 12px', fontWeight:600 }}>{err}</div>}
+          {err && <div style={{ marginTop:12, fontSize:12.5, color:C.dang, background:C.dangbg, border:`1px solid ${C.dangEdge}`, borderRadius:8, padding:'9px 12px', fontWeight:600 }}>{err}</div>}
         </div>
       </div>
 
@@ -286,7 +294,11 @@ export default function InterviewFeedbackForm({
   )
 }
 
+// The ink here sits on a saturated decision fill (Hold / Reject / Shortlist),
+// so it is onAccent — the token for ink on an accent — rather than a literal
+// white. TK, not C: this file declares its own C, which is why the tokens are
+// imported under an alias at the top.
 const decBtn = (color: string, busy?: boolean): React.CSSProperties => ({
-  padding:'11px 22px', borderRadius:9, border:'none', background:color, color:'#fff', fontFamily:font, fontSize:14, fontWeight:700,
+  padding:'11px 22px', borderRadius:9, border:'none', background:color, color:TK.onAccent, fontFamily:font, fontSize:14, fontWeight:700,
   cursor: busy ? 'default' : 'pointer', opacity: busy ? .6 : 1, minWidth:110,
 })

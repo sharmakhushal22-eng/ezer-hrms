@@ -550,7 +550,7 @@ const btn = {
   ghost: { padding:'7px 13px', borderRadius:8, border:`1px solid ${C.line}`, background:C.card, color:C.ink, fontFamily:font, fontSize:12.5, fontWeight:600, cursor:'pointer' } as React.CSSProperties,
   small: { padding:'6px 12px', borderRadius:8, fontFamily:font, fontSize:11.5, fontWeight:700, cursor:'pointer' } as React.CSSProperties,
 }
-const decChip = (d: Decision): React.CSSProperties => ({ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: DECISION_COLOR[d] + '18', color: DECISION_COLOR[d] })
+const decChip = (d: Decision): React.CSSProperties => ({ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: DECISION_BG[d], color: DECISION_COLOR[d] })
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize:11, fontWeight:800, letterSpacing:.5, textTransform:'uppercase', color:C.muted, margin:'2px 0 9px' }}>{children}</div>
 }
