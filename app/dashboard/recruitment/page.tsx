@@ -4660,7 +4660,23 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   })()
   const ceilingNote = `EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • Gratuity • Statutory bonus • Pan-India minimum wages`
 
+  // Negotiation was the one tab of eleven that destructured `rail` and then
+  // never rendered it, so opening Negotiation FROM the rail made the rail
+  // itself vanish — no route back to Dashboard/MRF/Pipeline short of the
+  // browser's Back button. Every sibling renders it: six via RxPage, MRF and
+  // Pipeline via their View components. This tab is a "WRAP" (see the switch
+  // at ~438) whose frame was never added, so the omission was structural and
+  // silent rather than a regression — it shipped broken.
+  //
+  // The body below deliberately keeps its original indentation. Re-indenting
+  // ~300 lines one level deeper would bury a two-line structural fix under a
+  // 300-line whitespace diff, and JSX does not care about indentation.
   return (
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="CTC negotiation"
+        subtitle="Clear the pre-negotiation checks, build the CTC against the MRF budget and the state minimum wage, then send a salary link the candidate can accept or decline."
+      />}>
     <div style={{ display:'grid', gridTemplateColumns: compact ? 'minmax(200px, 250px) minmax(0, 1fr)' : '1fr 1fr', gap:12, alignItems:'start', transition:'grid-template-columns .45s cubic-bezier(.4,0,.2,1)' }}>
       {/* ── Candidate column — full cards normally, compact list while the calculator is open ── */}
       <div style={{ minWidth:0 }}>
@@ -4960,6 +4976,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
         </div>
       )}
     </div>
+    </RxPage>
   )
 }
 
