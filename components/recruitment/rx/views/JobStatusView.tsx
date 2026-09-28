@@ -51,7 +51,7 @@ export function JobStatusView({ rail, rows, recruiterTable, onOpenMrf, onShare, 
               <button key={m.id} type="button" className="rx-li" onClick={() => onOpenMrf(m.id)} style={{ padding: '14px 10px', background: 'none', border: 0, font: 'inherit', color: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}>
                 <span style={{ width: 280, display: 'block' }}><span className="rx-name" style={{ display: 'block' }}>{m.title}</span><span className="rx-meta">{m.code}</span></span>
                 <span style={{ width: 130 }}><Badge tone={META[standing].tone}>{META[standing].label}</Badge></span>
-                <span style={{ flex: 1, display: 'block' }}><Track pct={elapsedPct} tone={META[standing].track} /><span className="rx-meta" style={{ fontSize: 12, marginTop: 6, display: 'block' }}>{note}</span></span>
+                <span style={{ flex: 1, display: 'block' }}><Track label={`${m.title}: validity window used`} pct={elapsedPct} tone={META[standing].track} /><span className="rx-meta" style={{ fontSize: 12, marginTop: 6, display: 'block' }}>{note}</span></span>
                 <span className="rx-meta rx-num" style={{ width: 90, textAlign: 'right' }}>{m.filled} of {m.openings} filled</span>
               </button>))}</div>
           )}

@@ -276,7 +276,12 @@ export default function InterviewFeedbackForm({
           <div style={{ fontSize:13, color:C.faint, fontWeight:600 }}>out of 80</div>
           {done>0 && <div style={{ marginTop:9 }}><span style={{ fontSize:11, fontWeight:800, padding:'3px 11px', borderRadius:20, color:bandColor, background:bandTint }}>{bandLabel}</span></div>}
         </div>
-        <div style={{ height:8, background:C.bg, borderRadius:5, overflow:'hidden', margin:'8px 0 6px' }}>
+        {/* The figure above is a separate div, so this bar had no accessible
+            name of its own — it read as an unnamed graphic beside a number. */}
+        <div role="progressbar"
+             aria-label={`Interview score: ${done ? total : 0} out of 80`}
+             aria-valuenow={total} aria-valuemin={0} aria-valuemax={80}
+             style={{ height:8, background:C.bg, borderRadius:5, overflow:'hidden', margin:'8px 0 6px' }}>
           <div style={{ height:'100%', width:`${(total/80)*100}%`, background: done?bandColor:C.faint, borderRadius:5, transition:'width .25s' }} />
         </div>
         <div style={{ fontSize:11, color:C.faint, textAlign:'center', marginBottom:12 }}>{done?`${pct}%${done<8?` · ${8-done} to rate`:''}`:'Not started'}</div>

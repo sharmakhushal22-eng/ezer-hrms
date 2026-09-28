@@ -2516,7 +2516,15 @@ function DeadlineBoard({ rows, orgOf }:any) {
               <Td align="center">{js.openings}</Td>
               <Td style={{ minWidth:110 }}>
                 <div style={{ fontSize:F.micro, color:C.faint, textAlign:'center', marginBottom:3, ...numeric }}>{js.filledCount}/{js.openings}</div>
-                <div style={{ background:C.brandTint, borderRadius:R.pill, height:5, overflow:'hidden' }}>
+                {/* The ratio above is a sibling div, so the bar itself announced
+                    nothing: a screen reader met 23 identical unnamed graphics,
+                    one per row. Naming it with the requisition makes each one
+                    say which requisition it belongs to. Same defect the kit's QA
+                    pass found in its own Track component. */}
+                <div role="progressbar"
+                     aria-label={`${m.job_title||m.designation||m.position}${m.mrf_number?` ${m.mrf_number}`:''}: ${js.filledCount} of ${js.openings} filled`}
+                     aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}
+                     style={{ background:C.brandTint, borderRadius:R.pill, height:5, overflow:'hidden' }}>
                   <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?C.positive:C.brand,
                                 transition:`width ${M.ease}` }} />
                 </div>

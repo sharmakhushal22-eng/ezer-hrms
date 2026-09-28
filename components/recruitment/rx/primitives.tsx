@@ -49,8 +49,15 @@ export function Ring({ pct, label, tone, size = 'md' }: { pct: number; label: Re
   );
 }
 
-export function Track({ pct, tone }: { pct: number; tone?: 'pos' | 'warn' | 'crit' }) {
-  return <div className={cx('rx-track', tone)} role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(1, Math.min(100, pct))}%` }} /></div>;
+/**
+ * A progress bar carries role="progressbar" and its values, but a screen
+ * reader still announces it as an unnamed control without an accessible name —
+ * and a page with several of them then reads as several identical bars. The
+ * kit's QA pass found this; `label` is the fix. It defaults so no existing
+ * caller breaks, but callers should pass something that says WHICH bar it is.
+ */
+export function Track({ pct, tone, label = 'Progress' }: { pct: number; tone?: 'pos' | 'warn' | 'crit'; label?: string }) {
+  return <div className={cx('rx-track', tone)} role="progressbar" aria-label={label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${Math.max(1, Math.min(100, pct))}%` }} /></div>;
 }
 
 export function PropBar({ parts }: { parts: { value: number; color: string; label: string }[] }) {
