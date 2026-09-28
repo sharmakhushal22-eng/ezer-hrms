@@ -527,6 +527,51 @@ export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string
   )
 }
 
+// ── Offer approvals — the HR Head's half of the offer flow ────────────────────
+// Every offer request submitted by a recruiter in this HR Head's company shows here as a
+// task: a notification card + a link to Recruitment → HR Head, where the review, approve
+// and reject happen (the same pattern as MRF approvals above).
+export function OfferApprovals({ employeeId }: { employeeId: string }) {
+  const [d, setD] = useState<{ isHrHead: boolean; pending: any[]; recent: any[] } | null>(null)
+  useEffect(() => { api('/api/ess/offer-approvals', employeeId).then(setD).catch(() => setD({ isHrHead: false, pending: [], recent: [] })) }, [employeeId])
+  if (!d || !d.isHrHead || (d.pending.length === 0 && d.recent.length === 0)) return null
+  const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
+  const day = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  return (
+    <div style={S.card}>
+      <div style={S.section}>Offer approvals · HR Head{d.pending.length ? ` · ${d.pending.length} waiting` : ''}</div>
+      {d.pending.length > 0 && <>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, margin: '6px 0 4px' }}>Waiting on you ({d.pending.length})</div>
+        {d.pending.map((o: any) => (
+          <div key={o.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '10px 0' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: C.amberBg, border: `1px solid ${TK.warningEdge}`, borderRadius: 9, padding: '10px 12px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 18, flexShrink: 0 }}>💼</span>
+              <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{o.candidate} · {o.designation || '—'}{o.mrf_number ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.purpleD, background: C.soft, padding: '1px 7px', borderRadius: 99, verticalAlign: 'middle' }}>{o.mrf_number}</span> : null}</div>
+                <div style={{ fontSize: 11.5, color: C.amber }}>Offer of {lakh(o.offered_ctc)}{o.variable_pct ? ` (${o.variable_pct}% variable)` : ''}{o.hike_pct ? ` · ${Number(o.hike_pct).toFixed(1)}% hike` : ''}{o.proposed_doj ? ` · DOJ ${day(o.proposed_doj)}` : ''} · needs your review &amp; approval · submitted {day(o.submitted_at)}</div>
+                {o.recruiter_comments && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>Recruiter: {o.recruiter_comments}</div>}
+              </div>
+              <a href="/ess-portal?module=recruitment&tab=hrhead" style={{ ...S.btn, background: C.green, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>Review &amp; approve →</a>
+            </div>
+          </div>
+        ))}
+      </>}
+      {d.recent.length > 0 && <>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: '10px 0 4px' }}>Decided recently ({d.recent.length})</div>
+        {d.recent.map((o: any) => (
+          <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{o.candidate} · {o.designation || '—'}</div>
+              <div style={{ fontSize: 11.5, color: C.muted }}>{lakh(o.offered_ctc)} · {day(o.actioned_at)}{o.comment ? ` · “${o.comment}”` : ''}</div>
+            </div>
+            <span style={pill(o.status === 'HR_HEAD_REJECTED' ? 'dang' : 'ok')}>{o.status === 'HR_HEAD_REJECTED' ? 'Rejected' : o.status === 'OFFER_SENT' ? 'Approved · offer sent' : 'Approved'}</span>
+          </div>
+        ))}
+      </>}
+    </div>
+  )
+}
+
 // ── Interviews to conduct — the interviewer's half of the round flow ──────────
 // A row per interview this employee has been added to, as MAIN interviewer or as
 // a PANELIST. Everyone sees the details and acknowledges; only the main
@@ -619,6 +664,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
   return (
     <div>
       <MrfApprovals employeeId={employeeId} notify={notify} />
+      <OfferApprovals employeeId={employeeId} />
       <InterviewInvites employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },
