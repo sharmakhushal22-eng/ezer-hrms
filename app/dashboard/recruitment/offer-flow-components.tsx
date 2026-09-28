@@ -187,7 +187,7 @@ This document is confidential and for internal approval only.`
     }).eq('id', negotiation?.id)
 
     // Create offer approval request
-    const { error } = await supabase.from('offer_approval_requests').insert({
+    const { data: created, error } = await supabase.from('offer_approval_requests').insert({
       candidate_id: candidate?.id,
       mrf_id: candidate?.mrf_id || null,
       company_id: candidate?.company_id || null,
@@ -217,7 +217,18 @@ This document is confidential and for internal approval only.`
       submitted_at: new Date().toISOString(),
       recruiter_comments: recruiterComments || null,
       hiring_manager_remark: hiringRemark || null,
-    })
+    }).select('id').single()
+
+    // Tell the HR Head(s) of the company there is an offer to review and approve (ESS bell +
+    // Tasks & Approvals, deep-linked to the HR Head tab). Best-effort: the request stands either way.
+    let notified = 0, notifyWarning = ''
+    if (!error && created?.id) {
+      try {
+        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'submitted', request_id: created.id }) })
+        const j = await r.json().catch(() => ({}))
+        notified = Number(j.notified || 0); notifyWarning = j.warning || (!r.ok ? (j.error || 'notification failed') : '')
+      } catch { notifyWarning = 'notification failed' }
+    }
 
     // Audit log
     await supabase.from('recruitment_audit_logs').insert({
@@ -230,7 +241,9 @@ This document is confidential and for internal approval only.`
 
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
-    alert('Offer approval request submitted to HR Head!')
+    alert(notified > 0
+      ? `Offer approval request submitted — the HR Head has been notified to review and approve (${notified} notified).`
+      : `Offer approval request submitted. ${notifyWarning || 'The HR Head could not be notified.'}`)
     if (onSubmitted) onSubmitted()
   }
 
@@ -440,9 +453,20 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       created_at: new Date().toISOString(),
     })
 
+    // Notify the recruiter(s) on the MRF (and, on approval, the HR managers who send the offer).
+    let notified = 0
+    if (!error) {
+      try {
+        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'decided', request_id: selected.id }) })
+        const j = await r.json().catch(() => ({})); notified = Number(j.notified || 0)
+      } catch { /* the decision is saved regardless */ }
+    }
+
     setProcessing(false)
     if (error) { alert('Error: ' + error.message); return }
-    alert(action === 'approve' ? 'Approved! The HR Manager has been notified.' : 'Rejected. The recruiter has been notified.')
+    alert(action === 'approve'
+      ? `Approved. ${notified ? `${notified} people notified (recruiter + HR manager) — the offer can now be sent.` : 'Saved — nobody could be notified.'}`
+      : `Rejected. ${notified ? `${notified} people notified (recruiter + MRF raiser).` : 'Saved — nobody could be notified.'}`)
     setSelected(null); setComment(''); loadRequests()
   }
 

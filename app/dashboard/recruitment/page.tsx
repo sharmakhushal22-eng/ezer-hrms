@@ -260,6 +260,9 @@ export default function RecruitmentPage() {
     const p = new URLSearchParams(window.location.search)
     const sub = p.get('mrfSub'); const id = p.get('mrf')
     if (sub || id) { setTab('mrf'); setMrfDeep({ sub: sub || undefined, id: id || undefined }) }
+    // …&tab=hrhead / sendoffer / offerapproval — the offer-approval notifications land here.
+    const t = p.get('tab')
+    if (t && ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus'].includes(t)) setTab(t as typeof tab)
   }, [])
   const [companies, setCompanies] = useState<Company[]>([])
   const [locations, setLocations] = useState<Location[]>([])
