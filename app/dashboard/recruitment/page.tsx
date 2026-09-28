@@ -395,15 +395,21 @@ export default function RecruitmentPage() {
 
   return (
     <div style={T.page}>
-      {/* All eleven tabs now render their own frame: RxPage supplies the
-          padding and the sticky rail, RecruitmentHeader the title and crumb.
-          The legacy page header, the pill bar and the 1300px width wrapper
-          that used to sit here are gone — they existed only for tabs that had
-          not been converted yet, and there are none left. */}
+      {/* page.tsx owns the frame. The rail is rendered ONCE, here, at index 0,
+          with the current tab after it — so React keeps the SAME rail element
+          mounted across tab switches and its active pill slides between
+          sections instead of re-entering on every change. That is the whole
+          reason the rail moved out of the tabs.
+          RxPage no longer emits this wrapper or the rail; it supplies only a
+          tab's header and body, so passing rail={} to it now would render a
+          second rail underneath the first. The tab block below keeps its own
+          indentation: re-indenting sixty lines would bury a structural change
+          in a whitespace diff. */}
+      <div className="rx">
+        {rail}
 
       {tab==='dashboard' && (
         <DashboardView
-          rail={rail}
           mrfs={mrfVMs}
           candidates={candVMs}
           stages={STAGES}
@@ -421,45 +427,49 @@ export default function RecruitmentPage() {
           and eight UI blocks, six of which JobStatusView has no slot for.
           Per Step 6 of the guide it is restyled in place inside RxPage
           rather than replaced by the view. */}
-      {tab==='jobstatus' && <JobStatusTab {...props} rail={rail} />}
+      {tab==='jobstatus' && <JobStatusTab {...props} />}
       {/* MRF renders MrfListView, which is a genuine fit here in a way
           JobStatusView was not: it has a passthrough slot for the existing
           filter bar and its actions map one-to-one onto the tab's handlers.
           The tab keeps its create/edit form, its detail drawer, its approval
           modal and its delete dialog. */}
-      {tab==='mrf' && <MRFTab {...props} rail={rail} />}
+      {tab==='mrf' && <MRFTab {...props} />}
       {/* Pipeline renders PipelineView. No drag-and-drop by design: every
           stage move still goes through the modal, so moveStage's forward-only
           rule and the modal's own feedback gate cannot be bypassed. */}
-      {tab==='pipeline' && <PipelineTab {...props} rail={rail} />}
+      {tab==='pipeline' && <PipelineTab {...props} />}
       {/* AI Screening is a WRAP, not a replace: the kit has no ScreeningView.
           The tab keeps its upload flow and handlers; only the result rows
           move to ScreeningResultCard, with the API's field names mapped. */}
-      {tab==='screening' && <ScreeningTab {...props} rail={rail} />}
+      {tab==='screening' && <ScreeningTab {...props} />}
       {/* Negotiation is a WRAP. The payroll calculator's table and maths are
           untouched on purpose: restyling statutory EPF/ESIC/PT presentation
           risks real numbers for cosmetic gain. Only the frame, the list and
           the panel containers change. */}
-      {tab==='negotiation' && <NegotiationTab {...props} rail={rail} />}
+      {tab==='negotiation' && <NegotiationTab {...props} />}
       {/* Offer Approval has TWO component returns -- the list, and an early
           return for the selected candidate. Both are wrapped, or the screen
           loses its chrome the moment a request is created. */}
-      {tab==='offerapproval' && <OfferApprovalTab {...props} rail={rail} />}
+      {tab==='offerapproval' && <OfferApprovalTab {...props} />}
       {/* Offers: the letter body and the Send flow are deliberately not
           restyled -- that text reaches a real candidate. Only the frame,
           the list and the panel container change. */}
-      {tab==='offers' && <OffersTab {...props} rail={rail} />}
+      {tab==='offers' && <OffersTab {...props} />}
       {/* Pre-onboarding: render-only restyle. Every control here writes,
           deletes or emails a real candidate (sendAcceptance posts to
           send-letter), so the frame changed and the handlers did not. */}
-      {tab==='preonboarding' && <PreOnboardTab {...props} rail={rail} />}
+      {tab==='preonboarding' && <PreOnboardTab {...props} />}
       {/* HR Head lives in offer-flow-components.tsx, which has its own style
           objects and its own RecFilterBar/SearchBar. Only this component was
           converted; CreateOfferApproval and AuditTrailViewer in that file are
           untouched, since the Offer Approval tab renders both. */}
-      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} rail={rail} />}
-      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} rail={rail} />}
+      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
+      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
 
+      </div>
+
+      {/* Outside .rx: the toast is position:fixed to the viewport, not to the
+          module frame. */}
       {notify && <Toast msg={notify.msg} type={notify.type} onClose={() => setNotify(null)} />}
     </div>
   )
@@ -2211,7 +2221,6 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         )
       ) : (
       <MrfListView
-        rail={rail}
         mrfs={mrfVMs}
         filterBar={filterBar}
         banner={bannerNode}
@@ -2817,7 +2826,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
   }
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Job status"
         subtitle="MRF deadlines, expiries and whether hiring is closing before requisitions lapse."
@@ -3113,7 +3122,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
   const ordered = [...strong, ...partial, ...notSuitable]
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="AI resume screening"
         subtitle="Score a batch of resumes against one approved opening, then send the strong ones straight into the pipeline."
@@ -3493,7 +3502,6 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   return (
     <>
       <PipelineView
-        rail={rail}
         candidates={candVMs}
         stages={STAGES}
         nextStepFor={nextStepFor}
@@ -4677,7 +4685,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   // ~300 lines one level deeper would bury a two-line structural fix under a
   // 300-line whitespace diff, and JSX does not care about indentation.
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="CTC negotiation"
         subtitle="Clear the pre-negotiation checks, build the CTC against the MRF budget and the state minimum wage, then send a salary link the candidate can accept or decline."
@@ -5090,7 +5098,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
 
   if (sel) {
     return (
-      <RxPage rail={rail} header={
+      <RxPage header={
         <RecruitmentHeader
           title="Offer approval"
           subtitle="Send an offer to the HR Head for sign-off once the candidate has accepted their salary."
@@ -5120,7 +5128,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   }
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Offer approval"
         subtitle="Send an offer to the HR Head for sign-off once the candidate has accepted their salary."
@@ -5293,7 +5301,7 @@ HR Team`
   }
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Offer letters"
         subtitle="Draft and send the letter once HR Head has approved the offer, then record how the candidate replied."
@@ -5499,7 +5507,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
   const respStyle:Record<string,[string,string]> = { ACCEPTED:[C.positiveTint,C.positive], REVISE:[C.warningTint,C.warning], BACKOUT:[C.criticalTint,C.critical] }
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Pre-onboarding"
         subtitle="Confirm how each candidate responded to their offer, set the joining date, and start their onboarding."

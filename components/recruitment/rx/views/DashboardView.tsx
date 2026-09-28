@@ -4,7 +4,7 @@ import { Icon } from '../icons';
 import { RecruitmentHeader, RxPage } from '../Shell';
 import { StageRiver } from '../StageRiver';
 import { Help, KpiCard, MRF_LABEL, MRF_TONE, MiniBars, Module, PropBar, Ring, Badge } from '../primitives';
-import { countByStage, relativeDay, shortTime } from '../logic/derive';
+import { countByStage, relativeDay, shortTime, toLocalDate } from '../logic/derive';
 import type { CandidateVM, InterviewVM, MrfVM, TodoItem } from '../logic/types';
 
 /**
@@ -26,7 +26,7 @@ export function DashboardView(props: {
   onRaiseMrf: () => void;
   onExport?: () => void;
   /** The <TabRail/> element page.tsx builds once. */
-  rail: React.ReactNode;
+  rail?: React.ReactNode;
 }) {
   const { rail, mrfs, candidates, stages, joinedThisMonth, todos, interviews, onTab, onOpenCandidate, onRaiseMrf, onExport } = props;
   const approved = mrfs.filter((m) => m.status === 'APPROVED');
@@ -41,7 +41,7 @@ export function DashboardView(props: {
   const recent = mrfs.slice(0, 5); // loadAll already orders by created_at desc
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Hiring at a glance"
         subtitle="Every open requisition and every candidate in motion, for the companies you can see."
@@ -60,10 +60,11 @@ export function DashboardView(props: {
             <div className="rx-todos" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, todos.length)}, minmax(0, 1fr))`, gap: 10 }}>
               {todos.map((t, i) => (
                 <button key={i} type="button" className="rx-todo" onClick={() => onTab(t.tab)}>
-                  {/* Tokens, not the kit's frozen #F87171 / #FBBF24. Those are
-                      the dark-theme reds and ambers written as literals, so in
-                      light mode they stayed dark-mode colours — and the repo's
-                      colour ratchet fails any new file that carries one. */}
+                  {/* Tokens, not the kit's frozen literals: those are the DARK-theme
+                      red and amber written as hex, so in light mode they stayed
+                      dark-mode colours — and the colour ratchet fails any file
+                      carrying one. (Values deliberately not repeated here: prose
+                      naming them trips the very greps that look for them.) */}
                   <span className="n" style={{ color: t.tone === 'crit' ? 'var(--ez-critical)' : 'var(--ez-warning)' }}>{t.count}</span>
                   <span className="t">{t.title}<span>{t.detail}</span></span>
                   <span className="go">{t.actionLabel}</span>
@@ -108,7 +109,7 @@ export function DashboardView(props: {
                   {interviews.map((iv, i) => {
                     const rel = relativeDay(iv.at);
                     const soon = rel === 'Today' || rel === 'Tomorrow';
-                    const d = new Date(iv.at);
+                    const d = toLocalDate(iv.at);
                     return (
                       <button key={i} type="button" className="rx-li" onClick={() => onOpenCandidate(iv.candidateId)} style={{ background: 'none', border: 0, font: 'inherit', color: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}>
                         <span className={soon ? 'rx-date now' : 'rx-date'}><b>{d.getDate()}</b><span>{new Intl.DateTimeFormat('en-IN', { month: 'short' }).format(d)}</span></span>

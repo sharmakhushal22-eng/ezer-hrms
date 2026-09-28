@@ -28,7 +28,7 @@ import type { MrfVM } from '../logic/types';
  */
 export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form, quickHireCap, status, onStatusChange,
   onCreate, onEdit, onView, onMore, onExport, canEdit, onReview, onCloseMrf, onReopen, onDelete }: {
-  rail: React.ReactNode; mrfs: MrfVM[]; companyLabel?: string; filterBar?: React.ReactNode; banner?: React.ReactNode;
+  rail?: React.ReactNode; mrfs: MrfVM[]; companyLabel?: string; filterBar?: React.ReactNode; banner?: React.ReactNode;
   /**
    * The tab's create/edit form. It has to render INSIDE this frame, between the
    * banner and the overview, because that is where it appears today — pushing it
@@ -60,7 +60,7 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
   const tiles: [string, number, string?][] = [['Total', mrfs.length], ['Approved', by('APPROVED'), 'var(--ez-positive)'], ['Pending approval', by('SUBMITTED'), 'var(--ez-warning)'], ['Openings', openings], ['Filled', filled, 'var(--ez-brand)'], ['Candidates', cands]];
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader title="Manpower requisitions" subtitle="Raise, approve and track every hiring request."
         help={<Help label="Quick Hire or Full MRF?">
           <p><b>Quick Hire</b> is for roles up to {formatINR(quickHireCap)} a year.</p>

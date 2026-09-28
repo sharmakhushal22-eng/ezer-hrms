@@ -453,7 +453,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const fRequests = requests.filter((r:any)=>(!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation }, mrfLookup, f))
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="HR Head approvals"
         subtitle="Sign off new requisitions, decide on offers that recruiters have escalated, and re-enter rejected candidates."
@@ -809,7 +809,7 @@ ${company} — Human Resources`)
   const positionOpts = distinctSorted(approved.map((r:any)=>r.candidates?.designation || r.manpower_requisitions?.designation))
   const fApproved = approved.filter((r:any)=>(!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation || r.manpower_requisitions?.designation }, mrfLookup, f))
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Send offer letters"
         subtitle="Requests the HR Head has approved. Review the letter, then send it to the candidate."
