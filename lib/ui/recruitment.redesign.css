@@ -859,7 +859,21 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx-dlg::backdrop{background:rgba(15,23,42,.42);backdrop-filter:blur(3px)}
 .rx-dlg-drawer{margin:0 0 0 auto;height:100dvh;width:min(560px,100vw);border-radius:0;border-width:0 0 0 1px;padding:28px;overflow-y:auto}
 .rx-dlg-drawer[open]{animation:rxSlideIn .45s var(--rx-ease) both}
-.rx-dlg-modal{width:min(1080px,calc(100vw - 32px));max-height:calc(100dvh - 80px);border-radius:24px;overflow-y:auto}
+/* A modal <dialog> is centred by the UA's own `inset:0; margin:auto`. Tailwind
+   v4's Preflight — pulled in by `@import "tailwindcss"` on line 1 of
+   app/globals.css — resets `margin:0` on `*, ::after, ::before, ::backdrop`,
+   which beats that UA rule; inset:0 then pinned the panel to the top-left.
+   Measured before this fix: left 0, top 0.
+
+   The drawer never showed it because `.rx-dlg-drawer` sets `margin:0 0 0 auto`
+   for its right dock. The modal was the only variant leaning on the UA default,
+   and nothing rendered it until the candidate modal did — the kit ships this
+   rule but its own prototype never uses it, so it arrived untested.
+
+   MEASUREMENT TRAP: once centred this reads left 356 / right 364 against
+   window.innerWidth. That 8px is the scrollbar gutter (globals.css sets an 8px
+   ::-webkit-scrollbar). Against documentElement.clientWidth it is exact. */
+.rx-dlg-modal{inset:0;margin:auto;width:min(1080px,calc(100vw - 32px));max-height:calc(100dvh - 80px);border-radius:24px;overflow-y:auto}
 .rx-dlg-modal[open]{animation:rxModal .45s var(--rx-ease) both}
 .rx-dlg[open]::backdrop{animation:rxFade .3s both}
 
