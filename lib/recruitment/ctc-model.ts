@@ -155,45 +155,40 @@ export function computeCtc(i: CtcInput): CtcResult | CtcTooLow {
   const basic = Math.max(fixedMonthly * BASIC_OF_FIXED, minWage)
   const hraMax = i.hraMax || HRA_MAX_NON_METRO
 
-  // Employer costs that depend on Basic only
-  const gratuityMonthly = gratuityOn ? basic * GRATUITY_RATE : 0
-  const bonusBase = Math.min(basic, Math.max(BONUS_CALC_FLOOR, minWage))
-  const bonusMonthly = basic <= BONUS_ELIGIBILITY_WAGE && bonusPct > 0 ? bonusBase * bonusPct : 0
-  const statBonus = bonusInCtc ? 0 : bonusMonthly              // in gross
-  const bonusOverheadMonthly = bonusInCtc ? bonusMonthly : 0    // employer overhead
+  // ── The package model (company policy, 28-Sep-2026) — the same rules the candidate's
+  // salary link shows, so the recruiter's statement and the link never differ:
+  //   EPF   employee 12% / employer 13% of Basic, Basic capped at the ₹25,000 ceiling
+  //   ESIC  employee 0.75% / employer 3.25% of Basic, only while Basic < ₹21,000
+  //   No gratuity, statutory-bonus, professional-tax or LWF lines in the package.
+  // The gratuity / bonus inputs are accepted for compatibility and ignored.
+  void gratuityOn; void bonusPct; void bonusInCtc
+  const gratuityMonthly = 0, bonusBase = 0, bonusMonthly = 0, statBonus = 0, bonusOverheadMonthly = 0
 
-  // Minimum fixed CTC: gross can't go below Basic (+ bonus paid with salary); at that
-  // point PF wages are just Basic (no allowances left).
-  const minGross = basic + statBonus
-  const epfAtMin = Math.min(basic, epfCeiling) * EPF_EMPLOYER_RATE
-  const esicOnMin = minGross <= ESIC_WAGE_CEILING ? minGross * ESIC_EMPLOYER_RATE : 0
-  const minReqFixedAnn = (minGross + epfAtMin + gratuityMonthly + bonusOverheadMonthly + esicOnMin) * 12
-  if (fixedAnnual + 0.5 < minReqFixedAnn) return { ok: false, minReqFixedAnn, fixedAnnual, basic }
-
-  // PF wages = Basic only (capped at the ceiling). Allowances do not enter EPF, so the
-  // package solves in one pass: employer costs come off the fixed CTC, the rest is gross.
   const epfWageBase = Math.min(basic, epfCeiling)
   const epfEmployer = epfWageBase * EPF_EMPLOYER_RATE
-  // Gross = what is left after employer costs; employer ESIC (on gross) in closed form
-  const R = fixedMonthly - epfEmployer - gratuityMonthly - bonusOverheadMonthly
-  const grossWithEsic = R / (1 + ESIC_EMPLOYER_RATE)
-  const esicApplies = grossWithEsic <= ESIC_WAGE_CEILING
-  const gross = esicApplies ? grossWithEsic : R
-  const esicEmployer = esicApplies ? gross * ESIC_EMPLOYER_RATE : 0
-  // Allocation inside gross
-  const rem = Math.max(0, gross - basic - statBonus)
+  const epfEmployee = epfWageBase * EPF_EMPLOYEE_RATE
+  const esicApplies = basic < ESIC_WAGE_CEILING
+  const esicEmployer = esicApplies ? basic * ESIC_EMPLOYER_RATE : 0
+  const esicEmployee = esicApplies ? basic * ESIC_EMPLOYEE_RATE : 0
+
+  // Minimum fixed CTC: gross can't go below Basic, and the employer contributions sit on top.
+  const minReqFixedAnn = (basic + epfEmployer + esicEmployer) * 12
+  if (fixedAnnual + 0.5 < minReqFixedAnn) return { ok: false, minReqFixedAnn, fixedAnnual, basic }
+
+  // Gross = fixed CTC less the two employer contributions; allocated as HRA, conveyance, special.
+  const gross = fixedMonthly - epfEmployer - esicEmployer
+  const rem = Math.max(0, gross - basic)
   const hra = Math.min(basic * hraMax, rem)
   const otherAllow = Math.max(0, rem - hra)
   const conveyance = Math.min(otherAllow, CONVEYANCE_STD)
   const specialAllow = Math.max(0, otherAllow - conveyance)
-  const esicNearCeiling = esicApplies && gross >= ESIC_WAGE_CEILING - 1000
+  const esicNearCeiling = false
 
-  // Employee side
-  const epfEmployee = epfWageBase * EPF_EMPLOYEE_RATE
-  const esicEmployee = esicApplies ? gross * ESIC_EMPLOYEE_RATE : 0
-  const ptMonthly = professionalTax(i.state, gross)
-  const lwfMonthly = labourWelfareFund(i.state, gross)
-  const totalDed = epfEmployee + esicEmployee + ptMonthly + lwfMonthly
+  // Employee side — EPF and ESIC only
+  void professionalTax; void labourWelfareFund
+  const ptMonthly = 0
+  const lwfMonthly = 0
+  const totalDed = epfEmployee + esicEmployee
   const inHand = gross - totalDed
 
   return {

@@ -61,28 +61,46 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   const [template, setTemplate] = useState('')
   const [showTemplate, setShowTemplate] = useState(false)
 
+  // Everything the recruiter already captured is prefilled: the negotiation's previous-employer
+  // fields when it has them, else the Add Candidate form (compensation block, notice, DOJ).
+  const comp = candidate?.application_details?.compensation || {}
+  const rs = (v: any) => { const n = Number(v); return n > 0 ? Math.round(n) : '' }
+  const lpaToRs = (v: any) => { const n = Number(v); return n > 0 ? Math.round(n * 100000) : '' }
+  const noticeDays = Number(negotiation?.notice_period_days || candidate?.notice_period_days || candidate?.notice_period || 0)
+  const defaultDoj = (() => {
+    if (negotiation?.proposed_doj) return String(negotiation.proposed_doj).slice(0, 10)
+    if (candidate?.onboarding_date) return String(candidate.onboarding_date).slice(0, 10)
+    if (candidate?.doj) return String(candidate.doj).slice(0, 10)
+    if (noticeDays > 0) return new Date(Date.now() + noticeDays * 86400000).toISOString().slice(0, 10)
+    return ''
+  })()
+
   // Previous employer form
   const [prevForm, setPrevForm] = useState({
-    prev_company_name: negotiation?.prev_company_name || '',
+    prev_company_name: negotiation?.prev_company_name || candidate?.current_company || comp.offer_company || '',
     prev_company_address: negotiation?.prev_company_address || '',
-    prev_total_ctc: negotiation?.prev_total_ctc || '',
-    prev_fixed_ctc: '',
-    prev_variable: negotiation?.prev_variable || '',
-    prev_ta_da: '',
-    prev_additional: '',
+    prev_total_ctc: rs(negotiation?.prev_total_ctc) || rs(comp.total_current_ctc_rs) || rs(candidate?.current_ctc) || '',
+    prev_fixed_ctc: rs(negotiation?.prev_fixed_ctc) || lpaToRs(comp.current_fixed_lpa) || rs(candidate?.current_ctc) || '',
+    prev_variable: rs(negotiation?.prev_variable) || lpaToRs(comp.current_variable_lpa) || '',
+    prev_ta_da: rs(negotiation?.prev_ta_da) || '',
+    prev_additional: negotiation?.prev_additional || (comp.offer_in_hand === 'Yes' && comp.offer_company ? `Offer in hand: ${comp.offer_company}${comp.offer_amount_lpa ? ` (₹${Number(comp.offer_amount_lpa).toFixed(2)} LPA)` : ''}` : ''),
   })
 
   // Joining details
   const [joining, setJoining] = useState({
-    proposed_doj: negotiation?.proposed_doj || '',
-    notice_period_days: candidate?.notice_period || '',
-    notice_buyout: false,
+    proposed_doj: defaultDoj,
+    notice_period_days: noticeDays > 0 ? String(noticeDays) : '',
+    notice_buyout: !!comp.buyout && String(comp.buyout).toLowerCase() === 'yes',
   })
 
   const [recruiterComments, setRecruiterComments] = useState('')
   const [hiringRemark, setHiringRemark] = useState('')
   const P = (k: string, v: any) => setPrevForm(f => ({ ...f, [k]: v }))
   const J = (k: string, v: any) => setJoining(f => ({ ...f, [k]: v }))
+
+  // The approval template is built from the prefilled data as soon as the form opens, so
+  // the recruiter reviews it rather than typing it; edits regenerate it via the button.
+  useEffect(() => { generateTemplate() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function generateTemplate() {
     const doj = joining.proposed_doj

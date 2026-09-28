@@ -14,7 +14,15 @@ export function hasStatement(calc:any): boolean {
   return !!calc && calc.basic != null && calc.gross != null && calc.inHand != null && calc.epfEmployer != null
 }
 
+// The recruiter's statement IS the candidate's statement (policy, 28-Sep-2026): EPF and ESIC on
+// Basic, ₹21,000 ESIC test on Basic, no PT / LWF / gratuity / bonus lines. One definition below.
 export function ctcStatementRows(calc:any, form:any): StmtRow[] {
+  void form
+  return linkStatementRows(calc)?.rows ?? []
+}
+
+/** The previous full-statutory statement, kept for reference / older exports. */
+export function legacyStatementRows(calc:any, form:any): StmtRow[] {
   const ceil = Number(calc.epfCeiling||EPF_WAGE_CEILING)
   // PF wages = Basic capped at the ceiling. Saves made while allowances were included keep their stored base.
   const epfBase = calc.epfWageBase != null ? Number(calc.epfWageBase) : Math.min(calc.basic, ceil)

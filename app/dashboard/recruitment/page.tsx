@@ -4019,28 +4019,19 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
   const lakh = (v:number) => `₹${(v/100000).toFixed(2)}L`
   const money = (v:number) => `₹${Math.round(v).toLocaleString('en-IN')}`
 
-  // Minimum-wage floor applies to EVERY engagement type: the monthly stipend / fees may
-  // not be below the state + worker-category minimum wage (HR master → default table).
-  const mrfLoc = (locations||[]).find((l:any)=>l.id===mrf?.location_id)
-  const mrfState = stateFromLocation(mrfLoc)   // e.g. Ahmedabad Branch → Gujarat
-  const [mwState, setMwState] = useState<string>(mrfState || DEFAULT_STATE)
-  useEffect(()=>{ if (mrfState) setMwState(mrfState) }, [mrf?.id, mrfState])
-  const [mwCat, setMwCat] = useState<string>(mrf?.wage_category || DEFAULT_CATEGORY)
-  useEffect(()=>{ if (mrf?.wage_category) setMwCat(mrf.wage_category) }, [mrf?.id, mrf?.wage_category])
-  const mw = resolveMinWage(mwRates, mwState, mwCat as any)
-  const belowMinWage = s>0 && s < mw.amount
+  // No minimum-wage check for interns / apprentices / contract / consultants (policy, 28-Sep-2026):
+  // the stipend or fees is whatever was agreed, bounded only by the MRF budget.
+  void mwRates; void locations
 
   async function save() {
     if (!s) { showNotify(`Enter the monthly ${payLabel.toLowerCase()}`,'error'); return }
     if (mrfStipendCapMonthly>0 && s > mrfStipendCapMonthly) { showNotify(`${payLabel} ${money(s)}/mo exceeds the MRF budget of ${money(mrfStipendCapMonthly)}/mo. Reduce it before saving.`,'error'); return }
-    if (s < mw.amount) { showNotify(`${payLabel} ${money(s)}/mo is below the minimum wage for ${mwState} (${mwCat}): ${money(mw.amount)}/mo. Raise it to continue.`,'error'); return }
     const companyId = effCompany || null
     if (!companyId) { showNotify('Select the company for this candidate first (dropdown in the calculator).','error'); return }
     if (!sel.company_id) await supabase.from('candidates').update({ company_id:companyId }).eq('id', sel.id)
     setSaving(true); setSavedLink(null)
     const calcData = { is_stipend:true, pay_kind:comp.kind, pay_label:payLabel, employment_type:mrf?.employment_type, stipend_monthly:s, tds_applicable:tds, tds_pct:pct, tds_amount:tdsAmt, net_monthly:net, annual:s*12,
-      additional_amount:addAmount, additional_freq:addFreq, remark:remark.trim()||null,
-      mw_state:mwState, mw_category:mwCat, min_wage:mw.amount, min_wage_source:mw.source }
+      additional_amount:addAmount, additional_freq:addFreq, remark:remark.trim()||null }
     const { data, error } = await supabase.from('ctc_negotiations').upsert({
       candidate_id:sel.id, company_id:companyId, link_sent_at:new Date().toISOString(),
       offered_ctc:s*12, net_monthly:net,
@@ -4069,30 +4060,13 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
           </div>
         )}
         <div style={{ ...T.g2, marginBottom:10 }}>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>State / UT</label>
-            <select className="rx-input" value={mwState} onChange={e=>setMwState(e.target.value)} disabled={!!mrfState}>
-              {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
-            </select>
-            <div style={{ fontSize:10.5, color:mrfState?C.positive:C.faint, marginTop:3 }}>{mrfState ? `Auto-filled from MRF branch: ${mrfLoc?.location_name||'branch'} → ${mrfState}` : 'No branch on the MRF — choose the state'}</div>
-          </div>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Worker Category</label>
-            <select className="rx-input" value={mwCat} onChange={e=>setMwCat(e.target.value)} disabled={!!mrf?.wage_category}>
-              {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
-            </select>
-            <div style={{ fontSize:10.5, color:mrf?.wage_category?C.positive:C.faint, marginTop:3 }}>{mrf?.wage_category ? 'Auto-filled from the MRF' : 'Not set on the MRF — choose here'}</div>
-          </div>
-        </div>
-        <div style={{ ...T.g2, marginBottom:10 }}>
           <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Monthly {payLabel} (₹) *</label>
-            <input className="rx-input" style={{ ...((overBudget||belowMinWage)?{ borderColor:C.critical }:{}) }} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder={comp.ph?.[0]||'25000'} />
+            <input className="rx-input" style={{ ...(overBudget?{ borderColor:C.critical }:{}) }} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder={comp.ph?.[0]||'25000'} />
             {mrfStipendCapMonthly>0 && (
               overBudget
                 ? <div style={{ fontSize:10.5, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF budget ({money(mrfStipendCapMonthly)}/mo) — {payLabel.toLowerCase()} can’t be higher than the approved budget.</div>
                 : <div style={{ fontSize:10.5, color:C.faint, marginTop:3 }}>MRF budget: up to {money(mrfStipendCapMonthly)}/mo</div>
             )}
-            {belowMinWage
-              ? <div style={{ fontSize:10.5, color:C.critical, marginTop:3, fontWeight:600 }}>Below minimum wage for {mwState} ({mwCat}): {money(mw.amount)}/mo — {payLabel.toLowerCase()} can’t be lower than this.</div>
-              : <div style={{ fontSize:10.5, color:C.faint, marginTop:3 }}>Minimum wage · {mwState} · {mwCat}: <b style={{ color:C.ink }}>{money(mw.amount)}/mo</b> {mw.source==='master'?'(HR master)':mw.source==='default'?'(default table)':'(fallback)'}</div>}
           </div>
           <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>TDS Applicable?</label>
             <select className="rx-input" value={tds?'Yes':'No'} onChange={e=>setTds(e.target.value==='Yes')}><option>No</option><option>Yes</option></select>
@@ -4122,7 +4096,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
             {addAmount>0&&<div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0 0', fontSize:12, color:C.inkSoft }}><span>Additional ({addFreq})</span><span>₹{addAmount.toLocaleString('en-IN')}</span></div>}
           </div>
         )}
-        <button onClick={save} disabled={saving||overBudget||belowMinWage} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10, opacity:(saving||overBudget||belowMinWage)?.6:1, cursor:(overBudget||belowMinWage)?'not-allowed':'pointer' }}>{overBudget?`${payLabel} exceeds MRF budget`:belowMinWage?`${payLabel} below minimum wage`:saving?'Saving…':`Save ${payLabel} & Move to Offers`}</button>
+        <button onClick={save} disabled={saving||overBudget} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10, opacity:(saving||overBudget)?.6:1, cursor:overBudget?'not-allowed':'pointer' }}>{overBudget?`${payLabel} exceeds MRF budget`:saving?'Saving…':`Save ${payLabel} & Move to Offers`}</button>
         {savedLink&&(
           <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 14px' }}>
             <div style={{ fontSize:11, fontWeight:600, color: C.brand, marginBottom:6 }}>CANDIDATE SALARY LINK</div>
@@ -4483,9 +4457,9 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   // Minimum wage for the chosen state + worker category (HR master → default table).
   const mw = resolveMinWage(mwRates, form.state, form.category as any)
 
-  // ── Automated CTC model — lives in lib/recruitment/ctc-model.ts (EPF ceiling ₹25,000,
-  // ESIC on gross, statutory bonus on the Act's base, state PT/LWF). It runs LIVE: every
-  // input change recomputes the statement, exactly like the reference calculator.
+  // ── Automated CTC model — lives in lib/recruitment/ctc-model.ts (EPF 12%/13% and ESIC
+  // 0.75%/3.25% on Basic, EPF ceiling ₹25,000, ESIC while Basic < ₹21,000; no gratuity /
+  // bonus / PT / LWF lines — the same rules as the candidate's salary link). It runs LIVE.
   const model = useMemo(()=>{
     const ctcAnnual = Number(form.ctc)
     if (!ctcAnnual) return null
@@ -4496,7 +4470,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[form.ctc, form.varAmt, form.state, form.gratuity, form.bonusPct, form.bonusMode, mw.amount, selMrf?.location_id])
   const calcError = model && !model.ok
-    ? `Required minimum fixed CTC for ${form.state} (${form.category}) is ${inr(model.minReqFixedAnn)}/year (${inr(model.minReqFixedAnn/12)}/month) to satisfy basic wages (₹${Math.round(model.basic).toLocaleString('en-IN')}), PF/ESIC, gratuity and bonus rules. Given fixed CTC is ${inr(model.fixedAnnual)}/year.`
+    ? `Required minimum fixed CTC for ${form.state} (${form.category}) is ${inr(model.minReqFixedAnn)}/year (${inr(model.minReqFixedAnn/12)}/month) to cover the minimum-wage Basic (₹${Math.round(model.basic).toLocaleString('en-IN')}) plus employer EPF and ESIC on it. Given fixed CTC is ${inr(model.fixedAnnual)}/year.`
     : ''
   const calc = useMemo(()=>{
     if (!model || !model.ok) return null
@@ -4649,7 +4623,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
     if ((form.terms||'').trim()) bits.push('T&C')
     return bits.length ? bits.join(' · ') : 'none yet — joining / retention / ESOP / T&C / additional'
   })()
-  const ceilingNote = `EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • Gratuity • Statutory bonus • Pan-India minimum wages`
+  const ceilingNote = `EPF & ESIC on Basic • EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • ESIC while Basic < ₹21,000 • Pan-India minimum wages`
 
   return (
     <RxPage rail={rail} header={
@@ -4783,27 +4757,8 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                 {' '}— Basic = higher of 50% of fixed CTC and this floor.
               </div>
 
-              <div style={{ ...T.section, borderTop:`1px solid ${C.brandEdge}`, paddingTop:10, marginBottom:8 }}>Statutory &amp; Benefit Rules</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr 1fr', gap:8, marginBottom:10 }}>
-                <div><label style={T.label}>Gratuity in CTC?</label>
-                  <select style={T.select} value={form.gratuity} onChange={e=>F('gratuity',e.target.value)}>
-                    <option value="yes">Yes (4.81% of Basic)</option>
-                    <option value="no">No (Over and above)</option>
-                  </select>
-                </div>
-                <div><label style={T.label}>Bonus Rate</label>
-                  <select style={T.select} value={form.bonusPct} onChange={e=>F('bonusPct',e.target.value)}>
-                    <option value="8.33">8.33% (Min)</option>
-                    <option value="20">20% (Max)</option>
-                    <option value="0">0% (N/A)</option>
-                  </select>
-                </div>
-                <div><label style={T.label}>Bonus Mode</label>
-                  <select style={T.select} value={form.bonusMode} onChange={e=>F('bonusMode',e.target.value)}>
-                    <option value="salary">With Salary</option>
-                    <option value="ctc">Only in CTC</option>
-                  </select>
-                </div>
+              <div style={{ fontSize:10.5, color:C.faint, margin:'0 0 10px', lineHeight:1.5, borderTop:`1px solid ${C.brandEdge}`, paddingTop:8 }}>
+                EPF 12% / 13% and ESIC 0.75% / 3.25% are on <b style={{ color:C.ink }}>Basic</b> (EPF ceiling ₹25,000; ESIC only while Basic is under ₹21,000). No gratuity, bonus, PT or LWF lines — the same statement the candidate sees on the salary link.
               </div>
               <button onClick={recalc} style={{ ...T.btnPrimary, width:'100%', padding:'9px', fontSize:12.5, marginBottom:12, boxShadow:'0 6px 16px rgba(124,58,237,.25)' }}>Recalculate Breakdown</button>
 
