@@ -18,6 +18,11 @@ export function Chip({ children, variant }: { children: React.ReactNode; variant
 export const MRF_TONE: Record<string, 'pos' | 'warn' | 'crit' | 'info' | 'brand' | 'mute'> = {
   DRAFT: 'brand', SUBMITTED: 'info', ON_HOLD: 'warn', APPROVED: 'pos', REJECTED: 'crit', CLOSED: 'mute',
 };
+/** One colour per MRF status (--st on cards, tiles and table dots). */
+export const MRF_COLOR: Record<string, string> = {
+  DRAFT: 'var(--ez-ramp-4)', SUBMITTED: 'var(--ez-info)', ON_HOLD: 'var(--ez-warning)', APPROVED: 'var(--ez-positive)', REJECTED: 'var(--ez-critical)', CLOSED: 'var(--ez-muted)',
+};
+
 export const MRF_LABEL: Record<string, string> = {
   DRAFT: 'Draft', SUBMITTED: 'Submitted', ON_HOLD: 'On hold', APPROVED: 'Approved', REJECTED: 'Rejected', CLOSED: 'Closed',
 };

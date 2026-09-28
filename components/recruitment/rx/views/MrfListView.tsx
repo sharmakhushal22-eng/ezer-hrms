@@ -3,7 +3,10 @@ import * as React from 'react';
 import { Icon } from '../icons';
 import { RecruitmentHeader, RxPage } from '../Shell';
 import { MrfCard } from '../cards';
-import { Badge, EmptyState, FilterPills, Help, MRF_LABEL, MRF_TONE, Module, NextStepLine, PropBar, SearchBox, Segmented } from '../primitives';
+import { Badge, EmptyState, Help, MRF_COLOR, MRF_LABEL, MRF_TONE, Module, NextStepLine, SearchBox, Segmented } from '../primitives';
+import type { IconName } from '../logic/types';
+
+const STATUS_ICON: Record<string, IconName> = { DRAFT: 'edit', SUBMITTED: 'send', ON_HOLD: 'hourglass', APPROVED: 'check', REJECTED: 'x', CLOSED: 'lock' };
 import { formatINR, mrfNextStep } from '../logic/derive';
 import { useListControls, useSlashFocus } from '../logic/hooks';
 import type { MrfVM } from '../logic/types';
@@ -27,7 +30,7 @@ import type { MrfVM } from '../logic/types';
  * outside this component.
  */
 export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form, quickHireCap, status, onStatusChange,
-  onCreate, onEdit, onView, onMore, onExport, canEdit, onReview, onCloseMrf, onReopen, onDelete }: {
+  onCreate, onEdit, onView, onMore, onExport, canEdit, candidatesNote, onReview, onCloseMrf, onReopen, onDelete }: {
   rail?: React.ReactNode; mrfs: MrfVM[]; companyLabel?: string; filterBar?: React.ReactNode; banner?: React.ReactNode;
   /**
    * The tab's create/edit form. It has to render INSIDE this frame, between the
@@ -39,6 +42,8 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
   quickHireCap: number;
   status?: string; onStatusChange?: (v: string) => void;
   onCreate: () => void; onEdit: (id: string) => void; onView: (id: string) => void; onMore?: (id: string) => void; onExport?: () => void;
+  /** Optional short line under each card's candidate count, from data already loaded. */
+  candidatesNote?: (m: MrfVM) => string | undefined;
   canEdit?: (m: MrfVM) => boolean;
   onReview?: (id: string) => void; onCloseMrf?: (id: string) => void; onReopen?: (id: string) => void; onDelete?: (id: string) => void;
 }) {
@@ -53,11 +58,9 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
   useSlashFocus(search);
   const by = (s: string) => mrfs.filter((m) => m.status === s).length;
   const statuses = ['DRAFT', 'SUBMITTED', 'ON_HOLD', 'APPROVED', 'REJECTED', 'CLOSED'];
-  const color: Record<string, string> = { APPROVED: 'var(--ez-positive)', SUBMITTED: 'var(--ez-info)', ON_HOLD: 'var(--ez-warning)', DRAFT: 'var(--ez-ramp-2)', REJECTED: 'var(--ez-critical)', CLOSED: 'var(--ez-line-strong)' };
   const openings = mrfs.reduce((a, m) => a + m.openings, 0);
   const filled = mrfs.reduce((a, m) => a + m.filled, 0);
   const cands = mrfs.reduce((a, m) => a + m.candidates, 0);
-  const tiles: [string, number, string?][] = [['Total', mrfs.length], ['Approved', by('APPROVED'), 'var(--ez-positive)'], ['Pending approval', by('SUBMITTED'), 'var(--ez-warning)'], ['Openings', openings], ['Filled', filled, 'var(--ez-brand)'], ['Candidates', cands]];
 
   return (
     <RxPage header={
@@ -72,16 +75,29 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
       <div className="rx-grid rx-stag">
         {banner && <div className="s12">{banner}</div>}
         {form && <div className="s12">{form}</div>}
-        <Module className="s12" title="Requisition overview" icon="chart" meta={companyLabel && `Company: ${companyLabel}`}>
-          <div className="rx-tiles6" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 16 }}>
-            {tiles.map(([l, v, c]) => <div key={l} style={{ padding: '4px 0' }}><div className="rx-meta">{l}</div><div className="rx-kpi-v" style={{ fontSize: 36, marginTop: 6, color: c }}>{v}</div></div>)}
-          </div>
-          <div style={{ margin: '16px 0 14px' }}><PropBar parts={statuses.map((s) => ({ value: by(s), color: color[s], label: MRF_LABEL[s] }))} /></div>
-          <FilterPills label="Filter by status" value={ctl.status} onChange={ctl.setStatus}
-            options={[{ value: '*', label: 'All', count: mrfs.length }, ...statuses.map((s) => ({ value: s, label: MRF_LABEL[s], count: by(s) }))]} />
-        </Module>
+        {/* The hero tile and the six status tiles ARE the status filter. They drive
+            ctl.setStatus, which this view keeps CONTROLLED by the tab — the
+            "N awaiting approval · Show them" banner sets the same filter from
+            outside, and an uncontrolled hook would move the tiles without
+            filtering anything. */}
+        <div className="s12 rx-ov" role="group" aria-label="Filter by status">
+          <button type="button" className="rx-hero" aria-pressed={ctl.status === '*'} onClick={() => ctl.setStatus('*')}>
+            <span className="rx-hero-l">All requisitions{companyLabel ? `, ${companyLabel}` : ''}</span>
+            <span className="rx-hero-n">{mrfs.length}</span>
+            <span className="rx-hero-s"><div><b>{openings}</b><span>openings</span></div><div><b>{filled}</b><span>filled</span></div><div><b>{cands}</b><span>candidates</span></div></span>
+          </button>
+          {statuses.map((st) => (
+            <button key={st} type="button" className="rx-stt" aria-pressed={ctl.status === st} disabled={by(st) === 0}
+              onClick={() => ctl.setStatus(ctl.status === st ? '*' : st)} style={{ ['--st' as string]: MRF_COLOR[st] }}>
+              <span className="rx-stt-ic"><Icon name={STATUS_ICON[st]} /></span>
+              <span className="rx-stt-n">{by(st)}</span>
+              <span className="rx-stt-l">{MRF_LABEL[st]}</span>
+              <span className="rx-stt-bar"><i style={{ width: `${mrfs.length ? Math.round((by(st) / mrfs.length) * 100) : 0}%` }} /></span>
+            </button>
+          ))}
+        </div>
 
-        <div className="s12 rx-bar" style={{ gap: 10 }}>
+        <div className="s12 rx-ctrl">
           <SearchBox ref={search} value={ctl.query} onChange={ctl.setQuery} placeholder="Search title, MRF number or department" label="Search requisitions" />
           {filterBar}
           <Segmented label="Layout" value={ctl.view} onChange={ctl.setView} options={[{ value: 'cards', label: 'Cards' }, { value: 'table', label: 'Table' }]} />
@@ -95,10 +111,10 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
           <div className="s12"><EmptyState title="No requisitions match" hint="Try another status or clear the search."
             action={<button type="button" className="rx-btn sm" onClick={ctl.clear}>Clear filters</button>} /></div>
         ) : ctl.view === 'cards' ? (
-          <div className="s12"><div className="rx-grid">
+          <div className="s12"><h2 className="sr-only">Requisitions</h2><div className="rx-grid">
             {ctl.visible.map((m) => (
               <div className="s4" key={m.id}>
-                <MrfCard m={m} onView={() => onView(m.id)} onEdit={() => onEdit(m.id)} onMore={onMore ? () => onMore(m.id) : undefined} canEdit={canEdit ? canEdit(m) : true}
+                <MrfCard m={m} onView={() => onView(m.id)} onEdit={() => onEdit(m.id)} onMore={onMore ? () => onMore(m.id) : undefined} canEdit={canEdit ? canEdit(m) : true} candidatesNote={candidatesNote?.(m)}
                   onReview={onReview ? () => onReview(m.id) : undefined}
                   onCloseMrf={onCloseMrf ? () => onCloseMrf(m.id) : undefined}
                   onReopen={onReopen ? () => onReopen(m.id) : undefined}
@@ -112,12 +128,12 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
               <table className="rx-table">
                 <thead><tr><th>Requisition</th><th>Department</th><th>Lane</th><th>Status</th><th>Filled</th><th>Candidates</th><th>Recruiter</th><th>Next step</th><th><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>{ctl.visible.map((m) => (
-                  <tr key={m.id}>
-                    <td><button type="button" onClick={() => onView(m.id)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 650, color: 'var(--ez-ink)', cursor: 'pointer' }}>{m.title}</button><div className="rx-meta" style={{ fontSize: 12 }}>{m.code}</div></td>
+                  <tr key={m.id} style={{ ['--st' as string]: MRF_COLOR[m.status] }}>
+                    <td><span className="rx-sdot" /><button type="button" onClick={() => onView(m.id)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 650, color: 'var(--ez-ink)', cursor: 'pointer' }}>{m.title}</button><div className="rx-meta" style={{ fontSize: 12 }}>{m.code}</div></td>
                     <td>{m.department}</td>
                     <td><Badge tone={m.lane === 'Full MRF' ? 'brand' : 'mute'} dot={false}>{m.lane}</Badge></td>
                     <td><Badge tone={MRF_TONE[m.status]}>{MRF_LABEL[m.status]}</Badge></td>
-                    <td className="rx-num">{m.filled} of {m.openings}</td>
+                    <td style={{ minWidth: 120 }}><div className="rx-row" style={{ gap: 8 }}><span className="rx-num" style={{ fontWeight: 650 }}>{m.filled}/{m.openings}</span><span className="rx-mt-bar" role="progressbar" aria-label={`${m.title}: ${m.filled} of ${m.openings} filled`} aria-valuenow={m.openings ? Math.round((m.filled / m.openings) * 100) : 0} aria-valuemin={0} aria-valuemax={100} style={{ flex: 1, margin: 0 }}><i style={{ width: `${m.openings ? (m.filled / m.openings) * 100 : 0}%` }} /></span></div></td>
                     <td className="rx-num">{m.candidates}</td>
                     {/* The pre-redesign table carried a Recruiter column; keeping it
                         means the list view loses nothing to the card view. */}

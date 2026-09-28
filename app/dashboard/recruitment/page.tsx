@@ -34,7 +34,7 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help,
+  Segmented, SearchBox, Help, RxDialog,
   type ScreenResult,
 } from '@/components/recruitment/rx'
 
@@ -988,11 +988,16 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
   //
   // This comment sits ABOVE the return, not inside it: after `return (` the
   // parenthesis takes exactly one element, so a JSX comment there parses as an
-  // empty object literal and breaks the file.
+  // empty object literal and breaks the file. (Written here once already, and
+  // ignored once already — a {/* … */} placed on the next line took tsc from
+  // 43 to 19 while this very warning sat ten lines above it.)
+  //
+  // padding:0 on the drawer: this panel came out of a container that had none,
+  // so all twelve sections below pad themselves. The shell's own 28px would
+  // double that and, worse, inset the gradient header that is meant to bleed
+  // edge to edge — measured at 495px inside a 560px drawer before the override.
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.drawer, display:'flex', justifyContent:'flex-end' }}
-      onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:C.canvas, width:'100%', maxWidth:760, height:'100%', overflowY:'auto', boxShadow:'-8px 0 30px rgba(0,0,0,0.25)' }}>
+    <RxDialog open onClose={onClose} variant="drawer" label="Requisition detail" style={{ padding: 0 }}>
         {/* Header */}
         <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'16px 20px', position:'sticky', top:0, zIndex:2 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
@@ -1271,8 +1276,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             ))}
           </div>
         </div>
-      </div>
-    </div>
+    </RxDialog>
   )
 }
 
