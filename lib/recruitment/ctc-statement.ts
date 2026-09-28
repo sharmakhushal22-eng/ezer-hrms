@@ -14,15 +14,7 @@ export function hasStatement(calc:any): boolean {
   return !!calc && calc.basic != null && calc.gross != null && calc.inHand != null && calc.epfEmployer != null
 }
 
-// The recruiter's statement IS the candidate's statement (policy, 28-Sep-2026): EPF and ESIC on
-// Basic, ₹21,000 ESIC test on Basic, no PT / LWF / gratuity / bonus lines. One definition below.
 export function ctcStatementRows(calc:any, form:any): StmtRow[] {
-  void form
-  return linkStatementRows(calc)?.rows ?? []
-}
-
-/** The previous full-statutory statement, kept for reference / older exports. */
-export function legacyStatementRows(calc:any, form:any): StmtRow[] {
   const ceil = Number(calc.epfCeiling||EPF_WAGE_CEILING)
   // PF wages = Basic capped at the ceiling. Saves made while allowances were included keep their stored base.
   const epfBase = calc.epfWageBase != null ? Number(calc.epfWageBase) : Math.min(calc.basic, ceil)
@@ -36,7 +28,7 @@ export function legacyStatementRows(calc:any, form:any): StmtRow[] {
   rows.push({ kind:'row', label:'Special Allowance', basis:'balance of fixed CTC', monthly:calc.specialAllow||0, annual:(calc.specialAllow||0)*12 })
   rows.push({ kind:'sum', label:'Gross Earnings (A)', monthly:calc.gross, annual:calc.gross*12 })
   rows.push({ kind:'emp', label:'Employer EPF', basis:`13% on PF wages ₹${Math.round(epfBase).toLocaleString('en-IN')} (Basic, ceiling ₹${ceil.toLocaleString('en-IN')})`, monthly:calc.epfEmployer, annual:calc.epfEmployer*12, remark:'In CTC' })
-  rows.push({ kind:'emp', label:'Employer ESIC', basis: (calc.esicEmployer||0)>0 ? '3.25% of gross (≤ ₹21,000)' : 'not applicable — gross > ₹21,000', monthly:calc.esicEmployer||0, annual:(calc.esicEmployer||0)*12, remark:'In CTC' })
+  rows.push({ kind:'emp', label:'Employer ESIC', basis: (calc.esicEmployer||0)>0 ? '3.25% of Basic (Basic < ₹21,000)' : 'not applicable — Basic ≥ ₹21,000', monthly:calc.esicEmployer||0, annual:(calc.esicEmployer||0)*12, remark:'In CTC' })
   if (calc.gratuity==='yes') rows.push({ kind:'grat', label:'Gratuity', basis:'4.81% of Basic', monthly:calc.gratuityMonthly||0, annual:(calc.gratuityMonthly||0)*12, remark:'In CTC' })
   if (calc.bonusMode==='ctc' && (calc.bonusOverheadMonthly||0)>0) rows.push({ kind:'bonus', label:'Statutory Bonus (employer overhead)', basis:`${calc.bonusPct}% on ₹${Math.round(calc.bonusBase||calc.basic).toLocaleString('en-IN')}`, monthly:calc.bonusOverheadMonthly, annual:calc.bonusOverheadMonthly*12, remark:'In CTC' })
   rows.push({ kind:'sum', label:'Fixed CTC Package', basis:'gross + employer contributions', monthly:calc.fixedMonthly, annual:calc.fixedMonthly*12 })
@@ -45,7 +37,7 @@ export function legacyStatementRows(calc:any, form:any): StmtRow[] {
   rows.push({ kind:'head', label:'Employee deductions & net in-hand' })
   rows.push({ kind:'sum', label:'Gross Earnings (A)', monthly:calc.gross, annual:calc.gross*12 })
   rows.push({ kind:'ded', label:'(−) Employee PF', basis:`12% on PF wages ₹${Math.round(epfBase).toLocaleString('en-IN')}`, monthly:calc.epfEmployee, annual:calc.epfEmployee*12, remark:'Deduction' })
-  rows.push({ kind:'ded', label:'(−) Employee ESIC', basis: (calc.esicEmployee||0)>0 ? '0.75% of gross' : 'not applicable', monthly:calc.esicEmployee||0, annual:(calc.esicEmployee||0)*12, remark:'Deduction' })
+  rows.push({ kind:'ded', label:'(−) Employee ESIC', basis: (calc.esicEmployee||0)>0 ? '0.75% of Basic' : 'not applicable', monthly:calc.esicEmployee||0, annual:(calc.esicEmployee||0)*12, remark:'Deduction' })
   rows.push({ kind:'ded', label:`(−) Professional Tax`, basis: (calc.ptMonthly||0)>0 ? `${form.state} slab` : `nil in ${form.state}`, monthly:calc.ptMonthly||0, annual:(calc.ptMonthly||0)*12, remark:'Deduction' })
   rows.push({ kind:'ded', label:'(−) Labour Welfare Fund', basis: (calc.lwfMonthly||0)>0 ? `${LWF_CYCLE[form.state]||form.state} · shown as monthly average` : `nil in ${form.state}`, monthly:calc.lwfMonthly||0, annual:(calc.lwfMonthly||0)*12, remark:'Deduction' })
   rows.push({ kind:'net', label:'Net In-Hand Salary', basis:'before TDS', monthly:calc.inHand, annual:calc.inHand*12 })

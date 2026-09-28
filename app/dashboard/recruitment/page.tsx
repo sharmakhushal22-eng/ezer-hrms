@@ -4457,9 +4457,9 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   // Minimum wage for the chosen state + worker category (HR master → default table).
   const mw = resolveMinWage(mwRates, form.state, form.category as any)
 
-  // ── Automated CTC model — lives in lib/recruitment/ctc-model.ts (EPF 12%/13% and ESIC
-  // 0.75%/3.25% on Basic, EPF ceiling ₹25,000, ESIC while Basic < ₹21,000; no gratuity /
-  // bonus / PT / LWF lines — the same rules as the candidate's salary link). It runs LIVE.
+  // ── Automated CTC model — lives in lib/recruitment/ctc-model.ts (EPF ceiling ₹25,000,
+  // EPF and ESIC on Basic, statutory bonus on the Act's base, state PT/LWF). It runs LIVE: every
+  // input change recomputes the statement, exactly like the reference calculator.
   const model = useMemo(()=>{
     const ctcAnnual = Number(form.ctc)
     if (!ctcAnnual) return null
@@ -4470,7 +4470,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[form.ctc, form.varAmt, form.state, form.gratuity, form.bonusPct, form.bonusMode, mw.amount, selMrf?.location_id])
   const calcError = model && !model.ok
-    ? `Required minimum fixed CTC for ${form.state} (${form.category}) is ${inr(model.minReqFixedAnn)}/year (${inr(model.minReqFixedAnn/12)}/month) to cover the minimum-wage Basic (₹${Math.round(model.basic).toLocaleString('en-IN')}) plus employer EPF and ESIC on it. Given fixed CTC is ${inr(model.fixedAnnual)}/year.`
+    ? `Required minimum fixed CTC for ${form.state} (${form.category}) is ${inr(model.minReqFixedAnn)}/year (${inr(model.minReqFixedAnn/12)}/month) to satisfy basic wages (₹${Math.round(model.basic).toLocaleString('en-IN')}), PF/ESIC, gratuity and bonus rules. Given fixed CTC is ${inr(model.fixedAnnual)}/year.`
     : ''
   const calc = useMemo(()=>{
     if (!model || !model.ok) return null
@@ -4623,7 +4623,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
     if ((form.terms||'').trim()) bits.push('T&C')
     return bits.length ? bits.join(' · ') : 'none yet — joining / retention / ESOP / T&C / additional'
   })()
-  const ceilingNote = `EPF & ESIC on Basic • EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • ESIC while Basic < ₹21,000 • Pan-India minimum wages`
+  const ceilingNote = `EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • Gratuity • Statutory bonus • Pan-India minimum wages`
 
   return (
     <RxPage rail={rail} header={
@@ -4757,8 +4757,27 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                 {' '}— Basic = higher of 50% of fixed CTC and this floor.
               </div>
 
-              <div style={{ fontSize:10.5, color:C.faint, margin:'0 0 10px', lineHeight:1.5, borderTop:`1px solid ${C.brandEdge}`, paddingTop:8 }}>
-                EPF 12% / 13% and ESIC 0.75% / 3.25% are on <b style={{ color:C.ink }}>Basic</b> (EPF ceiling ₹25,000; ESIC only while Basic is under ₹21,000). No gratuity, bonus, PT or LWF lines — the same statement the candidate sees on the salary link.
+              <div style={{ ...T.section, borderTop:`1px solid ${C.brandEdge}`, paddingTop:10, marginBottom:8 }}>Statutory &amp; Benefit Rules</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr 1fr', gap:8, marginBottom:10 }}>
+                <div><label style={T.label}>Gratuity in CTC?</label>
+                  <select style={T.select} value={form.gratuity} onChange={e=>F('gratuity',e.target.value)}>
+                    <option value="yes">Yes (4.81% of Basic)</option>
+                    <option value="no">No (Over and above)</option>
+                  </select>
+                </div>
+                <div><label style={T.label}>Bonus Rate</label>
+                  <select style={T.select} value={form.bonusPct} onChange={e=>F('bonusPct',e.target.value)}>
+                    <option value="8.33">8.33% (Min)</option>
+                    <option value="20">20% (Max)</option>
+                    <option value="0">0% (N/A)</option>
+                  </select>
+                </div>
+                <div><label style={T.label}>Bonus Mode</label>
+                  <select style={T.select} value={form.bonusMode} onChange={e=>F('bonusMode',e.target.value)}>
+                    <option value="salary">With Salary</option>
+                    <option value="ctc">Only in CTC</option>
+                  </select>
+                </div>
               </div>
               <button onClick={recalc} style={{ ...T.btnPrimary, width:'100%', padding:'9px', fontSize:12.5, marginBottom:12, boxShadow:'0 6px 16px rgba(124,58,237,.25)' }}>Recalculate Breakdown</button>
 
