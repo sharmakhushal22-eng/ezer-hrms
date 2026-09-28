@@ -39,6 +39,14 @@ async function roleHolders(companyId: string | null, roleCodes: string[]): Promi
 
 const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
 
+// GET ?company_ids=a,b  -> { heads: { [company_id]: [{ id, name, code }] } }  (who approves, per company)
+export async function GET(req: NextRequest) {
+  const ids = (req.nextUrl.searchParams.get('company_ids') || '').split(',').map(s => s.trim()).filter(Boolean)
+  const heads: Record<string, { id: string; name: string; code: string | null }[]> = {}
+  await Promise.all(ids.map(async id => { heads[id] = (await roleHolders(id, ['HR_HEAD'])).map(({ id, name, code }) => ({ id, name, code })) }))
+  return NextResponse.json({ heads })
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as any
   const requestId = String(body?.request_id || '')

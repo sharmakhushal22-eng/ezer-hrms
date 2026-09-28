@@ -4991,7 +4991,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   const [loading, setLoading] = useState(false)
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set())
   // #9 — existing offer-approval requests, so we can block re-create and show status.
-  const [reqMap, setReqMap] = useState<Map<string,{status:string;submitted_at:string}>>(new Map())
+  const [reqMap, setReqMap] = useState<Map<string,{status:string;submitted_at:string;hr_head_actioned_at?:string|null;hr_head_comments?:string|null;offer_sent_at?:string|null}>>(new Map())
   useEffect(()=>{
     supabase.from('ctc_negotiations').select('candidate_id, candidate_response, created_at').order('created_at',{ascending:false})
       .then(({data}:any)=>{
@@ -5000,13 +5000,23 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
         const acc = new Set<string>(); latest.forEach((resp,cid)=>{ if(resp==='ACCEPTED') acc.add(cid) })
         setAcceptedIds(acc)
       })
-    supabase.from('offer_approval_requests').select('candidate_id, status, submitted_at').order('submitted_at',{ascending:false})
+    supabase.from('offer_approval_requests').select('candidate_id, status, submitted_at, hr_head_actioned_at, hr_head_comments, offer_sent_at').order('submitted_at',{ascending:false})
       .then(({data}:any)=>{
-        const m = new Map<string,{status:string;submitted_at:string}>()
-        for (const r of data||[]) { if(r.candidate_id && !m.has(r.candidate_id)) m.set(r.candidate_id, { status:r.status, submitted_at:r.submitted_at }) }
+        const m = new Map<string,{status:string;submitted_at:string;hr_head_actioned_at?:string|null;hr_head_comments?:string|null;offer_sent_at?:string|null}>()
+        for (const r of data||[]) { if(r.candidate_id && !m.has(r.candidate_id)) m.set(r.candidate_id, { status:r.status, submitted_at:r.submitted_at, hr_head_actioned_at:r.hr_head_actioned_at, hr_head_comments:r.hr_head_comments, offer_sent_at:r.offer_sent_at }) }
         setReqMap(m)
       })
   },[candidates])
+  // Who approves: the HR Head(s) of each company, shown on the request status so the recruiter
+  // knows whose desk it is on.
+  const [hrHeads, setHrHeads] = useState<Record<string,{ id:string; name:string; code:string|null }[]>>({})
+  useEffect(()=>{
+    const ids = Array.from(new Set((companies||[]).map((co:Company)=>co.id).filter(Boolean)))
+    if (!ids.length) return
+    fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`).then(r=>r.json()).then((j:any)=>setHrHeads(j.heads||{})).catch(()=>{})
+  },[companies])
+  const hrHeadLabel = (companyId?:string|null) => { const hs = hrHeads[companyId||''] || []; return hs.length ? hs.map(h=>`${h.name}${h.code?` (${h.code})`:''}`).join(', ') : 'HR Head not set for this company' }
+  const fmtOn = (d?:string|null) => d ? new Date(d).toLocaleDateString('en-IN',{ day:'numeric', month:'short', year:'numeric' }) : ''
   // A request is "active" (blocks re-create) unless HR Head rejected it.
   const activeReq = (cid:string) => { const r = reqMap.get(cid); return r && r.status !== 'HR_HEAD_REJECTED' ? r : null }
   // Only candidates who ACCEPTED their CTC offer (and aren't already sent/closed) need HR-Head approval.
@@ -5017,8 +5027,8 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
 
   const STATUS_LABEL: Record<string,string> = {
-    SUBMITTED: 'Offer request sent to HR Head',
-    HR_HEAD_APPROVED: 'Approved by HR Head — offer letter pending',
+    SUBMITTED: 'Submitted — pending HR Head review',
+    HR_HEAD_APPROVED: 'Approved by HR Head — moved to Send Offer Letter',
     OFFER_SENT: 'Offer letter sent',
     HR_HEAD_REJECTED: 'Rejected by HR Head — you can re-create',
   }
@@ -5106,26 +5116,36 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
             <span className="rx-meta">{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</span>
           </div>
         ) : shownEligible.map((c:Candidate)=>{
-          const ar = activeReq(c.id)
+          const ar = activeReq(c.id)          // blocks re-create unless rejected
+          const lr = reqMap.get(c.id)         // latest request, any status — shown with the HR Head
+          const heads = hrHeadLabel(c.company_id)
           return (
           <div className="s12" key={c.id}>
-            <div className="rx-mod" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
-              <div style={{ minWidth:0 }}>
+            <div className="rx-mod" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' as const }}>
+              <div style={{ minWidth:0, flex:'1 1 240px' }}>
                 <div className="rx-row" style={{ gap:6 }}>
                   <span className="rx-name">{c.full_name}</span>
                   {c.offer_revised&&<Badge text="Revised Offer" />}
                 </div>
                 <div className="rx-meta" style={{ marginTop:2 }}>{c.designation||'—'} · {c.stage}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
               </div>
-              {ar ? (
-                <div style={{ textAlign:'right' as const, flexShrink:0 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color: ar.status==='HR_HEAD_REJECTED' ? C.critical : C.positive }}>
-                    {STATUS_LABEL[ar.status] || ar.status}
+              {lr && (
+                <div style={{ textAlign:'right' as const, flexShrink:0, maxWidth:420 }}>
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:700, padding:'3px 10px', borderRadius:99,
+                    background: lr.status==='HR_HEAD_REJECTED' ? C.criticalTint : lr.status==='SUBMITTED' ? C.warningTint : C.positiveTint,
+                    color: lr.status==='HR_HEAD_REJECTED' ? C.critical : lr.status==='SUBMITTED' ? C.warning : C.positive }}>
+                    {lr.status==='SUBMITTED' ? '⏳' : lr.status==='HR_HEAD_REJECTED' ? '✗' : '✓'} {STATUS_LABEL[lr.status] || lr.status}
                   </div>
-                  {ar.submitted_at && <div className="rx-meta" style={{ marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
+                  <div className="rx-meta" style={{ marginTop:4 }}>
+                    {lr.status==='SUBMITTED' && <>Pending with <b style={{ color:C.ink }}>{heads}</b>{lr.submitted_at ? ` · submitted ${fmtOn(lr.submitted_at)}` : ''}</>}
+                    {lr.status==='HR_HEAD_APPROVED' && <>Approved by <b style={{ color:C.ink }}>{heads}</b>{lr.hr_head_actioned_at ? ` on ${fmtOn(lr.hr_head_actioned_at)}` : ''}{lr.hr_head_comments ? ` · “${lr.hr_head_comments}”` : ''} · now in <b style={{ color:C.ink }}>Send Offers</b></>}
+                    {lr.status==='OFFER_SENT' && <>Approved by <b style={{ color:C.ink }}>{heads}</b>{lr.hr_head_actioned_at ? ` on ${fmtOn(lr.hr_head_actioned_at)}` : ''} · offer letter sent{lr.offer_sent_at ? ` ${fmtOn(lr.offer_sent_at)}` : ''}</>}
+                    {lr.status==='HR_HEAD_REJECTED' && <>Rejected by <b style={{ color:C.ink }}>{heads}</b>{lr.hr_head_actioned_at ? ` on ${fmtOn(lr.hr_head_actioned_at)}` : ''}{lr.hr_head_comments ? ` · “${lr.hr_head_comments}”` : ''}</>}
+                  </div>
                 </div>
-              ) : (
-                <button type="button" className="rx-btn p" style={{ flexShrink:0 }} onClick={()=>pick(c)}>Create request</button>
+              )}
+              {!ar && (
+                <button type="button" className="rx-btn p" style={{ flexShrink:0 }} onClick={()=>pick(c)}>{lr?.status==='HR_HEAD_REJECTED' ? 'Re-create request' : 'Create request'}</button>
               )}
             </div>
           </div>
