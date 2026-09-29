@@ -5418,6 +5418,46 @@ HR Team`
     showNotify(`${c.full_name} marked Backed Out — MRF re-opened.`); onRefresh()
   }
 
+  /**
+   * Where an offer has got to, derived ONLY from fields the Candidate interface
+   * actually declares. The writes also set `offer_response`
+   * ('ACCEPTED' | 'REVISION' | 'BACKOUT'), but that column is not on the
+   * interface, so reading it here would not type-check — and every state it
+   * encodes is recoverable from what is typed.
+   *
+   * Order matters. `awaiting` is tested before `revision` because a revised
+   * offer that has been re-sent carries offer_revised AND stage 'Offer Sent';
+   * it is waiting on the candidate again, and the "Revised Offer" badge already
+   * says how it got there.
+   */
+  type OfferState = 'accepted' | 'awaiting' | 'backout' | 'revision' | 'notsent'
+  const offerState = (c:Candidate): OfferState =>
+    c.offer_accepted ? 'accepted'
+    : c.stage==='Offer Sent' ? 'awaiting'
+    : c.stage==='Rejected' ? 'backout'
+    : c.offer_revised ? 'revision'
+    : 'notsent'
+
+  /** Two steps, because that is the whole of this stage: it goes out, they reply. */
+  const offerChain = (c:Candidate): ChainStepVM[] => {
+    const st = offerState(c)
+    const sentOn = c.offer_sent_at ? new Date(c.offer_sent_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : null
+    return [
+      { role:'Sent', approverName: sentOn || (st==='notsent' ? 'Not yet' : 'Sent'), status: st==='notsent' ? 'PENDING' : 'APPROVED' },
+      { role:'Candidate reply',
+        approverName: st==='accepted' ? 'Accepted' : st==='backout' ? 'Backed out' : st==='revision' ? 'Revision asked' : st==='awaiting' ? 'Awaiting' : '—',
+        status: st==='accepted' ? 'APPROVED' : st==='backout' ? 'REJECTED' : 'PENDING' },
+    ]
+  }
+
+  const OFFER_TILES: { key:OfferState; label:string }[] = [
+    { key:'notsent',  label:'Not sent' },
+    { key:'awaiting', label:'Awaiting reply' },
+    { key:'accepted', label:'Accepted' },
+    { key:'revision', label:'Revision asked' },
+    { key:'backout',  label:'Backed out' },
+  ]
+
   return (
     <RxPage header={
       <RecruitmentHeader
@@ -5429,6 +5469,24 @@ HR Team`
         </Help>}
       />}>
       <div className="rx-grid rx-stag">
+        {/* Where every offer stands. Five tiles, not the kit's four: the data
+            distinguishes a revision request from a backout, and calling both
+            "Declined" would merge a candidate still in play with one who is
+            gone. Read-outs, not filters — section 9 asks for the counts, and
+            adding a filter here would be new behaviour rather than a new look. */}
+        {shownOffered.length>0 && (
+          <div className="s12" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:10 }}>
+            {OFFER_TILES.map(t => {
+              const n = shownOffered.filter((c:Candidate)=>offerState(c)===t.key).length
+              return (
+                <div key={t.key} className={t.key==='backout' && n>0 ? 'rx-tile crit' : 'rx-tile'}>
+                  <div style={{ ...eyebrow }}>{t.label}</div>
+                  <div className="rx-num" style={{ fontSize:20, fontWeight:700, marginTop:2, color: n===0 ? C.faint : undefined }}>{n}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
         <div className="s4" style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <div className="rx-label">Shortlisted / offer stage ({shownOffered.length})</div>
           <SearchBox value={offQ} onChange={setOffQ} placeholder="Search candidate…" label="Search candidates" />
@@ -5466,11 +5524,15 @@ HR Team`
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
+            {/* Out, then back. The same two facts the tiles count, said per
+                candidate. markAccepted/markRevision/markBackout are untouched —
+                each still writes exactly what it always did. */}
+            <div style={{ marginTop:8 }}><ApprovalChain steps={offerChain(c)} /></div>
             {c.stage==='Offer Sent'&&!c.offer_accepted&&(
               <div style={{ display:'flex', gap:6, marginTop:8 }}>
-                <button onClick={(e)=>{ e.stopPropagation(); markAccepted(c) }} style={{ ...T.btn, background:C.positive, color:C.onAccent, fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>Accepted</button>
-                <button onClick={(e)=>{ e.stopPropagation(); markRevision(c) }} style={{ ...T.btn, background:C.warningTint, color:C.warning, border: `1px solid ${C.warningTint}`, fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>Revision</button>
-                <button onClick={(e)=>{ e.stopPropagation(); markBackout(c) }} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>Backout</button>
+                <button type="button" className="rx-btn sm ok" style={{ flex:1 }} onClick={(e)=>{ e.stopPropagation(); markAccepted(c) }}>Accepted</button>
+                <button type="button" className="rx-btn sm" style={{ flex:1, background:C.warningTint, color:C.warning, borderColor:C.warningTint }} onClick={(e)=>{ e.stopPropagation(); markRevision(c) }}>Revision</button>
+                <button type="button" className="rx-btn sm d" style={{ flex:1 }} onClick={(e)=>{ e.stopPropagation(); markBackout(c) }}>Backout</button>
               </div>
             )}
             {c.stage==='Offer Sent'&&c.offer_accepted&&(
