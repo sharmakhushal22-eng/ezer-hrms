@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 
@@ -498,7 +498,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail }: any = {}) {
+export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail, focusOfferId }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [requests, setRequests] = useState<any[]>([])
@@ -514,6 +514,15 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
   useEffect(() => { loadRequests() }, [tab])
   useEffect(() => { loadMrfs(); loadRejected() }, [])
+  // Deep link (…&tab=hrhead&offer=<id>): open that candidate's review drawer as soon as it is loaded.
+  const focusedOffer = useRef(false)
+  useEffect(() => {
+    if (!focusOfferId || focusedOffer.current || !requests.length) return
+    const hit = requests.find((r: any) => r.id === focusOfferId)
+    if (hit) { setSelected(hit); setAction('approve'); setComment(''); focusedOffer.current = true }
+    else if (tab === 'pending') setTab('done')   // maybe already decided — look in Approved once
+    else focusedOffer.current = true
+  }, [focusOfferId, requests, tab])
 
   async function loadRequests() {
     const { data } = await supabase.from('offer_approval_requests')

@@ -684,7 +684,7 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
                 <button onClick={() => decide('reject')} disabled={busy || !reason.trim()} style={{ ...S.btn, background: C.red, marginLeft: 'auto', opacity: busy || !reason.trim() ? .6 : 1 }}>{busy ? 'Rejecting…' : 'Confirm reject'}</button>
               </>) : (<>
                 <button onClick={() => setMode('reject')} disabled={busy} style={S.btnD}>Reject</button>
-                <a href="/ess-portal?module=recruitment&tab=hrhead" style={{ ...S.btnO, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Open in Recruitment</a>
+                <a href={`/ess-portal?module=recruitment&tab=hrhead&offer=${open.id}`} style={{ ...S.btnO, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Open in Recruitment</a>
                 <button onClick={() => decide('approve')} disabled={busy} style={{ ...S.btn, background: C.green, marginLeft: 'auto', opacity: busy ? .6 : 1 }}>{busy ? 'Approving…' : 'Approve offer'}</button>
               </>)}
             </div>

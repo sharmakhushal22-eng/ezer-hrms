@@ -255,14 +255,19 @@ export default function RecruitmentPage() {
   // Deep-link from ESS Tasks & Approvals: /ess-portal?module=recruitment&mrfSub=approvals&mrf=<id>
   // opens the MRF tab on its Approvals sub-tab with that requisition ready to review.
   const [mrfDeep, setMrfDeep] = useState<{ sub?:string; id?:string }>({})
+  // …&tab=hrhead&offer=<request id> — the offer-approval notifications land here. The tab is
+  // remembered until the grant has loaded, because the visibility fallback below would
+  // otherwise bounce a role-gated tab (HR Head) back to Dashboard before roles are known.
+  const wantedTab = useRef<string|null>(null)
+  const [offerDeep, setOfferDeep] = useState<string|null>(null)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const p = new URLSearchParams(window.location.search)
     const sub = p.get('mrfSub'); const id = p.get('mrf')
     if (sub || id) { setTab('mrf'); setMrfDeep({ sub: sub || undefined, id: id || undefined }) }
-    // …&tab=hrhead / sendoffer / offerapproval — the offer-approval notifications land here.
     const t = p.get('tab')
-    if (t && ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus'].includes(t)) setTab(t as typeof tab)
+    if (t && ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus'].includes(t)) { setTab(t as typeof tab); wantedTab.current = t }
+    const o = p.get('offer'); if (o) setOfferDeep(o)
   }, [])
   const [companies, setCompanies] = useState<Company[]>([])
   const [locations, setLocations] = useState<Location[]>([])
@@ -335,8 +340,10 @@ export default function RecruitmentPage() {
   const visibleTabs = TABS.filter(t => (t.k !== 'hrhead' || isHrHead) && canSeeScreen(grant, `recruitment.${t.k}`))
   // If the current tab is not one this role may see, fall back to the first it can.
   useEffect(() => {
+    if (grantLoading) return   // roles not known yet — deciding visibility now would be wrong
+    if (wantedTab.current && visibleTabs.some(t => t.k === wantedTab.current)) { setTab(wantedTab.current as typeof tab); wantedTab.current = null; return }
     if (visibleTabs.length && !visibleTabs.some(t => t.k === tab)) setTab(visibleTabs[0].k as typeof tab)
-  }, [visibleTabs, tab])
+  }, [visibleTabs, tab, grantLoading])
   // Scoped-HM MRF id set for the Send Offers tab (null = oversight, no filter). Memoised so
   // the child's fetch effect does not refire on every render.
   const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
@@ -456,7 +463,7 @@ export default function RecruitmentPage() {
           objects and its own RecFilterBar/SearchBar. Only this component was
           converted; CreateOfferApproval and AuditTrailViewer in that file are
           untouched, since the Offer Approval tab renders both. */}
-      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} rail={rail} />}
+      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} rail={rail} focusOfferId={offerDeep} />}
       {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} rail={rail} />}
 
       {notify && <Toast msg={notify.msg} type={notify.type} onClose={() => setNotify(null)} />}
