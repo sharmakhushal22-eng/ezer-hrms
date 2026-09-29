@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 
 // The design system, aliased around this file's own S.
@@ -565,8 +566,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     loadRejected()
   }
 
-  async function processApproval() {
-    if (action === 'reject' && !comment.trim()) { alert('A rejection reason is required'); return }
+  async function processApproval(req: any = selected, act: 'approve'|'reject' = action, note: string = comment): Promise<boolean> {
+    if (act === 'reject' && !note.trim()) { alert('A rejection reason is required'); return false }
+    const selected = req, action = act, comment = note
     setProcessing(true)
     // DB CHECK constraint allows only 'APPROVED' / 'REJECTED' (not 'APPROVE'/'REJECT').
     const headAction = action === 'approve' ? 'APPROVED' : 'REJECTED'
@@ -595,12 +597,12 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     }
 
     setProcessing(false)
-    if (error) { alert('Error: ' + error.message); return }
-    alert(action === 'approve'
-      ? `Approved. ${notified ? `${notified} people notified (recruiter + HR manager) — the offer can now be sent.` : 'Saved — nobody could be notified.'}`
-      : `Rejected. ${notified ? `${notified} people notified (recruiter + MRF raiser).` : 'Saved — nobody could be notified.'}`)
-    setSelected(null); setComment(''); loadRequests()
+    if (error) { alert('Error: ' + error.message); return false }
+    setDecided({ action, notified })
+    setComment(''); loadRequests()
+    return true
   }
+  const [decided, setDecided] = useState<{ action: 'approve'|'reject'; notified: number } | null>(null)
 
   const statusColor = (s: string) => ({
     SUBMITTED: [TK.infoTint,TK.info],
@@ -710,122 +712,217 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
         ))}
       </div>
 
-      <div style={{ fontSize:13, fontWeight:600, color:TK.brandDeep, margin:'4px 0 8px' }}>Offer Approvals</div>
-      <div style={{ marginBottom:16 }}>
+      <div className="rx-mod-h" style={{ marginBottom:10 }}>
+        <div className="rx-mod-t">Offer approvals{tab==='pending' && fRequests.length ? <span className="rx-chip" style={{ background:TK.warningTint, color:TK.warning }}>{fRequests.length} waiting</span> : null}</div>
         <Segmented label="Offer approvals" value={tab}
           onChange={(v:'pending'|'done')=>{ setTab(v); setSelected(null) }}
           options={[{ value:'pending' as const, label:`Pending (${fRequests.length})` },
                     { value:'done' as const,    label:'Approved' }]} />
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
-
-        {/* Request List */}
-        <div>
-          {fRequests.length === 0 && (
-            <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:32 }}>
-              {ql ? 'No matching candidate' : `No ${tab === 'pending' ? 'pending' : 'approved'} requests`}
-            </div>
-          )}
-          {fRequests.map(r => {
-            const [bg, c] = statusColor(r.status)
+      {fRequests.length === 0 ? (
+        <div className="rx-mod" style={{ textAlign:'center' as const, padding:36 }}>
+          <div style={{ fontSize:28, marginBottom:6 }}>{tab==='pending' ? '🗂️' : '✅'}</div>
+          <div style={{ fontSize:14, fontWeight:700, color:TK.ink }}>{ql ? 'No matching candidate' : tab==='pending' ? 'Nothing waiting on you' : 'No approved offers yet'}</div>
+          <div className="rx-meta" style={{ marginTop:4 }}>{tab==='pending' ? 'Offers land here when a recruiter submits them after the candidate accepts the salary link.' : 'Approved offers move to Send Offers for the HR manager.'}</div>
+        </div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:14 }}>
+          {fRequests.map((r, i) => {
+            const mn = (mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number
+            const on = selected?.id === r.id
+            const ini = (r.candidates?.full_name || '?').split(' ').filter(Boolean).slice(0,2).map((w:string)=>w[0]).join('').toUpperCase()
+            const hike = r.hike_pct != null ? Number(r.hike_pct) : null
             return (
-              <div key={r.id} onClick={()=>setSelected(r)}
-                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:`1px solid ${TK.line}`, background:selected?.id===r.id?TK.brandTint: TK.surface }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                  <div>
-                    <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
-                    <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} CTC</div>
-                    <div style={{ fontSize:11, color:TK.brand, marginTop:2 }}>Hike: {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}</div>
-                    {r.submitted_at && <div style={{ fontSize:TF.micro, color:TK.muted, marginTop:SP.xs }}>Submitted: {new Date(r.submitted_at).toLocaleDateString('en-IN')}</div>}
+              <button key={r.id} type="button" onClick={()=>{ setSelected(r); setAction('approve'); setComment(''); setDecided(null) }} className="rx-lift"
+                style={{ textAlign:'left', font:'inherit', cursor:'pointer', background:TK.surface, color:TK.ink, border:`1px solid ${on ? TK.brand : TK.line}`, boxShadow: on ? `0 0 0 3px ${TK.brandTint}` : E.raised, borderRadius:16, padding:16, display:'flex', flexDirection:'column', gap:12, animation:`rxRise .5s ${.06 * Math.min(i, 8)}s cubic-bezier(.2,.8,.2,1) both` }}>
+                <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+                  <div style={{ width:42, height:42, borderRadius:13, background:`linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:14, flexShrink:0 }}>{ini}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                      <span style={{ fontSize:14.5, fontWeight:800, letterSpacing:'-.01em' }}>{r.candidates?.full_name}</span>
+                      {mn && <span className="rx-chip">{mn}</span>}
+                    </div>
+                    <div className="rx-meta" style={{ marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{[r.candidates?.designation, r.candidates?.experience_years != null ? `${r.candidates.experience_years} yrs` : null, r.candidates?.current_company].filter(Boolean).join(' · ') || '—'}</div>
                   </div>
-                  <span style={{ fontSize:TF.micro, padding:'3px 9px', borderRadius:R.pill, background:bg, color:c, fontWeight:W.medium, lineHeight:1.45 }}>{r.status.replace('_',' ')}</span>
+                  <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 9px', borderRadius:99, background: r.status==='SUBMITTED' ? TK.warningTint : TK.positiveTint, color: r.status==='SUBMITTED' ? TK.warning : TK.positive, whiteSpace:'nowrap' }}>{r.status==='SUBMITTED' ? 'Awaiting you' : 'Approved'}</span>
                 </div>
-              </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
+                  {[['Offered CTC', `₹${(Number(r.offered_ctc||0)/100000).toFixed(2)}L`], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '—'], ['DOJ', r.proposed_doj ? new Date(r.proposed_doj).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) : '—']].map(([k,v]) => (
+                    <div key={k} className="rx-tile" style={{ padding:'8px 10px' }}>
+                      <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted }}>{k}</div>
+                      <div style={{ fontSize:15, fontWeight:800, color: k==='Hike' && hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink, marginTop:2, ...numeric }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:11.5, color:TK.faint }}>
+                  <span>Submitted {r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('en-IN', { day:'numeric', month:'short' }) : '—'}{r.notice_buyout ? ' · buyout' : ''}</span>
+                  <span style={{ color:TK.brandDeep, fontWeight:700 }}>{r.status==='SUBMITTED' ? 'Review & decide →' : 'View →'}</span>
+                </div>
+              </button>
             )
           })}
         </div>
+      )}
 
-        {/* Detail + Action */}
-        {selected && (
-          <div>
-            {/* Template */}
-            <div style={S.card}>
-              <div style={{ fontSize:13, fontWeight:500, marginBottom:10 }}>Approval Request</div>
-              <pre style={{ fontFamily:'monospace', fontSize:11, color:TK.inkSoft, background:TK.sunken, borderRadius:7, padding:12, overflowX:'auto', whiteSpace:'pre-wrap', border: `1px solid ${TK.brandEdge}`, maxHeight:400, overflow:'auto' }}>
-                {selected.template_content || 'Template not available'}
-              </pre>
-            </div>
-
-            {/* Key Numbers */}
-            <div style={S.card}>
-              <div style={S.sec}>Key Numbers</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                {[
-                  ['Previous CTC', `₹${selected.prev_total_ctc ? fmt(selected.prev_total_ctc) : '—'}`],
-                  ['Offered CTC', `₹${selected.offered_ctc ? fmt(selected.offered_ctc) : '—'}`],
-                  ['Hike', `${selected.hike_pct ? Number(selected.hike_pct).toFixed(1) + '%' : '—'}`],
-                  ['Days to Join', `${selected.days_to_join || '—'} days`],
-                  ['Proposed DOJ', selected.proposed_doj ? new Date(selected.proposed_doj).toLocaleDateString('en-IN') : '—'],
-                  ['Notice Period', `${selected.notice_period_days || '—'} days`],
-                ].map(([l,v]) => (
-                  <div key={l} style={{ background:TK.sunken, borderRadius:7, padding:'9px 12px', border: `1px solid ${TK.brandEdge}` }}>
-                    <div style={{ ...eyebrow }}>{l}</div>
-                    <div style={{ fontSize:13, fontWeight:500, color:TK.ink, marginTop:2 }}>{v}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Hiring Manager remark / target (#8) */}
-            {selected.hiring_manager_remark && (
-              <div style={S.card}>
-                <div style={S.sec}>Hiring Manager Remark / Target</div>
-                <div style={{ fontSize:13, color:TK.ink, whiteSpace:'pre-wrap' }}>{selected.hiring_manager_remark}</div>
-              </div>
-            )}
-
-            {/* Approval Action */}
-            {selected.status === 'SUBMITTED' && (
-              <div style={S.cardP}>
-                <div style={S.sec}>Your Decision</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?TK.positiveTint:TK.sunken, action==='approve'?TK.positive:TK.muted), border:action==='approve'?`2px solid ${TK.positive}`:`1px solid ${TK.line}`, padding:12, fontSize:13 }}>Approve
-                  </button>
-                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?TK.criticalTint:TK.sunken, action==='reject'?TK.critical:TK.muted), border:action==='reject'?`2px solid ${TK.critical}`:`1px solid ${TK.line}`, padding:12, fontSize:13 }}>Reject
-                  </button>
-                </div>
-                <div style={{ marginBottom:12 }}>
-                  <label className="rx-label" style={{ display:'block', marginBottom:6 }}>{action === 'reject' ? 'Rejection Reason *' : 'Comments (Optional)'}</label>
-                  <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={comment} onChange={e=>setComment(e.target.value)}
-                    placeholder={action === 'reject' ? 'Reason clearly batao...' : 'Optional comments for HR Manager...'} />
-                </div>
-                <button onClick={processApproval} disabled={processing}
-                  style={S.btn(action==='approve'?TK.positive:TK.critical,TK.surface)}>
-                  {processing ? 'Processing...' : action === 'approve' ? 'Approve & Notify HR Manager' : 'Reject & Notify Recruiter'}
-                </button>
-              </div>
-            )}
-
-            {/* Already actioned */}
-            {selected.status === 'HR_HEAD_APPROVED' && (
-              <div style={{ background:TK.positiveTint, border: `1px solid ${TK.positiveTint}`, borderRadius:10, padding:14 }}>
-                <div style={{ fontSize:13, fontWeight:500, color:TK.positive, marginBottom:4 }}>Approved</div>
-                {selected.hr_head_comments && <div style={{ fontSize:12, color:TK.inkSoft }}>{selected.hr_head_comments}</div>}
-                <div style={{ fontSize:11, color:TK.faint, marginTop:4 }}>
-                  {selected.hr_head_actioned_at ? new Date(selected.hr_head_actioned_at).toLocaleDateString('en-IN') : ''}
-                </div>
-                <div style={{ fontSize:12, color:TK.positive, fontWeight:500, marginTop:8 }}>
-                  The HR Manager has been notified — sending the offer letter is still pending
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {selected && (
+        <OfferReviewDrawer
+          req={selected} mrfNumber={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number || null}
+          processing={processing} decided={decided}
+          onClose={()=>{ setSelected(null); setDecided(null); setComment('') }}
+          onDecide={(act, note)=>processApproval(selected, act, note)} />
+      )}
         </div>
       </div>
     </RxPage>
+  )
+}
+
+
+// ── HR Head review drawer — slides in over the dashboard; one offer, one decision ──
+function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDecide }: {
+  req: any; mrfNumber: string | null; processing: boolean; decided: { action: 'approve'|'reject'; notified: number } | null
+  onClose: () => void; onDecide: (action: 'approve'|'reject', note: string) => Promise<boolean>
+}) {
+  const [mode, setMode] = useState<'view'|'reject'|'approve'>('view')
+  const [note, setNote] = useState('')
+  const [showTpl, setShowTpl] = useState(false)
+  useEffect(() => { setMode('view'); setNote(''); setShowTpl(false) }, [req?.id])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !processing) onClose() }
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, processing])
+  useEffect(() => { if (decided) { const t = setTimeout(onClose, 1600); return () => clearTimeout(t) } }, [decided, onClose])
+  if (typeof document === 'undefined') return null
+  const c = req.candidates || {}
+  const rs = (n: any) => `₹${fmt(Number(n || 0))}`
+  const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+  const ctc = Number(req.offered_ctc || 0), vp = Number(req.offered_variable_pct || 0), vAmt = ctc > 0 && vp > 0 ? Math.round(ctc * vp / 100) : 0
+  const hike = req.hike_pct != null ? Number(req.hike_pct) : null
+  const pending = req.status === 'SUBMITTED'
+  const Row = ({ k, v, strong }: { k: string; v: any; strong?: boolean }) => (v == null || v === '' || v === false) ? null : (
+    <div style={{ display:'flex', gap:12, padding:'7px 0', borderBottom:`1px solid ${TK.line}`, fontSize:13 }}>
+      <span style={{ flex:'0 0 170px', color:TK.muted }}>{k}</span><span style={{ flex:1, color:TK.ink, fontWeight: strong ? 700 : 500, ...numeric }}>{String(v)}</span>
+    </div>
+  )
+  const Sec = ({ t, tag }: { t: string; tag?: React.ReactNode }) => <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, margin:'18px 0 6px' }}>{t}{tag}</div>
+  return createPortal(
+    <div onMouseDown={e => { if (e.target === e.currentTarget && !processing) onClose() }}
+      style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(15,23,42,.42)', backdropFilter:'blur(3px)', animation:'rxFade .3s both' }}>
+      <div role="dialog" aria-modal="true" style={{ position:'absolute', top:0, right:0, bottom:0, width:'min(640px, 100vw)', background:TK.surface, color:TK.ink, borderLeft:`1px solid ${TK.line}`, boxShadow:E.overlay, display:'flex', flexDirection:'column', animation:'rxSlideIn .45s cubic-bezier(.2,.8,.2,1) both' }}>
+        {/* header */}
+        <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${TK.line}`, display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ width:46, height:46, borderRadius:14, background:`linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:15, flexShrink:0 }}>{(c.full_name || '?').split(' ').filter(Boolean).slice(0,2).map((w:string)=>w[0]).join('').toUpperCase()}</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              <span style={{ fontSize:17, fontWeight:800, letterSpacing:'-.01em' }}>{c.full_name}</span>
+              {mrfNumber && <span className="rx-chip">{mrfNumber}</span>}
+              <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 9px', borderRadius:99, background: pending ? TK.warningTint : TK.positiveTint, color: pending ? TK.warning : TK.positive }}>{pending ? 'Awaiting your decision' : 'Approved'}</span>
+            </div>
+            <div className="rx-meta" style={{ marginTop:2 }}>{[c.designation, c.experience_years != null ? `${c.experience_years} yrs` : null, c.current_company, c.email].filter(Boolean).join(' · ')}</div>
+          </div>
+          <button type="button" className="rx-btn sm g" onClick={() => !processing && onClose()} aria-label="Close">✕</button>
+        </div>
+
+        {/* body */}
+        <div style={{ flex:1, overflowY:'auto', padding:'16px 22px 24px' }}>
+          {decided ? (
+            <div style={{ height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', gap:10, padding:'40px 0', animation:'rxRise .4s both' }}>
+              <div style={{ width:84, height:84, borderRadius:99, display:'grid', placeItems:'center', background: decided.action==='approve' ? TK.positiveTint : TK.criticalTint, color: decided.action==='approve' ? TK.positive : TK.critical, fontSize:40, fontWeight:900, animation:'rxPop .5s cubic-bezier(.2,.8,.2,1) both' }}>{decided.action==='approve' ? '✓' : '✕'}</div>
+              <div style={{ fontSize:20, fontWeight:800 }}>{decided.action==='approve' ? 'Offer approved' : 'Offer rejected'}</div>
+              <div className="rx-meta" style={{ maxWidth:360 }}>{decided.action==='approve' ? `${c.full_name}'s offer moves to Send Offers. ${decided.notified ? `${decided.notified} people notified (recruiter + HR manager).` : ''}` : `The recruiter${decided.notified > 1 ? ' and the MRF raiser' : ''} ${decided.notified ? 'have been told why.' : 'will see the reason on the request.'}`}</div>
+            </div>
+          ) : (<>
+            {/* hero numbers */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
+              {[['Offered CTC', rs(ctc), 'per annum', TK.ink], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '—', Number(req.prev_total_ctc) > 0 ? `over ${rs(req.prev_total_ctc)}` : 'previous CTC unknown', hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink], ['Monthly in-hand', req.monthly_inhand ? rs(req.monthly_inhand) : '—', 'estimated · before TDS', TK.ink]].map(([k, v, sub, col], i) => (
+                <div key={String(k)} className="rx-tile" style={{ animation:`rxRise .45s ${.05 * i}s cubic-bezier(.2,.8,.2,1) both` }}>
+                  <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted }}>{k}</div>
+                  <div style={{ fontSize:20, fontWeight:800, letterSpacing:'-.02em', color: col as string, marginTop:3, ...numeric }}>{v}</div>
+                  <div style={{ fontSize:11, color:TK.faint, marginTop:2 }}>{sub}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
+              {req.proposed_doj && <span className="rx-chip">DOJ {day(req.proposed_doj)}{req.days_to_join != null ? ` · ${req.days_to_join} days` : ''}</span>}
+              {Number(req.notice_period_days) > 0 && <span className="rx-chip">Notice {req.notice_period_days} days</span>}
+              {req.notice_buyout && <span className="rx-chip" style={{ background:TK.warningTint, color:TK.warning }}>Buyout{Number(req.notice_buyout_amount) > 0 ? ` ${rs(req.notice_buyout_amount)}` : ''}</span>}
+              {vAmt > 0 && <span className="rx-chip">Variable {vp}%</span>}
+            </div>
+
+            <Sec t="Offered package" />
+            <Row k="Fixed CTC" v={vAmt > 0 ? `${rs(ctc - vAmt)} p.a.` : `${rs(ctc)} p.a. (all fixed)`} strong />
+            <Row k="Variable" v={vAmt > 0 ? `${rs(vAmt)} p.a. · ${vp}% of CTC` : null} />
+            <Row k="Joining bonus" v={Number(req.joining_bonus) > 0 ? `${rs(req.joining_bonus)}${req.joining_bonus_freq ? ` (${req.joining_bonus_freq})` : ''}` : null} />
+            <Row k="Retention bonus" v={Number(req.retention_bonus) > 0 ? rs(req.retention_bonus) : null} />
+            <Row k="ESOP" v={Number(req.esop_value) > 0 ? `${rs(req.esop_value)}${req.esop_vesting ? ` (${req.esop_vesting})` : ''}` : null} />
+
+            <Sec t="Previous employer" tag={<span style={{ fontSize:10, fontWeight:600, textTransform:'none', letterSpacing:0, color:TK.warning, background:TK.warningTint, padding:'2px 8px', borderRadius:99 }}>confidential</span>} />
+            <Row k="Company" v={req.prev_company_name || c.current_company} />
+            <Row k="Address" v={req.prev_company_address} />
+            <Row k="Total CTC" v={Number(req.prev_total_ctc) > 0 ? `${rs(req.prev_total_ctc)} p.a.` : null} strong />
+            <Row k="Fixed / variable" v={(Number(req.prev_fixed_ctc) > 0 || Number(req.prev_variable) > 0) ? `${Number(req.prev_fixed_ctc) > 0 ? rs(req.prev_fixed_ctc) : '—'} / ${Number(req.prev_variable) > 0 ? rs(req.prev_variable) : '—'}` : null} />
+            <Row k="TA / DA (monthly)" v={Number(req.prev_ta_da) > 0 ? rs(req.prev_ta_da) : null} />
+            <Row k="Additional" v={req.prev_additional} />
+
+            {(req.hiring_manager_remark || req.recruiter_comments) && (<>
+              <Sec t="Remarks" />
+              <Row k="Hiring manager" v={req.hiring_manager_remark} />
+              <Row k="Recruiter" v={req.recruiter_comments} />
+            </>)}
+
+            {!pending && (<>
+              <Sec t="Your decision" />
+              <Row k="Outcome" v={req.hr_head_action === 'REJECTED' ? 'Rejected' : 'Approved'} strong />
+              <Row k="On" v={req.hr_head_actioned_at ? new Date(req.hr_head_actioned_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : null} />
+              <Row k="Comment" v={req.hr_head_comments} />
+            </>)}
+
+            <Sec t="Attachments sent with the request" />
+            <div className="rx-hint" style={{ lineHeight:1.6 }}>MRF{mrfNumber ? ` ${mrfNumber}` : ''} · interview summary · CTC break-up acknowledgement (password-protected with the candidate's mobile number) — all in your mail.</div>
+
+            {req.template_content && (
+              <div style={{ marginTop:16 }}>
+                <button type="button" className="rx-btn sm" onClick={() => setShowTpl(v => !v)}>{showTpl ? 'Hide' : 'Show'} the recruiter's request text</button>
+                {showTpl && <div className="rx-paper" style={{ marginTop:10, padding:'22px 26px', animation:'rxRise .35s both' }}><pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.6 }}>{req.template_content}</pre></div>}
+              </div>
+            )}
+          </>)}
+        </div>
+
+        {/* footer — the decision */}
+        {pending && !decided && (
+          <div style={{ padding:'14px 22px', borderTop:`1px solid ${TK.line}`, background:TK.surface, display:'flex', flexDirection:'column', gap:10 }}>
+            {mode === 'reject' && (
+              <div style={{ padding:14, borderRadius:14, border:`1px solid ${TK.criticalEdge}`, background:TK.criticalTint, display:'flex', flexDirection:'column', gap:8, animation:'rxRise .3s both' }}>
+                <div style={{ fontSize:12.5, fontWeight:700, color:TK.critical }}>Why are you rejecting this offer? The recruiter and the MRF raiser will read this.</div>
+                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. CTC is above the approved band for this grade — revise and resubmit." style={{ height:'auto', minHeight:72, resize:'vertical', padding:'10px 13px' }} />
+              </div>
+            )}
+            {mode === 'approve' && (
+              <div style={{ padding:14, borderRadius:14, border:`1px solid ${TK.positiveEdge}`, background:TK.positiveTint, display:'flex', flexDirection:'column', gap:8, animation:'rxRise .3s both' }}>
+                <div style={{ fontSize:12.5, fontWeight:700, color:TK.positive }}>Approve {rs(ctc)} for {c.full_name}? A note for the HR manager is optional.</div>
+                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional comment — goes with the approval notification." style={{ height:'auto', minHeight:56, resize:'vertical', padding:'10px 13px' }} />
+              </div>
+            )}
+            <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+              {mode === 'view' ? (<>
+                <button type="button" className="rx-btn d" onClick={() => setMode('reject')} disabled={processing}>Reject</button>
+                <span style={{ flex:1 }} />
+                <button type="button" className="rx-btn p" onClick={() => setMode('approve')} disabled={processing}>Approve offer →</button>
+              </>) : (<>
+                <button type="button" className="rx-btn g" onClick={() => setMode('view')} disabled={processing}>← Back</button>
+                <span style={{ flex:1 }} />
+                <button type="button" className={`rx-btn ${mode === 'reject' ? 'd' : 'p'}`} disabled={processing || (mode === 'reject' && !note.trim())} onClick={() => onDecide(mode as 'approve'|'reject', note)} style={{ opacity: processing || (mode === 'reject' && !note.trim()) ? .55 : 1 }}>
+                  {processing ? (mode === 'reject' ? 'Rejecting…' : 'Approving…') : mode === 'reject' ? 'Confirm rejection' : 'Confirm approval'}
+                </button>
+              </>)}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
   )
 }
 
