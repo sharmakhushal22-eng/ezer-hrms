@@ -35,7 +35,7 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, FilterPills, daysUntil,
+  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, FilterPills, daysUntil, Icon,
   type ScreenResult, type ChainStepVM,
 } from '@/components/recruitment/rx'
 // NOT imported: Ring and missingDocuments. Section 10 wants a documents ring
@@ -1436,6 +1436,53 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
 
   const isQuick = form.mrf_type === 'Quick Hire'
   const isReplacement = form.hiring_type==='Replacement' || form.hiring_type==='Backfill'
+
+  // ── Step wizard (same shape as MrfForm's, different gate source) ───────────
+  //
+  // This form has a real validator, so the gates DO NOT restate its rules —
+  // they call validateMrf() and filter its keys per section. Restating would
+  // let the two drift, and the form would start refusing what saveMRF allows.
+  //
+  // NON-STRICT on purpose. validateMrf(form, true) adds the submit-only
+  // requirements (department, reason, budget, joining date, skills/JD); gating
+  // steps on those would make Save Draft unreachable past step 2. The strict
+  // pass stays where it belongs, in saveMRF('SUBMITTED').
+  //
+  // Per-field messages are already rendered by <Field error=…>; the rail only
+  // decides whether a step may be left, so it counts keys rather than echoing
+  // their text.
+  const stepErrs = validateMrf(form, false)
+  const MRF_STEPS: { id: string; title: string; keys: string[] }[] = [
+    { id: 'meta',   title: 'Requisition Meta',      keys: [] },
+    { id: 'pos',    title: 'Position Details',      keys: ['company_id', 'designation', 'no_of_openings'] },
+    { id: 'emp',    title: 'Employment Details',    keys: [] },
+    { id: 'budget', title: 'Budget & Cost',         keys: ['budget_max', 'duration_months'] },
+    { id: 'just',   title: 'Justification',         keys: ['department_id', 'reason', 'outgoing_employee_id'] },
+    { id: 'time',   title: 'Timeline',              keys: ['target_joining_date', 'validity_date'] },
+    ...(!isQuick ? [{ id: 'cand', title: 'Candidate Requirements', keys: ['skills_required', 'experience_max'] }] : []),
+    { id: 'appr',   title: 'Approval Workflow',     keys: [] },
+    ...(!isQuick ? [{ id: 'src', title: 'Sourcing', keys: [] as string[] }] : []),
+    { id: 'att',    title: 'Attachments',           keys: [] },
+  ]
+  const mrfStepBlock = (s: { keys: string[] }) => s.keys.map(k => stepErrs[k]).find(Boolean) || null
+  const [mrfStepIdx, setMrfStepIdx] = useState(0)
+  const [mrfMaxSeen, setMrfMaxSeen] = useState(0)
+  // Editing arrives prefilled, so every step is already reachable — walking an
+  // editor forward through five sections to fix the sixth would be a
+  // regression. A fresh create starts at 0 and walks. The forward gate still
+  // applies either way: reachable is not the same as passable.
+  // Seeded from the step COUNT, not a literal: Quick Hire drops §7 and §9, so
+  // the last index is 7 there and 9 on a Full MRF. A hardcoded 9 would be out
+  // of range on a Quick Hire edit — survivable only because mrfStep clamps.
+  useEffect(() => { setMrfStepIdx(0); setMrfMaxSeen(editMRF ? MRF_STEPS.length - 1 : 0) }, [editMRF, showForm, MRF_STEPS.length])
+  const mrfStep = Math.min(mrfStepIdx, MRF_STEPS.length - 1)
+  const mrfActive = MRF_STEPS[mrfStep].id
+  const mrfBlocked = mrfStepBlock(MRF_STEPS[mrfStep])
+  const mrfGoNext = () => {
+    if (mrfBlocked) { showNotify(mrfBlocked, 'error'); return }
+    const n = Math.min(mrfStep + 1, MRF_STEPS.length - 1)
+    setMrfStepIdx(n); setMrfMaxSeen(m => Math.max(m, n))
+  }
   // Salary vs stipend vs fees — drives the labels in §4 and the duration field.
   const comp = compOf(form.employment_type)
 
@@ -1824,7 +1871,33 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             )
           })()}
 
+          {/* Step rail. Inline JSX, not a component — a component declared
+              inside MRFTab would remount its subtree every render and steal
+              focus from the field being typed into. */}
+          <nav className="rx-fnav" aria-label="Requisition form steps"
+            style={{ position:'static', top:'auto', flexDirection:'row', flexWrap:'wrap', gap:4, margin:'0 0 16px' }}>
+            <div className="rx-row" style={{ width:'100%', justifyContent:'space-between', margin:'2px 4px 8px' }}>
+              <span className="rx-label">Step {mrfStep + 1} of {MRF_STEPS.length}</span>
+              <span className="rx-meta rx-num">
+                {MRF_STEPS.filter(s => s.keys.length && !mrfStepBlock(s)).length} of {MRF_STEPS.filter(s => s.keys.length).length} checks clear
+              </span>
+            </div>
+            {MRF_STEPS.map((s, i) => {
+              const clear = i < mrfMaxSeen && !mrfStepBlock(s)
+              const reachable = i <= mrfMaxSeen
+              return (
+                <a key={s.id} href={`#${s.id}`} aria-current={i === mrfStep ? 'step' : undefined}
+                  className={i === mrfStep ? 'now' : clear ? 'done' : ''}
+                  onClick={e => { e.preventDefault(); if (reachable) setMrfStepIdx(i) }}
+                  style={{ cursor: reachable ? 'pointer' : 'not-allowed', opacity: reachable ? 1 : .45 }}>
+                  <span className="rx-sd">{clear && i !== mrfStep ? <Icon name="check" /> : i + 1}</span>{s.title}
+                </a>
+              )
+            })}
+          </nav>
+
           {/* ── §1 Requisition Meta ── */}
+          {mrfActive === 'meta' && (<>
           <SectionLine title="1 · Requisition Meta" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Requisition Type">
@@ -1852,7 +1925,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §2 Position Details ── */}
+          {mrfActive === 'pos' && (<>
           <SectionLine title="2 · Position Details" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Company" required error={errors.company_id}>
@@ -1904,7 +1980,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §3 Employment Details ── */}
+          {mrfActive === 'emp' && (<>
           <SectionLine title="3 · Employment Details" />
           <div style={{ ...T.g4, marginBottom:10 }}>
             <Field label="Employment Type">
@@ -1928,7 +2007,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §4 Budget & Cost ── */}
+          {mrfActive === 'budget' && (<>
           <SectionLine title="4 · Budget & Cost" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Cost Center">
@@ -1998,7 +2080,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </div>
           )}
 
+          </>)}
+
           {/* ── §5 Justification ── */}
+          {mrfActive === 'just' && (<>
           <SectionLine title="5 · Justification" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Reason for Hire" error={errors.reason}>
@@ -2034,7 +2119,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §6 Timeline ── */}
+          {mrfActive === 'time' && (<>
           <SectionLine title="6 · Timeline" />
           <div style={{ ...T.g2, marginBottom:10 }}>
             <Field label="Target Joining Date" error={errors.target_joining_date}>
@@ -2045,8 +2133,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §7 Candidate Requirements ── */}
-          {!isQuick && (
+          {!isQuick && mrfActive === 'cand' && (
             <>
               <SectionLine title="7 · Candidate Requirements" />
               <div style={{ ...T.g2, marginBottom:10 }}>
@@ -2107,6 +2197,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           )}
 
           {/* ── §8 Approval Workflow — auto-routed, same as ESS Raise MRF ── */}
+          {mrfActive === 'appr' && (<>
           <SectionLine title="8 · Approval Workflow" />
           <div style={{ ...T.card, background:C.sunken, marginBottom:14 }}>
             <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.6 }}>
@@ -2121,8 +2212,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </div>
           </div>
 
+          </>)}
+
           {/* ── §9 Sourcing ── */}
-          {!isQuick && (
+          {!isQuick && mrfActive === 'src' && (
             <>
               <SectionLine title="9 · Sourcing" />
               <div style={{ ...T.g2, marginBottom:10 }}>
@@ -2145,6 +2238,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           )}
 
           {/* ── §10 Attachments ── */}
+          {mrfActive === 'att' && (<>
           <SectionLine title="10 · Attachments" />
           <div style={{ marginBottom:14 }}>
             {editMRF ? (
@@ -2156,6 +2250,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               </div>
             )}
           </div>
+          </>)}
 
           {Object.values(errors).filter(Boolean).length>0 && (
             <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'9px 12px', marginBottom:12, fontSize:12, color:C.critical }}>
@@ -2163,9 +2258,24 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </div>
           )}
 
-          <div style={{ display:'flex', gap:8 }}>
+          {/* Why Next is refusing, beside the button. The per-field message is
+              already rendered by <Field error=…>; this says which step. */}
+          {mrfBlocked && (
+            <div style={{ marginBottom:10 }}>
+              <span className="rx-why"><Icon name="lock" />{mrfBlocked}</span>
+            </div>
+          )}
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const }}>
+            <button onClick={()=>setMrfStepIdx(mrfStep - 1)} disabled={saving || mrfStep === 0} style={T.btnOutline}>← Back</button>
+            {mrfStep < MRF_STEPS.length - 1 && (
+              <button onClick={mrfGoNext} disabled={saving} style={{ ...T.btnPrimary, opacity: mrfBlocked ? .55 : 1 }}>Next · {MRF_STEPS[mrfStep + 1].title} →</button>
+            )}
+            {/* Save Draft on every step: a draft is incomplete by definition,
+                and saveMRF('DRAFT') runs the non-strict validator anyway. */}
             <button onClick={()=>saveMRF('DRAFT')} disabled={saving} style={T.btnOutline}>Save Draft</button>
-            <button onClick={()=>saveMRF('SUBMITTED')} disabled={saving} style={T.btnPrimary}>Submit for Approval</button>
+            {mrfStep === MRF_STEPS.length - 1 && (
+              <button onClick={()=>saveMRF('SUBMITTED')} disabled={saving} style={T.btnPrimary}>Submit for Approval</button>
+            )}
           </div>
         </div>
       )}
