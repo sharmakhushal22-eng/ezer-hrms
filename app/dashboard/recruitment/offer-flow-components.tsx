@@ -182,62 +182,54 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   useEffect(() => { generateTemplate() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function generateTemplate() {
+    // Only lines with a value — the same rule as the HR Head's mail. No "—" or "Nil" filler.
+    const money = (v: any) => `₹${fmt(Number(v))}`
+    const line = (k: string, v: any) => { const t = v == null ? '' : String(v).trim(); return t ? `  ${k.padEnd(20)} ${t}` : null }
+    const block = (title: string, lines: (string | null)[]) => { const L = lines.filter(Boolean); return L.length ? `${title}\n${L.join('\n')}` : null }
+    const ctc = Number(negotiation?.offered_ctc || 0), vp = Number(negotiation?.variable_pct || 0)
+    const vAmt = ctc > 0 && vp > 0 ? Math.round(ctc * vp / 100) : 0
+    const prevT = Number(prevForm.prev_total_ctc || 0)
+    const hike = prevT > 0 && ctc > 0 ? ((ctc - prevT) / prevT * 100) : (negotiation?.hike_pct != null ? Number(negotiation.hike_pct) : null)
     const doj = joining.proposed_doj
-    const daysToJoin = doj ? daysDiff(doj) : '—'
-    const hike = negotiation?.hike_pct ? Number(negotiation.hike_pct).toFixed(1) : '—'
-    const docsCount = negotiation?.documents_count || 'pending'
-
-    const tmpl = `OFFER APPROVAL REQUEST — CONFIDENTIAL
-${''.repeat(50)}
-Reference: OAR-${Date.now().toString().slice(-6)}
-Date: ${new Date().toLocaleDateString('en-IN')}
-Prepared by: [Recruiter Name]
-
-CANDIDATE INFORMATION:
-  Name:              ${candidate?.full_name || '—'}
-  MRF Reference:     ${mrf?.mrf_number || mrf?.id?.slice(0,8) || '—'}
-  Position:          ${mrf?.designation || candidate?.designation || '—'}
-  Experience:        ${candidate?.experience_years || '—'} years
-
-PREVIOUS EMPLOYER DETAILS:
-  Company:           ${prevForm.prev_company_name || '—'}
-  Address:           ${prevForm.prev_company_address || '—'}
-  Previous CTC:      ₹${prevForm.prev_total_ctc ? fmt(Number(prevForm.prev_total_ctc)) : '—'}
-  Fixed CTC:         ₹${prevForm.prev_fixed_ctc ? fmt(Number(prevForm.prev_fixed_ctc)) : '—'}
-  Variable:          ₹${prevForm.prev_variable ? fmt(Number(prevForm.prev_variable)) : '—'}
-  TA / DA:           ₹${prevForm.prev_ta_da ? fmt(Number(prevForm.prev_ta_da)) + '/month' : 'Nil'}
-  Additional:        ${prevForm.prev_additional || 'Nil'}
-
-OFFERED COMPENSATION PACKAGE:
-  Annual CTC:        ₹${negotiation?.offered_ctc ? fmt(negotiation.offered_ctc) : '—'}
-  Fixed:             ₹${negotiation?.offered_ctc && negotiation?.variable_pct ? fmt(negotiation.offered_ctc * (1 - negotiation.variable_pct/100)) : '—'}
-  Variable (${negotiation?.variable_pct || 0}%): ₹${negotiation?.offered_ctc && negotiation?.variable_pct ? fmt(negotiation.offered_ctc * negotiation.variable_pct/100) : '—'}
-  Monthly Gross:     ₹${negotiation?.offered_ctc ? fmt(Math.round(negotiation.offered_ctc * (1-((negotiation.variable_pct||0)/100)) / 12)) : '—'}
-  Monthly In-Hand:   ₹${negotiation?.net_monthly ? fmt(negotiation.net_monthly) : '—'} (est., excl. TDS)
-
-  One-time Payments:
-  Joining Bonus:     ₹${negotiation?.joining_bonus ? fmt(negotiation.joining_bonus) : 'Nil'} ${negotiation?.joining_bonus_freq ? `(${negotiation.joining_bonus_freq})` : ''}
-  Retention Bonus:   ₹${negotiation?.retention_bonus ? fmt(negotiation.retention_bonus) : 'Nil'} ${negotiation?.retention_bonus_freq ? `(${negotiation.retention_bonus_freq})` : ''}
-  ESOP:              ₹${negotiation?.esop_value ? fmt(negotiation.esop_value) : 'Nil'} ${negotiation?.esop_remark ? `(${negotiation.esop_remark})` : ''}
-
-  HIKE: ${hike}% over previous CTC
-
-JOINING DETAILS:
-  Proposed DOJ:      ${doj ? new Date(doj).toLocaleDateString('en-IN') : '—'}
-  Days to Join:      ${daysToJoin} days from today
-  Notice Period:     ${joining.notice_period_days || '—'} days
-  Notice Buyout:     ${joining.notice_buyout ? `Yes${Number(joining.notice_buyout_amount) > 0 ? ` — ₹${fmt(Number(joining.notice_buyout_amount))}` : ''}` : 'No'}
-
-DOCUMENTS STATUS:    ${docsCount} document(s) received
-BGV STATUS:          Pending
-
-HIRING MANAGER REMARK / TARGET:
-  ${hiringRemark || 'Nil'}
-
-${recruiterComments ? `Recruiter Comments:\n  ${recruiterComments}` : ''}
-${''.repeat(50)}
-This document is confidential and for internal approval only.`
-    setTemplate(tmpl)
+    const ref = `OAR-${(mrf?.mrf_number || '').replace(/^MRF-/, '') || Date.now().toString().slice(-6)}-${(candidate?.full_name || 'C').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 3)}`
+    const parts = [
+      `OFFER APPROVAL REQUEST — CONFIDENTIAL`,
+      `Reference ${ref} · ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+      '',
+      block('CANDIDATE', [
+        line('Name', candidate?.full_name), line('Position', mrf?.designation || candidate?.designation), line('MRF', mrf?.mrf_number),
+        line('Experience', candidate?.experience_years != null ? `${candidate.experience_years} years` : null), line('Current company', candidate?.current_company),
+      ]),
+      block('PREVIOUS EMPLOYER', [
+        line('Company', prevForm.prev_company_name), line('Address', prevForm.prev_company_address),
+        line('Previous CTC', prevT > 0 ? `${money(prevT)} p.a.` : null),
+        line('Fixed', Number(prevForm.prev_fixed_ctc) > 0 ? `${money(prevForm.prev_fixed_ctc)} p.a.` : null),
+        line('Variable', Number(prevForm.prev_variable) > 0 ? `${money(prevForm.prev_variable)} p.a.` : null),
+        line('TA / DA', Number(prevForm.prev_ta_da) > 0 ? `${money(prevForm.prev_ta_da)} per month` : null),
+        line('Additional', prevForm.prev_additional),
+      ]),
+      block('OFFERED PACKAGE', [
+        line('Annual CTC', ctc > 0 ? `${money(ctc)} p.a.` : null),
+        line('Fixed', vAmt > 0 ? `${money(ctc - vAmt)} p.a.` : null),
+        line('Variable', vAmt > 0 ? `${money(vAmt)} p.a. (${vp}% of CTC)` : null),
+        line('Monthly in-hand', negotiation?.net_monthly ? `${money(negotiation.net_monthly)} (est., excl. TDS)` : null),
+        line('Joining bonus', Number(negotiation?.joining_bonus) > 0 ? `${money(negotiation.joining_bonus)}${negotiation?.joining_bonus_freq ? ` (${negotiation.joining_bonus_freq})` : ''}` : null),
+        line('Retention bonus', Number(negotiation?.retention_bonus) > 0 ? `${money(negotiation.retention_bonus)}${negotiation?.retention_bonus_freq ? ` (${negotiation.retention_bonus_freq})` : ''}` : null),
+        line('ESOP', Number(negotiation?.esop_value) > 0 ? `${money(negotiation.esop_value)}${negotiation?.esop_remark ? ` (${negotiation.esop_remark})` : ''}` : null),
+        line('Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}% over previous CTC` : null),
+      ]),
+      block('JOINING', [
+        line('Proposed DOJ', doj ? `${new Date(doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} (${daysDiff(doj)} days from today)` : null),
+        line('Notice period', joining.notice_period_days ? `${joining.notice_period_days} days` : null),
+        line('Notice buyout', joining.notice_buyout ? (Number(joining.notice_buyout_amount) > 0 ? `Yes — ${money(joining.notice_buyout_amount)}` : 'Yes') : null),
+      ]),
+      block('REMARKS', [ line('Hiring manager', hiringRemark), line('Recruiter', recruiterComments) ]),
+      cc.length ? block('CC ON THE APPROVAL MAIL', [ `  ${cc.map(e => `${e.full_name}${e.emp_code ? ` (${e.emp_code})` : ''}`).join(', ')}` ]) : null,
+      '',
+      'Attachments: MRF · interview summary · CTC break-up acknowledgement (password-protected).',
+      'Confidential — for internal approval only.',
+    ]
+    setTemplate(parts.filter(x => x !== null).join('\n\n').replace(/\n{3,}/g, '\n\n'))
     setShowTemplate(true)
   }
 
