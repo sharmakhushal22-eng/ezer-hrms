@@ -7,7 +7,6 @@ import "./globals.css";
 // globals.css is not resolved by the Tailwind pipeline and silently 404s.
 import "@/lib/ui/theme.css";
 import AutoTitleCase from "@/components/AutoTitleCase";
-import UiScale from "@/components/UiScale";
 import { themeBootScript } from "@/lib/ui/ThemeToggle";
 import { eyeComfortBootScript, EyeComfortLayer, EyeComfortOverlay, EyeComfortDock } from "@/lib/ui/EyeComfort";
 
@@ -63,7 +62,8 @@ export default function RootLayout({
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <EyeComfortDock />
-          <UiScale />
+          {/* The interface-size (zoom) control that sat here was removed on request
+              (29-Sep-2026): the app renders at 100% and the browser's own zoom does the rest. */}
         </div>
         <EyeComfortOverlay />
       </body>
