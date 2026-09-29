@@ -34,8 +34,8 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help, RxDialog, Track,
-  type ScreenResult,
+  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, FilterPills,
+  type ScreenResult, type ChainStepVM,
 } from '@/components/recruitment/rx'
 // NOTE: the kit also exports Badge, but this file declares its own Badge({text})
 // at ~195 with a different signature, used a dozen times. Importing the kit's
@@ -5109,6 +5109,8 @@ function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
 // ── OFFER APPROVAL TAB (Recruiter → HR Head) ──────────────────────
 function OfferApprovalTab({ supabase, companies, departments, locations, candidates, mrfs, onRefresh, rail }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
+  // Request-status filter (05 #11). In memory only — no query changes.
+  const [oaStatus, setOaStatus] = useState<string>('*')
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [neg, setNeg] = useState<any>(null)
   const [loading, setLoading] = useState(false)
@@ -5145,6 +5147,42 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
     OFFER_SENT: 'Offer letter sent',
     HR_HEAD_REJECTED: 'Rejected by HR Head — you can re-create',
   }
+
+  /**
+   * The request's own status, told as the three steps it actually passes
+   * through: Raised → HR Head → Ready to send.
+   *
+   * ApprovalChain does NOT understand this table's statuses. It reads only
+   * APPROVED / REJECTED / PENDING, and marks a step "now" solely when it is
+   * PENDING *and* every earlier step is APPROVED. Passing HR_HEAD_APPROVED
+   * straight through would leave every step neither done nor current — so the
+   * domain status is translated here rather than handed over raw.
+   *
+   * HR_HEAD_REJECTED deliberately leaves the third step PENDING: its
+   * predecessor is REJECTED, so the chain renders it blank rather than "now",
+   * which is right — nothing is waiting to be sent.
+   */
+  const chainFor = (status:string, submittedAt?:string|null): ChainStepVM[] => {
+    const when = submittedAt ? new Date(submittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '—'
+    const hrHead = status==='HR_HEAD_REJECTED' ? 'REJECTED'
+      : (status==='HR_HEAD_APPROVED'||status==='OFFER_SENT') ? 'APPROVED' : 'PENDING'
+    return [
+      { role:'Raised',        approverName: when,                                   status:'APPROVED' },
+      { role:'HR Head',       approverName: hrHead==='PENDING' ? 'Awaiting sign-off' : hrHead==='REJECTED' ? 'Sent back' : 'Approved', status: hrHead },
+      { role:'Ready to send', approverName: status==='OFFER_SENT' ? 'Offer sent' : 'Not yet', status: status==='OFFER_SENT' ? 'APPROVED' : 'PENDING' },
+    ]
+  }
+
+  // In-memory status filter (05 #11). Counts are real, because FilterPills
+  // disables a zero-count pill rather than hiding it.
+  //
+  // Reads reqMap directly rather than activeReq(): activeReq deliberately
+  // returns null for HR_HEAD_REJECTED, because a rejected request no longer
+  // blocks re-creating one. Filtering through it would report every sent-back
+  // request as "Not raised", leaving the "Sent back" pill permanently at 0 and
+  // therefore permanently disabled — a control that could never fire.
+  const statusOf = (c:Candidate) => reqMap.get(c.id)?.status || 'NONE'
+  const statusShown = oaStatus==='*' ? shownEligible : shownEligible.filter((c:Candidate)=>statusOf(c)===oaStatus)
   async function pick(c:Candidate) {
     if (activeReq(c.id)) return   // #9 — already requested; cannot re-create
     setSel(c); setNeg(null); setLoading(true)
@@ -5224,12 +5262,34 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
           </select>
         </div>
 
-        {shownEligible.length===0 ? (
-          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:28 }}>
-            <span className="rx-meta">{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</span>
+        {shownEligible.length>0 && (
+          <div className="s12">
+            <FilterPills label="Filter by request status" value={oaStatus} onChange={setOaStatus}
+              options={[
+                { value:'*',                label:'All',              count: shownEligible.length },
+                { value:'NONE',             label:'Not raised',       count: shownEligible.filter((c:Candidate)=>statusOf(c)==='NONE').length },
+                { value:'SUBMITTED',        label:'Awaiting HR Head', count: shownEligible.filter((c:Candidate)=>statusOf(c)==='SUBMITTED').length },
+                { value:'HR_HEAD_APPROVED', label:'Approved',         count: shownEligible.filter((c:Candidate)=>statusOf(c)==='HR_HEAD_APPROVED').length },
+                { value:'OFFER_SENT',       label:'Offer sent',       count: shownEligible.filter((c:Candidate)=>statusOf(c)==='OFFER_SENT').length },
+                { value:'HR_HEAD_REJECTED', label:'Sent back',        count: shownEligible.filter((c:Candidate)=>statusOf(c)==='HR_HEAD_REJECTED').length },
+              ]} />
           </div>
-        ) : shownEligible.map((c:Candidate)=>{
-          const ar = activeReq(c.id)
+        )}
+
+        {statusShown.length===0 ? (
+          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:28 }}>
+            <span className="rx-meta">{oaQ||oaStatus!=='*'?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</span>
+          </div>
+        ) : statusShown.map((c:Candidate)=>{
+          // DISPLAY reads the request itself; the RE-CREATE GATE stays on
+          // activeReq(). Conflating the two is why a sent-back request rendered
+          // as a bare "Create request" button with no trace of the rejection:
+          // activeReq() returns null for HR_HEAD_REJECTED *so that* a new
+          // request can be raised, and the row was keyed off that. Its
+          // STATUS_LABEL entry and the critical-colour branch below were both
+          // unreachable in consequence. pick()'s guard is unchanged.
+          const ar = reqMap.get(c.id) || null
+          const canRaise = !activeReq(c.id)
           return (
           <div className="s12" key={c.id}>
             <div className="rx-mod" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
@@ -5240,16 +5300,20 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
                 </div>
                 <div className="rx-meta" style={{ marginTop:2 }}>{c.designation||'—'} · {c.stage}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
               </div>
-              {ar ? (
-                <div style={{ textAlign:'right' as const, flexShrink:0 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color: ar.status==='HR_HEAD_REJECTED' ? C.critical : C.positive }}>
-                    {STATUS_LABEL[ar.status] || ar.status}
-                  </div>
-                  {ar.submitted_at && <div className="rx-meta" style={{ marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
-                </div>
-              ) : (
-                <button type="button" className="rx-btn p" style={{ flexShrink:0 }} onClick={()=>pick(c)}>Create request</button>
-              )}
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8, flexShrink:0, minWidth: ar ? 260 : undefined }}>
+                {ar && (
+                  <>
+                    <div style={{ fontSize:12, fontWeight:600, textAlign:'right' as const, color: ar.status==='HR_HEAD_REJECTED' ? C.critical : C.positive }}>
+                      {STATUS_LABEL[ar.status] || ar.status}
+                    </div>
+                    {/* The same status, shown as the journey it is. The wording
+                        above stays: it is what tells a recruiter what to DO. */}
+                    <div style={{ alignSelf:'stretch' }}><ApprovalChain steps={chainFor(ar.status, ar.submitted_at)} /></div>
+                  </>
+                )}
+                {/* A sent-back request shows its chain AND the way forward. */}
+                {canRaise && <button type="button" className="rx-btn p" onClick={()=>pick(c)}>{ar?'Re-create request':'Create request'}</button>}
+              </div>
             </div>
           </div>
         )})}
