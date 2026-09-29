@@ -14,6 +14,24 @@ import { authToken } from '@/lib/rms/client'
 import { WAGE_CATS } from '@/lib/recruitment/min-wages'
 import { jobCodePrefix, newMrfNumber } from '@/lib/recruitment/job-code'
 import { C as TK, E } from '@/lib/ui'
+// The redesign's stylesheet, loaded HERE rather than by a route layout.
+//
+// A Next route layout only wraps its own subtree, and this form renders on five
+// surfaces: the recruitment page (create + read-only review), RoleTabs' Raise
+// MRF and Edit-&-resubmit inside the ESS portal, and app/mrf-approve. Only the
+// first is under app/dashboard/recruitment/layout.tsx. Importing the sheet in
+// the component itself is the narrowest site that covers all five — importing
+// it into RoleTabs or HrisShell instead would load it on every portal page,
+// which is how Social's reaction pills once ended up stacked (see
+// RecruitmentModule.tsx). Audited before doing this: the sheet has no bare
+// element, :root-property, or universal rules that could reach ESS markup, and
+// nothing in components/ess carries class="rx" or any of .s2/.s6/.sr-only/.b-*.
+import '@/lib/ui/recruitment.redesign.css'
+// Direct paths, NOT the rx barrel: the barrel re-exports DashboardView,
+// MrfListView and PipelineView, and pulling those into the ESS bundle to get
+// one icon and one meter would be a real cost.
+import { Icon } from '@/components/recruitment/rx/icons'
+import { LaneMeter } from '@/components/recruitment/rx/form'
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 //
@@ -37,13 +55,23 @@ const C = {
 // ── The redesign vocabulary, ported by hand ──────────────────────────────────
 //
 // These numbers are the Recruitment redesign's (.rx-input, .rx-label, .rx-btn,
-// .rx-mod), but they CANNOT be taken by using those classes. The stylesheet
-// that defines them, lib/ui/recruitment.redesign.css, is imported in exactly
-// one place — app/dashboard/recruitment/layout.tsx — and this form has two
-// live call sites, only one of which is under that layout. The other is
-// RoleTabs.tsx:270, inside HrisShell, whose design system is `.hx`. A class
-// this form does not own would style it on one screen and leave it naked on
-// the other, so the values are inlined instead.
+// .rx-mod), ported by hand when the stylesheet could not be reached from here.
+//
+// THAT IS NO LONGER TRUE, and the values below are kept deliberately rather
+// than by neglect. The sheet is now imported by this file (see the top), so
+// rx-* classes DO resolve on all five surfaces. The inline values stay because
+// they are already correct and because the alternative — rx-input/rx-btn
+// everywhere — buys nothing without a `.rx` ancestor: the sheet's radius
+// overrides are written `.rx .rx-btn{…!important}` to outrank the global
+// `button{border-radius:10px!important}`, and adding a `.rx` wrapper would drag
+// in the frame rule (28/32/40 padding, canvas background, flex column,
+// overflow:hidden) and reshape this form inside its ESS card.
+//
+// So the sheet is loaded for the pieces that genuinely need it — the auto-filled
+// fields below and the budget lane meter — and the rest keeps the hand-port.
+//
+// One rx number is still deliberately NOT reproduced: the 11px button radius,
+// for the reason just given.
 //
 // One rx number is deliberately NOT reproduced: the 11px button radius.
 // UIKeyframes ships `button { border-radius:10px !important }` globally, and
@@ -173,17 +201,39 @@ function Field({ label, required, hint, children }: { label: string; required?: 
     </div>
   )
 }
+/**
+ * A field filled in from the raiser's own employee record.
+ *
+ * Wears the kit's auto-field look (.rx-field .rx-auto + .rx-auto-tag: positive
+ * tint, green "check" tag pinned bottom-right) now that the stylesheet is
+ * reachable from here — but it is NOT the kit's <AutoField>.
+ *
+ * AutoField renders a fixed-height <input>. This renders a DIV, because the
+ * measurement that produced the old note still holds: the longest value here
+ * ("Sharma Retail Solutions Pvt Ltd") wraps to two lines in a
+ * minmax(190px,1fr) cell, and an input — which cannot wrap — would hide half of
+ * it behind the 112px inset the tag needs. A div grows instead.
+ *
+ * It also keeps the per-field hint. AutoField hardcodes "From profile", which
+ * would erase the distinction between "you", "your manager" and "your HOD".
+ */
 function Locked({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <Field label={label} hint={hint || 'auto · locked'}>
-      {/* height:'auto' + minHeight rather than inputBase's fixed 42. MEASURED,
-          not assumed: the longest value on screen ("Sharma Retail Solutions
-          Pvt Ltd") wraps to two lines and still fits inside 42px, so this is
-          defence against a three-line value, not a fix for a visible clip.
-          Padding is deliberately NOT overridden — adding vertical padding here
-          would push this box taller than the single-line fields beside it. */}
-      <div style={{ ...st.input, background: C.locked, color: C.ink, display: 'flex', alignItems: 'center', height: 'auto', minHeight: 42 }}>{value || '—'}</div>
-    </Field>
+    <div className="rx-field rx-auto">
+      <label className="rx-label">{label}</label>
+      {/* paddingRight overrides `.rx-auto .rx-input{padding-right:112px}`.
+          MEASURED, and the reason this is not the kit's geometry: these fields
+          sit in a repeat(auto-fit, minmax(190px,1fr)) grid, so a cell is ~197px
+          and that inset leaves a 72px text column — "Sharma Retail Solutions
+          Pvt Ltd" wrapped to FOUR lines and the tag rendered on top of it in
+          four of the five fields. The kit's 112px assumes the wide centre
+          column of RaiseMrfLayout, which this form does not use. */}
+      <div className="rx-input" style={{ height: 'auto', minHeight: 42, display: 'flex', alignItems: 'center', paddingRight: 13 }}>{value || '—'}</div>
+      {/* ...and with the inset gone the tag can no longer float over the value,
+          so it takes its own row. Inline position beats the stylesheet's
+          absolute; .rx-field is already a column flex, so it simply flows. */}
+      <span className="rx-auto-tag" style={{ position: 'static', alignSelf: 'flex-start' }}><Icon name="check" />{hint || 'From profile'}</span>
+    </div>
   )
 }
 function Sel({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
@@ -418,6 +468,9 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
 
   // Lane check — annualised max vs the ₹6L cap.
   const annualMax = (Number(form.budget_max) || 0) * (comp.period === 'MONTHLY' ? 12 : 1)
+  // The same annualisation applied to the floor, so the lane meter can draw the
+  // whole band. Presentation only — no check reads this.
+  const annualMin = (Number(form.budget_min) || 0) * (comp.period === 'MONTHLY' ? 12 : 1)
   const laneShouldBe = annualMax > QUICK_HIRE_CAP ? 'Full MRF' : 'Quick Hire'
   const laneMismatch = !!form.budget_max && laneShouldBe !== form.mrf_type
 
@@ -607,6 +660,20 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         {(comp.fixedTerm || comp.period === 'MONTHLY') && (
           <Field label="Duration (months)"><input type="number" min="1" max="60" style={st.input} value={form.duration_months} onChange={e => F('duration_months', e.target.value)} /></Field>
         )}
+      </div>
+      {/* Where the band sits against the Quick Hire cap.
+          The meter DRAWS a decision this form already made — annualMin and
+          annualMax are the same annualisation laneShouldBe is computed from, so
+          the picture and the check can never disagree. `lane` is null until a
+          budget exists, so the badge cannot assert a lane the check never made,
+          and the mismatch banner above keeps sole ownership of the switch
+          action. Nothing here writes, validates, or changes the lane. */}
+      <div style={{ marginTop: 14 }}>
+        <LaneMeter
+          minRupees={annualMin || null}
+          maxRupees={annualMax || null}
+          cap={QUICK_HIRE_CAP}
+          lane={form.budget_max ? laneShouldBe : null} />
       </div>
 
       {/* 5 · Justification */}
