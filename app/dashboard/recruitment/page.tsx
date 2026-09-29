@@ -3291,13 +3291,14 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     mrf_id: !cForm.mrf_id, first_name: !cForm.first_name.trim(), last_name: !cForm.last_name.trim(),
     email: !isEmail(cForm.email.trim()), phone: !/^\d{10}$/.test(cForm.phone.trim()),
     current_city: !cForm.current_city.trim(), total_exp_years: cForm.total_exp_years==='',
+    current_company: !String(cForm.current_company||'').trim(),
     qualification: !cForm.qualification, notice_period: !cForm.notice_period,
     current_fixed: cForm.current_fixed==='', expected_ctc: cForm.expected_ctc==='',
     source: !cForm.source, source_remark: cForm.source==='Other' && !String(cForm.source_remark||'').trim(), consent: !cForm.consent,
   } as Record<string,boolean>
   const bad = (k:string)=> touched && missing[k]
   const STEP_TITLES = ['Requisition & Personal', 'Contact & Professional', 'Compensation & Source', 'Documents & Screening']
-  const STEP_FIELDS: Record<number,string[]> = { 1:['mrf_id','first_name','last_name'], 2:['email','phone','current_city','total_exp_years','qualification','notice_period'], 3:['current_fixed','expected_ctc','source','source_remark'], 4:['consent'] }
+  const STEP_FIELDS: Record<number,string[]> = { 1:['mrf_id','first_name','last_name'], 2:['email','phone','current_city','total_exp_years','current_company','qualification','notice_period'], 3:['current_fixed','expected_ctc','source','source_remark'], 4:['consent'] }
   const stepMissing = (n:number) => STEP_FIELDS[n].filter(k=>missing[k]).length
   const goToStep = (n:number) => { setAddStep(Math.max(1, Math.min(4, n))); setTouched(false); addBodyRef.current?.scrollTo({ top:0, behavior:'smooth' }) }
   const goNext = () => {
@@ -3625,7 +3626,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Total experience — years{reqMark}</label><input className="rx-input" style={inp('total_exp_years')} type="number" min={0} max={50} value={cForm.total_exp_years} onChange={e=>CF('total_exp_years',e.target.value)} /></div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Months</label><input className="rx-input" type="number" min={0} max={11} value={cForm.total_exp_months} onChange={e=>CF('total_exp_months',e.target.value)} /></div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Relevant experience (yrs)</label><input className="rx-input" type="number" min={0} max={50} step={0.5} value={cForm.relevant_exp} onChange={e=>CF('relevant_exp',e.target.value)} /></div>
-                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current employer</label><input className="rx-input" value={cForm.current_company} onChange={e=>CF('current_company',e.target.value)} placeholder="Blank if fresher" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current / previous company{reqMark}</label><input className="rx-input" style={inp('current_company')} value={cForm.current_company} onChange={e=>CF('current_company',e.target.value)} placeholder="Company name (type Fresher if none)" /></div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current designation</label><input className="rx-input" value={cForm.designation} onChange={e=>CF('designation',e.target.value)} /></div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Function</label>
                   <select className="rx-input" value={cForm.function} onChange={e=>CF('function',e.target.value)}>

@@ -52,6 +52,44 @@ function recordMatchesFilters(rec: { company_id?:string|null; mrf_id?:string|nul
 const FILTER_EMPTY = { company:'', department:'', position:'', location:'' }
 const distinctSorted = (arr:(string|undefined|null)[]) => Array.from(new Set(arr.filter(Boolean))).sort() as string[]
 
+// ── CC picker — search employees by name / code, keep a few as chips. Module scope, so the
+// search box never re-mounts while typing. Everyone picked gets the HR Head's approval mail.
+type CcEmp = { id: string; full_name: string; emp_code: string | null; designation: string | null }
+function CcPicker({ value, onChange }: { value: CcEmp[]; onChange: (v: CcEmp[]) => void }) {
+  const supabase = createClient()
+  const [emps, setEmps] = useState<CcEmp[]>([])
+  const [q, setQ] = useState('')
+  useEffect(() => { supabase.from('employees').select('id, full_name, emp_code, designation').is('date_of_leaving', null).order('full_name').then(({ data }) => setEmps((data as CcEmp[]) || [])) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const s = q.trim().toLowerCase()
+  const hits = s ? emps.filter(e => !value.some(v => v.id === e.id) && ((e.full_name || '').toLowerCase().includes(s) || (e.emp_code || '').toLowerCase().includes(s))).slice(0, 8) : []
+  return (
+    <div>
+      {value.length > 0 && (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
+          {value.map(e => (
+            <span key={e.id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:TK.brandTint, color:TK.brandDeep, borderRadius:99, padding:'3px 6px 3px 10px', fontSize:11.5, fontWeight:600 }}>
+              {e.full_name} <span style={{ color:TK.faint }}>{e.emp_code}</span>
+              <button type="button" onClick={() => onChange(value.filter(v => v.id !== e.id))} style={{ border:'none', background:'transparent', cursor:'pointer', color:TK.brandDeep, fontSize:13, lineHeight:1 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ position:'relative' }}>
+        <input className="rx-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name or employee code to CC…" />
+        {hits.length > 0 && (
+          <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:8, marginTop:3, boxShadow:E.floating, maxHeight:220, overflowY:'auto' }}>
+            {hits.map(e => (
+              <button key={e.id} type="button" onClick={() => { onChange([...value, e]); setQ('') }} style={{ display:'flex', width:'100%', textAlign:'left', gap:8, alignItems:'center', padding:'8px 11px', border:'none', borderBottom:`1px solid ${TK.line}`, background:TK.surface, cursor:'pointer', fontFamily:'inherit' }}>
+                <span style={{ flex:1, fontSize:12.5, color:TK.ink }}>{e.full_name} <span style={{ color:TK.faint }}>· {e.emp_code || '—'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════
 // RECRUITER: CREATE OFFER APPROVAL REQUEST
 // ═══════════════════════════════════════════════════════════════
@@ -60,6 +98,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   const [saving, setSaving] = useState(false)
   const [template, setTemplate] = useState('')
   const [showTemplate, setShowTemplate] = useState(false)
+  const [cc, setCc] = useState<CcEmp[]>([])
 
   // Everything the recruiter already captured is prefilled: the negotiation's previous-employer
   // fields when it has them, else the Add Candidate form (compensation block, notice, DOJ).
@@ -91,6 +130,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     proposed_doj: defaultDoj,
     notice_period_days: noticeDays > 0 ? String(noticeDays) : '',
     notice_buyout: !!comp.buyout && String(comp.buyout).toLowerCase() === 'yes',
+    notice_buyout_amount: negotiation?.notice_buyout_amount != null ? String(negotiation.notice_buyout_amount) : '',
   })
 
   const [recruiterComments, setRecruiterComments] = useState('')
@@ -147,7 +187,7 @@ JOINING DETAILS:
   Proposed DOJ:      ${doj ? new Date(doj).toLocaleDateString('en-IN') : '—'}
   Days to Join:      ${daysToJoin} days from today
   Notice Period:     ${joining.notice_period_days || '—'} days
-  Notice Buyout:     ${joining.notice_buyout ? 'Yes' : 'No'}
+  Notice Buyout:     ${joining.notice_buyout ? `Yes${Number(joining.notice_buyout_amount) > 0 ? ` — ₹${fmt(Number(joining.notice_buyout_amount))}` : ''}` : 'No'}
 
 DOCUMENTS STATUS:    ${docsCount} document(s) received
 BGV STATUS:          Pending
@@ -186,8 +226,9 @@ This document is confidential and for internal approval only.`
       notice_period_days: Number(joining.notice_period_days) || null,
     }).eq('id', negotiation?.id)
 
-    // Create offer approval request
-    const { data: created, error } = await supabase.from('offer_approval_requests').insert({
+    // Create offer approval request (retried without notice_buyout_amount if migration 133 is not applied yet)
+    const buyoutAmt = joining.notice_buyout && Number(joining.notice_buyout_amount) > 0 ? Number(joining.notice_buyout_amount) : null
+    const row: any = {
       candidate_id: candidate?.id,
       mrf_id: candidate?.mrf_id || null,
       company_id: candidate?.company_id || null,
@@ -217,16 +258,25 @@ This document is confidential and for internal approval only.`
       submitted_at: new Date().toISOString(),
       recruiter_comments: recruiterComments || null,
       hiring_manager_remark: hiringRemark || null,
-    }).select('id').single()
+      notice_buyout_amount: buyoutAmt,
+      cc_employee_ids: cc.map(e => e.id),
+    }
+    let ins = await supabase.from('offer_approval_requests').insert(row).select('id').single()
+    if (ins.error && (ins.error.code === 'PGRST204' || /notice_buyout_amount|cc_employee_ids/.test(ins.error.message))) {
+      const { notice_buyout_amount: _b, cc_employee_ids: _c, ...rest } = row
+      ins = await supabase.from('offer_approval_requests').insert(rest).select('id').single()
+    }
+    const { data: created, error } = ins
 
     // Tell the HR Head(s) of the company there is an offer to review and approve (ESS bell +
     // Tasks & Approvals, deep-linked to the HR Head tab). Best-effort: the request stands either way.
-    let notified = 0, notifyWarning = ''
+    let notified = 0, notifyWarning = '', emailedTo = ''
     if (!error && created?.id) {
       try {
         const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'submitted', request_id: created.id }) })
         const j = await r.json().catch(() => ({}))
-        notified = Number(j.notified || 0); notifyWarning = j.warning || (!r.ok ? (j.error || 'notification failed') : '')
+        notified = Number(j.notified || 0); notifyWarning = j.warning || j.emailSkipped || (!r.ok ? (j.error || 'notification failed') : '')
+        if (Number(j.emailed) > 0) emailedTo = `${j.emailed} recipient(s)`
       } catch { notifyWarning = 'notification failed' }
     }
 
@@ -242,7 +292,7 @@ This document is confidential and for internal approval only.`
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
     alert(notified > 0
-      ? `Offer approval request submitted — the HR Head has been notified to review and approve (${notified} notified).`
+      ? `Offer approval request submitted — the HR Head has been notified to review and approve (${notified} notified${emailedTo ? `, mail sent to ${emailedTo}` : ''}${notifyWarning ? `; ${notifyWarning}` : ''}).`
       : `Offer approval request submitted. ${notifyWarning || 'The HR Head could not be notified.'}`)
     if (onSubmitted) onSubmitted()
   }
@@ -294,6 +344,11 @@ This document is confidential and for internal approval only.`
             </div>
           </div>
         </div>
+        {joining.notice_buyout && (
+          <div style={{ ...S.g3, marginBottom:10 }}>
+            <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Buyout Amount (₹)</label><input className="rx-input" type="number" min={0} step={1} value={joining.notice_buyout_amount} onChange={e=>J('notice_buyout_amount',e.target.value)} placeholder="e.g. 60000" /></div>
+          </div>
+        )}
         {joining.proposed_doj && (
           <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', fontSize:12, color:TK.brandDeep }}>
             Days to join: <strong>{daysDiff(joining.proposed_doj)} days</strong> from today
@@ -332,6 +387,13 @@ This document is confidential and for internal approval only.`
       <div style={S.card}>
         <SecLine title="Recruiter Comments (Optional)" />
         <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for HR Head..." />
+      </div>
+
+      {/* CC — everyone picked here receives the same approval mail as the HR Head */}
+      <div style={S.card}>
+        <SecLine title="CC on the approval mail (optional)" />
+        <div style={{ fontSize:11.5, color:TK.faint, marginBottom:8 }}>The HR Head gets the approval mail with the MRF, interview summary and CTC acknowledgement attached. Anyone you add here is CC'd on the same mail.</div>
+        <CcPicker value={cc} onChange={setCc} />
       </div>
 
       {/* ACTIONS */}

@@ -30,6 +30,15 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
+  // pdfkit (the offer-approval PDF pack) must stay a plain Node dependency: bundling it
+  // drags fontkit through Turbopack, whose @swc/helpers shim lacks an export fontkit
+  // imports, and the route fails to compile. Its AFM font tables are read from disk at
+  // runtime, so they are traced into the serverless function explicitly.
+  serverExternalPackages: ['pdfkit', 'fontkit'],
+  outputFileTracingIncludes: {
+    '/api/recruitment/offer-approval': ['./node_modules/pdfkit/js/data/**'],
+  },
+
   // Never let a browser reuse a cached HTML document for dashboard pages.
   //
   // Next.js fingerprints its JS chunks, so every build produces new chunk URLs —
