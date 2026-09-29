@@ -35,6 +35,30 @@ the timeline class is load-bearing for `.rx-tli`/`.rx-tld` inside it. That
 touches the rail on every tab, which is why it was not done as part of a
 tab-scoped redesign phase.
 
+## Verification limits (not defects — things that cannot be checked here)
+
+### The browser harness cannot exercise CSS breakpoints
+
+Resizing the browser window does **not** change the page's layout viewport.
+Measured during phase 6d, after `resize_window` reported success at 500x800:
+
+```
+innerWidth: 1440      <- the layout viewport, unchanged
+outerWidth: 752       <- the OS window really did shrink
+devicePixelRatio: 2
+matchMedia('(max-width:1180px)').matches -> false
+matchMedia('(max-width:760px)').matches  -> false
+```
+
+The tab renders at a fixed viewport independent of the window, so the two
+`@media` blocks in `recruitment.redesign.css` (<=1180px and <=760px) can never
+be triggered from this session. Anything that depends on them — the bento
+collapse, `.s3/.s4 -> span 6`, `.s5..s9 -> span 12`, the single-column phone
+layout — is **unverified by inspection only**, however many times it is retried.
+
+Don't burn turns on it. Verify responsive behaviour in a real browser, or by
+reading the rules and the span classes each layout uses.
+
 ## 2. `.rx-dlg-modal` was never centred
 
 Fixed during phase 4 — see the comment in `lib/ui/recruitment.redesign.css`

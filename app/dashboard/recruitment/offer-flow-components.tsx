@@ -892,15 +892,18 @@ ${company} — Human Resources`)
             {positionOpts.map((p:string)=><option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <div className="s4">
+        <div className="s3">
           {fApproved.length === 0 && (
-            <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:32 }}>
-              {sql ? 'No matching candidate' : 'No approved requests pending'}
+            <div className="rx-mod" style={{ textAlign:'center' as const, padding:32 }}>
+              <span className="rx-meta">{sql ? 'No matching candidate' : 'No approved requests pending'}</span>
             </div>
           )}
+          {/* No flexDirection here on purpose: this card's content really is
+              stacked, so .rx-card's own flex-direction:column is what we want.
+              The MRF/rehire rows in HR Head needed row and had to say so. */}
           {fApproved.map(r => (
-            <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:`1px solid ${TK.line}`, background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+            <div key={r.id} onClick={() => prepareOffer(r)} className="rx-card"
+              style={{ cursor:'pointer', marginBottom:SP.md, border:selected?.id===r.id?`2px solid ${TK.brand}`:undefined, background:selected?.id===r.id?TK.brandTint:undefined }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}
@@ -912,9 +915,30 @@ ${company} — Human Resources`)
           ))}
         </div>
 
+        {/* The letter as the candidate will read it. Presentation only: it
+            renders the SAME `body` state the form edits, so there is nothing
+            here that can disagree with what is actually sent. .rx-paper is
+            deliberately paper-white in both themes — it is a letter. */}
         {selected && (
-          <div className="s8" style={S.cardP}>
-            <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
+          <div className="s5">
+            <section className="rx-mod" style={{ padding:0, background:'transparent', border:'none', boxShadow:'none' }}>
+              <div className="rx-mod-h" style={{ marginBottom:10 }}>
+                <div className="rx-mod-t">Letter preview</div>
+                <span className="rx-mod-m">as the candidate will see it</span>
+              </div>
+              <div className="rx-paper" style={{ whiteSpace:'pre-wrap', maxHeight:560, overflowY:'auto' }}>
+                <div style={{ fontWeight:700, fontSize:13.5, marginBottom:10 }}>{subject || 'Offer of employment'}</div>
+                {body || 'Pick a candidate to build their letter.'}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {selected && (
+          <div className="s4">
+          <section className="rx-mod brand">
+            <div className="rx-mod-h"><div className="rx-mod-t">Send offer letter</div></div>
+            <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>{selected.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <div style={{ marginBottom:8 }}>
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>To *</label>
               <input className="rx-input" value={toEmail} onChange={e=>setToEmail(e.target.value)} />
@@ -934,10 +958,13 @@ ${company} — Human Resources`)
             <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.brandDeep }}>
               This emails the offer letter to the candidate via Gmail, records it, and marks the candidate <b>Offer Sent</b> in the pipeline.
             </div>
-            <button onClick={sendOffer} disabled={sending}
-              style={{ ...S.btn(TK.brand,TK.surface), width:'100%', padding:11, fontSize:13 }}>
+            {/* sendOffer is untouched: same validation, same send-offer-email
+                POST, same records written, same confirmations. */}
+            <button type="button" className="rx-btn p" onClick={sendOffer} disabled={sending}
+              style={{ width:'100%' }}>
               {sending ? 'Sending…' : 'Send Offer & Mark as Sent'}
             </button>
+          </section>
           </div>
         )}
       </div>
