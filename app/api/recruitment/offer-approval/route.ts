@@ -18,28 +18,8 @@ import { mrfPdf, interviewSummaryPdf, ctcAcknowledgementPdf } from '@/lib/recrui
 
 export const runtime = 'nodejs'
 
-type Person = { id: string; name: string; code: string | null; role: string; email: string | null }
-
-/** Active holders of the given ESS roles inside one company. */
-async function roleHolders(companyId: string | null, roleCodes: string[]): Promise<Person[]> {
-  if (!companyId) return []
-  const { data: roles } = await sb.from('ess_roles').select('id, role_code').in('role_code', roleCodes)
-  const roleIds = (roles || []).map((r: any) => r.id)
-  if (!roleIds.length) return []
-  const codeOf: Record<string, string> = {}
-  ;(roles || []).forEach((r: any) => { codeOf[r.id] = r.role_code })
-  const { data: urs } = await sb.from('ess_user_roles')
-    .select('role_id, ess_accounts!inner(employees!inner(id, full_name, emp_code, company_id, office_email, personal_email))')
-    .in('role_id', roleIds).eq('is_active', true)
-  const seen = new Set<string>(); const out: Person[] = []
-  for (const u of (urs || []) as any[]) {
-    const e = u.ess_accounts?.employees
-    if (e && e.company_id === companyId && !seen.has(e.id)) { seen.add(e.id); out.push({ id: e.id, name: e.full_name, code: e.emp_code, role: codeOf[u.role_id], email: e.office_email || e.personal_email || null }) }
-  }
-  return out
-}
-
-const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
+import { roleHolders as roleHoldersFor, notifyDecided, lakh } from '@/lib/recruitment/offer-approval-notify'
+const roleHolders = (companyId: string | null, roleCodes: string[]) => roleHoldersFor(sb as any, companyId, roleCodes)
 const inr = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
 
 /**
@@ -154,26 +134,11 @@ export async function POST(req: NextRequest) {
       ...(process.env.NODE_ENV !== 'production' ? { preview: mail.text, debugAttachments: built.map(x => ({ name: x.filename, base64: x.content.toString('base64') })) } : {}) })
   }
 
-  // ── HR Head → recruiter(s) + HR managers: the decision ──
+  // ── HR Head → recruiter(s) + HR managers: the decision (shared with the ESS route) ──
   if (body.action === 'decided') {
-    const approved = r.status === 'HR_HEAD_APPROVED' || r.hr_head_action === 'APPROVED'
-    const rejected = r.status === 'HR_HEAD_REJECTED' || r.hr_head_action === 'REJECTED'
-    if (!approved && !rejected) return NextResponse.json({ error: 'This request has not been decided yet' }, { status: 409 })
-    const recruiterIds: string[] = Array.isArray((mrf as any)?.assigned_recruiter_ids) ? (mrf as any).assigned_recruiter_ids : []
-    const managers = approved ? await roleHolders(companyId, ['HR_MANAGER']) : []
-    const targets = new Set<string>([...recruiterIds, ...managers.map(m => m.id)])
-    if ((mrf as any)?.requested_by && !approved) targets.add((mrf as any).requested_by)   // the raiser hears about a rejection too
-    const note = r.hr_head_comments ? ` Comment: “${r.hr_head_comments}”` : ''
-    await Promise.all([...targets].map(id => notify(
-      id,
-      approved ? `Offer approved — ${who}${role ? ` (${role})` : ''}` : `Offer rejected — ${who}${role ? ` (${role})` : ''}`,
-      approved
-        ? `The HR Head approved the ${lakh(r.offered_ctc)} offer for ${who}${ref}.${note} Send the offer letter from Recruitment → Send Offers.`
-        : `The HR Head rejected the ${lakh(r.offered_ctc)} offer for ${who}${ref}.${note} Revise the negotiation and raise a fresh approval request.`,
-      approved ? '/ess-portal?module=recruitment&tab=sendoffer' : '/ess-portal?module=recruitment&tab=offerapproval',
-      'APPROVAL',
-    ).catch(() => null)))
-    return NextResponse.json({ ok: true, notified: targets.size, outcome: approved ? 'APPROVED' : 'REJECTED' })
+    const n = await notifyDecided(sb as any, requestId)
+    if ('error' in n) return NextResponse.json({ error: n.error }, { status: n.status })
+    return NextResponse.json({ ok: true, ...n })
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

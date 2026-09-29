@@ -529,14 +529,42 @@ export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string
 
 // ── Offer approvals — the HR Head's half of the offer flow ────────────────────
 // Every offer request submitted by a recruiter in this HR Head's company shows here as a
-// task: a notification card + a link to Recruitment → HR Head, where the review, approve
-// and reject happen (the same pattern as MRF approvals above).
-export function OfferApprovals({ employeeId }: { employeeId: string }) {
+// task. "Review" opens the full request — candidate, previous employer, offered package,
+// joining details, remarks — and the HR Head approves or rejects RIGHT HERE (same writes
+// and notifications as Recruitment → HR Head, which stays available as a link).
+export function OfferApprovals({ employeeId, notify }: { employeeId: string; notify?: (m: string, t?: 'success' | 'error') => void }) {
   const [d, setD] = useState<{ isHrHead: boolean; pending: any[]; recent: any[] } | null>(null)
-  useEffect(() => { api('/api/ess/offer-approvals', employeeId).then(setD).catch(() => setD({ isHrHead: false, pending: [], recent: [] })) }, [employeeId])
+  const [open, setOpen] = useState<any | null>(null)
+  const [mode, setMode] = useState<'view' | 'reject'>('view')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(() => api('/api/ess/offer-approvals', employeeId).then(setD).catch(() => setD({ isHrHead: false, pending: [], recent: [] })), [employeeId])
+  useEffect(() => { load() }, [load])
   if (!d || !d.isHrHead || (d.pending.length === 0 && d.recent.length === 0)) return null
+  const rs = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
   const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
   const day = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  const say = (m: string, t?: 'success' | 'error') => notify ? notify(m, t) : (t === 'error' ? alert(m) : null)
+
+  async function decide(action: 'approve' | 'reject') {
+    if (!open) return
+    if (action === 'reject' && !reason.trim()) { say('A rejection reason is required', 'error'); return }
+    setBusy(true)
+    try {
+      const j = await api('/api/ess/offer-approvals', employeeId, { method: 'POST', body: JSON.stringify({ action, request_id: open.id, comment: reason.trim() }) })
+      say(action === 'approve' ? `Approved — ${open.candidate}'s offer moves to Send Offers${j.notified ? ` (${j.notified} notified)` : ''}.` : `Rejected — the recruiter has been told${j.notified ? ` (${j.notified} notified)` : ''}.`)
+      setOpen(null); setMode('view'); setReason(''); await load()
+    } catch (e: any) { say(e.message, 'error') }
+    setBusy(false)
+  }
+
+  // one labelled line, only when there is a value
+  const Line = ({ k, v }: { k: string; v: any }) => (v == null || v === '' || v === false) ? null : (
+    <div style={{ display: 'flex', gap: 10, padding: '5px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12.5 }}>
+      <span style={{ flex: '0 0 190px', color: C.muted }}>{k}</span><span style={{ flex: 1, color: C.ink, fontWeight: 500 }}>{String(v)}</span>
+    </div>
+  )
+
   return (
     <div style={S.card}>
       <div style={S.section}>Offer approvals · HR Head{d.pending.length ? ` · ${d.pending.length} waiting` : ''}</div>
@@ -549,9 +577,8 @@ export function OfferApprovals({ employeeId }: { employeeId: string }) {
               <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{o.candidate} · {o.designation || '—'}{o.mrf_number ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.purpleD, background: C.soft, padding: '1px 7px', borderRadius: 99, verticalAlign: 'middle' }}>{o.mrf_number}</span> : null}</div>
                 <div style={{ fontSize: 11.5, color: C.amber }}>Offer of {lakh(o.offered_ctc)}{o.variable_pct ? ` (${o.variable_pct}% variable)` : ''}{o.hike_pct ? ` · ${Number(o.hike_pct).toFixed(1)}% hike` : ''}{o.proposed_doj ? ` · DOJ ${day(o.proposed_doj)}` : ''} · needs your review &amp; approval · submitted {day(o.submitted_at)}</div>
-                {o.recruiter_comments && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>Recruiter: {o.recruiter_comments}</div>}
               </div>
-              <a href="/ess-portal?module=recruitment&tab=hrhead" style={{ ...S.btn, background: C.green, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>Review &amp; approve →</a>
+              <button onClick={() => { setOpen(o); setMode('view'); setReason('') }} style={{ ...S.btn, background: C.green }}>Review &amp; approve</button>
             </div>
           </div>
         ))}
@@ -568,6 +595,77 @@ export function OfferApprovals({ employeeId }: { employeeId: string }) {
           </div>
         ))}
       </>}
+
+      {open && createPortal(
+        <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) setOpen(null) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 4000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '24px 16px' }}>
+          <div style={{ background: C.card, borderRadius: 16, width: 'min(760px, 100%)', boxShadow: '0 24px 70px rgba(30,27,75,0.3)', padding: '18px 20px', margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>Offer approval — {open.candidate}</div>
+                <div style={{ fontSize: 12, color: C.muted }}>{open.designation || '—'}{open.mrf_number ? ` · ${open.mrf_number}` : ''}{open.raised_by ? ` · MRF raised by ${open.raised_by}` : ''}{open.recruiter ? ` · recruiter ${open.recruiter}` : ''}</div>
+              </div>
+              <button onClick={() => !busy && setOpen(null)} style={S.btnO}>Close</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+              {[['Offered CTC', rs(open.offered_ctc) + ' p.a.'], ['Monthly in-hand (est.)', open.monthly_inhand ? rs(open.monthly_inhand) : '—'], ['Hike', open.hike_pct != null ? `${Number(open.hike_pct).toFixed(1)}%` : '—']].map(([k, v]) => (
+                <div key={k} style={{ background: C.soft, borderRadius: 10, padding: '10px 12px' }}><div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em' }}>{k}</div><div style={{ fontSize: 15, fontWeight: 700, color: C.ink, marginTop: 2 }}>{v}</div></div>
+              ))}
+            </div>
+
+            <div style={S.section}>Offered package</div>
+            <Line k="Variable" v={open.variable_pct ? `${open.variable_pct}% · ${rs(Number(open.offered_ctc || 0) * Number(open.variable_pct) / 100)} p.a.` : null} />
+            <Line k="Joining bonus" v={Number(open.joining_bonus) > 0 ? `${rs(open.joining_bonus)}${open.joining_bonus_freq ? ` (${open.joining_bonus_freq})` : ''}` : null} />
+            <Line k="Retention bonus" v={Number(open.retention_bonus) > 0 ? rs(open.retention_bonus) : null} />
+            <Line k="ESOP" v={Number(open.esop_value) > 0 ? `${rs(open.esop_value)}${open.esop_vesting ? ` (${open.esop_vesting})` : ''}` : null} />
+
+            <div style={{ ...S.section, marginTop: 12 }}>Joining</div>
+            <Line k="Proposed DOJ" v={open.proposed_doj ? `${day(open.proposed_doj)}${open.days_to_join != null ? ` · ${open.days_to_join} days from submission` : ''}` : null} />
+            <Line k="Notice period" v={open.notice_period_days ? `${open.notice_period_days} days` : null} />
+            <Line k="Notice buyout" v={open.notice_buyout ? (Number(open.notice_buyout_amount) > 0 ? `Yes · ${rs(open.notice_buyout_amount)}` : 'Yes') : null} />
+
+            <div style={{ ...S.section, marginTop: 12 }}>Previous employer <span style={{ fontSize: 10, color: C.faint, textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>— confidential, not shown to the candidate</span></div>
+            <Line k="Company" v={open.prev_company_name || open.current_company} />
+            <Line k="Address" v={open.prev_company_address} />
+            <Line k="Previous total CTC" v={Number(open.prev_total_ctc) > 0 ? `${rs(open.prev_total_ctc)} p.a.` : null} />
+            <Line k="Fixed / variable" v={(Number(open.prev_fixed_ctc) > 0 || Number(open.prev_variable) > 0) ? `${Number(open.prev_fixed_ctc) > 0 ? rs(open.prev_fixed_ctc) : '—'} / ${Number(open.prev_variable) > 0 ? rs(open.prev_variable) : '—'}` : null} />
+            <Line k="TA / DA (monthly)" v={Number(open.prev_ta_da) > 0 ? rs(open.prev_ta_da) : null} />
+            <Line k="Additional" v={open.prev_additional} />
+            <Line k="Experience" v={open.experience_years != null ? `${open.experience_years} years` : null} />
+
+            {(open.hiring_manager_remark || open.recruiter_comments) && <>
+              <div style={{ ...S.section, marginTop: 12 }}>Remarks</div>
+              <Line k="Hiring manager" v={open.hiring_manager_remark} />
+              <Line k="Recruiter" v={open.recruiter_comments} />
+            </>}
+
+            {open.template_content && (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, color: C.purpleD }}>Approval request template (as submitted)</summary>
+                <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, color: C.ink, background: C.bg, borderRadius: 8, padding: 12, marginTop: 8, fontFamily: 'inherit', lineHeight: 1.5 }}>{open.template_content}</pre>
+              </details>
+            )}
+
+            {mode === 'reject' && (
+              <div style={{ marginTop: 14 }}>
+                <label style={S.label}>Reason for rejection — goes to the recruiter</label>
+                <textarea autoFocus value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. CTC above the approved band for this grade — revise and resubmit." style={{ ...S.input, minHeight: 72, resize: 'vertical' }} />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+              {mode === 'reject' ? (<>
+                <button onClick={() => setMode('view')} disabled={busy} style={S.btnO}>← Back</button>
+                <button onClick={() => decide('reject')} disabled={busy || !reason.trim()} style={{ ...S.btn, background: C.red, marginLeft: 'auto', opacity: busy || !reason.trim() ? .6 : 1 }}>{busy ? 'Rejecting…' : 'Confirm reject'}</button>
+              </>) : (<>
+                <button onClick={() => setMode('reject')} disabled={busy} style={S.btnD}>Reject</button>
+                <a href="/ess-portal?module=recruitment&tab=hrhead" style={{ ...S.btnO, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Open in Recruitment</a>
+                <button onClick={() => decide('approve')} disabled={busy} style={{ ...S.btn, background: C.green, marginLeft: 'auto', opacity: busy ? .6 : 1 }}>{busy ? 'Approving…' : 'Approve offer'}</button>
+              </>)}
+            </div>
+          </div>
+        </div>, document.body)}
     </div>
   )
 }
@@ -664,7 +762,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
   return (
     <div>
       <MrfApprovals employeeId={employeeId} notify={notify} />
-      <OfferApprovals employeeId={employeeId} />
+      <OfferApprovals employeeId={employeeId} notify={notify} />
       <InterviewInvites employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },
