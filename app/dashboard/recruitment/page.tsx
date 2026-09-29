@@ -34,9 +34,13 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help, RxDialog,
+  Segmented, SearchBox, Help, RxDialog, Track,
   type ScreenResult,
 } from '@/components/recruitment/rx'
+// NOTE: the kit also exports Badge, but this file declares its own Badge({text})
+// at ~195 with a different signature, used a dozen times. Importing the kit's
+// would shadow it. Where a kit badge is wanted here, write the markup directly
+// (`rx-b b-brand rx-live`) — which is what the kit's own prototype emits.
 
 /**
  * The type scale under a name this file does not shadow.
@@ -3014,6 +3018,9 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
   const [screening, setScreening] = useState(false)
   const [results, setResults] = useState<any[]>([])
   const [progress, setProgress] = useState(0)
+  // The file currently in front of the model, for the .rx-scan row. Presentation
+  // only — it is set from the existing upload loop and changes no request.
+  const [scanning, setScanning] = useState<string|null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const mrf = mrfs.find((m:MRF)=>m.id===selMRF)
 
@@ -3028,6 +3035,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
     const res:any[] = []
     for (let i=0; i<files.length; i++) {
       const file = files[i]
+      setScanning(file.name)
       const fd = new FormData()
       fd.append('file', file)                               // send the real file — API extracts PDF/DOCX/TXT
       fd.append('jd_text', jdText)
@@ -3047,6 +3055,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
       setProgress(Math.round(((i+1)/files.length)*100))
       setResults([...res])
     }
+    setScanning(null)
     setScreening(false)
   }
 
@@ -3159,9 +3168,18 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Resumes (PDF, Word or text)</label>
               <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv"
                 onChange={e=>setFiles(Array.from(e.target.files||[]))} style={{ display:'none' }} />
-              <button type="button" className="rx-btn" style={{ width:'100%', justifyContent:'flex-start' }}
-                onClick={()=>fileRef.current?.click()}>
-                {files.length>0?`${files.length} file${files.length===1?'':'s'} selected`:'Choose files…'}
+              {/* The kit's drop zone. It stays a BUTTON rather than becoming a
+                  real drag target: the upload loop reads from `files`, and
+                  adding a drop handler would be new behaviour, not a new skin. */}
+              <button type="button" className="rx-drop" onClick={()=>fileRef.current?.click()}
+                style={{ width:'100%', border:'2px dashed var(--ez-brand-edge)', cursor:'pointer', font:'inherit', color:'inherit' }}>
+                <span className="rx-ico" style={{ width:48, height:48, borderRadius:16 }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 20V9M7 14l5-5 5 5" /><path d="M5 4h14" />
+                  </svg>
+                </span>
+                <span className="rx-name">{files.length>0?`${files.length} file${files.length===1?'':'s'} selected`:'Choose PDF, Word or TXT files'}</span>
+                <span className="rx-meta">{files.length>0?'Click to change the selection':'Click to browse your computer'}</span>
               </button>
             </div>
           </div>
@@ -3178,8 +3196,35 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
           {/* The kit's own progress track. The hand-rolled one this replaces had
               a documented regression (a brandTint fill on a brandTint plane, 1.0
               contrast); .rx-track carries its own fill and hairline so that
-              cannot recur. */}
-          {screening && <div className="rx-track" style={{ marginTop:14 }}><i style={{ width:`${progress}%` }} /></div>}
+              cannot recur.
+
+              <Track> rather than the bare div: a progressbar with no accessible
+              name reads as an unnamed control, the same QA finding that put a
+              label on the deadline bars. */}
+          {screening && (
+            <div style={{ marginTop:14 }}>
+              <div className="rx-row" style={{ justifyContent:'space-between', marginBottom:8 }}>
+                <span className="rx-label">Screening {Math.min(results.length+1, files.length)} of {files.length} file{files.length===1?'':'s'}</span>
+                <span className="rx-meta rx-num">{progress}%</span>
+              </div>
+              <Track pct={progress} label={`Screening ${files.length} resume${files.length===1?'':'s'}`} />
+              {scanning && (
+                <div className="rx-li rx-scan" style={{ marginTop:10, border:'1px solid var(--ez-line)', borderRadius:12 }}>
+                  <span className="rx-ico">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z" />
+                    </svg>
+                  </span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div className="rx-name" style={{ fontSize:13, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{scanning}</div>
+                    <div className="rx-meta">Reading skills and experience</div>
+                  </div>
+                  {/* Written out rather than <Badge>: this file's Badge is its own. */}
+                  <span className="rx-b b-brand rx-live">Scoring</span>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {results.length>0 && (
