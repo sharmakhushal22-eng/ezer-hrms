@@ -5,6 +5,7 @@ import { useGrant } from '@/lib/rms/client'
 import { companyFilter, scopedCompanies, canSeeScreen } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
+import { compOf } from '@/lib/recruitment/compensation'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
 import CandidateInterviewModal from '@/components/recruitment/CandidateInterviewModal'
 import MrfForm, { mrfToForm } from '@/components/ess/MrfForm'
@@ -576,16 +577,12 @@ const asArray = (v:any) => Array.isArray(v) ? v : (typeof v==='string' && v ? ((
 // are quoted on different bases, so the form must not label them all "Salary".
 // `fixedTerm` marks engagements that run for a defined period and therefore
 // need a duration — an internship without one is not a real requisition.
-const COMPENSATION:Record<string,{ kind:'SALARY'|'STIPEND'|'FEES'; label:string; period:'ANNUAL'|'MONTHLY'; fixedTerm:boolean; ph:[string,string] }> = {
-  'Employee':     { kind:'SALARY',  label:'Salary',  period:'ANNUAL',  fixedTerm:false, ph:['600000','1200000'] },
-  'Intern':       { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['10000','25000'] },
-  'NAPS':         { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['9000','15000'] },
-  'NATS':         { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['9000','15000'] },
-  'Live Project': { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['5000','15000'] },
-  'Contract':     { kind:'FEES',    label:'Fees',    period:'MONTHLY', fixedTerm:true,  ph:['50000','120000'] },
-  'Consultant':   { kind:'FEES',    label:'Fees',    period:'MONTHLY', fixedTerm:false, ph:['75000','200000'] },
-}
-const compOf = (empType?:string) => COMPENSATION[empType||'Employee'] || COMPENSATION['Employee']
+// Moved to lib/recruitment/compensation.ts so the HR Head's over-ceiling tile
+// can apply the SAME annual/monthly normalisation this form does. Importing it
+// back out of this page would have closed a cycle (this file imports
+// ./offer-flow-components; components/ess/RecruitmentModule.tsx imports this
+// page). The table and compOf are unchanged; all ten call sites below still
+// read compOf(...) exactly as before.
 const perLabel = (p:string) => p==='ANNUAL' ? 'per annum' : 'per month'
 /** Annual figures read better in lakhs; monthly stipends and fees do not. */
 const payAmount = (n?:number|null, cur='INR', period='ANNUAL') =>
