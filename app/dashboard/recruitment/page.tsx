@@ -35,9 +35,14 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, FilterPills,
+  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, FilterPills, daysUntil,
   type ScreenResult, type ChainStepVM,
 } from '@/components/recruitment/rx'
+// NOT imported: Ring and missingDocuments. Section 10 wants a documents ring
+// from document_collection_links, but PreOnboardTab reads preonboarding_links
+// only, and those rows carry no per-document state — so both would need a new
+// read. Importing them unused would be dead surface, which is the same reason
+// COMPENSATION was dropped from this import list in phase 6b.
 // NOTE: the kit also exports Badge, but this file declares its own Badge({text})
 // at ~195 with a different signature, used a dozen times. Importing the kit's
 // would shadow it. Where a kit badge is wanted here, write the markup directly
@@ -5582,6 +5587,21 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
   }
   const daysToJoin = (c:Candidate) => c.onboarding_date ? Math.ceil((new Date(c.onboarding_date).getTime()-Date.now())/86400000) : null
 
+  /**
+   * Days to the date of joining, as a chip. Uses the kit's daysUntil(), which
+   * compares calendar days in LOCAL time rather than subtracting timestamps —
+   * so a joining date "tomorrow" reads 1 whatever the hour, instead of flipping
+   * to 0 after midday. daysToJoin() above is the tab's own older calculation and
+   * still drives the three-day badge; this only labels.
+   */
+  const dojChip = (c:Candidate, rowDoj?:string|null) => {
+    const d = daysUntil(rowDoj || c.doj || c.onboarding_date || null)
+    if (d === null) return null
+    const tone = d < 0 ? 'b-mute' : d <= 3 ? 'b-warn' : 'b-pos'
+    const text = d < 0 ? `Joined ${Math.abs(d)}d ago` : d === 0 ? 'Joins today' : `${d}d to joining`
+    return <span className={`rx-b ${tone}`}>{text}</span>
+  }
+
   const load = useCallback(()=>{
     supabase.from('preonboarding_links').select('*').order('created_at',{ascending:false})
       .then(({data}:any)=>setLinks(data||[]))
@@ -5751,11 +5771,17 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
                 <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.designation||'—'} · {companyName(c)} · DOJ: {row?.doj||c.doj||'Not set'}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
                 {c.email&&<div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{c.email}</div>}
               </div>
-              {resp&&(
-                <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:bg, color:fg }}>
-                  {resp==='ACCEPTED'?`✅ Accepted (${row?.candidate_type==='EXPERIENCED'?'Experienced':'Fresher'})`:resp==='REVISE'?'Revision requested':'Backed out'}
-                </span>
-              )}
+              {/* bg and fg stay SEPARATE token values. See the note above the
+                  return: concatenating an alpha suffix onto one of these is
+                  what silently removed this card's border once already. */}
+              <div className="rx-row" style={{ gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                {dojChip(c, row?.doj)}
+                {resp&&(
+                  <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:bg, color:fg }}>
+                    {resp==='ACCEPTED'?`✅ Accepted (${row?.candidate_type==='EXPERIENCED'?'Experienced':'Fresher'})`:resp==='REVISE'?'Revision requested':'Backed out'}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Onboarding date + HR email — drive the reminder emails */}
@@ -5764,11 +5790,13 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
               <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} className="rx-input" style={{ width:150, fontSize:12 }} />
               <label style={{ fontSize:11, color:C.brandDeep, fontWeight:600 }}>HR email:</label>
               <input value={hrVal(c)} onChange={e=>setHrEmails(m=>({...m,[c.id]:e.target.value}))} placeholder="hr@company.com" className="rx-input" style={{ width:180, fontSize:12 }} />
-              <button onClick={()=>saveOnboarding(c)} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11 }}>Save</button>
-              {(()=>{ const d=daysToJoin(c); if(d===null) return null
-                return d>=0 && d<=3
-                  ? <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>Joining in {d} day{d===1?'':'s'} — start onboarding</span>
-                  : <span style={{ fontSize:11, color:d<0?C.critical:C.faint }}>{d<0?'past joining date':`${d} days to join`}</span> })()}
+              <button type="button" className="rx-btn sm" onClick={()=>saveOnboarding(c)}>Save</button>
+              {/* Only the three-day call to action stays here. The plain
+                  "N days to join" this used to render in every other case is
+                  now the chip in the card header, and showing both said the
+                  same thing twice in one card. */}
+              {(()=>{ const d=daysToJoin(c); if(d===null||d<0||d>3) return null
+                return <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>Joining in {d} day{d===1?'':'s'} — start onboarding</span> })()}
             </div>
             {!c.hr_email&&!hrEmails[c.id]&&<div style={{ fontSize:F.micro, color:C.critical, marginTop:S.xs }}>Add an HR email so onboarding reminder mails can be sent.</div>}
 
@@ -5777,16 +5805,20 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
                 <div style={{ marginTop:12, background:C.sunken, borderRadius:10, padding:'10px 12px', border: `1px solid ${C.brandEdge}` }}>
                   <div style={{ fontSize:12, color:C.brandDeep, fontWeight:600, marginBottom:8 }}>Candidate type — sends the right letter:</div>
                   <div style={{ display:'flex', gap:8 }}>
-                    <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'EXPERIENCED')} style={{ ...T.btn, background:C.brand, color:C.onAccent }}>{busy===c.id?'Sending…':'Experienced → Resignation Acceptance'}</button>
-                    <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'FRESHER')} style={{ ...T.btn, background:C.info, color:C.onAccent }}>{busy===c.id?'Sending…':'Fresher → Joining Confirmation'}</button>
-                    <button onClick={()=>setChoose('')} style={{ ...T.btn, background:'transparent', color:C.faint }}>Cancel</button>
+                    {/* sendAcceptance is untouched — same send-letter POST,
+                        same preonboarding_links write, same notification. */}
+                    <button type="button" className="rx-btn p" disabled={busy===c.id} onClick={()=>sendAcceptance(c,'EXPERIENCED')}>{busy===c.id?'Sending…':'Experienced → Resignation Acceptance'}</button>
+                    <button type="button" className="rx-btn" disabled={busy===c.id} onClick={()=>sendAcceptance(c,'FRESHER')} style={{ background:C.info, color:C.onAccent, borderColor:C.info }}>{busy===c.id?'Sending…':'Fresher → Joining Confirmation'}</button>
+                    <button type="button" className="rx-btn g" onClick={()=>setChoose('')}>Cancel</button>
                   </div>
                 </div>
               ) : (
                 <div style={{ display:'flex', gap:8, marginTop:12 }}>
-                  <button onClick={()=>setChoose(c.id)} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}`, fontWeight:600 }}>Accepted</button>
-                  <button onClick={()=>markRevise(c)} style={{ ...T.btn, background:C.warningTint, color:C.warning, border: `1px solid ${C.warningTint}`, fontWeight:600 }}>Revise Offer</button>
-                  <button onClick={()=>markBackout(c)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontWeight:600 }}>Backout</button>
+                  {/* markRevise still asks for its reason; markBackout still
+                      blacklists and re-opens the MRF. Styling only. */}
+                  <button type="button" className="rx-btn" style={{ background:C.positiveTint, color:C.positive, borderColor:C.positiveTint }} onClick={()=>setChoose(c.id)}>Accepted</button>
+                  <button type="button" className="rx-btn" style={{ background:C.warningTint, color:C.warning, borderColor:C.warningTint }} onClick={()=>markRevise(c)}>Revise Offer</button>
+                  <button type="button" className="rx-btn d" onClick={()=>markBackout(c)}>Backout</button>
                 </div>
               )
             )}
@@ -5803,7 +5835,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
             {/* Backout available any day (even after acceptance) — blacklists + reopens the MRF */}
             {(resp==='ACCEPTED'||resp==='REVISE')&&(
               <div style={{ marginTop:10 }}>
-                <button onClick={()=>markBackout(c)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11 }}>Candidate Backed Out</button>
+                <button type="button" className="rx-btn sm d" onClick={()=>markBackout(c)}>Candidate Backed Out</button>
               </div>
             )}
           </div>
