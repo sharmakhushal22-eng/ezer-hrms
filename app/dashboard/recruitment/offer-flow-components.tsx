@@ -90,6 +90,39 @@ function CcPicker({ value, onChange }: { value: CcEmp[]; onChange: (v: CcEmp[]) 
   )
 }
 
+
+// ── Offer-approval form primitives (module scope: never re-mount while typing) ──
+function OaField({ label, hint, children, span }: { label: string; hint?: string; children: React.ReactNode; span?: number }) {
+  return (
+    <div className="rx-field" style={span ? { gridColumn: `span ${span}` } : undefined}>
+      <label className="rx-label">{label}</label>
+      {children}
+      {hint && <div className="rx-hint">{hint}</div>}
+    </div>
+  )
+}
+function OaCard({ n, title, sub, tag, children }: { n: number; title: string; sub?: string; tag?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="rx-mod">
+      <div className="rx-mod-h">
+        <div className="rx-mod-t"><span style={{ width:24, height:24, borderRadius:8, background:TK.brandTint, color:TK.brandDeep, display:'grid', placeItems:'center', fontSize:12, fontWeight:800 }}>{n}</span>{title}{tag}</div>
+        {sub && <div className="rx-mod-m">{sub}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}
+function OaTile({ l, v, sub, tone }: { l: string; v: string; sub?: string; tone?: 'brand' | 'ok' }) {
+  return (
+    <div className="rx-tile" style={tone === 'ok' ? { background:TK.positiveTint } : undefined}>
+      <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color: tone === 'ok' ? TK.positive : TK.muted }}>{l}</div>
+      <div style={{ fontSize:18, fontWeight:800, letterSpacing:'-.02em', color: tone === 'ok' ? TK.positive : TK.ink, marginTop:3, ...numeric }}>{v}</div>
+      {sub && <div style={{ fontSize:11.5, color:TK.faint, marginTop:2 }}>{sub}</div>}
+    </div>
+  )
+}
+const oaGrid = (cols: string): React.CSSProperties => ({ display:'grid', gridTemplateColumns: cols, gap:12 })
+
 // ═══════════════════════════════════════════════════════════════
 // RECRUITER: CREATE OFFER APPROVAL REQUEST
 // ═══════════════════════════════════════════════════════════════
@@ -99,6 +132,12 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   const [template, setTemplate] = useState('')
   const [showTemplate, setShowTemplate] = useState(false)
   const [cc, setCc] = useState<CcEmp[]>([])
+  const [hrHeads, setHrHeads] = useState<{ id:string; name:string; code:string|null }[] | null>(null)
+  useEffect(() => {
+    const cid = candidate?.company_id || mrf?.company_id
+    if (!cid) { setHrHeads([]); return }
+    fetch(`/api/recruitment/offer-approval?company_ids=${cid}`).then(r => r.json()).then(j => setHrHeads(j.heads?.[cid] || [])).catch(() => setHrHeads([]))
+  }, [candidate?.company_id, mrf?.company_id])
 
   // Everything the recruiter already captured is prefilled: the negotiation's previous-employer
   // fields when it has them, else the Add Candidate form (compensation block, notice, DOJ).
@@ -297,133 +336,172 @@ This document is confidential and for internal approval only.`
     if (onSubmitted) onSubmitted()
   }
 
+  // ── derived, for the summary rail ──
+  const ctcN = Number(negotiation?.offered_ctc || 0), varPct = Number(negotiation?.variable_pct || 0)
+  const varAmt = ctcN > 0 && varPct > 0 ? Math.round(ctcN * varPct / 100) : 0
+  const fixedAmt = ctcN - varAmt
+  const prevTotal = Number(prevForm.prev_total_ctc || 0)
+  const hikeLive = prevTotal > 0 && ctcN > 0 ? ((ctcN - prevTotal) / prevTotal) * 100 : (negotiation?.hike_pct != null ? Number(negotiation.hike_pct) : null)
+  const readiness = [
+    { k: 'Previous company', ok: !!prevForm.prev_company_name },
+    { k: 'Previous CTC', ok: Number(prevForm.prev_total_ctc) > 0 },
+    { k: 'Proposed DOJ', ok: !!joining.proposed_doj },
+    { k: 'Approval preview generated', ok: !!template },
+  ]
+  const ready = readiness.every(x => x.ok) && !!negotiation
+  const initials = (candidate?.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
   return (
-    <div style={{ maxWidth:700, margin:'0 auto', padding:16 }}>
-      <div style={{ fontSize:16, fontWeight:600, color:TK.ink, marginBottom:4 }}>Create Offer Approval Request</div>
-      <div style={{ fontSize:12, color:TK.faint, marginBottom:16 }}>
-        {candidate?.full_name} — {mrf?.designation}
+    <div className="rx-grid rx-stag">
+      {/* ── LEFT: the request, in four numbered steps ── */}
+      <div className="s8" style={{ display:'flex', flexDirection:'column', gap:16 }}>
+        {/* candidate strip */}
+        <div className="rx-mod" style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+          <div style={{ width:48, height:48, borderRadius:14, background:`linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:16, flexShrink:0 }}>{initials}</div>
+          <div style={{ flex:'1 1 240px', minWidth:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              <span style={{ fontSize:17, fontWeight:800, color:TK.ink, letterSpacing:'-.01em' }}>{candidate?.full_name}</span>
+              {mrf?.mrf_number && <span className="rx-chip">{mrf.mrf_number}</span>}
+              {candidate?.offer_revised && <span className="rx-chip" style={{ color:TK.warning, background:TK.warningTint }}>Revised offer</span>}
+            </div>
+            <div className="rx-meta" style={{ marginTop:3 }}>
+              {[mrf?.designation || candidate?.designation, candidate?.current_company ? `at ${candidate.current_company}` : null, candidate?.experience_years != null ? `${candidate.experience_years} yrs` : null, candidate?.stage].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted }}>Accepted offer</div>
+            <div style={{ fontSize:20, fontWeight:800, color:TK.positive, ...numeric }}>₹{fmt(ctcN)}</div>
+            <div className="rx-meta">per annum</div>
+          </div>
+        </div>
+
+        {/* 1 · offered package — read only, straight from the calculator */}
+        <OaCard n={1} title="Offered package" sub="from the negotiation calculator — change it there, not here">
+          {negotiation ? (<>
+            <div style={oaGrid('repeat(auto-fit, minmax(150px, 1fr))')}>
+              <OaTile l="Annual CTC" v={`₹${fmt(ctcN)}`} sub={varAmt ? `fixed ₹${fmt(fixedAmt)}` : 'all fixed'} />
+              <OaTile l="Variable" v={varAmt ? `₹${fmt(varAmt)}` : 'Nil'} sub={varAmt ? `${varPct}% of CTC` : undefined} />
+              <OaTile l="Monthly in-hand" v={`₹${fmt(negotiation.net_monthly || 0)}`} sub="estimated · before TDS" tone="ok" />
+              <OaTile l="Hike" v={hikeLive != null && isFinite(hikeLive) ? `${hikeLive > 0 ? '+' : ''}${hikeLive.toFixed(1)}%` : '—'} sub={prevTotal > 0 ? `over ₹${fmt(prevTotal)}` : 'enter previous CTC'} />
+            </div>
+            {(Number(negotiation.joining_bonus) > 0 || Number(negotiation.retention_bonus) > 0 || Number(negotiation.esop_value) > 0) && (
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
+                {Number(negotiation.joining_bonus) > 0 && <span className="rx-chip">Joining bonus ₹{fmt(negotiation.joining_bonus)}{negotiation.joining_bonus_freq ? ` · ${negotiation.joining_bonus_freq}` : ''}</span>}
+                {Number(negotiation.retention_bonus) > 0 && <span className="rx-chip">Retention ₹{fmt(negotiation.retention_bonus)}{negotiation.retention_bonus_freq ? ` · ${negotiation.retention_bonus_freq}` : ''}</span>}
+                {Number(negotiation.esop_value) > 0 && <span className="rx-chip">ESOP ₹{fmt(negotiation.esop_value)}{negotiation.esop_remark ? ` · ${negotiation.esop_remark}` : ''}</span>}
+              </div>
+            )}
+          </>) : (
+            <div className="rx-meta">No CTC negotiation found. Build the offer in the Negotiation tab first.</div>
+          )}
+        </OaCard>
+
+        {/* 2 · previous employer */}
+        <OaCard n={2} title="Previous employer" tag={<span className="rx-chip" style={{ color:TK.warning, background:TK.warningTint }}>Confidential — HR only</span>} sub="prefilled from the candidate record; not shown to the candidate">
+          <div style={oaGrid('1fr 1fr')}>
+            <OaField label="Previous company *"><input className="rx-input" value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></OaField>
+            <OaField label="Company address"><input className="rx-input" value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></OaField>
+          </div>
+          <div style={{ ...oaGrid('1fr 1fr 1fr'), marginTop:12 }}>
+            <OaField label="Previous total CTC (₹ p.a.) *" hint={prevTotal > 0 && ctcN > 0 ? `hike works out to ${hikeLive! > 0 ? '+' : ''}${hikeLive!.toFixed(1)}%` : undefined}><input className="rx-input" type="number" min={0} step={1} value={prevForm.prev_total_ctc} onChange={e=>P('prev_total_ctc',e.target.value)} placeholder="e.g. 900000" /></OaField>
+            <OaField label="Fixed (₹ p.a.)"><input className="rx-input" type="number" min={0} step={1} value={prevForm.prev_fixed_ctc} onChange={e=>P('prev_fixed_ctc',e.target.value)} placeholder="e.g. 810000" /></OaField>
+            <OaField label="Variable (₹ p.a.)"><input className="rx-input" type="number" min={0} step={1} value={prevForm.prev_variable} onChange={e=>P('prev_variable',e.target.value)} placeholder="e.g. 90000" /></OaField>
+          </div>
+          <div style={{ ...oaGrid('1fr 1fr'), marginTop:12 }}>
+            <OaField label="TA / DA (₹ monthly)"><input className="rx-input" type="number" min={0} step={1} value={prevForm.prev_ta_da} onChange={e=>P('prev_ta_da',e.target.value)} placeholder="0 if not applicable" /></OaField>
+            <OaField label="Any additional payment"><input className="rx-input" value={prevForm.prev_additional} onChange={e=>P('prev_additional',e.target.value)} placeholder="e.g. car allowance, retention, offer in hand" /></OaField>
+          </div>
+        </OaCard>
+
+        {/* 3 · joining */}
+        <OaCard n={3} title="Joining" sub="when the candidate can start, and what it costs to get them">
+          <div style={oaGrid('1fr 1fr 1fr')}>
+            <OaField label="Proposed date of joining *" hint={joining.proposed_doj ? `${daysDiff(joining.proposed_doj)} days from today` : undefined}><input className="rx-input" type="date" value={joining.proposed_doj} onChange={e=>J('proposed_doj',e.target.value)} /></OaField>
+            <OaField label="Notice period (days)"><input className="rx-input" type="number" min={0} step={1} value={joining.notice_period_days} onChange={e=>J('notice_period_days',e.target.value)} placeholder="e.g. 30" /></OaField>
+            <OaField label="Notice buyout">
+              <div className="rx-seg" style={{ display:'inline-flex', gap:4, padding:4, borderRadius:11, background:TK.sunken }}>
+                {[['No', false], ['Yes', true]].map(([l, v]) => (
+                  <button key={String(l)} type="button" onClick={() => J('notice_buyout', v)} className="rx-btn sm" style={{ border:'none', boxShadow:'none', background: joining.notice_buyout === v ? TK.surface : 'transparent', color: joining.notice_buyout === v ? TK.ink : TK.muted, fontWeight: joining.notice_buyout === v ? 700 : 500 }}>{l as string}</button>
+                ))}
+              </div>
+            </OaField>
+          </div>
+          {joining.notice_buyout && (
+            <div style={{ ...oaGrid('1fr 2fr'), marginTop:12, alignItems:'end' }}>
+              <OaField label="Buyout amount (₹)"><input className="rx-input" type="number" min={0} step={1} value={joining.notice_buyout_amount} onChange={e=>J('notice_buyout_amount',e.target.value)} placeholder="e.g. 60000" /></OaField>
+              <div className="rx-hint" style={{ paddingBottom:10 }}>Goes into the approval mail as “Notice buyout” — leave blank if the amount is not known yet.</div>
+            </div>
+          )}
+        </OaCard>
+
+        {/* 4 · notes & recipients */}
+        <OaCard n={4} title="Notes & recipients" sub="context for the HR Head, and who else should get the mail">
+          <div style={oaGrid('1fr')}>
+            <OaField label="Hiring manager remark / target"><input className="rx-input" value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for the HR Head…" /></OaField>
+            <OaField label="Recruiter comments"><textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:76 }} value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for the HR Head…" /></OaField>
+            <OaField label="CC on the approval mail" hint="Everyone here receives the same mail and attachments as the HR Head."><CcPicker value={cc} onChange={setCc} /></OaField>
+          </div>
+        </OaCard>
+
+        {/* the approval request, as the HR Head will see it */}
+        {showTemplate && (
+          <div className="rx-mod" style={{ padding:0, overflow:'hidden' }}>
+            <div className="rx-mod-h" style={{ padding:'14px 22px 0' }}>
+              <div className="rx-mod-t">Approval request — preview</div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button type="button" className="rx-btn sm" onClick={generateTemplate}>Regenerate</button>
+                <button type="button" className="rx-btn sm g" onClick={()=>setShowTemplate(false)}>Hide</button>
+              </div>
+            </div>
+            <div style={{ padding:'0 22px 20px' }}>
+              <div className="rx-paper" style={{ padding:'28px 32px', animation:'none' }}>
+                <pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.65, color:'#1f2937' }}>{template}</pre>
+              </div>
+              <div className="rx-hint" style={{ marginTop:8 }}>This is what goes to the HR Head with the mail. Edit the fields above and click Regenerate to refresh it.</div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* PREVIOUS EMPLOYER SECTION */}
-      <div style={S.cardP}>
-        <SecLine title="Previous Employer Details" />
-        <div style={{ fontSize:11, color:TK.brandDeep, background:TK.brandTint, borderRadius:7, padding:'6px 10px', marginBottom:12 }}>
-          This section is confidential — NOT shown to candidate. Only visible in HR approval request.
-        </div>
-        <div style={{ ...S.g2, marginBottom:10 }}>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Company Name *</label><input className="rx-input" value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></div>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Company Address</label><input className="rx-input" value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></div>
-        </div>
-        <div style={{ ...S.g3, marginBottom:10 }}>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Total CTC (₹) *</label><input className="rx-input" type="number" value={prevForm.prev_total_ctc} onChange={e=>P('prev_total_ctc',e.target.value)} placeholder="Annual" /></div>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Fixed CTC (₹)</label><input className="rx-input" type="number" value={prevForm.prev_fixed_ctc} onChange={e=>P('prev_fixed_ctc',e.target.value)} /></div>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Variable (₹ Annual)</label><input className="rx-input" type="number" value={prevForm.prev_variable} onChange={e=>P('prev_variable',e.target.value)} /></div>
-        </div>
-        <div style={{ ...S.g2, marginBottom:10 }}>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>TA / DA (₹ Monthly)</label><input className="rx-input" type="number" value={prevForm.prev_ta_da} onChange={e=>P('prev_ta_da',e.target.value)} placeholder="0 if not applicable" /></div>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Any Additional Payment</label><input className="rx-input" value={prevForm.prev_additional} onChange={e=>P('prev_additional',e.target.value)} placeholder="e.g. Car allowance, Retention" /></div>
-        </div>
-      </div>
-
-      {/* JOINING DETAILS */}
-      <div style={S.card}>
-        <SecLine title="Joining Details" />
-        <div style={{ ...S.g3, marginBottom:10 }}>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Proposed Date of Joining *</label><input className="rx-input" type="date" value={joining.proposed_doj} onChange={e=>J('proposed_doj',e.target.value)} /></div>
-          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Notice Period (Days)</label><input className="rx-input" type="number" value={joining.notice_period_days} onChange={e=>J('notice_period_days',e.target.value)} /></div>
-          <div style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
-            <label className="rx-label" style={{ marginBottom:8 }}>Notice Period Buyout</label>
-            <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-              {['Yes','No'].map(opt => (
-                <label key={opt} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13 }}>
-                  <input type="radio" name="buyout" value={opt} checked={joining.notice_buyout===(opt==='Yes')}
-                    onChange={()=>J('notice_buyout',opt==='Yes')} />
-                  {opt}
-                </label>
+      {/* ── RIGHT: summary rail — who approves, what goes, and the two actions ── */}
+      <div className="s4" style={{ position:'sticky', top:16, display:'flex', flexDirection:'column', gap:16 }}>
+        <div className="rx-mod">
+          <div className="rx-mod-h"><div className="rx-mod-t">Approval summary</div></div>
+          <div style={{ display:'grid', gap:10 }}>
+            <div className="rx-tile" style={{ background:TK.brandTint, border:`1px solid ${TK.brandEdge}` }}>
+              <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.brandDeep }}>Will be approved by</div>
+              <div style={{ fontSize:14, fontWeight:700, color:TK.ink, marginTop:4 }}>
+                {hrHeads == null ? 'Looking up the HR Head…' : hrHeads.length ? hrHeads.map(h => `${h.name}${h.code ? ` (${h.code})` : ''}`).join(', ') : 'No HR Head set for this company'}
+              </div>
+              <div className="rx-hint" style={{ marginTop:2 }}>Notified in HRIS → Tasks & Approvals and by mail{cc.length ? `, CC ${cc.length}` : ''}.</div>
+            </div>
+            <div>
+              <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted, marginBottom:6 }}>Goes with the mail</div>
+              {[['MRF', mrf?.mrf_number ? `Requisition ${mrf.mrf_number} as a PDF` : 'Requisition as a PDF'], ['Interview summary', 'every candidate on this MRF, rounds, scores and decisions'], ['CTC acknowledgement', 'the accepted salary break-up · password-protected (candidate’s mobile number)']].map(([k, v]) => (
+                <div key={k} style={{ display:'flex', gap:8, padding:'6px 0', borderTop:`1px solid ${TK.line}`, fontSize:12.5 }}>
+                  <span style={{ color:TK.positive, fontWeight:800 }}>📎</span><div><b style={{ color:TK.ink }}>{k}</b><div className="rx-hint">{v}</div></div>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted, marginBottom:6 }}>Ready to submit?</div>
+              {readiness.map(x => (
+                <div key={x.k} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', fontSize:12.5, color: x.ok ? TK.ink : TK.muted }}>
+                  <span style={{ width:18, height:18, borderRadius:99, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, background: x.ok ? TK.positiveTint : TK.sunken, color: x.ok ? TK.positive : TK.faint }}>{x.ok ? '✓' : '·'}</span>{x.k}
+                </div>
               ))}
             </div>
           </div>
-        </div>
-        {joining.notice_buyout && (
-          <div style={{ ...S.g3, marginBottom:10 }}>
-            <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Buyout Amount (₹)</label><input className="rx-input" type="number" min={0} step={1} value={joining.notice_buyout_amount} onChange={e=>J('notice_buyout_amount',e.target.value)} placeholder="e.g. 60000" /></div>
-          </div>
-        )}
-        {joining.proposed_doj && (
-          <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', fontSize:12, color:TK.brandDeep }}>
-            Days to join: <strong>{daysDiff(joining.proposed_doj)} days</strong> from today
-          </div>
-        )}
-      </div>
-
-      {/* OFFERED COMPENSATION SUMMARY (read only from negotiation) */}
-      <div style={S.card}>
-        <SecLine title="Offered Compensation (from Calculator)" />
-        {negotiation ? (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
-            {[
-              ['Annual CTC', `₹${fmt(negotiation.offered_ctc || 0)}`],
-              ['Monthly In-Hand', `₹${fmt(negotiation.net_monthly || 0)}`],
-              ['Hike %', `${Number(negotiation.hike_pct||0).toFixed(1)}%`],
-            ].map(([l,v]) => (
-              <div key={l} style={{ background:TK.brandTint, borderRadius:10, padding:'10px 12px' }}>
-                <div style={{ ...eyebrow }}>{l}</div>
-                <div style={{ fontSize:14, fontWeight:500, color:TK.brandDeep, marginTop:2 }}>{v}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ color:TK.faint, fontSize:12 }}>No CTC negotiation found. Please complete the calculator first.</div>
-        )}
-      </div>
-
-      {/* HIRING MANAGER REMARK / ADDITIONAL */}
-      <div style={S.card}>
-        <SecLine title="Hiring Manager — Remark / Additional (e.g. Target)" />
-        <input className="rx-input" value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for HR Head…" />
-      </div>
-
-      {/* RECRUITER COMMENTS */}
-      <div style={S.card}>
-        <SecLine title="Recruiter Comments (Optional)" />
-        <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for HR Head..." />
-      </div>
-
-      {/* CC — everyone picked here receives the same approval mail as the HR Head */}
-      <div style={S.card}>
-        <SecLine title="CC on the approval mail (optional)" />
-        <div style={{ fontSize:11.5, color:TK.faint, marginBottom:8 }}>The HR Head gets the approval mail with the MRF, interview summary and CTC acknowledgement attached. Anyone you add here is CC'd on the same mail.</div>
-        <CcPicker value={cc} onChange={setCc} />
-      </div>
-
-      {/* ACTIONS */}
-      <div style={{ display:'flex', gap:10, marginBottom:16 }}>
-        <button onClick={generateTemplate} style={S.btn(TK.brandTint,TK.brandDeep)}>Generate Approval Template
-        </button>
-        <button onClick={submitForApproval} disabled={saving || !template} style={S.btn(saving||!template?'rgba(37,99,235,0.4)':TK.brand,TK.surface)}>
-          {saving ? 'Submitting...' : 'Submit to HR Head'}
-        </button>
-      </div>
-
-      {/* TEMPLATE PREVIEW — read-only */}
-      {showTemplate && (
-        <div style={S.card}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-            <div style={{ fontSize:13, fontWeight:500 }}>Approval Request Preview (read-only)</div>
-            <button onClick={()=>setShowTemplate(false)} style={{ ...S.btn(TK.brandTint,TK.faint), padding:'4px 10px', fontSize:11 }}>Hide</button>
-          </div>
-          <pre style={{ fontFamily:'monospace', fontSize:11, color:TK.inkSoft, background:TK.sunken, borderRadius:7, padding:12, whiteSpace:'pre-wrap', border: `1px solid ${TK.brandEdge}`, maxHeight:500, overflow:'auto', margin:0 }}>
-            {template}
-          </pre>
-          <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>
-            This is a preview of what HR Head will see. To change it, edit the fields above and re-generate.
+          <div className="rx-sep" />
+          <div style={{ display:'grid', gap:8 }}>
+            <button type="button" className="rx-btn" onClick={generateTemplate} disabled={!negotiation}>{template ? 'Regenerate preview' : 'Generate preview'}</button>
+            <button type="button" className="rx-btn p" onClick={submitForApproval} disabled={saving || !ready} style={{ opacity: saving || !ready ? .55 : 1 }}>{saving ? 'Submitting…' : 'Submit to HR Head →'}</button>
+            {!ready && <div className="rx-hint" style={{ textAlign:'center' }}>{!template ? 'Generate the preview, then submit.' : 'Fill the starred fields to submit.'}</div>}
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
-
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════

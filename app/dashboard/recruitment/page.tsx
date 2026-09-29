@@ -5059,7 +5059,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
               : neg ? (
                 <>
                   <CreateOfferApproval candidate={sel} negotiation={neg} mrf={mrf} onSubmitted={()=>{ onRefresh?.(); setSel(null); setNeg(null) }} />
-                  <div style={{ maxWidth:700, margin:'16px auto 0' }}><AuditTrailViewer candidateId={sel.id} /></div>
+                  <div style={{ marginTop:16 }}><AuditTrailViewer candidateId={sel.id} /></div>
                 </>
               ) : (
                 <div className="rx-mod" style={{ borderColor:'var(--ez-warning-edge)' }}>
