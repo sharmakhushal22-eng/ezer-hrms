@@ -464,6 +464,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
 
   const isQuick = form.mrf_type === 'Quick Hire'
   const isReplacement = form.hiring_type === 'Replacement' || form.hiring_type === 'Backfill'
+
   const comp = compOf(form.employment_type)
 
   // Lane check — annualised max vs the ₹6L cap.
@@ -473,6 +474,70 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   const annualMin = (Number(form.budget_min) || 0) * (comp.period === 'MONTHLY' ? 12 : 1)
   const laneShouldBe = annualMax > QUICK_HIRE_CAP ? 'Full MRF' : 'Quick Hire'
   const laneMismatch = !!form.budget_max && laneShouldBe !== form.mrf_type
+
+  // ── Step wizard ────────────────────────────────────────────────────────────
+  //
+  // DECLARATION ORDER IS LOAD-BEARING: `comp` is declared ABOVE this block, not
+  // below it. requiredDone runs every gate eagerly on each render, and the
+  // budget gate reads comp — with comp declared afterwards that is a temporal
+  // dead zone ReferenceError on first render, on all five surfaces. tsc does
+  // not catch it, because the read sits inside an arrow function body rather
+  // than at the point of use. Found by reading the order, not by a green gate.
+  //
+  // One section at a time; the next opens once this one is complete.
+  //
+  // "Complete" introduces NO new requirement. Every gate below is one of
+  // save()'s own guards (see the checks at the top of save), moved earlier so a
+  // missing field is caught beside the field itself instead of at submit. A
+  // form that was submittable before is submittable now, and one that was not
+  // still is not — the message simply arrives sooner.
+  //
+  // Sections 1, 3, 8, 9 and 10 have no required fields, so their Next is open.
+  // That is the honest state of this form, not an oversight.
+  //
+  // Quick Hire drops sections 7 and 9, so the list is built from what is
+  // actually rendered and the cursor is clamped if the lane changes underneath.
+  // `required` marks a PRESENCE requirement — something the user must supply.
+  // A gate without it is a CORRECTNESS check: it still blocks Next, but it is
+  // not something to complete, so it must not count towards progress.
+  const STEPS: { id: string; title: string; required?: boolean; gate?: () => string | null }[] = [
+    { id: 'meta', title: 'Requisition Meta' },
+    { id: 'pos', title: 'Position Details', required: true,
+      gate: () => String(form.designation || '').trim() ? null : 'Designation is required.' },
+    { id: 'emp', title: 'Employment Details' },
+    { id: 'budget', title: 'Budget & Cost',
+      gate: () => {
+        const lo = Number(form.budget_min) || 0, hi = Number(form.budget_max) || 0
+        return lo && hi && lo > hi ? `${comp.label} range minimum cannot be more than the maximum.` : null
+      } },
+    { id: 'just', title: 'Justification', required: true,
+      gate: () => !form.reason ? 'Reason for hire is required.'
+        : (isReplacement && !form.outgoing_employee_id) ? 'Pick the outgoing employee for a replacement.'
+        : null },
+    { id: 'time', title: 'Timeline', required: true,
+      gate: () => form.target_joining_date ? null : 'Target joining date is required.' },
+    ...(!isQuick ? [{ id: 'cand', title: 'Candidate Requirements', required: true,
+      gate: () => (String(form.skills_required || '').trim() || String(form.job_description || '').trim())
+        ? null : 'Add mandatory skills or a job description.' }] : []),
+    { id: 'appr', title: 'Approval Workflow' },
+    ...(!isQuick ? [{ id: 'src', title: 'Sourcing' }] : []),
+    { id: 'att', title: 'Attachments' },
+  ]
+  const [stepIdx, setStepIdx] = useState(0)
+  const [maxSeen, setMaxSeen] = useState(0)
+  const step = Math.min(stepIdx, STEPS.length - 1)
+  const activeId = STEPS[step].id
+  const blocked = STEPS[step].gate?.() ?? null
+  // Counts PRESENCE requirements only. Counting every gate read "1 of 5 done"
+  // on an untouched form, because the budget check passes vacuously until both
+  // figures exist — progress that the user had not made.
+  const requiredTotal = STEPS.filter(s => s.required).length
+  const requiredDone = STEPS.filter(s => s.required && !s.gate!()).length
+  const goNext = () => {
+    if (blocked) { notify(blocked, 'error'); return }
+    const n = Math.min(step + 1, STEPS.length - 1)
+    setStepIdx(n); setMaxSeen(m => Math.max(m, n))
+  }
 
   async function save(status: 'DRAFT' | 'SUBMITTED') {
     const designation = String(form.designation || '').trim()
@@ -602,7 +667,38 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         </div>
       )}
 
+      {/* Step rail. <a> rather than <button> because .rx-fnav styles anchors,
+          and the rail is INLINE JSX rather than a component: a component
+          declared inside this one would remount its subtree every render and
+          steal focus from whatever field is being typed into. */}
+      {!readOnly && (
+        <nav className="rx-fnav" aria-label="Form steps"
+          style={{ position: 'static', top: 'auto', flexDirection: 'row', flexWrap: 'wrap', gap: 4, margin: '12px 0 14px' }}>
+          <div className="rx-row" style={{ width: '100%', justifyContent: 'space-between', margin: '2px 4px 8px' }}>
+            <span className="rx-label">Step {step + 1} of {STEPS.length}</span>
+            <span className="rx-meta rx-num">{requiredDone} of {requiredTotal} required done</span>
+          </div>
+          {STEPS.map((s, i) => {
+            // "Done" means VISITED and clear — both halves matter. Without the
+            // maxSeen half, Budget & Cost showed a green tick on an untouched
+            // form, because its gate only fires once min exceeds max and so
+            // passes vacuously until then. It read as progress nobody had made.
+            const cleared = i < maxSeen && !(s.gate?.() ?? null)
+            const reachable = i <= maxSeen
+            return (
+              <a key={s.id} href={`#${s.id}`} aria-current={i === step ? 'step' : undefined}
+                className={i === step ? 'now' : cleared ? 'done' : ''}
+                onClick={e => { e.preventDefault(); if (reachable) setStepIdx(i) }}
+                style={{ cursor: reachable ? 'pointer' : 'not-allowed', opacity: reachable ? 1 : .45 }}>
+                <span className="rx-sd">{cleared && i !== step ? <Icon name="check" /> : i + 1}</span>{s.title}
+              </a>
+            )
+          })}
+        </nav>
+      )}
+
       {/* 1 · Requisition Meta */}
+      {(readOnly || activeId === 'meta') && (<>
       <SectionLine n="1" title="Requisition Meta" />
       <div style={g2}>
         <Field label="Requisition Type"><Sel value={form.hiring_type} onChange={v => F('hiring_type', v)}>{REQ_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
@@ -612,7 +708,10 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Raised By — Role"><input style={st.input} value={form.raised_by_role} onChange={e => F('raised_by_role', e.target.value)} placeholder="e.g. Department Head" /></Field>
       </div>
 
+      </>)}
+
       {/* 2 · Position Details */}
+      {(readOnly || activeId === 'pos') && (<>
       <SectionLine n="2" title="Position Details" />
       <div style={g2}>
         <Locked label="Company" value={auto?.company_name} hint="auto · your company" />
@@ -628,7 +727,10 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Locked label="HOD — Department Head" value={auto?.hod} hint="auto · your HOD" />
       </div>
 
+      </>)}
+
       {/* 3 · Employment Details */}
+      {(readOnly || activeId === 'emp') && (<>
       <SectionLine n="3" title="Employment Details" />
       <div style={g2}>
         <Field label="Employment Type"><Sel value={form.employment_type} onChange={v => F('employment_type', v)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
@@ -636,7 +738,10 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Work Location"><Sel value={form.location_id} onChange={v => F('location_id', v)}><option value="">Select Location</option>{locations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</Sel></Field>
       </div>
 
+      </>)}
+
       {/* 4 · Budget & Cost */}
+      {(readOnly || activeId === 'budget') && (<>
       <SectionLine n="4" title="Budget & Cost" />
       <div style={{ fontSize: 12.5, color: TK.inkSoft, background: C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 11, padding: '9px 12px', margin: '2px 0 12px' }}>
         {form.employment_type} → paid as <b>{comp.label.toLowerCase()}</b>, quoted <b>{perLabel(comp.period)}</b>
@@ -676,7 +781,10 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
           lane={form.budget_max ? laneShouldBe : null} />
       </div>
 
+      </>)}
+
       {/* 5 · Justification */}
+      {(readOnly || activeId === 'just') && (<>
       <SectionLine n="5" title="Justification" />
       <div style={g2}>
         <Field label="Reason for Hire"><Sel value={form.reason} onChange={v => F('reason', v)}><option value="">Select Reason</option>{REASON_FOR_HIRE.map(r => <option key={r}>{r}</option>)}</Sel></Field>
@@ -692,15 +800,20 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Business Justification"><textarea style={{ ...st.area, minHeight: 80 }} value={form.business_justification} onChange={e => F('business_justification', e.target.value)} placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" /></Field>
       </div>
 
+      </>)}
+
       {/* 6 · Timeline */}
+      {(readOnly || activeId === 'time') && (<>
       <SectionLine n="6" title="Timeline" />
       <div style={g2}>
         <Field label="Target Joining Date"><input type="date" style={st.input} value={form.target_joining_date} onChange={e => F('target_joining_date', e.target.value)} /></Field>
         <Field label="Requisition Validity / Expiry" hint="Auto-flagged as expired if unfilled past this date"><input type="date" style={st.input} value={form.validity_date} onChange={e => F('validity_date', e.target.value)} /></Field>
       </div>
 
+      </>)}
+
       {/* 7 · Candidate Requirements (Full MRF only) */}
-      {!isQuick && <>
+      {!isQuick && (readOnly || activeId === 'cand') && <>
         <SectionLine n="7" title="Candidate Requirements" />
         <div style={g2}>
           <Field label="Experience — Min (years)"><input type="number" style={st.input} value={form.experience_min} onChange={e => F('experience_min', e.target.value)} /></Field>
@@ -718,14 +831,17 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       </>}
 
       {/* 8 · Approval Workflow (fixed ESS routing) */}
+      {(readOnly || activeId === 'appr') && (<>
       <SectionLine n="8" title="Approval Workflow" />
       <div style={{ fontSize: 12.5, color: C.muted, background: C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 11, padding: '12px 14px', lineHeight: 1.6 }}>
         On submit this routes through your reporting chain, company-scoped:
         <div style={{ marginTop: 4, color: C.ink, fontWeight: 500 }}>You ({auto?.code}) → RM2 {auto?.rm2 !== '—' ? `· ${auto.rm2}` : '(if set)'} → HR Head</div>
       </div>
 
+      </>)}
+
       {/* 9 · Sourcing (Full MRF only) */}
-      {!isQuick && <>
+      {!isQuick && (readOnly || activeId === 'src') && <>
         <SectionLine n="9" title="Sourcing" />
         <div style={g2}>
           <Field label="Internal vs External"><Sel value={form.sourcing_mode} onChange={v => F('sourcing_mode', v)}>{SOURCING_MODES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
@@ -736,8 +852,10 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       </>}
 
       {/* 10 · Attachments */}
+      {(readOnly || activeId === 'att') && (<>
       <SectionLine n="10" title="Attachments" />
       <div style={{ fontSize: 12, color: C.faint }}>Files can be attached from the Recruitment module once the MRF is created.</div>
+      </>)}
 
       </div>{/* end read-only body wrapper */}
 
@@ -766,10 +884,28 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 10, marginTop: 22, paddingTop: 18, borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
-          <button type="button" style={st.btnO} disabled={saving} onClick={() => save('DRAFT')}>Save Draft</button>
-          <button type="button" style={st.btn} disabled={saving} onClick={() => save('SUBMITTED')}>{saving ? 'Submitting…' : 'Submit for Approval'}</button>
-          <button type="button" style={{ ...st.btnO, marginLeft: 'auto' }} disabled={saving} onClick={onCancel}>Cancel</button>
+        <div style={{ marginTop: 22, paddingTop: 18, borderTop: `1px solid ${C.border}` }}>
+          {/* Why Next is refusing, said beside the button rather than only in a
+              toast — the toast is fired by goNext() for anyone who clicks. */}
+          {blocked && (
+            <div style={{ marginBottom: 10 }}>
+              <span className="rx-why"><Icon name="lock" />{blocked}</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" style={st.btnO} disabled={saving || step === 0} onClick={() => setStepIdx(step - 1)}>← Back</button>
+            {step < STEPS.length - 1 && (
+              <button type="button" style={{ ...st.btn, opacity: blocked ? .55 : 1 }} disabled={saving} onClick={goNext}>Next · {STEPS[step + 1].title} →</button>
+            )}
+            {/* Save Draft stays available on EVERY step. A draft is incomplete
+                by definition, so gating it would defeat the point — and save()
+                only requires a designation for DRAFT, exactly as before. */}
+            <button type="button" style={st.btnO} disabled={saving} onClick={() => save('DRAFT')}>Save Draft</button>
+            {step === STEPS.length - 1 && (
+              <button type="button" style={st.btn} disabled={saving} onClick={() => save('SUBMITTED')}>{saving ? 'Submitting…' : 'Submit for Approval'}</button>
+            )}
+            <button type="button" style={{ ...st.btnO, marginLeft: 'auto' }} disabled={saving} onClick={onCancel}>Cancel</button>
+          </div>
         </div>
       )}
     </div>

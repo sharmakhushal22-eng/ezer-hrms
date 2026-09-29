@@ -59,6 +59,32 @@ layout — is **unverified by inspection only**, however many times it is retrie
 Don't burn turns on it. Verify responsive behaviour in a real browser, or by
 reading the rules and the span classes each layout uses.
 
+### Screenshot pixels are not click pixels
+
+`computer:left_click` takes CSS pixels, but the screenshots come back at a
+different width than the page's CSS viewport. Measured during phase 8b:
+
+```
+getBoundingClientRect() centre of the Next button : (495, 620)
+window.innerWidth / visualViewport.width          : 1440 / 1432
+devicePixelRatio                                  : 2
+screenshot widths seen in the same session        : 1503, 1524, 1560, 1564
+```
+
+So a coordinate read off a screenshot image does not address the same point as
+the same coordinate passed to a click, and the drift is not a constant offset —
+it changes with the screenshot width. Several clicks in this session went to the
+wrong tab or the wrong rail item for exactly this reason, and each one looked
+like "the feature is broken" rather than "the click missed".
+
+**Use `find` and click by `ref`.** It resolves the element directly, and it also
+disambiguates when a page mounts the same component twice — /mrf-preview mounts
+two `<MrfForm>` instances, so a positional click can land on the second form's
+button while a DOM probe reads the first.
+
+Read coordinates from `getBoundingClientRect()` only when a ref is unavailable,
+and never from the screenshot image.
+
 ## 2. `.rx-dlg-modal` was never centred
 
 Fixed during phase 4 — see the comment in `lib/ui/recruitment.redesign.css`
