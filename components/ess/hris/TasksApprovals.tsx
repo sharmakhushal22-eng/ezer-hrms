@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChainRow, PendingItem } from './types'
 import { Ic, type IconKey } from './icons'
 import { CountUp, fmtDateTime, riseStyle, useToast } from './ui'
-import { MrfApprovals, InterviewInvites } from '@/components/ess/RoleTabs'
+import { MrfApprovals, InterviewInvites, OfferApprovals } from '@/components/ess/RoleTabs'
 
 type Filter = 'MINE' | 'ALL' | 'LEAVE' | 'TRAVEL' | 'RESIGNATION'
 
@@ -72,6 +72,7 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
           reporting manager still sees MRFs waiting on them and interviewers see their
           interview tasks. Each renders nothing when it has no items. */}
       <MrfApprovals employeeId={employeeId} notify={(m) => toast(m)} />
+      <OfferApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       <InterviewInvites employeeId={employeeId} notify={(m) => toast(m)} />
 
       <div className="hx-kpis">

@@ -13,7 +13,7 @@
 //
 // Every screen fetches its own scoped data; the same component renders for an
 // employee, an RM and an HR Head because the query differs, not the component.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '@/lib/ess/api'
 import { C as TK } from '@/lib/ui'
@@ -532,7 +532,7 @@ export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string
 // task. "Review" opens the full request — candidate, previous employer, offered package,
 // joining details, remarks — and the HR Head approves or rejects RIGHT HERE (same writes
 // and notifications as Recruitment → HR Head, which stays available as a link).
-export function OfferApprovals({ employeeId, notify }: { employeeId: string; notify?: (m: string, t?: 'success' | 'error') => void }) {
+export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employeeId: string; notify?: (m: string, t?: 'success' | 'error') => void; focusId?: string; onDone?: () => void }) {
   const [d, setD] = useState<{ isHrHead: boolean; pending: any[]; recent: any[] } | null>(null)
   const [open, setOpen] = useState<any | null>(null)
   const [mode, setMode] = useState<'view' | 'reject'>('view')
@@ -540,7 +540,30 @@ export function OfferApprovals({ employeeId, notify }: { employeeId: string; not
   const [busy, setBusy] = useState(false)
   const load = useCallback(() => api('/api/ess/offer-approvals', employeeId).then(setD).catch(() => setD({ isHrHead: false, pending: [], recent: [] })), [employeeId])
   useEffect(() => { load() }, [load])
-  if (!d || !d.isHrHead || (d.pending.length === 0 && d.recent.length === 0)) return null
+  // Focus mode (the /offer-approve/<id> page a notification links to): open that request straight away.
+  const focused = useRef(false)
+  useEffect(() => {
+    if (!focusId || !d || focused.current) return
+    const hit = [...d.pending, ...d.recent].find((o: any) => o.id === focusId)
+    if (hit) { setOpen(hit); setMode('view'); setReason('') }
+    focused.current = true
+  }, [focusId, d])
+  if (!d) return focusId ? <div style={{ fontSize: 12.5, color: C.faint, padding: 20, textAlign: 'center' }}>Loading offer…</div> : null
+  if (focusId && d.isHrHead && !open && focused.current) {
+    const hit = [...d.pending, ...d.recent].find((o: any) => o.id === focusId)
+    return (
+      <div style={{ ...S.card, textAlign: 'center', padding: 28 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>{hit ? `This offer is ${hit.status === 'HR_HEAD_REJECTED' ? 'rejected' : hit.status === 'SUBMITTED' ? 'awaiting your decision' : 'approved'}` : 'This offer isn’t awaiting your approval'}</div>
+        <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6 }}>{hit ? 'You closed the review without deciding.' : 'It may belong to another company, or has already been decided.'}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 14 }}>
+          {hit && hit.status === 'SUBMITTED' && <button style={S.btn} onClick={() => { setOpen(hit); setMode('view') }}>Open again</button>}
+          <button style={S.btnO} onClick={() => onDone?.()}>← Back to Tasks &amp; Approvals</button>
+        </div>
+      </div>
+    )
+  }
+  if (!d.isHrHead) return focusId ? <div style={{ ...S.card, textAlign: 'center', padding: 28, color: C.muted, fontSize: 13 }}>Only the HR Head of the company can review offer approvals.</div> : null
+  if (d.pending.length === 0 && d.recent.length === 0 && !focusId) return null
   const rs = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
   const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
   const day = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
@@ -554,6 +577,7 @@ export function OfferApprovals({ employeeId, notify }: { employeeId: string; not
       const j = await api('/api/ess/offer-approvals', employeeId, { method: 'POST', body: JSON.stringify({ action, request_id: open.id, comment: reason.trim() }) })
       say(action === 'approve' ? `Approved — ${open.candidate}'s offer moves to Send Offers${j.notified ? ` (${j.notified} notified)` : ''}.` : `Rejected — the recruiter has been told${j.notified ? ` (${j.notified} notified)` : ''}.`)
       setOpen(null); setMode('view'); setReason(''); await load()
+      if (focusId) onDone?.()
     } catch (e: any) { say(e.message, 'error') }
     setBusy(false)
   }
@@ -605,7 +629,7 @@ export function OfferApprovals({ employeeId, notify }: { employeeId: string; not
                 <div style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>Offer approval — {open.candidate}</div>
                 <div style={{ fontSize: 12, color: C.muted }}>{open.designation || '—'}{open.mrf_number ? ` · ${open.mrf_number}` : ''}{open.raised_by ? ` · MRF raised by ${open.raised_by}` : ''}{open.recruiter ? ` · recruiter ${open.recruiter}` : ''}</div>
               </div>
-              <button onClick={() => !busy && setOpen(null)} style={S.btnO}>Close</button>
+              <button onClick={() => { if (busy) return; setOpen(null); if (focusId) onDone?.() }} style={S.btnO}>{focusId ? '← Back' : 'Close'}</button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>

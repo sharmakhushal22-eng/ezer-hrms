@@ -27,6 +27,7 @@ const inr = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')
  * hike or remark simply does not appear.
  */
 function approvalMail(r: any, who: string, role: string, mrfNo: string | null, raisedBy: string | null, appUrl: string, attachments: string[] = []) {
+  const reviewUrl = `${appUrl}/offer-approve/${r.id}`
   const ctc = Number(r.offered_ctc || 0)
   const varPct = Number(r.offered_variable_pct || 0)
   const varAmt = ctc > 0 && varPct > 0 ? Math.round(ctc * varPct / 100) : 0
@@ -54,8 +55,8 @@ function approvalMail(r: any, who: string, role: string, mrfNo: string | null, r
   const attachNote = attachments.length
     ? `\n\nAttached: ${attachments.join('; ')}.\nThe CTC break-up acknowledgement is password-protected — the password is the candidate's registered mobile number.`
     : ''
-  const text = `Dear HR Head,\n\nAn offer is waiting for your review and approval.\n\n${lines.join('\n')}${attachNote}\n\nReview and approve: ${appUrl}/ess-portal?module=recruitment&tab=hrhead\n\n— EZER HRMS`
-  const html = `<p>Dear HR Head,</p><p>An offer is waiting for your review and approval.</p><table style="border-collapse:collapse;font-family:Segoe UI,Arial,sans-serif;font-size:13px">${lines.map(l => { const i = l.indexOf('  '); const k = l.slice(0, i).trim(); const v = l.slice(i).trim(); return `<tr><td style="padding:4px 14px 4px 0;color:#6B7280">${k}</td><td style="padding:4px 0;font-weight:600">${v}</td></tr>` }).join('')}</table>${attachments.length ? `<p style="font-size:12px;color:#374151"><b>Attached:</b> ${attachments.join('; ')}.<br/>The CTC break-up acknowledgement is password-protected — the password is the candidate's registered mobile number.</p>` : ''}<p><a href="${appUrl}/ess-portal?module=recruitment&tab=hrhead" style="display:inline-block;padding:9px 16px;border-radius:7px;background:#2563EB;color:#fff;text-decoration:none;font-weight:600">Review &amp; approve</a></p><p style="color:#6B7280;font-size:12px">— EZER HRMS</p>`
+  const text = `Dear HR Head,\n\nAn offer is waiting for your review and approval.\n\n${lines.join('\n')}${attachNote}\n\nReview and approve: ${reviewUrl}\n\n— EZER HRMS`
+  const html = `<p>Dear HR Head,</p><p>An offer is waiting for your review and approval.</p><table style="border-collapse:collapse;font-family:Segoe UI,Arial,sans-serif;font-size:13px">${lines.map(l => { const i = l.indexOf('  '); const k = l.slice(0, i).trim(); const v = l.slice(i).trim(); return `<tr><td style="padding:4px 14px 4px 0;color:#6B7280">${k}</td><td style="padding:4px 0;font-weight:600">${v}</td></tr>` }).join('')}</table>${attachments.length ? `<p style="font-size:12px;color:#374151"><b>Attached:</b> ${attachments.join('; ')}.<br/>The CTC break-up acknowledgement is password-protected — the password is the candidate's registered mobile number.</p>` : ''}<p><a href="${reviewUrl}" style="display:inline-block;padding:9px 16px;border-radius:7px;background:#2563EB;color:#fff;text-decoration:none;font-weight:600">Review &amp; approve</a></p><p style="color:#6B7280;font-size:12px">— EZER HRMS</p>`
   return { subject, text, html }
 }
 
@@ -91,8 +92,8 @@ export async function POST(req: NextRequest) {
     await Promise.all(heads.map(h => notify(
       h.id,
       `Offer approval — ${who}${role ? ` (${role})` : ''}`,
-      `An offer of ${lakh(r.offered_ctc)} for ${who}${role ? `, ${role}` : ''}${ref} is waiting for your review and approval${r.proposed_doj ? ` (proposed DOJ ${new Date(r.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Open Recruitment → HR Head to approve or reject.`,
-      '/ess-portal?module=recruitment&tab=hrhead',
+      `An offer of ${lakh(r.offered_ctc)} for ${who}${role ? `, ${role}` : ''}${ref} is waiting for your review and approval${r.proposed_doj ? ` (proposed DOJ ${new Date(r.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Open it from Tasks & Approvals to review and approve.`,
+      `/offer-approve/${r.id}`,
       'APPROVAL',
     ).catch(() => null)))
 
