@@ -21,7 +21,7 @@ const META: Record<Standing, { label: string; tone: 'pos' | 'info' | 'warn' | 'c
 const ORDER: Standing[] = ['CRITICAL', 'BREACHED', 'WATCH', 'ON_TRACK', 'AWAITING', 'NO_DEADLINE', 'FILLED', 'CANCELLED'];
 
 export function JobStatusView({ rail, rows, recruiterTable, onOpenMrf, onShare, onExport }: {
-  rail: React.ReactNode;
+  rail?: React.ReactNode;
   rows: { m: MrfVM; standing: Standing; /** e.g. "5 days left" from the existing calc */ note: string; /** 0–100 of the validity window used */ elapsedPct: number }[];
   recruiterTable?: React.ReactNode; onOpenMrf: (id: string) => void; onShare?: () => void; onExport?: () => void;
 }) {
@@ -29,7 +29,7 @@ export function JobStatusView({ rail, rows, recruiterTable, onOpenMrf, onShare, 
   const count = (s: Standing) => rows.filter((r) => r.standing === s).length;
   const shown = rows.filter((r) => f === '*' || r.standing === f).sort((a, b) => ORDER.indexOf(a.standing) - ORDER.indexOf(b.standing));
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader title="Job status" subtitle="Every requisition flagged by where it stands against its deadline, with recruiter performance and a shareable report."
         actions={<>{onShare && <button type="button" className="rx-btn" onClick={onShare}><Icon name="share" />Share report</button>}
           {onExport && <button type="button" className="rx-btn p" onClick={onExport}><Icon name="download" />Export report</button>}</>} />}>
@@ -51,7 +51,7 @@ export function JobStatusView({ rail, rows, recruiterTable, onOpenMrf, onShare, 
               <button key={m.id} type="button" className="rx-li" onClick={() => onOpenMrf(m.id)} style={{ padding: '14px 10px', background: 'none', border: 0, font: 'inherit', color: 'inherit', textAlign: 'left', width: '100%', cursor: 'pointer' }}>
                 <span style={{ width: 280, display: 'block' }}><span className="rx-name" style={{ display: 'block' }}>{m.title}</span><span className="rx-meta">{m.code}</span></span>
                 <span style={{ width: 130 }}><Badge tone={META[standing].tone}>{META[standing].label}</Badge></span>
-                <span style={{ flex: 1, display: 'block' }}><Track pct={elapsedPct} tone={META[standing].track} /><span className="rx-meta" style={{ fontSize: 12, marginTop: 6, display: 'block' }}>{note}</span></span>
+                <span style={{ flex: 1, display: 'block' }}><Track label={`${m.title}: validity window used`} pct={elapsedPct} tone={META[standing].track} /><span className="rx-meta" style={{ fontSize: 12, marginTop: 6, display: 'block' }}>{note}</span></span>
                 <span className="rx-meta rx-num" style={{ width: 90, textAlign: 'right' }}>{m.filled} of {m.openings} filled</span>
               </button>))}</div>
           )}

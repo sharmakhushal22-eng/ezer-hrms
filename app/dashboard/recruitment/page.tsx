@@ -6,6 +6,7 @@ import { useGrant } from '@/lib/rms/client'
 import { companyFilter, scopedCompanies, canSeeScreen } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
+import { compOf } from '@/lib/recruitment/compensation'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
 import CandidateInterviewModal from '@/components/recruitment/CandidateInterviewModal'
 import MrfForm, { mrfToForm } from '@/components/ess/MrfForm'
@@ -15,11 +16,16 @@ import { computeCtc, inr, EPF_WAGE_CEILING, hraMaxFor } from '@/lib/recruitment/
 import { ctcStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
 import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+// Every recruitment API route is guarded (docs/security/open-endpoints.md), so the
+// browser hands over whichever session it holds. uploadAuthHeaders() is the same
+// credentials WITHOUT Content-Type — mandatory for FormData, because setting it by
+// hand suppresses the multipart boundary and the server cannot parse the parts.
+import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
 
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
 import {
-  C, F, W, R, E, S, M, tone, eyebrow, numeric, inputStyle,
+  C, F, W, R, E, S, M, Z, tone, eyebrow, numeric, inputStyle,
   TableWrap, Th, Td, Tr, Empty,
 } from '@/lib/ui'
 
@@ -30,9 +36,18 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help,
-  type ScreenResult,
+  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, FilterPills, daysUntil, Icon,
+  type ScreenResult, type ChainStepVM,
 } from '@/components/recruitment/rx'
+// NOT imported: Ring and missingDocuments. Section 10 wants a documents ring
+// from document_collection_links, but PreOnboardTab reads preonboarding_links
+// only, and those rows carry no per-document state — so both would need a new
+// read. Importing them unused would be dead surface, which is the same reason
+// COMPENSATION was dropped from this import list in phase 6b.
+// NOTE: the kit also exports Badge, but this file declares its own Badge({text})
+// at ~195 with a different signature, used a dozen times. Importing the kit's
+// would shadow it. Where a kit badge is wanted here, write the markup directly
+// (`rx-b b-brand rx-live`) — which is what the kit's own prototype emits.
 
 /**
  * The type scale under a name this file does not shadow.
@@ -214,7 +229,7 @@ function Toast({ msg, type, onClose }:{ msg:string, type:'success'|'error', onCl
   return (
     // Radius, shadow and spacing off the scales rather than hand-picked. The
     // shadow was a literal rgba, so a toast kept its light-theme cast in dark.
-    <div style={{ position:'fixed', bottom:S.xl, right:S.xl, zIndex:9999,
+    <div style={{ position:'fixed', bottom:S.xl, right:S.xl, zIndex:Z.toast,
       background:type==='success'?C.positive:C.critical, color:C.onAccent,
       borderRadius:R.md, padding:`${S.md}px ${S.lg}px`, fontSize:F.small, fontWeight:W.medium,
       boxShadow:E.overlay, display:'flex', alignItems:'center', gap:S.sm }}>
@@ -401,15 +416,21 @@ export default function RecruitmentPage() {
 
   return (
     <div style={T.page}>
-      {/* All eleven tabs now render their own frame: RxPage supplies the
-          padding and the sticky rail, RecruitmentHeader the title and crumb.
-          The legacy page header, the pill bar and the 1300px width wrapper
-          that used to sit here are gone — they existed only for tabs that had
-          not been converted yet, and there are none left. */}
+      {/* page.tsx owns the frame. The rail is rendered ONCE, here, at index 0,
+          with the current tab after it — so React keeps the SAME rail element
+          mounted across tab switches and its active pill slides between
+          sections instead of re-entering on every change. That is the whole
+          reason the rail moved out of the tabs.
+          RxPage no longer emits this wrapper or the rail; it supplies only a
+          tab's header and body, so passing rail={} to it now would render a
+          second rail underneath the first. The tab block below keeps its own
+          indentation: re-indenting sixty lines would bury a structural change
+          in a whitespace diff. */}
+      <div className="rx">
+        {rail}
 
       {tab==='dashboard' && (
         <DashboardView
-          rail={rail}
           mrfs={mrfVMs}
           candidates={candVMs}
           stages={STAGES}
@@ -427,45 +448,49 @@ export default function RecruitmentPage() {
           and eight UI blocks, six of which JobStatusView has no slot for.
           Per Step 6 of the guide it is restyled in place inside RxPage
           rather than replaced by the view. */}
-      {tab==='jobstatus' && <JobStatusTab {...props} rail={rail} />}
+      {tab==='jobstatus' && <JobStatusTab {...props} />}
       {/* MRF renders MrfListView, which is a genuine fit here in a way
           JobStatusView was not: it has a passthrough slot for the existing
           filter bar and its actions map one-to-one onto the tab's handlers.
           The tab keeps its create/edit form, its detail drawer, its approval
           modal and its delete dialog. */}
-      {tab==='mrf' && <MRFTab {...props} rail={rail} />}
+      {tab==='mrf' && <MRFTab {...props} />}
       {/* Pipeline renders PipelineView. No drag-and-drop by design: every
           stage move still goes through the modal, so moveStage's forward-only
           rule and the modal's own feedback gate cannot be bypassed. */}
-      {tab==='pipeline' && <PipelineTab {...props} rail={rail} />}
+      {tab==='pipeline' && <PipelineTab {...props} />}
       {/* AI Screening is a WRAP, not a replace: the kit has no ScreeningView.
           The tab keeps its upload flow and handlers; only the result rows
           move to ScreeningResultCard, with the API's field names mapped. */}
-      {tab==='screening' && <ScreeningTab {...props} rail={rail} />}
+      {tab==='screening' && <ScreeningTab {...props} />}
       {/* Negotiation is a WRAP. The payroll calculator's table and maths are
           untouched on purpose: restyling statutory EPF/ESIC/PT presentation
           risks real numbers for cosmetic gain. Only the frame, the list and
           the panel containers change. */}
-      {tab==='negotiation' && <NegotiationTab {...props} rail={rail} />}
+      {tab==='negotiation' && <NegotiationTab {...props} />}
       {/* Offer Approval has TWO component returns -- the list, and an early
           return for the selected candidate. Both are wrapped, or the screen
           loses its chrome the moment a request is created. */}
-      {tab==='offerapproval' && <OfferApprovalTab {...props} rail={rail} />}
+      {tab==='offerapproval' && <OfferApprovalTab {...props} />}
       {/* Offers: the letter body and the Send flow are deliberately not
           restyled -- that text reaches a real candidate. Only the frame,
           the list and the panel container change. */}
-      {tab==='offers' && <OffersTab {...props} rail={rail} />}
+      {tab==='offers' && <OffersTab {...props} />}
       {/* Pre-onboarding: render-only restyle. Every control here writes,
           deletes or emails a real candidate (sendAcceptance posts to
           send-letter), so the frame changed and the handlers did not. */}
-      {tab==='preonboarding' && <PreOnboardTab {...props} rail={rail} />}
+      {tab==='preonboarding' && <PreOnboardTab {...props} />}
       {/* HR Head lives in offer-flow-components.tsx, which has its own style
           objects and its own RecFilterBar/SearchBar. Only this component was
           converted; CreateOfferApproval and AuditTrailViewer in that file are
           untouched, since the Offer Approval tab renders both. */}
-      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} rail={rail} focusOfferId={offerDeep} />}
-      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} rail={rail} />}
+      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} focusOfferId={offerDeep} />}
+      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
 
+      </div>
+
+      {/* Outside .rx: the toast is position:fixed to the viewport, not to the
+          module frame. */}
       {notify && <Toast msg={notify.msg} type={notify.type} onClose={() => setNotify(null)} />}
     </div>
   )
@@ -568,16 +593,12 @@ const asArray = (v:any) => Array.isArray(v) ? v : (typeof v==='string' && v ? ((
 // are quoted on different bases, so the form must not label them all "Salary".
 // `fixedTerm` marks engagements that run for a defined period and therefore
 // need a duration — an internship without one is not a real requisition.
-const COMPENSATION:Record<string,{ kind:'SALARY'|'STIPEND'|'FEES'; label:string; period:'ANNUAL'|'MONTHLY'; fixedTerm:boolean; ph:[string,string] }> = {
-  'Employee':     { kind:'SALARY',  label:'Salary',  period:'ANNUAL',  fixedTerm:false, ph:['600000','1200000'] },
-  'Intern':       { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['10000','25000'] },
-  'NAPS':         { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['9000','15000'] },
-  'NATS':         { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['9000','15000'] },
-  'Live Project': { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['5000','15000'] },
-  'Contract':     { kind:'FEES',    label:'Fees',    period:'MONTHLY', fixedTerm:true,  ph:['50000','120000'] },
-  'Consultant':   { kind:'FEES',    label:'Fees',    period:'MONTHLY', fixedTerm:false, ph:['75000','200000'] },
-}
-const compOf = (empType?:string) => COMPENSATION[empType||'Employee'] || COMPENSATION['Employee']
+// Moved to lib/recruitment/compensation.ts so the HR Head's over-ceiling tile
+// can apply the SAME annual/monthly normalisation this form does. Importing it
+// back out of this page would have closed a cycle (this file imports
+// ./offer-flow-components; components/ess/RecruitmentModule.tsx imports this
+// page). The table and compOf are unchanged; all ten call sites below still
+// read compOf(...) exactly as before.
 const perLabel = (p:string) => p==='ANNUAL' ? 'per annum' : 'per month'
 /** Annual figures read better in lakhs; monthly stipends and fees do not. */
 const payAmount = (n?:number|null, cur='INR', period='ANNUAL') =>
@@ -777,13 +798,11 @@ function PersonSearchSelect({ people, value, onChange, placeholder }:{ people:an
   )
 }
 
-// The recruitment upload/share routes run on the service-role key, so they check for a
-// dashboard session of their own. The browser already holds one — this hands it over.
-async function authHeaders(supabase:any): Promise<Record<string,string>> {
-  const { data } = await supabase.auth.getSession()
-  const t = data?.session?.access_token
-  return t ? { Authorization: `Bearer ${t}` } : {}
-}
+// The private authHeaders(supabase) that used to live here read ONLY the Supabase
+// session, so it handed back {} for an employee signed in through ESS — and this
+// page renders inside ESS via components/ess/RecruitmentModule. Against the two
+// routes that were already guarded that meant a silent 401 for ESS users.
+// lib/auth-headers.ts checks both sessions and is imported at the top instead.
 
 // ── §7 CTQ QUESTION EDITOR ────────────────────────────────────────
 function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }) {
@@ -904,7 +923,7 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
     const fd = new FormData()
     fd.append('mrf_id', mrfId); fd.append('kind', kind); fd.append('file', file)
     try {
-      const r = await fetch('/api/recruitment/upload-mrf-doc', { method:'POST', body:fd, headers: await authHeaders(supabase) })
+      const r = await fetch('/api/recruitment/upload-mrf-doc', { method:'POST', body:fd, headers: await uploadAuthHeaders() })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error||'Upload failed')
       showNotify('File uploaded'); onChanged()
@@ -914,13 +933,13 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
   }
 
   async function open(path:string) {
-    const r = await fetch('/api/recruitment/upload-mrf-doc?path='+encodeURIComponent(path), { headers: await authHeaders(supabase) })
+    const r = await fetch('/api/recruitment/upload-mrf-doc?path='+encodeURIComponent(path), { headers: await authHeaders() })
     const j = await r.json()
     if (j.url) window.open(j.url,'_blank'); else showNotify(j.error||'Could not open file','error')
   }
 
   async function remove(path:string) {
-    const r = await fetch(`/api/recruitment/upload-mrf-doc?mrf_id=${mrfId}&path=${encodeURIComponent(path)}`, { method:'DELETE', headers: await authHeaders(supabase) })
+    const r = await fetch(`/api/recruitment/upload-mrf-doc?mrf_id=${mrfId}&path=${encodeURIComponent(path)}`, { method:'DELETE', headers: await authHeaders() })
     if (r.ok) { showNotify('File removed'); onChanged() } else showNotify('Could not remove file','error')
   }
 
@@ -975,10 +994,27 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
   const channels = asArray(m.sourcing_channels), files = asArray(m.attachments)
   const comp = compOf(m.employment_type)
 
+  // Neutral scrim, not rgba(30,27,75,…): that was the pre-rebrand navy, frozen.
+  // It is rgba rather than hex, so the colour ratchet never saw it — found by
+  // walking the UI, not by a tool. CandidateInterviewModal was converted in
+  // 5cdc45a; these two lived in page.tsx and were missed.
+  //
+  // The drawer shadow keeps its -8px geometry deliberately: this panel slides in
+  // from the right, so the offset is directional and an elevation token would
+  // flatten it. Only the colour changes.
+  //
+  // This comment sits ABOVE the return, not inside it: after `return (` the
+  // parenthesis takes exactly one element, so a JSX comment there parses as an
+  // empty object literal and breaks the file. (Written here once already, and
+  // ignored once already — a {/* … */} placed on the next line took tsc from
+  // 43 to 19 while this very warning sat ten lines above it.)
+  //
+  // padding:0 on the drawer: this panel came out of a container that had none,
+  // so all twelve sections below pad themselves. The shell's own 28px would
+  // double that and, worse, inset the gradient header that is meant to bleed
+  // edge to edge — measured at 495px inside a 560px drawer before the override.
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:200, display:'flex', justifyContent:'flex-end' }}
-      onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:C.canvas, width:'100%', maxWidth:760, height:'100%', overflowY:'auto', boxShadow:'-8px 0 30px rgba(30,27,75,0.25)' }}>
+    <RxDialog open onClose={onClose} variant="drawer" label="Requisition detail" style={{ padding: 0 }}>
         {/* Header */}
         <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'16px 20px', position:'sticky', top:0, zIndex:2 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
@@ -1001,7 +1037,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
         <div style={{ padding:'16px 20px' }}>
           <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' as const }}>
             {canEdit && <button onClick={()=>{ onEdit(m); onClose() }} style={T.btnOutline}>Edit this MRF</button>}
-            {canSendBack && <button onClick={()=>{ onSendBack(m); onClose() }} style={{ ...T.btnOutline, borderColor:'#FDE68A', color:C.warning }}>↩ Send back to raiser</button>}
+            {canSendBack && <button onClick={()=>{ onSendBack(m); onClose() }} style={{ ...T.btnOutline, borderColor:C.warningEdge, color:C.warning }}>↩ Send back to raiser</button>}
             {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
               <button onClick={()=>{ onReview(m); onClose() }} style={T.btnPrimary}>Review & Approve</button>
             )}
@@ -1257,8 +1293,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             ))}
           </div>
         </div>
-      </div>
-    </div>
+    </RxDialog>
   )
 }
 
@@ -1412,6 +1447,53 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
 
   const isQuick = form.mrf_type === 'Quick Hire'
   const isReplacement = form.hiring_type==='Replacement' || form.hiring_type==='Backfill'
+
+  // ── Step wizard (same shape as MrfForm's, different gate source) ───────────
+  //
+  // This form has a real validator, so the gates DO NOT restate its rules —
+  // they call validateMrf() and filter its keys per section. Restating would
+  // let the two drift, and the form would start refusing what saveMRF allows.
+  //
+  // NON-STRICT on purpose. validateMrf(form, true) adds the submit-only
+  // requirements (department, reason, budget, joining date, skills/JD); gating
+  // steps on those would make Save Draft unreachable past step 2. The strict
+  // pass stays where it belongs, in saveMRF('SUBMITTED').
+  //
+  // Per-field messages are already rendered by <Field error=…>; the rail only
+  // decides whether a step may be left, so it counts keys rather than echoing
+  // their text.
+  const stepErrs = validateMrf(form, false)
+  const MRF_STEPS: { id: string; title: string; keys: string[] }[] = [
+    { id: 'meta',   title: 'Requisition Meta',      keys: [] },
+    { id: 'pos',    title: 'Position Details',      keys: ['company_id', 'designation', 'no_of_openings'] },
+    { id: 'emp',    title: 'Employment Details',    keys: [] },
+    { id: 'budget', title: 'Budget & Cost',         keys: ['budget_max', 'duration_months'] },
+    { id: 'just',   title: 'Justification',         keys: ['department_id', 'reason', 'outgoing_employee_id'] },
+    { id: 'time',   title: 'Timeline',              keys: ['target_joining_date', 'validity_date'] },
+    ...(!isQuick ? [{ id: 'cand', title: 'Candidate Requirements', keys: ['skills_required', 'experience_max'] }] : []),
+    { id: 'appr',   title: 'Approval Workflow',     keys: [] },
+    ...(!isQuick ? [{ id: 'src', title: 'Sourcing', keys: [] as string[] }] : []),
+    { id: 'att',    title: 'Attachments',           keys: [] },
+  ]
+  const mrfStepBlock = (s: { keys: string[] }) => s.keys.map(k => stepErrs[k]).find(Boolean) || null
+  const [mrfStepIdx, setMrfStepIdx] = useState(0)
+  const [mrfMaxSeen, setMrfMaxSeen] = useState(0)
+  // Editing arrives prefilled, so every step is already reachable — walking an
+  // editor forward through five sections to fix the sixth would be a
+  // regression. A fresh create starts at 0 and walks. The forward gate still
+  // applies either way: reachable is not the same as passable.
+  // Seeded from the step COUNT, not a literal: Quick Hire drops §7 and §9, so
+  // the last index is 7 there and 9 on a Full MRF. A hardcoded 9 would be out
+  // of range on a Quick Hire edit — survivable only because mrfStep clamps.
+  useEffect(() => { setMrfStepIdx(0); setMrfMaxSeen(editMRF ? MRF_STEPS.length - 1 : 0) }, [editMRF, showForm, MRF_STEPS.length])
+  const mrfStep = Math.min(mrfStepIdx, MRF_STEPS.length - 1)
+  const mrfActive = MRF_STEPS[mrfStep].id
+  const mrfBlocked = mrfStepBlock(MRF_STEPS[mrfStep])
+  const mrfGoNext = () => {
+    if (mrfBlocked) { showNotify(mrfBlocked, 'error'); return }
+    const n = Math.min(mrfStep + 1, MRF_STEPS.length - 1)
+    setMrfStepIdx(n); setMrfMaxSeen(m => Math.max(m, n))
+  }
   // Salary vs stipend vs fees — drives the labels in §4 and the duration field.
   const comp = compOf(form.employment_type)
 
@@ -1473,7 +1555,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     const dept = departments.find((d:Department)=>d.id===form.department_id)
     try {
       const res = await fetch('/api/recruitment/generate-jd', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', headers: await authHeaders(),
         body:JSON.stringify({ designation:form.designation||form.job_title, department:dept?.dept_name||'', experience:[form.experience_min,form.experience_max].filter(Boolean).join('-')+(form.experience_min||form.experience_max?' years':''), employee_type:form.employment_type, education:[form.education_min,form.education_max].filter(Boolean).join(' to '), skills:form.skills_required })
       })
       const data = await res.json()
@@ -1800,7 +1882,33 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             )
           })()}
 
+          {/* Step rail. Inline JSX, not a component — a component declared
+              inside MRFTab would remount its subtree every render and steal
+              focus from the field being typed into. */}
+          <nav className="rx-fnav" aria-label="Requisition form steps"
+            style={{ position:'static', top:'auto', flexDirection:'row', flexWrap:'wrap', gap:4, margin:'0 0 16px' }}>
+            <div className="rx-row" style={{ width:'100%', justifyContent:'space-between', margin:'2px 4px 8px' }}>
+              <span className="rx-label">Step {mrfStep + 1} of {MRF_STEPS.length}</span>
+              <span className="rx-meta rx-num">
+                {MRF_STEPS.filter(s => s.keys.length && !mrfStepBlock(s)).length} of {MRF_STEPS.filter(s => s.keys.length).length} checks clear
+              </span>
+            </div>
+            {MRF_STEPS.map((s, i) => {
+              const clear = i < mrfMaxSeen && !mrfStepBlock(s)
+              const reachable = i <= mrfMaxSeen
+              return (
+                <a key={s.id} href={`#${s.id}`} aria-current={i === mrfStep ? 'step' : undefined}
+                  className={i === mrfStep ? 'now' : clear ? 'done' : ''}
+                  onClick={e => { e.preventDefault(); if (reachable) setMrfStepIdx(i) }}
+                  style={{ cursor: reachable ? 'pointer' : 'not-allowed', opacity: reachable ? 1 : .45 }}>
+                  <span className="rx-sd">{clear && i !== mrfStep ? <Icon name="check" /> : i + 1}</span>{s.title}
+                </a>
+              )
+            })}
+          </nav>
+
           {/* ── §1 Requisition Meta ── */}
+          {mrfActive === 'meta' && (<>
           <SectionLine title="1 · Requisition Meta" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Requisition Type">
@@ -1828,7 +1936,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §2 Position Details ── */}
+          {mrfActive === 'pos' && (<>
           <SectionLine title="2 · Position Details" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Company" required error={errors.company_id}>
@@ -1880,7 +1991,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §3 Employment Details ── */}
+          {mrfActive === 'emp' && (<>
           <SectionLine title="3 · Employment Details" />
           <div style={{ ...T.g4, marginBottom:10 }}>
             <Field label="Employment Type">
@@ -1904,7 +2018,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §4 Budget & Cost ── */}
+          {mrfActive === 'budget' && (<>
           <SectionLine title="4 · Budget & Cost" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Cost Center">
@@ -1940,7 +2057,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <input className="rx-input" style={eb('budget_max')} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder={comp.ph[1]} />
             </Field>
             <Field label="Worker / Skill Category" hint="Sets the minimum wage applied in salary negotiation">
-              <select style={T.select} value={form.wage_category||''} onChange={e=>F('wage_category',e.target.value)}>
+              <select className="rx-input" value={form.wage_category||''} onChange={e=>F('wage_category',e.target.value)}>
                 <option value="">Select category…</option>
                 {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
               </select>
@@ -1974,7 +2091,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </div>
           )}
 
+          </>)}
+
           {/* ── §5 Justification ── */}
+          {mrfActive === 'just' && (<>
           <SectionLine title="5 · Justification" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Reason for Hire" error={errors.reason}>
@@ -2010,7 +2130,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §6 Timeline ── */}
+          {mrfActive === 'time' && (<>
           <SectionLine title="6 · Timeline" />
           <div style={{ ...T.g2, marginBottom:10 }}>
             <Field label="Target Joining Date" error={errors.target_joining_date}>
@@ -2021,8 +2144,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
 
+          </>)}
+
           {/* ── §7 Candidate Requirements ── */}
-          {!isQuick && (
+          {!isQuick && mrfActive === 'cand' && (
             <>
               <SectionLine title="7 · Candidate Requirements" />
               <div style={{ ...T.g2, marginBottom:10 }}>
@@ -2083,6 +2208,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           )}
 
           {/* ── §8 Approval Workflow — auto-routed, same as ESS Raise MRF ── */}
+          {mrfActive === 'appr' && (<>
           <SectionLine title="8 · Approval Workflow" />
           <div style={{ ...T.card, background:C.sunken, marginBottom:14 }}>
             <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.6 }}>
@@ -2097,8 +2223,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </div>
           </div>
 
+          </>)}
+
           {/* ── §9 Sourcing ── */}
-          {!isQuick && (
+          {!isQuick && mrfActive === 'src' && (
             <>
               <SectionLine title="9 · Sourcing" />
               <div style={{ ...T.g2, marginBottom:10 }}>
@@ -2121,6 +2249,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           )}
 
           {/* ── §10 Attachments ── */}
+          {mrfActive === 'att' && (<>
           <SectionLine title="10 · Attachments" />
           <div style={{ marginBottom:14 }}>
             {editMRF ? (
@@ -2132,6 +2261,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               </div>
             )}
           </div>
+          </>)}
 
           {Object.values(errors).filter(Boolean).length>0 && (
             <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'9px 12px', marginBottom:12, fontSize:12, color:C.critical }}>
@@ -2139,9 +2269,24 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </div>
           )}
 
-          <div style={{ display:'flex', gap:8 }}>
+          {/* Why Next is refusing, beside the button. The per-field message is
+              already rendered by <Field error=…>; this says which step. */}
+          {mrfBlocked && (
+            <div style={{ marginBottom:10 }}>
+              <span className="rx-why"><Icon name="lock" />{mrfBlocked}</span>
+            </div>
+          )}
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const }}>
+            <button onClick={()=>setMrfStepIdx(mrfStep - 1)} disabled={saving || mrfStep === 0} style={T.btnOutline}>← Back</button>
+            {mrfStep < MRF_STEPS.length - 1 && (
+              <button onClick={mrfGoNext} disabled={saving} style={{ ...T.btnPrimary, opacity: mrfBlocked ? .55 : 1 }}>Next · {MRF_STEPS[mrfStep + 1].title} →</button>
+            )}
+            {/* Save Draft on every step: a draft is incomplete by definition,
+                and saveMRF('DRAFT') runs the non-strict validator anyway. */}
             <button onClick={()=>saveMRF('DRAFT')} disabled={saving} style={T.btnOutline}>Save Draft</button>
-            <button onClick={()=>saveMRF('SUBMITTED')} disabled={saving} style={T.btnPrimary}>Submit for Approval</button>
+            {mrfStep === MRF_STEPS.length - 1 && (
+              <button onClick={()=>saveMRF('SUBMITTED')} disabled={saving} style={T.btnPrimary}>Submit for Approval</button>
+            )}
           </div>
         </div>
       )}
@@ -2171,7 +2316,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
 
             {/* HR Head step: approving also assigns the hiring manager(s) who will run the hiring */}
             {assignOpen && (
-              <div onMouseDown={e=>{ if(e.target===e.currentTarget && !apprBusy) setAssignOpen(false) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+              <div onMouseDown={e=>{ if(e.target===e.currentTarget && !apprBusy) setAssignOpen(false) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
                 <div style={{ background:C.surface, borderRadius:14, width:'min(520px,100%)', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', overflow:'hidden' }}>
                   <div style={{ padding:'16px 20px 12px', borderBottom:`1px solid ${C.line}` }}>
                     <div style={{ fontSize:15, fontWeight:700, color:C.ink }}>Assign Hiring Manager(s)</div>
@@ -2207,7 +2352,6 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         )
       ) : (
       <MrfListView
-        rail={rail}
         mrfs={mrfVMs}
         filterBar={filterBar}
         banner={bannerNode}
@@ -2235,12 +2379,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       {approvalModal&&<ApprovalModal mrf={approvalModal} org={orgOf(approvalModal)}
         onApprove={approveMRF} onReject={rejectMRF} onHold={holdMRF} onClose={()=>setApprovalModal(null)} />}
       {sendBackFor&&(
-        <div onMouseDown={e=>{ if(e.target===e.currentTarget && !sbBusy) setSendBackFor(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+        <div onMouseDown={e=>{ if(e.target===e.currentTarget && !sbBusy) setSendBackFor(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div style={{ background:C.surface, borderRadius:14, width:'min(440px,100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.3)' }}>
             <div style={{ fontSize:15, fontWeight:700, color:C.ink, marginBottom:4 }}>Send back to raiser</div>
             <div style={{ fontSize:12.5, color:C.faint, marginBottom:12 }}>{sendBackFor.designation||sendBackFor.position}{sendBackFor.mrf_number?` · ${sendBackFor.mrf_number}`:''} — the raiser will fix and resubmit; it re-enters approval from the top.</div>
-            <label style={T.label}>Remark — what should the raiser fix?</label>
-            <textarea autoFocus style={{ ...T.textarea, minHeight:80 }} value={sbNote} onChange={e=>setSbNote(e.target.value)} placeholder="e.g. Budget needs revision / openings count is wrong…" />
+            <label className="rx-label">Remark — what should the raiser fix?</label>
+            <textarea autoFocus className="rx-input" style={{ minHeight:80 }} value={sbNote} onChange={e=>setSbNote(e.target.value)} placeholder="e.g. Budget needs revision / openings count is wrong…" />
             <div style={{ display:'flex', gap:8, marginTop:14 }}>
               <button onClick={sendBackMrf} disabled={sbBusy||!sbNote.trim()} style={{ ...T.btn, background:C.warning, color:C.onAccent, flex:1, opacity:(sbBusy||!sbNote.trim())?.6:1 }}>{sbBusy?'Sending…':'Send back'}</button>
               <button onClick={()=>{ setSendBackFor(null); setSbNote('') }} disabled={sbBusy} style={{ ...T.btnOutline, flex:1 }}>Cancel</button>
@@ -2249,7 +2393,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         </div>
       )}
       {deleteConfirm&&(
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ background:C.surface, borderRadius:14, padding:24, width:340, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:8 }}>Delete MRF?</div>
             <div style={{ fontSize:13, color:C.faint, marginBottom:20 }}>This action cannot be undone. Linked candidates are kept but unlinked from this requisition.</div>
@@ -2277,8 +2421,12 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
 
   async function go(fn:()=>Promise<void>|void) { setBusy(true); await fn(); setBusy(false) }
 
+  // Neutral scrim — the panel inside this very modal already used a neutral
+  // rgba(0,0,0,0.2) shadow, so the frozen navy here was inconsistent with its
+  // own child as well as with the sibling modal. Comment above the return, not
+  // inside it, for the same reason as MrfDetail.
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div style={{ background:C.surface, borderRadius:14, padding:24, width:'100%', maxWidth:480, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{mrf.job_title||mrf.designation||mrf.position}</div>
         <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>
@@ -2499,7 +2647,15 @@ function DeadlineBoard({ rows, orgOf }:any) {
               <Td align="center">{js.openings}</Td>
               <Td style={{ minWidth:110 }}>
                 <div style={{ fontSize:F.micro, color:C.faint, textAlign:'center', marginBottom:3, ...numeric }}>{js.filledCount}/{js.openings}</div>
-                <div style={{ background:C.brandTint, borderRadius:R.pill, height:5, overflow:'hidden' }}>
+                {/* The ratio above is a sibling div, so the bar itself announced
+                    nothing: a screen reader met 23 identical unnamed graphics,
+                    one per row. Naming it with the requisition makes each one
+                    say which requisition it belongs to. Same defect the kit's QA
+                    pass found in its own Track component. */}
+                <div role="progressbar"
+                     aria-label={`${m.job_title||m.designation||m.position}${m.mrf_number?` ${m.mrf_number}`:''}: ${js.filledCount} of ${js.openings} filled`}
+                     aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}
+                     style={{ background:C.brandTint, borderRadius:R.pill, height:5, overflow:'hidden' }}>
                   <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?C.positive:C.brand,
                                 transition:`width ${M.ease}` }} />
                 </div>
@@ -2798,7 +2954,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
     try {
       const { blob, name } = buildReport(exportFmt)
       const fd = new FormData(); fd.append('file', new File([blob], name, { type:blob.type }))
-      const r = await fetch('/api/recruitment/share-report', { method:'POST', body:fd, headers: await authHeaders(supabase) })
+      const r = await fetch('/api/recruitment/share-report', { method:'POST', body:fd, headers: await uploadAuthHeaders() })
       const j = await r.json()
       if (!r.ok || !j.url) throw new Error(j.error || 'Could not create a share link')
       setShareUrl(j.url)
@@ -2809,7 +2965,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
   }
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Job status"
         subtitle="MRF deadlines, expiries and whether hiring is closing before requisitions lapse."
@@ -2985,6 +3141,9 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
   const [screening, setScreening] = useState(false)
   const [results, setResults] = useState<any[]>([])
   const [progress, setProgress] = useState(0)
+  // The file currently in front of the model, for the .rx-scan row. Presentation
+  // only — it is set from the existing upload loop and changes no request.
+  const [scanning, setScanning] = useState<string|null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const mrf = mrfs.find((m:MRF)=>m.id===selMRF)
 
@@ -2999,6 +3158,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
     const res:any[] = []
     for (let i=0; i<files.length; i++) {
       const file = files[i]
+      setScanning(file.name)
       const fd = new FormData()
       fd.append('file', file)                               // send the real file — API extracts PDF/DOCX/TXT
       fd.append('jd_text', jdText)
@@ -3009,7 +3169,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
       fd.append('previous_company_preference', mrf.previous_company_preference || '')
       fd.append('candidate_name', file.name.replace(/\.[^.]+$/,''))
       try {
-        const r = await fetch('/api/recruitment/screen-resumes', { method:'POST', body:fd }) // no Content-Type → browser sets multipart boundary
+        const r = await fetch('/api/recruitment/screen-resumes', { method:'POST', body:fd, headers: await uploadAuthHeaders() }) // uploadAuthHeaders omits Content-Type → browser sets the multipart boundary
         const d = await r.json()
         res.push({ ...d, file_name:file.name, added:false })
       } catch {
@@ -3018,6 +3178,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
       setProgress(Math.round(((i+1)/files.length)*100))
       setResults([...res])
     }
+    setScanning(null)
     setScreening(false)
   }
 
@@ -3105,7 +3266,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
   const ordered = [...strong, ...partial, ...notSuitable]
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="AI resume screening"
         subtitle="Score a batch of resumes against one approved opening, then send the strong ones straight into the pipeline."
@@ -3130,9 +3291,18 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Resumes (PDF, Word or text)</label>
               <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv"
                 onChange={e=>setFiles(Array.from(e.target.files||[]))} style={{ display:'none' }} />
-              <button type="button" className="rx-btn" style={{ width:'100%', justifyContent:'flex-start' }}
-                onClick={()=>fileRef.current?.click()}>
-                {files.length>0?`${files.length} file${files.length===1?'':'s'} selected`:'Choose files…'}
+              {/* The kit's drop zone. It stays a BUTTON rather than becoming a
+                  real drag target: the upload loop reads from `files`, and
+                  adding a drop handler would be new behaviour, not a new skin. */}
+              <button type="button" className="rx-drop" onClick={()=>fileRef.current?.click()}
+                style={{ width:'100%', border:'2px dashed var(--ez-brand-edge)', cursor:'pointer', font:'inherit', color:'inherit' }}>
+                <span className="rx-ico" style={{ width:48, height:48, borderRadius:16 }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 20V9M7 14l5-5 5 5" /><path d="M5 4h14" />
+                  </svg>
+                </span>
+                <span className="rx-name">{files.length>0?`${files.length} file${files.length===1?'':'s'} selected`:'Choose PDF, Word or TXT files'}</span>
+                <span className="rx-meta">{files.length>0?'Click to change the selection':'Click to browse your computer'}</span>
               </button>
             </div>
           </div>
@@ -3149,8 +3319,35 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
           {/* The kit's own progress track. The hand-rolled one this replaces had
               a documented regression (a brandTint fill on a brandTint plane, 1.0
               contrast); .rx-track carries its own fill and hairline so that
-              cannot recur. */}
-          {screening && <div className="rx-track" style={{ marginTop:14 }}><i style={{ width:`${progress}%` }} /></div>}
+              cannot recur.
+
+              <Track> rather than the bare div: a progressbar with no accessible
+              name reads as an unnamed control, the same QA finding that put a
+              label on the deadline bars. */}
+          {screening && (
+            <div style={{ marginTop:14 }}>
+              <div className="rx-row" style={{ justifyContent:'space-between', marginBottom:8 }}>
+                <span className="rx-label">Screening {Math.min(results.length+1, files.length)} of {files.length} file{files.length===1?'':'s'}</span>
+                <span className="rx-meta rx-num">{progress}%</span>
+              </div>
+              <Track pct={progress} label={`Screening ${files.length} resume${files.length===1?'':'s'}`} />
+              {scanning && (
+                <div className="rx-li rx-scan" style={{ marginTop:10, border:'1px solid var(--ez-line)', borderRadius:12 }}>
+                  <span className="rx-ico">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z" />
+                    </svg>
+                  </span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div className="rx-name" style={{ fontSize:13, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{scanning}</div>
+                    <div className="rx-meta">Reading skills and experience</div>
+                  </div>
+                  {/* Written out rather than <Badge>: this file's Badge is its own. */}
+                  <span className="rx-b b-brand rx-live">Scoring</span>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {results.length>0 && (
@@ -3210,7 +3407,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     if (!/^\d{6}$/.test(pin)) { setPinLookup(null); return }
     let alive = true
     setPinLookup({ pin, status:'loading' })
-    fetch(`/api/recruitment/pincode?pin=${pin}`).then(r=>r.json()).then((j:any)=>{
+    // Not awaited — this runs in a useEffect body, so the headers are fetched as
+    // the first link of the same promise chain rather than by making it async.
+    authHeaders().then(h => fetch(`/api/recruitment/pincode?pin=${pin}`, { headers: h })).then(r=>r.json()).then((j:any)=>{
       if (!alive) return
       if (!j?.ok) { setPinLookup({ pin, status:'fail' }); return }
       setCForm((f:any)=>({ ...f, perm_city: j.city||f.perm_city, perm_state: j.state||f.perm_state, perm_country: j.country||f.perm_country||'India' }))
@@ -3229,7 +3428,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     setParsing(true); setParseNote(null)
     try {
       const fd = new FormData(); fd.append('file', file)
-      const r = await fetch('/api/recruitment/parse-resume', { method:'POST', body: fd })
+      const r = await fetch('/api/recruitment/parse-resume', { method:'POST', body: fd, headers: await uploadAuthHeaders() })
       const j = await r.json().catch(()=>({}))
       if (!r.ok || !j.ok) { setParseNote({ ok:false, text: j.error || 'Could not parse this resume' }); setParsing(false); return }
       const f = j.fields || {}
@@ -3484,7 +3683,6 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   return (
     <>
       <PipelineView
-        rail={rail}
         candidates={candVMs}
         stages={STAGES}
         nextStepFor={nextStepFor}
@@ -3530,14 +3728,14 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <div style={{ display:'flex', gap:6, margin:'12px 0 6px', flexWrap:'wrap' as const }}>
                 {STEP_TITLES.map((t,i)=>{ const n=i+1, active=n===addStep, done=n<addStep; return (
                   <button key={n} type="button" onClick={()=>{ if (done) goToStep(n) }} disabled={!done && !active}
-                    style={{ display:'flex', alignItems:'center', gap:7, flex:'1 1 150px', padding:'7px 10px', borderRadius:9, border:`1px solid ${active?C.brand:done?'#A7F3D0':C.line}`, background:active?C.brandTint:done?C.positiveTint:C.surface, cursor:done?'pointer':'default', fontFamily:'inherit', textAlign:'left' as const }}>
+                    style={{ display:'flex', alignItems:'center', gap:7, flex:'1 1 150px', padding:'7px 10px', borderRadius:9, border:`1px solid ${active?C.brand:done?C.positiveEdge:C.line}`, background:active?C.brandTint:done?C.positiveTint:C.surface, cursor:done?'pointer':'default', fontFamily:'inherit', textAlign:'left' as const }}>
                     <span style={{ width:20, height:20, borderRadius:'50%', display:'grid', placeItems:'center', fontSize:11, fontWeight:800, background:active?C.brand:done?C.positive:C.sunken, color:(active||done)?C.onAccent:C.faint, flexShrink:0 }}>{done?'✓':n}</span>
                     <span style={{ fontSize:11.5, fontWeight:active?700:600, color:active?C.brandDeep:done?C.positive:C.faint, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{t}</span>
                   </button>
                 )})}
               </div>
               {parseNote && (
-                <div style={{ margin:'10px 0 4px', padding:'9px 12px', borderRadius:9, fontSize:12.5, lineHeight:1.5, background: parseNote.ok?C.positiveTint:C.criticalTint, color: parseNote.ok?C.positive:C.critical, border:`1px solid ${parseNote.ok?'#A7F3D0':'#FCA5A5'}` }}>
+                <div style={{ margin:'10px 0 4px', padding:'9px 12px', borderRadius:9, fontSize:12.5, lineHeight:1.5, background: parseNote.ok?C.positiveTint:C.criticalTint, color: parseNote.ok?C.positive:C.critical, border:`1px solid ${parseNote.ok?C.positiveEdge:C.criticalEdge}` }}>
                   <b>{parseNote.ok?'✓ Resume parsed.':'✗ Parse failed.'}</b> {parseNote.text}
                   {parseNote.ok && parseNote.missing && parseNote.missing.length>0 && <div style={{ marginTop:3, fontSize:11.5, opacity:.9 }}>Not found in the resume — fill manually: {parseNote.missing.map((k:string)=>k.replace(/_/g,' ')).join(', ')}</div>}
                 </div>
@@ -3828,7 +4026,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
 
       {/* ── Interview Pipeline full-screen overlay ── */}
       {interviewCand && (
-        <div style={{ position:'fixed', inset:0, background:C.canvas, zIndex:300, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
+        <div style={{ position:'fixed', inset:0, background:C.canvas, zIndex:Z.overlay, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
           <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'12px 20px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10 }}>
             <button onClick={()=>setInterviewCand(null)} style={{ padding:'6px 14px', borderRadius:7, border:'1px solid rgba(255,255,255,.3)', background:'transparent', color:C.onAccent, cursor:'pointer', fontSize:12, fontFamily:'inherit', fontWeight:500 }}>Back to Pipeline</button>
             <div style={{ fontSize:15, fontWeight:600, color:C.onAccent }}>Interview Pipeline — {interviewCand.full_name}</div>
@@ -3879,7 +4077,7 @@ function SearchBar({ placeholder, onApply, width=300 }:{ placeholder:string; onA
   const [draft, setDraft] = useState('')
   return (
     <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
-      <input style={{ ...T.input, maxWidth:width }} value={draft} placeholder={placeholder}
+      <input className="rx-input" style={{ maxWidth:width }} value={draft} placeholder={placeholder}
         onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
       <button style={T.btnPrimary} onClick={()=>onApply(draft.trim())}>Apply</button>
       {draft && <button style={T.btnOutline} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
@@ -3889,17 +4087,17 @@ function SearchBar({ placeholder, onApply, width=300 }:{ placeholder:string; onA
 
 function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
   return (
-    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
+    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:Z.sticky, boxShadow:'var(--ez-shadow-flat)' }}>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Company</label>
-        <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+        <label className="rx-label">Company</label>
+        <select className="rx-input" value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
           <option value="">All companies</option>
           {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
         </select>
       </div>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Department</label>
-        <select style={T.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
+        <label className="rx-label">Department</label>
+        <select className="rx-input" value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
           <option value="">All departments</option>
           {(() => {
             const vis = (departments||[]).filter((d:any)=>!f.company||d.company_id===f.company)
@@ -3908,15 +4106,15 @@ function RecFilterBar({ companies, departments, locations, positions, f, setF }:
         </select>
       </div>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Position</label>
-        <select style={T.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
+        <label className="rx-label">Position</label>
+        <select className="rx-input" value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
           <option value="">All positions</option>
           {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
         </select>
       </div>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Location</label>
-        <select style={T.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
+        <label className="rx-label">Location</label>
+        <select className="rx-input" value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
           <option value="">All locations</option>
           {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
         </select>
@@ -3956,7 +4154,7 @@ function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?
             <div style={{ fontSize:15, fontWeight:800 }}>Minimum wages — payroll master</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Monthly figures, currently effective · read-only here — HR maintains them under Payroll → Minimum Wages</div>
           </div>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search state…" style={{ ...T.input, width:200, marginLeft:'auto' }} />
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search state…" className="rx-input" style={{ width:200, marginLeft:'auto' }} />
           <button onClick={onClose} style={T.btnOutline}>Close</button>
         </div>
         {keys.length===0 ? (
@@ -3980,7 +4178,7 @@ function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?
                     return (
                       <tr key={`${k}-${r.category}-${i}`} style={{ background: exact ? C.brandTint : hl ? C.sunken : 'transparent' }}>
                         <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: i===0 ? 700 : 400, color: i===0 ? C.ink : 'transparent', whiteSpace:'nowrap' as const }}>{k}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: exact ? 700 : 500 }}>{MW_CAT_LABEL[r.category]||r.category}{exact && <span style={{ marginLeft:6, fontSize:9.5, fontWeight:700, color:C.brandDeep, background:C.surface, border:`1px solid ${C.brand}55`, borderRadius:99, padding:'1px 6px' }}>in use</span>}</td>
+                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: exact ? 700 : 500 }}>{MW_CAT_LABEL[r.category]||r.category}{exact && <span style={{ marginLeft:6, fontSize:9.5, fontWeight:700, color:C.brandDeep, background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:99, padding:'1px 6px' }}>in use</span>}</td>
                         <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', ...numeric }}>{rs(r.basic_amount)}</td>
                         <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', ...numeric }}>{rs(r.vda_amount)}</td>
                         <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', fontWeight:700, ...numeric }}>{rs(r.total_minimum_wage)}</td>
@@ -4095,7 +4293,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
           </div>
         </div>
         <div style={{ marginBottom:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Remark</label>
-          <textarea style={{ ...T.textarea, minHeight:60 }} value={remark} onChange={e=>setRemark(e.target.value)} placeholder="Any note for the candidate (shown on the salary link)…" />
+          <textarea className="rx-input" style={{ minHeight:60 }} value={remark} onChange={e=>setRemark(e.target.value)} placeholder="Any note for the candidate (shown on the salary link)…" />
         </div>
 
         {s>0&&(
@@ -4143,7 +4341,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   const [rejecting, setRejecting] = useState<any|null>(null)  // doc pending reject confirm
 
   const signDoc = async (docId:string, mode:'view'|'download') => {
-    const r = await fetch(`/api/recruitment/doc-collection/file?doc_id=${docId}&mode=${mode}`, { cache:'no-store' })
+    const r = await fetch(`/api/recruitment/doc-collection/file?doc_id=${docId}&mode=${mode}`, { cache:'no-store', headers: await authHeaders() })
     const j = await r.json().catch(()=>({}))
     if (!r.ok || !j.url) throw new Error(j.error||'Could not open file')
     return j as { url:string; file_name?:string }
@@ -4163,7 +4361,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   async function onReject(d:any) {
     setBusyDoc(d.id)
     try {
-      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'reject', doc_id:d.id }) })
+      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ action:'reject', doc_id:d.id }) })
       const j = await r.json().catch(()=>({}))
       if (!r.ok) { showNotify(j.error||'Could not reject','error'); setBusyDoc(''); setRejecting(null); return }
       showNotify(`${d.doc_label||d.doc_type} rejected — resend the link so the candidate re-uploads it.`)
@@ -4175,7 +4373,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
     setZipping(true)
     try {
       const qs = ids && ids.length ? `&ids=${ids.join(',')}` : ''
-      const r = await fetch(`/api/recruitment/doc-collection/zip?candidate_id=${candidate.id}${qs}`, { cache:'no-store' })
+      const r = await fetch(`/api/recruitment/doc-collection/zip?candidate_id=${candidate.id}${qs}`, { cache:'no-store', headers: await authHeaders() })
       if (!r.ok) { const j = await r.json().catch(()=>({})); showNotify(j.error||'Could not build zip','error'); setZipping(false); return }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
@@ -4188,7 +4386,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
   const loadStatus = async () => {
     try {
-      const r = await fetch(`/api/recruitment/doc-collection?candidate_id=${candidate.id}`, { cache:'no-store' })
+      const r = await fetch(`/api/recruitment/doc-collection?candidate_id=${candidate.id}`, { cache:'no-store', headers: await authHeaders() })
       const j = await r.json().catch(()=>({}))
       setLink(j.link||null); setDocs(j.docs||[])
     } catch {} finally { setLoading(false) }
@@ -4209,7 +4407,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { showNotify('Enter a valid candidate email','error'); return }
     setSending(true)
     try {
-      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers:{'Content-Type':'application/json'},
+      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers: await authHeaders(),
         body: JSON.stringify({ action:'send', candidate_id:candidate.id, mrf_id:candidate.mrf_id||mrf?.id||null, company_id:companyId||candidate.company_id||mrf?.company_id||null, email:email.trim(), cc:cc.map(c=>c.email), created_by:meEmail||null }) })
       const j = await r.json().catch(()=>({}))
       if (!r.ok) { showNotify(j.error||'Could not send','error'); setSending(false); return }
@@ -4221,7 +4419,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
   return (
     <div onMouseDown={e=>{ if(e.target===e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}>
+      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:Z.drawer, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}>
       <div style={{ background:C.surface, borderRadius:16, width:'min(560px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', padding:'18px 20px', margin:'0 auto' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
           <div style={{ fontSize:16, fontWeight:700, color:C.ink, flex:1 }}>CTC Negotiation — {candidate.full_name}{mrf?.mrf_number && <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mrf.mrf_number}</span>}</div>
@@ -4266,9 +4464,9 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
           {mode==='send' && (
             <div>
-              <label style={T.label}>Candidate email</label>
-              <input style={T.input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="candidate@email.com" />
-              <label style={{ ...T.label, marginTop:12 }}>CC <span style={{ color:C.faint, fontWeight:400 }}>— search employees to add to the email</span></label>
+              <label className="rx-label">Candidate email</label>
+              <input className="rx-input" value={email} onChange={e=>setEmail(e.target.value)} placeholder="candidate@email.com" />
+              <label className="rx-label" style={{ marginTop:12 }}>CC <span style={{ color:C.faint, fontWeight:400 }}>— search employees to add to the email</span></label>
               {cc.length>0 && (
                 <div style={{ display:'flex', flexWrap:'wrap' as const, gap:6, marginBottom:6 }}>
                   {cc.map(c=>(
@@ -4279,7 +4477,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
                 </div>
               )}
               <div style={{ position:'relative' }}>
-                <input style={T.input} value={ccQ} onChange={e=>setCcQ(e.target.value)} placeholder="Type a name or emp code…" />
+                <input className="rx-input" value={ccQ} onChange={e=>setCcQ(e.target.value)} placeholder="Type a name or emp code…" />
                 {ccHits.length>0 && (
                   <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:C.surface, border:`1px solid ${C.line}`, borderRadius:8, marginTop:3, boxShadow:'0 8px 24px rgba(30,27,75,0.14)', maxHeight:220, overflowY:'auto' }}>
                     {ccHits.map((e:any)=>(
@@ -4330,7 +4528,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
                       <div style={{ display:'flex', gap:5, flexShrink:0 }}>
                         <button onClick={()=>onView(d)} disabled={busyDoc===d.id} style={{ ...T.btnOutline, padding:'5px 9px', fontSize:11 }}>View</button>
                         <button onClick={()=>onDownload(d)} disabled={busyDoc===d.id} style={{ ...T.btnOutline, padding:'5px 9px', fontSize:11 }}>Download</button>
-                        <button onClick={()=>setRejecting(d)} disabled={busyDoc===d.id} style={{ padding:'5px 9px', fontSize:11, borderRadius:7, border:`1px solid ${C.critical}44`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Reject</button>
+                        <button onClick={()=>setRejecting(d)} disabled={busyDoc===d.id} style={{ padding:'5px 9px', fontSize:11, borderRadius:7, border:`1px solid ${C.criticalEdge}`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Reject</button>
                       </div>
                     </div>
                   ))}
@@ -4636,8 +4834,19 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   })()
   const ceilingNote = `EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • Gratuity • Statutory bonus • Pan-India minimum wages`
 
+  // Negotiation was the one tab of eleven that destructured `rail` and then
+  // never rendered it, so opening Negotiation FROM the rail made the rail
+  // itself vanish — no route back to Dashboard/MRF/Pipeline short of the
+  // browser's Back button. Every sibling renders it: six via RxPage, MRF and
+  // Pipeline via their View components. This tab is a "WRAP" (see the switch
+  // at ~438) whose frame was never added, so the omission was structural and
+  // silent rather than a regression — it shipped broken.
+  //
+  // The body below deliberately keeps its original indentation. Re-indenting
+  // ~300 lines one level deeper would bury a two-line structural fix under a
+  // 300-line whitespace diff, and JSX does not care about indentation.
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Salary negotiation"
         subtitle="Clear the pre-negotiation checks first, then build the offer in the Automated CTC Calculator and share the salary link."
@@ -4665,7 +4874,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
           return (
             <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
               style={{ ...T.card, cursor:'pointer', padding: compact ? '9px 11px' : T.card.padding, marginBottom: compact ? 6 : T.card.marginBottom,
-                border:on?'2px solid #2563EB':'1px solid var(--ez-line)', background:on?C.brandTint: C.surface, transition:'padding .3s, background .2s' }}>
+                border:on?`2px solid ${C.brand}`:'1px solid var(--ez-line)', background:on?C.brandTint: C.surface, transition:'padding .3s, background .2s' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
                 <div style={{ minWidth:0 }}>
                   <div style={{ fontSize:compact?12.5:13, fontWeight:600, color:C.ink, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}</div>
@@ -4722,36 +4931,43 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
             <button onClick={()=>setSel(null)} style={T.btnOutline}>Close</button>
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'minmax(300px, 5fr) minmax(360px, 7fr)', gap:12, alignItems:'start' }}>
+          {/* minmax(0,…), not minmax(300px,…)/minmax(360px,…). Those floors sum
+              to 672px plus the gap, and with the rail and page padding the
+              calculator has less than that at 1440px — so the right track held
+              its 360px and pushed the document to 1544px, a 104px horizontal
+              overhang, measured. A grid track containing wide content needs a
+              zero minimum or it cannot honour its container. The fr ratios are
+              untouched, so nothing moves at widths where the room exists. */}
+          <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 5fr) minmax(0, 7fr)', gap:12, alignItems:'start' }}>
             {/* ── Inputs & Rules Selection ── compact: two fields per row, the extras folded away ── */}
             <div style={{ ...T.cardPurple, padding:'12px 14px' }}>
               <div style={{ ...T.section, borderBottom:`1px solid ${C.brandEdge}`, paddingBottom:8, marginBottom:10 }}>Inputs &amp; Rules Selection</div>
               {!autoCompany && (
                 <div style={{ marginBottom:10, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
-                  <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
-                  <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
+                  <label className="rx-label">Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
+                  <select className="rx-input" value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
                     <option value="">Select company…</option>
                     {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
                   </select>
                 </div>
               )}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
-                <div><label style={T.label}>State / UT</label>
-                  <select style={T.select} value={form.state} onChange={e=>F('state',e.target.value)} disabled={!!mrfStateOf(selMrf)}>
+                <div><label className="rx-label">State / UT</label>
+                  <select className="rx-input" value={form.state} onChange={e=>F('state',e.target.value)} disabled={!!mrfStateOf(selMrf)}>
                     {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
                   </select>
                   <div style={{ fontSize:10, color:mrfStateOf(selMrf)?C.positive:C.faint, marginTop:2, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{mrfStateOf(selMrf) ? `From MRF branch: ${mrfLocOf(selMrf)?.location_name||'branch'}` : 'No branch on the MRF — choose'}</div>
                 </div>
-                <div><label style={T.label}>Worker Category</label>
-                  <select style={T.select} value={form.category} onChange={e=>F('category',e.target.value)} disabled={!!(selMrf as any)?.wage_category}>
+                <div><label className="rx-label">Worker Category</label>
+                  <select className="rx-input" value={form.category} onChange={e=>F('category',e.target.value)} disabled={!!(selMrf as any)?.wage_category}>
                     {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
                   </select>
                   <div style={{ fontSize:10, color:(selMrf as any)?.wage_category?C.positive:C.faint, marginTop:2 }}>{(selMrf as any)?.wage_category ? 'From the MRF' : 'Not set on the MRF — choose'}</div>
                 </div>
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:6 }}>
-                <div><label style={T.label}>Total CTC (Annual ₹) *</label>
-                  <input style={{ ...T.input, fontWeight:700, ...(ctcOutOfRange?{ borderColor:C.critical }:{}) }} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder={mrfBudgetMin>0?String(mrfBudgetMin):"600000"} />
+                <div><label className="rx-label">Total CTC (Annual ₹) *</label>
+                  <input className="rx-input" style={{ fontWeight:700, ...(ctcOutOfRange?{ borderColor:C.critical }:{}) }} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder={mrfBudgetMin>0?String(mrfBudgetMin):"600000"} />
                   {budgetRangeText && (
                     ctcOverBudget
                       ? <div style={{ fontSize:10, color:C.critical, marginTop:2, fontWeight:600 }}>Above the MRF budget range ({budgetRangeText}) — reduce to {lakh(mrfBudgetMax)} or less</div>
@@ -4760,7 +4976,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                       : <div style={{ fontSize:10, color: form.ctc!=='' ? C.positive : C.faint, marginTop:2 }}>{form.ctc!=='' ? '✓ Within ' : ''}MRF budget range: {budgetRangeText}</div>
                   )}
                 </div>
-                <div><label style={T.label}>Variable CTC (Annual ₹)</label><input style={{ ...T.input, fontWeight:700 }} type="number" value={form.varAmt} onChange={e=>F('varAmt',e.target.value)} placeholder="0" /></div>
+                <div><label className="rx-label">Variable CTC (Annual ₹)</label><input className="rx-input" style={{ fontWeight:700 }} type="number" value={form.varAmt} onChange={e=>F('varAmt',e.target.value)} placeholder="0" /></div>
               </div>
               <div style={{ fontSize:10.5, color:C.faint, margin:'2px 0 10px', lineHeight:1.5 }}>
                 Min wage · {form.state} · {form.category}: <b style={{ color:C.ink }}>₹{Math.round(mw.amount).toLocaleString('en-IN')}/mo</b>
@@ -4770,21 +4986,21 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
 
               <div style={{ ...T.section, borderTop:`1px solid ${C.brandEdge}`, paddingTop:10, marginBottom:8 }}>Statutory &amp; Benefit Rules</div>
               <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr 1fr', gap:8, marginBottom:10 }}>
-                <div><label style={T.label}>Gratuity in CTC?</label>
-                  <select style={T.select} value={form.gratuity} onChange={e=>F('gratuity',e.target.value)}>
+                <div><label className="rx-label">Gratuity in CTC?</label>
+                  <select className="rx-input" value={form.gratuity} onChange={e=>F('gratuity',e.target.value)}>
                     <option value="yes">Yes (4.81% of Basic)</option>
                     <option value="no">No (Over and above)</option>
                   </select>
                 </div>
-                <div><label style={T.label}>Bonus Rate</label>
-                  <select style={T.select} value={form.bonusPct} onChange={e=>F('bonusPct',e.target.value)}>
+                <div><label className="rx-label">Bonus Rate</label>
+                  <select className="rx-input" value={form.bonusPct} onChange={e=>F('bonusPct',e.target.value)}>
                     <option value="8.33">8.33% (Min)</option>
                     <option value="20">20% (Max)</option>
                     <option value="0">0% (N/A)</option>
                   </select>
                 </div>
-                <div><label style={T.label}>Bonus Mode</label>
-                  <select style={T.select} value={form.bonusMode} onChange={e=>F('bonusMode',e.target.value)}>
+                <div><label className="rx-label">Bonus Mode</label>
+                  <select className="rx-input" value={form.bonusMode} onChange={e=>F('bonusMode',e.target.value)}>
                     <option value="salary">With Salary</option>
                     <option value="ctc">Only in CTC</option>
                   </select>
@@ -4801,24 +5017,24 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                 </summary>
                 <div style={{ padding:'4px 12px 12px', borderTop:`1px solid ${C.brandEdge}` }}>
                   <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:8, marginTop:8 }}>
-                    <div><label style={T.label}>Joining Bonus (₹)</label><input style={T.input} type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
-                    <div><label style={T.label}>Paid</label>
-                      <select style={{ ...T.select, opacity: Number(form.joining_bonus)>0 ? 1 : .45, cursor: Number(form.joining_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.joining_bonus)>0)} value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
+                    <div><label className="rx-label">Joining Bonus (₹)</label><input className="rx-input" type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
+                    <div><label className="rx-label">Paid</label>
+                      <select className="rx-input" style={{ opacity: Number(form.joining_bonus)>0 ? 1 : .45, cursor: Number(form.joining_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.joining_bonus)>0)} value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
                         <option>With Salary</option><option>After 3 Months</option><option>After 6 Months</option><option>As per Policy</option>
                       </select>
                     </div>
-                    <div><label style={T.label}>Retention Bonus (₹)</label><input style={T.input} type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
-                    <div><label style={T.label}>Paid</label>
-                      <select style={{ ...T.select, opacity: Number(form.retention_bonus)>0 ? 1 : .45, cursor: Number(form.retention_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.retention_bonus)>0)} value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
+                    <div><label className="rx-label">Retention Bonus (₹)</label><input className="rx-input" type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
+                    <div><label className="rx-label">Paid</label>
+                      <select className="rx-input" style={{ opacity: Number(form.retention_bonus)>0 ? 1 : .45, cursor: Number(form.retention_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.retention_bonus)>0)} value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
                         <option>After 3 Months</option><option>After 6 Months</option><option>After 1 Year</option><option>As per Policy</option>
                       </select>
                     </div>
-                    <div><label style={T.label}>ESOP (₹ Grant Value)</label><input style={T.input} type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
-                    <div><label style={T.label}>ESOP Plan / Vesting</label><input style={T.input} value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr, 1 yr cliff" /></div>
+                    <div><label className="rx-label">ESOP (₹ Grant Value)</label><input className="rx-input" type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
+                    <div><label className="rx-label">ESOP Plan / Vesting</label><input className="rx-input" value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr, 1 yr cliff" /></div>
                   </div>
                   <div style={{ marginTop:8 }}>
-                    <label style={T.label}>Terms &amp; Conditions <span style={{ color:C.faint, fontWeight:400, textTransform:'none' as const, letterSpacing:0 }}>— shown on the salary link</span></label>
-                    <textarea style={{ ...T.textarea, minHeight:52 }} value={form.terms} onChange={e=>F('terms',e.target.value)} placeholder="e.g. Joining bonus is recoverable if the employee leaves within 12 months…" />
+                    <label className="rx-label">Terms &amp; Conditions <span style={{ color:C.faint, fontWeight:400, textTransform:'none' as const, letterSpacing:0 }}>— shown on the salary link</span></label>
+                    <textarea className="rx-input" style={{ minHeight:52 }} value={form.terms} onChange={e=>F('terms',e.target.value)} placeholder="e.g. Joining bonus is recoverable if the employee leaves within 12 months…" />
                   </div>
                   {/* Additional Amounts — add as many as needed (amount + frequency + remark) */}
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:10, marginBottom:6 }}>
@@ -4828,12 +5044,12 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   {addItems.length===0 && <div style={{ fontSize:10.5, color:C.faint }}>Optional — e.g. a monthly allowance or a quarterly incentive.</div>}
                   {addItems.map((r,i)=>(
                     <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1.4fr auto', gap:6, alignItems:'end', marginBottom:6, animation:'ezFadeUp .25s ease' }}>
-                      <div><label style={T.label}>Amount (₹)</label><input style={T.input} type="number" value={r.amount} onChange={e=>setRow(i,'amount',e.target.value)} placeholder="5000" /></div>
-                      <div><label style={T.label}>Frequency</label>
-                        <select style={T.select} value={r.freq} onChange={e=>setRow(i,'freq',e.target.value)}>{ADD_FREQS.map(o=><option key={o}>{o}</option>)}</select>
+                      <div><label className="rx-label">Amount (₹)</label><input className="rx-input" type="number" value={r.amount} onChange={e=>setRow(i,'amount',e.target.value)} placeholder="5000" /></div>
+                      <div><label className="rx-label">Frequency</label>
+                        <select className="rx-input" value={r.freq} onChange={e=>setRow(i,'freq',e.target.value)}>{ADD_FREQS.map(o=><option key={o}>{o}</option>)}</select>
                       </div>
-                      <div><label style={T.label}>Remark</label><input style={T.input} value={r.remark} onChange={e=>setRow(i,'remark',e.target.value)} placeholder="Optional note" /></div>
-                      <button onClick={()=>delRow(i)} title="Remove" style={{ padding:'8px 10px', borderRadius:7, border:`1px solid ${C.critical}44`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:700 }}>✕</button>
+                      <div><label className="rx-label">Remark</label><input className="rx-input" value={r.remark} onChange={e=>setRow(i,'remark',e.target.value)} placeholder="Optional note" /></div>
+                      <button onClick={()=>delRow(i)} title="Remove" style={{ padding:'8px 10px', borderRadius:7, border:`1px solid ${C.criticalEdge}`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:700 }}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -4849,9 +5065,9 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   {saving?'Saving…':ctcOverBudget?'CTC exceeds MRF budget':ctcBelowBudget?'CTC below MRF budget':!calc?'Enter a valid CTC first':'Save Negotiation & Generate Link'}
                 </button>
                 {savedLink&&(
-                  <div style={{ marginTop:8, background:C.positiveTint, border:`1px solid ${C.positive}44`, borderRadius:10, padding:'8px 10px', animation:'ezFadeUp .3s ease' }}>
+                  <div style={{ marginTop:8, background:C.positiveTint, border:`1px solid ${C.positiveEdge}`, borderRadius:10, padding:'8px 10px', animation:'ezFadeUp .3s ease' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                      <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:10.5, fontFamily:'monospace', flex:1, padding:'7px 9px' }} />
+                      <input readOnly value={savedLink} onFocus={e=>e.target.select()} className="rx-input" style={{ fontSize:10.5, fontFamily:'monospace', flex:1, padding:'7px 9px' }} />
                       <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btnOutline, background:C.surface, borderColor:C.positive, color:C.positive, fontWeight:700, padding:'6px 10px', fontSize:11.5 }}>Copy</button>
                       <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.positive, color:C.onAccent, textDecoration:'none', padding:'6px 10px', fontSize:11.5 }}>Open ↗</a>
                     </div>
@@ -4868,15 +5084,15 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   <div style={{ fontSize:10.5, color:C.faint, marginTop:2 }}>Compliant with statutory minimum wage ({form.state} · {form.category}: ₹{Math.round(mw.amount).toLocaleString('en-IN')}/mo) &amp; EPFO regulations</div>
                 </div>
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                  <button onClick={()=>setShowMw(true)} style={{ ...T.btnOutline, background:C.brandTint, borderColor:`${C.brand}55`, color:C.brandDeep, fontWeight:700, fontSize:11.5 }}>Min wages</button>
-                  <button onClick={downloadExcel} disabled={!calc} style={{ ...T.btnOutline, background:C.positiveTint, borderColor:`${C.positive}55`, color:C.positive, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>Excel</button>
-                  <button onClick={printPdf} disabled={!calc} style={{ ...T.btnOutline, background:C.criticalTint, borderColor:`${C.critical}55`, color:C.critical, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>PDF</button>
+                  <button onClick={()=>setShowMw(true)} style={{ ...T.btnOutline, background:C.brandTint, borderColor:C.brandEdge, color:C.brandDeep, fontWeight:700, fontSize:11.5 }}>Min wages</button>
+                  <button onClick={downloadExcel} disabled={!calc} style={{ ...T.btnOutline, background:C.positiveTint, borderColor:C.positiveEdge, color:C.positive, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>Excel</button>
+                  <button onClick={printPdf} disabled={!calc} style={{ ...T.btnOutline, background:C.criticalTint, borderColor:C.criticalEdge, color:C.critical, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>PDF</button>
                 </div>
                 {showMw && <MinWagesPopup rates={mwRates} state={form.state} category={form.category} onClose={()=>setShowMw(false)} />}
               </div>
 
               {calcError&&(
-                <div style={{ background:C.criticalTint, border:`1px solid ${C.critical}55`, color:C.critical, fontSize:12, lineHeight:1.6, borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
+                <div style={{ background:C.criticalTint, border:`1px solid ${C.criticalEdge}`, color:C.critical, fontSize:12, lineHeight:1.6, borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
                   <b>Given CTC is too low!</b> {calcError}
                 </div>
               )}
@@ -4889,7 +5105,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   <CtcStatementTable rows={statementRows()} />
 
                   {calc.gratuity==='no'&&(
-                    <div style={{ marginTop:10, background:C.infoTint, border:`1px solid ${C.info}44`, borderRadius:10, padding:'9px 13px', fontSize:12, color:C.info, lineHeight:1.5 }}>
+                    <div style={{ marginTop:10, background:C.infoTint, border:`1px solid ${C.infoEdge}`, borderRadius:10, padding:'9px 13px', fontSize:12, color:C.info, lineHeight:1.5 }}>
                       <b>Note:</b> Gratuity is Over and Above the mentioned CTC package as per The Payment of Gratuity Act, 1972.
                     </div>
                   )}
@@ -4958,7 +5174,14 @@ function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
     row:{}, sum:{ bg:C.sunken, weight:700 }, emp:{ color:C.brandDeep }, grat:{ color:C.positive }, bonus:{ color:C.info },
     muted:{ color:C.faint }, total:{ bg:C.brand, color:C.onAccent, weight:700 }, ded:{ color:C.critical }, net:{ bg:C.positive, color:C.onAccent, weight:700 },
   }
+  // The ₹ columns are nowrap and cannot shrink, so once the grid track above
+  // was allowed a zero minimum this table became the thing that would overflow.
+  // A table is permitted to be wider than the page — but inside its own
+  // scroller, not by dragging the whole document sideways. Comment sits above
+  // the return: a JSX comment after `return (` parses as an empty object
+  // literal and breaks the file.
   return (
+    <div style={{ overflowX:'auto' }}>
     <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:0 }}>
       <thead>
         <tr style={{ background:C.sunken }}>
@@ -4987,6 +5210,7 @@ function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
         })}
       </tbody>
     </table>
+    </div>
   )
 }
 
@@ -4994,6 +5218,8 @@ function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
 // ── OFFER APPROVAL TAB (Recruiter → HR Head) ──────────────────────
 function OfferApprovalTab({ supabase, companies, departments, locations, candidates, mrfs, onRefresh, rail }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
+  // Request-status filter (05 #11). In memory only — no query changes.
+  const [oaStatus, setOaStatus] = useState<string>('*')
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [neg, setNeg] = useState<any>(null)
   const [loading, setLoading] = useState(false)
@@ -5040,6 +5266,42 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
     OFFER_SENT: 'Offer letter sent',
     HR_HEAD_REJECTED: 'Rejected by HR Head — you can re-create',
   }
+
+  /**
+   * The request's own status, told as the three steps it actually passes
+   * through: Raised → HR Head → Ready to send.
+   *
+   * ApprovalChain does NOT understand this table's statuses. It reads only
+   * APPROVED / REJECTED / PENDING, and marks a step "now" solely when it is
+   * PENDING *and* every earlier step is APPROVED. Passing HR_HEAD_APPROVED
+   * straight through would leave every step neither done nor current — so the
+   * domain status is translated here rather than handed over raw.
+   *
+   * HR_HEAD_REJECTED deliberately leaves the third step PENDING: its
+   * predecessor is REJECTED, so the chain renders it blank rather than "now",
+   * which is right — nothing is waiting to be sent.
+   */
+  const chainFor = (status:string, submittedAt?:string|null): ChainStepVM[] => {
+    const when = submittedAt ? new Date(submittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '—'
+    const hrHead = status==='HR_HEAD_REJECTED' ? 'REJECTED'
+      : (status==='HR_HEAD_APPROVED'||status==='OFFER_SENT') ? 'APPROVED' : 'PENDING'
+    return [
+      { role:'Raised',        approverName: when,                                   status:'APPROVED' },
+      { role:'HR Head',       approverName: hrHead==='PENDING' ? 'Awaiting sign-off' : hrHead==='REJECTED' ? 'Sent back' : 'Approved', status: hrHead },
+      { role:'Ready to send', approverName: status==='OFFER_SENT' ? 'Offer sent' : 'Not yet', status: status==='OFFER_SENT' ? 'APPROVED' : 'PENDING' },
+    ]
+  }
+
+  // In-memory status filter (05 #11). Counts are real, because FilterPills
+  // disables a zero-count pill rather than hiding it.
+  //
+  // Reads reqMap directly rather than activeReq(): activeReq deliberately
+  // returns null for HR_HEAD_REJECTED, because a rejected request no longer
+  // blocks re-creating one. Filtering through it would report every sent-back
+  // request as "Not raised", leaving the "Sent back" pill permanently at 0 and
+  // therefore permanently disabled — a control that could never fire.
+  const statusOf = (c:Candidate) => reqMap.get(c.id)?.status || 'NONE'
+  const statusShown = oaStatus==='*' ? shownEligible : shownEligible.filter((c:Candidate)=>statusOf(c)===oaStatus)
   async function pick(c:Candidate) {
     if (activeReq(c.id)) return   // #9 — already requested; cannot re-create
     setSel(c); setNeg(null); setLoading(true)
@@ -5050,7 +5312,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
 
   if (sel) {
     return (
-      <RxPage rail={rail} header={
+      <RxPage header={
         <RecruitmentHeader
           title="Offer approval"
           subtitle="Send an offer to the HR Head for sign-off once the candidate has accepted their salary."
@@ -5080,7 +5342,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   }
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Offer approval"
         subtitle="Send an offer to the HR Head for sign-off once the candidate has accepted their salary."
@@ -5119,13 +5381,34 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
           </select>
         </div>
 
-        {shownEligible.length===0 ? (
-          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:28 }}>
-            <span className="rx-meta">{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</span>
+        {shownEligible.length>0 && (
+          <div className="s12">
+            <FilterPills label="Filter by request status" value={oaStatus} onChange={setOaStatus}
+              options={[
+                { value:'*',                label:'All',              count: shownEligible.length },
+                { value:'NONE',             label:'Not raised',       count: shownEligible.filter((c:Candidate)=>statusOf(c)==='NONE').length },
+                { value:'SUBMITTED',        label:'Awaiting HR Head', count: shownEligible.filter((c:Candidate)=>statusOf(c)==='SUBMITTED').length },
+                { value:'HR_HEAD_APPROVED', label:'Approved',         count: shownEligible.filter((c:Candidate)=>statusOf(c)==='HR_HEAD_APPROVED').length },
+                { value:'OFFER_SENT',       label:'Offer sent',       count: shownEligible.filter((c:Candidate)=>statusOf(c)==='OFFER_SENT').length },
+                { value:'HR_HEAD_REJECTED', label:'Sent back',        count: shownEligible.filter((c:Candidate)=>statusOf(c)==='HR_HEAD_REJECTED').length },
+              ]} />
           </div>
-        ) : shownEligible.map((c:Candidate)=>{
-          const ar = activeReq(c.id)          // blocks re-create unless rejected
-          const lr = reqMap.get(c.id)         // latest request, any status — shown with the HR Head
+        )}
+
+        {statusShown.length===0 ? (
+          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:28 }}>
+            <span className="rx-meta">{oaQ||oaStatus!=='*'?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</span>
+          </div>
+        ) : statusShown.map((c:Candidate)=>{
+          // DISPLAY reads the request itself; the RE-CREATE GATE stays on
+          // activeReq(). Conflating the two is why a sent-back request rendered
+          // as a bare "Create request" button with no trace of the rejection:
+          // activeReq() returns null for HR_HEAD_REJECTED *so that* a new
+          // request can be raised, and the row was keyed off that. Its
+          // STATUS_LABEL entry and the critical-colour branch below were both
+          // unreachable in consequence. pick()'s guard is unchanged.
+          const ar = reqMap.get(c.id) || null
+          const canRaise = !activeReq(c.id)
           const heads = hrHeadLabel(c.company_id)
           return (
           <div className="s12" key={c.id}>
@@ -5137,24 +5420,30 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
                 </div>
                 <div className="rx-meta" style={{ marginTop:2 }}>{c.designation||'—'} · {c.stage}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
               </div>
-              {lr && (
-                <div style={{ textAlign:'right' as const, flexShrink:0, maxWidth:420 }}>
-                  <div style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:700, padding:'3px 10px', borderRadius:99,
-                    background: lr.status==='HR_HEAD_REJECTED' ? C.criticalTint : lr.status==='SUBMITTED' ? C.warningTint : C.positiveTint,
-                    color: lr.status==='HR_HEAD_REJECTED' ? C.critical : lr.status==='SUBMITTED' ? C.warning : C.positive }}>
-                    {lr.status==='SUBMITTED' ? '⏳' : lr.status==='HR_HEAD_REJECTED' ? '✗' : '✓'} {STATUS_LABEL[lr.status] || lr.status}
-                  </div>
-                  <div className="rx-meta" style={{ marginTop:4 }}>
-                    {lr.status==='SUBMITTED' && <>Pending with <b style={{ color:C.ink }}>{heads}</b>{lr.submitted_at ? ` · submitted ${fmtOn(lr.submitted_at)}` : ''}</>}
-                    {lr.status==='HR_HEAD_APPROVED' && <>Approved by <b style={{ color:C.ink }}>{heads}</b>{lr.hr_head_actioned_at ? ` on ${fmtOn(lr.hr_head_actioned_at)}` : ''}{lr.hr_head_comments ? ` · “${lr.hr_head_comments}”` : ''} · now in <b style={{ color:C.ink }}>Send Offers</b></>}
-                    {lr.status==='OFFER_SENT' && <>Approved by <b style={{ color:C.ink }}>{heads}</b>{lr.hr_head_actioned_at ? ` on ${fmtOn(lr.hr_head_actioned_at)}` : ''} · offer letter sent{lr.offer_sent_at ? ` ${fmtOn(lr.offer_sent_at)}` : ''}</>}
-                    {lr.status==='HR_HEAD_REJECTED' && <>Rejected by <b style={{ color:C.ink }}>{heads}</b>{lr.hr_head_actioned_at ? ` on ${fmtOn(lr.hr_head_actioned_at)}` : ''}{lr.hr_head_comments ? ` · “${lr.hr_head_comments}”` : ''}</>}
-                  </div>
-                </div>
-              )}
-              {!ar && (
-                <button type="button" className="rx-btn p" style={{ flexShrink:0 }} onClick={()=>pick(c)}>{lr?.status==='HR_HEAD_REJECTED' ? 'Re-create request' : 'Create request'}</button>
-              )}
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8, flexShrink:0, minWidth: ar ? 260 : undefined, maxWidth:420 }}>
+                {ar && (
+                  <>
+                    <div style={{ textAlign:'right' as const }}>
+                      <div style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:700, padding:'3px 10px', borderRadius:99,
+                        background: ar.status==='HR_HEAD_REJECTED' ? C.criticalTint : ar.status==='SUBMITTED' ? C.warningTint : C.positiveTint,
+                        color: ar.status==='HR_HEAD_REJECTED' ? C.critical : ar.status==='SUBMITTED' ? C.warning : C.positive }}>
+                        {ar.status==='SUBMITTED' ? '⏳' : ar.status==='HR_HEAD_REJECTED' ? '✗' : '✓'} {STATUS_LABEL[ar.status] || ar.status}
+                      </div>
+                      <div className="rx-meta" style={{ marginTop:4 }}>
+                        {ar.status==='SUBMITTED' && <>Pending with <b style={{ color:C.ink }}>{heads}</b>{ar.submitted_at ? ` · submitted ${fmtOn(ar.submitted_at)}` : ''}</>}
+                        {ar.status==='HR_HEAD_APPROVED' && <>Approved by <b style={{ color:C.ink }}>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''}{ar.hr_head_comments ? ` · “${ar.hr_head_comments}”` : ''} · now in <b style={{ color:C.ink }}>Send Offers</b></>}
+                        {ar.status==='OFFER_SENT' && <>Approved by <b style={{ color:C.ink }}>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''} · offer letter sent{ar.offer_sent_at ? ` ${fmtOn(ar.offer_sent_at)}` : ''}</>}
+                        {ar.status==='HR_HEAD_REJECTED' && <>Rejected by <b style={{ color:C.ink }}>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''}{ar.hr_head_comments ? ` · “${ar.hr_head_comments}”` : ''}</>}
+                      </div>
+                    </div>
+                    {/* The same status, shown as the journey it is. The wording
+                        above stays: it is what tells a recruiter what to DO. */}
+                    <div style={{ alignSelf:'stretch' }}><ApprovalChain steps={chainFor(ar.status, ar.submitted_at)} /></div>
+                  </>
+                )}
+                {/* A sent-back request shows its chain AND the way forward. */}
+                {canRaise && <button type="button" className="rx-btn p" onClick={()=>pick(c)}>{ar?.status==='HR_HEAD_REJECTED' ? 'Re-create request' : 'Create request'}</button>}
+              </div>
             </div>
           </div>
         )})}
@@ -5262,8 +5551,48 @@ HR Team`
     showNotify(`${c.full_name} marked Backed Out — MRF re-opened.`); onRefresh()
   }
 
+  /**
+   * Where an offer has got to, derived ONLY from fields the Candidate interface
+   * actually declares. The writes also set `offer_response`
+   * ('ACCEPTED' | 'REVISION' | 'BACKOUT'), but that column is not on the
+   * interface, so reading it here would not type-check — and every state it
+   * encodes is recoverable from what is typed.
+   *
+   * Order matters. `awaiting` is tested before `revision` because a revised
+   * offer that has been re-sent carries offer_revised AND stage 'Offer Sent';
+   * it is waiting on the candidate again, and the "Revised Offer" badge already
+   * says how it got there.
+   */
+  type OfferState = 'accepted' | 'awaiting' | 'backout' | 'revision' | 'notsent'
+  const offerState = (c:Candidate): OfferState =>
+    c.offer_accepted ? 'accepted'
+    : c.stage==='Offer Sent' ? 'awaiting'
+    : c.stage==='Rejected' ? 'backout'
+    : c.offer_revised ? 'revision'
+    : 'notsent'
+
+  /** Two steps, because that is the whole of this stage: it goes out, they reply. */
+  const offerChain = (c:Candidate): ChainStepVM[] => {
+    const st = offerState(c)
+    const sentOn = c.offer_sent_at ? new Date(c.offer_sent_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : null
+    return [
+      { role:'Sent', approverName: sentOn || (st==='notsent' ? 'Not yet' : 'Sent'), status: st==='notsent' ? 'PENDING' : 'APPROVED' },
+      { role:'Candidate reply',
+        approverName: st==='accepted' ? 'Accepted' : st==='backout' ? 'Backed out' : st==='revision' ? 'Revision asked' : st==='awaiting' ? 'Awaiting' : '—',
+        status: st==='accepted' ? 'APPROVED' : st==='backout' ? 'REJECTED' : 'PENDING' },
+    ]
+  }
+
+  const OFFER_TILES: { key:OfferState; label:string }[] = [
+    { key:'notsent',  label:'Not sent' },
+    { key:'awaiting', label:'Awaiting reply' },
+    { key:'accepted', label:'Accepted' },
+    { key:'revision', label:'Revision asked' },
+    { key:'backout',  label:'Backed out' },
+  ]
+
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Offer letters"
         subtitle="Draft and send the letter once HR Head has approved the offer, then record how the candidate replied."
@@ -5273,6 +5602,24 @@ HR Team`
         </Help>}
       />}>
       <div className="rx-grid rx-stag">
+        {/* Where every offer stands. Five tiles, not the kit's four: the data
+            distinguishes a revision request from a backout, and calling both
+            "Declined" would merge a candidate still in play with one who is
+            gone. Read-outs, not filters — section 9 asks for the counts, and
+            adding a filter here would be new behaviour rather than a new look. */}
+        {shownOffered.length>0 && (
+          <div className="s12" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:10 }}>
+            {OFFER_TILES.map(t => {
+              const n = shownOffered.filter((c:Candidate)=>offerState(c)===t.key).length
+              return (
+                <div key={t.key} className={t.key==='backout' && n>0 ? 'rx-tile crit' : 'rx-tile'}>
+                  <div style={{ ...eyebrow }}>{t.label}</div>
+                  <div className="rx-num" style={{ fontSize:20, fontWeight:700, marginTop:2, color: n===0 ? C.faint : undefined }}>{n}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
         <div className="s4" style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <div className="rx-label">Shortlisted / offer stage ({shownOffered.length})</div>
           <SearchBox value={offQ} onChange={setOffQ} placeholder="Search candidate…" label="Search candidates" />
@@ -5310,11 +5657,15 @@ HR Team`
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
+            {/* Out, then back. The same two facts the tiles count, said per
+                candidate. markAccepted/markRevision/markBackout are untouched —
+                each still writes exactly what it always did. */}
+            <div style={{ marginTop:8 }}><ApprovalChain steps={offerChain(c)} /></div>
             {c.stage==='Offer Sent'&&!c.offer_accepted&&(
               <div style={{ display:'flex', gap:6, marginTop:8 }}>
-                <button onClick={(e)=>{ e.stopPropagation(); markAccepted(c) }} style={{ ...T.btn, background:C.positive, color:C.onAccent, fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>Accepted</button>
-                <button onClick={(e)=>{ e.stopPropagation(); markRevision(c) }} style={{ ...T.btn, background:C.warningTint, color:C.warning, border: `1px solid ${C.warningTint}`, fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>Revision</button>
-                <button onClick={(e)=>{ e.stopPropagation(); markBackout(c) }} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>Backout</button>
+                <button type="button" className="rx-btn sm ok" style={{ flex:1 }} onClick={(e)=>{ e.stopPropagation(); markAccepted(c) }}>Accepted</button>
+                <button type="button" className="rx-btn sm" style={{ flex:1, background:C.warningTint, color:C.warning, borderColor:C.warningTint }} onClick={(e)=>{ e.stopPropagation(); markRevision(c) }}>Revision</button>
+                <button type="button" className="rx-btn sm d" style={{ flex:1 }} onClick={(e)=>{ e.stopPropagation(); markBackout(c) }}>Backout</button>
               </div>
             )}
             {c.stage==='Offer Sent'&&c.offer_accepted&&(
@@ -5363,6 +5714,21 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
     showNotify(`Saved onboarding details for ${c.full_name}.`); onRefresh()
   }
   const daysToJoin = (c:Candidate) => c.onboarding_date ? Math.ceil((new Date(c.onboarding_date).getTime()-Date.now())/86400000) : null
+
+  /**
+   * Days to the date of joining, as a chip. Uses the kit's daysUntil(), which
+   * compares calendar days in LOCAL time rather than subtracting timestamps —
+   * so a joining date "tomorrow" reads 1 whatever the hour, instead of flipping
+   * to 0 after midday. daysToJoin() above is the tab's own older calculation and
+   * still drives the three-day badge; this only labels.
+   */
+  const dojChip = (c:Candidate, rowDoj?:string|null) => {
+    const d = daysUntil(rowDoj || c.doj || c.onboarding_date || null)
+    if (d === null) return null
+    const tone = d < 0 ? 'b-mute' : d <= 3 ? 'b-warn' : 'b-pos'
+    const text = d < 0 ? `Joined ${Math.abs(d)}d ago` : d === 0 ? 'Joins today' : `${d}d to joining`
+    return <span className={`rx-b ${tone}`}>{text}</span>
+  }
 
   const load = useCallback(()=>{
     supabase.from('preonboarding_links').select('*').order('created_at',{ascending:false})
@@ -5428,7 +5794,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
     const letter = { company_name:company, title, recipient:c.full_name, paragraphs,
       highlights:[ { label:'Position', value:role }, { label:'Date of Joining', value:String(doj) } ] }
     try {
-      const r = await fetch('/api/recruitment/send-letter', { method:'POST', headers:{'Content-Type':'application/json'},
+      const r = await fetch('/api/recruitment/send-letter', { method:'POST', headers: await authHeaders(),
         body:JSON.stringify({ to:c.email, cc:'', subject,
           body:`Dear ${c.full_name},\n\n${paragraphs.join('\n\n')}\n\nWarm regards,\n${company} — Human Resources`, letter }) })
       const d = await r.json().catch(()=>({}))
@@ -5469,7 +5835,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
   const respStyle:Record<string,[string,string]> = { ACCEPTED:[C.positiveTint,C.positive], REVISE:[C.warningTint,C.warning], BACKOUT:[C.criticalTint,C.critical] }
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Pre-onboarding"
         subtitle="Confirm how each candidate responded to their offer, set the joining date, and start their onboarding."
@@ -5533,11 +5899,17 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
                 <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.designation||'—'} · {companyName(c)} · DOJ: {row?.doj||c.doj||'Not set'}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
                 {c.email&&<div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{c.email}</div>}
               </div>
-              {resp&&(
-                <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:bg, color:fg }}>
-                  {resp==='ACCEPTED'?`✅ Accepted (${row?.candidate_type==='EXPERIENCED'?'Experienced':'Fresher'})`:resp==='REVISE'?'Revision requested':'Backed out'}
-                </span>
-              )}
+              {/* bg and fg stay SEPARATE token values. See the note above the
+                  return: concatenating an alpha suffix onto one of these is
+                  what silently removed this card's border once already. */}
+              <div className="rx-row" style={{ gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                {dojChip(c, row?.doj)}
+                {resp&&(
+                  <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:bg, color:fg }}>
+                    {resp==='ACCEPTED'?`✅ Accepted (${row?.candidate_type==='EXPERIENCED'?'Experienced':'Fresher'})`:resp==='REVISE'?'Revision requested':'Backed out'}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Onboarding date + HR email — drive the reminder emails */}
@@ -5546,11 +5918,13 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
               <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} className="rx-input" style={{ width:150, fontSize:12 }} />
               <label style={{ fontSize:11, color:C.brandDeep, fontWeight:600 }}>HR email:</label>
               <input value={hrVal(c)} onChange={e=>setHrEmails(m=>({...m,[c.id]:e.target.value}))} placeholder="hr@company.com" className="rx-input" style={{ width:180, fontSize:12 }} />
-              <button onClick={()=>saveOnboarding(c)} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11 }}>Save</button>
-              {(()=>{ const d=daysToJoin(c); if(d===null) return null
-                return d>=0 && d<=3
-                  ? <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>Joining in {d} day{d===1?'':'s'} — start onboarding</span>
-                  : <span style={{ fontSize:11, color:d<0?C.critical:C.faint }}>{d<0?'past joining date':`${d} days to join`}</span> })()}
+              <button type="button" className="rx-btn sm" onClick={()=>saveOnboarding(c)}>Save</button>
+              {/* Only the three-day call to action stays here. The plain
+                  "N days to join" this used to render in every other case is
+                  now the chip in the card header, and showing both said the
+                  same thing twice in one card. */}
+              {(()=>{ const d=daysToJoin(c); if(d===null||d<0||d>3) return null
+                return <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>Joining in {d} day{d===1?'':'s'} — start onboarding</span> })()}
             </div>
             {!c.hr_email&&!hrEmails[c.id]&&<div style={{ fontSize:F.micro, color:C.critical, marginTop:S.xs }}>Add an HR email so onboarding reminder mails can be sent.</div>}
 
@@ -5559,16 +5933,20 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
                 <div style={{ marginTop:12, background:C.sunken, borderRadius:10, padding:'10px 12px', border: `1px solid ${C.brandEdge}` }}>
                   <div style={{ fontSize:12, color:C.brandDeep, fontWeight:600, marginBottom:8 }}>Candidate type — sends the right letter:</div>
                   <div style={{ display:'flex', gap:8 }}>
-                    <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'EXPERIENCED')} style={{ ...T.btn, background:C.brand, color:C.onAccent }}>{busy===c.id?'Sending…':'Experienced → Resignation Acceptance'}</button>
-                    <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'FRESHER')} style={{ ...T.btn, background:C.info, color:C.onAccent }}>{busy===c.id?'Sending…':'Fresher → Joining Confirmation'}</button>
-                    <button onClick={()=>setChoose('')} style={{ ...T.btn, background:'transparent', color:C.faint }}>Cancel</button>
+                    {/* sendAcceptance is untouched — same send-letter POST,
+                        same preonboarding_links write, same notification. */}
+                    <button type="button" className="rx-btn p" disabled={busy===c.id} onClick={()=>sendAcceptance(c,'EXPERIENCED')}>{busy===c.id?'Sending…':'Experienced → Resignation Acceptance'}</button>
+                    <button type="button" className="rx-btn" disabled={busy===c.id} onClick={()=>sendAcceptance(c,'FRESHER')} style={{ background:C.info, color:C.onAccent, borderColor:C.info }}>{busy===c.id?'Sending…':'Fresher → Joining Confirmation'}</button>
+                    <button type="button" className="rx-btn g" onClick={()=>setChoose('')}>Cancel</button>
                   </div>
                 </div>
               ) : (
                 <div style={{ display:'flex', gap:8, marginTop:12 }}>
-                  <button onClick={()=>setChoose(c.id)} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}`, fontWeight:600 }}>Accepted</button>
-                  <button onClick={()=>markRevise(c)} style={{ ...T.btn, background:C.warningTint, color:C.warning, border: `1px solid ${C.warningTint}`, fontWeight:600 }}>Revise Offer</button>
-                  <button onClick={()=>markBackout(c)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontWeight:600 }}>Backout</button>
+                  {/* markRevise still asks for its reason; markBackout still
+                      blacklists and re-opens the MRF. Styling only. */}
+                  <button type="button" className="rx-btn" style={{ background:C.positiveTint, color:C.positive, borderColor:C.positiveTint }} onClick={()=>setChoose(c.id)}>Accepted</button>
+                  <button type="button" className="rx-btn" style={{ background:C.warningTint, color:C.warning, borderColor:C.warningTint }} onClick={()=>markRevise(c)}>Revise Offer</button>
+                  <button type="button" className="rx-btn d" onClick={()=>markBackout(c)}>Backout</button>
                 </div>
               )
             )}
@@ -5585,7 +5963,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
             {/* Backout available any day (even after acceptance) — blacklists + reopens the MRF */}
             {(resp==='ACCEPTED'||resp==='REVISE')&&(
               <div style={{ marginTop:10 }}>
-                <button onClick={()=>markBackout(c)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11 }}>Candidate Backed Out</button>
+                <button type="button" className="rx-btn sm d" onClick={()=>markBackout(c)}>Candidate Backed Out</button>
               </div>
             )}
           </div>

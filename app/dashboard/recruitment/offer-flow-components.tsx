@@ -2,13 +2,20 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
+// send-offer-email runs on the server with no session of its own, so the browser
+// hands its own over. authHeaders() reads whichever session exists — ESS or the
+// dashboard — which matters because this file also renders inside ESS.
 import { authHeaders } from '@/lib/auth-headers'
 
 // The design system, aliased around this file's own S.
 import {
   C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
-import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help } from '@/components/recruitment/rx'
+import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help, Timeline, Callout } from '@/components/recruitment/rx'
+// The offer's ceiling is the MRF budget normalised to a year. budget_max is
+// quoted in the engagement's own period; offered_ctc is always annual. See
+// lib/recruitment/compensation.ts for why that lives outside this page.
+import { overCeiling, annualCeiling, compOf } from '@/lib/recruitment/compensation'
 
 // ── STYLES ───────────────────────────────────────────────────────
 // Bound to the design system. This file owns the name S, so the tokens are
@@ -635,7 +642,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const fRequests = requests.filter((r:any)=>(!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation }, mrfLookup, f))
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="HR Head approvals"
         subtitle="Sign off new requisitions, decide on offers that recruiters have escalated, and re-enter rejected candidates."
@@ -678,12 +685,12 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* MRF Approvals — HR Head approves new manpower requisitions here */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:TK.brandDeep, margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
+        <div className="rx-label" style={{ margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
         {fMrfs.length === 0 && (
-          <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:18, fontSize:12 }}>{ql?'No matching MRF':'No MRFs pending approval'}</div>
+          <div className="rx-mod" style={{ textAlign:'center' as const, padding:18 }}><span className="rx-meta">{ql?'No matching MRF':'No MRFs pending approval'}</span></div>
         )}
         {fMrfs.map(m => (
-          <div key={m.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+          <div key={m.id} className="rx-card" style={{ display:'flex', /* .rx-card is flex-direction:column, so a row must say so — without this, space-between distributes VERTICALLY and alignItems centres the content */ flexDirection:'row', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:SP.md }}>
             <div>
               <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
               <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>
@@ -692,8 +699,10 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               {m.skills_required && <div style={{ fontSize:11, color:TK.brandDeep, marginTop:3 }}>Skills: {m.skills_required}</div>}
             </div>
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-              <button onClick={()=>approveMrf(m.id)} style={S.btn(TK.positive,TK.surface)}>Approve</button>
-              <button onClick={()=>rejectMrf(m.id)} style={{ ...S.btn(TK.criticalTint,TK.critical), border: `1px solid ${TK.criticalTint}` }}>Reject</button>
+              {/* Styling only — approveMrf/rejectMrf are untouched, and
+                  rejectMrf still asks for its reason the way it always has. */}
+              <button type="button" className="rx-btn ok" onClick={()=>approveMrf(m.id)}>Approve</button>
+              <button type="button" className="rx-btn d" onClick={()=>rejectMrf(m.id)}>Reject</button>
             </div>
           </div>
         ))}
@@ -701,12 +710,12 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:TK.brandDeep, margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
+        <div className="rx-label" style={{ margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
         {fRejected.length === 0 && (
-          <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:18, fontSize:12 }}>{ql?'No matching candidate':'No rejected candidates'}</div>
+          <div className="rx-mod" style={{ textAlign:'center' as const, padding:18 }}><span className="rx-meta">{ql?'No matching candidate':'No rejected candidates'}</span></div>
         )}
         {fRejected.map(c => (
-          <div key={c.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+          <div key={c.id} className="rx-card" style={{ display:'flex', /* see the MRF row above: .rx-card supplies flex-direction:column */ flexDirection:'row', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:SP.md }}>
             <div>
               <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}{c.blacklisted && <span style={{ fontSize:10, color:TK.critical, marginLeft:8, fontWeight:600 }}>BLACKLISTED</span>}</div>
               <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{c.designation || '—'}</div>
@@ -716,7 +725,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                 <option value="">Place at stage…</option>
                 {REHIRE_STAGES.map(st => <option key={st} value={st}>{st}</option>)}
               </select>
-              <button onClick={()=>rehire(c, rehireStage[c.id])} style={S.btn(TK.positive,TK.surface)}>Rehire</button>
+              <button type="button" className="rx-btn ok" onClick={()=>rehire(c, rehireStage[c.id])}>Rehire</button>
             </div>
           </div>
         ))}
@@ -777,7 +786,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {selected && (
         <OfferReviewDrawer
-          req={selected} mrfNumber={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number || null}
+          req={selected} mrf={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id) || null}
           processing={processing} decided={decided}
           onClose={()=>{ setSelected(null); setDecided(null); setComment('') }}
           onDecide={(act, note)=>processApproval(selected, act, note)} />
@@ -847,8 +856,8 @@ function OfferDocuments({ requestId }: { requestId: string }) {
 }
 
 // ── HR Head review screen — a centred dialog over the dashboard; one offer, one decision ──
-function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDecide }: {
-  req: any; mrfNumber: string | null; processing: boolean; decided: { action: 'approve'|'reject'; notified: number } | null
+function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }: {
+  req: any; mrf: any; processing: boolean; decided: { action: 'approve'|'reject'; notified: number } | null
   onClose: () => void; onDecide: (action: 'approve'|'reject', note: string) => Promise<boolean>
 }) {
   const [mode, setMode] = useState<'view'|'reject'|'approve'>('view')
@@ -867,6 +876,12 @@ function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDec
   const ctc = Number(req.offered_ctc || 0), vp = Number(req.offered_variable_pct || 0), vAmt = ctc > 0 && vp > 0 ? Math.round(ctc * vp / 100) : 0
   const hike = req.hike_pct != null ? Number(req.hike_pct) : null
   const pending = req.status === 'SUBMITTED'
+  const mrfNumber: string | null = mrf?.mrf_number || null
+  // The offer's ceiling is the MRF budget normalised to a year (budget_max is quoted in the
+  // engagement's own period; offered_ctc is always annual) — lib/recruitment/compensation.ts.
+  const ceiling = annualCeiling(mrf?.budget_max, mrf?.employment_type)
+  const overBudget = overCeiling(req.offered_ctc, mrf?.budget_max, mrf?.employment_type)
+  const monthlyBudget = compOf(mrf?.employment_type).period === 'MONTHLY'
   const Row = ({ k, v, strong }: { k: string; v: any; strong?: boolean }) => (v == null || v === '' || v === false) ? null : (
     <div style={{ display:'flex', gap:12, padding:'7px 0', borderBottom:`1px solid ${TK.line}`, fontSize:13 }}>
       <span style={{ flex:'0 0 170px', color:TK.muted }}>{k}</span><span style={{ flex:1, color:TK.ink, fontWeight: strong ? 700 : 500, ...numeric }}>{String(v)}</span>
@@ -901,6 +916,14 @@ function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDec
             </div>
           ) : (<div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
            <div style={{ flex:'1 1 480px', minWidth:0 }}>
+            {overBudget && (
+              <div style={{ marginBottom:12 }}>
+                <Callout tone="warn">
+                  This offer is above the requisition&rsquo;s budget — {rs(ctc)} against a ceiling of {rs(ceiling)}.
+                  {monthlyBudget && ` The requisition is budgeted monthly (${rs(mrf?.budget_max)}/mo), shown here as a year.`}
+                </Callout>
+              </div>
+            )}
             {/* hero numbers */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
               {[['Offered CTC', rs(ctc), 'per annum', TK.ink], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '—', Number(req.prev_total_ctc) > 0 ? `over ${rs(req.prev_total_ctc)}` : 'previous CTC unknown', hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink], ['Monthly in-hand', req.monthly_inhand ? rs(req.monthly_inhand) : '—', 'estimated · before TDS', TK.ink]].map(([k, v, sub, col], i) => (
@@ -945,6 +968,11 @@ function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDec
               <Row k="On" v={req.hr_head_actioned_at ? new Date(req.hr_head_actioned_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : null} />
               <Row k="Comment" v={req.hr_head_comments} />
             </>)}
+
+            {ceiling > 0 && !overBudget && <div className="rx-hint" style={{ marginTop:10 }}>Within the requisition&rsquo;s budget ceiling of {rs(ceiling)} a year.</div>}
+
+            {/* the history of what the HR Head is signing off — recruitment_audit_logs */}
+            {req.candidate_id && <div style={{ marginTop:16 }}><AuditTrailViewer candidateId={req.candidate_id} /></div>}
 
             {req.template_content && (
               <div style={{ marginTop:16 }}>
@@ -1104,7 +1132,7 @@ ${company} — Human Resources`)
       }
       const r = await fetch('/api/recruitment/send-offer-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer }),
       })
       const d = await r.json().catch(() => ({}))
@@ -1174,7 +1202,7 @@ ${company} — Human Resources`)
   const positionOpts = distinctSorted(approved.map((r:any)=>r.candidates?.designation || r.manpower_requisitions?.designation))
   const fApproved = approved.filter((r:any)=>(!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation || r.manpower_requisitions?.designation }, mrfLookup, f))
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader
         title="Send offer letters"
         subtitle="Every offer submitted to the HR Head. The Send Offer button unlocks the moment the HR Head approves."
@@ -1209,15 +1237,18 @@ ${company} — Human Resources`)
             {positionOpts.map((p:string)=><option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <div className="s4">
+        <div className="s3">
           {fApproved.length === 0 && (
-            <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:32 }}>
-              {sql ? 'No matching candidate' : 'No offers submitted to the HR Head yet'}
+            <div className="rx-mod" style={{ textAlign:'center' as const, padding:32 }}>
+              <span className="rx-meta">{sql ? 'No matching candidate' : 'No offers submitted to the HR Head yet'}</span>
             </div>
           )}
+          {/* No flexDirection here on purpose: this card's content really is
+              stacked, so .rx-card's own flex-direction:column is what we want.
+              The MRF/rehire rows in HR Head needed row and had to say so. */}
           {fApproved.map(r => (
-            <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:`1px solid ${TK.line}`, background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+            <div key={r.id} onClick={() => prepareOffer(r)} className="rx-card"
+              style={{ cursor:'pointer', marginBottom:SP.md, border:selected?.id===r.id?`2px solid ${TK.brand}`:undefined, background:selected?.id===r.id?TK.brandTint:undefined }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}
@@ -1245,9 +1276,30 @@ ${company} — Human Resources`)
           ))}
         </div>
 
+        {/* The letter as the candidate will read it. Presentation only: it
+            renders the SAME `body` state the form edits, so there is nothing
+            here that can disagree with what is actually sent. .rx-paper is
+            deliberately paper-white in both themes — it is a letter. */}
         {selected && (
-          <div className="s8" style={S.cardP}>
-            <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
+          <div className="s5">
+            <section className="rx-mod" style={{ padding:0, background:'transparent', border:'none', boxShadow:'none' }}>
+              <div className="rx-mod-h" style={{ marginBottom:10 }}>
+                <div className="rx-mod-t">Letter preview</div>
+                <span className="rx-mod-m">as the candidate will see it</span>
+              </div>
+              <div className="rx-paper" style={{ whiteSpace:'pre-wrap', maxHeight:560, overflowY:'auto' }}>
+                <div style={{ fontWeight:700, fontSize:13.5, marginBottom:10 }}>{subject || 'Offer of employment'}</div>
+                {body || 'Pick a candidate to build their letter.'}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {selected && (
+          <div className="s4">
+          <section className="rx-mod brand">
+            <div className="rx-mod-h"><div className="rx-mod-t">Send offer letter</div></div>
+            <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>{selected.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <div style={{ marginBottom:8 }}>
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>To *</label>
               <input className="rx-input" value={toEmail} onChange={e=>setToEmail(e.target.value)} />
@@ -1273,11 +1325,14 @@ ${company} — Human Resources`)
                 <b>Yet to be approved.</b> This offer is with the HR Head{headNames(selected) ? ` (${headNames(selected)})` : ''}. The button below unlocks automatically once it is approved — you can prepare the letter meanwhile.
               </div>
             )}
-            <button onClick={sendOffer} disabled={sending || !isApproved(selected)}
+            {/* sendOffer is untouched: same validation, same send-offer-email
+                POST, same records written, same confirmations. */}
+            <button type="button" className="rx-btn p" onClick={sendOffer} disabled={sending || !isApproved(selected)}
               title={isApproved(selected) ? undefined : 'Waiting for HR Head approval'}
-              style={{ ...S.btn(TK.brand,TK.surface), width:'100%', padding:11, fontSize:13, opacity: isApproved(selected) ? 1 : .5, cursor: isApproved(selected) ? 'pointer' : 'not-allowed' }}>
+              style={{ width:'100%', opacity: isApproved(selected) ? 1 : .5, cursor: isApproved(selected) ? 'pointer' : 'not-allowed' }}>
               {sending ? 'Sending…' : isApproved(selected) ? 'Send Offer & Mark as Sent' : '🔒 Waiting for HR Head approval'}
             </button>
+          </section>
           </div>
         )}
       </div>
@@ -1318,23 +1373,32 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
     OFFER_BACKOUT:             ['','Candidate backed out'],
   }
 
+  // Newest first, per section 7. The QUERY still asks for ascending order —
+  // only the presentation is reversed here, so nothing that depends on the read
+  // order changes. The icon half of each actionLabel tuple is empty throughout
+  // (it has been for a while), so the tone carries the meaning instead.
+  const items = [...logs].reverse().map((log) => {
+    const [, label] = actionLabel[log.action_type] || ['', log.action_type]
+    const tone: 'pos' | 'warn' | 'mute' | '' =
+      /APPROVED|ACCEPTED|SUBMITTED|REHIRED/.test(log.action_type) ? 'pos'
+      : /REJECTED|BACKOUT|REVISE/.test(log.action_type) ? 'warn'
+      : ''
+    return {
+      title: label,
+      meta: `${log.actor_email ? `${log.actor_email} · ` : ''}${new Date(log.created_at).toLocaleString('en-IN')}`,
+      tone,
+    }
+  })
+
   return (
-    <div style={S.card}>
-      <div style={{ fontSize:13, fontWeight:500, marginBottom:12 }}>Audit Trail</div>
-      {logs.length === 0 && <div style={{ color:TK.faint, fontSize:12 }}>No audit logs yet</div>}
-      {logs.map((log, i) => {
-        const [icon, label] = actionLabel[log.action_type] || ['', log.action_type]
-        return (
-          <div key={log.id} style={{ display:'flex', gap:10, paddingBottom:12, borderBottom: i<logs.length-1 ? `1px solid ${TK.line}` : 'none', marginBottom:i<logs.length-1?12:0 }}>
-            <div style={{ width:28, height:28, borderRadius:99, background:TK.brandTint, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>{icon}</div>
-            <div>
-              <div style={{ fontSize:12, fontWeight:500, color:TK.ink }}>{label}</div>
-              {log.actor_email && <div style={{ fontSize:11, color:TK.faint, marginTop:1 }}>By: {log.actor_email}</div>}
-              <div style={{ fontSize:TF.micro, color:TK.muted, marginTop:1 }}>{new Date(log.created_at).toLocaleString('en-IN')}</div>
-            </div>
-          </div>
-        )
-      })}
-    </div>
+    <section className="rx-mod">
+      <div className="rx-mod-h">
+        <div className="rx-mod-t">Audit trail</div>
+        {items.length > 0 && <span className="rx-mod-m">{items.length} event{items.length === 1 ? '' : 's'}</span>}
+      </div>
+      {items.length === 0
+        ? <span className="rx-meta">No audit logs yet</span>
+        : <Timeline items={items} />}
+    </section>
   )
 }

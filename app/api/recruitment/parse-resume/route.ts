@@ -7,6 +7,8 @@
 // normalisation + regex fallbacks (email, phone, LinkedIn) so a missed field is still caught.
 
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import mammoth from 'mammoth'
 // pdf-parse v1 — import the lib entry directly to avoid its debug-mode file read.
 import pdf from 'pdf-parse/lib/pdf-parse.js'
@@ -120,6 +122,9 @@ function normalise(m: any, text: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   let form: FormData
   try { form = await req.formData() } catch { return NextResponse.json({ error: 'Invalid upload' }, { status: 400 }) }
   const file = form.get('file') as File | null

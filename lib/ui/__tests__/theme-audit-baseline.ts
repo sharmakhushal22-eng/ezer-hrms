@@ -58,14 +58,27 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   // approve/hold/reject edges, which now use the state edge tokens added in
   // fd6323f. Zero, not three: the last three were inside a comment I had
   // written describing the literals I removed, and the scanner strips comments.
-  'app/dashboard/recruitment/page.tsx': 0,
+  // NINE, and every one of them deliberate. They are the CTC statement that
+  // printPdf builds into a window.open() document (~4622-4637): markup handed
+  // to the browser's print pipeline and rendered on white paper, where no
+  // --ez-* custom property is in scope, so a token there resolves to nothing
+  // at all. Exactly the reason FlexiTdsCalculator keeps 21 above.
+  //
+  // This entry rose from 0, which the ratchet is built to resist — it is
+  // recorded rather than "fixed" because converting it would break a working
+  // PDF export. Every other colour in this 5,600-line file is on tokens.
+  'app/dashboard/recruitment/page.tsx': 9,
   'app/dashboard/roles/page.tsx': 2,
   'app/ess-login/page.tsx': 1,
   'app/joining/[token]/client.tsx': 6,
   'app/onboarding/[token]/client.tsx': 8,
   'app/onboarding/[token]/page.tsx': 1,
   'app/page.tsx': 7,
-  'app/salary-view/[token]/client.tsx': 4,
+  // Zero now. The candidate-facing offer page went onto tokens with the
+  // Recruitment blend: page grounds, the validity band, the regime and FBP
+  // pickers and the accept/decline panels. It is opened from a token link, so
+  // a candidate sees the default light theme — but it no longer freezes it.
+  'app/salary-view/[token]/client.tsx': 0,
   'app/verify/[token]/page.tsx': 2,
   'components/company/GroupEditor.tsx': 3,
   'components/company/GroupHeader.tsx': 1,
@@ -74,7 +87,7 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/ess/EmployeePortal.tsx': 6,
   'components/ess/FlexiTdsCalculator.tsx': 21,
   'components/ess/LeaveSection.tsx': 7,
-  'components/ess/RoleTabs.tsx': 4,
+  'components/ess/RoleTabs.tsx': 0,
   'components/ess/today/PunchDial.tsx': 1,
   'components/ess/today/Toast.tsx': 1,
   'components/letters/LetterheadConfig.tsx': 2,
@@ -106,4 +119,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 233;
+export const THEME_AUDIT_TOTAL = 216;

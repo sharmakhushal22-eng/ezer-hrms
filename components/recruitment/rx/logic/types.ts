@@ -115,4 +115,4 @@ export type IconName =
   | 'grid' | 'file' | 'spark' | 'flow' | 'coin' | 'check' | 'shield' | 'send' | 'mail' | 'door' | 'target'
   | 'plus' | 'search' | 'filter' | 'download' | 'upload' | 'clock' | 'users' | 'brief' | 'x' | 'lock'
   | 'alert' | 'info' | 'link' | 'copy' | 'cal' | 'eye' | 'edit' | 'more' | 'right' | 'chart' | 'share'
-  | 'doc' | 'bolt' | 'trend';
+  | 'doc' | 'bolt' | 'trend' | 'pin' | 'wallet' | 'swap' | 'hourglass' | 'building';

@@ -20,10 +20,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+// interview-invite reads and WRITES the candidate's stage, so it is guarded
+// server-side. authHeaders() reads whichever session exists — this modal opens
+// from the dashboard and from the recruitment page embedded in ESS.
+import { authHeaders } from '@/lib/auth-headers'
 import InterviewFeedbackForm, { type Feedback, bandOf } from './InterviewFeedbackForm'
 import { type Decision, DECISION_LABEL, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
 import { C as TK, E, F, Z } from '@/lib/ui'
+// The move-stage picker adopts the kit's radiogroup. moveOptions() only LABELS
+// the targets; blockedReason() below still decides. See the note on roundVMs.
+import { RxDialog, Icon, moveOptions, type RoundVM } from '@/components/recruitment/rx'
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 //
@@ -94,6 +101,7 @@ export default function CandidateInterviewModal({
   const [confirmShortlist, setConfirmShortlist] = useState(false)
   const [shortlisting, setShortlisting] = useState(false)
   const [stageNow, setStageNow] = useState<string>(candidate.stage)
+  const [target, setTarget] = useState<string | null>(null)   // stage picked in the move radiogroup
 
   // schedule form state
   const [mainPick, setMainPick] = useState<Emp[]>([])
@@ -105,10 +113,13 @@ export default function CandidateInterviewModal({
   const [sending, setSending] = useState(false)
 
   useEffect(() => { setStageNow(candidate.stage) }, [candidate.stage])
+  // A move landed (or a decision moved the candidate): clear the picker so it
+  // never shows a selection that is now behind the candidate.
+  useEffect(() => { setTarget(null) }, [stageNow])
 
   const loadInvites = useCallback(async () => {
     try {
-      const r = await fetch(`/api/recruitment/interview-invite?candidate_id=${candidate.id}`, { cache: 'no-store' })
+      const r = await fetch(`/api/recruitment/interview-invite?candidate_id=${candidate.id}`, { cache: 'no-store', headers: await authHeaders() })
       const j = await r.json().catch(() => ({}))
       setInvites(Array.isArray(j.invites) ? j.invites : [])
     } catch { /* leave as-is */ }
@@ -175,6 +186,22 @@ export default function CandidateInterviewModal({
     return null
   }, [stages, invitesByRound, roundComplete])
 
+  /**
+   * View models for the kit's stage picker. Built from invitesByRound — the SAME
+   * set blockedReason() walks — so a label can never disagree with the gate: a
+   * round that was named but never scheduled has no invite rows and gates
+   * nothing. moveOptions() reads only `name` and `hasFeedback`.
+   *
+   * This is deliberately NOT the interview_rounds table. That table is what the
+   * pipeline's own RoundVMs come from, and this modal never loads it — feeding
+   * moveOptions an empty array here would report every stage as open and quietly
+   * bypass the feedback gate.
+   */
+  const roundVMs = useMemo<RoundVM[]>(() => Object.keys(invitesByRound).map(r => {
+    const m = mainOf(r)
+    return { name: r, interviewer: m?.interviewer_name || '', at: m?.scheduled_at ?? null, hasFeedback: roundComplete(r) }
+  }), [invitesByRound, mainOf, roundComplete])
+
   const openScheduleFor = (r: string) => {
     setOpenRound(r); setViewing(null); setFbRound(null)
     setMainPick([]); setPanel([]); setLink(''); setPasscode('')
@@ -189,7 +216,7 @@ export default function CandidateInterviewModal({
     try {
       const scheduled_at = new Date(`${date}T${time || '10:00'}`).toISOString()
       const r = await fetch('/api/recruitment/interview-invite', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({
           action: 'schedule', candidate_id: candidate.id, mrf_id: candidate.mrf_id || null,
           company_id: candidate.company_id || mrf?.company_id || null, round: openRound,
@@ -215,7 +242,7 @@ export default function CandidateInterviewModal({
     setFbSaving(true)
     try {
       const r = await fetch('/api/recruitment/interview-invite', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({
           action: 'direct_feedback', candidate_id: candidate.id, mrf_id: candidate.mrf_id || null,
           company_id: candidate.company_id || mrf?.company_id || null, round: fbRound,
@@ -238,7 +265,7 @@ export default function CandidateInterviewModal({
     setShortlisting(true)
     try {
       const r = await fetch('/api/recruitment/interview-invite', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({ action: 'shortlist', candidate_id: candidate.id }),
       })
       const j = await r.json().catch(() => ({}))
@@ -291,6 +318,18 @@ export default function CandidateInterviewModal({
       </Shell>
     )
   }
+
+  // Forward-only targets, mirroring moveStage's own rule.
+  // GUARD: when the candidate is already Rejected they are not in `flow` at all,
+  // so moveOptions' indexOf returns -1, slice(cur+1) becomes slice(0), and it
+  // would offer every stage — including ones behind them.
+  const inFlow = stages.filter(s => s !== 'Rejected').includes(stageNow)
+  const moveOpts = inFlow ? moveOptions(stages, stageNow, roundVMs) : []
+  // Rejected sits past Shortlisted, so blockedReason() already gates it today.
+  // moveOptions strips it from the list entirely, hence its own button.
+  const rejectBlocked = blockedReason('Rejected')
+  const canReject = stages.includes('Rejected') && stageNow !== 'Rejected'
+  const anyGated = !!rejectBlocked || moveOpts.some(o => !o.allowed)
 
   return (
     <Shell onClose={onClose}>
@@ -437,26 +476,36 @@ export default function CandidateInterviewModal({
 
       {/* stage move — gated */}
       <SectionTitle>Move stage</SectionTitle>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-        {stages.map(s => {
-          const isBack = stages.indexOf(s) < stages.indexOf(stageNow)
-          const reason = blockedReason(s)
-          const disabled = isBack || !!reason
-          const current = stageNow === s
-          return (
-            <button key={s} onClick={() => { if (!disabled && !current) tryMove(s) }} disabled={disabled}
-              title={isBack ? 'Pipeline moves forward only' : reason ? `Complete the ${reason} round first` : ''}
-              style={{ fontFamily:font, fontSize:11, fontWeight:600, padding:'5px 11px', borderRadius:8, cursor: disabled ? 'not-allowed' : 'pointer',
-                background: current ? (stageColor[s] || C.purple) : C.sunken,
-                color: current ? TK.onAccent : (stageText[s] || C.muted),
-                border: current ? 'none' : `1px solid ${C.line}`,
-                opacity: disabled && !current ? .4 : 1, textDecoration: isBack ? 'line-through' : 'none' }}>
-              {s}{reason && !isBack && !current ? ' 🔒' : ''}
-            </button>
-          )
-        })}
-      </div>
-      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>Interview decisions move the candidate automatically (Reject → Rejected, Hold → Hold, Shortlist → the round's stage). 🔒 Every scheduled round needs the main interviewer's feedback before Shortlisted or beyond.</div>
+      {moveOpts.length === 0 && !canReject ? (
+        <div style={{ fontSize:12, color:C.faint }}>No stage left to move to — this candidate is {stageNow}.</div>
+      ) : (
+        <>
+          <div className="rx-move" role="radiogroup" aria-label="Next stage">
+            {moveOpts.map(o => {
+              // moveOptions does NOT gate Shortlisted itself; blockedReason does,
+              // and it is the authority in this modal. Whichever refuses, wins.
+              const reason = blockedReason(o.stage)
+              const allowed = o.allowed && !reason
+              return (
+                <label key={o.stage} className={allowed ? '' : 'off'}>
+                  <input type="radio" name="mv" disabled={!allowed} checked={target === o.stage} onChange={() => setTarget(o.stage)} />
+                  <b>{o.stage}</b>
+                  <small>{reason ? `Complete the ${reason} round first` : (o.reason ?? '')}</small>
+                </label>
+              )
+            })}
+          </div>
+          <div className="rx-row" style={{ gap:8, marginTop:12, flexWrap:'wrap' }}>
+            <button className="rx-btn p" disabled={!target} onClick={() => { if (target) tryMove(target) }}>Move candidate</button>
+            {canReject && (
+              <button className="rx-btn d" disabled={!!rejectBlocked} onClick={() => tryMove('Rejected')}
+                title={rejectBlocked ? `Complete the ${rejectBlocked} round first` : ''}>Reject</button>
+            )}
+            {anyGated && <span className="rx-why"><Icon name="lock" />Feedback still outstanding</span>}
+          </div>
+        </>
+      )}
+      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>Interview decisions move the candidate automatically (Reject → Rejected, Hold → Hold, Shortlist → the round's stage). Every scheduled round needs the main interviewer's feedback before Shortlisted or beyond.</div>
 
       {/* Add-round popup — name the round, then it opens straight into scheduling */}
       {showAddRound && (
@@ -550,7 +599,7 @@ const btn = {
   ghost: { padding:'7px 13px', borderRadius:8, border:`1px solid ${C.line}`, background:C.card, color:C.ink, fontFamily:font, fontSize:12.5, fontWeight:600, cursor:'pointer' } as React.CSSProperties,
   small: { padding:'6px 12px', borderRadius:8, fontFamily:font, fontSize:11.5, fontWeight:700, cursor:'pointer' } as React.CSSProperties,
 }
-const decChip = (d: Decision): React.CSSProperties => ({ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: DECISION_COLOR[d] + '18', color: DECISION_COLOR[d] })
+const decChip = (d: Decision): React.CSSProperties => ({ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: DECISION_BG[d], color: DECISION_COLOR[d] })
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize:11, fontWeight:800, letterSpacing:.5, textTransform:'uppercase', color:C.muted, margin:'2px 0 9px' }}>{children}</div>
 }
@@ -562,13 +611,25 @@ function Popup({ children, onClose }: { children: React.ReactNode; onClose: () =
     </div>
   )
 }
+/**
+ * The modal shell. `.rx-dlg-modal` brings the top layer, focus trap, Esc and
+ * backdrop dismiss. It sets NO padding of its own, so the 18/20 this file's
+ * content has always assumed is passed through here — the drawer's padding:0
+ * trap does not repeat.
+ *
+ * Width is pinned to the two sizes this file used before (720 / 1000) rather
+ * than the sheet's 1080 default, so the non-wide views do not suddenly grow.
+ *
+ * `open` is hard-true: the pipeline tab mounts this modal conditionally and
+ * unmounts it on close, so there is no closed state to represent. The three
+ * views below are early RETURNS, not stacked overlays — only one Shell is ever
+ * mounted, so no <dialog> is ever nested inside another.
+ */
 function Shell({ children, onClose, wide }: { children: React.ReactNode; onClose: () => void; wide?: boolean }) {
   return (
-    <div onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.drawer, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px', fontFamily:font, color:C.ink }}>
-      <div style={{ background:C.card, borderRadius:16, width: wide ? 'min(1000px, 100%)' : 'min(720px, 100%)', boxShadow:E.overlay, padding:'18px 20px', margin:'0 auto' }}>
-        {children}
-      </div>
-    </div>
+    <RxDialog open onClose={onClose} variant="modal" label="Candidate"
+      style={{ width: wide ? 'min(1000px, calc(100vw - 32px))' : 'min(720px, calc(100vw - 32px))', padding:'18px 20px', fontFamily:font, color:C.ink }}>
+      {children}
+    </RxDialog>
   )
 }

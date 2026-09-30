@@ -19,7 +19,7 @@ import type { CandidateVM, NextStep } from '../logic/types';
  * moveStage inside the modal, so forward-only and the feedback gate cannot be bypassed.
  */
 export function PipelineView({ rail, candidates, stages, nextStepFor, onOpen, onAddCandidate, openingSelect, filterBar, onShowRejected }: {
-  rail: React.ReactNode; candidates: CandidateVM[]; stages: readonly string[]; nextStepFor: (c: CandidateVM) => NextStep;
+  rail?: React.ReactNode; candidates: CandidateVM[]; stages: readonly string[]; nextStepFor: (c: CandidateVM) => NextStep;
   onOpen: (id: string) => void; onAddCandidate: () => void; openingSelect?: React.ReactNode; filterBar?: React.ReactNode; onShowRejected?: () => void;
 }) {
   const active = candidates.filter((c) => c.stage !== REJECTED);
@@ -33,7 +33,7 @@ export function PipelineView({ rail, candidates, stages, nextStepFor, onOpen, on
   const caps = ['var(--ez-ramp-1)', 'var(--ez-ramp-2)', 'var(--ez-ramp-3)', 'var(--ez-ramp-4)', 'var(--ez-ramp-5)', 'var(--ez-ramp-6)'];
 
   return (
-    <RxPage rail={rail} header={
+    <RxPage header={
       <RecruitmentHeader title="Candidate pipeline" subtitle="Each card says what to do next; open it to schedule rounds, record feedback and move them on."
         help={<Help label="How stages work">
           <p>Candidates move <b>left to right only</b>. You can skip ahead, but you cannot send someone back a stage.</p>

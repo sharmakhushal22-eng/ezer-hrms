@@ -36,37 +36,103 @@
 .rx-sub{font-size:14px;color:var(--ez-head-muted);margin-top:6px;max-width:620px;line-height:1.45}
 .rx-head-act{display:flex;gap:10px;align-items:center;flex-shrink:0}
 
-/* ── Phase-grouped tab rail ────────────────────────────────────────────── */
-/* Eleven tabs used to need 1197px in the 1122px available at a 1440px viewport
-   — a 75px overrun that hit any user who can see all eleven (HR Head, legacy)
-   and vanished at ten, so it was easy to miss. With scrollbar-width:none they
-   were simply cut off with no hint they could be reached: the same failure the
-   old pill bar had. Tightening both gaps to 1px and the group padding closes it
-   exactly — measured at 1122/1122, zero overflow, last tab 5px clear.
-   scrollbar-width:thin stays because narrower viewports still scroll. There is
-   deliberately NO right-edge mask: CSS cannot make one conditional on actually
-   overflowing, so it would fade the last tab permanently, including on the
-   ten-tab accounts that fit with room to spare. */
-.rx-rail{display:flex;gap:1px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;align-items:stretch;padding:6px;border-radius:18px;
-  background:var(--ez-surface);border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-raised);
-  animation:rxRise .5s .05s var(--rx-ease) both}
-.rx-grp{display:flex;flex-direction:column;gap:3px;padding:4px 2px 2px;flex-shrink:0;border-radius:14px}
-.rx-grp + .rx-grp{border-left:1px dashed var(--ez-line)}
-.rx-grp-l{font-size:11px;font-weight:600;color:var(--ez-faint);padding-left:6px;letter-spacing:.01em}
-.rx-grp-t{display:flex;gap:1px}
-.rx-tab{position:relative;display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 6px;
-  border-radius:10px;font-size:12.5px;font-weight:500;color:var(--ez-muted);text-decoration:none;
-  white-space:nowrap;transition:background .16s,color .16s}
-.rx-tab:hover{background:var(--ez-sunken);color:var(--ez-ink)}
-.rx-tab .rx-n{font-size:10.5px;font-weight:700;min-width:18px;height:17px;padding:0 5px;border-radius:99px;
-  display:inline-flex;align-items:center;justify-content:center;background:var(--ez-sunken);
-  color:var(--ez-muted);font-variant-numeric:tabular-nums}
-.rx-tab[aria-current="page"]{background:var(--ez-brand-tint);color:var(--ez-brand-deep);font-weight:650}
-.rx-tab[aria-current="page"] .rx-n{background:var(--ez-brand);color:var(--ez-on-accent)}
-.rx-tab[aria-current="page"]::after{content:"";position:absolute;left:8px;right:8px;bottom:3px;height:2px;
-  border-radius:2px;background:var(--ez-brand);transform-origin:left;animation:rxGrowX .45s .2s var(--rx-ease) both}
-.rx-tab svg{width:14px;height:14px;flex-shrink:0;opacity:.8}
-.rx-tab[aria-current="page"] svg{opacity:1}
+/* ── Journey rail: full-width, phase-grouped section navigation ─────────
+   The five phases read left to right like the hiring journey itself. Each
+   phase column is sized by how many sections it holds, and every section
+   stretches to fill it, so the rail always spans the full width.
+   One gradient pill (.rx-ind) slides to the active section instead of each
+   tab repainting — the eye follows where you went. */
+.rx-rail{position:relative;display:grid;gap:6px 8px;align-items:end;padding:12px 32px 12px;
+  background:color-mix(in srgb,var(--ez-surface) 88%,transparent);
+  -webkit-backdrop-filter:saturate(1.5) blur(14px);backdrop-filter:saturate(1.5) blur(14px);
+  border-bottom:1px solid var(--ez-line);box-shadow:0 1px 0 var(--ez-line);
+  transition:padding .3s var(--rx-ease),box-shadow .3s var(--rx-ease);animation:rxRailIn .6s var(--rx-ease) both}
+/* the journey line: a thin brand thread running under the whole band, drifting forward */
+.rx-rail::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;pointer-events:none;
+  background:linear-gradient(90deg,transparent 0,var(--ez-brand) 20%,var(--ez-ramp-3) 50%,var(--ez-brand) 80%,transparent 100%);
+  background-size:200% 100%;opacity:.55;animation:rxThread 6s linear infinite}
+.rx-grp{position:relative;display:flex;flex-direction:column;gap:8px;min-width:0;padding:0;border:0}
+.rx-grp-l{display:none}
+
+/* phase header: number chip, name, and a line that fills when you are in this phase */
+.rx-ph{display:flex;align-items:center;gap:8px;height:22px;font-size:11.5px;font-weight:700;letter-spacing:.02em;
+  color:var(--ez-muted);overflow:hidden;transition:height .3s var(--rx-ease),opacity .25s,margin .3s var(--rx-ease)}
+.rx-ph-n{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:18px;padding:0 5px;border-radius:6px;
+  font-size:10.5px;font-variant-numeric:tabular-nums;background:var(--ez-sunken);color:var(--ez-faint);border:1px solid var(--ez-line);
+  transition:background .3s,color .3s,border-color .3s}
+.rx-ph i{flex:1;height:2px;border-radius:2px;background:var(--ez-line);position:relative;overflow:hidden}
+.rx-ph i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--ez-brand),var(--ez-ramp-3));
+  transform:scaleX(0);transform-origin:left;transition:transform .6s var(--rx-ease)}
+.rx-grp.on .rx-ph{color:var(--ez-brand-deep)}
+.rx-grp.on .rx-ph-n{background:var(--ez-brand);color:var(--ez-on-accent);border-color:var(--ez-brand-deep)}
+.rx-grp.on .rx-ph i::after{transform:scaleX(1)}
+
+.rx-grp-t{display:flex;gap:2px;position:relative;z-index:var(--ez-z-raised)}
+.rx-tab{position:relative;z-index:var(--ez-z-raised);flex:1 1 0;min-width:max-content;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  height:66px;padding:6px 12px 7px;border-radius:15px;font-size:12.5px;font-weight:550;line-height:1.1;color:var(--ez-ink-soft);text-decoration:none;
+  white-space:nowrap;border:1px solid transparent;background:transparent;
+  transition:color .25s var(--rx-ease),background .2s,border-color .2s,transform .2s var(--rx-ease)}
+.rx-ti{position:relative;width:32px;height:32px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:var(--ez-sunken);color:var(--ez-muted);border:1px solid var(--ez-line);
+  transition:transform .35s var(--rx-snap),background .25s,color .25s,border-color .25s}
+.rx-ti svg{width:16px;height:16px}
+.rx-tab:hover{background:var(--ez-sunken);border-color:var(--ez-line);color:var(--ez-ink)}
+.rx-tab:hover .rx-ti{transform:translateY(-3px) rotate(-8deg) scale(1.06);background:var(--ez-brand-tint);color:var(--ez-brand);border-color:var(--ez-brand-edge)}
+.rx-tab:active{transform:scale(.97)}
+.rx-tab .rx-n{position:absolute;top:3px;left:calc(50% + 8px);font-size:10.5px;font-weight:700;min-width:19px;height:18px;padding:0 5px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--ez-surface);
+  background:var(--ez-sunken);color:var(--ez-muted);border:1px solid var(--ez-line);font-variant-numeric:tabular-nums;transition:background .25s,color .25s}
+.rx-tab .rx-n.you{background:var(--ez-warning);color:var(--ez-on-accent);border-color:var(--ez-warning)}
+.rx-tab .rx-n.you::after{content:"";position:absolute;inset:-3px;border-radius:99px;border:2px solid var(--ez-warning);opacity:0;animation:rxBeacon 2.4s ease-out infinite}
+
+/* active section: text flips to on-accent; the sliding pill paints the fill */
+.rx-tab[aria-current="page"]{color:var(--ez-on-accent);font-weight:650;background:transparent;border-color:transparent}
+.rx-tab[aria-current="page"]:hover{background:transparent}
+.rx-tab[aria-current="page"] .rx-ti{background:rgba(255,255,255,.18);color:var(--ez-on-accent);border-color:rgba(255,255,255,.28);transform:none}
+.rx-tab[aria-current="page"] .rx-n{background:var(--ez-surface);color:var(--ez-brand-deep);border-color:transparent;box-shadow:0 0 0 2px var(--ez-brand-deep)}
+.rx-tab[aria-current="page"] .rx-n.you{background:var(--ez-warning);color:var(--ez-on-accent)}
+.rx-tab[aria-current="page"]::after{display:none}
+.rx-ind{position:absolute;z-index:var(--ez-z-base);top:0;left:0;height:66px;width:0;border-radius:15px;pointer-events:none;
+  background:linear-gradient(135deg,var(--ez-brand) 0%,var(--ez-brand-deep) 100%);
+  box-shadow:var(--ez-shadow-brand),inset 0 1px 0 rgba(255,255,255,.22);
+  transition:transform .5s cubic-bezier(.3,1.22,.4,1),width .5s cubic-bezier(.3,1.22,.4,1),opacity .2s}
+.rx-ind::after{content:"";position:absolute;inset:0;border-radius:inherit;overflow:hidden;
+  background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.28) 50%,transparent 70%);background-size:250% 100%;
+  animation:rxSheen 3.2s ease-in-out infinite}
+.rx-ind.still{transition:none}
+/* no JS yet (first paint) → the active tab carries its own fill */
+.rx-rail:not(.has-ind) .rx-tab[aria-current="page"]{background:linear-gradient(135deg,var(--ez-brand),var(--ez-brand-deep));box-shadow:var(--ez-shadow-brand)}
+
+/* first arrival: sections drop in one after another */
+.rx-rail .rx-tab{animation:rxTabIn .5s var(--rx-ease) both}
+.rx-rail .rx-grp:nth-of-type(1) .rx-tab{animation-delay:.05s}.rx-rail .rx-grp:nth-of-type(2) .rx-tab{animation-delay:.1s}
+.rx-rail .rx-grp:nth-of-type(3) .rx-tab{animation-delay:.15s}.rx-rail .rx-grp:nth-of-type(4) .rx-tab{animation-delay:.2s}
+.rx-rail .rx-grp:nth-of-type(5) .rx-tab{animation-delay:.25s}
+
+/* docked: once the page scrolls, the phase headers fold away and the band tightens */
+.rx-rail.is-stuck{padding-top:8px;padding-bottom:8px;box-shadow:var(--ez-shadow-floating)}
+.rx-rail.is-stuck .rx-ph{height:0;opacity:0;margin-bottom:-8px}
+.rx-rail .rx-tab,.rx-ind{transition-property:color,background,border-color,transform,height,width,opacity}
+.rx-rail.is-stuck .rx-tab{height:54px}
+.rx-rail.is-stuck .rx-ti{width:28px;height:28px}
+.rx-rail-sentinel{height:1px;margin-bottom:-1px}
+
+@keyframes rxRailIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes rxTabIn{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes rxThread{from{background-position:200% 0}to{background-position:0 0}}
+@keyframes rxSheen{0%,55%{background-position:200% 0}100%{background-position:-60% 0}}
+@keyframes rxBeacon{0%{opacity:.7;transform:scale(.9)}80%,100%{opacity:0;transform:scale(1.5)}}
+
+/* narrow screens: the band scrolls sideways, sections keep their size */
+@media (max-width:1100px){
+  .rx-rail{display:flex;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x proximity;padding-left:18px;padding-right:18px}
+  .rx-rail::-webkit-scrollbar{display:none}
+  .rx-grp{flex-shrink:0;scroll-snap-align:start}
+  .rx-tab{flex:0 0 auto}
+}
+@media (prefers-reduced-motion: reduce){
+  .rx-ind,.rx-ph,.rx-ph i::after,.rx-ti{transition:none}
+  .rx-rail::after,.rx-ind::after,.rx-tab .rx-n.you::after{animation:none}
+}
 
 /* ── Bento grid + modules ──────────────────────────────────────────────── */
 .rx-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
@@ -177,13 +243,13 @@
   color:var(--ez-ink);font:inherit;font-size:14px;padding:0 13px;width:100%;transition:border-color .16s,box-shadow .16s}
 .rx-input:focus{outline:none;border-color:var(--ez-brand);box-shadow:0 0 0 4px var(--ez-brand-tint)}
 .rx-hint{font-size:12px;color:var(--ez-faint)}
-/* min-width is load-bearing, not cosmetic. The input inside is width:100% with
-   an absolutely-positioned icon and kbd hint, so this box's intrinsic minimum
-   is ~0 — and a flex item that can shrink to nothing never triggers the
-   wrap that .rx-bar already allows, it just gets starved. On the MRF tab the
+/* min-width is load-bearing, not cosmetic. The input inside is width:100%
+   with an absolutely-positioned icon and kbd hint, so this box's intrinsic
+   minimum is ~0 — and a flex item that can shrink to nothing never triggers
+   the wrap .rx-bar already allows, it just gets starved. On the MRF tab the
    row carries five passthrough filter selects as well, which squeezed the
-   search field down to about 90px ("Se" plus the slash hint). A floor makes
-   the row wrap instead. min() keeps it from overflowing a narrow phone. */
+   field to about 90px. A floor makes the row wrap instead; min() keeps it
+   from overflowing a narrow phone. */
 .rx-search{position:relative;flex:1 1 240px;min-width:min(220px,100%)}
 .rx-search svg{position:absolute;left:13px;top:13px;width:16px;height:16px;color:var(--ez-faint)}
 .rx-search .rx-input{padding-left:38px}
@@ -340,7 +406,7 @@
 @keyframes rxModal{from{transform:translateY(24px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 
 @media (prefers-reduced-motion: reduce){
-  .rx *,.rx *::before,.rx *::after,.rx-head,.rx-rail{animation-duration:.01ms!important;animation-delay:0ms!important;animation-iteration-count:1!important}
+  .rx *,.rx *::before,.rx *::after,.rx-head,.rx-rail,.rx-rail *{animation-duration:.01ms!important;animation-delay:0ms!important;animation-iteration-count:1!important}
   .rx-lift:hover,.rx-card:hover,.rx-btn:hover{transform:none}
 }
 
@@ -367,8 +433,6 @@
 
 /* ── usability pass ───────────────────────────────────────────────────── */
 /* "Needs you" marker on a tab: a count tells how many, the dot tells whose move it is */
-.rx-tab .rx-n.you{background:var(--ez-warning-tint);color:var(--ez-warning);box-shadow:inset 0 0 0 1px var(--ez-warning-edge)}
-.rx-tab[aria-current="page"] .rx-n.you{background:var(--ez-warning);color:var(--ez-on-accent);box-shadow:none}
 
 /* inline help: native <details>, so it is keyboard- and screen-reader-friendly for free */
 .rx-help{position:relative;display:inline-block}
@@ -496,6 +560,240 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx [hidden]{display:none!important}
 
 /* ════════════════════════════════════════════════════════════════════════
+   CONTRAST + DEPTH PASS
+   The product canvas (#F3F5F8) sits almost on top of the white surface, so
+   cards dissolved into the page. Inside the recruitment module only, the
+   ground drops a step (cooler, slightly blue — the HRMS brand family) and
+   every surface gets a firmer edge and a layered shadow, so modules read as
+   objects on a desk. Dark mode deepens the ground instead of lifting cards.
+   ════════════════════════════════════════════════════════════════════════ */
+:root{
+  --rx-ground:#E6ECF5;
+  --rx-edge:#D3DCE9;
+  --rx-edge-strong:#BCC8DA;
+  --rx-elev-1:0 0 0 1px rgba(15,23,42,.02),0 1px 2px rgba(15,23,42,.06),0 6px 16px -6px rgba(15,23,42,.14),0 2px 0 rgba(15,23,42,.03);
+  --rx-elev-2:0 0 0 1px rgba(15,23,42,.02),0 2px 4px rgba(15,23,42,.06),0 18px 36px -12px rgba(15,23,42,.26),0 4px 0 rgba(37,99,235,.05);
+  --rx-rim:inset 0 1px 0 rgba(255,255,255,.9);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-ez-theme="light"]):not([data-theme="light"]){
+    --rx-ground:#090C10;--rx-edge:#2A313C;--rx-edge-strong:#3A4452;
+    --rx-elev-1:0 0 0 1px rgba(0,0,0,.2),0 1px 2px rgba(0,0,0,.4),0 8px 18px -8px rgba(0,0,0,.6);
+    --rx-elev-2:0 0 0 1px rgba(0,0,0,.2),0 2px 4px rgba(0,0,0,.4),0 22px 40px -14px rgba(0,0,0,.75);
+    --rx-rim:inset 0 1px 0 rgba(255,255,255,.05);
+  }
+}
+:root[data-ez-theme="dark"],:root[data-theme="dark"]{
+  --rx-ground:#090C10;--rx-edge:#2A313C;--rx-edge-strong:#3A4452;
+  --rx-elev-1:0 0 0 1px rgba(0,0,0,.2),0 1px 2px rgba(0,0,0,.4),0 8px 18px -8px rgba(0,0,0,.6);
+  --rx-elev-2:0 0 0 1px rgba(0,0,0,.2),0 2px 4px rgba(0,0,0,.4),0 22px 40px -14px rgba(0,0,0,.75);
+  --rx-rim:inset 0 1px 0 rgba(255,255,255,.05);
+}
+.rx-mod{border-color:var(--rx-edge);box-shadow:var(--rx-rim),var(--rx-elev-1)}
+.rx-lift:hover{box-shadow:var(--rx-rim),var(--rx-elev-2);border-color:var(--ez-brand-edge)}
+.rx-mod-t svg{padding:0;box-sizing:content-box}
+.rx-mod-t{color:var(--ez-ink)}
+.rx-col{background:color-mix(in srgb,var(--ez-surface) 55%,transparent);border-color:var(--rx-edge)}
+.rx-card{border-color:var(--rx-edge);box-shadow:var(--rx-rim),0 1px 2px rgba(15,23,42,.06)}
+.rx-input{border-color:var(--rx-edge-strong)}
+.rx-rail{border-bottom-color:var(--rx-edge)}
+.rx-table th{background:color-mix(in srgb,var(--ez-brand-tint) 55%,var(--ez-sunken));color:var(--ez-ink-soft)}
+.rx-empty{border-color:var(--rx-edge-strong)}
+.rx-stile{border-color:var(--rx-edge)}
+.rx-meta{color:var(--ez-muted)}
+
+/* ── MRF card v2: compact, modular, with depth ─────────────────────────
+   Status owns one colour (--st) — a ribbon, a header wash and the status
+   badge all come from it, so a glance down the grid reads the pipeline.
+   The card tilts toward the pointer (≤4°, text never smears) and its inner
+   tiles sit a layer above the face, so the tilt reads as real depth. */
+.rx-mc{position:relative;perspective:1000px;--st:var(--ez-brand);--rx-rx:0deg;--rx-ry:0deg;--mx:50%;--my:0%}
+.rx-mc-in{position:relative;height:100%;display:flex;flex-direction:column;gap:12px;padding:16px 16px 14px;border-radius:18px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--st) 10%,var(--ez-surface)) 0,var(--ez-surface) 96px);
+  border:1px solid var(--rx-edge);box-shadow:var(--rx-rim),var(--rx-elev-1);
+  transform:rotateX(var(--rx-rx)) rotateY(var(--rx-ry));transform-style:preserve-3d;
+  transition:transform .45s var(--rx-ease),box-shadow .35s var(--rx-ease),border-color .3s;animation:rxRise .55s var(--rx-ease) both}
+.rx-mc-in::before{content:"";position:absolute;left:14px;right:14px;top:-1px;height:4px;border-radius:0 0 6px 6px;
+  background:linear-gradient(90deg,var(--st),color-mix(in srgb,var(--st) 45%,transparent))}
+.rx-mc-in::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .3s;
+  background:radial-gradient(420px circle at var(--mx) var(--my),rgba(255,255,255,.55),transparent 45%)}
+.rx-mc:hover .rx-mc-in{box-shadow:var(--rx-rim),var(--rx-elev-2);border-color:color-mix(in srgb,var(--st) 40%,var(--rx-edge));transition:transform .12s linear,box-shadow .35s,border-color .3s}
+.rx-mc:hover .rx-mc-in::after{opacity:.9}
+.rx-mc.flat .rx-mc-in{transform:translateY(-3px)}
+.rx-mc-top{display:flex;align-items:center;justify-content:space-between;gap:8px;transform:translateZ(10px)}
+.rx-mc-code{font-size:11.5px;font-weight:600;color:var(--ez-muted);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.rx-mc-t{font-family:var(--rx-display);font-size:18px;font-weight:700;letter-spacing:-.02em;line-height:1.15;color:var(--ez-ink);transform:translateZ(16px)}
+.rx-mc-sub{display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--ez-muted);margin-top:-6px;transform:translateZ(10px)}
+.rx-mc-sub span{display:inline-flex;align-items:center;gap:5px}
+.rx-mc-sub svg{width:13px;height:13px;color:var(--ez-faint)}
+.rx-mc-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;transform:translateZ(22px)}
+.rx-mt{display:flex;flex-direction:column;gap:3px;padding:9px 10px 10px;border-radius:12px;background:var(--ez-surface);
+  border:1px solid var(--rx-edge);box-shadow:0 1px 0 var(--rx-edge),0 3px 8px -4px rgba(15,23,42,.12);min-width:0}
+.rx-mt-l{font-size:11px;font-weight:600;color:var(--ez-muted);display:flex;align-items:center;gap:5px}
+.rx-mt-l svg{width:12px;height:12px;color:var(--st)}
+.rx-mt b{font-family:var(--rx-display);font-size:21px;font-weight:700;letter-spacing:-.03em;line-height:1;color:var(--ez-ink);font-variant-numeric:tabular-nums}
+.rx-mt b small{font-size:13px;color:var(--ez-faint);font-weight:600;margin-left:1px}
+.rx-mt-s{font-size:11px;color:var(--ez-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-mt-bar{display:block;height:5px;border-radius:5px;background:var(--ez-sunken);overflow:hidden;margin-top:3px}
+.rx-mt-bar i{display:block;height:100%;border-radius:5px;background:var(--st);transform-origin:left;animation:rxGrowX .9s .35s var(--rx-ease) both}
+.rx-mt-dots{display:flex;gap:2px;margin-top:4px;height:5px}
+.rx-mt-dots i{flex:1;border-radius:2px;background:var(--ez-sunken)}
+.rx-mt-dots i.on{background:var(--ez-ramp-4)}
+.rx-mc-chain{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,var(--ez-sunken) 70%,transparent);
+  border:1px dashed var(--rx-edge);transform:translateZ(12px)}
+.rx-cd{display:flex;align-items:center}
+.rx-cd span{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;
+  background:var(--ez-surface);color:var(--ez-faint);border:1.5px solid var(--rx-edge-strong);position:relative}
+.rx-cd span + span{margin-left:10px}
+.rx-cd span + span::before{content:"";position:absolute;right:100%;top:50%;width:10px;height:2px;margin-top:-1px;background:var(--rx-edge-strong)}
+.rx-cd span.ok{background:var(--ez-positive);color:var(--ez-on-accent);border-color:var(--ez-positive)}
+.rx-cd span.ok + span::before,.rx-cd span.ok + span.ok::before{background:var(--ez-positive)}
+.rx-cd span.now{background:var(--ez-warning-tint);color:var(--ez-warning);border-color:var(--ez-warning);animation:rxRing 2s ease-out infinite}
+.rx-cd span.no{background:var(--ez-critical);color:var(--ez-on-accent);border-color:var(--ez-critical)}
+.rx-cd-t{font-size:12px;color:var(--ez-ink-soft);line-height:1.3;min-width:0}
+.rx-cd-t b{font-weight:650;color:var(--ez-ink)}
+.rx-mc-foot{display:flex;align-items:center;gap:8px;margin-top:auto;transform:translateZ(8px)}
+.rx-mc-foot .rx-next{flex:1;min-width:0;padding:6px 9px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-mc-foot .rx-next svg{flex-shrink:0}
+.rx-mc-act{display:flex;gap:4px}
+.rx-mc-act .rx-btn{width:32px;height:32px;padding:0;border-radius:9px}
+.rx-mc-act .rx-btn svg{width:15px;height:15px}
+
+/* ── MRF overview v2: one hero tile + six status tiles that ARE the filter ── */
+.rx-ov{display:grid;grid-template-columns:minmax(0,1.35fr) repeat(6,minmax(0,1fr));gap:12px}
+.rx-hero{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:10px;padding:18px 20px;border-radius:18px;text-align:left;cursor:pointer;
+  font:inherit;color:var(--ez-on-dark);border:0;background:linear-gradient(140deg,var(--ez-dark) 0%,var(--ez-dark-mid) 55%,var(--ez-dark-accent) 100%);
+  box-shadow:var(--rx-elev-2);transition:transform .3s var(--rx-ease),box-shadow .3s}
+.rx-hero::after{content:"";position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;
+  background:radial-gradient(circle,rgba(96,165,250,.35),transparent 65%);animation:rxBreathe 5s ease-in-out infinite}
+.rx-hero[aria-pressed="true"]{box-shadow:0 0 0 3px var(--ez-brand),var(--rx-elev-2)}
+.rx-hero:hover{transform:translateY(-2px)}
+.rx-hero-n{font-family:var(--rx-display);font-size:46px;font-weight:700;letter-spacing:-.04em;line-height:.95;position:relative}
+.rx-hero-l{font-size:13px;color:var(--ez-on-dark-muted);position:relative}
+.rx-hero-s{display:flex;gap:16px;position:relative;margin-top:auto}
+.rx-hero-s div{display:flex;flex-direction:column;gap:1px}
+.rx-hero-s b{font-family:var(--rx-display);font-size:20px;font-weight:700}
+.rx-hero-s span{font-size:11.5px;color:var(--ez-on-dark-muted)}
+.rx-stt{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px 14px 12px;border-radius:16px;cursor:pointer;
+  font:inherit;text-align:left;color:var(--ez-ink);background:linear-gradient(180deg,color-mix(in srgb,var(--st) 12%,var(--ez-surface)),var(--ez-surface) 70%);
+  border:1px solid color-mix(in srgb,var(--st) 28%,var(--rx-edge));box-shadow:var(--rx-rim),var(--rx-elev-1);
+  transition:transform .25s var(--rx-snap),box-shadow .25s,border-color .25s}
+.rx-stt:hover:not(:disabled){transform:translateY(-3px);box-shadow:var(--rx-rim),var(--rx-elev-2)}
+.rx-stt[aria-pressed="true"]{border:2px solid var(--st);padding:13px 13px 11px;box-shadow:0 0 0 4px color-mix(in srgb,var(--st) 18%,transparent),var(--rx-elev-2)}
+.rx-stt:disabled{opacity:.5;cursor:not-allowed}
+.rx-stt-ic{width:30px;height:30px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:var(--st);color:#fff;
+  box-shadow:0 4px 10px -4px var(--st)}
+.rx-stt-ic svg{width:15px;height:15px}
+.rx-stt-n{font-family:var(--rx-display);font-size:30px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.rx-stt-l{font-size:12.5px;font-weight:600;color:var(--ez-ink-soft)}
+.rx-stt-bar{align-self:stretch;height:4px;border-radius:4px;background:var(--ez-sunken);overflow:hidden}
+.rx-stt-bar i{display:block;height:100%;background:var(--st);transform-origin:left;animation:rxGrowX .9s .3s var(--rx-ease) both}
+.rx-ctrl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px;border-radius:16px;background:var(--ez-surface);
+  border:1px solid var(--rx-edge);box-shadow:var(--rx-rim),var(--rx-elev-1)}
+.rx-ctrl .rx-input{background:var(--ez-sunken);border-color:transparent}
+.rx-ctrl .rx-input:focus{background:var(--ez-surface);border-color:var(--ez-brand)}
+.rx-sdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--st);box-shadow:0 0 0 3px color-mix(in srgb,var(--st) 20%,transparent);margin-right:8px;vertical-align:1px}
+
+/* ── Raise MRF form ─────────────────────────────────────────────────── */
+.rx-fwrap{display:grid;grid-template-columns:230px minmax(0,1fr) 350px;gap:20px;align-items:start}
+.rx-fnav{position:sticky;top:120px;display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:18px;background:var(--ez-surface);
+  border:1px solid var(--rx-edge);box-shadow:var(--rx-rim),var(--rx-elev-1)}
+.rx-fnav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:11px;font-size:13px;font-weight:550;color:var(--ez-ink-soft);text-decoration:none;transition:background .2s}
+.rx-fnav a:hover{background:var(--ez-sunken)}
+.rx-fnav a .rx-sd{width:24px;height:24px;font-size:11px}
+.rx-fnav a.done .rx-sd{background:var(--ez-positive);color:var(--ez-on-accent);border-color:var(--ez-positive)}
+.rx-fnav a.now{background:var(--ez-brand-tint);color:var(--ez-brand-deep)}
+.rx-fnav a.now .rx-sd{background:var(--ez-brand);color:var(--ez-on-accent);border-color:var(--ez-brand-deep)}
+.rx-fsec{position:relative;padding:22px 24px;border-radius:20px;background:var(--ez-surface);border:1px solid var(--rx-edge);box-shadow:var(--rx-rim),var(--rx-elev-1);
+  display:flex;flex-direction:column;gap:18px;scroll-margin-top:130px}
+.rx-fsec.now{border-color:var(--ez-brand-edge);box-shadow:0 0 0 4px var(--ez-brand-tint),var(--rx-elev-1)}
+.rx-fsec-h{display:flex;align-items:flex-start;gap:14px}
+.rx-fsec-n{width:38px;height:38px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:linear-gradient(140deg,var(--ez-brand),var(--ez-brand-deep));color:var(--ez-on-accent);box-shadow:var(--ez-shadow-brand)}
+.rx-fsec-n svg{width:18px;height:18px}
+.rx-fsec h2{font-family:var(--rx-display);font-size:19px;font-weight:700;letter-spacing:-.02em}
+.rx-fsec-h p{font-size:13px;color:var(--ez-muted);margin-top:3px}
+.rx-fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.rx-fgrid.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rx-span2{grid-column:span 2}
+.rx-auto{position:relative}
+.rx-auto .rx-input{background:color-mix(in srgb,var(--ez-positive-tint) 55%,var(--ez-surface));border-color:var(--ez-positive-edge);padding-right:112px}
+.rx-auto-tag{position:absolute;right:8px;bottom:9px;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:7px;font-size:11px;font-weight:650;
+  background:var(--ez-positive-tint);color:var(--ez-positive);border:1px solid var(--ez-positive-edge)}
+.rx-auto-tag svg{width:12px;height:12px}
+.rx-choice{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.rx-choice label{position:relative;display:flex;flex-direction:column;gap:6px;padding:14px;border-radius:14px;cursor:pointer;border:1.5px solid var(--rx-edge-strong);
+  background:var(--ez-surface);transition:transform .2s var(--rx-snap),border-color .2s,box-shadow .2s,background .2s}
+.rx-choice label:hover{transform:translateY(-2px);border-color:var(--ez-brand-edge);box-shadow:var(--rx-elev-1)}
+.rx-choice input{position:absolute;opacity:0;pointer-events:none}
+.rx-choice .ic{width:32px;height:32px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:var(--ez-sunken);color:var(--ez-muted);transition:background .2s,color .2s}
+.rx-choice .ic svg{width:16px;height:16px}
+.rx-choice b{font-size:13.5px}
+.rx-choice small{font-size:11.5px;color:var(--ez-muted);line-height:1.35}
+.rx-choice label:has(input:checked){border:2px solid var(--ez-brand);padding:13.5px;background:var(--ez-brand-tint);box-shadow:0 0 0 4px color-mix(in srgb,var(--ez-brand) 12%,transparent)}
+.rx-choice label:has(input:checked) .ic{background:var(--ez-brand);color:var(--ez-on-accent)}
+.rx-choice label:has(input:checked)::after{content:"";position:absolute;top:10px;right:10px;width:18px;height:18px;border-radius:50%;
+  background:var(--ez-brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/11px no-repeat;animation:rxPop .35s var(--rx-snap) both}
+.rx-num-step{display:inline-flex;align-items:center;border:1px solid var(--rx-edge-strong);border-radius:12px;overflow:hidden;background:var(--ez-surface);height:42px}
+.rx-num-step button{width:42px;height:100%;border:0;background:var(--ez-sunken);font:inherit;font-size:18px;font-weight:600;color:var(--ez-ink-soft);cursor:pointer}
+.rx-num-step button:hover{background:var(--ez-brand-tint);color:var(--ez-brand-deep)}
+.rx-num-step input{width:64px;height:100%;border:0;text-align:center;font:inherit;font-size:16px;font-weight:700;background:transparent;color:var(--ez-ink)}
+.rx-lane{padding:16px;border-radius:16px;background:var(--ez-sunken);border:1px solid var(--rx-edge)}
+.rx-lane-bar{position:relative;height:16px;border-radius:16px;background:linear-gradient(90deg,color-mix(in srgb,var(--ez-positive) 22%,var(--ez-surface)) 0 50%,color-mix(in srgb,var(--ez-brand) 20%,var(--ez-surface)) 50% 100%);border:1px solid var(--rx-edge)}
+.rx-lane-band{position:absolute;top:2px;bottom:2px;border-radius:10px;background:linear-gradient(90deg,var(--ez-positive),var(--ez-brand));box-shadow:0 2px 6px -2px rgba(37,99,235,.5);transform-origin:left;animation:rxGrowX .8s .3s var(--rx-ease) both}
+.rx-lane-cap{position:absolute;left:50%;top:-8px;bottom:-8px;width:2px;background:var(--ez-ink);border-radius:2px}
+.rx-lane-cap::after{content:attr(data-label);position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:10.5px;font-weight:700;white-space:nowrap;color:var(--ez-ink)}
+.rx-lane-leg{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ez-muted);margin-top:8px}
+.rx-chips-in{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:42px;padding:6px 8px;border-radius:11px;border:1px solid var(--rx-edge-strong);background:var(--ez-surface)}
+.rx-chips-in .rx-tag{height:26px}
+.rx-chips-in input{flex:1;min-width:120px;border:0;outline:0;font:inherit;font-size:13.5px;background:transparent;color:var(--ez-ink)}
+.rx-ai{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:10px;border:1px solid var(--ez-brand-edge);cursor:pointer;
+  background:linear-gradient(120deg,var(--ez-brand-tint),color-mix(in srgb,var(--ez-brand-tint) 40%,var(--ez-surface)));color:var(--ez-brand-deep);font:inherit;font-size:12.5px;font-weight:650;position:relative;overflow:hidden}
+.rx-ai svg{width:15px;height:15px}
+.rx-ai::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.7) 50%,transparent 65%);background-size:250% 100%;animation:rxSheen 3s ease-in-out infinite}
+.rx-side{position:sticky;top:120px;display:flex;flex-direction:column;gap:14px}
+.rx-prev{padding:4px;border-radius:22px;background:linear-gradient(140deg,var(--ez-brand-edge),transparent 60%);}
+.rx-prev-l{font-size:11.5px;font-weight:700;color:var(--ez-muted);letter-spacing:.02em;margin:4px 8px 8px;display:flex;align-items:center;gap:6px}
+.rx-prev-l i{width:7px;height:7px;border-radius:50%;background:var(--ez-positive);animation:rxPulse 1.6s ease-in-out infinite}
+.rx-submit{padding:18px;border-radius:20px;background:var(--ez-surface);border:1px solid var(--rx-edge);box-shadow:var(--rx-rim),var(--rx-elev-1);display:flex;flex-direction:column;gap:12px}
+.rx-reqs{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.rx-reqs div{display:flex;align-items:center;gap:8px;color:var(--ez-muted)}
+.rx-reqs div.ok{color:var(--ez-ink-soft)}
+.rx-reqs .rx-sd{width:18px;height:18px}
+.rx-reqs div.ok .rx-sd{background:var(--ez-positive);border-color:var(--ez-positive);color:var(--ez-on-accent)}
+.rx-reqs .rx-sd svg{width:10px;height:10px}
+@media (max-width:1280px){.rx-fwrap{grid-template-columns:minmax(0,1fr) 320px}.rx-fnav{display:none}}
+@media (max-width:1180px){.rx-ov{grid-template-columns:repeat(3,minmax(0,1fr))}.rx-hero{grid-column:span 3}}
+@media (max-width:900px){.rx-fwrap{grid-template-columns:1fr}.rx-side{position:static}.rx-choice{grid-template-columns:repeat(2,minmax(0,1fr))}.rx-fgrid,.rx-fgrid.c3{grid-template-columns:1fr}.rx-span2{grid-column:auto}}
+@media (prefers-reduced-motion: reduce){.rx-mc-in{transform:none!important;transition:none}.rx-mc-in::after{display:none}}
+.rx-fsec .rx-seg{display:flex;width:100%}
+.rx-fsec .rx-seg button{flex:1;white-space:nowrap;padding:0 8px}
+.rx-prev .rx-mc-act{display:none}
+.rx-prev .rx-mt b{font-size:18px}
+.rx-num-step{width:100%}
+.rx-num-step input{flex:1}
+
+/* Solid accent for filled controls. In dark mode the brand token turns light
+   blue for text and outlines, but white text on it drops below AA — so filled
+   pills and primary buttons keep a deep blue in both themes. */
+:root{--rx-acc-a:var(--ez-brand);--rx-acc-b:var(--ez-brand-deep);--rx-sheen:rgba(255,255,255,.55)}
+@media (prefers-color-scheme: dark){:root:not([data-ez-theme="light"]):not([data-theme="light"]){--rx-acc-a:#2563EB;--rx-acc-b:#1E40AF;--rx-sheen:rgba(255,255,255,.07)}}
+:root[data-ez-theme="dark"],:root[data-theme="dark"]{--rx-acc-a:#2563EB;--rx-acc-b:#1E40AF;--rx-sheen:rgba(255,255,255,.07)}
+.rx-btn.p{background:linear-gradient(180deg,var(--rx-acc-a),var(--rx-acc-b));border-color:var(--rx-acc-b);color:#fff}
+.rx-ind,.rx-rail:not(.has-ind) .rx-tab[aria-current="page"]{background:linear-gradient(135deg,var(--rx-acc-a) 0%,var(--rx-acc-b) 100%)}
+.rx-tab[aria-current="page"],.rx-tab[aria-current="page"] .rx-ti{color:#fff}
+.rx-tab[aria-current="page"] .rx-n{color:var(--rx-acc-b);background:#fff;box-shadow:0 0 0 2px var(--rx-acc-b)}
+.rx-fsec-n{background:linear-gradient(140deg,var(--rx-acc-a),var(--rx-acc-b));color:#fff}
+.rx-fnav a.now .rx-sd,.rx-vsi.now .rx-sd,.rx-date.now{background:var(--rx-acc-a);border-color:var(--rx-acc-b);color:#fff}
+.rx-grp.on .rx-ph-n{background:var(--rx-acc-a);border-color:var(--rx-acc-b);color:#fff}
+.rx-choice label:has(input:checked) .ic{background:var(--rx-acc-a);color:#fff}
+.rx-st span.cur{background:var(--rx-acc-a);border-color:var(--rx-acc-b);color:#fff}
+.rx-mc-in::after{background:radial-gradient(420px circle at var(--mx) var(--my),var(--rx-sheen),transparent 45%)}
+.rx-ai::after{background:linear-gradient(110deg,transparent 35%,var(--rx-sheen) 50%,transparent 65%);background-size:250% 100%}
+.rx-mod.dark .rx-mod-t{color:var(--ez-on-dark)}
+
+
+/* ════════════════════════════════════════════════════════════════════════
    APP INTEGRATION
    Everything above is shared with the design reference HTML. Everything
    below exists only for the real app (Next.js page, runtime stylesheet from
@@ -507,8 +805,12 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx{overflow:visible;background:transparent;
   --rx-display:var(--rx-display-font,"Bricolage Grotesque"),"DM Sans","Segoe UI",system-ui,sans-serif}
 .rx-head{position:relative;z-index:var(--ez-z-band)}
-.rx-rail{position:sticky;top:10px;z-index:var(--ez-z-rail);backdrop-filter:saturate(1.4) blur(10px);
-  background:color-mix(in srgb,var(--ez-surface) 86%,transparent)}
+/* Journey rail: full width of the content area (edge to edge beside the app
+   sidebar), docked to the top. --rx-pad-x must equal .rx's side padding. */
+.rx{--rx-pad-x:32px}
+.rx-rail{position:sticky;top:0;z-index:var(--ez-z-rail);margin:0 calc(-1 * var(--rx-pad-x));padding-left:var(--rx-pad-x);padding-right:var(--rx-pad-x)}
+.rx-rail-sentinel{height:1px;margin:-28px 0 -19px}
+@media (max-width:1180px){.rx{--rx-pad-x:18px}.rx-rail-sentinel{margin-top:-20px}}
 
 /* The runtime sheet (UIKeyframes) forces border-radius:10px !important on every
    <button>. These restore the intended shapes inside the recruitment module
@@ -517,7 +819,7 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx .rx-btn.sm{border-radius:9px!important}
 .rx .rx-filter,.rx .rx-help summary{border-radius:999px!important}
 .rx .rx-seg button{border-radius:9px!important}
-.rx .rx-tab{border-radius:10px!important}
+.rx .rx-tab{border-radius:15px!important}
 .rx .rx-tag button{border-radius:6px!important}
 .rx .rx-stile{border-radius:14px!important}
 .rx .rx-card{border-radius:14px!important}
@@ -525,12 +827,20 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx .rx-todo{border-radius:14px!important}
 .rx button.rx-node{border-radius:14px!important}
 .rx .rx-li{border-radius:12px!important}
+.rx .rx-hero{border-radius:18px!important}
+.rx .rx-stt{border-radius:16px!important}
+.rx .rx-mc-act .rx-btn{border-radius:9px!important}
+.rx .rx-num-step button{border-radius:0!important}
+.rx .rx-ai{border-radius:10px!important}
+.rx .rx-choice label{border-radius:14px}
+/* The recruitment ground: one step deeper than the product canvas so cards read
+   as objects. Applied to the module wrapper, not the whole app. */
+.rx{background:var(--rx-ground);border-radius:0}
 
 /* React renders these as <button>s — reset UA button styling */
 .rx .rx-todo,.rx .rx-card,.rx .rx-kpi-card,.rx .rx-stile,.rx button.rx-node,.rx button.rx-li{font-family:inherit;font-size:inherit;line-height:inherit}
 .rx .rx-tab{font-family:inherit}
-.rx .rx-tab{border:0;background:transparent;cursor:pointer}
-.rx .rx-tab[aria-current="page"]{background:var(--ez-brand-tint)}
+.rx .rx-tab{cursor:pointer}
 .rx .rx-todo{width:100%;text-align:left;cursor:pointer;color:inherit}
 .rx .rx-card{width:100%;text-align:left}
 .rx .rx-kpi-card{width:100%;text-align:left;display:block}
@@ -549,7 +859,21 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx-dlg::backdrop{background:rgba(15,23,42,.42);backdrop-filter:blur(3px)}
 .rx-dlg-drawer{margin:0 0 0 auto;height:100dvh;width:min(560px,100vw);border-radius:0;border-width:0 0 0 1px;padding:28px;overflow-y:auto}
 .rx-dlg-drawer[open]{animation:rxSlideIn .45s var(--rx-ease) both}
-.rx-dlg-modal{width:min(1080px,calc(100vw - 32px));max-height:calc(100dvh - 80px);border-radius:24px;overflow-y:auto}
+/* A modal <dialog> is centred by the UA's own `inset:0; margin:auto`. Tailwind
+   v4's Preflight — pulled in by `@import "tailwindcss"` on line 1 of
+   app/globals.css — resets `margin:0` on `*, ::after, ::before, ::backdrop`,
+   which beats that UA rule; inset:0 then pinned the panel to the top-left.
+   Measured before this fix: left 0, top 0.
+
+   The drawer never showed it because `.rx-dlg-drawer` sets `margin:0 0 0 auto`
+   for its right dock. The modal was the only variant leaning on the UA default,
+   and nothing rendered it until the candidate modal did — the kit ships this
+   rule but its own prototype never uses it, so it arrived untested.
+
+   MEASUREMENT TRAP: once centred this reads left 356 / right 364 against
+   window.innerWidth. That 8px is the scrollbar gutter (globals.css sets an 8px
+   ::-webkit-scrollbar). Against documentElement.clientWidth it is exact. */
+.rx-dlg-modal{inset:0;margin:auto;width:min(1080px,calc(100vw - 32px));max-height:calc(100dvh - 80px);border-radius:24px;overflow-y:auto}
 .rx-dlg-modal[open]{animation:rxModal .45s var(--rx-ease) both}
 .rx-dlg[open]::backdrop{animation:rxFade .3s both}
 
@@ -571,3 +895,7 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 /* KPI tiles in a row share one height */
 .rx-grid > .s3:has(> .rx-kpi-card){align-self:stretch}
 .rx .rx-kpi-card{height:100%}
+.rx-ai{align-self:flex-start}
+/* found in QA: month label on the "today/tomorrow" date chip was 3.4:1 in dark mode */
+.rx-date.now span{color:#fff}
+.rx-hint{color:var(--ez-muted)}

@@ -14,6 +14,8 @@
 // ESS tasks are still created, and the response says email was skipped.
 
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { notify as essNotify } from '@/lib/ess/session'
@@ -25,6 +27,9 @@ const empEmail = (e: any) => e?.office_email || e?.personal_email || null
 const bad = (m: string, s = 400) => NextResponse.json({ error: m }, { status: s })
 
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const candidateId = req.nextUrl.searchParams.get('candidate_id')
   if (!candidateId) return bad('candidate_id is required')
   const { data, error } = await sb.from('interview_invites')
@@ -47,6 +52,9 @@ async function insertInvites(rows: any[]) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment', 'EDIT')
+  if (gate.error) return gate.error
+
   const body = await req.json().catch(() => null) as any
   if (!body) return bad('Bad request')
 

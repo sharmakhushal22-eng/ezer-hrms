@@ -3,6 +3,8 @@
 // to the 'onboarding-docs' storage bucket (service role) and records the path
 // on the candidate. Used by the Negotiation → Pre-negotiation Checks flow.
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
@@ -15,6 +17,9 @@ const supa = createClient(
 const COL: Record<string, string> = { AADHAAR: 'aadhaar_url', PREV_OFFER: 'prev_offer_url' }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment', 'EDIT')
+  if (gate.error) return gate.error
+
   try {
     const fd = await req.formData()
     const candidateId = fd.get('candidate_id') as string

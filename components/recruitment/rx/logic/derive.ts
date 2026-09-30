@@ -66,23 +66,33 @@ export function hikePct(currentRupees: number | null | undefined, offeredRupees:
 
 /* ── Dates ───────────────────────────────────────────────────────────── */
 
+/**
+ * Date-only strings from Postgres `date` columns ("2026-10-02") are calendar
+ * days, not instants. `new Date("2026-10-02")` reads them as UTC midnight,
+ * which lands on the previous day anywhere west of UTC. Parse them as local.
+ */
+export function toLocalDate(iso: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(iso);
+}
+
 export function daysUntil(iso: string | null | undefined, today = new Date()): number | null {
   if (!iso) return null;
   const a = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const d = new Date(iso); const b = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const d = toLocalDate(iso); const b = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   return Math.round((b - a) / 86400000);
 }
 
 const dFmt = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' });
 const tFmt = new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-export const shortDate = (iso: string) => dFmt.format(new Date(iso));
-export const shortTime = (iso: string) => tFmt.format(new Date(iso));
+export const shortDate = (iso: string) => dFmt.format(toLocalDate(iso));
+export const shortTime = (iso: string) => tFmt.format(toLocalDate(iso));
 
 export function relativeDay(iso: string, today = new Date()): string {
   const n = daysUntil(iso, today);
   if (n === 0) return 'Today';
   if (n === 1) return 'Tomorrow';
-  if (n !== null && n > 1 && n < 7) return new Intl.DateTimeFormat('en-IN', { weekday: 'long' }).format(new Date(iso));
+  if (n !== null && n > 1 && n < 7) return new Intl.DateTimeFormat('en-IN', { weekday: 'long' }).format(toLocalDate(iso));
   return shortDate(iso);
 }
 
@@ -122,7 +132,7 @@ export function moveOptions(stages: readonly string[], current: string, rounds: 
 
 /** One-line "what to do next" for a candidate card. Needs the candidate's interview_rounds. */
 export function candidateNextStep(c: CandidateVM, rounds: RoundVM[] = [], today = new Date()): NextStep {
-  const future = rounds.filter((r) => r.at && daysUntil(r.at, today)! >= 0).sort((a, b) => +new Date(a.at!) - +new Date(b.at!));
+  const future = rounds.filter((r) => r.at && daysUntil(r.at, today)! >= 0).sort((a, b) => +toLocalDate(a.at!) - +toLocalDate(b.at!));
   const overdue = rounds.find((r) => r.at && daysUntil(r.at, today)! < 0 && !r.hasFeedback);
   if (c.stage === 'Joined') return { text: 'Joined', tone: 'pos', icon: 'check' };
   if (c.stage === 'Offer Sent') return { text: 'Waiting for the candidate to reply', tone: 'mute', icon: 'clock' };

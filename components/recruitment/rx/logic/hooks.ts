@@ -87,3 +87,26 @@ export function useCountUp(target: number, ms = 700) {
   }, [target, ms]);
   return v;
 }
+
+/**
+ * Pointer tilt for a card: sets --rx-rx / --rx-ry (max 4°) and --mx / --my
+ * (sheen position) on the element. Off for touch and reduced motion.
+ * Resets to flat on leave, so text is never left on a transformed layer.
+ */
+export function useTilt<T extends HTMLElement>() {
+  const ref = React.useRef<T>(null);
+  React.useEffect(() => {
+    const el = ref.current; if (!el || typeof window === 'undefined') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !window.matchMedia('(hover: hover)').matches) return;
+    const move = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width; const py = (e.clientY - r.top) / r.height;
+      el.style.setProperty('--rx-ry', `${((px - 0.5) * 8).toFixed(2)}deg`);
+      el.style.setProperty('--rx-rx', `${((0.5 - py) * 6).toFixed(2)}deg`);
+      el.style.setProperty('--mx', `${(px * 100).toFixed(1)}%`); el.style.setProperty('--my', `${(py * 100).toFixed(1)}%`);
+    };
+    const leave = () => { el.style.setProperty('--rx-ry', '0deg'); el.style.setProperty('--rx-rx', '0deg'); };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerleave', leave);
+    return () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerleave', leave); };
+  }, []);
+  return ref;
+}

@@ -46,6 +46,9 @@
      sharing a value leaves their order undefined, which is precisely the bug
      the z-index ratchet was written after. */
   --ez-z-under:    -1;   /* decorative underlay within a component  */
+  --ez-z-base:      0;   /* Z.base — an element that must sit UNDER
+                            a raised sibling in the same context, e.g.
+                            the rail's sliding pill beneath its tabs  */
   --ez-z-raised:    1;   /* Z.raised                                */
   --ez-z-local-1:   5;   /* component-local layering, lower         */
   --ez-z-local-2:   6;   /* component-local layering, upper         */

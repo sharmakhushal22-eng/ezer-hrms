@@ -10,8 +10,15 @@ import * as React from 'react';
  * Replaces only the SHELL of CandidateInterviewModal and the MRF detail drawer.
  * Their contents — and every write they make — stay as they are.
  */
-export function RxDialog({ open, onClose, variant, label, children }: {
+export function RxDialog({ open, onClose, variant, label, children, style }: {
   open: boolean; onClose: () => void; variant: 'drawer' | 'modal'; label: string; children: React.ReactNode;
+  /**
+   * Escape hatch for content that manages its own padding. `.rx-dlg-drawer`
+   * sets padding:28px, which suits content written for this shell — but a panel
+   * lifted out of an older container already pads every section itself, and the
+   * 28px then insets a header meant to bleed to the edges.
+   */
+  style?: React.CSSProperties;
 }) {
   const ref = React.useRef<HTMLDialogElement>(null);
 
@@ -37,7 +44,7 @@ export function RxDialog({ open, onClose, variant, label, children }: {
   }, [onClose]);
 
   return (
-    <dialog ref={ref} className={variant === 'drawer' ? 'rx-dlg rx-dlg-drawer' : 'rx-dlg rx-dlg-modal'} aria-label={label}
+    <dialog ref={ref} className={variant === 'drawer' ? 'rx-dlg rx-dlg-drawer' : 'rx-dlg rx-dlg-modal'} aria-label={label} style={style}
       // closedby is newer than React's DOM typings
       {...({ closedby: 'any' } as Record<string, string>)}>
       {children}

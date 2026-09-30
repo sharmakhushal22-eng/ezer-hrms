@@ -1,7 +1,12 @@
 // app/api/recruitment/interview-ai/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const { type, designation, round, candidate_summary, existing_notes } = await req.json()
 
   let prompt = ''
