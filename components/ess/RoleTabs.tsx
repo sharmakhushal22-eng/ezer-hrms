@@ -533,7 +533,7 @@ export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string
 // joining details, remarks — and the HR Head approves or rejects RIGHT HERE (same writes
 // and notifications as Recruitment → HR Head, which stays available as a link).
 export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employeeId: string; notify?: (m: string, t?: 'success' | 'error') => void; focusId?: string; onDone?: () => void }) {
-  const [d, setD] = useState<{ isHrHead: boolean; pending: any[]; recent: any[] } | null>(null)
+  const [d, setD] = useState<{ isHrHead: boolean; isHrManager?: boolean; pending: any[]; recent: any[]; awaiting?: any[]; ready?: any[] } | null>(null)
   const [open, setOpen] = useState<any | null>(null)
   const [mode, setMode] = useState<'view' | 'reject'>('view')
   const [reason, setReason] = useState('')
@@ -562,11 +562,44 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
       </div>
     )
   }
-  if (!d.isHrHead) return focusId ? <div style={{ ...S.card, textAlign: 'center', padding: 28, color: C.muted, fontSize: 13 }}>Only the HR Head of the company can review offer approvals.</div> : null
-  if (d.pending.length === 0 && d.recent.length === 0 && !focusId) return null
   const rs = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
   const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
   const day = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  // HR Manager: nothing to decide here — a task-style card per offer that is still with the HR
+  // Head ("yet to be approved"), and the approved ones that are ready to send from Recruitment.
+  if (!d.isHrHead && d.isHrManager && !focusId) {
+    const awaiting = d.awaiting || [], ready = d.ready || []
+    if (awaiting.length === 0 && ready.length === 0) return null
+    const goSend = () => { window.location.href = '/ess-portal?module=recruitment&tab=sendoffer' }
+    return (
+      <div style={S.card}>
+        <div style={S.section}>Offer letters · HR Manager{awaiting.length ? ` · ${awaiting.length} yet to be approved` : ''}{ready.length ? ` · ${ready.length} ready to send` : ''}</div>
+        {awaiting.map((o: any) => (
+          <div key={o.id} style={{ display: 'flex', gap: 10, alignItems: 'center', background: C.amberBg, border: `1px solid ${TK.warningEdge}`, borderRadius: 9, padding: '10px 12px', flexWrap: 'wrap', marginBottom: 8 }}>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>⏳</span>
+            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{o.candidate} · {o.designation || '—'}{o.mrf_number ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.purpleD, background: C.soft, padding: '1px 6px', borderRadius: 99 }}>{o.mrf_number}</span> : null}</div>
+              <div style={{ fontSize: 11.5, color: C.amber }}>This candidate's offer is yet to be approved by the HR Head · {lakh(o.offered_ctc)}{o.proposed_doj ? ` · DOJ ${day(o.proposed_doj)}` : ''} · submitted {day(o.submitted_at)}</div>
+            </div>
+            <span style={pill('warn')}>Awaiting HR Head</span>
+            <button disabled title="Unlocks once the HR Head approves" style={{ ...S.btn, opacity: .45, cursor: 'not-allowed' }}>Send offer</button>
+          </div>
+        ))}
+        {ready.map((o: any) => (
+          <div key={o.id} style={{ display: 'flex', gap: 10, alignItems: 'center', background: C.greenBg, border: `1px solid ${TK.positiveEdge}`, borderRadius: 9, padding: '10px 12px', flexWrap: 'wrap', marginBottom: 8 }}>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>✅</span>
+            <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{o.candidate} · {o.designation || '—'}{o.mrf_number ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.purpleD, background: C.soft, padding: '1px 6px', borderRadius: 99 }}>{o.mrf_number}</span> : null}</div>
+              <div style={{ fontSize: 11.5, color: C.green }}>Approved by the HR Head on {day(o.actioned_at)} · {lakh(o.offered_ctc)} · the offer letter can be sent now</div>
+            </div>
+            <button onClick={goSend} style={{ ...S.btn, background: C.green }}>Send offer →</button>
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (!d.isHrHead) return focusId ? <div style={{ ...S.card, textAlign: 'center', padding: 28, color: C.muted, fontSize: 13 }}>Only the HR Head of the company can review offer approvals.</div> : null
+  if (d.pending.length === 0 && d.recent.length === 0 && !focusId) return null
   const say = (m: string, t?: 'success' | 'error') => notify ? notify(m, t) : (t === 'error' ? alert(m) : null)
 
   async function decide(action: 'approve' | 'reject') {

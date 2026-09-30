@@ -949,16 +949,38 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [sq, setSq] = useState('')
+  const [hrHeads, setHrHeads] = useState<Record<string, { id: string; name: string; code: string | null }[]>>({})
+  const [tick, setTick] = useState(0)
+
+  // Requests appear here the moment the recruiter submits them to the HR Head — with the
+  // Send Offer button locked — and unlock once approved. Poll so an approval made in HRIS
+  // shows up without a reload.
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 15000)
+    const onVis = () => { if (document.visibilityState === 'visible') setTick(t => t + 1) }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
+  }, [])
 
   useEffect(() => {
     supabase.from('offer_approval_requests')
       .select('*, candidates(full_name, email, phone, designation, experience_years, current_company, mrf_id), companies(company_name, company_code), manpower_requisitions(designation), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct)')
-      .eq('status','HR_HEAD_APPROVED')
-      .order('hr_head_actioned_at',{ ascending:false })
+      .in('status',['SUBMITTED','HR_HEAD_APPROVED'])
+      .order('submitted_at',{ ascending:false })
       // A scoped hiring manager only sees offers for candidates under the MRFs assigned to
       // them; `allowedMrfIds` is null for oversight roles (no filter).
-      .then(({ data }) => setApproved((data || []).filter((r: any) => !allowedMrfIds || (r.candidates?.mrf_id && allowedMrfIds.has(r.candidates.mrf_id)))))
-  }, [allowedMrfIds])
+      .then(({ data }) => {
+        const rows = (data || []).filter((r: any) => !allowedMrfIds || (r.candidates?.mrf_id && allowedMrfIds.has(r.candidates.mrf_id)))
+        setApproved(rows)
+        // keep the open one in sync — this is what flips the button from locked to live
+        setSelected((sel: any) => sel ? (rows.find((r: any) => r.id === sel.id) || null) : sel)
+        const ids = Array.from(new Set(rows.map((r: any) => r.company_id).filter(Boolean))) as string[]
+        if (ids.length) fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`).then(r => r.json()).then(j => setHrHeads(j.heads || {})).catch(() => null)
+      })
+  }, [allowedMrfIds, tick])
+
+  const isApproved = (r: any) => r?.status === 'HR_HEAD_APPROVED'
+  const headNames = (r: any) => (hrHeads[r?.company_id] || []).map(h => `${h.name}${h.code ? ` (${h.code})` : ''}`).join(', ')
 
   function prepareOffer(r: any) {
     setSelected(r)
@@ -986,6 +1008,10 @@ ${company} — Human Resources`)
 
   async function sendOffer() {
     if (!selected || !toEmail || !body) { alert('Recipient email and body are required'); return }
+    // Never trust the button state alone — re-read the row so an offer the HR Head has not
+    // approved (or has rejected since the screen loaded) cannot go out.
+    const { data: live } = await supabase.from('offer_approval_requests').select('status').eq('id', selected.id).maybeSingle()
+    if (live?.status !== 'HR_HEAD_APPROVED') { alert(live?.status === 'SUBMITTED' ? 'The HR Head has not approved this offer yet. The Send Offer button unlocks once they do.' : `This offer is ${String(live?.status || 'unavailable').replace(/_/g, ' ').toLowerCase()} — it cannot be sent.`); setTick(t => t + 1); return }
 
     // Validate the To + CC addresses, and warn if CC was left empty (easy to forget).
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -1088,10 +1114,10 @@ ${company} — Human Resources`)
     <RxPage rail={rail} header={
       <RecruitmentHeader
         title="Send offer letters"
-        subtitle="Requests the HR Head has approved. Review the letter, then send it to the candidate."
+        subtitle="Every offer submitted to the HR Head. The Send Offer button unlocks the moment the HR Head approves."
         help={<Help label="Who appears here">
-          <p>Only requests already <b>approved by the HR Head</b>. Nothing reaches this list before that.</p>
-          <p>Sending emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
+          <p>A candidate appears the moment the recruiter <b>submits the offer to the HR Head</b>, with the Send Offer button locked.</p>
+          <p>Once the HR Head <b>approves</b>, the button unlocks. Sending emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
         </Help>}
       />}>
       <div className="rx-grid rx-stag">
@@ -1123,7 +1149,7 @@ ${company} — Human Resources`)
         <div className="s4">
           {fApproved.length === 0 && (
             <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:32 }}>
-              {sql ? 'No matching candidate' : 'No approved requests pending'}
+              {sql ? 'No matching candidate' : 'No offers submitted to the HR Head yet'}
             </div>
           )}
           {fApproved.map(r => (
@@ -1133,8 +1159,24 @@ ${company} — Human Resources`)
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}
               </div>
-              <div style={{ fontSize:11, color:TK.positive, marginTop:4 }}>
-                HR Head approved on {r.hr_head_actioned_at ? new Date(r.hr_head_actioned_at).toLocaleDateString('en-IN') : '—'}
+              {isApproved(r) ? (
+                <div style={{ fontSize:11, color:TK.positive, marginTop:4, display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ width:7, height:7, borderRadius:99, background:TK.positive, flexShrink:0 }} />
+                  HR Head approved on {r.hr_head_actioned_at ? new Date(r.hr_head_actioned_at).toLocaleDateString('en-IN') : '—'} · ready to send
+                </div>
+              ) : (
+                <div style={{ fontSize:11, color:TK.warning, marginTop:4, display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ width:7, height:7, borderRadius:99, background:TK.warning, flexShrink:0, animation:'rxPulse 1.6s ease-in-out infinite' }} />
+                  Yet to be approved by HR Head{headNames(r) ? ` · ${headNames(r)}` : ''}
+                </div>
+              )}
+              <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                <span className="rx-chip" style={{ background: isApproved(r) ? TK.positiveTint : TK.warningTint, color: isApproved(r) ? TK.positive : TK.warning, border:`1px solid ${isApproved(r) ? TK.positiveEdge : TK.warningEdge}` }}>{isApproved(r) ? 'Approved' : 'Awaiting approval'}</span>
+                <button className="rx-btn sm" disabled={!isApproved(r)} onClick={e => { e.stopPropagation(); prepareOffer(r) }}
+                  title={isApproved(r) ? 'Open the offer letter' : 'Unlocks once the HR Head approves'}
+                  style={{ marginLeft:'auto', opacity: isApproved(r) ? 1 : .45, cursor: isApproved(r) ? 'pointer' : 'not-allowed' }}>
+                  {isApproved(r) ? 'Send offer' : '🔒 Send offer'}
+                </button>
               </div>
             </div>
           ))}
@@ -1159,12 +1201,19 @@ ${company} — Human Resources`)
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Email Body</label>
               <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:280 }} value={body} onChange={e=>setBody(e.target.value)} />
             </div>
-            <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.brandDeep }}>
-              This emails the offer letter to the candidate via Gmail, records it, and marks the candidate <b>Offer Sent</b> in the pipeline.
-            </div>
-            <button onClick={sendOffer} disabled={sending}
-              style={{ ...S.btn(TK.brand,TK.surface), width:'100%', padding:11, fontSize:13 }}>
-              {sending ? 'Sending…' : 'Send Offer & Mark as Sent'}
+            {isApproved(selected) ? (
+              <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.brandDeep }}>
+                This emails the offer letter to the candidate via Gmail, records it, and marks the candidate <b>Offer Sent</b> in the pipeline.
+              </div>
+            ) : (
+              <div style={{ background:TK.warningTint, border:`1px solid ${TK.warningEdge}`, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.warning }}>
+                <b>Yet to be approved.</b> This offer is with the HR Head{headNames(selected) ? ` (${headNames(selected)})` : ''}. The button below unlocks automatically once it is approved — you can prepare the letter meanwhile.
+              </div>
+            )}
+            <button onClick={sendOffer} disabled={sending || !isApproved(selected)}
+              title={isApproved(selected) ? undefined : 'Waiting for HR Head approval'}
+              style={{ ...S.btn(TK.brand,TK.surface), width:'100%', padding:11, fontSize:13, opacity: isApproved(selected) ? 1 : .5, cursor: isApproved(selected) ? 'pointer' : 'not-allowed' }}>
+              {sending ? 'Sending…' : isApproved(selected) ? 'Send Offer & Mark as Sent' : '🔒 Waiting for HR Head approval'}
             </button>
           </div>
         )}

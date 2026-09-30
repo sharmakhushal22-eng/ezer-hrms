@@ -1,6 +1,8 @@
 // app/api/ess/offer-approvals/route.ts
 //
-//   GET                                                -> { isHrHead, pending: [...], recent: [...] }
+//   GET                                                -> { isHrHead, isHrManager, pending, recent, awaiting, ready }
+//     HR Head    : pending (SUBMITTED, to decide) + recent decisions
+//     HR Manager : awaiting (SUBMITTED — "yet to be approved", read-only) + ready (HR_HEAD_APPROVED, send from Recruitment)
 //   POST { action:'approve'|'reject', request_id, comment } -> the HR Head's decision, from ESS
 //
 // The HR Head's offer-approval tasks for ESS → Tasks & Approvals. Listing AND deciding
@@ -32,13 +34,31 @@ async function callerIsHrHead(ctx: any): Promise<boolean> {
   const roles = (ctx.menu.roles || []).map((x: string) => String(x).toUpperCase())
   return roles.includes('HR_HEAD') || !!ctx.grant.isSuperAdmin
 }
+function callerIsHrManager(ctx: any): boolean {
+  return (ctx.menu.roles || []).map((x: string) => String(x).toUpperCase()).includes('HR_MANAGER')
+}
 
 export async function GET(req: NextRequest) {
   const r = await essRoute(req)
   if (r.error) return r.error
   const { ctx } = r
   const isHrHead = await callerIsHrHead(ctx)
-  if (!isHrHead || !ctx.companyId) return NextResponse.json({ isHrHead: false, pending: [], recent: [] })
+  const isHrManager = callerIsHrManager(ctx)
+  const empty = { isHrHead: false, isHrManager, pending: [], recent: [], awaiting: [], ready: [] }
+  if (!ctx.companyId) return NextResponse.json(empty)
+
+  // The HR Manager has nothing to decide, but sees what is queued: offers submitted to the HR Head
+  // ("yet to be approved" — the Send Offer button is locked) and approved ones ready to send.
+  if (!isHrHead) {
+    if (!isHrManager) return NextResponse.json(empty)
+    const fetchMgr = async (sel: string) => Promise.all([
+      sb.from('offer_approval_requests').select(sel).eq('company_id', ctx.companyId).eq('status', 'SUBMITTED').order('submitted_at', { ascending: true }),
+      sb.from('offer_approval_requests').select(sel).eq('company_id', ctx.companyId).eq('status', 'HR_HEAD_APPROVED').order('hr_head_actioned_at', { ascending: false }).limit(20),
+    ]) as Promise<[{ data: any[] | null; error: any }, { data: any[] | null; error: any }]>
+    let [a, b] = await fetchMgr(SEL)
+    if (a.error && /notice_buyout_amount/.test(a.error.message)) [a, b] = await fetchMgr(SEL.replace(', notice_buyout_amount', ''))
+    return NextResponse.json({ ...empty, awaiting: (a.data || []).map(shape), ready: (b.data || []).map(shape) })
+  }
 
   const since = new Date(Date.now() - 30 * 86400_000).toISOString()
   const fetchBoth = async (sel: string) => Promise.all([
@@ -47,7 +67,7 @@ export async function GET(req: NextRequest) {
   ]) as Promise<[{ data: any[] | null; error: any }, { data: any[] | null; error: any }]>
   let [p, q] = await fetchBoth(SEL)
   if (p.error && /notice_buyout_amount/.test(p.error.message)) [p, q] = await fetchBoth(SEL.replace(', notice_buyout_amount', ''))   // migration 133 not applied yet
-  return NextResponse.json({ isHrHead: true, pending: (p.data || []).map(shape), recent: (q.data || []).map(shape) })
+  return NextResponse.json({ isHrHead: true, isHrManager, pending: (p.data || []).map(shape), recent: (q.data || []).map(shape), awaiting: [], ready: [] })
 }
 
 export async function POST(req: NextRequest) {
