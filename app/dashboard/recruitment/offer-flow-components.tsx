@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
+import { authHeaders } from '@/lib/auth-headers'
 
 // The design system, aliased around this file's own S.
 import {
@@ -788,7 +789,64 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 }
 
 
-// ── HR Head review drawer — slides in over the dashboard; one offer, one decision ──
+// ── Documents on the review screen — the approval pack, downloadable in place ──
+// The generated PDFs come through the API (it needs the session), so they are fetched as a blob
+// and saved; MRF uploads arrive as short-lived signed URLs and are plain links.
+type OfferDoc = { key: string; name: string; note?: string; url?: string }
+function OfferDocuments({ requestId }: { requestId: string }) {
+  const [docs, setDocs] = useState<OfferDoc[] | null>(null)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    setDocs(null); setErr('')
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/recruitment/offer-approval/documents?request_id=${encodeURIComponent(requestId)}`, { headers: await authHeaders() })
+        const j = await r.json().catch(() => ({}))
+        if (!live) return
+        if (!r.ok) { setErr(j.error || 'Could not load the documents'); setDocs([]) } else setDocs(j.docs || [])
+      } catch { if (live) { setErr('Could not load the documents'); setDocs([]) } }
+    })()
+    return () => { live = false }
+  }, [requestId])
+
+  async function download(d: OfferDoc) {
+    setBusy(d.key); setErr('')
+    try {
+      const r = await fetch(`/api/recruitment/offer-approval/documents?request_id=${encodeURIComponent(requestId)}&doc=${d.key}`, { headers: await authHeaders() })
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || 'Download failed') }
+      const name = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') || '')?.[1] || `${d.name}.pdf`
+      const href = URL.createObjectURL(await r.blob())
+      const a = document.createElement('a'); a.href = href; a.download = name
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(href), 4000)
+    } catch (e: any) { setErr(`${d.name}: ${e.message}`) }
+    setBusy(null)
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+      {docs === null && [0, 1, 2].map(i => <div key={i} className="rx-tile" style={{ height:58, opacity:.5 }} />)}
+      {docs?.map(d => (
+        <div key={d.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:R.md, border:`1px solid ${TK.line}`, background:TK.surface }}>
+          <div style={{ width:34, height:38, borderRadius:7, background:TK.criticalTint, color:TK.critical, display:'grid', placeItems:'center', fontSize:9.5, fontWeight:800, flexShrink:0 }}>{d.url ? 'FILE' : 'PDF'}</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:TK.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.name}</div>
+            {d.note && <div style={{ fontSize:11, color:TK.muted, marginTop:1 }}>{d.note}</div>}
+          </div>
+          {d.url
+            ? <a href={d.url} target="_blank" rel="noreferrer" className="rx-btn sm" style={{ textDecoration:'none' }}>↓ Download</a>
+            : <button type="button" className="rx-btn sm" disabled={busy === d.key} onClick={() => download(d)} style={{ opacity: busy === d.key ? .6 : 1 }}>{busy === d.key ? 'Preparing…' : '↓ Download'}</button>}
+        </div>
+      ))}
+      {docs?.length === 0 && !err && <div className="rx-hint">No documents for this offer.</div>}
+      {err && <div style={{ fontSize:12, color:TK.critical, background:TK.criticalTint, borderRadius:R.sm, padding:'8px 10px' }}>{err}</div>}
+    </div>
+  )
+}
+
+// ── HR Head review screen — a centred dialog over the dashboard; one offer, one decision ──
 function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDecide }: {
   req: any; mrfNumber: string | null; processing: boolean; decided: { action: 'approve'|'reject'; notified: number } | null
   onClose: () => void; onDecide: (action: 'approve'|'reject', note: string) => Promise<boolean>
@@ -817,8 +875,8 @@ function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDec
   const Sec = ({ t, tag }: { t: string; tag?: React.ReactNode }) => <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, margin:'18px 0 6px' }}>{t}{tag}</div>
   return createPortal(
     <div onMouseDown={e => { if (e.target === e.currentTarget && !processing) onClose() }}
-      style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(15,23,42,.42)', backdropFilter:'blur(3px)', animation:'rxFade .3s both' }}>
-      <div role="dialog" aria-modal="true" style={{ position:'absolute', top:0, right:0, bottom:0, width:'min(640px, 100vw)', background:TK.surface, color:TK.ink, borderLeft:`1px solid ${TK.line}`, boxShadow:E.overlay, display:'flex', flexDirection:'column', animation:'rxSlideIn .45s cubic-bezier(.2,.8,.2,1) both' }}>
+      style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(15,23,42,.42)', backdropFilter:'blur(3px)', animation:'rxFade .3s both', display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 16px' }}>
+      <div role="dialog" aria-modal="true" style={{ width:'min(1080px, 100%)', maxHeight:'calc(100vh - 48px)', background:TK.surface, color:TK.ink, border:`1px solid ${TK.line}`, borderRadius:R.xl, boxShadow:E.overlay, display:'flex', flexDirection:'column', overflow:'hidden', animation:'rxModal .4s cubic-bezier(.2,.8,.2,1) both' }}>
         {/* header */}
         <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${TK.line}`, display:'flex', alignItems:'center', gap:12 }}>
           <div style={{ width:46, height:46, borderRadius:14, background:`linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:15, flexShrink:0 }}>{(c.full_name || '?').split(' ').filter(Boolean).slice(0,2).map((w:string)=>w[0]).join('').toUpperCase()}</div>
@@ -834,14 +892,15 @@ function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDec
         </div>
 
         {/* body */}
-        <div style={{ flex:1, overflowY:'auto', padding:'16px 22px 24px' }}>
+        <div style={{ flex:1, overflowY:'auto', padding:'18px 22px 24px' }}>
           {decided ? (
             <div style={{ height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', gap:10, padding:'40px 0', animation:'rxRise .4s both' }}>
               <div style={{ width:84, height:84, borderRadius:99, display:'grid', placeItems:'center', background: decided.action==='approve' ? TK.positiveTint : TK.criticalTint, color: decided.action==='approve' ? TK.positive : TK.critical, fontSize:40, fontWeight:900, animation:'rxPop .5s cubic-bezier(.2,.8,.2,1) both' }}>{decided.action==='approve' ? '✓' : '✕'}</div>
               <div style={{ fontSize:20, fontWeight:800 }}>{decided.action==='approve' ? 'Offer approved' : 'Offer rejected'}</div>
               <div className="rx-meta" style={{ maxWidth:360 }}>{decided.action==='approve' ? `${c.full_name}'s offer moves to Send Offers. ${decided.notified ? `${decided.notified} people notified (recruiter + HR manager).` : ''}` : `The recruiter${decided.notified > 1 ? ' and the MRF raiser' : ''} ${decided.notified ? 'have been told why.' : 'will see the reason on the request.'}`}</div>
             </div>
-          ) : (<>
+          ) : (<div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
+           <div style={{ flex:'1 1 480px', minWidth:0 }}>
             {/* hero numbers */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
               {[['Offered CTC', rs(ctc), 'per annum', TK.ink], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '—', Number(req.prev_total_ctc) > 0 ? `over ${rs(req.prev_total_ctc)}` : 'previous CTC unknown', hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink], ['Monthly in-hand', req.monthly_inhand ? rs(req.monthly_inhand) : '—', 'estimated · before TDS', TK.ink]].map(([k, v, sub, col], i) => (
@@ -887,16 +946,20 @@ function OfferReviewDrawer({ req, mrfNumber, processing, decided, onClose, onDec
               <Row k="Comment" v={req.hr_head_comments} />
             </>)}
 
-            <Sec t="Attachments sent with the request" />
-            <div className="rx-hint" style={{ lineHeight:1.6 }}>MRF{mrfNumber ? ` ${mrfNumber}` : ''} · interview summary · CTC break-up acknowledgement (password-protected with the candidate's mobile number) — all in your mail.</div>
-
             {req.template_content && (
               <div style={{ marginTop:16 }}>
                 <button type="button" className="rx-btn sm" onClick={() => setShowTpl(v => !v)}>{showTpl ? 'Hide' : 'Show'} the recruiter's request text</button>
                 {showTpl && <div className="rx-paper" style={{ marginTop:10, padding:'22px 26px', animation:'rxRise .35s both' }}><pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.6 }}>{req.template_content}</pre></div>}
               </div>
             )}
-          </>)}
+           </div>
+
+           {/* documents — the same pack the HR Head was mailed, downloadable here */}
+           <div style={{ flex:'1 1 300px', maxWidth:'100%', minWidth:0, background:TK.sunken, border:`1px solid ${TK.line}`, borderRadius:R.lg, padding:14 }}>
+            <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, marginBottom:10 }}>Documents</div>
+            <OfferDocuments requestId={req.id} />
+           </div>
+          </div>)}
         </div>
 
         {/* footer — the decision */}
