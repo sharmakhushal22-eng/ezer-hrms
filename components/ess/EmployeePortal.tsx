@@ -3625,7 +3625,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   // Approvals is shown to everyone now — it carries the MRF / hiring block for
   // RMs and HODs, and an empty state for everyone else. Raise MRF is a raiser-only
   // section, so it drops out of the sub-tabs for anyone who cannot raise one.
-  const canRaiseMrf = essMenu.super_admin || essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals || essMenu.approval_types.length > 0
+  // Matches the server exactly — POST /api/ess/mrf action:'create' allows
+  // is_rm || is_hod || canApprovals and nothing else. This used to also admit
+  // super_admin and anyone holding an approval_type, so those logins were shown
+  // the tab, filled the whole form, and were refused at submit with "You do not
+  // have rights to raise an MRF". Offering a form the API will refuse is the bug;
+  // widening the server instead would hand out the right to raise, which is not
+  // a UI decision.
+  const canRaiseMrf = essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals
   const sectionItems = section.items.filter(i => i.k !== 'raise-mrf' || canRaiseMrf)
 
   const renderView = () => {
@@ -3686,6 +3693,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'exit':          return <HrisShell employeeId={emp.id} tab={view} go={go}
                                               canApprove={essMenu.can.approvals}
                                               canRaiseMrf={canRaiseMrf}
+                                              adminMode={adminMode}
                                               notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
