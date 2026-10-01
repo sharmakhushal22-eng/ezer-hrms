@@ -183,6 +183,9 @@ export async function POST(req: NextRequest) {
     { const bMin = nOrNull(body.budget_min), bMax = nOrNull(body.budget_max)
       if (bMin && bMax && bMin > bMax) return NextResponse.json({ error: `Budget minimum (₹${bMin.toLocaleString('en-IN')}) cannot be more than the maximum (₹${bMax.toLocaleString('en-IN')}).` }, { status: 400 }) }
     const sOrNull = (v: any) => { const s = String(v ?? '').trim(); return s || null }
+    // Tri-state flag, same shape as is_budgeted below: unanswered stays null
+    // rather than becoming false, so "not decided" and "no" stay distinguishable.
+    const bOrNull = (v: any) => (v === '' || v === null || v === undefined) ? null : (v === 'yes' || v === true)
     const isBudgeted = body.is_budgeted === '' || body.is_budgeted == null ? null : (body.is_budgeted === 'yes' || body.is_budgeted === true)
     const reason = sOrNull(body.reason)
 
@@ -224,6 +227,22 @@ export async function POST(req: NextRequest) {
       skills_required: sOrNull(body.skills_required), good_to_have_skills: sOrNull(body.good_to_have_skills),
       job_description: sOrNull(body.job_description),
       sourcing_mode: sOrNull(body.sourcing_mode), sourcing_channels: Array.isArray(body.sourcing_channels) ? body.sourcing_channels : [],
+      // ── Field Master phase 1 (migration 134) ──────────────────────────────
+      // Optional throughout. The two flags follow is_budgeted's 'yes'/'no'/''
+      // convention rather than raw booleans, so the form sends one shape.
+      request_source: sOrNull(body.request_source),
+      headcount_sanctioned: nOrNull(body.headcount_sanctioned),
+      headcount_actual: nOrNull(body.headcount_actual),
+      headcount_open: nOrNull(body.headcount_open),
+      agency_vendor: sOrNull(body.agency_vendor),
+      agency_fee_pct: nOrNull(body.agency_fee_pct),
+      agency_exclusivity_days: nOrNull(body.agency_exclusivity_days),
+      agency_ownership_days: nOrNull(body.agency_ownership_days),
+      bgv_required: bOrNull(body.bgv_required), bgv_package: sOrNull(body.bgv_package),
+      medical_required: bOrNull(body.medical_required),
+      closure_offered_ctc: nOrNull(body.closure_offered_ctc),
+      closure_doj: body.closure_doj || null,
+      closure_source: sOrNull(body.closure_source),
       status,
       requested_by: me,
       raised_by_name: sOrNull(body.raised_by_name) || meRow.full_name,
@@ -234,10 +253,19 @@ export async function POST(req: NextRequest) {
       approval_chain: chain,
     }
     let { data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single()
-    // Until migration 130 adds manpower_requisitions.wage_category, PostgREST rejects the
-    // unknown column — drop it and retry rather than blocking every MRF from being raised.
-    if (error && /wage_category/i.test(error.message || '')) {
-      delete mrfRow.wage_category
+    // A column the database does not have yet must not block the requisition.
+    // Migrations here are applied by hand in the Supabase SQL editor, so there
+    // is always a window where the form sends more than the schema holds — 130
+    // (wage_category) and 134 (the Field Master batch) both opened one.
+    //
+    // Named columns were fine for a single field; by 134 that would be fifteen
+    // branches and a new one every time. So drop WHICHEVER column PostgREST
+    // names and retry, bounded so a different error can never spin here.
+    for (let drops = 0; error && drops < 20; drops++) {
+      // PGRST204: "Could not find the 'x' column of 'y' in the schema cache"
+      const miss = /'([a-z0-9_]+)' column/i.exec(error.message || '')?.[1]
+      if (!miss || !(miss in mrfRow)) break
+      delete mrfRow[miss]
       ;({ data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single())
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

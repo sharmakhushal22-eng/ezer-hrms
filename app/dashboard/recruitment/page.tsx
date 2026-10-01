@@ -1324,6 +1324,14 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     approval_chain:[] as any[],
     // §9 Sourcing
     sourcing_mode:'External', sourcing_channels:[] as string[],
+    // ── Field Master phase 1 (migration 134) ──────────────────────────────
+    // Optional throughout — validateMrf() does not reference any of them, so
+    // the step gates and Save Draft behave exactly as before.
+    request_source:'',                                                    // §1
+    headcount_sanctioned:'', headcount_actual:'', headcount_open:'',      // §4
+    closure_offered_ctc:'', closure_doj:'', closure_source:'',            // §4/§6
+    bgv_required:'', bgv_package:'', medical_required:'',                 // §7
+    agency_vendor:'', agency_fee_pct:'', agency_exclusivity_days:'', agency_ownership_days:'',  // §9
   }
   // Only the raiser (or a super admin / legacy dashboard login) may edit or delete an MRF.
   const canEditMrf = (m:any) => !!canEditAnyMrf || (!!employeeId && m?.requested_by === employeeId)
@@ -1650,6 +1658,24 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       good_to_have_skills:form.good_to_have_skills||null,
       ctq_questions:form.ctq_questions||[], approval_chain:approvalChain,
       sourcing_mode:form.sourcing_mode||null, sourcing_channels:form.sourcing_channels||[],
+      // ── Field Master phase 1 (migration 134) ──────────────────────────────
+      // Spread only when filled, exactly as wage_category does above: this form
+      // writes to PostgREST directly and has no drop-and-retry to fall back on,
+      // so naming a column the database does not have yet would fail the save.
+      ...(form.request_source ? { request_source:form.request_source } : {}),
+      ...(form.headcount_sanctioned ? { headcount_sanctioned:Number(form.headcount_sanctioned)||null } : {}),
+      ...(form.headcount_actual ? { headcount_actual:Number(form.headcount_actual)||null } : {}),
+      ...(form.headcount_open ? { headcount_open:Number(form.headcount_open)||null } : {}),
+      ...(form.agency_vendor ? { agency_vendor:form.agency_vendor } : {}),
+      ...(form.agency_fee_pct ? { agency_fee_pct:Number(form.agency_fee_pct)||null } : {}),
+      ...(form.agency_exclusivity_days ? { agency_exclusivity_days:Number(form.agency_exclusivity_days)||null } : {}),
+      ...(form.agency_ownership_days ? { agency_ownership_days:Number(form.agency_ownership_days)||null } : {}),
+      ...(form.bgv_required ? { bgv_required:form.bgv_required==='yes' } : {}),
+      ...(form.bgv_package ? { bgv_package:form.bgv_package } : {}),
+      ...(form.medical_required ? { medical_required:form.medical_required==='yes' } : {}),
+      ...(form.closure_offered_ctc ? { closure_offered_ctc:Number(form.closure_offered_ctc)||null } : {}),
+      ...(form.closure_doj ? { closure_doj:form.closure_doj } : {}),
+      ...(form.closure_source ? { closure_source:form.closure_source } : {}),
       // Attribute the requisition to the raiser so it shows in their ESS "My requests",
       // and so ESS approval treats it identically to a Raise-MRF submission.
       ...(editMRF ? {} : { requested_by: employeeId || null }),
@@ -1926,6 +1952,14 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             <Field label="Requisition ID" hint={editMRF?undefined:'Generated on save'}>
               <input className="rx-input" style={{ background:C.sunken, color:C.ink, fontWeight:700 }} value={(editMRF as any)?.mrf_number||form.mrf_number||'Auto-generated'} readOnly />
             </Field>
+            <Field label="Request Source" hint="How this requisition came about">
+              <select className="rx-input" value={form.request_source} onChange={e=>F('request_source',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="Manual">Manual</option>
+                <option value="Manpower plan (AOP)">Manpower plan (AOP)</option>
+                <option value="Triggered by separation">Triggered by separation</option>
+              </select>
+            </Field>
           </div>
           <div style={{ ...T.g2, marginBottom:10 }}>
             <Field label="Raised By — Name">
@@ -2016,6 +2050,25 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             <Field label="Shift / Schedule">
               <MasterSelect options={masters.shift_type} value={form.shift_schedule} onChange={(v:string)=>F('shift_schedule',v)} />
             </Field>
+            {/* BGV and the pre-employment medical live here rather than in §7,
+                which is Full-MRF only — both apply to a Quick Hire just the same. */}
+            <Field label="Background Verification">
+              <select className="rx-input" value={form.bgv_required} onChange={e=>F('bgv_required',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="yes">Required</option>
+                <option value="no">Not required</option>
+              </select>
+            </Field>
+            <Field label="BGV Package" hint="Which checks — education, employment, criminal, address">
+              <input className="rx-input" value={form.bgv_package} onChange={e=>F('bgv_package',e.target.value)} placeholder="e.g. Standard 3-check" />
+            </Field>
+            <Field label="Pre-employment Medical">
+              <select className="rx-input" value={form.medical_required} onChange={e=>F('medical_required',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="yes">Required</option>
+                <option value="no">Not required</option>
+              </select>
+            </Field>
           </div>
 
           </>)}
@@ -2062,6 +2115,15 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
               </select>
             </Field>
+            <Field label="Headcount — Sanctioned" hint="For this department / location">
+              <input className="rx-input" type="number" min="0" value={form.headcount_sanctioned} onChange={e=>F('headcount_sanctioned',e.target.value)} />
+            </Field>
+            <Field label="Headcount — Actual" hint="On roll today">
+              <input className="rx-input" type="number" min="0" value={form.headcount_actual} onChange={e=>F('headcount_actual',e.target.value)} />
+            </Field>
+            <Field label="Headcount — Open" hint="Already open, this one included">
+              <input className="rx-input" type="number" min="0" value={form.headcount_open} onChange={e=>F('headcount_open',e.target.value)} />
+            </Field>
           </div>
           {form.budget_min && form.budget_max && !errors.budget_max && (
             <div style={{ fontSize:11, color:C.brandDeep, marginBottom:10 }}>
@@ -2072,6 +2134,20 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               )}
             </div>
           )}
+          {/* Closure — what the role actually closed at, against what was
+              budgeted. Filled when the requisition closes, not while raising it. */}
+          <div style={{ fontSize:11, fontWeight:700, color:C.faint, textTransform:'uppercase', letterSpacing:'.06em', margin:'14px 0 8px' }}>Closure — filled when the role is closed</div>
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Offered CTC" hint="Compare against the budgeted range above">
+              <input className="rx-input" type="number" min="0" value={form.closure_offered_ctc} onChange={e=>F('closure_offered_ctc',e.target.value)} />
+            </Field>
+            <Field label="Actual Joining Date">
+              <input className="rx-input" type="date" value={form.closure_doj} onChange={e=>F('closure_doj',e.target.value)} />
+            </Field>
+            <Field label="Source" hint="Where the hire finally came from">
+              <input className="rx-input" value={form.closure_source} onChange={e=>F('closure_source',e.target.value)} placeholder="e.g. Referral, Naukri, Agency" />
+            </Field>
+          </div>
 
           {/* Fixed-term engagements run for a defined period. */}
           {(comp.fixedTerm || comp.period==='MONTHLY') && (
@@ -2244,6 +2320,23 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Preferred Sourcing Channels</label>
                 <ChannelPicker options={masters.candidate_source} value={form.sourcing_channels}
                   onChange={(v:string[])=>F('sourcing_channels',v)} />
+              </div>
+              {/* Agency terms — only meaningful once Agency is one of the
+                  channels above, so they sit directly beneath the picker. */}
+              <div style={{ fontSize:11, fontWeight:700, color:C.faint, textTransform:'uppercase', letterSpacing:'.06em', margin:'14px 0 8px' }}>Agency terms</div>
+              <div style={{ ...T.g2, marginBottom:10 }}>
+                <Field label="Agency / Vendor">
+                  <input className="rx-input" value={form.agency_vendor} onChange={e=>F('agency_vendor',e.target.value)} placeholder="Vendor name" />
+                </Field>
+                <Field label="Agency Fee %" hint="Of annual CTC">
+                  <input className="rx-input" type="number" min="0" max="100" value={form.agency_fee_pct} onChange={e=>F('agency_fee_pct',e.target.value)} />
+                </Field>
+                <Field label="Exclusivity (days)" hint="How long the vendor holds the role alone">
+                  <input className="rx-input" type="number" min="0" value={form.agency_exclusivity_days} onChange={e=>F('agency_exclusivity_days',e.target.value)} />
+                </Field>
+                <Field label="Candidate Ownership (days)" hint="How long their claim on a submitted candidate lasts">
+                  <input className="rx-input" type="number" min="0" value={form.agency_ownership_days} onChange={e=>F('agency_ownership_days',e.target.value)} />
+                </Field>
               </div>
             </>
           )}

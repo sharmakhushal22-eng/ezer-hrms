@@ -115,6 +115,8 @@ const g2: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(
 
 // ── Constants (mirrored from the Recruitment MRF form) ───────────────────────
 const REQ_TYPES = ['New Hire', 'Replacement', 'Temporary', 'Backfill']
+// How the requisition came about — Field Master section A (migration 134).
+const REQUEST_SOURCES = ['Manual', 'Manpower plan (AOP)', 'Triggered by separation']
 const PRIORITIES: [string, string][] = [['HIGH', 'High / Urgent'], ['MEDIUM', 'Medium / Normal'], ['LOW', 'Low']]
 const EMP_TYPES = ['Employee', 'Intern', 'Contract', 'Consultant', 'NAPS', 'NATS', 'Live Project']
 const WORK_MODES = ['Onsite', 'Hybrid', 'Remote']
@@ -334,6 +336,14 @@ const EMPTY = {
   skills_required: '', good_to_have_skills: '', job_description: '',
   ctq_questions: [] as string[],   // questions the interviewers should ask (optional)
   sourcing_mode: 'External', sourcing_channels: [] as string[],
+  // ── Field Master phase 1 (migration 134) ─────────────────────────────────
+  // All optional: validateMrf() does not reference any of them, so a draft
+  // raised before 134 stays submittable.
+  request_source: '',
+  headcount_sanctioned: '', headcount_actual: '', headcount_open: '',
+  agency_vendor: '', agency_fee_pct: '', agency_exclusivity_days: '', agency_ownership_days: '',
+  bgv_required: '', bgv_package: '', medical_required: '',
+  closure_offered_ctc: '', closure_doj: '', closure_source: '',
 }
 
 // Map a manpower_requisitions row back into the form shape — used when editing a
@@ -360,6 +370,23 @@ export function mrfToForm(m: any): Record<string, any> {
     skills_required: m.skills_required || '', good_to_have_skills: m.good_to_have_skills || '', job_description: m.job_description || '',
     ctq_questions: Array.isArray(m.ctq_questions) ? m.ctq_questions.map(String) : [],
     sourcing_mode: m.sourcing_mode || 'External', sourcing_channels: Array.isArray(m.sourcing_channels) ? m.sourcing_channels : [],
+    // Field Master phase 1 — booleans come back as true/false/null, so they map
+    // to the same 'yes' / 'no' / '' shape the form's selects already use for
+    // is_budgeted rather than inventing a second convention.
+    request_source: m.request_source || '',
+    headcount_sanctioned: m.headcount_sanctioned != null ? String(m.headcount_sanctioned) : '',
+    headcount_actual: m.headcount_actual != null ? String(m.headcount_actual) : '',
+    headcount_open: m.headcount_open != null ? String(m.headcount_open) : '',
+    agency_vendor: m.agency_vendor || '',
+    agency_fee_pct: m.agency_fee_pct != null ? String(m.agency_fee_pct) : '',
+    agency_exclusivity_days: m.agency_exclusivity_days != null ? String(m.agency_exclusivity_days) : '',
+    agency_ownership_days: m.agency_ownership_days != null ? String(m.agency_ownership_days) : '',
+    bgv_required: m.bgv_required === true ? 'yes' : m.bgv_required === false ? 'no' : '',
+    bgv_package: m.bgv_package || '',
+    medical_required: m.medical_required === true ? 'yes' : m.medical_required === false ? 'no' : '',
+    closure_offered_ctc: m.closure_offered_ctc != null ? String(m.closure_offered_ctc) : '',
+    closure_doj: (m.closure_doj || '').slice(0, 10),
+    closure_source: m.closure_source || '',
   }
 }
 
@@ -579,6 +606,22 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         ctq_questions: (form.ctq_questions || []).map((q: string) => String(q).trim()).filter(Boolean),
         job_description: form.job_description || null,
         sourcing_mode: form.sourcing_mode || null, sourcing_channels: form.sourcing_channels || [],
+        // Field Master phase 1. The route coerces these with the same
+        // sOrNull / nOrNull helpers as their neighbours, so '' arrives as null
+        // rather than an empty string in a numeric column.
+        request_source: form.request_source || null,
+        headcount_sanctioned: form.headcount_sanctioned || null,
+        headcount_actual: form.headcount_actual || null,
+        headcount_open: form.headcount_open || null,
+        agency_vendor: form.agency_vendor || null,
+        agency_fee_pct: form.agency_fee_pct || null,
+        agency_exclusivity_days: form.agency_exclusivity_days || null,
+        agency_ownership_days: form.agency_ownership_days || null,
+        bgv_required: form.bgv_required, bgv_package: form.bgv_package || null,
+        medical_required: form.medical_required,
+        closure_offered_ctc: form.closure_offered_ctc || null,
+        closure_doj: form.closure_doj || null,
+        closure_source: form.closure_source || null,
       }
       const res = await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify(payload) })
       if (status === 'DRAFT') { notify('MRF saved as draft.'); onDone(); return }
@@ -703,6 +746,12 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       <div style={g2}>
         <Field label="Requisition Type"><Sel value={form.hiring_type} onChange={v => F('hiring_type', v)}>{REQ_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
         <Field label="Priority"><Sel value={form.urgency} onChange={v => F('urgency', v)}>{PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Sel></Field>
+        <Field label="Request Source" hint="How this requisition came about">
+          <Sel value={form.request_source} onChange={v => F('request_source', v)}>
+            <option value="">Not specified</option>
+            {REQUEST_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+          </Sel>
+        </Field>
         <Field label="Requisition ID" hint={form.mrf_number ? 'Reserved for this requisition' : 'Reserving a number…'}><div style={{ ...st.input, background: C.locked, color: form.mrf_number ? C.ink : C.faint, fontWeight: form.mrf_number ? 700 : 400, letterSpacing: form.mrf_number ? '.03em' : 0, display: 'flex', alignItems: 'center', minHeight: 38 }}>{form.mrf_number || 'Generating…'}</div></Field>
         <Field label="Raised By — Name"><input style={st.input} value={form.raised_by_name} onChange={e => F('raised_by_name', e.target.value)} placeholder="Your name" /></Field>
         <Field label="Raised By — Role"><input style={st.input} value={form.raised_by_role} onChange={e => F('raised_by_role', e.target.value)} placeholder="e.g. Department Head" /></Field>
@@ -736,6 +785,19 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Employment Type"><Sel value={form.employment_type} onChange={v => F('employment_type', v)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
         <Field label="Work Mode"><Sel value={form.work_mode} onChange={v => F('work_mode', v)}>{WORK_MODES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
         <Field label="Work Location"><Sel value={form.location_id} onChange={v => F('location_id', v)}><option value="">Select Location</option>{locations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</Sel></Field>
+        {/* BGV and the pre-employment medical sit here rather than in §7, which
+            is Full-MRF only — both apply to a Quick Hire just the same. */}
+        <Field label="Background Verification">
+          <Sel value={form.bgv_required} onChange={v => F('bgv_required', v)}>
+            <option value="">Not specified</option><option value="yes">Required</option><option value="no">Not required</option>
+          </Sel>
+        </Field>
+        <Field label="BGV Package" hint="Which checks — education, employment, criminal, address"><input style={st.input} value={form.bgv_package} onChange={e => F('bgv_package', e.target.value)} placeholder="e.g. Standard 3-check" /></Field>
+        <Field label="Pre-employment Medical">
+          <Sel value={form.medical_required} onChange={v => F('medical_required', v)}>
+            <option value="">Not specified</option><option value="yes">Required</option><option value="no">Not required</option>
+          </Sel>
+        </Field>
       </div>
 
       </>)}
@@ -750,6 +812,9 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Cost Center"><MasterSel value={form.cost_center} onChange={v => F('cost_center', v)} opts={masters.cost_center || []} placeholder="Select…" /></Field>
         <Field label="Budgeted Position"><Sel value={form.is_budgeted} onChange={v => F('is_budgeted', v)}><option value="">Not specified</option><option value="yes">Yes — budgeted</option><option value="no">No — unbudgeted</option></Sel></Field>
         <Field label="Approved Headcount Ref."><input style={st.input} value={form.headcount_ref} onChange={e => F('headcount_ref', e.target.value)} placeholder="e.g. HCP-2026-014" /></Field>
+        <Field label="Headcount — Sanctioned" hint="For this department / location"><input type="number" min="0" style={st.input} value={form.headcount_sanctioned} onChange={e => F('headcount_sanctioned', e.target.value)} /></Field>
+        <Field label="Headcount — Actual" hint="On roll today"><input type="number" min="0" style={st.input} value={form.headcount_actual} onChange={e => F('headcount_actual', e.target.value)} /></Field>
+        <Field label="Headcount — Open" hint="Already open, this one included"><input type="number" min="0" style={st.input} value={form.headcount_open} onChange={e => F('headcount_open', e.target.value)} /></Field>
         <Field label="Currency"><MasterSel value={form.currency} onChange={v => F('currency', v)} opts={masters.currency || []} placeholder="INR" useCode /></Field>
         <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}><input type="number" style={st.input} value={form.budget_min} onChange={e => F('budget_min', e.target.value)} placeholder={comp.ph[0]} /></Field>
         <Field label={`${comp.label} Range — Max`} hint={perLabel(comp.period)}><input type="number" style={{ ...st.input, ...((Number(form.budget_min) > 0 && Number(form.budget_max) > 0 && Number(form.budget_min) > Number(form.budget_max)) ? { borderColor: C.red } : {}) }} value={form.budget_max} onChange={e => F('budget_max', e.target.value)} placeholder={comp.ph[1]} /></Field>
@@ -765,6 +830,15 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         {(comp.fixedTerm || comp.period === 'MONTHLY') && (
           <Field label="Duration (months)"><input type="number" min="1" max="60" style={st.input} value={form.duration_months} onChange={e => F('duration_months', e.target.value)} /></Field>
         )}
+      </div>
+      {/* Closure — what the role actually closed at, against what was budgeted.
+          Filled when the requisition closes, not while raising it, so it sits
+          below the band rather than among the fields being decided now. */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: TK.faint, textTransform: 'uppercase', letterSpacing: '.06em', margin: '16px 0 8px' }}>Closure — filled when the role is closed</div>
+      <div style={g2}>
+        <Field label="Offered CTC" hint="Compare against the budgeted range above"><input type="number" min="0" style={st.input} value={form.closure_offered_ctc} onChange={e => F('closure_offered_ctc', e.target.value)} /></Field>
+        <Field label="Actual Joining Date"><input type="date" style={st.input} value={form.closure_doj} onChange={e => F('closure_doj', e.target.value)} /></Field>
+        <Field label="Source" hint="Where the hire finally came from"><input style={st.input} value={form.closure_source} onChange={e => F('closure_source', e.target.value)} placeholder="e.g. Referral, Naukri, Agency" /></Field>
       </div>
       {/* Where the band sits against the Quick Hire cap.
           The meter DRAWS a decision this form already made — annualMin and
@@ -845,6 +919,12 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <SectionLine n="9" title="Sourcing" />
         <div style={g2}>
           <Field label="Internal vs External"><Sel value={form.sourcing_mode} onChange={v => F('sourcing_mode', v)}>{SOURCING_MODES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
+          {/* Agency terms — only meaningful when an agency is one of the
+              channels, so they live here beside the channel picker. */}
+          <Field label="Agency / Vendor"><input style={st.input} value={form.agency_vendor} onChange={e => F('agency_vendor', e.target.value)} placeholder="Vendor name" /></Field>
+          <Field label="Agency Fee %" hint="Of annual CTC"><input type="number" min="0" max="100" style={st.input} value={form.agency_fee_pct} onChange={e => F('agency_fee_pct', e.target.value)} /></Field>
+          <Field label="Exclusivity (days)" hint="How long the vendor holds the role alone"><input type="number" min="0" style={st.input} value={form.agency_exclusivity_days} onChange={e => F('agency_exclusivity_days', e.target.value)} /></Field>
+          <Field label="Candidate Ownership (days)" hint="How long their claim on a submitted candidate lasts"><input type="number" min="0" style={st.input} value={form.agency_ownership_days} onChange={e => F('agency_ownership_days', e.target.value)} /></Field>
         </div>
         <div style={{ marginTop: 10 }}>
           <Field label="Preferred Sourcing Channels"><ChannelPicker value={form.sourcing_channels} onChange={v => F('sourcing_channels', v)} opts={masters.candidate_source || []} /></Field>
