@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '@/lib/ess/api'
-import { C as TK } from '@/lib/ui'
+import { C as TK, Z } from '@/lib/ui'
 import MrfForm, { mrfToForm } from './MrfForm'
 import InterviewFeedbackForm, { type Feedback as InterviewFeedback } from '@/components/recruitment/InterviewFeedbackForm'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
@@ -404,7 +404,7 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
         ]
         const wide = new Set(['Mandatory Skills', 'Good-to-have Skills', 'Reason for Hire'])
         return (
-          <div onClick={closeReview} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,.5)', backdropFilter: 'blur(2px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={closeReview} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,.5)', backdropFilter: 'blur(2px)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: C.card, borderRadius: 14, width: 'min(620px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,.4)', overflow: 'hidden' }}>
               {/* Header */}
               <div style={{ padding: '16px 22px 14px', background: `linear-gradient(135deg, ${C.purple}, ${C.purpleD})`, color: TK.onAccent }}>

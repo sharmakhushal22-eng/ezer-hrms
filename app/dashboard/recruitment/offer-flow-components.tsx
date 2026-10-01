@@ -9,7 +9,7 @@ import { authHeaders } from '@/lib/auth-headers'
 
 // The design system, aliased around this file's own S.
 import {
-  C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+  C as TK, F as TF, W, R, E, S as SP, Z, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
 import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help, Timeline, Callout } from '@/components/recruitment/rx'
 // The offer's ceiling is the MRF budget normalised to a year. budget_max is
@@ -86,7 +86,7 @@ function CcPicker({ value, onChange }: { value: CcEmp[]; onChange: (v: CcEmp[]) 
       <div style={{ position:'relative' }}>
         <input className="rx-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name or employee code to CC…" />
         {hits.length > 0 && (
-          <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:8, marginTop:3, boxShadow:E.floating, maxHeight:220, overflowY:'auto' }}>
+          <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:Z.raised, background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:8, marginTop:3, boxShadow:E.floating, maxHeight:220, overflowY:'auto' }}>
             {hits.map(e => (
               <button key={e.id} type="button" onClick={() => { onChange([...value, e]); setQ('') }} style={{ display:'flex', width:'100%', textAlign:'left', gap:8, alignItems:'center', padding:'8px 11px', border:'none', borderBottom:`1px solid ${TK.line}`, background:TK.surface, cursor:'pointer', fontFamily:'inherit' }}>
                 <span style={{ flex:1, fontSize:12.5, color:TK.ink }}>{e.full_name} <span style={{ color:TK.faint }}>· {e.emp_code || '—'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
@@ -455,7 +455,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
             </div>
             <div style={{ padding:'0 22px 20px' }}>
               <div className="rx-paper" style={{ padding:'28px 32px', animation:'none' }}>
-                <pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.65, color:'#1f2937' }}>{template}</pre>
+                <pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.65, color:TK.inkSoft }}>{template}</pre>
               </div>
               <div className="rx-hint" style={{ marginTop:8 }}>This is what goes to the HR Head with the mail. Edit the fields above and click Regenerate to refresh it.</div>
             </div>
@@ -890,7 +890,7 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }:
   const Sec = ({ t, tag }: { t: string; tag?: React.ReactNode }) => <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, margin:'18px 0 6px' }}>{t}{tag}</div>
   return createPortal(
     <div onMouseDown={e => { if (e.target === e.currentTarget && !processing) onClose() }}
-      style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(15,23,42,.42)', backdropFilter:'blur(3px)', animation:'rxFade .3s both', display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 16px' }}>
+      style={{ position:'fixed', inset:0, zIndex:Z.modal, background:'rgba(15,23,42,.42)', backdropFilter:'blur(3px)', animation:'rxFade .3s both', display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 16px' }}>
       <div role="dialog" aria-modal="true" style={{ width:'min(1080px, 100%)', maxHeight:'calc(100vh - 48px)', background:TK.surface, color:TK.ink, border:`1px solid ${TK.line}`, borderRadius:R.xl, boxShadow:E.overlay, display:'flex', flexDirection:'column', overflow:'hidden', animation:'rxModal .4s cubic-bezier(.2,.8,.2,1) both' }}>
         {/* header */}
         <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${TK.line}`, display:'flex', alignItems:'center', gap:12 }}>

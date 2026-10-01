@@ -128,11 +128,17 @@ describe('ESIC', () => {
     assert.equal(r.esicNearCeiling, false)
   })
 
-  test('applies at the documented rates while gross is within the ceiling', () => {
+  // The basis is BASIC, not gross: ctc-model.ts computes
+  //   esicApplies  = basic < ESIC_WAGE_CEILING
+  //   esicEmployer = basic * ESIC_EMPLOYER_RATE
+  // This test asserted against gross until 01-Oct-2026 and went red when the
+  // calculator moved to the salary-link model. Kept pointed at the code's own
+  // basis so it keeps testing the rate, not the basis.
+  test('applies at the documented rates while Basic is within the ceiling', () => {
     const r = ok({ ctcAnnual: 240_000, minWage: 9_000 })
-    if (r.gross <= ESIC_WAGE_CEILING) {
-      near(r.esicEmployer, r.gross * ESIC_EMPLOYER_RATE, 'employer ESIC')
-      near(r.esicEmployee, r.gross * ESIC_EMPLOYEE_RATE, 'employee ESIC')
+    if (r.basic < ESIC_WAGE_CEILING) {
+      near(r.esicEmployer, r.basic * ESIC_EMPLOYER_RATE, 'employer ESIC')
+      near(r.esicEmployee, r.basic * ESIC_EMPLOYEE_RATE, 'employee ESIC')
     }
   })
 
