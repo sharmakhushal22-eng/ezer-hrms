@@ -1332,6 +1332,14 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     closure_offered_ctc:'', closure_doj:'', closure_source:'',            // §4/§6
     bgv_required:'', bgv_package:'', medical_required:'',                 // §7
     agency_vendor:'', agency_fee_pct:'', agency_exclusivity_days:'', agency_ownership_days:'',  // §9
+    // ── Field Master phase 2 (migration 135) — section E, candidate profile ──
+    // All §7, all optional — validateMrf() does not reference any of them.
+    role_summary:'', kras:'',
+    specialisation:'', certifications:'',
+    relevant_experience_min:'', relevant_experience_max:'',
+    industry_preference:'', target_companies:'',
+    max_notice_period_days:'', languages:'', travel_percentage:'', relocation_required:'',
+    diversity_flag:'', licence_requirement:'',
   }
   // Only the raiser (or a super admin / legacy dashboard login) may edit or delete an MRF.
   const canEditMrf = (m:any) => !!canEditAnyMrf || (!!employeeId && m?.requested_by === employeeId)
@@ -1676,6 +1684,22 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       ...(form.closure_offered_ctc ? { closure_offered_ctc:Number(form.closure_offered_ctc)||null } : {}),
       ...(form.closure_doj ? { closure_doj:form.closure_doj } : {}),
       ...(form.closure_source ? { closure_source:form.closure_source } : {}),
+      // Phase 2 (135) — spread only when filled, same reason as above: this
+      // form writes to PostgREST directly and has no drop-and-retry.
+      ...(form.role_summary ? { role_summary:form.role_summary } : {}),
+      ...(form.kras ? { kras:form.kras } : {}),
+      ...(form.specialisation ? { specialisation:form.specialisation } : {}),
+      ...(form.certifications ? { certifications:form.certifications } : {}),
+      ...(form.relevant_experience_min ? { relevant_experience_min:Number(form.relevant_experience_min)||null } : {}),
+      ...(form.relevant_experience_max ? { relevant_experience_max:Number(form.relevant_experience_max)||null } : {}),
+      ...(form.industry_preference ? { industry_preference:form.industry_preference } : {}),
+      ...(form.target_companies ? { target_companies:form.target_companies } : {}),
+      ...(form.max_notice_period_days ? { max_notice_period_days:Number(form.max_notice_period_days)||null } : {}),
+      ...(form.languages ? { languages:form.languages } : {}),
+      ...(form.travel_percentage ? { travel_percentage:Number(form.travel_percentage)||null } : {}),
+      ...(form.relocation_required ? { relocation_required:form.relocation_required==='yes' } : {}),
+      ...(form.diversity_flag ? { diversity_flag:form.diversity_flag==='yes' } : {}),
+      ...(form.licence_requirement ? { licence_requirement:form.licence_requirement } : {}),
       // Attribute the requisition to the raiser so it shows in their ESS "My requests",
       // and so ESS approval treats it identically to a Raise-MRF submission.
       ...(editMRF ? {} : { requested_by: employeeId || null }),
@@ -2253,6 +2277,62 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                     <option value="MNC">MNC</option>
                     <option value="STARTUP">Startup</option>
                   </select>
+                </Field>
+                {/* Relevant experience is distinct from total above: ten years
+                    in the industry with two in this role is a different hire. */}
+                <Field label="Relevant Experience — Min (years)">
+                  <input className="rx-input" type="number" min="0" value={form.relevant_experience_min} onChange={e=>F('relevant_experience_min',e.target.value)} />
+                </Field>
+                <Field label="Relevant Experience — Max (years)">
+                  <input className="rx-input" type="number" min="0" value={form.relevant_experience_max} onChange={e=>F('relevant_experience_max',e.target.value)} />
+                </Field>
+                <Field label="Specialisation" hint="Stream or branch within the qualification">
+                  <input className="rx-input" value={form.specialisation} onChange={e=>F('specialisation',e.target.value)} placeholder="e.g. Computer Science, Finance" />
+                </Field>
+                <Field label="Certifications">
+                  <input className="rx-input" value={form.certifications} onChange={e=>F('certifications',e.target.value)} placeholder="e.g. PMP, CFA, AWS" />
+                </Field>
+                <Field label="Industry Preference">
+                  <input className="rx-input" value={form.industry_preference} onChange={e=>F('industry_preference',e.target.value)} placeholder="e.g. BFSI, Manufacturing" />
+                </Field>
+                <Field label="Target Companies" hint="Comma separated">
+                  <input className="rx-input" value={form.target_companies} onChange={e=>F('target_companies',e.target.value)} />
+                </Field>
+                <Field label="Max Notice Period (days)" hint="Beyond this, the candidate is not workable">
+                  <input className="rx-input" type="number" min="0" value={form.max_notice_period_days} onChange={e=>F('max_notice_period_days',e.target.value)} />
+                </Field>
+                <Field label="Languages" hint="Comma separated">
+                  <input className="rx-input" value={form.languages} onChange={e=>F('languages',e.target.value)} placeholder="e.g. Hindi, English, Tamil" />
+                </Field>
+                <Field label="Travel (%)" hint="Share of time on the road">
+                  <input className="rx-input" type="number" min="0" max="100" value={form.travel_percentage} onChange={e=>F('travel_percentage',e.target.value)} />
+                </Field>
+                <Field label="Relocation Required">
+                  <select className="rx-input" value={form.relocation_required} onChange={e=>F('relocation_required',e.target.value)}>
+                    <option value="">Not specified</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </Field>
+                <Field label="Diversity Requisition" hint="Reserved for a diversity hire">
+                  <select className="rx-input" value={form.diversity_flag} onChange={e=>F('diversity_flag',e.target.value)}>
+                    <option value="">Not specified</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </Field>
+                <Field label="Licence / Vehicle" hint="Field roles — driving licence, own vehicle">
+                  <input className="rx-input" value={form.licence_requirement} onChange={e=>F('licence_requirement',e.target.value)} placeholder="e.g. LMV licence + two-wheeler" />
+                </Field>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <Field label="Role Summary" hint="What this role exists to do — two or three lines">
+                  <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:70 }} value={form.role_summary} onChange={e=>F('role_summary',e.target.value)} />
+                </Field>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <Field label="KRAs" hint="What the role is measured on">
+                  <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:70 }} value={form.kras} onChange={e=>F('kras',e.target.value)} />
                 </Field>
               </div>
               <div style={{ marginBottom:10 }}>

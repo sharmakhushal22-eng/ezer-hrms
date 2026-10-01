@@ -344,6 +344,14 @@ const EMPTY = {
   agency_vendor: '', agency_fee_pct: '', agency_exclusivity_days: '', agency_ownership_days: '',
   bgv_required: '', bgv_package: '', medical_required: '',
   closure_offered_ctc: '', closure_doj: '', closure_source: '',
+  // ── Field Master phase 2 (migration 135) — section E, candidate profile ──
+  // Optional throughout, same as phase 1.
+  role_summary: '', kras: '',
+  specialisation: '', certifications: '',
+  relevant_experience_min: '', relevant_experience_max: '',
+  industry_preference: '', target_companies: '',
+  max_notice_period_days: '', languages: '', travel_percentage: '', relocation_required: '',
+  diversity_flag: '', licence_requirement: '',
 }
 
 // Map a manpower_requisitions row back into the form shape — used when editing a
@@ -387,6 +395,19 @@ export function mrfToForm(m: any): Record<string, any> {
     closure_offered_ctc: m.closure_offered_ctc != null ? String(m.closure_offered_ctc) : '',
     closure_doj: (m.closure_doj || '').slice(0, 10),
     closure_source: m.closure_source || '',
+    // Phase 2 — section E. Booleans use the same 'yes' / 'no' / '' shape as
+    // is_budgeted and the phase 1 flags rather than a second convention.
+    role_summary: m.role_summary || '', kras: m.kras || '',
+    specialisation: m.specialisation || '', certifications: m.certifications || '',
+    relevant_experience_min: m.relevant_experience_min != null ? String(m.relevant_experience_min) : '',
+    relevant_experience_max: m.relevant_experience_max != null ? String(m.relevant_experience_max) : '',
+    industry_preference: m.industry_preference || '', target_companies: m.target_companies || '',
+    max_notice_period_days: m.max_notice_period_days != null ? String(m.max_notice_period_days) : '',
+    languages: m.languages || '',
+    travel_percentage: m.travel_percentage != null ? String(m.travel_percentage) : '',
+    relocation_required: m.relocation_required === true ? 'yes' : m.relocation_required === false ? 'no' : '',
+    diversity_flag: m.diversity_flag === true ? 'yes' : m.diversity_flag === false ? 'no' : '',
+    licence_requirement: m.licence_requirement || '',
   }
 }
 
@@ -622,6 +643,19 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         closure_offered_ctc: form.closure_offered_ctc || null,
         closure_doj: form.closure_doj || null,
         closure_source: form.closure_source || null,
+        // Phase 2 — section E. Coerced by the same sOrNull / nOrNull / bOrNull
+        // helpers in the route as their phase 1 neighbours.
+        role_summary: form.role_summary || null, kras: form.kras || null,
+        specialisation: form.specialisation || null, certifications: form.certifications || null,
+        relevant_experience_min: form.relevant_experience_min || null,
+        relevant_experience_max: form.relevant_experience_max || null,
+        industry_preference: form.industry_preference || null, target_companies: form.target_companies || null,
+        max_notice_period_days: form.max_notice_period_days || null,
+        languages: form.languages || null,
+        travel_percentage: form.travel_percentage || null,
+        relocation_required: form.relocation_required,
+        diversity_flag: form.diversity_flag,
+        licence_requirement: form.licence_requirement || null,
       }
       const res = await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify(payload) })
       if (status === 'DRAFT') { notify('MRF saved as draft.'); onDone(); return }
@@ -895,8 +929,32 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
           <Field label="Education — Minimum"><Sel value={form.education_min} onChange={v => F('education_min', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
           <Field label="Education — Maximum"><Sel value={form.education_max} onChange={v => F('education_max', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
           <Field label="Previous Company Preference"><Sel value={form.previous_company_preference} onChange={v => F('previous_company_preference', v)}>{PREV_COMPANY.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Sel></Field>
+          {/* Relevant experience is distinct from total above: ten years in the
+              industry with two in this role is a different candidate. */}
+          <Field label="Relevant Experience — Min (years)"><input type="number" min="0" style={st.input} value={form.relevant_experience_min} onChange={e => F('relevant_experience_min', e.target.value)} /></Field>
+          <Field label="Relevant Experience — Max (years)"><input type="number" min="0" style={st.input} value={form.relevant_experience_max} onChange={e => F('relevant_experience_max', e.target.value)} /></Field>
+          <Field label="Specialisation" hint="Stream or branch within the qualification"><input style={st.input} value={form.specialisation} onChange={e => F('specialisation', e.target.value)} placeholder="e.g. Computer Science, Finance" /></Field>
+          <Field label="Certifications"><input style={st.input} value={form.certifications} onChange={e => F('certifications', e.target.value)} placeholder="e.g. PMP, CFA, AWS" /></Field>
+          <Field label="Industry Preference"><input style={st.input} value={form.industry_preference} onChange={e => F('industry_preference', e.target.value)} placeholder="e.g. BFSI, Manufacturing" /></Field>
+          <Field label="Target Companies" hint="Comma separated"><input style={st.input} value={form.target_companies} onChange={e => F('target_companies', e.target.value)} /></Field>
+          <Field label="Max Notice Period (days)" hint="Beyond this, the candidate is not workable"><input type="number" min="0" style={st.input} value={form.max_notice_period_days} onChange={e => F('max_notice_period_days', e.target.value)} /></Field>
+          <Field label="Languages" hint="Comma separated"><input style={st.input} value={form.languages} onChange={e => F('languages', e.target.value)} placeholder="e.g. Hindi, English, Tamil" /></Field>
+          <Field label="Travel (%)" hint="Share of time on the road"><input type="number" min="0" max="100" style={st.input} value={form.travel_percentage} onChange={e => F('travel_percentage', e.target.value)} /></Field>
+          <Field label="Relocation Required">
+            <Sel value={form.relocation_required} onChange={v => F('relocation_required', v)}>
+              <option value="">Not specified</option><option value="yes">Yes</option><option value="no">No</option>
+            </Sel>
+          </Field>
+          <Field label="Diversity Requisition" hint="Reserved for a diversity hire">
+            <Sel value={form.diversity_flag} onChange={v => F('diversity_flag', v)}>
+              <option value="">Not specified</option><option value="yes">Yes</option><option value="no">No</option>
+            </Sel>
+          </Field>
+          <Field label="Licence / Vehicle" hint="Field roles — driving licence, own vehicle"><input style={st.input} value={form.licence_requirement} onChange={e => F('licence_requirement', e.target.value)} placeholder="e.g. LMV licence + two-wheeler" /></Field>
         </div>
         <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+          <Field label="Role Summary" hint="What this role exists to do — two or three lines"><textarea style={{ ...st.area, minHeight: 70 }} value={form.role_summary} onChange={e => F('role_summary', e.target.value)} /></Field>
+          <Field label="KRAs" hint="What the role is measured on"><textarea style={{ ...st.area, minHeight: 70 }} value={form.kras} onChange={e => F('kras', e.target.value)} /></Field>
           <Field label="Mandatory Skills"><SkillsMultiSelect value={form.skills_required} onChange={v => F('skills_required', v)} allSkills={skills} onAddSkill={addSkill} /></Field>
           <Field label="Good-to-have Skills"><SkillsMultiSelect value={form.good_to_have_skills} onChange={v => F('good_to_have_skills', v)} allSkills={skills} onAddSkill={addSkill} placeholder="Search good-to-have skills, or add custom" /></Field>
           <Field label="Job Description"><textarea style={{ ...st.area, minHeight: 120 }} value={form.job_description} onChange={e => F('job_description', e.target.value)} placeholder="Role summary, responsibilities, must-haves…" /></Field>
