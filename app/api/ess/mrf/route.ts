@@ -52,7 +52,7 @@ async function hrHeadFor(companyId: string | null): Promise<Brief | null> {
 
 // The people an HR Head can assign an approved MRF to — only Hiring Managers / Recruiters
 // (the role that actually runs the hiring), never the broader HR team.
-const HR_ROLE_CODES = ['RECRUITER']
+const HR_ROLE_CODES = ['RECRUITER', 'HR_MANAGER']
 async function hrTeamFor(companyId: string | null): Promise<(Brief & { role: string })[]> {
   if (!companyId) return []
   const { data: roles } = await sb.from('ess_roles').select('id, role_code').in('role_code', HR_ROLE_CODES)
@@ -342,6 +342,28 @@ export async function POST(req: NextRequest) {
       cur.status = 'REJECTED'; cur.acted_at = now; cur.comment = note
       await sb.from('manpower_requisitions').update({ approval_chain: chain, status: 'REJECTED' }).eq('id', id)
       return NextResponse.json({ ok: true })
+    }
+
+    // The HR Head's approval IS the hand-off: approving without naming who runs
+    // the hiring leaves an open requisition belonging to nobody. myAssignments
+    // keys off assigned_recruiter_ids, so an empty one means the MRF reaches no
+    // queue at all. Enforced HERE rather than only in the form, because the
+    // dashboard modal and any direct POST reach this same branch — a disabled
+    // button is not an enforcement point.
+    //
+    // Checked BEFORE anything is mutated, so a refusal leaves the chain as it was.
+    // Only the HR_HEAD step: an RM2 approval carries no assignment.
+    const wantHr: string[] = Array.isArray(body.assigned_hr_ids)
+      ? body.assigned_hr_ids.map((x: any) => String(x)).filter(Boolean) : []
+    if (cur.role === 'HR_HEAD' && !wantHr.length) {
+      return NextResponse.json({ error: 'Assign at least one recruiter or HR manager — approving hands them the requisition to run.' }, { status: 400 })
+    }
+    // And they must actually hold the role, so the picker cannot be bypassed by
+    // posting an arbitrary employee id.
+    if (wantHr.length) {
+      const allowed = new Set((await hrTeamFor(ctx.companyId)).map(h => h.id))
+      const strays = wantHr.filter(x => !allowed.has(x))
+      if (strays.length) return NextResponse.json({ error: 'Only recruiters or HR managers in your company can be assigned a requisition.' }, { status: 400 })
     }
 
     cur.status = 'APPROVED'; cur.acted_at = now; cur.comment = note

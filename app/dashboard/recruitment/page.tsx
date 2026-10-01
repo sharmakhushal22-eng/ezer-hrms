@@ -1810,30 +1810,72 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     setShowForm(false); setEditMRF(null); setForm(EMPTY); setErrors({}); onRefresh()
   }
 
-  // §8 — single-click approval. One decision approves the requisition outright;
-  // any configured chain is stamped complete by the same approver so the
-  // recorded trail matches the decision, rather than leaving steps PENDING on
-  // an MRF that is already open for hiring.
-  async function approveMRF(id:string, recruiter:string, comments:string, actor:string) {
+  // §8 — approve ONE step and hand the requisition to the next approver.
+  //
+  // This used to stamp the whole chain APPROVED in a single write and set the
+  // MRF to APPROVED outright. Two things followed, and both were invisible:
+  //
+  //   1. The HR Head never saw the requisition. The ESS queue is built from
+  //      status='SUBMITTED' rows whose PENDING step names you, so a row flipped
+  //      straight to APPROVED drops out of the pool entirely — "nothing is
+  //      waiting on you", with the MRF already open for hiring.
+  //   2. The trail lied. Every remaining step, HR_HEAD included, was recorded
+  //      as approved by whoever clicked, at the moment they clicked.
+  //
+  // Now it mirrors the ESS route (app/api/ess/mrf, action 'approve'): the
+  // PENDING step is approved, the first WAITING step becomes PENDING, and the
+  // MRF only reaches APPROVED when no step is left. One chain, one set of
+  // rules, whichever screen the approver happens to be on.
+  async function approveMRF(id:string, assignIds:string[], comments:string, actor:string) {
     const mrf = mrfs.find((m:MRF)=>m.id===id); if (!mrf) return
-    const chain = asArray((mrf as any).approval_chain)
+    const chain = asArray((mrf as any).approval_chain).map((s:any)=>({ ...s }))
     const now = new Date().toISOString()
-    const nextChain = chain.map((s:any)=> s.status==='APPROVED' ? s : {
-      ...s, status:'APPROVED',
-      actor: actor || s.actor || null,
-      comments: comments || s.comments || null,
-      acted_at: s.acted_at || now,
-    })
-    const patch:any = { status:'APPROVED', approval_chain:nextChain, remarks:comments||null, approved_at:now }
-    if (recruiter) patch.assigned_recruiter = recruiter
+    const patch:any = { remarks: comments||null }
+    // Real employee ids, not a typed address. assigned_recruiter_ids is what the
+    // assignee's "assigned to you" block reads (and what `acknowledge` checks);
+    // assigned_recruiter is only the human-readable echo beside it. Writing the
+    // string alone — which this screen did — named somebody nothing would reach.
+    const picked = (assignIds||[]).map((pid:string)=>apprPeople.find((p:any)=>p.id===pid)).filter(Boolean)
+    if (assignIds?.length) {
+      patch.assigned_recruiter_ids = assignIds
+      patch.assigned_recruiter = picked.map((p:any)=>`${p.name}${p.code?` (${p.code})`:''}`).join(', ') || null
+    }
+
+    const cur = chain.find((s:any)=>s.status==='PENDING')
+    const next = cur ? chain.find((s:any)=>s.status==='WAITING') : null
+    if (cur) {
+      cur.status = 'APPROVED'
+      cur.acted_at = now
+      cur.actor = actor || cur.actor || null
+      // The two paths disagree on the key — the ESS route writes `comment`,
+      // this screen has always written `comments`. Set both so the remark shows
+      // wherever the trail is read.
+      cur.comments = comments || cur.comments || null
+      cur.comment  = comments || cur.comment  || null
+      if (next) next.status = 'PENDING'          // hand it to the next approver
+      else { patch.status = 'APPROVED'; patch.approved_at = now }
+      patch.approval_chain = chain
+    } else {
+      // No chain, or nothing pending on it: there is no next approver to hand
+      // this to, so one decision opens the requisition — the behaviour this
+      // screen has always had for an MRF with no configured routing.
+      patch.status = 'APPROVED'; patch.approved_at = now
+      if (chain.length) patch.approval_chain = chain
+    }
+
     const { error } = await supabase.from('manpower_requisitions').update(patch).eq('id',id)
     if (error) { showNotify('Approval failed: '+error.message,'error'); return }
-    await logMrfAudit(supabase, mrf, 'MRF_APPROVED', {
+    await logMrfAudit(supabase, mrf, next ? 'MRF_STEP_APPROVED' : 'MRF_APPROVED', {
       position: mrf.designation||mrf.position,
+      step: cur ? `${cur.role || 'step'} by ${actor || 'unnamed'}` : 'single',
+      next: next ? `${next.role || 'next'} · ${next.approver_name || next.approver_id || '—'}` : 'none — fully approved',
       steps: chain.length ? chain.map((s:any)=>s.role).join(' → ') : 'single',
-      recruiter: recruiter||'unassigned',
+      recruiter: picked.length ? picked.map((p:any)=>`${p.name}${p.code?` (${p.code})`:''}`).join(', ') : 'unassigned',
     })
-    showNotify(recruiter ? 'MRF approved — recruiter assigned.' : 'MRF approved.')
+    const assignedTo = picked.map((p:any)=>p.name).filter(Boolean).join(', ')
+    showNotify(next
+      ? `Approved — now with ${next.approver_name || next.role || 'the next approver'}.`
+      : (assignedTo ? `MRF approved — assigned to ${assignedTo}.` : 'MRF approved.'))
     setApprovalModal(null); onRefresh()
   }
 
@@ -2687,7 +2729,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           onChanged={onRefresh} showNotify={showNotify} canEdit={canEditMrf(detailMRF)} canSendBack={canSendBackMrf(detailMRF)} onSendBack={setSendBackFor} />
       )}
 
-      {approvalModal&&<ApprovalModal mrf={approvalModal} org={orgOf(approvalModal)}
+      {approvalModal&&<ApprovalModal mrf={approvalModal} org={orgOf(approvalModal)} people={apprPeople}
         onApprove={approveMRF} onReject={rejectMRF} onHold={holdMRF} onClose={()=>setApprovalModal(null)} />}
       {sendBackFor&&(
         <div onMouseDown={e=>{ if(e.target===e.currentTarget && !sbBusy) setSendBackFor(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
@@ -2719,15 +2761,18 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   )
 }
 
-function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
+function ApprovalModal({ mrf, org, people = [], onApprove, onReject, onHold, onClose }:any) {
   const [mode, setMode] = useState<'approve'|'reject'|'hold'>('approve')
-  const [recruiter, setRecruiter] = useState(mrf.assigned_recruiter||'')
+  const [assignIds, setAssignIds] = useState<string[]>(Array.isArray(mrf.assigned_recruiter_ids) ? mrf.assigned_recruiter_ids : [])
   const [actor, setActor] = useState('')
   const [comments, setComments] = useState('')
   const [busy, setBusy] = useState(false)
   const openings = mrf.no_of_openings||mrf.openings||0
-  const emailOk = !recruiter || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recruiter.trim())
   const chain = asArray(mrf.approval_chain)
+  // Assignment is required at the HR Head step and only there — that approval is
+  // the hand-off. An RM2 approval passes the requisition along, not out.
+  const atHrHead = (chain.find((s:any)=>s.status==='PENDING')||{}).role === 'HR_HEAD'
+  const canApprove = !atHrHead || assignIds.length > 0
   const comp = compOf(mrf.employment_type)
 
   async function go(fn:()=>Promise<void>|void) { setBusy(true); await fn(); setBusy(false) }
@@ -2775,18 +2820,39 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
 
         {mode==='approve'?(
           <>
-            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Assign Recruiter Email</label>
-            <input className="rx-input" style={{ marginBottom:4, ...(emailOk?{}:{ border: `1px solid ${C.criticalTint}`, background:C.criticalTint }) }}
-              value={recruiter} onChange={e=>setRecruiter(e.target.value)} placeholder="recruiter@company.com" />
-            <div style={{ fontSize:11, color: emailOk?C.faint:C.critical, marginBottom:11 }}>
-              {emailOk ? 'Optional — the MRF can be approved and assigned later.' : 'That does not look like a valid email.'}
-            </div>
+            {/* The HR Head's approval IS the hand-off, so it names a real
+                employee rather than a typed address. This was a free-text
+                "Assign Recruiter Email" writing assigned_recruiter (a display
+                string) and never assigned_recruiter_ids — so whoever was named
+                never saw the MRF: "assigned to you" reads the id array. The
+                server now requires an id here at the HR_HEAD step. */}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>
+              Assign to recruiter / HR manager{atHrHead ? ' *' : ''}
+            </label>
+            {people.length ? (
+              <div style={{ marginBottom:4 }}>
+                <RecruiterPicker people={people} value={assignIds} onChange={setAssignIds}
+                  placeholder="Search by name or employee code…" />
+              </div>
+            ) : (
+              <div style={{ fontSize:11, color:C.warning, background:C.warningTint, borderRadius:7, padding:'8px 10px', marginBottom:11 }}>
+                No recruiters or HR managers are set up for this company, so this requisition cannot be handed to
+                anyone yet. Ask an admin to give someone the <b>Recruiter</b> or <b>HR Manager</b> role in Assign Roles.
+              </div>
+            )}
+            {people.length>0 && (
+              <div style={{ fontSize:11, color: atHrHead && !assignIds.length ? C.critical : C.faint, marginBottom:11 }}>
+                {atHrHead
+                  ? (assignIds.length ? 'They start on this requisition as soon as it is approved.' : 'Required — approving hands them the requisition to run.')
+                  : 'Optional at this step — the HR Head assigns when they approve.'}
+              </div>
+            )}
             <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Approver comments</label>
             <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', marginBottom:16, minHeight:70 }} value={comments}
               onChange={e=>setComments(e.target.value)} placeholder="Optional note for the record" />
-            <button onClick={()=>emailOk && go(()=>onApprove(mrf.id, recruiter.trim(), comments.trim(), actor.trim()))} disabled={busy||!emailOk}
-              style={{ ...T.btnPrimary, width:'100%', opacity: busy||!emailOk?.6:1 }}>
-              {busy?'Approving…':'Approve & Assign'}
+            <button onClick={()=>canApprove && go(()=>onApprove(mrf.id, assignIds, comments.trim(), actor.trim()))} disabled={busy||!canApprove}
+              style={{ ...T.btnPrimary, width:'100%', opacity: busy||!canApprove?.6:1 }}>
+              {busy?'Approving…':atHrHead?'Approve & Assign':'Approve'}
             </button>
           </>
         ):mode==='hold'?(

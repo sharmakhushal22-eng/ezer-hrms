@@ -9,11 +9,31 @@ import { C } from '@/lib/ui'
 export interface PickerPerson { id: string; name: string; code: string; designation?: string; is_recruiter?: boolean }
 
 /** Shape the /api/ess/mrf GET payload into picker rows (companyPeople + hrOptions flag). */
+/**
+ * Who an approved requisition may be handed to: the people who actually run
+ * hiring — RECRUITER or HR_MANAGER, in the caller's own company. That is
+ * `hrOptions` (server-side hrTeamFor), not `companyPeople`.
+ *
+ * This used to list EVERY active employee and merely tag the recruiters, so an
+ * MRF could be assigned to anyone at all while the role list was decoration.
+ * The server now refuses an assignee who does not hold one of those roles, so a
+ * wider picker would only offer choices the API rejects.
+ *
+ * companyPeople is still read, but only to enrich: it carries designation and
+ * the canonical name/code, which hrOptions does not always have.
+ */
 export function toPickerPeople(d: any): PickerPerson[] {
-  const rec = new Set(((d?.hrOptions) || []).map((h: any) => h.id))
-  const base: PickerPerson[] = ((d?.companyPeople) || []).map((p: any) => ({ id: p.id, name: p.full_name || p.name, code: p.emp_code || p.code, designation: p.designation || '', is_recruiter: rec.has(p.id) }))
-  if (base.length) return base
-  return ((d?.hrOptions) || []).map((h: any) => ({ id: h.id, name: h.name, code: h.code, designation: 'Hiring Manager', is_recruiter: true }))
+  const byId = new Map<string, any>(((d?.companyPeople) || []).map((p: any) => [p.id, p]))
+  return ((d?.hrOptions) || []).map((h: any) => {
+    const p = byId.get(h.id)
+    return {
+      id: h.id,
+      name: p?.full_name || h.name || '',
+      code: p?.emp_code || h.code || '',
+      designation: p?.designation || (h.role === 'HR_MANAGER' ? 'HR Manager' : 'Recruiter'),
+      is_recruiter: true,
+    }
+  })
 }
 
 // Eleven frozen literals, now eleven tokens. The values were the pre-rebrand
