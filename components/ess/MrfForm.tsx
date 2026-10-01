@@ -352,6 +352,14 @@ const EMPTY = {
   industry_preference: '', target_companies: '',
   max_notice_period_days: '', languages: '', travel_percentage: '', relocation_required: '',
   diversity_flag: '', licence_requirement: '',
+  // ── Field Master phase 3 (migration 136) — section F, compensation ──────
+  // Optional throughout, same as 134 / 135.
+  variable_percentage: '',
+  joining_bonus_allowed: '', joining_bonus_cap: '',
+  relocation_allowance_allowed: '', relocation_allowance_cap: '',
+  notice_buyout_allowed: '', notice_buyout_cap: '',
+  esop_eligible: '', esop_retention_notes: '',
+  budget_code: '',
 }
 
 // Map a manpower_requisitions row back into the form shape — used when editing a
@@ -408,6 +416,17 @@ export function mrfToForm(m: any): Record<string, any> {
     relocation_required: m.relocation_required === true ? 'yes' : m.relocation_required === false ? 'no' : '',
     diversity_flag: m.diversity_flag === true ? 'yes' : m.diversity_flag === false ? 'no' : '',
     licence_requirement: m.licence_requirement || '',
+    // Phase 3 — section F. Same 'yes' / 'no' / '' shape for the flags.
+    variable_percentage: m.variable_percentage != null ? String(m.variable_percentage) : '',
+    joining_bonus_allowed: m.joining_bonus_allowed === true ? 'yes' : m.joining_bonus_allowed === false ? 'no' : '',
+    joining_bonus_cap: m.joining_bonus_cap != null ? String(m.joining_bonus_cap) : '',
+    relocation_allowance_allowed: m.relocation_allowance_allowed === true ? 'yes' : m.relocation_allowance_allowed === false ? 'no' : '',
+    relocation_allowance_cap: m.relocation_allowance_cap != null ? String(m.relocation_allowance_cap) : '',
+    notice_buyout_allowed: m.notice_buyout_allowed === true ? 'yes' : m.notice_buyout_allowed === false ? 'no' : '',
+    notice_buyout_cap: m.notice_buyout_cap != null ? String(m.notice_buyout_cap) : '',
+    esop_eligible: m.esop_eligible === true ? 'yes' : m.esop_eligible === false ? 'no' : '',
+    esop_retention_notes: m.esop_retention_notes || '',
+    budget_code: m.budget_code || '',
   }
 }
 
@@ -656,6 +675,14 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         relocation_required: form.relocation_required,
         diversity_flag: form.diversity_flag,
         licence_requirement: form.licence_requirement || null,
+        // Phase 3 — section F. Coerced by the same sOrNull / nOrNull / bOrNull
+        // helpers in the route as their 134 / 135 neighbours.
+        variable_percentage: form.variable_percentage || null,
+        joining_bonus_allowed: form.joining_bonus_allowed, joining_bonus_cap: form.joining_bonus_cap || null,
+        relocation_allowance_allowed: form.relocation_allowance_allowed, relocation_allowance_cap: form.relocation_allowance_cap || null,
+        notice_buyout_allowed: form.notice_buyout_allowed, notice_buyout_cap: form.notice_buyout_cap || null,
+        esop_eligible: form.esop_eligible, esop_retention_notes: form.esop_retention_notes || null,
+        budget_code: form.budget_code || null,
       }
       const res = await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify(payload) })
       if (status === 'DRAFT') { notify('MRF saved as draft.'); onDone(); return }
@@ -864,6 +891,37 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         {(comp.fixedTerm || comp.period === 'MONTHLY') && (
           <Field label="Duration (months)"><input type="number" min="1" max="60" style={st.input} value={form.duration_months} onChange={e => F('duration_months', e.target.value)} /></Field>
         )}
+        <Field label="Variable Pay (%)" hint={form.variable_percentage ? `Fixed is the remaining ${Math.max(0, 100 - (Number(form.variable_percentage) || 0))}%` : 'Fixed is the remainder'}><input type="number" min="0" max="100" style={st.input} value={form.variable_percentage} onChange={e => F('variable_percentage', e.target.value)} /></Field>
+        <Field label="Budget Code" hint="The budget line this draws on — not the cost centre"><input style={st.input} value={form.budget_code} onChange={e => F('budget_code', e.target.value)} /></Field>
+      </div>
+      {/* What the requisition is sanctioned to OFFER — each is "allowed, and up
+          to what", so the cap only means anything beside its flag. */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: TK.faint, textTransform: 'uppercase', letterSpacing: '.06em', margin: '16px 0 8px' }}>Allowances sanctioned for this role</div>
+      <div style={g2}>
+        <Field label="Joining Bonus">
+          <Sel value={form.joining_bonus_allowed} onChange={v => F('joining_bonus_allowed', v)}>
+            <option value="">Not specified</option><option value="yes">Allowed</option><option value="no">Not allowed</option>
+          </Sel>
+        </Field>
+        <Field label="Joining Bonus — Cap" hint="Ceiling, if allowed"><input type="number" min="0" style={st.input} value={form.joining_bonus_cap} onChange={e => F('joining_bonus_cap', e.target.value)} disabled={form.joining_bonus_allowed === 'no'} /></Field>
+        <Field label="Relocation Allowance">
+          <Sel value={form.relocation_allowance_allowed} onChange={v => F('relocation_allowance_allowed', v)}>
+            <option value="">Not specified</option><option value="yes">Allowed</option><option value="no">Not allowed</option>
+          </Sel>
+        </Field>
+        <Field label="Relocation — Cap" hint="Ceiling, if allowed"><input type="number" min="0" style={st.input} value={form.relocation_allowance_cap} onChange={e => F('relocation_allowance_cap', e.target.value)} disabled={form.relocation_allowance_allowed === 'no'} /></Field>
+        <Field label="Notice Buyout">
+          <Sel value={form.notice_buyout_allowed} onChange={v => F('notice_buyout_allowed', v)}>
+            <option value="">Not specified</option><option value="yes">Allowed</option><option value="no">Not allowed</option>
+          </Sel>
+        </Field>
+        <Field label="Notice Buyout — Cap" hint="Ceiling, if allowed"><input type="number" min="0" style={st.input} value={form.notice_buyout_cap} onChange={e => F('notice_buyout_cap', e.target.value)} disabled={form.notice_buyout_allowed === 'no'} /></Field>
+        <Field label="ESOP / Retention" hint="Senior roles">
+          <Sel value={form.esop_eligible} onChange={v => F('esop_eligible', v)}>
+            <option value="">Not specified</option><option value="yes">Eligible</option><option value="no">Not eligible</option>
+          </Sel>
+        </Field>
+        <Field label="ESOP / Retention — Detail"><input style={st.input} value={form.esop_retention_notes} onChange={e => F('esop_retention_notes', e.target.value)} placeholder="Units, vesting, retention terms" disabled={form.esop_eligible === 'no'} /></Field>
       </div>
       {/* Closure — what the role actually closed at, against what was budgeted.
           Filled when the requisition closes, not while raising it, so it sits

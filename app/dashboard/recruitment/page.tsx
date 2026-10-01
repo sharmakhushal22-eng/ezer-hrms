@@ -1340,6 +1340,15 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     industry_preference:'', target_companies:'',
     max_notice_period_days:'', languages:'', travel_percentage:'', relocation_required:'',
     diversity_flag:'', licence_requirement:'',
+    // ── Field Master phase 3 (migration 136) — section F, compensation ──────
+    // All §4 Budget & Cost, all optional. §4 is not isQuick-gated: a Quick Hire
+    // has a budget too, and these are budget facts.
+    variable_percentage:'',
+    joining_bonus_allowed:'', joining_bonus_cap:'',
+    relocation_allowance_allowed:'', relocation_allowance_cap:'',
+    notice_buyout_allowed:'', notice_buyout_cap:'',
+    esop_eligible:'', esop_retention_notes:'',
+    budget_code:'',
   }
   // Only the raiser (or a super admin / legacy dashboard login) may edit or delete an MRF.
   const canEditMrf = (m:any) => !!canEditAnyMrf || (!!employeeId && m?.requested_by === employeeId)
@@ -1700,6 +1709,18 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       ...(form.relocation_required ? { relocation_required:form.relocation_required==='yes' } : {}),
       ...(form.diversity_flag ? { diversity_flag:form.diversity_flag==='yes' } : {}),
       ...(form.licence_requirement ? { licence_requirement:form.licence_requirement } : {}),
+      // Phase 3 (136) — spread only when filled, same reason as above: this
+      // form writes to PostgREST directly and has no drop-and-retry.
+      ...(form.variable_percentage ? { variable_percentage:Number(form.variable_percentage)||null } : {}),
+      ...(form.joining_bonus_allowed ? { joining_bonus_allowed:form.joining_bonus_allowed==='yes' } : {}),
+      ...(form.joining_bonus_cap ? { joining_bonus_cap:Number(form.joining_bonus_cap)||null } : {}),
+      ...(form.relocation_allowance_allowed ? { relocation_allowance_allowed:form.relocation_allowance_allowed==='yes' } : {}),
+      ...(form.relocation_allowance_cap ? { relocation_allowance_cap:Number(form.relocation_allowance_cap)||null } : {}),
+      ...(form.notice_buyout_allowed ? { notice_buyout_allowed:form.notice_buyout_allowed==='yes' } : {}),
+      ...(form.notice_buyout_cap ? { notice_buyout_cap:Number(form.notice_buyout_cap)||null } : {}),
+      ...(form.esop_eligible ? { esop_eligible:form.esop_eligible==='yes' } : {}),
+      ...(form.esop_retention_notes ? { esop_retention_notes:form.esop_retention_notes } : {}),
+      ...(form.budget_code ? { budget_code:form.budget_code } : {}),
       // Attribute the requisition to the raiser so it shows in their ESS "My requests",
       // and so ESS approval treats it identically to a Raise-MRF submission.
       ...(editMRF ? {} : { requested_by: employeeId || null }),
@@ -2148,6 +2169,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             <Field label="Headcount — Open" hint="Already open, this one included">
               <input className="rx-input" type="number" min="0" value={form.headcount_open} onChange={e=>F('headcount_open',e.target.value)} />
             </Field>
+            <Field label="Variable Pay (%)" hint={form.variable_percentage ? `Fixed is the remaining ${Math.max(0, 100 - (Number(form.variable_percentage)||0))}%` : 'Fixed is the remainder'}>
+              <input className="rx-input" type="number" min="0" max="100" value={form.variable_percentage} onChange={e=>F('variable_percentage',e.target.value)} />
+            </Field>
+            <Field label="Budget Code" hint="The budget line this draws on — not the cost centre">
+              <input className="rx-input" value={form.budget_code} onChange={e=>F('budget_code',e.target.value)} />
+            </Field>
           </div>
           {form.budget_min && form.budget_max && !errors.budget_max && (
             <div style={{ fontSize:11, color:C.brandDeep, marginBottom:10 }}>
@@ -2158,6 +2185,51 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               )}
             </div>
           )}
+          {/* What the requisition is sanctioned to OFFER — each is "allowed,
+              and up to what", so a cap only means anything beside its flag. */}
+          <div style={{ fontSize:11, fontWeight:700, color:C.faint, textTransform:'uppercase', letterSpacing:'.06em', margin:'14px 0 8px' }}>Allowances sanctioned for this role</div>
+          <div style={{ ...T.g2, marginBottom:10 }}>
+            <Field label="Joining Bonus">
+              <select className="rx-input" value={form.joining_bonus_allowed} onChange={e=>F('joining_bonus_allowed',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="yes">Allowed</option>
+                <option value="no">Not allowed</option>
+              </select>
+            </Field>
+            <Field label="Joining Bonus — Cap" hint="Ceiling, if allowed">
+              <input className="rx-input" type="number" min="0" value={form.joining_bonus_cap} onChange={e=>F('joining_bonus_cap',e.target.value)} disabled={form.joining_bonus_allowed==='no'} />
+            </Field>
+            <Field label="Relocation Allowance">
+              <select className="rx-input" value={form.relocation_allowance_allowed} onChange={e=>F('relocation_allowance_allowed',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="yes">Allowed</option>
+                <option value="no">Not allowed</option>
+              </select>
+            </Field>
+            <Field label="Relocation — Cap" hint="Ceiling, if allowed">
+              <input className="rx-input" type="number" min="0" value={form.relocation_allowance_cap} onChange={e=>F('relocation_allowance_cap',e.target.value)} disabled={form.relocation_allowance_allowed==='no'} />
+            </Field>
+            <Field label="Notice Buyout">
+              <select className="rx-input" value={form.notice_buyout_allowed} onChange={e=>F('notice_buyout_allowed',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="yes">Allowed</option>
+                <option value="no">Not allowed</option>
+              </select>
+            </Field>
+            <Field label="Notice Buyout — Cap" hint="Ceiling, if allowed">
+              <input className="rx-input" type="number" min="0" value={form.notice_buyout_cap} onChange={e=>F('notice_buyout_cap',e.target.value)} disabled={form.notice_buyout_allowed==='no'} />
+            </Field>
+            <Field label="ESOP / Retention" hint="Senior roles">
+              <select className="rx-input" value={form.esop_eligible} onChange={e=>F('esop_eligible',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="yes">Eligible</option>
+                <option value="no">Not eligible</option>
+              </select>
+            </Field>
+            <Field label="ESOP / Retention — Detail">
+              <input className="rx-input" value={form.esop_retention_notes} onChange={e=>F('esop_retention_notes',e.target.value)} placeholder="Units, vesting, retention terms" disabled={form.esop_eligible==='no'} />
+            </Field>
+          </div>
           {/* Closure — what the role actually closed at, against what was
               budgeted. Filled when the requisition closes, not while raising it. */}
           <div style={{ fontSize:11, fontWeight:700, color:C.faint, textTransform:'uppercase', letterSpacing:'.06em', margin:'14px 0 8px' }}>Closure — filled when the role is closed</div>
