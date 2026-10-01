@@ -1725,6 +1725,72 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       // and so ESS approval treats it identically to a Raise-MRF submission.
       ...(editMRF ? {} : { requested_by: employeeId || null }),
     }
+    // ── Re-approval on a material edit ────────────────────────────────────
+    // Approvers sign off on a specific ask. Changing the headcount, the grade or
+    // the money after they did means they approved something that no longer
+    // exists, so the requisition goes back through the chain.
+    //
+    // Only these four count. A reworded JD or an extra sourcing channel is not
+    // what anyone approved, and sending those back would teach people to avoid
+    // editing at all.
+    //
+    // NORMALISED on both sides, deliberately. The row stores numbers and a
+    // nullable string; the form holds strings and ''. A raw !== compares 600000
+    // with '600000' and reports a change on EVERY save — which would reset
+    // approvals on a typo fix and make the whole feature untrustworthy.
+    if (editMRF && ((editMRF as any).status === 'APPROVED' || (editMRF as any).status === 'CLOSED')) {
+      const n = (v:any) => Number(v) || 0
+      const s = (v:any) => String(v ?? '').trim()
+      const before = editMRF as any
+      const changed = [
+        n(before.no_of_openings ?? before.openings) !== n(form.no_of_openings),
+        s(before.grade)       !== s(form.grade),
+        n(before.budget_min)  !== n(form.budget_min),
+        n(before.budget_max)  !== n(form.budget_max),
+      ].some(Boolean)
+      if (changed) {
+        // A closed requisition is finished — its openings are filled. Reopening
+        // it by editing the numbers would resurrect a hiring plan nobody has
+        // approved, so this is a refusal rather than a re-approval.
+        if (before.status === 'CLOSED') {
+          setSaving(false)
+          showNotify('This MRF is closed — openings, grade and budget can no longer be changed. Raise a new requisition instead.','error')
+          return
+        }
+        // Downstream work makes this unsafe rather than merely unapproved: an
+        // offer already with a candidate would be hanging off a requisition
+        // that is no longer approved. Same test the auto-close uses (the
+        // candidates prop is already here, so no extra round trip).
+        const live = (candidates||[]).filter((c:Candidate)=>c.mrf_id===editMRF.id && (c.stage==='Offer Sent'||c.stage==='Joined'))
+        if (live.length) {
+          setSaving(false)
+          showNotify(`Openings, grade or budget cannot be changed — ${live.length} candidate${live.length===1?' is':'s are'} already at offer stage on this MRF.`,'error')
+          return
+        }
+        // Back to the start of the chain it already has: first step pending,
+        // the rest waiting. Steps are MAPPED, not rebuilt, so approver ids and
+        // any keys this row carries survive. Both `comment` and `comments` are
+        // cleared because the two write paths disagree on the key — the ESS
+        // route builds steps with `comment`, the dashboard approve path writes
+        // `comments`, and a stale remark must not survive on a reset step.
+        const reset = asArray((editMRF as any).approval_chain)
+          .map((st:any, i:number) => ({ ...st, status: i === 0 ? 'PENDING' : 'WAITING', acted_at: null, comment: null, comments: null }))
+        // An empty or unreadable chain has nobody to send this to. Writing
+        // SUBMITTED anyway would leave a requisition in limbo: pending approval,
+        // with no approver, surfacing in no queue. The ESS create path refuses
+        // the same case rather than inventing a route (route.ts, "No approver
+        // could be found"), so refuse here too and leave the row as it was.
+        if (!reset.length) {
+          setSaving(false)
+          showNotify('This MRF has no approval chain, so a change to openings, grade or budget cannot be sent for re-approval. Ask HR to check its routing.','error')
+          return
+        }
+        payload.status = 'SUBMITTED'
+        payload.approval_chain = reset
+        payload.approved_at = null
+        showNotify('Openings, grade or budget changed — this MRF goes back for approval.')
+      }
+    }
     let error:any, savedId = editMRF?.id
     if (editMRF) {
       const r = await supabase.from('manpower_requisitions').update(payload).eq('id',editMRF.id)
