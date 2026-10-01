@@ -982,15 +982,15 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       {!isQuick && (readOnly || activeId === 'cand') && <>
         <SectionLine n="7" title="Candidate Requirements" />
         <div style={g2}>
-          <Field label="Experience — Min (years)"><input type="number" style={st.input} value={form.experience_min} onChange={e => F('experience_min', e.target.value)} /></Field>
-          <Field label="Experience — Max (years)"><input type="number" style={st.input} value={form.experience_max} onChange={e => F('experience_max', e.target.value)} /></Field>
+          <Field label="Total Experience — Min (years)" hint="All work experience"><input type="number" style={st.input} value={form.experience_min} onChange={e => F('experience_min', e.target.value)} /></Field>
+          <Field label="Total Experience — Max (years)" hint="All work experience"><input type="number" style={st.input} value={form.experience_max} onChange={e => F('experience_max', e.target.value)} /></Field>
           <Field label="Education — Minimum"><Sel value={form.education_min} onChange={v => F('education_min', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
           <Field label="Education — Maximum"><Sel value={form.education_max} onChange={v => F('education_max', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
           <Field label="Previous Company Preference"><Sel value={form.previous_company_preference} onChange={v => F('previous_company_preference', v)}>{PREV_COMPANY.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Sel></Field>
           {/* Relevant experience is distinct from total above: ten years in the
               industry with two in this role is a different candidate. */}
-          <Field label="Relevant Experience — Min (years)"><input type="number" min="0" style={st.input} value={form.relevant_experience_min} onChange={e => F('relevant_experience_min', e.target.value)} /></Field>
-          <Field label="Relevant Experience — Max (years)"><input type="number" min="0" style={st.input} value={form.relevant_experience_max} onChange={e => F('relevant_experience_max', e.target.value)} /></Field>
+          <Field label="Relevant Experience — Min (years)" hint="In this kind of role, not total"><input type="number" min="0" style={st.input} value={form.relevant_experience_min} onChange={e => F('relevant_experience_min', e.target.value)} /></Field>
+          <Field label="Relevant Experience — Max (years)" hint="In this kind of role, not total"><input type="number" min="0" style={st.input} value={form.relevant_experience_max} onChange={e => F('relevant_experience_max', e.target.value)} /></Field>
           <Field label="Specialisation" hint="Stream or branch within the qualification"><input style={st.input} value={form.specialisation} onChange={e => F('specialisation', e.target.value)} placeholder="e.g. Computer Science, Finance" /></Field>
           <Field label="Certifications"><input style={st.input} value={form.certifications} onChange={e => F('certifications', e.target.value)} placeholder="e.g. PMP, CFA, AWS" /></Field>
           <Field label="Industry Preference"><input style={st.input} value={form.industry_preference} onChange={e => F('industry_preference', e.target.value)} placeholder="e.g. BFSI, Manufacturing" /></Field>

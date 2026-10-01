@@ -2389,10 +2389,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             <>
               <SectionLine title="7 · Candidate Requirements" />
               <div style={{ ...T.g2, marginBottom:10 }}>
-                <Field label="Experience — Min (years)">
+                <Field label="Total Experience — Min (years)" hint="All work experience">
                   <input className="rx-input" type="number" min="0" value={form.experience_min} onChange={e=>F('experience_min',e.target.value)} placeholder="e.g. 3" />
                 </Field>
-                <Field label="Experience — Max (years)" error={errors.experience_max}>
+                <Field label="Total Experience — Max (years)" error={errors.experience_max} hint={errors.experience_max?undefined:'All work experience'}>
                   <input className="rx-input" style={eb('experience_max')} type="number" min="0" value={form.experience_max} onChange={e=>F('experience_max',e.target.value)} placeholder="e.g. 5" />
                 </Field>
               </div>
@@ -2418,10 +2418,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 </Field>
                 {/* Relevant experience is distinct from total above: ten years
                     in the industry with two in this role is a different hire. */}
-                <Field label="Relevant Experience — Min (years)">
+                <Field label="Relevant Experience — Min (years)" hint="In this kind of role, not total">
                   <input className="rx-input" type="number" min="0" value={form.relevant_experience_min} onChange={e=>F('relevant_experience_min',e.target.value)} />
                 </Field>
-                <Field label="Relevant Experience — Max (years)">
+                <Field label="Relevant Experience — Max (years)" hint="In this kind of role, not total">
                   <input className="rx-input" type="number" min="0" value={form.relevant_experience_max} onChange={e=>F('relevant_experience_max',e.target.value)} />
                 </Field>
                 <Field label="Specialisation" hint="Stream or branch within the qualification">
