@@ -11,8 +11,10 @@ export interface PickerPerson { id: string; name: string; code: string; designat
 /** Shape the /api/ess/mrf GET payload into picker rows (companyPeople + hrOptions flag). */
 /**
  * Who an approved requisition may be handed to: the people who actually run
- * hiring — RECRUITER or HR_MANAGER, in the caller's own company. That is
- * `hrOptions` (server-side hrTeamFor), not `companyPeople`.
+ * hiring — the RECRUITER role, seeded as 'Hiring Manager / Recruiter', in the
+ * caller's own company. That is `hrOptions` (server-side hrTeamFor), not
+ * `companyPeople`. HR_MANAGER is the senior HR tier and is NOT assignable:
+ * they oversee requisitions rather than running them.
  *
  * This used to list EVERY active employee and merely tag the recruiters, so an
  * MRF could be assigned to anyone at all while the role list was decoration.
@@ -30,7 +32,7 @@ export function toPickerPeople(d: any): PickerPerson[] {
       id: h.id,
       name: p?.full_name || h.name || '',
       code: p?.emp_code || h.code || '',
-      designation: p?.designation || (h.role === 'HR_MANAGER' ? 'HR Manager' : 'Recruiter'),
+      designation: p?.designation || 'Hiring Manager / Recruiter',
       is_recruiter: true,
     }
   })

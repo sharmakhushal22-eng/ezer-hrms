@@ -52,7 +52,13 @@ async function hrHeadFor(companyId: string | null): Promise<Brief | null> {
 
 // The people an HR Head can assign an approved MRF to — only Hiring Managers / Recruiters
 // (the role that actually runs the hiring), never the broader HR team.
-const HR_ROLE_CODES = ['RECRUITER', 'HR_MANAGER']
+// RECRUITER *is* the hiring-manager role — ess_roles seeds it as
+// 'Hiring Manager / Recruiter' (021_ess.sql), 082 maps "Hiring Manager" onto it,
+// and 114_seed_hiring_managers.sql grants it. There is no separate
+// HIRING_MANAGER code. HR_MANAGER is the senior HR tier (ORG scope, full salary
+// visibility, and listed in OVERSIGHT_CODES) — they watch every requisition
+// rather than being handed one, so they are deliberately NOT assignable.
+const HR_ROLE_CODES = ['RECRUITER']
 async function hrTeamFor(companyId: string | null): Promise<(Brief & { role: string })[]> {
   if (!companyId) return []
   const { data: roles } = await sb.from('ess_roles').select('id, role_code').in('role_code', HR_ROLE_CODES)
@@ -356,14 +362,14 @@ export async function POST(req: NextRequest) {
     const wantHr: string[] = Array.isArray(body.assigned_hr_ids)
       ? body.assigned_hr_ids.map((x: any) => String(x)).filter(Boolean) : []
     if (cur.role === 'HR_HEAD' && !wantHr.length) {
-      return NextResponse.json({ error: 'Assign at least one recruiter or HR manager — approving hands them the requisition to run.' }, { status: 400 })
+      return NextResponse.json({ error: 'Assign at least one hiring manager or recruiter — approving hands them the requisition to run.' }, { status: 400 })
     }
     // And they must actually hold the role, so the picker cannot be bypassed by
     // posting an arbitrary employee id.
     if (wantHr.length) {
       const allowed = new Set((await hrTeamFor(ctx.companyId)).map(h => h.id))
       const strays = wantHr.filter(x => !allowed.has(x))
-      if (strays.length) return NextResponse.json({ error: 'Only recruiters or HR managers in your company can be assigned a requisition.' }, { status: 400 })
+      if (strays.length) return NextResponse.json({ error: 'Only hiring managers / recruiters in your company can be assigned a requisition.' }, { status: 400 })
     }
 
     cur.status = 'APPROVED'; cur.acted_at = now; cur.comment = note

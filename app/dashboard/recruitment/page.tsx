@@ -2827,7 +2827,7 @@ function ApprovalModal({ mrf, org, people = [], onApprove, onReject, onHold, onC
                 never saw the MRF: "assigned to you" reads the id array. The
                 server now requires an id here at the HR_HEAD step. */}
             <label className="rx-label" style={{ display:'block', marginBottom:6 }}>
-              Assign to recruiter / HR manager{atHrHead ? ' *' : ''}
+              Assign to hiring manager / recruiter{atHrHead ? ' *' : ''}
             </label>
             {people.length ? (
               <div style={{ marginBottom:4 }}>
@@ -2836,8 +2836,8 @@ function ApprovalModal({ mrf, org, people = [], onApprove, onReject, onHold, onC
               </div>
             ) : (
               <div style={{ fontSize:11, color:C.warning, background:C.warningTint, borderRadius:7, padding:'8px 10px', marginBottom:11 }}>
-                No recruiters or HR managers are set up for this company, so this requisition cannot be handed to
-                anyone yet. Ask an admin to give someone the <b>Recruiter</b> or <b>HR Manager</b> role in Assign Roles.
+                No hiring managers are set up for this company, so this requisition cannot be handed to anyone yet.
+                Ask an admin to give someone the <b>Hiring Manager / Recruiter</b> role in Assign Roles.
               </div>
             )}
             {people.length>0 && (
