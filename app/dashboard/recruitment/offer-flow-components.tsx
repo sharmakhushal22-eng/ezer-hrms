@@ -34,6 +34,26 @@ const S = {
   sec: { ...eyebrow, display:'flex', alignItems:'center', gap:8, marginBottom:SP.md, marginTop:SP.xs } as React.CSSProperties,
 }
 const fmt = (n: number) => Math.round(n).toLocaleString('en-IN')
+
+/** The default covering email for an offer. Module scope and pure: prepareOffer
+ *  seeds it BEFORE starting the draft loader, so a saved draft's edited wording
+ *  overwrites the template rather than racing it. */
+const TEMPLATE_BODY = (r: any, role: string, company: string) => `Dear ${r.candidates?.full_name},
+
+Congratulations! We are delighted to offer you the position of ${role} at ${company}.
+
+Your detailed offer letter is included below (and attached as an image) for your reference.
+
+Key details:
+• Annual CTC: ₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}
+• Proposed Date of Joining: ${r.proposed_doj ? new Date(r.proposed_doj).toLocaleDateString('en-IN') : '—'}
+
+This offer is valid for 7 days and is subject to background verification and document submission. To accept, simply reply to this email confirming your acceptance.
+
+We look forward to welcoming you to the team.
+
+Warm regards,
+${company} — Human Resources`
 const daysDiff = (d: string) => Math.max(0, Math.ceil((new Date(d).getTime() - Date.now()) / 86400000))
 
 function SecLine({ title }: { title: string }) {
@@ -1110,6 +1130,21 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
+  // What the HR Manager may correct before the letter goes out: how the offer
+  // READS, never what it is worth. The figures below stay derived from the
+  // approved request at send time, so a letter can never quote a number the HR
+  // Head did not approve.
+  //
+  // Seeded in prepareOffer, NOT in a useEffect on `selected` — the 15s poll
+  // replaces that object wholesale, and an effect keyed on it would wipe these
+  // fields while someone was typing into them.
+  const [letter, setLetter] = useState({ candidate_name:'', designation:'', company_name:'', proposed_doj:'', date:'' })
+  // The saved offer_letters row for THIS request, if one exists. id so a second
+  // save updates rather than piling up drafts; status so FINAL can lock the
+  // fields and unlock Send. null status = nothing saved yet.
+  const [letterId, setLetterId] = useState<string | null>(null)
+  const [letterStatus, setLetterStatus] = useState<string | null>(null)
+  const [savingLetter, setSavingLetter] = useState(false)
   const [sq, setSq] = useState('')
   const [hrHeads, setHrHeads] = useState<Record<string, { id: string; name: string; code: string | null }[]>>({})
   const [tick, setTick] = useState(0)
@@ -1161,25 +1196,100 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
   function prepareOffer(r: any) {
     setSelected(r)
     setToEmail(r.candidates?.email || '')
+    // CC is per-candidate and must be cleared on every switch. It used to be set
+    // ONLY inside the draft loader's `if (…cc_emails.length)`, so a candidate
+    // with no draft kept the PREVIOUS candidate's CC list — and their offer
+    // letter, salary included, would be copied to addresses chosen for someone
+    // else. Reset first; the loader re-fills it if this candidate's draft has one.
+    setCcEmails('')
     const company = r.companies?.company_name || 'our organization'
     const role = r.candidates?.designation || r.manpower_requisitions?.designation || 'the role'
+    // BOTH the id and the status must be cleared, not just the status. The draft
+    // loader below bails with `if (!draft) return`, so a candidate with no draft
+    // would inherit the PREVIOUS candidate's letterId — and saveLetter, which
+    // updates by that id, would overwrite one candidate's offer letter with
+    // another's details.
+    setLetterId(null)
+    setLetterStatus(null)
+    // Seed the presentational fields from the SAME expressions the send payload
+    // uses, so the form and the letter can never describe different people.
+    setLetter({
+      candidate_name: r.candidates?.full_name || '',
+      designation: r.candidates?.designation || r.manpower_requisitions?.designation || '',
+      company_name: r.companies?.company_name || '',
+      proposed_doj: (r.proposed_doj || '').slice(0, 10),
+      date: new Date().toISOString().slice(0, 10),
+    })
+    // Seed the template FIRST, then load the draft over it. These two paths both
+    // write `body`, and the draft must win — so the order has to be explicit in
+    // program order rather than left to resolve by microtask timing, which is
+    // what decided it when the template was seeded after the loader started.
     setSubject(`Offer of Employment — ${role} | ${company}`)
-    setBody(`Dear ${r.candidates?.full_name},
+    setBody(TEMPLATE_BODY(r, role, company))
+    // A saved draft wins over the seed — that is the point of saving one. The
+    // FIGURES are deliberately not restored from it: they are always re-derived
+    // from the approved request at send time, so a draft written before the HR
+    // Head revised an offer shows the new money with the old wording, rather
+    // than quoting terms nobody approved.
+    ;(async () => {
+      const { data: draft } = await supabase.from('offer_letters')
+        .select('id, status, letter_content, to_email, cc_emails, candidate_name, designation, date_of_joining')
+        .eq('offer_request_id', r.id).neq('status', 'SENT')
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      if (!draft) return
+      setLetterId(draft.id)
+      setLetterStatus(draft.status || 'DRAFT')
+      if (draft.to_email) setToEmail(draft.to_email)
+      if (Array.isArray(draft.cc_emails) && draft.cc_emails.length) setCcEmails(draft.cc_emails.join(', '))
+      if (draft.letter_content) setBody(draft.letter_content)
+      setLetter(l => ({
+        ...l,
+        candidate_name: draft.candidate_name || l.candidate_name,
+        designation: draft.designation || l.designation,
+        proposed_doj: (draft.date_of_joining || l.proposed_doj || '').slice(0, 10),
+      }))
+    })()
+  }
 
-Congratulations! We are delighted to offer you the position of ${role} at ${company}.
-
-Your detailed offer letter is included below (and attached as an image) for your reference.
-
-Key details:
-• Annual CTC: ₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}
-• Proposed Date of Joining: ${r.proposed_doj ? new Date(r.proposed_doj).toLocaleDateString('en-IN') : '—'}
-
-This offer is valid for 7 days and is subject to background verification and document submission. To accept, simply reply to this email confirming your acceptance.
-
-We look forward to welcoming you to the team.
-
-Warm regards,
-${company} — Human Resources`)
+  /**
+   * Save the letter as DRAFT (still editable) or FINAL (locked, ready to send).
+   *
+   * Upserts by letterId rather than inserting each time — the HR Manager will
+   * press Save more than once, and a pile of drafts for one request would make
+   * "the draft for this request" ambiguous again, which is the problem
+   * offer_request_id (139) was added to solve.
+   *
+   * Writes date_of_joining, not proposed_doj: those are the same fact under two
+   * spellings (offer_letters vs offer_approval_requests), and the draft loader
+   * reads the former. Writing the wrong one loses the DOJ on reload.
+   *
+   * Only the presentational fields are persisted. The money is never written
+   * here — it is re-derived from the approved request at send time, so a letter
+   * cannot quote terms the HR Head did not approve.
+   */
+  async function saveLetter(status: 'DRAFT' | 'FINAL') {
+    if (!selected || readOnly) return
+    if (!letter.candidate_name.trim()) { alert("The candidate's name cannot be empty on the letter."); return }
+    setSavingLetter(true)
+    const row = {
+      offer_request_id: selected.id,
+      candidate_id: selected.candidate_id,
+      company_id: selected.company_id || null,
+      candidate_name: letter.candidate_name.trim(),
+      designation: letter.designation.trim() || 'Not specified',
+      date_of_joining: letter.proposed_doj || null,
+      letter_content: body,
+      to_email: toEmail,
+      cc_emails: ccEmails.split(',').map((e: string) => e.trim()).filter(Boolean),
+      status,
+    }
+    const res = letterId
+      ? await supabase.from('offer_letters').update(row).eq('id', letterId).select('id').single()
+      : await supabase.from('offer_letters').insert(row).select('id').single()
+    setSavingLetter(false)
+    if (res.error) { alert('Could not save the letter: ' + res.error.message); return }
+    setLetterId(res.data?.id || letterId)
+    setLetterStatus(status)
   }
 
   async function sendOffer() {
@@ -1206,10 +1316,23 @@ ${company} — Human Resources`)
 
     // 1. Actually email the offer letter to the candidate via Gmail.
     try {
+      // The five presentational fields come from `letter` — what the HR Manager
+      // actually reviewed and finalised. Reading them from `selected` instead
+      // would show an editable form and then quietly send the unedited original.
+      // The eight money fields keep deriving from the approved request, so the
+      // letter cannot quote terms the HR Head did not approve.
+      //
+      // `date` is FORMATTED here rather than passed raw: renderOfferLetterPng
+      // prints d.date verbatim (lib/offer-letter-image.tsx:39), so an
+      // <input type="date"> value would stamp "2026-10-02" on the letterhead
+      // instead of "02 October 2026".
       const offer = {
-        candidate_name: selected.candidates?.full_name,
-        designation: selected.candidates?.designation || selected.manpower_requisitions?.designation,
-        company_name: selected.companies?.company_name,
+        candidate_name: letter.candidate_name.trim() || selected.candidates?.full_name,
+        designation: letter.designation.trim() || selected.candidates?.designation || selected.manpower_requisitions?.designation,
+        company_name: letter.company_name.trim() || selected.companies?.company_name,
+        date: letter.date
+          ? new Date(letter.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
+          : undefined,
         annual_ctc: selected.offered_ctc,
         variable_pct: selected.offered_variable_pct ?? selected.ctc_negotiations?.variable_pct,
         monthly_basic: selected.ctc_negotiations?.basic_monthly,
@@ -1218,7 +1341,7 @@ ${company} — Human Resources`)
         joining_bonus: selected.joining_bonus,
         retention_bonus: selected.retention_bonus,
         esop_value: selected.esop_value,
-        proposed_doj: selected.proposed_doj,
+        proposed_doj: letter.proposed_doj || selected.proposed_doj,
       }
       const r = await fetch('/api/recruitment/send-offer-email', {
         method: 'POST',
@@ -1238,17 +1361,28 @@ ${company} — Human Resources`)
     }
 
     // 2. Email is out — record the offer letter.
-    const { error } = await supabase.from('offer_letters').insert({
+    //
+    // If a DRAFT/FINAL row already exists for this request, promote THAT row to
+    // SENT instead of inserting a second one. Two rows for one request would
+    // leave the finalised draft behind, and prepareOffer's loader (which asks
+    // for the newest non-SENT row) would hand it back over a letter that has
+    // already gone out.
+    const sentRow = {
+      offer_request_id: selected.id,
       candidate_id: selected.candidate_id,
-      candidate_name: selected.candidates?.full_name || toEmail,
-      designation: selected.candidates?.designation || selected.manpower_requisitions?.designation || 'Not specified',
+      candidate_name: letter.candidate_name.trim() || selected.candidates?.full_name || toEmail,
+      designation: letter.designation.trim() || selected.candidates?.designation || selected.manpower_requisitions?.designation || 'Not specified',
       company_id: selected.company_id || null,
+      date_of_joining: letter.proposed_doj || null,
       letter_content: body,
       to_email: toEmail,
       cc_emails: ccEmails.split(',').map((e: string) => e.trim()).filter(Boolean),
       status: 'SENT',
       sent_at: new Date().toISOString(),
-    })
+    }
+    const { error } = letterId
+      ? await supabase.from('offer_letters').update(sentRow).eq('id', letterId)
+      : await supabase.from('offer_letters').insert(sentRow)
 
     // Update approval request
     await supabase.from('offer_approval_requests').update({
@@ -1288,6 +1422,10 @@ ${company} — Human Resources`)
     setApproved(a => a.filter(r => r.id !== selected.id))
   }
 
+  // FINAL locks the wording; readOnly is the Send Offers screen, which may look
+  // but not touch. Reopening as a draft is offered rather than withheld — a
+  // one-way Finalise would be a trap for a typo caught one second too late.
+  const letterLocked = readOnly || letterStatus === 'FINAL'
   const sql = sq.trim().toLowerCase()
   const positionOpts = distinctSorted(approved.map((r:any)=>r.candidates?.designation || r.manpower_requisitions?.designation))
   const fApproved = approved.filter((r:any)=>(!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation || r.manpower_requisitions?.designation }, mrfLookup, f))
@@ -1390,6 +1528,63 @@ ${company} — Human Resources`)
           <section className="rx-mod brand">
             <div className="rx-mod-h"><div className="rx-mod-t">Send offer letter</div></div>
             <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>{selected.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
+            {/* ── What the HR Manager may correct ──────────────────────────
+                Five fields, all presentational: how the offer READS. The money
+                sits beside them read-only because it is the HR Head's approved
+                figure — sendOffer re-derives it from the request rather than
+                trusting anything on this form. */}
+            <SecLine title={letterStatus === 'FINAL' ? 'Letter details · finalised' : 'Letter details'} />
+            <div style={S.g2}>
+              <div>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Candidate name *</label>
+                <input className="rx-input" value={letter.candidate_name} disabled={letterLocked}
+                  onChange={e=>setLetter(l=>({ ...l, candidate_name:e.target.value }))} />
+              </div>
+              <div>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Designation</label>
+                <input className="rx-input" value={letter.designation} disabled={letterLocked}
+                  onChange={e=>setLetter(l=>({ ...l, designation:e.target.value }))} />
+              </div>
+              <div>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Company name</label>
+                <input className="rx-input" value={letter.company_name} disabled={letterLocked}
+                  onChange={e=>setLetter(l=>({ ...l, company_name:e.target.value }))} />
+              </div>
+              <div>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Date of joining</label>
+                <input className="rx-input" type="date" value={letter.proposed_doj} disabled={letterLocked}
+                  onChange={e=>setLetter(l=>({ ...l, proposed_doj:e.target.value }))} />
+              </div>
+              <div>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Letter date</label>
+                <input className="rx-input" type="date" value={letter.date} disabled={letterLocked}
+                  onChange={e=>setLetter(l=>({ ...l, date:e.target.value }))} />
+              </div>
+            </div>
+
+            {/* The approved figures, shown so the HR Manager can check the letter
+                against them — never edited here. */}
+            <div style={{ background:TK.sunken, border:`1px solid ${TK.line}`, borderRadius:R.md, padding:'10px 12px', marginTop:SP.md, marginBottom:SP.md }}>
+              <div style={{ ...eyebrow, marginBottom:6 }}>Approved by the HR Head · not editable</div>
+              {([
+                ['Annual CTC', selected.offered_ctc, 'inr'],
+                ['Variable', selected.offered_variable_pct ?? selected.ctc_negotiations?.variable_pct, 'pct'],
+                ['Monthly basic', selected.ctc_negotiations?.basic_monthly, 'inr'],
+                ['Monthly HRA', selected.ctc_negotiations?.hra_monthly, 'inr'],
+                ['Est. net monthly', selected.monthly_inhand ?? selected.ctc_negotiations?.net_monthly, 'inr'],
+                ['Joining bonus', selected.joining_bonus, 'inr'],
+                ['Retention bonus', selected.retention_bonus, 'inr'],
+                ['ESOP value', selected.esop_value, 'inr'],
+              ] as [string, any, string][]).map(([lab, val, kind]) => (
+                <div key={lab} style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'3px 0' }}>
+                  <span style={{ color:TK.muted }}>{lab}</span>
+                  <span style={{ ...numeric, fontWeight:W.semi }}>
+                    {val ? (kind === 'pct' ? `${Number(val).toFixed(1)}%` : `₹${fmt(Number(val))}`) : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             <div style={{ marginBottom:8 }}>
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>To *</label>
               <input className="rx-input" value={toEmail} onChange={e=>setToEmail(e.target.value)} />
@@ -1415,12 +1610,48 @@ ${company} — Human Resources`)
                 <b>Yet to be approved.</b> This offer is with the HR Head{headNames(selected) ? ` (${headNames(selected)})` : ''}. The button below unlocks automatically once it is approved — you can prepare the letter meanwhile.
               </div>
             )}
-            {/* sendOffer is untouched: same validation, same send-offer-email
-                POST, same records written, same confirmations. */}
-            <button type="button" className="rx-btn p" onClick={sendOffer} disabled={sending || readOnly || !isApproved(selected)}
-              title={readOnly ? 'Sent from the Offer Letter screen by the assigned HR Manager' : isApproved(selected) ? undefined : 'Waiting for HR Head approval'}
-              style={{ width:'100%', opacity: (!readOnly && isApproved(selected)) ? 1 : .5, cursor: (!readOnly && isApproved(selected)) ? 'pointer' : 'not-allowed' }}>
-              {readOnly ? 'Sent from the Offer Letter screen' : sending ? 'Sending…' : isApproved(selected) ? 'Send Offer & Mark as Sent' : '🔒 Waiting for HR Head approval'}
+            {/* Draft · Finalise · Send.
+                Finalise is a real gate on a path that worked without one, so the
+                Send button SAYS which step is missing rather than sitting dead —
+                the same courtesy the 'Waiting for HR Head approval' state pays. */}
+            {!readOnly && (
+              <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+                <button type="button" className="rx-btn" style={{ flex:1 }} disabled={savingLetter || letterLocked}
+                  onClick={()=>saveLetter('DRAFT')}
+                  title={letterStatus === 'FINAL' ? 'Reopen it as a draft to edit' : 'Save your edits and come back to them later'}>
+                  {savingLetter ? 'Saving…' : 'Save as draft'}
+                </button>
+                {letterStatus === 'FINAL' ? (
+                  <button type="button" className="rx-btn" style={{ flex:1 }} disabled={savingLetter}
+                    onClick={()=>saveLetter('DRAFT')} title="Unlock the fields to correct something">
+                    Reopen as draft
+                  </button>
+                ) : (
+                  <button type="button" className="rx-btn" style={{ flex:1 }} disabled={savingLetter}
+                    onClick={()=>saveLetter('FINAL')} title="Lock the wording and unlock Send">
+                    Finalise
+                  </button>
+                )}
+              </div>
+            )}
+            {!readOnly && isApproved(selected) && letterStatus !== 'FINAL' && (
+              <div style={{ background:TK.warningTint, border:`1px solid ${TK.warningEdge}`, borderRadius:R.sm, padding:'7px 11px', marginBottom:8, fontSize:11, color:TK.warning }}>
+                <b>Not finalised yet.</b> Review the details above, then <b>Finalise</b> to unlock Send. You can reopen it as a draft afterwards.
+              </div>
+            )}
+            {/* sendOffer's own logic is untouched: same validation, same
+                send-offer-email POST, same records written, same confirmations. */}
+            <button type="button" className="rx-btn p" onClick={sendOffer}
+              disabled={sending || readOnly || !isApproved(selected) || letterStatus !== 'FINAL'}
+              title={readOnly ? 'Sent from the Offer Letter screen by the assigned HR Manager'
+                : !isApproved(selected) ? 'Waiting for HR Head approval'
+                : letterStatus !== 'FINAL' ? 'Finalise the letter to unlock Send' : undefined}
+              style={{ width:'100%', opacity: (!readOnly && isApproved(selected) && letterStatus === 'FINAL') ? 1 : .5, cursor: (!readOnly && isApproved(selected) && letterStatus === 'FINAL') ? 'pointer' : 'not-allowed' }}>
+              {readOnly ? 'Sent from the Offer Letter screen'
+                : sending ? 'Sending…'
+                : !isApproved(selected) ? '🔒 Waiting for HR Head approval'
+                : letterStatus !== 'FINAL' ? '🔒 Finalise the letter to send'
+                : 'Send Offer & Mark as Sent'}
             </button>
           </section>
           </div>
