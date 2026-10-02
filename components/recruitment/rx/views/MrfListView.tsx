@@ -30,7 +30,7 @@ import type { MrfVM } from '../logic/types';
  * outside this component.
  */
 export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form, quickHireCap, status, onStatusChange,
-  onCreate, onEdit, onView, onMore, onExport, canEdit, candidatesNote, onReview, onCloseMrf, onReopen, onDelete }: {
+  onCreate, onEdit, onView, onMore, onExport, canEdit, canDelete, candidatesNote, onReview, onCloseMrf, onReopen, onDelete }: {
   rail?: React.ReactNode; mrfs: MrfVM[]; companyLabel?: string; filterBar?: React.ReactNode; banner?: React.ReactNode;
   /**
    * The tab's create/edit form. It has to render INSIDE this frame, between the
@@ -45,6 +45,9 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
   /** Optional short line under each card's candidate count, from data already loaded. */
   candidatesNote?: (m: MrfVM) => string | undefined;
   canEdit?: (m: MrfVM) => boolean;
+  /** Separate from canEdit: the assigned hiring manager may edit a requisition
+   *  they are running, but only the raiser or an admin may delete it. */
+  canDelete?: (m: MrfVM) => boolean;
   onReview?: (id: string) => void; onCloseMrf?: (id: string) => void; onReopen?: (id: string) => void; onDelete?: (id: string) => void;
 }) {
   const ctl = useListControls(mrfs, {
@@ -114,7 +117,7 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
           <div className="s12"><h2 className="sr-only">Requisitions</h2><div className="rx-grid">
             {ctl.visible.map((m) => (
               <div className="s4" key={m.id}>
-                <MrfCard m={m} onView={() => onView(m.id)} onEdit={() => onEdit(m.id)} onMore={onMore ? () => onMore(m.id) : undefined} canEdit={canEdit ? canEdit(m) : true} candidatesNote={candidatesNote?.(m)}
+                <MrfCard m={m} onView={() => onView(m.id)} onEdit={() => onEdit(m.id)} onMore={onMore ? () => onMore(m.id) : undefined} canEdit={canEdit ? canEdit(m) : true} canDelete={canDelete ? canDelete(m) : true} candidatesNote={candidatesNote?.(m)}
                   onReview={onReview ? () => onReview(m.id) : undefined}
                   onCloseMrf={onCloseMrf ? () => onCloseMrf(m.id) : undefined}
                   onReopen={onReopen ? () => onReopen(m.id) : undefined}

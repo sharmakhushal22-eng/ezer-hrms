@@ -1351,7 +1351,20 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     budget_code:'',
   }
   // Only the raiser (or a super admin / legacy dashboard login) may edit or delete an MRF.
-  const canEditMrf = (m:any) => !!canEditAnyMrf || (!!employeeId && m?.requested_by === employeeId)
+  // EDIT and DELETE are deliberately different rules.
+  //
+  // The assigned hiring manager runs this requisition, so they may shape it —
+  // openings, grade, skills — as the hiring reveals what the role actually
+  // needs. They could not before: the gate named only the raiser, so the person
+  // doing the work had to send it back to someone who was no longer involved.
+  // (A material change still re-enters the approval chain; see saveMRF.)
+  const canEditMrf = (m:any) => !!canEditAnyMrf
+    || (!!employeeId && m?.requested_by === employeeId)
+    || (!!employeeId && Array.isArray(m?.assigned_recruiter_ids) && m.assigned_recruiter_ids.includes(employeeId))
+  // Deleting is NOT theirs. It destroys the requisition and orphans the offer
+  // approvals, audit rows and document links that point at it, so it stays with
+  // the raiser and the admins — the rule edit used to have.
+  const canDeleteMrf = (m:any) => !!canEditAnyMrf || (!!employeeId && m?.requested_by === employeeId)
   // The assigned hiring manager can send an APPROVED MRF back to the raiser for changes.
   const canSendBackMrf = (m:any) => m?.status==='APPROVED' && !!employeeId && Array.isArray(m?.assigned_recruiter_ids) && m.assigned_recruiter_ids.includes(employeeId)
   const [sendBackFor, setSendBackFor] = useState<MRF|null>(null)
@@ -1908,6 +1921,16 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   }
 
   async function deleteMRF(id:string) {
+    // Checked HERE, not only on the button. This orphans the offer approvals,
+    // audit rows and document links that point at the requisition and then hard
+    // deletes it — far too destructive to rest on a hidden control. The assigned
+    // hiring manager can edit a requisition they are running; they cannot
+    // destroy it.
+    const row = mrfs.find((m:MRF)=>m.id===id)
+    if (row && !canDeleteMrf(row)) {
+      showNotify('Only the person who raised this MRF, or an admin, can delete it.','error')
+      setDeleteConfirm(null); return
+    }
     await supabase.from('offer_approval_requests').update({ mrf_id:null }).eq('mrf_id', id)
     await supabase.from('recruitment_audit_logs').update({ mrf_id:null }).eq('mrf_id', id)
     await supabase.from('document_collection_links').update({ mrf_id:null }).eq('mrf_id', id)
@@ -2718,6 +2741,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         onReview={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setApprovalModal(m) }}
         onCloseMrf={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setMrfStatus(m,'CLOSED','MRF_CLOSED') }}
         onReopen={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setMrfStatus(m,'APPROVED','MRF_REOPENED') }}
+        canDelete={(m:any)=>canDeleteMrf(mrfs.find((x:MRF)=>x.id===m.id) || m)}
         onDelete={(id:string)=>setDeleteConfirm(id)}
       />
       )}

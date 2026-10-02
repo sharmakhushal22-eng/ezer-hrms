@@ -10,8 +10,12 @@ import type { CandidateVM, MrfVM, NextStep } from './logic/types';
    Buttons call the tab's EXISTING handlers:
    onView → opens the current detail drawer, onEdit → the inline ten-step
    form (edit path), onMore → whatever the card menu does today (delete etc.). */
-export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, candidatesNote, onReview, onCloseMrf, onReopen, onDelete }: {
+export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, canDelete = true, candidatesNote, onReview, onCloseMrf, onReopen, onDelete }: {
   m: MrfVM; onView: () => void; onEdit?: () => void; onMore?: () => void; canEdit?: boolean;
+  /** Delete is gated separately from edit: the assigned hiring manager may edit
+   *  a requisition they are running, but only the raiser or an admin may destroy
+   *  it. Defaults true so existing callers are unchanged. */
+  canDelete?: boolean;
   /** Optional short line under the candidate count, from data already loaded. */
   candidatesNote?: string;
   /* The four status-conditional actions the pre-redesign card carried. The kit's
@@ -86,7 +90,7 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, candidatesN
             {onReopen && m.status === 'CLOSED' && (
               <button type="button" className="rx-btn g" onClick={onReopen} aria-label={`Re-open ${m.title}`} title="Re-open"><Icon name="door" /></button>)}
             {canEdit && onEdit && <button type="button" className="rx-btn g" onClick={onEdit} aria-label={`Edit ${m.title}`} title="Edit"><Icon name="edit" /></button>}
-            {onDelete && <button type="button" className="rx-btn d" onClick={onDelete} aria-label={`Delete ${m.title}`} title="Delete"><Icon name="x" /></button>}
+            {canDelete && onDelete && <button type="button" className="rx-btn d" onClick={onDelete} aria-label={`Delete ${m.title}`} title="Delete"><Icon name="x" /></button>}
             {onMore && <button type="button" className="rx-btn g" onClick={onMore} aria-label="More actions" title="More"><Icon name="more" /></button>}
           </div>
         </div>
