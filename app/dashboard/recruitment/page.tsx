@@ -266,6 +266,13 @@ export default function RecruitmentPage() {
   const { grant, loading: grantLoading } = useGrant()
   // The HR Head tab is for the HR Head alone (and super admin / legacy dashboard login).
   const isHrHead = grant.legacy || grant.isSuperAdmin || (grant.roles || []).some((r: any) => r.role_code === 'HR_HEAD')
+  // An HR Manager sees the offers the HR Head handed to THEM, not every offer in
+  // their company. Deliberately excludes the oversight logins: a super admin or
+  // the legacy dashboard login is not "an HR Manager with assignments", and
+  // scoping them to hr_manager_id would empty the screen for the people who are
+  // meant to see everything.
+  const isScopedHrManager = !grant.legacy && !grant.isSuperAdmin
+    && (grant.roles || []).some((r: any) => r.role_code === 'HR_MANAGER')
   const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
   // Deep-link from ESS Tasks & Approvals: /ess-portal?module=recruitment&mrfSub=approvals&mrf=<id>
   // opens the MRF tab on its Approvals sub-tab with that requisition ready to review.
@@ -485,7 +492,7 @@ export default function RecruitmentPage() {
           converted; CreateOfferApproval and AuditTrailViewer in that file are
           untouched, since the Offer Approval tab renders both. */}
       {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} focusOfferId={offerDeep} />}
-      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
+      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} myEmployeeId={grant.employeeId} scopeToMe={isScopedHrManager} />}
 
       </div>
 
@@ -5689,7 +5696,15 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   useEffect(()=>{
     const ids = Array.from(new Set((companies||[]).map((co:Company)=>co.id).filter(Boolean)))
     if (!ids.length) return
-    fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`).then(r=>r.json()).then((j:any)=>setHrHeads(j.heads||{})).catch(()=>{})
+    // Session-guarded route: the headers must be awaited before the fetch.
+    // An un-awaited authHeaders() is a Promise, which fetch ignores silently —
+    // the call then 401s with nothing failing at build time.
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`, { headers: await authHeaders() })
+        setHrHeads(((await r.json()) as any).heads || {})
+      } catch { /* the status line just omits the HR Head name */ }
+    })()
   },[companies])
   const hrHeadLabel = (companyId?:string|null) => { const hs = hrHeads[companyId||''] || []; return hs.length ? hs.map(h=>`${h.name}${h.code?` (${h.code})`:''}`).join(', ') : 'HR Head not set for this company' }
   const fmtOn = (d?:string|null) => d ? new Date(d).toLocaleDateString('en-IN',{ day:'numeric', month:'short', year:'numeric' }) : ''

@@ -11,6 +11,8 @@
 // routes the notifications, which need the service role and the ESS role tables.
 
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: both verbs answered to anyone until now. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { notify } from '@/lib/ess/session'
@@ -68,15 +70,43 @@ function approvalMail(r: any, who: string, role: string, mrfNo: string | null, r
   return { subject, text, html }
 }
 
-// GET ?company_ids=a,b  -> { heads: { [company_id]: [{ id, name, code }] } }  (who approves, per company)
+// GET ?company_ids=a,b
+//   -> { heads:    { [company_id]: [{ id, name, code }] } }  who approves, per company
+//      { managers: { [company_id]: [{ id, name, code }] } }  who may be given the offer to issue
+//
+// `managers` feeds the HR Head's picker: approving an offer names the HR Manager
+// who will generate and send the letter, the same way approving an MRF names the
+// hiring manager who will run it. Same roleHolders() the decision mail already
+// uses for HR_MANAGER below, so the people offered here and the people notified
+// there can never drift apart.
 export async function GET(req: NextRequest) {
+  // Guarded: this enumerates named employees (HR Heads and HR Managers) for any
+  // company id in the query string. It answered to anyone until now — the
+  // sibling /documents route next door has always required a session, so this
+  // was the outlier rather than a deliberate exception. See
+  // docs/security/open-endpoints.md.
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const ids = (req.nextUrl.searchParams.get('company_ids') || '').split(',').map(s => s.trim()).filter(Boolean)
   const heads: Record<string, { id: string; name: string; code: string | null }[]> = {}
-  await Promise.all(ids.map(async id => { heads[id] = (await roleHolders(id, ['HR_HEAD'])).map(({ id, name, code }) => ({ id, name, code })) }))
-  return NextResponse.json({ heads })
+  const managers: Record<string, { id: string; name: string; code: string | null }[]> = {}
+  await Promise.all(ids.map(async id => {
+    const [h, m] = await Promise.all([roleHolders(id, ['HR_HEAD']), roleHolders(id, ['HR_MANAGER'])])
+    heads[id] = h.map(({ id, name, code }) => ({ id, name, code }))
+    managers[id] = m.map(({ id, name, code }) => ({ id, name, code }))
+  }))
+  return NextResponse.json({ heads, managers })
 }
 
 export async function POST(req: NextRequest) {
+  // Guarded: this reads a whole offer_approval_requests row from a
+  // client-supplied request_id and sends the approval / decision mail off it.
+  // EDIT rather than VIEW — it causes mail to real people, even though the row
+  // itself is written by the caller's own Supabase session.
+  const gate = await requireModule(req, 'Recruitment', 'EDIT')
+  if (gate.error) return gate.error
+
   const body = await req.json().catch(() => null) as any
   const requestId = String(body?.request_id || '')
   if (!requestId) return NextResponse.json({ error: 'request_id is required' }, { status: 400 })

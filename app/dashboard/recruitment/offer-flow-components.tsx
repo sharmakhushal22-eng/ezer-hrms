@@ -145,7 +145,16 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   useEffect(() => {
     const cid = candidate?.company_id || mrf?.company_id
     if (!cid) { setHrHeads([]); return }
-    fetch(`/api/recruitment/offer-approval?company_ids=${cid}`).then(r => r.json()).then(j => setHrHeads(j.heads?.[cid] || [])).catch(() => setHrHeads([]))
+    // The route is session-guarded, so the headers have to be awaited before the
+    // fetch — passing authHeaders() unawaited hands fetch a Promise, which it
+    // ignores silently, and the call 401s with nothing failing at build time.
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/recruitment/offer-approval?company_ids=${cid}`, { headers: await authHeaders() })
+        const j = await r.json()
+        setHrHeads(j.heads?.[cid] || [])
+      } catch { setHrHeads([]) }
+    })()
   }, [candidate?.company_id, mrf?.company_id])
 
   // Everything the recruiter already captured is prefilled: the negotiation's previous-employer
@@ -313,7 +322,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     let notified = 0, notifyWarning = '', emailedTo = ''
     if (!error && created?.id) {
       try {
-        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'submitted', request_id: created.id }) })
+        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ action:'submitted', request_id: created.id }) })
         const j = await r.json().catch(() => ({}))
         notified = Number(j.notified || 0); notifyWarning = j.warning || j.emailSkipped || (!r.ok ? (j.error || 'notification failed') : '')
         if (Number(j.emailed) > 0) emailedTo = `${j.emailed} recipient(s)`
@@ -608,7 +617,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     let notified = 0
     if (!error) {
       try {
-        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'decided', request_id: selected.id }) })
+        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ action:'decided', request_id: selected.id }) })
         const j = await r.json().catch(() => ({})); notified = Number(j.notified || 0)
       } catch { /* the decision is saved regardless */ }
     }
@@ -1060,13 +1069,20 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
       .order('submitted_at',{ ascending:false })
       // A scoped hiring manager only sees offers for candidates under the MRFs assigned to
       // them; `allowedMrfIds` is null for oversight roles (no filter).
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         const rows = (data || []).filter((r: any) => !allowedMrfIds || (r.candidates?.mrf_id && allowedMrfIds.has(r.candidates.mrf_id)))
         setApproved(rows)
         // keep the open one in sync — this is what flips the button from locked to live
         setSelected((sel: any) => sel ? (rows.find((r: any) => r.id === sel.id) || null) : sel)
         const ids = Array.from(new Set(rows.map((r: any) => r.company_id).filter(Boolean))) as string[]
-        if (ids.length) fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`).then(r => r.json()).then(j => setHrHeads(j.heads || {})).catch(() => null)
+        // Session-guarded route: the headers must be awaited. Handing fetch an
+        // un-awaited authHeaders() Promise is ignored silently and 401s.
+        if (ids.length) {
+          try {
+            const r = await fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`, { headers: await authHeaders() })
+            setHrHeads((await r.json()).heads || {})
+          } catch { /* the list still renders; only the "who approves" line is missing */ }
+        }
       })
   }, [allowedMrfIds, tick])
 
