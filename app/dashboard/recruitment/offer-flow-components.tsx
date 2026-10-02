@@ -64,6 +64,9 @@ const distinctSorted = (arr:(string|undefined|null)[]) => Array.from(new Set(arr
 // ── CC picker — search employees by name / code, keep a few as chips. Module scope, so the
 // search box never re-mounts while typing. Everyone picked gets the HR Head's approval mail.
 type CcEmp = { id: string; full_name: string; emp_code: string | null; designation: string | null }
+/** An HR_MANAGER holder in a given company, as /api/recruitment/offer-approval
+ *  returns them. The HR Head picks one when approving; they issue the letter. */
+type HrManagerOption = { id: string; name: string; code: string | null }
 function CcPicker({ value, onChange }: { value: CcEmp[]; onChange: (v: CcEmp[]) => void }) {
   const supabase = createClient()
   const [emps, setEmps] = useState<CcEmp[]>([])
@@ -592,8 +595,17 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     loadRejected()
   }
 
-  async function processApproval(req: any = selected, act: 'approve'|'reject' = action, note: string = comment): Promise<boolean> {
+  async function processApproval(req: any = selected, act: 'approve'|'reject' = action, note: string = comment, hrManager?: { id: string; name: string; code: string | null } | null): Promise<boolean> {
     if (act === 'reject' && !note.trim()) { alert('A rejection reason is required'); return false }
+    // Approving IS the hand-off: it names the HR Manager who will generate and
+    // send the offer letter, the same way approving an MRF names the hiring
+    // manager who will run it. Checked HERE rather than only on the button —
+    // this function has default parameters, so it can be called bare, and a
+    // disabled control is not an enforcement point.
+    if (act === 'approve' && !hrManager?.id) {
+      alert('Choose the HR Manager who will issue the offer letter — approving hands it to them.')
+      return false
+    }
     const selected = req, action = act, comment = note
     setProcessing(true)
     // DB CHECK constraint allows only 'APPROVED' / 'REJECTED' (not 'APPROVE'/'REJECT').
@@ -604,6 +616,13 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       hr_head_action: headAction,
       hr_head_comments: comment,
       hr_head_actioned_at: new Date().toISOString(),
+      // Only on approval. A rejection has nobody to hand the offer to, and
+      // stamping a manager onto a rejected request would put it in their queue.
+      // hr_manager_id (137) is the handle the Send Offers screen scopes on;
+      // hr_manager_email is the readable echo beside it, like assigned_recruiter.
+      ...(action === 'approve' && hrManager?.id
+        ? { hr_manager_id: hrManager.id, hr_manager_email: `${hrManager.name}${hrManager.code ? ` (${hrManager.code})` : ''}` }
+        : {}),
     }).eq('id', selected.id)
 
     await supabase.from('recruitment_audit_logs').insert({
@@ -798,7 +817,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
           req={selected} mrf={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id) || null}
           processing={processing} decided={decided}
           onClose={()=>{ setSelected(null); setDecided(null); setComment('') }}
-          onDecide={(act, note)=>processApproval(selected, act, note)} />
+          onDecide={(act, note, hrManager)=>processApproval(selected, act, note, hrManager)} />
       )}
         </div>
       </div>
@@ -867,12 +886,37 @@ function OfferDocuments({ requestId }: { requestId: string }) {
 // ── HR Head review screen — a centred dialog over the dashboard; one offer, one decision ──
 function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }: {
   req: any; mrf: any; processing: boolean; decided: { action: 'approve'|'reject'; notified: number } | null
-  onClose: () => void; onDecide: (action: 'approve'|'reject', note: string) => Promise<boolean>
+  onClose: () => void
+  /** Approving carries the HR Manager who will issue the letter; rejecting does not. */
+  onDecide: (action: 'approve'|'reject', note: string, hrManager?: HrManagerOption | null) => Promise<boolean>
 }) {
+  // Who may be handed the offer: HR_MANAGER holders in the request's own
+  // company, from the (now session-guarded) offer-approval GET. null = still
+  // loading, [] = this company has nobody with the role.
+  const [managers, setManagers] = useState<HrManagerOption[] | null>(null)
+  const [hrManager, setHrManager] = useState<HrManagerOption | null>(null)
   const [mode, setMode] = useState<'view'|'reject'|'approve'>('view')
   const [note, setNote] = useState('')
   const [showTpl, setShowTpl] = useState(false)
-  useEffect(() => { setMode('view'); setNote(''); setShowTpl(false) }, [req?.id])
+  useEffect(() => { setMode('view'); setNote(''); setShowTpl(false); setHrManager(null); setManagers(null) }, [req?.id])
+  // Who can be handed this offer: HR_MANAGER holders in THIS request's company.
+  // Scoped per request rather than loaded once, because the HR Head reviews
+  // offers across companies and the people differ. The route is session-guarded,
+  // so the headers must be awaited — an un-awaited authHeaders() is a Promise,
+  // which fetch ignores silently, and the call 401s with nothing failing at build.
+  useEffect(() => {
+    const cid = req?.company_id
+    if (!cid) { setManagers([]); return }
+    let live = true
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/recruitment/offer-approval?company_ids=${cid}`, { headers: await authHeaders() })
+        const j = await r.json()
+        if (live) setManagers(j.managers?.[cid] || [])
+      } catch { if (live) setManagers([]) }
+    })()
+    return () => { live = false }
+  }, [req?.id, req?.company_id])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !processing) onClose() }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
@@ -1010,8 +1054,26 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }:
             )}
             {mode === 'approve' && (
               <div style={{ padding:14, borderRadius:14, border:`1px solid ${TK.positiveEdge}`, background:TK.positiveTint, display:'flex', flexDirection:'column', gap:8, animation:'rxRise .3s both' }}>
-                <div style={{ fontSize:12.5, fontWeight:700, color:TK.positive }}>Approve {rs(ctc)} for {c.full_name}? A note for the HR manager is optional.</div>
-                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional comment — goes with the approval notification." style={{ height:'auto', minHeight:56, resize:'vertical', padding:'10px 13px' }} />
+                <div style={{ fontSize:12.5, fontWeight:700, color:TK.positive }}>Approve {rs(ctc)} for {c.full_name}? Choose who will issue the offer letter.</div>
+                {/* Approving IS the hand-off. Required, so the offer cannot be
+                    approved into nobody's queue — the same rule the HR Head's
+                    MRF approval uses when it names the hiring manager. */}
+                {managers === null ? (
+                  <div style={{ fontSize:11.5, color:TK.muted }}>Loading HR Managers…</div>
+                ) : managers.length === 0 ? (
+                  <div style={{ fontSize:11.5, color:TK.warning, background:TK.warningTint, borderRadius:8, padding:'8px 10px' }}>
+                    No HR Manager is set up for this company, so this offer cannot be handed to anyone yet.
+                    Ask an admin to give someone the <b>HR Manager</b> role in Assign Roles.
+                  </div>
+                ) : (
+                  <select className="rx-input" value={hrManager?.id || ''}
+                    onChange={e => setHrManager(managers.find(m => m.id === e.target.value) || null)}
+                    style={{ padding:'9px 11px' }}>
+                    <option value="">Select the HR Manager who will issue the letter…</option>
+                    {managers.map(m => <option key={m.id} value={m.id}>{m.name}{m.code ? ` (${m.code})` : ''}</option>)}
+                  </select>
+                )}
+                <textarea className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional comment — goes with the approval notification." style={{ height:'auto', minHeight:56, resize:'vertical', padding:'10px 13px' }} />
               </div>
             )}
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -1022,7 +1084,7 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }:
               </>) : (<>
                 <button type="button" className="rx-btn g" onClick={() => setMode('view')} disabled={processing}>← Back</button>
                 <span style={{ flex:1 }} />
-                <button type="button" className={`rx-btn ${mode === 'reject' ? 'd' : 'p'}`} disabled={processing || (mode === 'reject' && !note.trim())} onClick={() => onDecide(mode as 'approve'|'reject', note)} style={{ opacity: processing || (mode === 'reject' && !note.trim()) ? .55 : 1 }}>
+                <button type="button" className={`rx-btn ${mode === 'reject' ? 'd' : 'p'}`} disabled={processing || (mode === 'reject' && !note.trim()) || (mode === 'approve' && !hrManager)} onClick={() => onDecide(mode as 'approve'|'reject', note, hrManager)} style={{ opacity: processing || (mode === 'reject' && !note.trim()) || (mode === 'approve' && !hrManager) ? .55 : 1 }}>
                   {processing ? (mode === 'reject' ? 'Rejecting…' : 'Approving…') : mode === 'reject' ? 'Confirm rejection' : 'Confirm approval'}
                 </button>
               </>)}
@@ -1038,7 +1100,7 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }:
 // ═══════════════════════════════════════════════════════════════
 // HR MANAGER: SEND OFFER LETTER
 // ═══════════════════════════════════════════════════════════════
-export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null, rail }: any = {}) {
+export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null, myEmployeeId = null, scopeToMe = false, rail }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [approved, setApproved] = useState<any[]>([])
@@ -1070,7 +1132,14 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
       // A scoped hiring manager only sees offers for candidates under the MRFs assigned to
       // them; `allowedMrfIds` is null for oversight roles (no filter).
       .then(async ({ data }) => {
-        const rows = (data || []).filter((r: any) => !allowedMrfIds || (r.candidates?.mrf_id && allowedMrfIds.has(r.candidates.mrf_id)))
+        // An HR Manager sees the offers the HR Head handed to THEM — hr_manager_id,
+        // set at final approval (137). That REPLACES the MRF filter for them
+        // rather than stacking on it: allowedMrfIds is "every MRF this viewer can
+        // see", which is visibility, not assignment, and would show an HR Manager
+        // every offer in their scope. Oversight logins keep the old behaviour.
+        const rows = (data || []).filter((r: any) => scopeToMe
+          ? (!!myEmployeeId && r.hr_manager_id === myEmployeeId)
+          : (!allowedMrfIds || (r.candidates?.mrf_id && allowedMrfIds.has(r.candidates.mrf_id))))
         setApproved(rows)
         // keep the open one in sync — this is what flips the button from locked to live
         setSelected((sel: any) => sel ? (rows.find((r: any) => r.id === sel.id) || null) : sel)
@@ -1084,7 +1153,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
           } catch { /* the list still renders; only the "who approves" line is missing */ }
         }
       })
-  }, [allowedMrfIds, tick])
+  }, [allowedMrfIds, myEmployeeId, scopeToMe, tick])
 
   const isApproved = (r: any) => r?.status === 'HR_HEAD_APPROVED'
   const headNames = (r: any) => (hrHeads[r?.company_id] || []).map(h => `${h.name}${h.code ? ` (${h.code})` : ''}`).join(', ')
