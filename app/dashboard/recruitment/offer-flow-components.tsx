@@ -1100,7 +1100,7 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }:
 // ═══════════════════════════════════════════════════════════════
 // HR MANAGER: SEND OFFER LETTER
 // ═══════════════════════════════════════════════════════════════
-export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null, myEmployeeId = null, scopeToMe = false, rail }: any = {}) {
+export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null, myEmployeeId = null, scopeToMe = false, readOnly = false, rail }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [approved, setApproved] = useState<any[]>([])
@@ -1183,6 +1183,11 @@ ${company} — Human Resources`)
   }
 
   async function sendOffer() {
+    // Send Offers is the read-only view of offers in flight; dispatch belongs to
+    // the Offer Letter screen, which only the assigned HR Manager can open.
+    // Checked here as well as on the button, for the same reason the status is
+    // re-read below: a disabled control is not an enforcement point.
+    if (readOnly) { alert('Offers are sent from the Offer Letter screen by the assigned HR Manager.'); return }
     if (!selected || !toEmail || !body) { alert('Recipient email and body are required'); return }
     // Never trust the button state alone — re-read the row so an offer the HR Head has not
     // approved (or has rejected since the screen loaded) cannot go out.
@@ -1412,10 +1417,10 @@ ${company} — Human Resources`)
             )}
             {/* sendOffer is untouched: same validation, same send-offer-email
                 POST, same records written, same confirmations. */}
-            <button type="button" className="rx-btn p" onClick={sendOffer} disabled={sending || !isApproved(selected)}
-              title={isApproved(selected) ? undefined : 'Waiting for HR Head approval'}
-              style={{ width:'100%', opacity: isApproved(selected) ? 1 : .5, cursor: isApproved(selected) ? 'pointer' : 'not-allowed' }}>
-              {sending ? 'Sending…' : isApproved(selected) ? 'Send Offer & Mark as Sent' : '🔒 Waiting for HR Head approval'}
+            <button type="button" className="rx-btn p" onClick={sendOffer} disabled={sending || readOnly || !isApproved(selected)}
+              title={readOnly ? 'Sent from the Offer Letter screen by the assigned HR Manager' : isApproved(selected) ? undefined : 'Waiting for HR Head approval'}
+              style={{ width:'100%', opacity: (!readOnly && isApproved(selected)) ? 1 : .5, cursor: (!readOnly && isApproved(selected)) ? 'pointer' : 'not-allowed' }}>
+              {readOnly ? 'Sent from the Offer Letter screen' : sending ? 'Sending…' : isApproved(selected) ? 'Send Offer & Mark as Sent' : '🔒 Waiting for HR Head approval'}
             </button>
           </section>
           </div>

@@ -32,7 +32,18 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'negotiation', label: 'Negotiation' },
       { key: 'offerapproval', label: 'Offer Approval' },
       { key: 'hrhead', label: 'HR Head' },
+      // Two screens, one dispatch. Send Offers is the read-only view of offers
+      // in flight (migration 123 seeds it for RECRUITER); Offer Letter is where
+      // the assigned HR Manager reviews, edits, generates and sends, and
+      // migration 138 grants it to HR_MANAGER alone.
+      //
+      // BOTH must be listed. An unlisted key that the page still renders leaves
+      // the module unconfigured for every role, so the tab can never be
+      // restricted — recruitment-authority.test.ts checks exactly this, and
+      // caught it when an earlier edit replaced sendoffer instead of adding
+      // offerletter beside it.
       { key: 'sendoffer', label: 'Send Offers' },
+      { key: 'offerletter', label: 'Offer Letter' },
       { key: 'offers', label: 'Offers' },
       { key: 'preonboarding', label: 'Pre-onboarding' },
       { key: 'jobstatus', label: 'Job Status' },

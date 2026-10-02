@@ -273,7 +273,7 @@ export default function RecruitmentPage() {
   // meant to see everything.
   const isScopedHrManager = !grant.legacy && !grant.isSuperAdmin
     && (grant.roles || []).some((r: any) => r.role_code === 'HR_MANAGER')
-  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
+  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offerletter'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
   // Deep-link from ESS Tasks & Approvals: /ess-portal?module=recruitment&mrfSub=approvals&mrf=<id>
   // opens the MRF tab on its Approvals sub-tab with that requisition ready to review.
   const [mrfDeep, setMrfDeep] = useState<{ sub?:string; id?:string }>({})
@@ -288,7 +288,7 @@ export default function RecruitmentPage() {
     const sub = p.get('mrfSub'); const id = p.get('mrf')
     if (sub || id) { setTab('mrf'); setMrfDeep({ sub: sub || undefined, id: id || undefined }) }
     const t = p.get('tab')
-    if (t && ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus'].includes(t)) { setTab(t as typeof tab); wantedTab.current = t }
+    if (t && ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offerletter','offers','preonboarding','jobstatus'].includes(t)) { setTab(t as typeof tab); wantedTab.current = t }
     const o = p.get('offer'); if (o) setOfferDeep(o)
   }, [])
   const [companies, setCompanies] = useState<Company[]>([])
@@ -353,7 +353,12 @@ export default function RecruitmentPage() {
     { k:'negotiation', l:'Negotiation' },
     { k:'offerapproval', l:'Offer Approval' },
     { k:'hrhead', l:'HR Head' },
+    // Two screens, one dispatch. Send Offers stays as the read-only view of
+    // offers in flight (recruiters keep it); Offer Letter is where the assigned
+    // HR Manager reviews, edits, generates and sends — and migration 138 grants
+    // recruitment.offerletter to HR_MANAGER alone.
     { k:'sendoffer', l:'Send Offers' },
+    { k:'offerletter', l:'Offer Letter' },
     { k:'offers', l:'Offers' },
     { k:'preonboarding', l:'Pre-onboarding' },
     { k:'jobstatus', l:'Job Status' },
@@ -492,7 +497,11 @@ export default function RecruitmentPage() {
           converted; CreateOfferApproval and AuditTrailViewer in that file are
           untouched, since the Offer Approval tab renders both. */}
       {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} focusOfferId={offerDeep} />}
-      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} myEmployeeId={grant.employeeId} scopeToMe={isScopedHrManager} />}
+      {/* Same component, two roles. Send Offers is the read-only view of offers
+          in flight — recruiters keep sight of them but cannot dispatch. Offer
+          Letter is the assigned HR Manager's screen and owns sending. */}
+      {tab==='sendoffer' && <HRManagerSendOffer readOnly companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} myEmployeeId={grant.employeeId} scopeToMe={false} />}
+      {tab==='offerletter' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} myEmployeeId={grant.employeeId} scopeToMe={isScopedHrManager} />}
 
       </div>
 

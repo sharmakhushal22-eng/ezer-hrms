@@ -63,11 +63,17 @@ const visibleFor = (code: string) =>
 // Every assertion below is worthless if the regexes silently matched nothing.
 
 test('all three sources were actually parsed', () => {
-  assert.equal(TAB_KEYS.length, 11,
-    `parsed ${TAB_KEYS.length} tab keys from page.tsx, expected 11 — the parse broke, not the tabs`)
+  // Twelve since Offer Letter landed beside Send Offers: the read-only view of
+  // offers in flight stays with the recruiters, dispatch moved to the assigned
+  // HR Manager's screen. These two counts are a tripwire for the regexes
+  // silently matching nothing — they are not the access assertions, which are
+  // the three "page, catalogue and migration agree" checks below and hold at
+  // any size.
+  assert.equal(TAB_KEYS.length, 12,
+    `parsed ${TAB_KEYS.length} tab keys from page.tsx, expected 12 — the parse broke, not the tabs`)
   assert.ok(TAB_KEYS.includes('hrhead') && TAB_KEYS.includes('negotiation'),
     `parsed keys look wrong: ${TAB_KEYS.join(',')}`)
-  assert.equal(CATALOGUE_KEYS.length, 11, 'the recruitment catalogue should list eleven screens')
+  assert.equal(CATALOGUE_KEYS.length, 12, 'the recruitment catalogue should list twelve screens')
   assert.ok(SEEDED.length >= 15, `parsed ${SEEDED.length} seeded rows from migration 123 — the parse broke`)
 })
 
