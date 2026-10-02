@@ -678,6 +678,29 @@ function validateMrf(form:any, strict:boolean) {
   return e
 }
 
+// Email a candidate their salary break-up link. Module scope on purpose: a
+// helper declared inside a component is rebuilt every render, and both the
+// stipend calculator and the CTC negotiator call this one.
+//
+// Reports what actually happened. The route returns emailed:false with a reason
+// when Gmail is not configured, and saying "sent" over that would leave a
+// recruiter waiting on a mail that was never attempted.
+async function emailSalaryLink(candidateId:string, to:string|undefined, showNotify:(m:string,t?:'success'|'error')=>void) {
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to.trim())) {
+    showNotify('This candidate has no email address on record — add one on their profile first.','error'); return
+  }
+  try {
+    const r = await fetch('/api/recruitment/salary-link', {
+      method:'POST', headers: await authHeaders(),
+      body: JSON.stringify({ candidate_id:candidateId, email:to.trim() }),
+    })
+    const j = await r.json().catch(()=>({}))
+    if (!r.ok) { showNotify(j.error||'Could not send the salary link','error'); return }
+    if (j.emailed) showNotify(`Break-up emailed to ${j.to||to}`)
+    else showNotify(j.emailSkipped || 'Link ready, but the email was not sent.','error')
+  } catch (e:any) { showNotify(e?.message||'Could not send the salary link','error') }
+}
+
 async function logMrfAudit(supabase:any, mrf:{id:string; company_id?:string}, action_type:string, details:any) {
   await supabase.from('recruitment_audit_logs').insert({
     mrf_id:mrf.id, company_id:mrf.company_id||null, action_type, details,
@@ -4713,6 +4736,12 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               <input readOnly value={savedLink} onFocus={e=>e.target.select()} className="rx-input" style={{ fontSize:11, fontFamily:'monospace' }} />
               <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:C.brand, color:C.onAccent, whiteSpace:'nowrap' as const }}>Copy</button>
+              {/* The link used to be copy-only: the recruiter pasted it into
+                  their own mail client. This sends it the same way the document
+                  request is sent, so the candidate-facing trail is one system. */}
+              <button onClick={()=>emailSalaryLink(sel.id, sel.email, showNotify)} disabled={!sel.email}
+                title={sel.email ? `Email to ${sel.email}` : 'No email address on this candidate'}
+                style={{ ...T.btn, background:C.positive, color:C.onAccent, whiteSpace:'nowrap' as const, opacity:sel.email?1:.5, cursor:sel.email?'pointer':'not-allowed' }}>Email</button>
             </div>
           </div>
         )}
@@ -5470,6 +5499,18 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                     <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                       <input readOnly value={savedLink} onFocus={e=>e.target.select()} className="rx-input" style={{ fontSize:10.5, fontFamily:'monospace', flex:1, padding:'7px 9px' }} />
                       <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btnOutline, background:C.surface, borderColor:C.positive, color:C.positive, fontWeight:700, padding:'6px 10px', fontSize:11.5 }}>Copy</button>
+                      {/* Sends the link the screen already minted. A candidate who
+                          has answered is confirmed first — re-sending a break-up
+                          to someone who accepted should be deliberate. */}
+                      <button
+                        onClick={()=>{
+                          const answered = loadedNeg?.candidate_response
+                          if (answered && !window.confirm(`${sel.full_name} has already ${String(answered).toLowerCase()} this offer. Send the break-up again?`)) return
+                          emailSalaryLink(sel.id, sel.email, showNotify)
+                        }}
+                        disabled={!sel.email}
+                        title={sel.email ? `Email to ${sel.email}` : 'No email address on this candidate'}
+                        style={{ ...T.btnOutline, background:C.surface, borderColor:C.positive, color:C.positive, fontWeight:700, padding:'6px 10px', fontSize:11.5, opacity:sel.email?1:.5, cursor:sel.email?'pointer':'not-allowed' }}>Email</button>
                       <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.positive, color:C.onAccent, textDecoration:'none', padding:'6px 10px', fontSize:11.5 }}>Open ↗</a>
                     </div>
                   </div>
