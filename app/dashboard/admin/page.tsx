@@ -7,6 +7,7 @@ import { supabase } from '../../../lib/supabase'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import InboxPolicy from '@/components/admin/InboxPolicy'
+import OfferLetterDesign from '@/components/admin/OfferLetterDesign'
 
 // ═══════════════════════════════════════════════
 //  COMPANY SETUP — Types, Constants, Styles
@@ -1363,7 +1364,7 @@ function MasterSetupTab() {
 //  ADMIN PAGE — Main Export (Tabs)
 // ═══════════════════════════════════════════════
 export default function AdminPage() {
-  const [tab, setTab] = useState<'company' | 'master' | 'inbox'>('company')
+  const [tab, setTab] = useState<'company' | 'master' | 'inbox' | 'offerletter'>('company')
   return (
     <div style={{ minHeight: '100vh', background: TK.sunken, fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
       {/* Header — the shared band. Was a flat dark slab, which differentiated
@@ -1383,6 +1384,7 @@ export default function AdminPage() {
           { id: 'company', label: 'Company Setup', desc: 'Onboard a new company — 7-step wizard' },
           { id: 'master',  label: 'Master Setup',  desc: 'Manage dropdowns — Add/Edit/Disable' },
           { id: 'inbox',   label: 'Inbox',         desc: 'Who can message whom · department desks' },
+          { id: 'offerletter', label: 'Offer Letter', desc: 'Body template · terms · annexures' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
             style={{ padding: '13px 20px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
@@ -1397,6 +1399,7 @@ export default function AdminPage() {
         {tab === 'company' && <CompanySetupTab />}
         {tab === 'master'  && <MasterSetupTab />}
         {tab === 'inbox'   && <InboxPolicy />}
+        {tab === 'offerletter' && <OfferLetterDesign />}
       </div>
     </div>
   )
