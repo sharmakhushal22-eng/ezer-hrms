@@ -1346,7 +1346,11 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
       const r = await fetch('/api/recruitment/send-offer-email', {
         method: 'POST',
         headers: await authHeaders(),
-        body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer }),
+        // offer_request_id lets the server print the admin-configured template
+        // onto the company's uploaded letterhead. Without it the server has no
+        // way to find the template, terms or stationery, and silently falls
+        // back to the drawn letter.
+        body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer, offer_request_id: selected.id }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok || !d.ok) {

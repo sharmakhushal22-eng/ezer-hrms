@@ -10,7 +10,11 @@ import { NextRequest, NextResponse } from 'next/server'
 // Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
 import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
+import { createClient } from '@supabase/supabase-js'
 import { renderOfferLetterPng, pngToPdf } from '@/lib/offer-letter-image'
+// Prints the configured template onto the company's uploaded letterhead PDF.
+// Falls back to renderOfferLetterPng above when nothing is configured yet.
+import { buildOfferLetterPdf, OfferTemplateTokenError } from '@/lib/recruitment/offer-letter-pdf'
 
 export const runtime = 'nodejs' // nodemailer needs the Node.js runtime, not Edge
 
@@ -19,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (gate.error) return gate.error
 
   try {
-    const { to, cc, subject, body, offer } = await req.json()
+    const { to, cc, subject, body, offer, offer_request_id } = await req.json()
 
     if (!to || !subject || !body) {
       return NextResponse.json({ error: 'Missing recipient, subject, or body' }, { status: 400 })
@@ -39,11 +43,41 @@ export async function POST(req: NextRequest) {
       .map((e: string) => e.trim())
       .filter(Boolean)
 
-    // Render the professional offer-letter image and attach it (inline + downloadable).
-    // If anything goes wrong, we still send the text email rather than fail the whole send.
-    // Attach the offer letter as a PDF only (no inline/PNG attachment).
+    // ── The attachment ────────────────────────────────────────────────────
+    // Preferred: the admin-configured template printed onto the company's own
+    // uploaded letterhead PDF (Admin Setup › Offer Letter). Fallback: the drawn
+    // letter this route has always produced, used when no template or no
+    // letterhead has been configured yet.
+    //
+    // A template with an unfillable {{token}} is NOT a fallback case — it stops
+    // the send with a 400, because the alternative is emailing a candidate a
+    // letter with "{{offer_ctc_annual}}" printed on it. Nothing is marked sent
+    // on a non-2xx, so the HR Manager can fix the template and retry.
     const attachments: any[] = []
-    if (offer) {
+    let letterheadUsed: string | null = null
+
+    if (offer_request_id) {
+      try {
+        const supa = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
+        )
+        const built = await buildOfferLetterPdf(supa, offer_request_id)
+        if (built) {
+          attachments.push({ filename: 'Offer_Letter.pdf', content: built.pdf, contentType: 'application/pdf' })
+          letterheadUsed = built.letterheadFile
+        }
+      } catch (e) {
+        if (e instanceof OfferTemplateTokenError) {
+          return NextResponse.json({ error: e.message, unknown_tokens: e.tokens }, { status: 400 })
+        }
+        // Any other failure (storage hiccup, malformed stationery) falls through
+        // to the drawn letter rather than blocking an approved offer.
+        console.error('letterhead merge failed — falling back to the drawn letter:', e)
+      }
+    }
+
+    if (!attachments.length && offer) {
       try {
         const png = await renderOfferLetterPng({ ...offer, from_name: process.env.GMAIL_FROM_NAME })
         const pdf = await pngToPdf(png)
@@ -69,7 +103,7 @@ export async function POST(req: NextRequest) {
       attachments,
     })
 
-    return NextResponse.json({ ok: true, messageId: info.messageId })
+    return NextResponse.json({ ok: true, messageId: info.messageId, letterhead: letterheadUsed })
   } catch (err: any) {
     console.error('send-offer-email failed:', err)
     return NextResponse.json({ error: err?.message || 'Failed to send email' }, { status: 502 })

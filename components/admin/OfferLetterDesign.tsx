@@ -21,10 +21,32 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { MERGE_FIELDS, sampleOfferMergeFields } from '@/lib/letters/mergeFields'
 import { renderTemplate, extractTokens } from '@/lib/letters/renderTemplate'
+// The letterhead store is REUSED, not reimplemented: one company has one piece
+// of stationery, and describing it in two places is how the two descriptions
+// start disagreeing. Uploading here writes the same row HR Letters reads.
+import {
+  getLetterheadAtScope, saveLetterheadAtScope, removeLetterheadAtScope, getSignedUrlForPath,
+} from '@/lib/letterhead/resolve'
+import { readPdfInfo, ptToMm, describePageSize } from '@/lib/letterhead/pagesize'
+import {
+  ACCEPTED_LETTERHEAD_MIME, MAX_LETTERHEAD_BYTES,
+  type LetterheadFileRow, type ScopeType,
+} from '@/lib/letterhead/types'
 import { C as TK, R, E, S as SP, W } from '@/lib/ui'
 
 const LETTER_TYPE = 'OFFER_LETTER'
 const font = '"DM Sans","Segoe UI",sans-serif'
+
+// Same sanitiser as components/letters/LetterheadConfig.tsx, so a file uploaded
+// from either screen lands under the same storage path convention. It is a
+// local const there rather than an export, so this is a deliberate copy of four
+// lines rather than a refactor of a working screen.
+const safeName = (name: string) =>
+  name.normalize('NFKD').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'file'
+
+// Below this the content area is too small to print a letter into — one live row
+// is configured 0/2/1/0mm, which would run body text straight over the artwork.
+const MIN_SAFE_MM = 10
 
 // Only Offer and System tokens are offered here. The Employee/Employment/
 // Appraisal groups resolve from an employees row, and an offer letter addresses
@@ -123,10 +145,34 @@ export default function OfferLetterDesign() {
   const [previewing, setPreviewing] = useState(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
 
+  // ── Letterhead ────────────────────────────────────────────────────────────
+  // There is exactly one group, so "All companies" resolves to GROUP scope
+  // without asking which group. If that ever stops being true this needs a
+  // picker rather than [0].
+  const [groupId, setGroupId] = useState<string | null>(null)
+  const [lh, setLh] = useState<LetterheadFileRow | null>(null)
+  const [lhUrl, setLhUrl] = useState<string | null>(null)
+  const [lhFile, setLhFile] = useState<File | null>(null)
+  const [lhInfo, setLhInfo] = useState<{ label: string; wMm: number; hMm: number; pages: number } | null>(null)
+  const [mTop, setMTop] = useState(40)
+  const [mBottom, setMBottom] = useState(30)
+  const [mLeft, setMLeft] = useState(20)
+  const [mRight, setMRight] = useState(20)
+  const [scalePct, setScalePct] = useState(100)
+  const [lhSaving, setLhSaving] = useState(false)
+  const [lhErr, setLhErr] = useState('')
+
   useEffect(() => {
     supabase.from('companies').select('id, company_name').order('company_name')
       .then(({ data }) => setCompanies((data ?? []) as Company[]))
+    supabase.from('groups').select('id').order('group_name').limit(1)
+      .then(({ data }) => setGroupId(data?.[0]?.id ?? null))
   }, [])
+
+  // The scope this screen writes stationery to. GROUP when no company is
+  // chosen, mirroring how the template itself falls back.
+  const scopeType: ScopeType = companyId ? 'COMPANY' : 'GROUP'
+  const scopeKey = companyId || groupId || ''
 
   // Load the template + clauses for whichever scope is selected. Keyed on
   // letter_type, never on name — see the header note.
@@ -148,6 +194,90 @@ export default function OfferLetterDesign() {
   }, [companyId])
 
   useEffect(() => { load() }, [load])
+
+  // Load whatever stationery is already set at this scope, so the admin sees
+  // what they would be replacing before they replace it.
+  const loadLetterhead = useCallback(async () => {
+    setLhFile(null); setLhInfo(null); setLhErr(''); setLhUrl(null)
+    if (!scopeKey) { setLh(null); return }
+    const row = await getLetterheadAtScope(scopeType, scopeKey)
+    setLh(row)
+    setMTop(row?.content_top_mm ?? 40)
+    setMBottom(row?.content_bottom_mm ?? 30)
+    setMLeft(row?.content_left_mm ?? 20)
+    setMRight(row?.content_right_mm ?? 20)
+    setScalePct(row?.scale_percent ?? 100)
+    if (row?.file_url) setLhUrl(await getSignedUrlForPath('letterhead-files', row.file_url))
+  }, [scopeType, scopeKey])
+
+  useEffect(() => { loadLetterhead() }, [loadLetterhead])
+
+  async function pickLetterhead(f: File) {
+    setLhErr('')
+    if (!ACCEPTED_LETTERHEAD_MIME.includes(f.type as any)) { setLhErr('Only a PDF can be used as a letterhead.'); return }
+    if (f.size > MAX_LETTERHEAD_BYTES) { setLhErr('That file is over 5MB — please upload a smaller PDF.'); return }
+    let info
+    try { info = await readPdfInfo(f) }
+    catch { setLhErr('That PDF could not be read — it may be corrupted.'); return }
+    // Single page only: merge draws page 1 as the background of every page, so
+    // a multi-page upload would silently lose pages 2+.
+    if (info.pageCount > 1) {
+      setLhErr(`This PDF has ${info.pageCount} pages. A letterhead must be a single page.`)
+      return
+    }
+    setLhFile(f)
+    setLhInfo({ label: describePageSize(info.size), wMm: ptToMm(info.size.widthPt), hMm: ptToMm(info.size.heightPt), pages: info.pageCount })
+  }
+
+  async function saveLetterhead() {
+    if (!lhFile || !lhInfo || !scopeKey) return
+    // Replacing is explicit and names the file being replaced: this row is the
+    // company's one letterhead, and HR Letters prints on it too.
+    if (lh && !confirm(
+      `${companyId ? (companies.find(c => c.id === companyId)?.company_name ?? 'This company') : 'All companies'} already uses "${lh.file_name}".\n\n` +
+      'Replace it? HR Letters prints on this same letterhead, so its letters will change too.'
+    )) return
+
+    setLhSaving(true); setLhErr('')
+    const path = `${scopeType}/${scopeKey}/${Date.now()}_${safeName(lhFile.name)}`
+    const { error: upErr } = await supabase.storage.from('letterhead-files').upload(path, lhFile, { upsert: false })
+    if (upErr) { setLhSaving(false); setLhErr('Upload failed: ' + upErr.message); return }
+
+    const scopeIdField = scopeType === 'GROUP' ? 'group_id' : 'company_id'
+    const { error } = await saveLetterheadAtScope({
+      scope_type: scopeType, scope_key: scopeKey,
+      [scopeIdField]: scopeKey,
+      file_url: path, file_name: lhFile.name, file_size_bytes: lhFile.size,
+      page_count: lhInfo.pages, page_width_mm: lhInfo.wMm, page_height_mm: lhInfo.hMm,
+      content_top_mm: mTop, content_bottom_mm: mBottom,
+      content_left_mm: mLeft, content_right_mm: mRight,
+      scale_percent: scalePct,
+    } as any)
+    setLhSaving(false)
+    if (error) { setLhErr('Save failed: ' + error.message); return }
+    loadLetterhead()
+  }
+
+  // Margins can be adjusted without re-uploading — the artwork has not changed,
+  // only where text may sit on it.
+  async function saveMarginsOnly() {
+    if (!lh || !scopeKey) return
+    setLhSaving(true); setLhErr('')
+    const { error } = await supabase.from('letterhead_files').update({
+      content_top_mm: mTop, content_bottom_mm: mBottom,
+      content_left_mm: mLeft, content_right_mm: mRight, scale_percent: scalePct,
+    }).eq('scope_type', scopeType).eq('scope_key', scopeKey)
+    setLhSaving(false)
+    if (error) { setLhErr('Could not update the safe area: ' + error.message); return }
+    loadLetterhead()
+  }
+
+  async function removeLetterhead() {
+    if (!lh || !scopeKey) return
+    if (!confirm(`Remove "${lh.file_name}"?\n\nOffer letters and HR letters at this scope will have no letterhead until one is uploaded.`)) return
+    await removeLetterheadAtScope(scopeType, scopeKey)
+    loadLetterhead()
+  }
 
   function insertToken(token: string) {
     const ta = editorRef.current
@@ -306,6 +436,86 @@ export default function OfferLetterDesign() {
         <section style={S.card}><span style={{ fontSize: 12, color: TK.muted }}>Loading…</span></section>
       ) : (
         <>
+          {/* Letterhead */}
+          <section style={S.card}>
+            <div style={{ ...S.row, marginBottom: 3 }}>
+              <div style={S.h}>Letterhead</div>
+              <span style={{ ...S.chip, marginLeft: 'auto', background: lh ? TK.positiveTint : TK.sunken, color: lh ? TK.positive : TK.muted, border: `1px solid ${lh ? TK.positiveEdge : TK.line}` }}>
+                {lh ? 'Set' : 'Not set'}
+              </span>
+            </div>
+            <div style={S.sub}>
+              A single-page PDF of your blank stationery. The offer letter is printed onto it automatically when an offer is sent.
+            </div>
+
+            {!scopeKey ? (
+              <div style={S.warn}>No group found, so there is nowhere to attach a group-wide letterhead. Pick a company instead.</div>
+            ) : (
+              <>
+                {lh && !lhFile && (
+                  <div style={{ ...S.row, border: `1px solid ${TK.line}`, borderRadius: R.md, padding: '10px 12px', marginBottom: SP.xs, background: TK.sunken }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: W.semi, color: TK.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{lh.file_name}</div>
+                      <div style={{ fontSize: 11, color: TK.muted, marginTop: 2 }}>
+                        {lh.page_width_mm} × {lh.page_height_mm}mm · safe area {lh.content_top_mm}/{lh.content_bottom_mm}/{lh.content_left_mm}/{lh.content_right_mm}mm · {lh.scale_percent}%
+                      </div>
+                    </div>
+                    {lhUrl && <a href={lhUrl} target="_blank" rel="noreferrer" style={{ ...S.btn, textDecoration: 'none' }}>View</a>}
+                    <button type="button" style={S.btn} onClick={removeLetterhead}>Remove</button>
+                  </div>
+                )}
+
+                {/* Shared-stationery notice: this is the one fact an admin needs
+                    before uploading here, because it changes another module. */}
+                <div style={{ ...S.note, marginBottom: SP.xs }}>
+                  This is the {scopeType === 'GROUP' ? 'group-wide' : "company's"} letterhead, shared with <b>HR Letters</b>. Uploading here changes it for both.
+                </div>
+
+                <label style={S.label}>{lh ? 'Replace letterhead (PDF)' : 'Upload letterhead (PDF)'}</label>
+                <input type="file" accept="application/pdf" style={{ ...S.input, padding: '7px 9px', cursor: 'pointer' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) pickLetterhead(f) }} />
+
+                {lhInfo && (
+                  <div style={{ fontSize: 11.5, color: TK.muted, marginTop: SP.xs }}>
+                    Detected: <b style={{ color: TK.ink }}>{lhInfo.label}</b>
+                  </div>
+                )}
+
+                {/* Safe area — where body text may be placed on the artwork. */}
+                <div style={{ marginTop: SP.md }}>
+                  <label style={S.label}>Safe area (mm from each edge)</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: SP.xs }}>
+                    {([['Top', mTop, setMTop], ['Bottom', mBottom, setMBottom], ['Left', mLeft, setMLeft], ['Right', mRight, setMRight]] as [string, number, (n: number) => void][]).map(([lab, val, set]) => (
+                      <div key={lab}>
+                        <div style={{ fontSize: 10.5, color: TK.muted, marginBottom: 3 }}>{lab}</div>
+                        <input type="number" min={0} max={120} style={S.input} value={val}
+                          onChange={e => set(Math.max(0, Math.min(120, Number(e.target.value) || 0)))} />
+                      </div>
+                    ))}
+                  </div>
+                  {lhInfo && (lhInfo.hMm - mTop - mBottom < MIN_SAFE_MM || lhInfo.wMm - mLeft - mRight < MIN_SAFE_MM) && (
+                    <div style={S.warn}>
+                      That leaves almost no room for text — the letter would print over your artwork. Increase the margins.
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ ...S.row, marginTop: SP.md, flexWrap: 'wrap' as const }}>
+                  <button type="button" style={S.btnP} onClick={saveLetterhead} disabled={lhSaving || !lhFile}
+                    title={!lhFile ? 'Choose a PDF first' : undefined}>
+                    {lhSaving ? 'Saving…' : lh ? 'Replace letterhead' : 'Save letterhead'}
+                  </button>
+                  {lh && !lhFile && (
+                    <button type="button" style={S.btn} onClick={saveMarginsOnly} disabled={lhSaving}>
+                      Update safe area only
+                    </button>
+                  )}
+                  {lhErr && <span style={{ fontSize: 12, color: TK.critical }}>{lhErr}</span>}
+                </div>
+              </>
+            )}
+          </section>
+
           {/* Body template */}
           <section style={S.card}>
             <div style={S.h}>Body template</div>
