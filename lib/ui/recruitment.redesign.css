@@ -109,10 +109,14 @@
 .rx-rail .rx-grp:nth-of-type(5) .rx-tab{animation-delay:.25s}
 
 /* docked: once the page scrolls, the phase headers fold away and the band tightens */
-.rx-rail.is-stuck{padding-top:8px;padding-bottom:8px;box-shadow:var(--ez-shadow-floating)}
-.rx-rail.is-stuck .rx-ph{height:0;opacity:0;margin-bottom:-8px}
+/* the rail docks on scroll, but must NOT change its own height doing so:
+   .rx-rail-sentinel sits inside the rail's box (negative top margin), so a
+   height change moved the very element that decides whether it is docked --
+   measured oscillating 84<->121px, flipping is-stuck 4x per scroll. Docking
+   is a shadow now. Restore compaction only with real hysteresis. */
+.rx-rail.is-stuck{box-shadow:var(--ez-shadow-floating)}
+.rx-rail.is-stuck .rx-ph{opacity:0}
 .rx-rail .rx-tab,.rx-ind{transition-property:color,background,border-color,transform,height,width,opacity}
-.rx-rail.is-stuck .rx-tab{height:54px}
 .rx-rail.is-stuck .rx-ti{width:28px;height:28px}
 .rx-rail-sentinel{height:1px;margin-bottom:-1px}
 
