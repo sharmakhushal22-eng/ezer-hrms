@@ -12,13 +12,14 @@ import {
   C as TK, F as TF, W, R, E, S as SP, Z, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
 import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help, Timeline, Callout } from '@/components/recruitment/rx'
-// The assignable hiring managers / recruiters, and the same picker the MRF
-// Approvals sub-tab and the ESS portal use. RecruiterPicker imports only react
-// and @/lib/ui, so there is no cycle back into this file. toPickerPeople shapes
-// /api/ess/mrf's hrOptions — server-side hrTeamFor, RECRUITER only — so this
-// screen cannot offer somebody the API would refuse.
-import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
-import { api as essApi } from '@/lib/ess/api'
+// The same picker the MRF Approvals sub-tab and the ESS portal use. It imports
+// only react and @/lib/ui, so there is no cycle back into this file.
+//
+// The PEOPLE come from /api/recruitment/offer-approval's company-keyed
+// `recruiters`, not from /api/ess/mrf's hrOptions: this screen lists MRFs from
+// every company, and hrOptions is scoped to the caller's own company — which is
+// how an MRF got assigned across companies.
+import RecruiterPicker from '@/components/recruitment/RecruiterPicker'
 // The offer's ceiling is the MRF budget normalised to a year. budget_max is
 // quoted in the engagement's own period; offered_ctc is always annual. See
 // lib/recruitment/compensation.ts for why that lives outside this page.
@@ -561,27 +562,46 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   // Assigning the hiring manager at the HR Head step. This screen had no picker
   // at all: Approve wrote status 'APPROVED' straight to Supabase, so an MRF was
   // opened with assigned_recruiter_ids empty and reached nobody's queue.
-  const [hmOptions, setHmOptions] = useState<any[]>([])
+  // company_id -> the recruiters in THAT company. Never one flat list: see the
+  // loader below for the cross-company assignment that caused.
+  const [hmByCompany, setHmByCompany] = useState<Record<string, any[]>>({})
   const [hmErr, setHmErr] = useState('')
   const [assignMap, setAssignMap] = useState<Record<string, string[]>>({})
   const [mrfBusy, setMrfBusy] = useState<string | null>(null)
 
   useEffect(() => { loadRequests() }, [tab])
   useEffect(() => { loadMrfs(); loadRejected() }, [])
-  // The assignable list, company-scoped, from the same guarded source the other
-  // two approval screens read. Loaded once rather than per card.
+  // The assignable hiring managers, keyed BY THE MRF's OWN COMPANY.
+  //
+  // This screen lists SUBMITTED requisitions from every company (loadMrfs has no
+  // company filter), so one flat list is wrong: it used to come from
+  // /api/ess/mrf, whose hrOptions is hrTeamFor(the HR HEAD's own company). An
+  // MRF belonging to company A therefore offered company B's recruiters, and
+  // one was assigned that way — after which the recruiter never saw it, because
+  // Recruitment pins every query to the viewer's own company and dropped the row
+  // before the "assigned to me" check could run. Nothing on either screen
+  // explained it.
+  //
+  // So: fetch per company present in the list, exactly as OfferReviewDrawer and
+  // HRManagerSendOffer already do, and index by company id.
   useEffect(() => {
-    if (!employeeId) {
-      setHmOptions([])
-      setHmErr('Your ESS session is not active, so the hiring-manager list cannot be loaded. Sign in again with your own ESS account.')
-      return
-    }
+    const ids = Array.from(new Set(mrfs.map((m: any) => m.company_id).filter(Boolean))) as string[]
+    if (!ids.length) { setHmByCompany({}); setHmErr(''); return }
     let live = true
-    essApi('/api/ess/mrf', employeeId)
-      .then((d: any) => { if (live) { setHmOptions(toPickerPeople(d)); setHmErr('') } })
-      .catch((e: any) => { if (live) { setHmOptions([]); setHmErr(e?.message || 'Could not load the hiring managers.') } })
+    ;(async () => {
+      try {
+        // Session-guarded: the headers must be AWAITED. An un-awaited
+        // authHeaders() is a Promise, which fetch ignores silently, and the call
+        // 401s with nothing failing at build time.
+        const r = await fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`, { headers: await authHeaders() })
+        const j = await r.json()
+        if (live) { setHmByCompany(j.recruiters || {}); setHmErr('') }
+      } catch (e: any) {
+        if (live) { setHmByCompany({}); setHmErr(e?.message || 'Could not load the hiring managers for these companies.') }
+      }
+    })()
     return () => { live = false }
-  }, [employeeId])
+  }, [mrfs])
   // Deep link (…&tab=hrhead&offer=<id>): open that candidate's review drawer as soon as it is loaded.
   const focusedOffer = useRef(false)
   useEffect(() => {
@@ -642,19 +662,27 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       alert('Assign at least one hiring manager or recruiter — approving hands them the requisition to run.')
       return
     }
-    // And they must hold the role, so a stale list cannot slip somebody in.
-    // Mirrors the server's own check against hrTeamFor.
-    if (picked.length && hmOptions.length) {
-      const allowed = new Set(hmOptions.map((p: any) => p.id))
+    // They must hold the role AND belong to THIS MRF's company — not the HR
+    // Head's. Keyed on m.company_id, because this screen lists requisitions from
+    // every company: a flat list let an MRF in company A be handed to a
+    // recruiter in company B, who then never saw it (Recruitment pins every
+    // query to the viewer's own company and dropped the row before the
+    // "assigned to me" check could run).
+    //
+    // Mirrors the server's own test — roleHolders filters e.company_id ===
+    // companyId, exactly as hrTeamFor does.
+    const inCompany = hmByCompany[m.company_id] || []
+    if (picked.length && inCompany.length) {
+      const allowed = new Set(inCompany.map((p: any) => p.id))
       if (picked.some((x: string) => !allowed.has(x))) {
-        alert('Only hiring managers / recruiters in this company can be assigned a requisition.')
+        alert('Only hiring managers / recruiters in this requisition’s own company can be assigned to it.')
         return
       }
     }
 
     setMrfBusy(id)
     const now = new Date().toISOString()
-    const chosen = picked.map((pid: string) => hmOptions.find((p: any) => p.id === pid)).filter(Boolean)
+    const chosen = picked.map((pid: string) => inCompany.find((p: any) => p.id === pid)).filter(Boolean)
     const label = (p: any) => `${p.name}${p.code ? ` (${p.code})` : ''}`
     const patch: any = {}
     if (picked.length) {
@@ -884,6 +912,10 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
           // passes the requisition along, not out.
           const needsAssign = !cur || cur.role === 'HR_HEAD'
           const picked = assignMap[m.id] || []
+          // Only the recruiters in THIS requisition's company. The HR Head's own
+          // company is irrelevant here, and using it is what allowed an MRF to
+          // be assigned to somebody who could never see it.
+          const people = hmByCompany[m.company_id] || []
           const busy = mrfBusy === m.id
           const blocked = needsAssign && !picked.length
           return (
@@ -910,17 +942,21 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                 <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Assign hiring manager / recruiter <em>*</em></label>
                 {hmErr ? (
                   <div className="rx-hint" style={{ color:TK.warning }}>{hmErr}</div>
-                ) : hmOptions.length === 0 ? (
+                ) : people.length === 0 ? (
                   <div className="rx-hint" style={{ color:TK.warning }}>
-                    No hiring managers or recruiters are set up for this company, so this requisition cannot be handed to anyone yet.
-                    Ask an admin to give someone the <b>Hiring Manager / Recruiter</b> role in Assign Roles.
+                    No hiring managers or recruiters are set up for <b>{m.companies?.company_name || 'this requisition’s company'}</b>,
+                    so it cannot be handed to anyone yet. Ask an admin to give someone the
+                    <b> Hiring Manager / Recruiter</b> role in that company under Assign Roles.
                   </div>
                 ) : (
                   <>
+                    {/* Names the company on purpose. This screen lists MRFs from
+                        every company, so "N available" alone invited the
+                        cross-company assignment this scoping now prevents. */}
                     <div style={{ fontSize:11, color:TK.faint, marginBottom:6 }}>
-                      {hmOptions.length} available in this company
+                      {people.length} available in {m.companies?.company_name || 'this requisition’s company'}
                     </div>
-                    <RecruiterPicker people={hmOptions} value={picked}
+                    <RecruiterPicker people={people} value={picked}
                       onChange={(ids:string[]) => setAssignMap(prev => ({ ...prev, [m.id]: ids }))} />
                   </>
                 )}

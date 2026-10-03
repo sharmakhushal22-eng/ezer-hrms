@@ -174,8 +174,13 @@ describe('the HR Head tab enforces the rule at its own write', () => {
   })
 
   test('assignees are validated against the assignable list', () => {
-    assert.ok(/allowed/.test(body) && /hmOptions/.test(body),
-      'mirror the server-side role check rather than trusting the picker')
+    // inCompany, not a flat list: the validation must use the recruiters of THIS
+    // requisition's company. An earlier version of this assertion looked for
+    // `hmOptions`, the single caller-company-scoped list that allowed an MRF to
+    // be assigned across companies — so matching it would now be a regression.
+    assert.ok(/allowed/.test(body) && /inCompany/.test(body),
+      'mirror the server-side role check, scoped to the MRF\'s own company, rather than ' +
+      'trusting the picker')
   })
 
   test('it advances the approval chain instead of stamping APPROVED', () => {
@@ -210,12 +215,44 @@ describe('the HR Head tab enforces the rule at its own write', () => {
       `the HR Head tab's assignment notification must match the route's: "${phrase}"`)
   })
 
+  test('the assignable list is scoped to the MRF\'s own company', () => {
+    // This screen lists SUBMITTED requisitions from EVERY company (loadMrfs has
+    // no company filter), while /api/ess/mrf's hrOptions is scoped to the
+    // CALLER's company. One flat list therefore offered the wrong people, and an
+    // MRF in company A was assigned to a recruiter in company B — who never saw
+    // it, because Recruitment pins every query to the viewer's own company and
+    // dropped the row before the "assigned to me" check could run.
+    assert.ok(/hmByCompany\[m\.company_id\]/.test(OFFER),
+      "the picker must read hmByCompany[m.company_id] — a single flat list of the HR Head's " +
+      'own recruiters is what caused the cross-company assignment')
+    assert.ok(/hmByCompany\[m\.company_id\]/.test(body),
+      'approveMrf must validate against THIS MRF\'s company too, not just the picker')
+    assert.ok(!/toPickerPeople/.test(OFFER),
+      'hrOptions/toPickerPeople is caller-company-scoped and must not feed this screen')
+  })
+
+  test('the company-keyed recruiters come from the guarded route', () => {
+    const route = readFileSync('app/api/recruitment/offer-approval/route.ts', 'utf8')
+    assert.ok(/roleHolders\(id, \['RECRUITER'\]\)/.test(route),
+      'the GET must return RECRUITER holders per company — HR_MANAGER is not assignable')
+    assert.ok(/recruiters\[id\]/.test(route),
+      'they must be keyed by company id, so each MRF can be scoped to its own')
+    assert.ok(/requireModule\(req, 'Recruitment'\)/.test(route),
+      'this enumerates named employees per company — it stays session-guarded')
+  })
+
   test('the screen renders the assignment menu', () => {
     assert.ok(/RecruiterPicker/.test(OFFER),
       'the HR Head tab must show a picker — it had none, which is why the rule could not be met')
-    assert.ok(/toPickerPeople/.test(OFFER) && /'\/api\/ess\/mrf'/.test(OFFER),
-      'the assignable list must come from the same guarded source as the other screens ' +
-      '(hrOptions / hrTeamFor), not a second query with different rules')
+    // The SOURCE assertion deliberately inverted. This first demanded
+    // toPickerPeople + /api/ess/mrf, which is hrOptions — scoped to the CALLER's
+    // company. On a screen listing MRFs from every company that is the wrong
+    // list, and it is what produced the cross-company assignment. The people now
+    // come from offer-approval's company-keyed `recruiters`; see the scoping
+    // test above, which asserts toPickerPeople is absent.
+    assert.ok(/offer-approval\?company_ids=/.test(OFFER),
+      'the assignable list must be fetched per company from the guarded ' +
+      'offer-approval route, so each MRF offers only its own company\'s recruiters')
   })
 
   test('the Approve button is gated too, as the courtesy half', () => {

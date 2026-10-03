@@ -71,14 +71,30 @@ function approvalMail(r: any, who: string, role: string, mrfNo: string | null, r
 }
 
 // GET ?company_ids=a,b
-//   -> { heads:    { [company_id]: [{ id, name, code }] } }  who approves, per company
-//      { managers: { [company_id]: [{ id, name, code }] } }  who may be given the offer to issue
+//   -> { heads:      { [company_id]: [{ id, name, code }] } }  who approves, per company
+//      { managers:   { [company_id]: [{ id, name, code }] } }  who may be given the offer to issue
+//      { recruiters: { [company_id]: [{ id, name, code }] } }  who may be given an MRF to run
 //
 // `managers` feeds the HR Head's picker: approving an offer names the HR Manager
 // who will generate and send the letter, the same way approving an MRF names the
 // hiring manager who will run it. Same roleHolders() the decision mail already
 // uses for HR_MANAGER below, so the people offered here and the people notified
 // there can never drift apart.
+//
+// `recruiters` is the MRF equivalent, and it is keyed BY COMPANY for a reason.
+// The HR Head tab lists SUBMITTED requisitions from every company, but its
+// assignment picker was loaded once from /api/ess/mrf, whose hrOptions is
+// hrTeamFor(the HR HEAD's own company). So the list spanned companies while the
+// candidates did not, and an MRF belonging to company A was handed to a
+// recruiter in company B — who then never saw it, because Recruitment pins
+// every query to the viewer's own company and filtered it out before the
+// "assigned to me" check ever ran.
+//
+// RECRUITER is the assignable role (seeded 'Hiring Manager / Recruiter');
+// HR_MANAGER oversees requisitions rather than running them. roleHolders walks
+// the same ess_roles → ess_user_roles → ess_accounts → employees path and
+// applies the same e.company_id === companyId test as hrTeamFor, so the people
+// offered here are exactly the people /api/ess/mrf will accept.
 export async function GET(req: NextRequest) {
   // Guarded: this enumerates named employees (HR Heads and HR Managers) for any
   // company id in the query string. It answered to anyone until now — the
@@ -91,12 +107,16 @@ export async function GET(req: NextRequest) {
   const ids = (req.nextUrl.searchParams.get('company_ids') || '').split(',').map(s => s.trim()).filter(Boolean)
   const heads: Record<string, { id: string; name: string; code: string | null }[]> = {}
   const managers: Record<string, { id: string; name: string; code: string | null }[]> = {}
+  const recruiters: Record<string, { id: string; name: string; code: string | null; designation?: string | null }[]> = {}
   await Promise.all(ids.map(async id => {
-    const [h, m] = await Promise.all([roleHolders(id, ['HR_HEAD']), roleHolders(id, ['HR_MANAGER'])])
+    const [h, m, r] = await Promise.all([
+      roleHolders(id, ['HR_HEAD']), roleHolders(id, ['HR_MANAGER']), roleHolders(id, ['RECRUITER']),
+    ])
     heads[id] = h.map(({ id, name, code }) => ({ id, name, code }))
     managers[id] = m.map(({ id, name, code }) => ({ id, name, code }))
+    recruiters[id] = r.map(({ id, name, code }) => ({ id, name, code }))
   }))
-  return NextResponse.json({ heads, managers })
+  return NextResponse.json({ heads, managers, recruiters })
 }
 
 export async function POST(req: NextRequest) {
