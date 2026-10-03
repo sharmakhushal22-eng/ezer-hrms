@@ -1790,19 +1790,24 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 }
 
 /* ---- Sticky action bar -------------------------------------------------- */
+/* Deliberately NOT sticky. The approve controls sit at the END of the detail
+   panel, so the reviewer scrolls past the figures, the approval pack and the
+   hand-off block before Approve is even reachable. Approving is the last thing
+   you do, not something you can reach from the top of the page.
+   ActionBar is the last child of .rxa-detail, so static == end of the form.
+   The shadow is small now: it sits on the page rather than floating over it. */
 .rxa-bar {
-  position: sticky;
-  bottom: 12px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 9px;
+  margin-top: 4px;
   padding: 9px 10px 9px 13px;
   border: 1px solid var(--ez-line-strong);
   border-radius: 12px;
   background: var(--ez-surface);
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--ez-ink) 16%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ez-ink) 7%, transparent);
 }
 .rxa-bar-s {
   flex: 1 1 187px;
@@ -1946,7 +1951,6 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
     font-size: 12px;
   }
   .rxa-bar {
-    bottom: 8px;
     padding: 7px 9px;
   }
   .rxa-bar-s {
