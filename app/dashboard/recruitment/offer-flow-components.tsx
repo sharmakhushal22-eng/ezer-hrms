@@ -682,6 +682,33 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       recruiter: chosen.length ? chosen.map(label).join(', ') : 'unassigned',
       next: next ? `${next.role || 'next'} · ${next.approver_name || '—'}` : 'none — fully approved',
     })
+
+    // Tell the people just handed this requisition. /api/ess/mrf does this on
+    // its own approve path; this screen did not, so making the assignment
+    // mandatory here would otherwise have assigned somebody SILENTLY — they
+    // would only find it by chancing on the "Assigned to you" block in Tasks &
+    // Approvals. Same table, title, body and deep link as the route's version,
+    // so one assignment does not read two different ways.
+    //
+    // After the write and the audit on purpose: a notification is the least
+    // important of the three, and a failure here must not lose the approval.
+    if (picked.length) {
+      const role = m.designation || m.position || 'a role'
+      const mrfLabel = `${role}${m.mrf_number ? ` (${m.mrf_number})` : ''}`
+      const { error: nErr } = await supabase.from('ess_notifications').insert(
+        picked.map((hid: string) => ({
+          employee_id: hid,
+          category: 'MRF',
+          title: 'You have been assigned an MRF',
+          body: `You have been assigned to hire for ${mrfLabel}. Acknowledge it in Tasks & Approvals, then run the hiring in Recruitment.`,
+          link: '/ess?tab=approvals',
+          is_read: false,
+        })),
+      )
+      // Said out loud rather than swallowed: the HR Head should know the
+      // hand-off happened but the person was not told, so they can tell them.
+      if (nErr) alert(`Approved and assigned, but the notification failed: ${nErr.message}\nTell ${chosen.map(label).join(', ')} directly.`)
+    }
     setAssignMap(prev => { const n = { ...prev }; delete n[id]; return n })
     loadMrfs()
   }

@@ -189,6 +189,27 @@ describe('the HR Head tab enforces the rule at its own write', () => {
       'approvals from this screen left no audit trail at all')
   })
 
+  test('the assignee is told they were handed the requisition', () => {
+    // Making the assignment mandatory is only half the hand-off. /api/ess/mrf
+    // notifies each assignee on its own approve path; this screen did not, so
+    // the rule would have assigned somebody SILENTLY — they would find out only
+    // by chancing on the "Assigned to you" block in Tasks & Approvals.
+    assert.ok(/ess_notifications/.test(body),
+      'approving here must notify each assigned hiring manager, as the ESS route does')
+    assert.ok(/'\/ess\?tab=approvals'/.test(body),
+      'use the same deep link as the route — that is where Acknowledge lives')
+  })
+
+  test('both approval paths word the assignment the same way', () => {
+    // Two places tell somebody the same thing. If they drift, one assignment
+    // reads two different ways depending on which screen the HR Head used.
+    const phrase = 'You have been assigned an MRF'
+    assert.ok(ESS.includes(phrase),
+      `the ESS route's assignment notification changed — it no longer says "${phrase}"`)
+    assert.ok(OFFER.includes(phrase),
+      `the HR Head tab's assignment notification must match the route's: "${phrase}"`)
+  })
+
   test('the screen renders the assignment menu', () => {
     assert.ok(/RecruiterPicker/.test(OFFER),
       'the HR Head tab must show a picker — it had none, which is why the rule could not be met')
