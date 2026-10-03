@@ -524,7 +524,7 @@ export default function RecruitmentPage() {
           untouched, since the Offer Approval tab renders both. */}
       {/* employeeId is what the hiring-manager list is fetched with — without it
           the assignment menu on this screen has nothing to offer. */}
-      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} focusOfferId={offerDeep} employeeId={grant.employeeId} />}
+      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} viewerName={grant.name ?? ''} focusOfferId={offerDeep} employeeId={grant.employeeId} />}
       {/* One tab, and the ROLE decides what it offers. A recruiter sees every
           offer in flight but cannot dispatch (readOnly); the assigned HR Manager
           gets the draft/finalise/send controls, scoped to the offers the HR Head

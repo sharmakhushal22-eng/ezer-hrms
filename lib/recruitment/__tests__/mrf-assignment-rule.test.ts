@@ -42,6 +42,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const PAGE = readFileSync('app/dashboard/recruitment/page.tsx', 'utf8')
+// The picker and the button gate moved into the redesigned view, so the
+// courtesy half is asserted where it now lives. The four WRITE-level
+// enforcement points below are unchanged.
+const VIEW = readFileSync('components/recruitment/rx/views/HRHeadApprovalView.tsx', 'utf8')
+const LOGIC = readFileSync('components/recruitment/rx/logic/approvals.ts', 'utf8')
 const ESS = readFileSync('app/api/ess/mrf/route.ts', 'utf8')
 const OFFER = readFileSync('app/dashboard/recruitment/offer-flow-components.tsx', 'utf8')
 
@@ -258,8 +263,20 @@ describe('the HR Head tab enforces the rule at its own write', () => {
   })
 
   test('the screen renders the assignment menu', () => {
-    assert.ok(/RecruiterPicker/.test(OFFER),
-      'the HR Head tab must show a picker — it had none, which is why the rule could not be met')
+    // The picker MOVED. This tab renders HRHeadApprovalView now, and the view's
+    // PersonGrid is the picker; RecruiterPicker is gone from this file.
+    //
+    // Matching /RecruiterPicker/ over whole-file source kept PASSING after the
+    // swap, because the name survived on a dead import line and in a comment --
+    // the same prose-matching trap the toPickerPeople assertion below documents.
+    // So this asserts the MOUNT and the view's own grid instead.
+    assert.ok(/<HRHeadApprovalView/.test(OFFER),
+      'the HR Head tab must render the approvals view, which carries the picker')
+    assert.ok(/recruitersByCompany=\{hmByCompany\}/.test(OFFER),
+      'the view must be handed the COMPANY-KEYED recruiters — a flat list is what ' +
+      'caused the cross-company assignment')
+    assert.ok(/function PersonGrid\(/.test(VIEW) && /aria-pressed=\{on\}/.test(VIEW),
+      'the view must render a selectable person list — that is the picker now')
     // The SOURCE assertion deliberately inverted. This first demanded
     // toPickerPeople + /api/ess/mrf, which is hrOptions — scoped to the CALLER's
     // company. On a screen listing MRFs from every company that is the wrong
@@ -272,8 +289,15 @@ describe('the HR Head tab enforces the rule at its own write', () => {
   })
 
   test('the Approve button is gated too, as the courtesy half', () => {
-    assert.ok(/const blocked = needsAssign && !picked\.length/.test(OFFER),
-      'the button should explain the requirement before the click, even though the write enforces it')
+    // Also moved into the view, and still only the courtesy half: approveMrf's
+    // own refusal above is the rule. A disabled button is not an enforcement
+    // point — which is the whole reason this file exists.
+    assert.ok(/disabled=\{!ready \|\| busy\}/.test(VIEW),
+      'the approve control must be disabled until the hand-off is ready')
+    assert.ok(/const ready = isMrf \? canApproveMrf\(mrfPicked\)/.test(VIEW),
+      'readiness must come from canApproveMrf, so the gate tracks the ids actually picked')
+    assert.ok(/return assigneeIds\.length > 0/.test(LOGIC),
+      'canApproveMrf must mean "somebody is named"')
   })
 
   test('page.tsx passes the employeeId the list needs', () => {

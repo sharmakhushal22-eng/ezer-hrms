@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 // send-offer-email runs on the server with no session of its own, so the browser
@@ -12,14 +12,17 @@ import {
   C as TK, F as TF, W, R, E, S as SP, Z, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
 import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help, Timeline, Callout } from '@/components/recruitment/rx'
-// The same picker the MRF Approvals sub-tab and the ESS portal use. It imports
-// only react and @/lib/ui, so there is no cycle back into this file.
-//
-// The PEOPLE come from /api/recruitment/offer-approval's company-keyed
-// `recruiters`, not from /api/ess/mrf's hrOptions: this screen lists MRFs from
-// every company, and hrOptions is scoped to the caller's own company — which is
-// how an MRF got assigned across companies.
-import RecruiterPicker from '@/components/recruitment/RecruiterPicker'
+// The redesigned MRF & Offer Approvals screen. Presentational only: it reads
+// nothing and writes nothing, so every loader and every Supabase write below
+// stays exactly where it was and is handed in as a prop. Imported by DIRECT
+// PATH rather than through @/components/recruitment/rx on purpose -- the barrel
+// re-exports DashboardView/MrfListView/PipelineView, and components/ess/MrfForm
+// avoids it for that reason.
+import HRHeadApprovalView from '@/components/recruitment/rx/views/HRHeadApprovalView'
+import {
+  toMrfApprovalVM, toOfferApprovalVM,
+  type OfferApprovalVM, type PackDoc,
+} from '@/components/recruitment/rx/logic/approvals'
 // The offer's ceiling is the MRF budget normalised to a year. budget_max is
 // quoted in the engagement's own period; offered_ctc is always annual. See
 // lib/recruitment/compensation.ts for why that lives outside this page.
@@ -546,7 +549,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail, focusOfferId, employeeId = null }: any = {}) {
+export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail, focusOfferId, employeeId = null, viewerName = '' }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [requests, setRequests] = useState<any[]>([])
@@ -568,6 +571,11 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const [hmErr, setHmErr] = useState('')
   const [assignMap, setAssignMap] = useState<Record<string, string[]>>({})
   const [mrfBusy, setMrfBusy] = useState<string | null>(null)
+  // HR_MANAGER holders per company. OfferReviewDrawer fetches these per request;
+  // the redesigned screen needs them for whichever offer is open, so they are
+  // read from the response the recruiter loader ALREADY makes. The GET returns
+  // heads/managers/recruiters together -- this is not a second request.
+  const [mgrByCompany, setMgrByCompany] = useState<Record<string, any[]>>({})
 
   useEffect(() => { loadRequests() }, [tab])
   useEffect(() => { loadMrfs(); loadRejected() }, [])
@@ -595,7 +603,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
         // 401s with nothing failing at build time.
         const r = await fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`, { headers: await authHeaders() })
         const j = await r.json()
-        // Shape each row for RecruiterPicker before storing it.
+        // Shape each row before storing it.
         //
         // Its unsearched "Suggested hiring managers" list filters on
         // `p.is_recruiter`. The API returns {id, name, code} with no such flag,
@@ -614,9 +622,13 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             designation: p.designation || 'Hiring Manager / Recruiter',
           }))
         }
-        if (live) { setHmByCompany(shaped); setHmErr('') }
+        if (live) {
+          setHmByCompany(shaped)
+          setMgrByCompany((j.managers || {}) as Record<string, any[]>)
+          setHmErr('')
+        }
       } catch (e: any) {
-        if (live) { setHmByCompany({}); setHmErr(e?.message || 'Could not load the hiring managers for these companies.') }
+        if (live) { setHmByCompany({}); setMgrByCompany({}); setHmErr(e?.message || 'Could not load the hiring managers for these companies.') }
       }
     })()
     return () => { live = false }
@@ -658,9 +670,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     })
   }
 
-  async function approveMrf(id: string) {
-    const m = mrfs.find((x: any) => x.id === id); if (!m) return
-    const picked = (assignMap[id] || []).filter(Boolean)
+  async function approveMrf(id: string, assignIds?: string[]): Promise<boolean> {
+    const m = mrfs.find((x: any) => x.id === id); if (!m) return false
+    const picked = (assignIds ?? assignMap[id] ?? []).filter(Boolean)
     const chain = Array.isArray(m.approval_chain) ? m.approval_chain.map((s: any) => ({ ...s })) : []
     const cur = chain.find((s: any) => s.status === 'PENDING')
     // The hand-off: the HR Head's own step, or an MRF with no routing at all,
@@ -679,7 +691,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     // actually calls. A disabled button is not an enforcement point.
     if (isHandOff && !picked.length) {
       alert('Assign at least one hiring manager or recruiter — approving hands them the requisition to run.')
-      return
+      return false
     }
     // They must hold the role AND belong to THIS MRF's company — not the HR
     // Head's. Keyed on m.company_id, because this screen lists requisitions from
@@ -695,7 +707,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       const allowed = new Set(inCompany.map((p: any) => p.id))
       if (picked.some((x: string) => !allowed.has(x))) {
         alert('Only hiring managers / recruiters in this requisition’s own company can be assigned to it.')
-        return
+        return false
       }
     }
 
@@ -723,7 +735,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
     const { error } = await supabase.from('manpower_requisitions').update(patch).eq('id', id)
     setMrfBusy(null)
-    if (error) { alert('Error: ' + error.message); return }
+    if (error) { alert('Error: ' + error.message); return false }
     await auditMrf(m, next ? 'MRF_STEP_APPROVED' : 'MRF_APPROVED', {
       position: m.designation || m.position,
       recruiter: chosen.length ? chosen.map(label).join(', ') : 'unassigned',
@@ -758,27 +770,32 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     }
     setAssignMap(prev => { const n = { ...prev }; delete n[id]; return n })
     loadMrfs()
+    return true
   }
 
-  async function rejectMrf(id: string) {
-    const m = mrfs.find((x: any) => x.id === id); if (!m) return
-    const reason = window.prompt('Rejection reason for this MRF:'); if (reason === null) return
-    if (!reason.trim()) { alert('A rejection reason is required.'); return }
+  async function rejectMrf(id: string, reason?: string): Promise<boolean> {
+    const m = mrfs.find((x: any) => x.id === id); if (!m) return false
+    // The redesigned screen collects the note in its own panel and passes it
+    // in; the prompt stays as the fallback for any other caller.
+    const why = reason ?? window.prompt('Rejection reason for this MRF:')
+    if (why === null) return false
+    if (!why.trim()) { alert('A rejection reason is required.'); return false }
     setMrfBusy(id)
     // Record the refusal on the chain too — this set REJECTED with no trace of
     // who refused it or at which step.
     const chain = Array.isArray(m.approval_chain) ? m.approval_chain.map((s: any) => ({ ...s })) : []
     const cur = chain.find((s: any) => s.status === 'PENDING')
-    const patch: any = { status: 'REJECTED', remarks: reason }
+    const patch: any = { status: 'REJECTED', remarks: why }
     if (cur) {
-      cur.status = 'REJECTED'; cur.acted_at = new Date().toISOString(); cur.comment = reason
+      cur.status = 'REJECTED'; cur.acted_at = new Date().toISOString(); cur.comment = why
       patch.approval_chain = chain
     }
     const { error } = await supabase.from('manpower_requisitions').update(patch).eq('id', id)
     setMrfBusy(null)
-    if (error) { alert('Error: ' + error.message); return }
-    await auditMrf(m, 'MRF_REJECTED', { position: m.designation || m.position, reason })
+    if (error) { alert('Error: ' + error.message); return false }
+    await auditMrf(m, 'MRF_REJECTED', { position: m.designation || m.position, reason: why })
     loadMrfs()
+    return true
   }
 
   // ── Rehire: HR Head re-enters a rejected candidate into the pipeline ──
@@ -876,6 +893,53 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const fRejected = rejected.filter((c:any)=>(!ql || (c.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:c.company_id, mrf_id:c.mrf_id, position:c.designation }, mrfLookup, f))
   const fRequests = requests.filter((r:any)=>(!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation }, mrfLookup, f))
 
+  // ── Row -> view model for the redesigned screen ──────────────────────────
+  // Pure mapping of rows ALREADY loaded. No new query: the names come from the
+  // companies/departments/locations the page passes down and from the MRF's own
+  // raised_by_name, which loadMrfs selects as part of `*`.
+  const companyOf = (id?: string | null) => {
+    const co = (companies || []).find((c: any) => c.id === id)
+    return co ? { code: co.company_code || co.company_name || '\u2014', name: co.company_name || co.company_code || '\u2014' } : null
+  }
+  const mrfVMs = useMemo(() => fMrfs.map((m: any) => toMrfApprovalVM(m, {
+    company: companyOf(m.company_id),
+    department: (departments || []).find((d: any) => d.id === m.department_id)?.dept_name ?? null,
+    location: (locations || []).find((l: any) => l.id === m.location_id)?.location_name ?? null,
+    raiser: m.raised_by_name ? { name: m.raised_by_name, code: m.raised_by_role || '' } : null,
+  })), [fMrfs, companies, departments, locations]) // eslint-disable-line react-hooks/exhaustive-deps
+  const offerVMs = useMemo(() => fRequests.map((r: any) => {
+    const mrf = (mrfLookup || []).find((m: any) => m.id === r.mrf_id)
+    // budget_* is quoted in the engagement's own period; offered_ctc is always
+    // annual. Normalising here keeps the budget bar from calling a monthly-
+    // budgeted requisition "above range" -- lib/recruitment/compensation.ts.
+    const annual = (v: any) => (v == null ? null : annualCeiling(v, mrf?.employment_type))
+    return toOfferApprovalVM(r, {
+      company: companyOf(r.company_id),
+      candidateName: r.candidates?.full_name ?? null,
+      designation: r.candidates?.designation ?? null,
+      mrfNumber: mrf?.mrf_number ?? null,
+      recruiterName: mrf?.assigned_recruiter ?? null,
+      budgetMin: annual(mrf?.budget_min),
+      budgetMax: annual(mrf?.budget_max),
+      waitingSince: r.submitted_at ?? null,
+    })
+  }), [fRequests, mrfLookup, companies]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The approval pack, downloaded in place. Same route, same keys (mrf |
+  // interview | ctc) and the same blob handling OfferDocuments uses -- the CTC
+  // acknowledgement is still password protected by the route, not here.
+  async function openPackDoc(o: OfferApprovalVM, doc: PackDoc) {
+    try {
+      const r = await fetch(`/api/recruitment/offer-approval/documents?request_id=${encodeURIComponent(o.id)}&doc=${doc.key}`, { headers: await authHeaders() })
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || 'Download failed') }
+      const name = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') || '')?.[1] || `${doc.label}.pdf`
+      const href = URL.createObjectURL(await r.blob())
+      const a = document.createElement('a'); a.href = href; a.download = name
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(href), 4000)
+    } catch (e: any) { alert(`${doc.label}: ${e.message}`) }
+  }
+
   return (
     <RxPage header={
       <RecruitmentHeader
@@ -892,7 +956,13 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       />}>
       <div className="rx-grid rx-stag">
         <div className="s12 rx-bar" style={{ gap:10 }}>
-          <SearchBox value={hq} onChange={setHq} placeholder="Search candidate or job role…" label="Search approvals" />
+          {/* Waiting / Approved. The redesigned screen carries its own search and
+              company pills, so this row keeps only what it does not duplicate:
+              this toggle and the department / location / position filters. */}
+          <Segmented label="Offer approvals" value={tab}
+            onChange={(v:'pending'|'done')=>{ setTab(v); setSelected(null) }}
+            options={[{ value:'pending' as const, label:'Waiting' },
+                      { value:'done' as const,    label:'Approved' }]} />
           {/* CORRECTION to what step 10 said here: this file's RecFilterBar was
               NOT sticky -- that was page.tsx's separate copy. The reason these
               controls are inline is consistency with the other tabs, and it let
@@ -920,88 +990,50 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
           </select>
         </div>
         <div className="s12">
+      {/* The per-company recruiter load failing is the one thing the new view
+          cannot say for itself: it is handed a map, not a request. Shown here so
+          an empty picker still comes with its reason. */}
+      {hmErr && <div style={{ marginBottom:SP.md }}><Callout tone="warn">{hmErr}</Callout></div>}
+      {/* THE REDESIGN. Everything above this line -- the loaders, approveMrf,
+          rejectMrf, processApproval, the chain advance, the audit write and the
+          notifications -- is unchanged and handed in as props. This component
+          reads nothing and writes nothing itself.
 
-      {/* MRF Approvals — HR Head approves new manpower requisitions here */}
-      <div style={{ marginBottom:22 }}>
-        <div className="rx-label" style={{ margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
-        {fMrfs.length === 0 && (
-          <div className="rx-mod" style={{ textAlign:'center' as const, padding:18 }}><span className="rx-meta">{ql?'No matching MRF':'No MRFs pending approval'}</span></div>
-        )}
-        {fMrfs.map(m => {
-          const chain = Array.isArray(m.approval_chain) ? m.approval_chain : []
-          const cur = chain.find((s:any)=>s.status==='PENDING')
-          // Assignment is required at the hand-off and only there: an RM2 step
-          // passes the requisition along, not out.
-          const needsAssign = !cur || cur.role === 'HR_HEAD'
-          const picked = assignMap[m.id] || []
-          // Only the recruiters in THIS requisition's company. The HR Head's own
-          // company is irrelevant here, and using it is what allowed an MRF to
-          // be assigned to somebody who could never see it.
-          const people = hmByCompany[m.company_id] || []
-          const busy = mrfBusy === m.id
-          const blocked = needsAssign && !picked.length
-          return (
-          <div key={m.id} className="rx-card" style={{ marginBottom:SP.md }}>
-            <div style={{ display:'flex', flexDirection:'row' as const, justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
-              <div>
-                <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
-                <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>
-                  {m.companies?.company_name || ''} · {m.no_of_openings || m.openings || 0} openings · {m.employment_type || '—'}{m.experience_required ? ` · ${m.experience_required}` : ''}
-                </div>
-                {m.skills_required && <div style={{ fontSize:11, color:TK.brandDeep, marginTop:3 }}>Skills: {m.skills_required}</div>}
-              </div>
-              {!needsAssign && (
-                <span className="rx-chip" style={{ flexShrink:0, background:TK.sunken, color:TK.muted, border:`1px solid ${TK.line}` }}>
-                  {cur?.role || 'Earlier'} step — the HR Head assigns on final approval
-                </span>
-              )}
-            </div>
-
-            {/* The assignment menu. This block did not exist: Approve wrote
-                status APPROVED with nobody named, which is the rule break. */}
-            {needsAssign && (
-              <div style={{ marginTop:SP.md, paddingTop:SP.md, borderTop:`1px solid ${TK.line}` }}>
-                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Assign hiring manager / recruiter <em>*</em></label>
-                {hmErr ? (
-                  <div className="rx-hint" style={{ color:TK.warning }}>{hmErr}</div>
-                ) : people.length === 0 ? (
-                  <div className="rx-hint" style={{ color:TK.warning }}>
-                    No hiring managers or recruiters are set up for <b>{m.companies?.company_name || 'this requisition’s company'}</b>,
-                    so it cannot be handed to anyone yet. Ask an admin to give someone the
-                    <b> Hiring Manager / Recruiter</b> role in that company under Assign Roles.
-                  </div>
-                ) : (
-                  <>
-                    {/* Names the company on purpose. This screen lists MRFs from
-                        every company, so "N available" alone invited the
-                        cross-company assignment this scoping now prevents. */}
-                    <div style={{ fontSize:11, color:TK.faint, marginBottom:6 }}>
-                      {people.length} available in {m.companies?.company_name || 'this requisition’s company'}
-                    </div>
-                    <RecruiterPicker people={people} value={picked}
-                      onChange={(ids:string[]) => setAssignMap(prev => ({ ...prev, [m.id]: ids }))} />
-                  </>
-                )}
-              </div>
-            )}
-
-            <div style={{ display:'flex', gap:8, marginTop:SP.md }}>
-              <button type="button" className="rx-btn ok" disabled={busy || blocked}
-                title={blocked ? 'Pick who will run this hiring — approving hands it to them' : undefined}
-                style={{ opacity: (busy || blocked) ? .55 : 1, cursor: blocked ? 'not-allowed' : 'pointer' }}
-                onClick={()=>approveMrf(m.id)}>
-                {busy ? 'Approving…' : needsAssign ? `Approve & Assign${picked.length ? ` (${picked.length})` : ''}` : 'Approve'}
-              </button>
-              <button type="button" className="rx-btn d" disabled={busy} onClick={()=>rejectMrf(m.id)}>Reject</button>
-            </div>
-          </div>
-          )
-        })}
-      </div>
-
-      {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
-      <div style={{ marginBottom:22 }}>
-        <div className="rx-label" style={{ margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
+          Waiting is the new screen. Approved stays on the existing grid and
+          review dialog: it is a read-only archive of decided offers, it is
+          where the ?offer=<id> deep link lands, and the new view has no
+          equivalent for it. */}
+      {tab === 'pending' ? (
+        <HRHeadApprovalView
+          viewerName={viewerName || 'You'}
+          viewerId={employeeId}
+          mrfs={mrfVMs}
+          offers={offerVMs}
+          recruitersByCompany={hmByCompany}
+          managersByCompany={mgrByCompany}
+          rehireCount={fRejected.length}
+          onOpenPackDoc={openPackDoc}
+          onApproveMrf={(m, ids) => approveMrf(m.id, ids)}
+          onRejectMrf={(m, note) => rejectMrf(m.id, note)}
+          onApproveOffer={async (o, hrManagerId) => {
+            const req = requests.find((r: any) => r.id === o.id)
+            if (!req) return false
+            // Named from the SAME company-keyed list the picker offered, so an
+            // id from another company cannot be handed the letter.
+            const hit = (mgrByCompany[o.companyId] || []).find((p: any) => p.id === hrManagerId)
+            if (!hit) { alert('That HR Manager is not in this offer\u2019s company.'); return false }
+            return processApproval(req, 'approve', '', { id: hit.id, name: hit.name, code: hit.code ?? null })
+          }}
+          onRejectOffer={async (o, note) => {
+            const req = requests.find((r: any) => r.id === o.id)
+            if (!req) return false
+            return processApproval(req, 'reject', note, null)
+          }}
+          rehire={
+            /* The existing rehire UI, unchanged. Its fields were never part of
+               the redesign, so it is passed through as a slot rather than
+               restyled into classes that do not exist. */
+            <div>
         {fRejected.length === 0 && (
           <div className="rx-mod" style={{ textAlign:'center' as const, padding:18 }}><span className="rx-meta">{ql?'No matching candidate':'No rejected candidates'}</span></div>
         )}
@@ -1020,21 +1052,17 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="rx-mod-h" style={{ marginBottom:10 }}>
-        <div className="rx-mod-t">Offer approvals{tab==='pending' && fRequests.length ? <span className="rx-chip" style={{ background:TK.warningTint, color:TK.warning }}>{fRequests.length} waiting</span> : null}</div>
-        <Segmented label="Offer approvals" value={tab}
-          onChange={(v:'pending'|'done')=>{ setTab(v); setSelected(null) }}
-          options={[{ value:'pending' as const, label:`Pending (${fRequests.length})` },
-                    { value:'done' as const,    label:'Approved' }]} />
-      </div>
-
+            </div>
+          }
+        />
+      ) : (
+        <>
+          <div className="rx-label" style={{ margin:'10px 0 8px' }}>Approved offers ({fRequests.length})</div>
       {fRequests.length === 0 ? (
         <div className="rx-mod" style={{ textAlign:'center' as const, padding:36 }}>
-          <div style={{ fontSize:28, marginBottom:6 }}>{tab==='pending' ? '🗂️' : '✅'}</div>
-          <div style={{ fontSize:14, fontWeight:700, color:TK.ink }}>{ql ? 'No matching candidate' : tab==='pending' ? 'Nothing waiting on you' : 'No approved offers yet'}</div>
-          <div className="rx-meta" style={{ marginTop:4 }}>{tab==='pending' ? 'Offers land here when a recruiter submits them after the candidate accepts the salary link.' : 'Approved offers move to Send Offers for the HR manager.'}</div>
+          <div style={{ fontSize:28, marginBottom:6 }}>✅</div>
+          <div style={{ fontSize:14, fontWeight:700, color:TK.ink }}>{ql ? 'No matching candidate' : 'No approved offers yet'}</div>
+          <div className="rx-meta" style={{ marginTop:4 }}>Approved offers move to Send Offers for the HR manager.</div>
         </div>
       ) : (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:14 }}>
@@ -1081,6 +1109,8 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
           processing={processing} decided={decided}
           onClose={()=>{ setSelected(null); setDecided(null); setComment('') }}
           onDecide={(act, note, hrManager)=>processApproval(selected, act, note, hrManager)} />
+      )}
+        </>
       )}
         </div>
       </div>
