@@ -382,7 +382,10 @@ export default function RecruitmentPage() {
     // about who is looking at it. A recruiter sees offers in flight read-only;
     // the assigned HR Manager reviews, edits, generates and sends. Same tab.
     { k:'sendoffer', l:'Offer Letters' },
-    { k:'offers', l:'Offers' },
+    // Tracking, not dispatch. Its letter composer was retired: it wrote a row
+    // and claimed "Email ready" without ever sending. Offer Letters owns
+    // sending; this screen owns the reply.
+    { k:'offers', l:'Offer Tracking' },
     { k:'preonboarding', l:'Pre-onboarding' },
     { k:'jobstatus', l:'Job Status' },
   ]
@@ -6083,10 +6086,6 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
 function OffersTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
-  const [letter, setLetter] = useState('')
-  const [toEmail, setToEmail] = useState('')
-  const [cc, setCc] = useState('')
-  const [doj, setDoj] = useState('')
   // A candidate reaches Offers only AFTER HR Head has APPROVED the offer (offer_approval_requests
   // status = HR_HEAD_APPROVED) — or an offer is already sent. So the flow is:
   // shortlist → Negotiation → Offer Approval → HR Head approves → Offers. No bypass.
@@ -6102,51 +6101,21 @@ function OffersTab({ supabase, companies, departments, locations, mrfs, candidat
     .filter((c:Candidate)=>!offQ || c.full_name.toLowerCase().includes(offQ.toLowerCase()))
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
 
-  async function generateLetter(c:Candidate) {
-    const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-    const { data:neg } = await supabase.from('ctc_negotiations').select('*').eq('candidate_id',c.id).order('created_at',{ascending:false}).limit(1)
-    const n = neg?.[0]
-    const content = `Dear ${c.full_name},
-
-We are pleased to extend an offer of employment for the position of ${mrf?.designation||c.designation||'—'}.
-
-OFFER DETAILS:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Annual CTC:         ₹${n?.offered_ctc?(n.offered_ctc/100000).toFixed(2):' — '} Lakhs
-Monthly Basic:      ₹${n?.basic_monthly?Math.round(n.basic_monthly).toLocaleString('en-IN'):' — '}
-Monthly HRA:        ₹${n?.hra_monthly?Math.round(n.hra_monthly).toLocaleString('en-IN'):' — '}
-Est. Net Take-Home: ₹${n?.net_monthly?Math.round(n.net_monthly).toLocaleString('en-IN'):' — '}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Date of Joining: ${doj||'To be confirmed'}
-
-This offer is valid for 7 days and subject to:
-1. Successful completion of background verification
-2. Submission of all required documents
-3. Medical fitness certification
-
-Please confirm acceptance by replying to this email.
-
-With regards,
-HR Team`
-    setLetter(content)
-    setToEmail(c.email||'')
-    setSel(c)
-  }
-
-  async function sendOffer() {
-    if (!sel||!letter) return
-    const { error } = await supabase.from('offer_letters').insert({
-      candidate_id:sel.id, candidate_name:sel.full_name, designation:sel.designation||'Not specified', company_id:sel.company_id||null,
-      letter_content:letter, to_email:toEmail,
-      cc_emails:cc.split(',').map((e:string)=>e.trim()).filter(Boolean),
-      status:'SENT', sent_at:new Date().toISOString()
-    })
-    if (error) { showNotify('Save failed: '+error.message,'error'); return }
-    await supabase.from('candidates').update({ stage:'Offer Sent', doj:doj||null, offer_accepted:false, offer_sent_at:new Date().toISOString(), offer_reminder_sent:false }).eq('id',sel.id)
-    await closeMrfIfFilled(supabase, sel.mrf_id)
-    showNotify('Offer saved! Email ready.'); onRefresh()
-  }
+  // generateLetter and sendOffer lived here and are deliberately gone.
+  //
+  // sendOffer never sent anything: it inserted an offer_letters row with status
+  // 'SENT' and reported "Email ready", with no send-offer-email call, no
+  // letterhead, no PDF and no offer_request_id — so the candidate received
+  // nothing, and the draft/finalise flow on the Offer Letters tab could not see
+  // the rows it left behind. Two screens claiming to send the same offer, one of
+  // which reached nobody, is worse than one screen that does it properly.
+  //
+  // Its only irreplaceable side effect was writing candidates.doj, which
+  // Pre-onboarding counts down to and the joining-reminder cron fires off. That
+  // write moved to the real send (offer-flow-components.tsx) rather than being
+  // dropped.
+  //
+  // What stays here is the half nothing else does: recording the reply.
 
   // ── Post-offer-letter response (#13): Accepted / Revision / Backout ──
   // Accepted → moves into Pre-onboarding; MRF stays/closes per openings.
@@ -6222,11 +6191,12 @@ HR Team`
   return (
     <RxPage header={
       <RecruitmentHeader
-        title="Offer letters"
-        subtitle="Draft and send the letter once HR Head has approved the offer, then record how the candidate replied."
+        title="Offer tracking"
+        subtitle="Where every offer stands, and where you record how the candidate replied."
         help={<Help label="Who appears here">
           <p>A candidate reaches this list only after <b>HR Head approval</b>, or once an offer has already been sent. There is no bypass.</p>
-          <p>Picking someone builds their letter from the saved CTC negotiation. Nothing is sent until you press Send.</p>
+          <p>Letters are drafted and sent from <b>Offer Letters</b> — on the company&rsquo;s letterhead, by email. This screen tracks what came back.</p>
+          <p><b>Accepted</b> moves them to Pre-onboarding. <b>Revision</b> returns the offer to the HR Head and reopens the requisition. <b>Backout</b> rejects the candidate and reopens it for hiring.</p>
         </Help>}
       />}>
       <div className="rx-grid rx-stag">
@@ -6281,7 +6251,7 @@ HR Team`
           <div key={c.id} className="rx-card" style={{ cursor:'pointer',
               borderColor: sel?.id===c.id ? 'var(--ez-brand)' : undefined,
               background:  sel?.id===c.id ? 'var(--ez-brand-tint)' : undefined }}
-            onClick={()=>generateLetter(c)}>
+            onClick={()=>setSel(c)}>
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
@@ -6307,18 +6277,26 @@ HR Team`
           </div>
         )}
         </div>
-      {sel&&letter&&(
-        <div className="s8">
-          <div className="rx-mod">
-            <div className="rx-mod-h"><div className="rx-mod-t">Offer letter</div></div>
-            <div style={{ marginBottom:8 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>To Email</label><input className="rx-input" value={toEmail} onChange={e=>setToEmail(e.target.value)} /></div>
-            <div style={{ marginBottom:8 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>CC (comma separated)</label><input className="rx-input" value={cc} onChange={e=>setCc(e.target.value)} placeholder="hr@co.com, md@co.com" /></div>
-            <div style={{ marginBottom:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Date of Joining</label><input className="rx-input" type="date" value={doj} onChange={e=>setDoj(e.target.value)} /></div>
-            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:300, fontFamily:'monospace', fontSize:11 }} value={letter} onChange={e=>setLetter(e.target.value)} />
-            <button onClick={sendOffer} style={{ ...T.btnPrimary, width:'100%', marginTop:10, padding:10 }}>Send Offer Letter</button>
-          </div>
+      {/* The letter composer that stood here is gone. It wrote an offer_letters
+          row and said "Email ready" — it never called send-offer-email, carried
+          no letterhead and no offer_request_id, so the candidate received
+          nothing and the draft/finalise flow could not see its rows. Two screens
+          both claiming to "send" an offer, one of which reached nobody.
+          Dispatch belongs to Offer Letters; this screen tracks the reply. */}
+      <div className="s8">
+        <div className="rx-mod">
+          <div className="rx-mod-h"><div className="rx-mod-t">Sending an offer letter</div></div>
+          <p style={{ fontSize:13, color:C.inkSoft, lineHeight:1.6, margin:0 }}>
+            Offer letters are drafted and sent from <b>Offer Letters</b>, where the body comes from the
+            template in Admin Setup, prints onto the company&rsquo;s letterhead and goes out by email.
+          </p>
+          <p style={{ fontSize:12.5, color:C.muted, lineHeight:1.6, marginBottom:0 }}>
+            Record the candidate&rsquo;s reply here once it arrives — <b>Accepted</b> moves them to
+            Pre-onboarding, <b>Revision</b> sends the offer back to the HR Head and reopens the
+            requisition, <b>Backout</b> rejects the candidate and reopens it for hiring.
+          </p>
         </div>
-      )}
+      </div>
       </div>
     </RxPage>
   )

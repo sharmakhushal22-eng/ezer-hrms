@@ -45,7 +45,10 @@ export const SCREEN_MODULES: ScreenModule[] = [
       // visible. Migration 141 removes the now-orphaned recruitment.offerletter
       // rows that migration 138 seeded.
       { key: 'sendoffer', label: 'Offer Letters' },
-      { key: 'offers', label: 'Offers' },
+      // Reply tracking (Accepted / Revision / Backout). Its draft-and-send half
+      // was retired — it never emailed anything — so dispatch lives on the
+      // merged 'sendoffer' screen alone.
+      { key: 'offers', label: 'Offer Tracking' },
       { key: 'preonboarding', label: 'Pre-onboarding' },
       { key: 'jobstatus', label: 'Job Status' },
     ],

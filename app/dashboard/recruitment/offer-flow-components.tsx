@@ -1638,8 +1638,23 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
       offer_sent_at: new Date().toISOString(),
     }).eq('id', selected.id)
 
-    // Update candidate stage
-    await supabase.from('candidates').update({ stage: 'Offer Sent', offer_accepted: false, offer_sent_at: new Date().toISOString(), offer_reminder_sent: false }).eq('id', selected.candidate_id)
+    // Update candidate stage.
+    //
+    // doj is set HERE now. It used to be written only by the Offers tab's own
+    // send (page.tsx), which is being retired as a dispatch path because it
+    // never emailed anything. Pre-onboarding counts down to candidates.doj, the
+    // joining-reminder cron fires off it, and the time-to-fill metric reads it —
+    // so dropping that write without moving it would have left Pre-onboarding
+    // showing "Not set" and the reminders with no date to count to.
+    //
+    // The letter's proposed DOJ is what the candidate was actually told; the
+    // approved request is the fallback when the letter left it blank.
+    const sentDoj = letter.proposed_doj || selected.proposed_doj || null
+    await supabase.from('candidates').update({
+      stage: 'Offer Sent', offer_accepted: false,
+      offer_sent_at: new Date().toISOString(), offer_reminder_sent: false,
+      ...(sentDoj ? { doj: sentDoj } : {}),
+    }).eq('id', selected.candidate_id)
 
     // Auto-close the MRF once its openings are filled by sent/joined offers.
     const { data: candRow } = await supabase.from('candidates').select('mrf_id').eq('id', selected.candidate_id).maybeSingle()
