@@ -4829,12 +4829,23 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
 // ── CTC Negotiation — document collection link (24h) ──────────────────────────
 // Replaces the old Aadhaar/offer uploader. The recruiter sends the candidate a
 // secure 24h link to upload their documents; CC colleagues; then Resend / see Status.
-function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, onRefresh }:any) {
+function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, onRefresh, canEditEmail = false }:any) {
   const [loading, setLoading] = useState(true)
   const [link, setLink] = useState<any>(null)
   const [docs, setDocs] = useState<any[]>([])
   const [mode, setMode] = useState<'main'|'send'|'status'>('main')
   const [email, setEmail] = useState<string>(candidate.email||'')
+  // The REGISTERED address, edited in place on the main screen.
+  //
+  // `email` above is the recipient for one dispatch and has always been
+  // editable on the send screen — but it is local state that never wrote back.
+  // So a hiring manager fixing a typo there fixed that one send and nothing
+  // else: candidates.email kept the wrong address, and the salary break-up
+  // button later passed the uncorrected value straight through. This is the
+  // field that persists.
+  const [regEmail, setRegEmail] = useState<string>(candidate.email||'')
+  const [savingEmail, setSavingEmail] = useState(false)
+  const regDirty = regEmail.trim() !== (candidate.email||'').trim()
   const [cc, setCc] = useState<{id:string;name:string;email:string}[]>([])
   const [ccQ, setCcQ] = useState('')
   const [emps, setEmps] = useState<any[]>([])
@@ -4909,6 +4920,42 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   const active = link && link.status==='ACTIVE' && link.expires_at && new Date(link.expires_at).getTime()>now
   const timeLeft = link?.expires_at ? Math.max(0, Math.floor((new Date(link.expires_at).getTime()-now)/3600000)) : 0
 
+  /**
+   * Persist a corrected registered address onto the candidate.
+   *
+   * Writes candidates.email, which is what every later stage reads: the salary
+   * break-up link, the offer letter's To field, and the follow-up cron. Without
+   * this the correction lived only in the send screen's local state.
+   *
+   * It deliberately does NOT rewrite document_collection_links.candidate_email.
+   * The OTP gate authenticates the candidate against THAT column
+   * (collect-docs/otp/route.ts), so silently repointing an already-sent link
+   * would change who can open a link that is already out. Resending does it
+   * properly — the route reuses the row and rewrites the address — and the UI
+   * says so rather than leaving the discrepancy unexplained.
+   */
+  async function saveRegisteredEmail() {
+    const next = regEmail.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(next)) { showNotify('Enter a valid email address','error'); return }
+    const prev = (candidate.email||'').trim()
+    if (next === prev) return
+    setSavingEmail(true)
+    const { error } = await supabase.from('candidates').update({ email: next }).eq('id', candidate.id)
+    if (error) { setSavingEmail(false); showNotify('Could not save: '+error.message,'error'); return }
+    // Recorded: this changes where an offer is sent, so it should not be a
+    // silent edit. Both values, so a mis-correction can be traced.
+    await supabase.from('recruitment_audit_logs').insert({
+      candidate_id: candidate.id, company_id: candidate.company_id||null,
+      action_type: 'CANDIDATE_EMAIL_CHANGED',
+      details: { from: prev || null, to: next, stage: 'Pre-negotiation Checks' },
+      created_at: new Date().toISOString(),
+    })
+    setEmail(next)          // the send screen starts from the corrected address
+    setSavingEmail(false)
+    showNotify(link ? 'Email updated. Resend the link so it goes to the new address.' : 'Email updated.')
+    onRefresh?.()
+  }
+
   async function send() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { showNotify('Enter a valid candidate email','error'); return }
     setSending(true)
@@ -4936,8 +4983,33 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
           <>
           {mode==='main' && (
             <div>
-              <div style={{ fontSize:12, color:C.faint, marginBottom:2 }}>Registered email</div>
-              <div style={{ fontSize:13, fontWeight:600, marginBottom:12 }}>{candidate.email || <span style={{ color:C.critical }}>no email on file</span>}</div>
+              <label className="rx-label" style={{ display:'block', marginBottom:4 }}>Registered email</label>
+              {canEditEmail ? (
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                    <input className="rx-input" type="email" value={regEmail} onChange={e=>setRegEmail(e.target.value)}
+                      placeholder="candidate@email.com" style={{ flex:1 }} />
+                    <button onClick={saveRegisteredEmail} disabled={savingEmail || !regDirty}
+                      title={!regDirty ? 'No change to save' : 'Save this address on the candidate'}
+                      style={{ ...T.btnPrimary, padding:'7px 13px', fontSize:12, opacity:(savingEmail||!regDirty)?.5:1,
+                        cursor:(savingEmail||!regDirty)?'not-allowed':'pointer' }}>
+                      {savingEmail ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                  {!candidate.email && <div style={{ fontSize:11, color:C.critical, marginTop:4 }}>No email on file — add one before sending anything.</div>}
+                  {regDirty && (
+                    <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>
+                      Unsaved. Saving updates the candidate everywhere — document link, salary break-up and the offer letter.
+                      {link && ' A link already sent stays bound to the old address until you resend it.'}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize:13, fontWeight:600, marginBottom:12 }}>
+                  {candidate.email || <span style={{ color:C.critical }}>no email on file</span>}
+                  <div style={{ fontSize:11, color:C.faint, fontWeight:400, marginTop:3 }}>Only the assigned hiring manager can correct this.</div>
+                </div>
+              )}
               {link ? (
                 <>
                   <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
@@ -5078,7 +5150,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   )
 }
 
-function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId, rail }:any) {
+function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId, canEditAnyMrf, rail }:any) {
   // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
   // A revised offer moves the candidate back to 'Shortlisted', so they reappear here with the calculator.
   const finalCands = candidates.filter((c:Candidate)=>['Shortlisted'].includes(c.stage))
@@ -5411,6 +5483,12 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
 
       {subTab==='checks'&&sel&&(
         <CtcDocLink candidate={sel} mrf={selMrf} companyId={effCompany} supabase={supabase} showNotify={showNotify}
+          /* Correcting a typo'd address belongs to the person running the hiring.
+             Same rule as canEditMrf: an admin, the raiser, or an assigned
+             hiring manager on this candidate's MRF. */
+          canEditEmail={!!canEditAnyMrf
+            || (!!employeeId && selMrf?.requested_by === employeeId)
+            || (!!employeeId && Array.isArray(selMrf?.assigned_recruiter_ids) && selMrf.assigned_recruiter_ids.includes(employeeId))}
           onClose={()=>setSel(null)} onRefresh={onRefresh} />
       )}
 

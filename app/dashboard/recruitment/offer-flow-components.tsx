@@ -1926,6 +1926,7 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
     DOCUMENT_UPLOADED:         ['','Document uploaded'],
     DOCUMENTS_SUBMITTED:       ['','All documents submitted'],
     SALARY_LINK_SENT:          ['','Salary calculator link sent'],
+    CANDIDATE_EMAIL_CHANGED:   ['','Registered email corrected'],
     CANDIDATE_INTERESTED:      ['','Candidate confirmed interest'],
     OFFER_APPROVAL_REQUESTED:  ['','Offer approval request submitted'],
     HR_HEAD_APPROVED:          ['','HR Head approved'],
