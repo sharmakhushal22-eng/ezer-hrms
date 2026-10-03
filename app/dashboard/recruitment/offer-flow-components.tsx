@@ -12,6 +12,13 @@ import {
   C as TK, F as TF, W, R, E, S as SP, Z, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
 import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help, Timeline, Callout } from '@/components/recruitment/rx'
+// The assignable hiring managers / recruiters, and the same picker the MRF
+// Approvals sub-tab and the ESS portal use. RecruiterPicker imports only react
+// and @/lib/ui, so there is no cycle back into this file. toPickerPeople shapes
+// /api/ess/mrf's hrOptions — server-side hrTeamFor, RECRUITER only — so this
+// screen cannot offer somebody the API would refuse.
+import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+import { api as essApi } from '@/lib/ess/api'
 // The offer's ceiling is the MRF budget normalised to a year. budget_max is
 // quoted in the engagement's own period; offered_ctc is always annual. See
 // lib/recruitment/compensation.ts for why that lives outside this page.
@@ -538,7 +545,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail, focusOfferId }: any = {}) {
+export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail, focusOfferId, employeeId = null }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [requests, setRequests] = useState<any[]>([])
@@ -551,9 +558,30 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const [rejected, setRejected] = useState<any[]>([])
   const [rehireStage, setRehireStage] = useState<Record<string,string>>({})
   const [hq, setHq] = useState('')
+  // Assigning the hiring manager at the HR Head step. This screen had no picker
+  // at all: Approve wrote status 'APPROVED' straight to Supabase, so an MRF was
+  // opened with assigned_recruiter_ids empty and reached nobody's queue.
+  const [hmOptions, setHmOptions] = useState<any[]>([])
+  const [hmErr, setHmErr] = useState('')
+  const [assignMap, setAssignMap] = useState<Record<string, string[]>>({})
+  const [mrfBusy, setMrfBusy] = useState<string | null>(null)
 
   useEffect(() => { loadRequests() }, [tab])
   useEffect(() => { loadMrfs(); loadRejected() }, [])
+  // The assignable list, company-scoped, from the same guarded source the other
+  // two approval screens read. Loaded once rather than per card.
+  useEffect(() => {
+    if (!employeeId) {
+      setHmOptions([])
+      setHmErr('Your ESS session is not active, so the hiring-manager list cannot be loaded. Sign in again with your own ESS account.')
+      return
+    }
+    let live = true
+    essApi('/api/ess/mrf', employeeId)
+      .then((d: any) => { if (live) { setHmOptions(toPickerPeople(d)); setHmErr('') } })
+      .catch((e: any) => { if (live) { setHmOptions([]); setHmErr(e?.message || 'Could not load the hiring managers.') } })
+    return () => { live = false }
+  }, [employeeId])
   // Deep link (…&tab=hrhead&offer=<id>): open that candidate's review drawer as soon as it is loaded.
   const focusedOffer = useRef(false)
   useEffect(() => {
@@ -580,17 +608,102 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       .order('created_at', { ascending: false })
     setMrfs(data || [])
   }
+  /** recruitment_audit_logs, the shape logMrfAudit writes in page.tsx — which is
+   *  local to that file and not exported, so this is three deliberate lines
+   *  rather than a refactor of a working screen. These approvals used to leave
+   *  no audit trail whatsoever. */
+  async function auditMrf(m: any, action_type: string, details: any) {
+    await supabase.from('recruitment_audit_logs').insert({
+      mrf_id: m.id, company_id: m.company_id || null, action_type, details,
+      created_at: new Date().toISOString(),
+    })
+  }
+
   async function approveMrf(id: string) {
-    const { error } = await supabase.from('manpower_requisitions')
-      .update({ status: 'APPROVED', approved_at: new Date().toISOString() }).eq('id', id)
+    const m = mrfs.find((x: any) => x.id === id); if (!m) return
+    const picked = (assignMap[id] || []).filter(Boolean)
+    const chain = Array.isArray(m.approval_chain) ? m.approval_chain.map((s: any) => ({ ...s })) : []
+    const cur = chain.find((s: any) => s.status === 'PENDING')
+    // The hand-off: the HR Head's own step, or an MRF with no routing at all,
+    // which one decision opens outright.
+    const isHandOff = !cur || cur.role === 'HR_HEAD'
+
+    // THE RULE, ENFORCED IN THE WRITE.
+    //
+    // The HR Head's approval IS the hand-off. "Assigned to you" reads
+    // assigned_recruiter_ids, so approving with an empty one opens a requisition
+    // that reaches no queue — nobody works it and nothing says so.
+    //
+    // This function wrote straight to Supabase, so it reached neither
+    // /api/ess/mrf's guard nor page.tsx's approveMRF. Both of those were
+    // hardened earlier; this path was missed, and it is the one the HR Head tab
+    // actually calls. A disabled button is not an enforcement point.
+    if (isHandOff && !picked.length) {
+      alert('Assign at least one hiring manager or recruiter — approving hands them the requisition to run.')
+      return
+    }
+    // And they must hold the role, so a stale list cannot slip somebody in.
+    // Mirrors the server's own check against hrTeamFor.
+    if (picked.length && hmOptions.length) {
+      const allowed = new Set(hmOptions.map((p: any) => p.id))
+      if (picked.some((x: string) => !allowed.has(x))) {
+        alert('Only hiring managers / recruiters in this company can be assigned a requisition.')
+        return
+      }
+    }
+
+    setMrfBusy(id)
+    const now = new Date().toISOString()
+    const chosen = picked.map((pid: string) => hmOptions.find((p: any) => p.id === pid)).filter(Boolean)
+    const label = (p: any) => `${p.name}${p.code ? ` (${p.code})` : ''}`
+    const patch: any = {}
+    if (picked.length) {
+      patch.assigned_recruiter_ids = picked
+      patch.assigned_recruiter = chosen.map(label).join(', ') || null
+    }
+    // ADVANCE the chain rather than stamping it. This used to set status
+    // 'APPROVED' outright, so an RM2 step was never recorded and the
+    // requisition skipped its own routing entirely.
+    const next = cur ? chain.find((s: any) => s.status === 'WAITING') : null
+    if (cur) {
+      cur.status = 'APPROVED'; cur.acted_at = now
+      if (next) next.status = 'PENDING'
+      else { patch.status = 'APPROVED'; patch.approved_at = now }
+      patch.approval_chain = chain
+    } else {
+      patch.status = 'APPROVED'; patch.approved_at = now
+    }
+
+    const { error } = await supabase.from('manpower_requisitions').update(patch).eq('id', id)
+    setMrfBusy(null)
     if (error) { alert('Error: ' + error.message); return }
+    await auditMrf(m, next ? 'MRF_STEP_APPROVED' : 'MRF_APPROVED', {
+      position: m.designation || m.position,
+      recruiter: chosen.length ? chosen.map(label).join(', ') : 'unassigned',
+      next: next ? `${next.role || 'next'} · ${next.approver_name || '—'}` : 'none — fully approved',
+    })
+    setAssignMap(prev => { const n = { ...prev }; delete n[id]; return n })
     loadMrfs()
   }
+
   async function rejectMrf(id: string) {
+    const m = mrfs.find((x: any) => x.id === id); if (!m) return
     const reason = window.prompt('Rejection reason for this MRF:'); if (reason === null) return
-    const { error } = await supabase.from('manpower_requisitions')
-      .update({ status: 'REJECTED', remarks: reason }).eq('id', id)
+    if (!reason.trim()) { alert('A rejection reason is required.'); return }
+    setMrfBusy(id)
+    // Record the refusal on the chain too — this set REJECTED with no trace of
+    // who refused it or at which step.
+    const chain = Array.isArray(m.approval_chain) ? m.approval_chain.map((s: any) => ({ ...s })) : []
+    const cur = chain.find((s: any) => s.status === 'PENDING')
+    const patch: any = { status: 'REJECTED', remarks: reason }
+    if (cur) {
+      cur.status = 'REJECTED'; cur.acted_at = new Date().toISOString(); cur.comment = reason
+      patch.approval_chain = chain
+    }
+    const { error } = await supabase.from('manpower_requisitions').update(patch).eq('id', id)
+    setMrfBusy(null)
     if (error) { alert('Error: ' + error.message); return }
+    await auditMrf(m, 'MRF_REJECTED', { position: m.designation || m.position, reason })
     loadMrfs()
   }
 
@@ -737,23 +850,68 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
         {fMrfs.length === 0 && (
           <div className="rx-mod" style={{ textAlign:'center' as const, padding:18 }}><span className="rx-meta">{ql?'No matching MRF':'No MRFs pending approval'}</span></div>
         )}
-        {fMrfs.map(m => (
-          <div key={m.id} className="rx-card" style={{ display:'flex', /* .rx-card is flex-direction:column, so a row must say so — without this, space-between distributes VERTICALLY and alignItems centres the content */ flexDirection:'row', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:SP.md }}>
-            <div>
-              <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
-              <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>
-                {m.companies?.company_name || ''} · {m.no_of_openings || m.openings || 0} openings · {m.employment_type || '—'}{m.experience_required ? ` · ${m.experience_required}` : ''}
+        {fMrfs.map(m => {
+          const chain = Array.isArray(m.approval_chain) ? m.approval_chain : []
+          const cur = chain.find((s:any)=>s.status==='PENDING')
+          // Assignment is required at the hand-off and only there: an RM2 step
+          // passes the requisition along, not out.
+          const needsAssign = !cur || cur.role === 'HR_HEAD'
+          const picked = assignMap[m.id] || []
+          const busy = mrfBusy === m.id
+          const blocked = needsAssign && !picked.length
+          return (
+          <div key={m.id} className="rx-card" style={{ marginBottom:SP.md }}>
+            <div style={{ display:'flex', flexDirection:'row' as const, justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
+                <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>
+                  {m.companies?.company_name || ''} · {m.no_of_openings || m.openings || 0} openings · {m.employment_type || '—'}{m.experience_required ? ` · ${m.experience_required}` : ''}
+                </div>
+                {m.skills_required && <div style={{ fontSize:11, color:TK.brandDeep, marginTop:3 }}>Skills: {m.skills_required}</div>}
               </div>
-              {m.skills_required && <div style={{ fontSize:11, color:TK.brandDeep, marginTop:3 }}>Skills: {m.skills_required}</div>}
+              {!needsAssign && (
+                <span className="rx-chip" style={{ flexShrink:0, background:TK.sunken, color:TK.muted, border:`1px solid ${TK.line}` }}>
+                  {cur?.role || 'Earlier'} step — the HR Head assigns on final approval
+                </span>
+              )}
             </div>
-            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-              {/* Styling only — approveMrf/rejectMrf are untouched, and
-                  rejectMrf still asks for its reason the way it always has. */}
-              <button type="button" className="rx-btn ok" onClick={()=>approveMrf(m.id)}>Approve</button>
-              <button type="button" className="rx-btn d" onClick={()=>rejectMrf(m.id)}>Reject</button>
+
+            {/* The assignment menu. This block did not exist: Approve wrote
+                status APPROVED with nobody named, which is the rule break. */}
+            {needsAssign && (
+              <div style={{ marginTop:SP.md, paddingTop:SP.md, borderTop:`1px solid ${TK.line}` }}>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Assign hiring manager / recruiter <em>*</em></label>
+                {hmErr ? (
+                  <div className="rx-hint" style={{ color:TK.warning }}>{hmErr}</div>
+                ) : hmOptions.length === 0 ? (
+                  <div className="rx-hint" style={{ color:TK.warning }}>
+                    No hiring managers or recruiters are set up for this company, so this requisition cannot be handed to anyone yet.
+                    Ask an admin to give someone the <b>Hiring Manager / Recruiter</b> role in Assign Roles.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize:11, color:TK.faint, marginBottom:6 }}>
+                      {hmOptions.length} available in this company
+                    </div>
+                    <RecruiterPicker people={hmOptions} value={picked}
+                      onChange={(ids:string[]) => setAssignMap(prev => ({ ...prev, [m.id]: ids }))} />
+                  </>
+                )}
+              </div>
+            )}
+
+            <div style={{ display:'flex', gap:8, marginTop:SP.md }}>
+              <button type="button" className="rx-btn ok" disabled={busy || blocked}
+                title={blocked ? 'Pick who will run this hiring — approving hands it to them' : undefined}
+                style={{ opacity: (busy || blocked) ? .55 : 1, cursor: blocked ? 'not-allowed' : 'pointer' }}
+                onClick={()=>approveMrf(m.id)}>
+                {busy ? 'Approving…' : needsAssign ? `Approve & Assign${picked.length ? ` (${picked.length})` : ''}` : 'Approve'}
+              </button>
+              <button type="button" className="rx-btn d" disabled={busy} onClick={()=>rejectMrf(m.id)}>Reject</button>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}

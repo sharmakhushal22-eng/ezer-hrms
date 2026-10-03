@@ -8,16 +8,24 @@
 // opens a requisition that reaches no queue at all — nobody is working it and
 // nothing says so.
 //
-// THE RULE LIVES IN THREE PLACES, AND ONE OF THEM WAS MISSING
+// THE RULE LIVES IN FOUR PLACES, AND THEY WERE FIXED ONE AT A TIME
 //
 //   1. app/api/ess/mrf/route.ts        refuses an HR_HEAD step with no
 //                                      assigned_hr_ids, before any mutation
 //   2. ApprovalModal's Approve button  disabled while nothing is picked
-//   3. approveMRF()                    the dashboard's own Supabase write
+//   3. approveMRF()        (page.tsx)  the Review modal's Supabase write
+//   4. approveMrf()  (offer-flow-...)  the HR Head TAB's Supabase write
 //
-// (1) and (2) were added together. (3) was not, and (3) is the one the Review
-// modal actually calls — it writes straight to Supabase and reached neither
-// guard. An HR Head approved an MRF through it with nobody assigned.
+// (1) and (2) came first. (3) was missed, and an HR Head approved an MRF
+// through the Review modal with nobody assigned. (4) was missed again — and
+// (4) is the screen whose own heading says "MRF approvals", reached from the
+// HR Head tab in the rail. It had no picker at all: one click wrote
+// status 'APPROVED', skipping the assignment, the approval chain and the audit
+// log together. A user found it manually after (3) was fixed.
+//
+// The lesson this file now encodes: a rule enforced at one write is not
+// enforced. Every path that writes the approval needs its own check, and this
+// test enumerates them so the next one cannot be added quietly.
 //
 // A disabled button is not an enforcement point. Two routes past (2):
 // a chain with no PENDING step made the modal's atHrHead false (so Approve
@@ -35,6 +43,7 @@ import { readFileSync } from 'node:fs'
 
 const PAGE = readFileSync('app/dashboard/recruitment/page.tsx', 'utf8')
 const ESS = readFileSync('app/api/ess/mrf/route.ts', 'utf8')
+const OFFER = readFileSync('app/dashboard/recruitment/offer-flow-components.tsx', 'utf8')
 
 // ── The parse, guarded ──────────────────────────────────────────────────────
 // Every assertion below is worthless if these anchors moved and matched nothing.
@@ -132,6 +141,74 @@ test('the assignable list is loaded without waiting for the Approvals sub-tab', 
     'picker can be empty exactly when the rule is being enforced')
   assert.ok(!/if \(mrfSub==='approvals'\) loadApprovals\(\)/.test(PAGE),
     'the sub-tab-gated load should be gone, not merely duplicated')
+})
+
+// ── 5. The HR Head tab — the path a user had to find by hand ───────────────
+
+describe('the HR Head tab enforces the rule at its own write', () => {
+  const start = OFFER.indexOf('async function approveMrf(')
+  const body = OFFER.slice(start, OFFER.indexOf('\n  async function rejectMrf', start))
+
+  test('approveMrf exists and its body was isolated', () => {
+    assert.ok(start !== -1, 'approveMrf not found in offer-flow-components.tsx')
+    assert.ok(body.length > 400 && body.length < 12_000,
+      `approveMrf body slice looks wrong (${body.length} chars) — the anchors moved`)
+  })
+
+  test('it refuses an unassigned hand-off', () => {
+    assert.ok(/isHandOff && !picked\.length/.test(body),
+      'the HR Head tab wrote status APPROVED with nobody assigned. This screen has its own ' +
+      'Supabase write and reaches neither the ESS route nor page.tsx, so it needs its own check.')
+  })
+
+  test('a chain with no PENDING step still counts as the hand-off', () => {
+    assert.ok(/!cur \|\| cur\.role === 'HR_HEAD'/.test(body),
+      'an MRF with no routing is opened outright by one decision, so it is a hand-off too')
+  })
+
+  test('the refusal precedes the Supabase update', () => {
+    const guard = body.indexOf('!picked.length')
+    const write = body.indexOf("from('manpower_requisitions').update")
+    assert.ok(guard !== -1 && write !== -1 && guard < write,
+      'the check must run before the write, or a refused approval has already happened')
+  })
+
+  test('assignees are validated against the assignable list', () => {
+    assert.ok(/allowed/.test(body) && /hmOptions/.test(body),
+      'mirror the server-side role check rather than trusting the picker')
+  })
+
+  test('it advances the approval chain instead of stamping APPROVED', () => {
+    assert.ok(/'WAITING'/.test(body) && /approval_chain/.test(body),
+      "this screen set status 'APPROVED' outright, so an RM2 step was never recorded and " +
+      'the requisition skipped its own routing')
+  })
+
+  test('the decision is written to the audit log', () => {
+    assert.ok(/auditMrf\(/.test(body),
+      'approvals from this screen left no audit trail at all')
+  })
+
+  test('the screen renders the assignment menu', () => {
+    assert.ok(/RecruiterPicker/.test(OFFER),
+      'the HR Head tab must show a picker — it had none, which is why the rule could not be met')
+    assert.ok(/toPickerPeople/.test(OFFER) && /'\/api\/ess\/mrf'/.test(OFFER),
+      'the assignable list must come from the same guarded source as the other screens ' +
+      '(hrOptions / hrTeamFor), not a second query with different rules')
+  })
+
+  test('the Approve button is gated too, as the courtesy half', () => {
+    assert.ok(/const blocked = needsAssign && !picked\.length/.test(OFFER),
+      'the button should explain the requirement before the click, even though the write enforces it')
+  })
+
+  test('page.tsx passes the employeeId the list needs', () => {
+    // No /s flag: tsconfig targets ES2017, where dotAll is a TS1501 error and
+    // would push the typecheck baseline off 43. [^>] already spans newlines.
+    assert.ok(/<HRHeadApprovalDashboard[^>]*employeeId=\{grant\.employeeId\}/.test(PAGE),
+      'without employeeId the hiring-manager fetch has no identity and the menu is empty — ' +
+      'which would force the HR Head past the assignment step again')
+  })
 })
 
 test('only hiring managers / recruiters are assignable', () => {

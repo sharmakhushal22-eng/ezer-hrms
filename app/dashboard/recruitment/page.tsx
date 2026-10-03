@@ -496,7 +496,9 @@ export default function RecruitmentPage() {
           objects and its own RecFilterBar/SearchBar. Only this component was
           converted; CreateOfferApproval and AuditTrailViewer in that file are
           untouched, since the Offer Approval tab renders both. */}
-      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} focusOfferId={offerDeep} />}
+      {/* employeeId is what the hiring-manager list is fetched with — without it
+          the assignment menu on this screen has nothing to offer. */}
+      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} focusOfferId={offerDeep} employeeId={grant.employeeId} />}
       {/* Same component, two roles. Send Offers is the read-only view of offers
           in flight — recruiters keep sight of them but cannot dispatch. Offer
           Letter is the assigned HR Manager's screen and owns sending. */}
