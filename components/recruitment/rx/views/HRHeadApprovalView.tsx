@@ -149,7 +149,6 @@ function Hero({ waiting, mrfCount, offerCount, cleared, total, viewerName }: Her
   return (
     <div className="rxa-hero">
       <div className="rxa-hero-main">
-        <h1 className="rxa-hero-k">MRF &amp; Offer Approvals</h1>
         <div className="rxa-hero-t">
           {waiting === 0 ? 'All clear for now' : `${plural(waiting, 'approval', 'approvals')} waiting on you`}
         </div>
