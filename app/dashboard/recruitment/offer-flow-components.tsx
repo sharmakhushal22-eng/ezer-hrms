@@ -593,7 +593,15 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   // So: fetch per company present in the list, exactly as OfferReviewDrawer and
   // HRManagerSendOffer already do, and index by company id.
   useEffect(() => {
-    const ids = Array.from(new Set(mrfs.map((m: any) => m.company_id).filter(Boolean))) as string[]
+    // BOTH lists. These ids used to come from the MRFs alone, which was wrong the
+    // moment the two queues diverged: with no SUBMITTED requisition the effect
+    // returned early, mgrByCompany stayed empty, and every pending offer showed
+    // "No HR Manager is set up for this company yet" and could not be handed off.
+    // OfferReviewDrawer fetched per request, so it never had this gap.
+    const ids = Array.from(new Set([
+      ...mrfs.map((m: any) => m.company_id),
+      ...requests.map((r: any) => r.company_id),
+    ].filter(Boolean))) as string[]
     if (!ids.length) { setHmByCompany({}); setHmErr(''); return }
     let live = true
     ;(async () => {
@@ -632,7 +640,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       }
     })()
     return () => { live = false }
-  }, [mrfs])
+  }, [mrfs, requests])
   // Deep link (…&tab=hrhead&offer=<id>): open that candidate's review drawer as soon as it is loaded.
   const focusedOffer = useRef(false)
   useEffect(() => {

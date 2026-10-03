@@ -915,7 +915,11 @@ export default function HRHeadApprovalView(props: HRHeadApprovalViewProps) {
     setMgr({ ...mgr, [curOffer.id]: chosenMgr === id ? null : id })
   }
 
-  const waiting = openMrfs.length + openOffers.length + rehireCount
+  // Rehire is a POOL, not a queue: nothing in it is pending on this approver.
+  // Counting it here rendered as "6 approvals waiting on you" directly above
+  // "0 MRFs and 1 offer" -- the headline disagreed with its own sub-line.
+  // The Rehire section badge still shows the pool's real size.
+  const waiting = openMrfs.length + openOffers.length
   const total = waiting + done.length
   const counts: Record<ApprovalSection, number> = { mrf: openMrfs.length, offer: openOffers.length, rehire: rehireCount }
   const hasCur = isMrf ? curMrf !== null : curOffer !== null
