@@ -19,6 +19,8 @@
 // by the string 'Offer Letter', and a rename would have silently detached it.
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+// /api/letters/preview is session-guarded, so the browser hands its own session over.
+import { authHeaders } from '@/lib/auth-headers'
 import { MERGE_FIELDS, sampleOfferMergeFields } from '@/lib/letters/mergeFields'
 import { renderTemplate, extractTokens } from '@/lib/letters/renderTemplate'
 // The letterhead store is REUSED, not reimplemented: one company has one piece
@@ -401,9 +403,12 @@ export default function OfferLetterDesign() {
       terms.forEach((c, i) => parts.push(`${i + 1}. ${c.heading ? c.heading + ' — ' : ''}${c.body}`))
     }
     annex.forEach(c => parts.push(`ANNEXURE: ${c.heading || ''}\n\n${c.body}`))
+    // The headers must be AWAITED. Handing fetch an un-awaited authHeaders()
+    // promise is ignored silently, the call goes out unauthenticated, and the
+    // guarded route 401s with nothing failing at build time.
     const res = await fetch('/api/letters/preview', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
       body: JSON.stringify({ letter_name: 'Offer Letter', body_text: parts.join('\n\n') }),
     })
     setPreviewing(false)
