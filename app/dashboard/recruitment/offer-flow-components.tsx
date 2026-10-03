@@ -595,7 +595,26 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
         // 401s with nothing failing at build time.
         const r = await fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`, { headers: await authHeaders() })
         const j = await r.json()
-        if (live) { setHmByCompany(j.recruiters || {}); setHmErr('') }
+        // Shape each row for RecruiterPicker before storing it.
+        //
+        // Its unsearched "Suggested hiring managers" list filters on
+        // `p.is_recruiter`. The API returns {id, name, code} with no such flag,
+        // so storing the rows raw made the picker render "No recruiters
+        // suggested" directly beneath a count saying "3 available" — the people
+        // were loaded and findable by typing, but never offered. toPickerPeople
+        // used to stamp this on; routing around it dropped the flag.
+        //
+        // true by construction: every row here comes from
+        // roleHolders(companyId, ['RECRUITER']).
+        const shaped: Record<string, any[]> = {}
+        for (const [cid, rows] of Object.entries((j.recruiters || {}) as Record<string, any[]>)) {
+          shaped[cid] = (rows || []).map((p: any) => ({
+            ...p,
+            is_recruiter: true,
+            designation: p.designation || 'Hiring Manager / Recruiter',
+          }))
+        }
+        if (live) { setHmByCompany(shaped); setHmErr('') }
       } catch (e: any) {
         if (live) { setHmByCompany({}); setHmErr(e?.message || 'Could not load the hiring managers for these companies.') }
       }

@@ -227,8 +227,24 @@ describe('the HR Head tab enforces the rule at its own write', () => {
       'own recruiters is what caused the cross-company assignment')
     assert.ok(/hmByCompany\[m\.company_id\]/.test(body),
       'approveMrf must validate against THIS MRF\'s company too, not just the picker')
-    assert.ok(!/toPickerPeople/.test(OFFER),
+    // Anchored to the IMPORT and CALL forms, not the bare name: this regex runs
+    // over whole-file source, so a plain /toPickerPeople/ also matched the
+    // comment in the loader explaining why the helper is no longer used — the
+    // test then failed on prose while the code was correct. An assertion about
+    // what the code does NOT do has to name code.
+    assert.ok(!/import[^\n]*toPickerPeople/.test(OFFER) && !/toPickerPeople\(/.test(OFFER),
       'hrOptions/toPickerPeople is caller-company-scoped and must not feed this screen')
+  })
+
+  test('picker rows carry is_recruiter, or the list renders empty beneath its own count', () => {
+    // RecruiterPicker's unsearched list is `people.filter(p => p.is_recruiter)`.
+    // The route returns {id, name, code} with no such flag, so passing those
+    // rows straight through showed "No recruiters suggested" directly under
+    // "3 available in <company>" — loaded, findable by typing, never offered.
+    // The count and the list read the same array, so they must not disagree.
+    assert.ok(/is_recruiter: true/.test(OFFER),
+      'rows fed to RecruiterPicker must carry is_recruiter — every one comes from ' +
+      "roleHolders(companyId, ['RECRUITER']), so the flag is true by construction")
   })
 
   test('the company-keyed recruiters come from the guarded route', () => {
