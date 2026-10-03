@@ -35,18 +35,16 @@ export const SCREEN_MODULES: ScreenModule[] = [
       // recruitment-authority.test.ts. This is what HR sees in the permission
       // matrix, so it must read the same as the rail tab.
       { key: 'hrhead', label: 'MRF & Offer Approvals' },
-      // Two screens, one dispatch. Send Offers is the read-only view of offers
-      // in flight (migration 123 seeds it for RECRUITER); Offer Letter is where
-      // the assigned HR Manager reviews, edits, generates and sends, and
-      // migration 138 grants it to HR_MANAGER alone.
+      // ONE screen since the merge. Send Offers and Offer Letter rendered the
+      // same component with different props, so they are a single tab whose
+      // behaviour follows the viewer's role: read-only for a recruiter, full
+      // dispatch for the assigned HR Manager.
       //
-      // BOTH must be listed. An unlisted key that the page still renders leaves
-      // the module unconfigured for every role, so the tab can never be
-      // restricted — recruitment-authority.test.ts checks exactly this, and
-      // caught it when an earlier edit replaced sendoffer instead of adding
-      // offerletter beside it.
-      { key: 'sendoffer', label: 'Send Offers' },
-      { key: 'offerletter', label: 'Offer Letter' },
+      // 'sendoffer' is the key that survived because RECRUITER and HR_MANAGER
+      // both already held it live, so no grant had to move for the tab to stay
+      // visible. Migration 141 removes the now-orphaned recruitment.offerletter
+      // rows that migration 138 seeded.
+      { key: 'sendoffer', label: 'Offer Letters' },
       { key: 'offers', label: 'Offers' },
       { key: 'preonboarding', label: 'Pre-onboarding' },
       { key: 'jobstatus', label: 'Job Status' },

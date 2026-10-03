@@ -271,9 +271,21 @@ export default function RecruitmentPage() {
   // the legacy dashboard login is not "an HR Manager with assignments", and
   // scoping them to hr_manager_id would empty the screen for the people who are
   // meant to see everything.
+  // Who may actually SEND an offer letter on the merged tab. Previously this was
+  // "whoever could open the Offer Letter tab", which migration 138 granted to
+  // HR_MANAGER alone; the oversight logins reach it the same way they reach
+  // everything else. Everyone else sees the same screen read-only.
+  const canDispatchOffer = grant.legacy || grant.isSuperAdmin
+    || (grant.roles || []).some((r: any) => r.role_code === 'HR_MANAGER')
   const isScopedHrManager = !grant.legacy && !grant.isSuperAdmin
     && (grant.roles || []).some((r: any) => r.role_code === 'HR_MANAGER')
-  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offerletter'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
+  // 'offerletter' is gone: Send Offers and Offer Letter were the SAME component
+  // with two props, so they are one tab now (key 'sendoffer', labelled "Offer
+  // Letters"). The key that survived is the one BOTH roles already hold live —
+  // RECRUITER and HR_MANAGER — so the merge needs no grant migration to stay
+  // visible. Keeping 'offerletter' instead would have hidden the screen from
+  // recruiters until a migration ran.
+  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
   // Deep-link from ESS Tasks & Approvals: /ess-portal?module=recruitment&mrfSub=approvals&mrf=<id>
   // opens the MRF tab on its Approvals sub-tab with that requisition ready to review.
   const [mrfDeep, setMrfDeep] = useState<{ sub?:string; id?:string }>({})
@@ -288,7 +300,11 @@ export default function RecruitmentPage() {
     const sub = p.get('mrfSub'); const id = p.get('mrf')
     if (sub || id) { setTab('mrf'); setMrfDeep({ sub: sub || undefined, id: id || undefined }) }
     const t = p.get('tab')
-    if (t && ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offerletter','offers','preonboarding','jobstatus'].includes(t)) { setTab(t as typeof tab); wantedTab.current = t }
+    // ?tab=offerletter still arrives from notifications sent before the merge,
+    // so it maps onto the surviving tab rather than being ignored — an old link
+    // landing on the dashboard with no explanation is worse than a redirect.
+    const t2 = t === 'offerletter' ? 'sendoffer' : t
+    if (t2 && ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus'].includes(t2)) { setTab(t2 as typeof tab); wantedTab.current = t2 }
     const o = p.get('offer'); if (o) setOfferDeep(o)
   }, [])
   const [companies, setCompanies] = useState<Company[]>([])
@@ -361,12 +377,11 @@ export default function RecruitmentPage() {
     // escalated offer approvals (plus rehire). "MRF approvals" alone would
     // under-describe it and collide with the section of that name inside it.
     { k:'hrhead', l:'MRF & Offer Approvals' },
-    // Two screens, one dispatch. Send Offers stays as the read-only view of
-    // offers in flight (recruiters keep it); Offer Letter is where the assigned
-    // HR Manager reviews, edits, generates and sends — and migration 138 grants
-    // recruitment.offerletter to HR_MANAGER alone.
-    { k:'sendoffer', l:'Send Offers' },
-    { k:'offerletter', l:'Offer Letter' },
+    // ONE screen, role-aware. These were two tabs rendering the same component
+    // with different props; the difference was never about the screen, it was
+    // about who is looking at it. A recruiter sees offers in flight read-only;
+    // the assigned HR Manager reviews, edits, generates and sends. Same tab.
+    { k:'sendoffer', l:'Offer Letters' },
     { k:'offers', l:'Offers' },
     { k:'preonboarding', l:'Pre-onboarding' },
     { k:'jobstatus', l:'Job Status' },
@@ -507,11 +522,12 @@ export default function RecruitmentPage() {
       {/* employeeId is what the hiring-manager list is fetched with — without it
           the assignment menu on this screen has nothing to offer. */}
       {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} focusOfferId={offerDeep} employeeId={grant.employeeId} />}
-      {/* Same component, two roles. Send Offers is the read-only view of offers
-          in flight — recruiters keep sight of them but cannot dispatch. Offer
-          Letter is the assigned HR Manager's screen and owns sending. */}
-      {tab==='sendoffer' && <HRManagerSendOffer readOnly companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} myEmployeeId={grant.employeeId} scopeToMe={false} />}
-      {tab==='offerletter' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} myEmployeeId={grant.employeeId} scopeToMe={isScopedHrManager} />}
+      {/* One tab, and the ROLE decides what it offers. A recruiter sees every
+          offer in flight but cannot dispatch (readOnly); the assigned HR Manager
+          gets the draft/finalise/send controls, scoped to the offers the HR Head
+          handed to them. Exactly the behaviour the two separate tabs had — the
+          split was a screen-level expression of a permission-level fact. */}
+      {tab==='sendoffer' && <HRManagerSendOffer readOnly={!canDispatchOffer} companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} myEmployeeId={grant.employeeId} scopeToMe={isScopedHrManager} />}
 
       </div>
 

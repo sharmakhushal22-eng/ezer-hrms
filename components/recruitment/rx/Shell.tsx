@@ -47,8 +47,10 @@ export const TAB_META: Record<string, { icon: IconName; group: RailTab['group'] 
   negotiation: { icon: 'coin', group: 'Offer' },
   offerapproval: { icon: 'check', group: 'Offer' },
   hrhead: { icon: 'shield', group: 'Offer' },
-  sendoffer: { icon: 'send', group: 'Offer' },
-  offerletter: { icon: 'doc', group: 'Offer' },
+  // One entry since Send Offers and Offer Letter merged into a single
+  // role-aware tab. 'doc' rather than 'send': the screen is the letter, and
+  // sending is only what the HR Manager does with it.
+  sendoffer: { icon: 'doc', group: 'Offer' },
   offers: { icon: 'mail', group: 'Offer' },
   preonboarding: { icon: 'door', group: 'Join' },
   jobstatus: { icon: 'target', group: 'Track' },
