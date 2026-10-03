@@ -352,7 +352,15 @@ export default function RecruitmentPage() {
     { k:'pipeline', l:'Pipeline' },
     { k:'negotiation', l:'Negotiation' },
     { k:'offerapproval', l:'Offer Approval' },
-    { k:'hrhead', l:'HR Head' },
+    // LABEL only. The key stays 'hrhead': it is the screen key seeded by
+    // migration 123, what canSeeScreen resolves, what ?tab=hrhead deep-links to,
+    // and what recruitment-authority.test.ts asserts. Renaming the key would
+    // detach every seeded permission row from the tab it grants.
+    //
+    // Named for both things it does — this console holds MRF sign-off AND the
+    // escalated offer approvals (plus rehire). "MRF approvals" alone would
+    // under-describe it and collide with the section of that name inside it.
+    { k:'hrhead', l:'MRF & Offer Approvals' },
     // Two screens, one dispatch. Send Offers stays as the read-only view of
     // offers in flight (recruiters keep it); Offer Letter is where the assigned
     // HR Manager reviews, edits, generates and sends — and migration 138 grants

@@ -879,7 +879,10 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   return (
     <RxPage header={
       <RecruitmentHeader
-        title="HR Head approvals"
+        /* Matches the rail tab and the admin permission matrix, which both read
+           "MRF & Offer Approvals". The page header saying something different
+           from the tab you clicked is its own small bug. */
+        title="MRF & Offer Approvals"
         subtitle="Sign off new requisitions, decide on offers that recruiters have escalated, and re-enter rejected candidates."
         help={<Help label="What lands here">
           <p><b>MRF approvals</b> are requisitions waiting on your sign-off before hiring can start.</p>

@@ -31,7 +31,10 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'pipeline', label: 'Pipeline' },
       { key: 'negotiation', label: 'Negotiation' },
       { key: 'offerapproval', label: 'Offer Approval' },
-      { key: 'hrhead', label: 'HR Head' },
+      // Label only — the key 'hrhead' is seeded in migration 123 and asserted in
+      // recruitment-authority.test.ts. This is what HR sees in the permission
+      // matrix, so it must read the same as the rail tab.
+      { key: 'hrhead', label: 'MRF & Offer Approvals' },
       // Two screens, one dispatch. Send Offers is the read-only view of offers
       // in flight (migration 123 seeds it for RECRUITER); Offer Letter is where
       // the assigned HR Manager reviews, edits, generates and sends, and
