@@ -11,6 +11,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { authToken } from '@/lib/rms/client'
+// essSessionExpired tells "had a session, it lapsed" apart from "never had one",
+// which is the difference between "sign in again" and a 403 that reads as an
+// accusation. authToken() silently falls back to the Supabase session when the
+// ESS token dies, so without this the form only finds out after submitting.
+import { essSessionExpired } from '@/lib/ess-session-client'
 import { WAGE_CATS } from '@/lib/recruitment/min-wages'
 import { jobCodePrefix, newMrfNumber } from '@/lib/recruitment/job-code'
 import { C as TK, E } from '@/lib/ui'
@@ -683,6 +688,17 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         notice_buyout_allowed: form.notice_buyout_allowed, notice_buyout_cap: form.notice_buyout_cap || null,
         esop_eligible: form.esop_eligible, esop_retention_notes: form.esop_retention_notes || null,
         budget_code: form.budget_code || null,
+      }
+      // Say so BEFORE the round trip. A lapsed ESS token makes authToken() fall
+      // back to the Supabase session, the server then sees the legacy login and
+      // refuses the write — after the whole form has been filled in. The GET
+      // that loaded this form succeeded, so nothing on screen hinted at it.
+      // Nothing is cleared here: the answers stay, so signing in again and
+      // pressing save once more is all that is needed.
+      if (essSessionExpired()) {
+        setSaving(false)
+        notify('Your ESS session has expired. Sign in again in another tab, then press save — your answers are kept.', 'error')
+        return
       }
       const res = await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify(payload) })
       if (status === 'DRAFT') { notify('MRF saved as draft.'); onDone(); return }

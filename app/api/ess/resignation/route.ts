@@ -30,7 +30,16 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const c = await essCaller(req)
   if (c.error) return c.error
-  if (c.caller.viewAs) return forbidden('A resignation can only be submitted by the employee themself.')
+  // See app/api/ess/mrf/route.ts. The old wording was already careful not to
+  // accuse anyone, but it still left a lapsed ESS session with no idea what to
+  // do about it.
+  if (c.caller.viewAs) {
+    return forbidden(c.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active, so this resignation has nobody to submit it. '
+        + 'Sign in again with your own ESS account.'
+      : 'A resignation can only be submitted by the employee themself, so it cannot be '
+        + 'done while you are viewing somebody else\'s portal.')
+  }
   const me = c.caller.employeeId
   const body = await req.json().catch(() => ({}))
 

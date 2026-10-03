@@ -333,7 +333,16 @@ export async function POST(req: NextRequest) {
   const { ctx } = r
   // Applying for leave while viewing somebody else's portal would file it in
   // THEIR name. Approvals already refuses this; so does Leave now.
-  if (ctx.caller.viewAs) return forbidden('Leave cannot be applied for while viewing as somebody else.')
+  // Two situations, one message — see the note in app/api/ess/mrf/route.ts.
+  // actorEmployeeId null means no employee record behind the session (a lapsed
+  // ESS token included), not impersonation.
+  if (ctx.caller.viewAs) {
+    return forbidden(ctx.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active, so there is nobody to apply on behalf of. '
+        + 'Sign in again with your own ESS account.'
+      : 'Leave is applied for in your own name, so it cannot be submitted while you '
+        + 'are viewing somebody else\'s portal. Open your own portal to apply.')
+  }
 
   const me = ctx.caller.employeeId
   const body = await req.json().catch(() => ({}))
@@ -547,7 +556,12 @@ export async function PATCH(req: NextRequest) {
   const r = await essRoute(req)
   if (r.error) return r.error
   const { ctx } = r
-  if (ctx.caller.viewAs) return forbidden('Leave cannot be cancelled while viewing as somebody else.')
+  if (ctx.caller.viewAs) {
+    return forbidden(ctx.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active. Sign in again with your own ESS account to cancel this.'
+      : 'A cancellation is recorded under your own name, so it cannot be done while you '
+        + 'are viewing somebody else\'s portal. Open your own portal to cancel.')
+  }
 
   const me = ctx.caller.employeeId
   const body = await req.json().catch(() => ({}))

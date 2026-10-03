@@ -136,7 +136,24 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const r = await essRoute(req); if (r.error) return r.error
   const { ctx } = r
-  if (ctx.caller.viewAs) return forbidden('MRF actions cannot be done while viewing as somebody else.')
+  // viewAs covers two unrelated situations and the old single message described
+  // only one, so an ESS employee whose token had simply EXPIRED was told they
+  // were impersonating somebody. essCaller sets viewAs true unconditionally for
+  // the legacy dashboard login — and a lapsed ESS token lands there, because
+  // authToken() falls back to the Supabase session, verifyEssToken then fails,
+  // and requireDashboardUser returns kind:'legacy' with employeeId null. The GET
+  // still answers (it takes the id from the query string), so the form fills in
+  // normally and only the submit is refused.
+  //
+  // actorEmployeeId separates them: null = not attached to an employee record,
+  // non-null = a real person looking at a colleague's portal.
+  if (ctx.caller.viewAs) {
+    return forbidden(ctx.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active, so this requisition has nobody to raise it. '
+        + 'Sign in again with your own ESS account and resubmit — your answers are still on screen.'
+      : 'An MRF is raised in your own name, so it cannot be submitted while you are '
+        + 'viewing somebody else\'s portal. Open your own portal to raise one.')
+  }
   const me = ctx.caller.employeeId
   const body = await req.json().catch(() => ({}))
   const action = String(body.action || '')

@@ -293,7 +293,14 @@ export async function POST(req: NextRequest) {
   const r = await essRoute(req)
   if (r.error) return r.error
   const { ctx } = r
-  if (ctx.caller.viewAs) return forbidden('Attendance cannot be regularised while viewing as somebody else.')
+  // See app/api/ess/mrf/route.ts for why these are two messages, not one.
+  if (ctx.caller.viewAs) {
+    return forbidden(ctx.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active, so there is no attendance record to regularise. '
+        + 'Sign in again with your own ESS account.'
+      : 'A regularisation is recorded under your own name, so it cannot be done while you '
+        + 'are viewing somebody else\'s portal. Open your own portal to regularise.')
+  }
 
   const me = ctx.caller.employeeId
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
