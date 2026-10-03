@@ -1435,7 +1435,14 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     try { const d = await essApi('/api/ess/mrf', employeeId); setToApprove(d.toApprove||[]); setApprPeople(toPickerPeople(d)); setApprErr('') }
     catch(e:any){ setApprErr(e.message||'Could not load approvals') }
   }, [employeeId])
-  useEffect(()=>{ if (mrfSub==='approvals') loadApprovals() }, [mrfSub, loadApprovals])
+  // Load on mount, not only when the Approvals sub-tab opens. apprPeople (the
+  // assignable hiring managers) comes from this call, and the Review modal is
+  // reachable straight from the Requisitions list — where it used to render
+  // "No hiring managers are set up for this company" simply because nothing had
+  // fetched them yet. An HR Head was then pushed past the assignment step by a
+  // picker that offered nobody, which is half of how an MRF got approved
+  // unassigned.
+  useEffect(()=>{ loadApprovals() }, [loadApprovals])
   // Open a requisition for review — fetch the full row (the pending-list select omits some
   // fields, e.g. job_description) so the read-only form shows everything.
   const openReviewMrf = useCallback(async (m:any) => {
@@ -1882,6 +1889,43 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     const mrf = mrfs.find((m:MRF)=>m.id===id); if (!mrf) return
     const chain = asArray((mrf as any).approval_chain).map((s:any)=>({ ...s }))
     const now = new Date().toISOString()
+
+    // ── The assignment rule, enforced at the WRITE ─────────────────────────
+    // An HR Head approved an MRF here with nobody assigned, which is a rule
+    // break: the HR Head's approval IS the hand-off, and "assigned to you"
+    // reads assigned_recruiter_ids — so an empty one opens a requisition that
+    // reaches no queue at all.
+    //
+    // The rule already lived in ApprovalModal's disabled button and in
+    // /api/ess/mrf (which refuses an HR_HEAD step with no assigned_hr_ids).
+    // This function reached NEITHER: it writes to Supabase directly, and a
+    // disabled button is not an enforcement point. Two ways past it:
+    //
+    //   · a chain with no PENDING step makes the modal's `atHrHead` false, so
+    //     Approve enables and the branch below used to approve outright
+    //   · anything else calling this with an empty assignIds
+    //
+    // So the check is here, before any mutation, and it covers the no-chain
+    // case too — an MRF with no routing is still being opened by the HR Head.
+    const pend = chain.find((s:any)=>s.status==='PENDING')
+    const isHandOff = !pend || pend.role === 'HR_HEAD'
+    if (isHandOff && !(assignIds||[]).length) {
+      showNotify('Assign at least one hiring manager or recruiter — approving hands them the requisition to run.','error')
+      return
+    }
+    // They must actually hold the role, so a stale picker or a hand-edited id
+    // cannot slip somebody in. apprPeople is the RECRUITER-only list the server
+    // validates against (hrTeamFor), so this mirrors it rather than inventing
+    // a second rule.
+    if ((assignIds||[]).length && apprPeople.length) {
+      const allowed = new Set(apprPeople.map((p:any)=>p.id))
+      const strays = (assignIds||[]).filter((x:string)=>!allowed.has(x))
+      if (strays.length) {
+        showNotify('Only hiring managers / recruiters in this company can be assigned a requisition.','error')
+        return
+      }
+    }
+
     const patch:any = { remarks: comments||null }
     // Real employee ids, not a typed address. assigned_recruiter_ids is what the
     // assignee's "assigned to you" block reads (and what `acknowledge` checks);
@@ -2832,9 +2876,17 @@ function ApprovalModal({ mrf, org, people = [], onApprove, onReject, onHold, onC
   const [busy, setBusy] = useState(false)
   const openings = mrf.no_of_openings||mrf.openings||0
   const chain = asArray(mrf.approval_chain)
-  // Assignment is required at the HR Head step and only there — that approval is
-  // the hand-off. An RM2 approval passes the requisition along, not out.
-  const atHrHead = (chain.find((s:any)=>s.status==='PENDING')||{}).role === 'HR_HEAD'
+  // Assignment is required wherever this approval is the HAND-OFF: the HR Head
+  // step, and an MRF with no pending step at all (no routing configured), which
+  // one decision opens outright. Only an RM2 step passes the requisition along
+  // rather than out.
+  //
+  // This used to read `=== 'HR_HEAD'` alone, so a chain with nothing PENDING
+  // made it false, enabled Approve, and let the requisition open with nobody
+  // assigned. approveMRF now refuses that case regardless of this flag — the
+  // button is the courtesy, the write is the rule.
+  const pending = chain.find((s:any)=>s.status==='PENDING')
+  const atHrHead = !pending || pending.role === 'HR_HEAD'
   const canApprove = !atHrHead || assignIds.length > 0
   const comp = compOf(mrf.employment_type)
 
@@ -2894,6 +2946,12 @@ function ApprovalModal({ mrf, org, people = [], onApprove, onReject, onHold, onC
             </label>
             {people.length ? (
               <div style={{ marginBottom:4 }}>
+                {/* The picker lists each hiring manager with name, employee code
+                    and designation, recruiters suggested first — the details the
+                    HR Head needs to choose without leaving the approval. */}
+                <div style={{ fontSize:11, color:C.faint, marginBottom:6 }}>
+                  {people.length} hiring manager{people.length===1?'':'s'} available in this company
+                </div>
                 <RecruiterPicker people={people} value={assignIds} onChange={setAssignIds}
                   placeholder="Search by name or employee code…" />
               </div>
