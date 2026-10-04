@@ -25,6 +25,13 @@ import type {
   NegCandidateVM, NegFilter, NegForm, NegFormKey, AddItem, AddItemKey,
   BreakdownVM, StatementSection, StatementRow, DocLinkState, CcPerson, UploadedDocVM,
 } from '@/components/recruitment/rx/logic/negotiationView'
+// The redesigned Offer Approval queue. Presentational only: it reads nothing
+// and writes nothing, so the loaders, the eligibility rule (acceptedIds), the
+// re-create gate (activeReq) and every filter below stay put. It reuses the
+// rxn-* styling of the Negotiation stage rather than a parallel set, because
+// the two are adjacent stages of one flow.
+import OfferApprovalView, { type OaFilterSel } from '@/components/recruitment/rx/views/OfferApprovalView'
+import { oaTrail, type OaCandidateVM, type OaCount, type OaStatus } from '@/components/recruitment/rx/logic/offerApprovalView'
 import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
 // Every recruitment API route is guarded (docs/security/open-endpoints.md), so the
@@ -47,7 +54,7 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, FilterPills, daysUntil, Icon,
+  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, daysUntil, Icon,
   type ScreenResult, type ChainStepVM,
 } from '@/components/recruitment/rx'
 // NOT imported: Ring and missingDocuments. Section 10 wants a documents ring
@@ -5695,39 +5702,15 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
     HR_HEAD_REJECTED: 'Rejected by HR Head — you can re-create',
   }
 
-  /**
-   * The request's own status, told as the three steps it actually passes
-   * through: Raised → HR Head → Ready to send.
-   *
-   * ApprovalChain does NOT understand this table's statuses. It reads only
-   * APPROVED / REJECTED / PENDING, and marks a step "now" solely when it is
-   * PENDING *and* every earlier step is APPROVED. Passing HR_HEAD_APPROVED
-   * straight through would leave every step neither done nor current — so the
-   * domain status is translated here rather than handed over raw.
-   *
-   * HR_HEAD_REJECTED deliberately leaves the third step PENDING: its
-   * predecessor is REJECTED, so the chain renders it blank rather than "now",
-   * which is right — nothing is waiting to be sent.
-   */
-  const chainFor = (status:string, submittedAt?:string|null): ChainStepVM[] => {
-    const when = submittedAt ? new Date(submittedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '—'
-    const hrHead = status==='HR_HEAD_REJECTED' ? 'REJECTED'
-      : (status==='HR_HEAD_APPROVED'||status==='OFFER_SENT') ? 'APPROVED' : 'PENDING'
-    return [
-      { role:'Raised',        approverName: when,                                   status:'APPROVED' },
-      { role:'HR Head',       approverName: hrHead==='PENDING' ? 'Awaiting sign-off' : hrHead==='REJECTED' ? 'Sent back' : 'Approved', status: hrHead },
-      { role:'Ready to send', approverName: status==='OFFER_SENT' ? 'Offer sent' : 'Not yet', status: status==='OFFER_SENT' ? 'APPROVED' : 'PENDING' },
-    ]
-  }
 
-  // In-memory status filter (05 #11). Counts are real, because FilterPills
-  // disables a zero-count pill rather than hiding it.
+  // In-memory status filter (05 #11). Counts are real, because the counter band
+  // disables a zero count rather than hiding it.
   //
   // Reads reqMap directly rather than activeReq(): activeReq deliberately
   // returns null for HR_HEAD_REJECTED, because a rejected request no longer
   // blocks re-creating one. Filtering through it would report every sent-back
-  // request as "Not raised", leaving the "Sent back" pill permanently at 0 and
-  // therefore permanently disabled — a control that could never fire.
+  // request as "Not raised", leaving the "Sent back" counter permanently at 0
+  // and therefore permanently disabled — a control that could never fire.
   const statusOf = (c:Candidate) => reqMap.get(c.id)?.status || 'NONE'
   const statusShown = oaStatus==='*' ? shownEligible : shownEligible.filter((c:Candidate)=>statusOf(c)===oaStatus)
   async function pick(c:Candidate) {
@@ -5769,6 +5752,73 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
     )
   }
 
+  // ── The redesigned queue ────────────────────────────────────────────
+  // Every value here is read from state this component already holds: the same
+  // `f` filters and setF, the same eligibility list, the same reqMap and the
+  // same re-create gate. No query is added, and no wording is rewritten.
+  const oaFilters: OaFilterSel[] = [
+    { key:'company', label:'Company', value:f.company,
+      options:[{ value:'', label:'All companies' },
+        ...companies.map((co:Company)=>({ value:co.id, label:co.company_name||co.company_code }))] },
+    { key:'department', label:'Department', value:f.department,
+      options:[{ value:'', label:'All departments' },
+        ...departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=>({ value:d.id, label:d.dept_name }))] },
+    { key:'location', label:'Location', value:f.location,
+      options:[{ value:'', label:'All locations' },
+        ...locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=>({ value:l.id, label:l.location_name }))] },
+    { key:'position', label:'Position', value:f.position,
+      options:[{ value:'', label:'All positions' },
+        ...distinctPositions(candidates).map((p:string)=>({ value:p, label:p }))] },
+  ]
+  // Choosing a company clears department and location, exactly as the old
+  // selects did -- those two lists are scoped to the chosen company.
+  const onOaFilter = (key:string, value:string) => {
+    if (key === 'company') { setF({ ...f, company:value, department:'', location:'' }); return }
+    setF({ ...f, [key]: value })
+  }
+  // The same six counters the pills showed, over the same list. A zero one is
+  // disabled rather than hidden, so the set of statuses never moves about.
+  const oaCounts: OaCount[] = [
+    { value:'*',                label:'All',              count: shownEligible.length },
+    { value:'NONE',             label:'Not raised',       count: shownEligible.filter((c:Candidate)=>statusOf(c)==='NONE').length },
+    { value:'SUBMITTED',        label:'Awaiting HR Head', count: shownEligible.filter((c:Candidate)=>statusOf(c)==='SUBMITTED').length },
+    { value:'HR_HEAD_APPROVED', label:'Approved',         count: shownEligible.filter((c:Candidate)=>statusOf(c)==='HR_HEAD_APPROVED').length },
+    { value:'OFFER_SENT',       label:'Offer sent',       count: shownEligible.filter((c:Candidate)=>statusOf(c)==='OFFER_SENT').length },
+    { value:'HR_HEAD_REJECTED', label:'Sent back',        count: shownEligible.filter((c:Candidate)=>statusOf(c)==='HR_HEAD_REJECTED').length },
+  ]
+  const oaRows: OaCandidateVM[] = statusShown.map((c:Candidate)=>{
+    // DISPLAY reads the request itself; the RE-CREATE GATE stays on activeReq().
+    // Conflating the two is why a sent-back request once rendered as a bare
+    // "Create request" with no trace of the rejection: activeReq() returns null
+    // for HR_HEAD_REJECTED *so that* a new request can be raised.
+    const ar = reqMap.get(c.id) || null
+    const st = (ar?.status || 'NONE') as OaStatus
+    const heads = hrHeadLabel(c.company_id)
+    return {
+      id: c.id,
+      name: c.full_name,
+      role: c.designation || '\u2014',
+      stage: c.stage,
+      mrfNumber: mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number ?? null,
+      revised: !!c.offer_revised,
+      status: st,
+      statusLabel: STATUS_LABEL[st] || st,
+      // The existing sentences, word for word. They are what tells a recruiter
+      // what to do, so they are carried over rather than re-written.
+      statusDetail: ar === null ? null : (
+        <>
+          {st==='SUBMITTED' && <>Pending with <b>{heads}</b>{ar.submitted_at ? ` \u00B7 submitted ${fmtOn(ar.submitted_at)}` : ''}</>}
+          {st==='HR_HEAD_APPROVED' && <>Approved by <b>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''}{ar.hr_head_comments ? ` \u00B7 \u201C${ar.hr_head_comments}\u201D` : ''} \u00B7 now in <b>Send Offers</b></>}
+          {st==='OFFER_SENT' && <>Approved by <b>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''} \u00B7 offer letter sent{ar.offer_sent_at ? ` ${fmtOn(ar.offer_sent_at)}` : ''}</>}
+          {st==='HR_HEAD_REJECTED' && <>Rejected by <b>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''}{ar.hr_head_comments ? ` \u00B7 \u201C${ar.hr_head_comments}\u201D` : ''}</>}
+        </>
+      ),
+      canRaise: !activeReq(c.id),
+      raiseLabel: st==='HR_HEAD_REJECTED' ? 'Re-create request' : 'Create request',
+      trail: oaTrail(st, ar?.submitted_at ? fmtOn(ar.submitted_at) : ''),
+    }
+  })
+
   return (
     <RxPage header={
       <RecruitmentHeader
@@ -5779,106 +5829,22 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
           <p>One request per candidate: once sent, the row shows its status instead of the button. A rejected request can be re-created.</p>
         </Help>}
       />}>
-      <div className="rx-grid rx-stag">
-        <div className="s12 rx-bar" style={{ gap:10 }}>
-          {/* SearchBox filters as you type; the old SearchBar needed Apply. */}
-          <SearchBox value={oaQ} onChange={setOaQ} placeholder="Search candidate…" label="Search candidates" />
-          {/* Inline rather than the old shared RecFilterBar, whose root
-              carried position:sticky; zIndex:30 and scrolled over the rail
-              (--ez-z-rail, 20); inline sticky cannot be unset by a parent. Same
-              four controls, same `f` state, same setF. */}
-          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
-            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
-            <option value="">All companies</option>
-            {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
-          </select>
-          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
-            onChange={e=>setF({ ...f, department:e.target.value })}>
-            <option value="">All departments</option>
-            {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
-          </select>
-          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
-            onChange={e=>setF({ ...f, location:e.target.value })}>
-            <option value="">All locations</option>
-            {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
-          </select>
-          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
-            onChange={e=>setF({ ...f, position:e.target.value })}>
-            <option value="">All positions</option>
-            {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
-          </select>
-        </div>
-
-        {shownEligible.length>0 && (
-          <div className="s12">
-            <FilterPills label="Filter by request status" value={oaStatus} onChange={setOaStatus}
-              options={[
-                { value:'*',                label:'All',              count: shownEligible.length },
-                { value:'NONE',             label:'Not raised',       count: shownEligible.filter((c:Candidate)=>statusOf(c)==='NONE').length },
-                { value:'SUBMITTED',        label:'Awaiting HR Head', count: shownEligible.filter((c:Candidate)=>statusOf(c)==='SUBMITTED').length },
-                { value:'HR_HEAD_APPROVED', label:'Approved',         count: shownEligible.filter((c:Candidate)=>statusOf(c)==='HR_HEAD_APPROVED').length },
-                { value:'OFFER_SENT',       label:'Offer sent',       count: shownEligible.filter((c:Candidate)=>statusOf(c)==='OFFER_SENT').length },
-                { value:'HR_HEAD_REJECTED', label:'Sent back',        count: shownEligible.filter((c:Candidate)=>statusOf(c)==='HR_HEAD_REJECTED').length },
-              ]} />
-          </div>
-        )}
-
-        {statusShown.length===0 ? (
-          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:28 }}>
-            <span className="rx-meta">{oaQ||oaStatus!=='*'?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</span>
-          </div>
-        ) : statusShown.map((c:Candidate)=>{
-          // DISPLAY reads the request itself; the RE-CREATE GATE stays on
-          // activeReq(). Conflating the two is why a sent-back request rendered
-          // as a bare "Create request" button with no trace of the rejection:
-          // activeReq() returns null for HR_HEAD_REJECTED *so that* a new
-          // request can be raised, and the row was keyed off that. Its
-          // STATUS_LABEL entry and the critical-colour branch below were both
-          // unreachable in consequence. pick()'s guard is unchanged.
-          const ar = reqMap.get(c.id) || null
-          const canRaise = !activeReq(c.id)
-          const heads = hrHeadLabel(c.company_id)
-          return (
-          <div className="s12" key={c.id}>
-            <div className="rx-mod" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' as const }}>
-              <div style={{ minWidth:0, flex:'1 1 240px' }}>
-                <div className="rx-row" style={{ gap:6 }}>
-                  <span className="rx-name">{c.full_name}</span>
-                  {c.offer_revised&&<Badge text="Revised Offer" />}
-                </div>
-                <div className="rx-meta" style={{ marginTop:2 }}>{c.designation||'—'} · {c.stage}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
-              </div>
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8, flexShrink:0, minWidth: ar ? 260 : undefined, maxWidth:420 }}>
-                {ar && (
-                  <>
-                    <div style={{ textAlign:'right' as const }}>
-                      <div style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:700, padding:'3px 10px', borderRadius:99,
-                        background: ar.status==='HR_HEAD_REJECTED' ? C.criticalTint : ar.status==='SUBMITTED' ? C.warningTint : C.positiveTint,
-                        color: ar.status==='HR_HEAD_REJECTED' ? C.critical : ar.status==='SUBMITTED' ? C.warning : C.positive }}>
-                        {ar.status==='SUBMITTED' ? '⏳' : ar.status==='HR_HEAD_REJECTED' ? '✗' : '✓'} {STATUS_LABEL[ar.status] || ar.status}
-                      </div>
-                      <div className="rx-meta" style={{ marginTop:4 }}>
-                        {ar.status==='SUBMITTED' && <>Pending with <b style={{ color:C.ink }}>{heads}</b>{ar.submitted_at ? ` · submitted ${fmtOn(ar.submitted_at)}` : ''}</>}
-                        {ar.status==='HR_HEAD_APPROVED' && <>Approved by <b style={{ color:C.ink }}>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''}{ar.hr_head_comments ? ` · “${ar.hr_head_comments}”` : ''} · now in <b style={{ color:C.ink }}>Send Offers</b></>}
-                        {ar.status==='OFFER_SENT' && <>Approved by <b style={{ color:C.ink }}>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''} · offer letter sent{ar.offer_sent_at ? ` ${fmtOn(ar.offer_sent_at)}` : ''}</>}
-                        {ar.status==='HR_HEAD_REJECTED' && <>Rejected by <b style={{ color:C.ink }}>{heads}</b>{ar.hr_head_actioned_at ? ` on ${fmtOn(ar.hr_head_actioned_at)}` : ''}{ar.hr_head_comments ? ` · “${ar.hr_head_comments}”` : ''}</>}
-                      </div>
-                    </div>
-                    {/* The same status, shown as the journey it is. The wording
-                        above stays: it is what tells a recruiter what to DO. */}
-                    <div style={{ alignSelf:'stretch' }}><ApprovalChain steps={chainFor(ar.status, ar.submitted_at)} /></div>
-                  </>
-                )}
-                {/* A sent-back request shows its chain AND the way forward. */}
-                {canRaise && <button type="button" className="rx-btn p" onClick={()=>pick(c)}>{ar?.status==='HR_HEAD_REJECTED' ? 'Re-create request' : 'Create request'}</button>}
-              </div>
-            </div>
-          </div>
-        )})}
-      </div>
+      <OfferApprovalView
+        search={oaQ}
+        onSearch={setOaQ}
+        filters={oaFilters}
+        onFilter={onOaFilter}
+        counts={oaCounts}
+        statusFilter={oaStatus}
+        onStatusFilter={setOaStatus}
+        rows={oaRows}
+        total={shownEligible.length}
+        onRaise={(id:string)=>{ const c = statusShown.find((x:Candidate)=>x.id===id); if (c) pick(c) }}
+      />
     </RxPage>
   )
 }
+
 
 function OffersTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)

@@ -2577,3 +2577,99 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 @media (prefers-reduced-motion: reduce) {
   .rxn *, .rxn *::before, .rxn *::after, .rxn-layer { animation-duration: 0.01ms !important; transition: none !important; }
 }
+
+/* ==========================================================================
+   Offer Approval queue (tab key: offerapproval) — additions to the rxn block
+   --------------------------------------------------------------------------
+   This screen REUSES the Negotiation grammar above rather than defining a
+   parallel set of classes. The two are adjacent stages of one flow and should
+   not look like two products, so only what Offer Approval has and Negotiation
+   does not is defined here.
+
+   On the grid: `.rxn-sect.oa` carries two classes, so it outranks every plain
+   `.rxn-sect { --rxn-cols: ... }` rule above — INCLUDING the ones inside the
+   narrow-screen media queries. Each of those widths therefore needs its own
+   `.oa` override at the end of this block. Without them the four columns would
+   simply never collapse on a phone, which is the kind of failure that only
+   shows up on a device nobody tested.
+   ========================================================================== */
+
+/* ---- The request-status counters --------------------------------------- */
+.rxn-tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); gap: 8px; }
+.rxn .rxn-tally-i {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 9px 12px;
+  border: 1px solid var(--ez-line); border-radius: var(--rxn-r-card) !important;
+  background: var(--ez-surface); color: var(--ez-ink);
+  text-align: left; cursor: pointer;
+  box-shadow: var(--ez-shadow-flat);
+  transition: border-color 0.16s, background 0.16s, transform 0.16s;
+}
+.rxn .rxn-tally-i:hover:not(:disabled) { border-color: var(--ez-brand); transform: translateY(-1px); }
+.rxn .rxn-tally-i[aria-pressed='true'] { border-color: var(--ez-brand-deep); background: var(--ez-brand-tint); box-shadow: var(--ez-shadow-raised); }
+.rxn .rxn-tally-i:disabled { background: var(--ez-sunken); cursor: not-allowed; box-shadow: none; transform: none; }
+.rxn-tally-n { font-family: var(--rx-display, inherit); font-size: 22px; font-weight: 700; line-height: 1.15; color: var(--ez-ink); font-variant-numeric: tabular-nums; }
+.rxn-tally-n.brand { color: var(--ez-brand-deep); }
+.rxn-tally-n.warn { color: var(--ez-warning); }
+.rxn-tally-n.pos { color: var(--ez-positive); }
+.rxn-tally-n.bad { color: var(--ez-critical); }
+.rxn .rxn-tally-i:disabled .rxn-tally-n { color: var(--ez-muted); }
+.rxn-tally-l { font-size: 11.5px; font-weight: 700; color: var(--ez-muted); }
+
+/* ---- A section whose rows were sent back ------------------------------- */
+.rxn .rxn-sect.bad .rxn-sect-h { background: var(--ez-critical-tint); }
+.rxn-sect.bad .rxn-sect-i { background: var(--ez-critical); }
+.rxn-sect.bad .rxn-sect-w { color: var(--ez-critical); }
+.rxn-sect.bad .rxn-row .rxn-av { background: var(--ez-critical-tint); color: var(--ez-critical); }
+
+/* ---- Rows on this screen ----------------------------------------------- */
+.rxn-sect.oa { --rxn-cols: minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(0, 1.6fr) 168px; }
+/* The row CONTAINS the "Create request" button, so it is not itself a control:
+   a button inside a button is invalid markup. Nothing else here is clickable,
+   so the row drops the pointer and the hover fill. */
+.rxn .rxn-row.flat { cursor: default; }
+.rxn .rxn-row.flat:hover { background: var(--ez-surface); }
+.rxn .rxn-row.has-note { row-gap: 6px; }
+.rxn-cell.go { justify-self: end; }
+.rxn-cell.tr { align-self: center; }
+/* The status sentence spans the row. Squeezed into a cell it wraps to four or
+   five lines on every approved candidate, because it carries the approver, the
+   date and their comment. */
+.rxn-cell.note { grid-column: 1 / -1; padding-left: 44px; color: var(--ez-muted); font-size: 11.5px; line-height: 1.5; }
+.rxn-cell.note b { color: var(--ez-ink); font-weight: 700; }
+/* What the group means, under the column labels rather than in the heading. */
+.rxn-none.oa-hint { padding: 7px 12px; background: var(--ez-sunken); font-size: 11.5px; }
+
+/* ---- The three-step trail: the current step, and a blocked one ---------- */
+.rxn-cell.tr .rxn-trail-d { width: 18px; height: 18px; }
+.rxn-cell.tr .rxn-trail-t { font-size: 11px; }
+.rxn-cell.tr .rxn-trail-i + .rxn-trail-i::before { top: 8px; }
+.rxn-trail-i[data-state='now'] .rxn-trail-d { border-color: var(--ez-brand); background: var(--ez-brand-tint); color: var(--ez-brand-deep); }
+.rxn-trail-i[data-state='now'] .rxn-trail-t { color: var(--ez-ink); }
+.rxn-trail-i[data-state='blocked'] .rxn-trail-d { border-color: var(--ez-critical); background: var(--ez-critical); color: var(--ez-on-accent); }
+.rxn-trail-i[data-state='blocked'] .rxn-trail-t { color: var(--ez-critical); }
+/* The connecting line fills only once the earlier step is genuinely done, and
+   turns back on a rejection so the break is visible at a glance. */
+.rxn-trail-i[data-state='done'] + .rxn-trail-i[data-state='now']::before { background: var(--ez-positive); }
+.rxn-trail-i[data-state='blocked'] + .rxn-trail-i::before { background: var(--ez-critical-edge); }
+
+/* ---- Narrow screens: the .oa grid has to collapse as well -------------- */
+@media (max-width: 1100px) {
+  .rxn-sect.oa { --rxn-cols: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.5fr) 158px; }
+}
+@media (max-width: 820px) {
+  /* The trail folds away BEFORE the MRF does: a recruiter needs to know which
+     requisition this is far more than the shape of three progress dots. That
+     is the opposite of the generic rule above, which drops the MRF column. */
+  .rxn-sect.oa { --rxn-cols: minmax(0, 1.4fr) minmax(0, 1.2fr) 150px; }
+  .rxn-sect.oa .rxn-thead .mrf, .rxn-sect.oa .rxn-cell.mrf { display: block; }
+  .rxn-sect.oa .rxn-thead .tr, .rxn-sect.oa .rxn-cell.tr { display: none; }
+  .rxn-sect.oa .rxn-row-x { display: none; }
+}
+@media (max-width: 560px) {
+  .rxn-sect.oa { --rxn-cols: minmax(0, 1fr) auto; }
+  .rxn-sect.oa .rxn-thead .mrf, .rxn-sect.oa .rxn-cell.mrf { display: none; }
+  /* With no MRF column, the requisition rides along under the name instead. */
+  .rxn-sect.oa .rxn-row-x { display: inline; }
+  .rxn-sect.oa .rxn-cell.note { padding-left: 0; }
+}
