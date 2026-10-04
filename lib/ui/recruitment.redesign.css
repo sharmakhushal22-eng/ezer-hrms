@@ -2673,3 +2673,69 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
   .rxn-sect.oa .rxn-row-x { display: inline; }
   .rxn-sect.oa .rxn-cell.note { padding-left: 0; }
 }
+
+/* ==========================================================================
+   Offer Tracking (tab key: offers) — additions to the rxn block
+   --------------------------------------------------------------------------
+   Third stage on the same grammar, so almost everything is already defined.
+   What is new: a warning section tone, a two-step trail, read-only counters,
+   the selected-row highlight and the three reply buttons.
+
+   Same specificity note as the .oa block above -- `.rxn-sect.ot` is two
+   classes, so it outranks the plain `.rxn-sect { --rxn-cols }` rules in the
+   narrow-screen media queries and needs its own override at each width.
+   ========================================================================== */
+
+/* ---- A section still waiting on somebody ------------------------------- */
+.rxn .rxn-sect.warn .rxn-sect-h { background: var(--ez-warning-tint); }
+.rxn-sect.warn .rxn-sect-i { background: var(--ez-warning); }
+.rxn-sect.warn .rxn-sect-w { color: var(--ez-warning); }
+.rxn-sect.warn .rxn-row .rxn-av { background: var(--ez-warning-tint); color: var(--ez-warning); }
+
+/* ---- Counters that are read-outs, not controls -------------------------- */
+/* This screen has never filtered by these numbers, so they are not buttons and
+   must not look pressable. */
+.rxn .rxn-tally-i.ro { cursor: default; box-shadow: none; }
+.rxn .rxn-tally-i.ro:hover { border-color: var(--ez-line); transform: none; }
+
+/* ---- Two-step trail ----------------------------------------------------- */
+.rxn-trail.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* ---- Rows on this screen ------------------------------------------------ */
+.rxn-sect.ot { --rxn-cols: minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(0, 1.2fr) 232px; }
+/* Clicking the row selects it, which is what it did before; the reply controls
+   inside stop the click so recording a reply never doubles as selecting. */
+.rxn .rxn-row.flat[data-sel='true'] {
+  background: color-mix(in srgb, var(--ez-brand-tint) 60%, var(--ez-surface));
+  box-shadow: inset 3px 0 0 var(--ez-brand);
+}
+.rxn-reply { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+/* The middle of the three. ok and danger already exist; warning did not. */
+.rxn .rxn-btn.warn { border-color: var(--ez-warning-edge); background: var(--ez-warning-tint); color: var(--ez-warning); }
+.rxn .rxn-btn.warn:hover:not(:disabled) { border-color: var(--ez-warning); }
+/* .ok is sized for the save dock; inside a row it has to match its neighbours. */
+.rxn .rxn-reply .rxn-btn.ok { height: var(--rxn-h-sm); padding: 0 9px; font-size: 12px; font-weight: 700; }
+
+/* ---- Narrow screens ----------------------------------------------------- */
+@media (max-width: 1100px) {
+  .rxn-sect.ot { --rxn-cols: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.1fr) 224px; }
+}
+@media (max-width: 820px) {
+  /* Same trade as the Offer Approval grid: the trail folds before the MRF,
+     because which requisition this is matters more than two progress dots. */
+  .rxn-sect.ot { --rxn-cols: minmax(0, 1.3fr) minmax(0, 1fr) 224px; }
+  .rxn-sect.ot .rxn-thead .mrf, .rxn-sect.ot .rxn-cell.mrf { display: block; }
+  .rxn-sect.ot .rxn-thead .tr, .rxn-sect.ot .rxn-cell.tr { display: none; }
+  .rxn-sect.ot .rxn-row-x { display: none; }
+}
+@media (max-width: 560px) {
+  /* The three reply buttons need a line of their own well before this, so the
+     action cell drops under the candidate rather than being squeezed. */
+  .rxn-sect.ot { --rxn-cols: minmax(0, 1fr); }
+  .rxn-sect.ot .rxn-thead { display: none; }
+  .rxn-sect.ot .rxn-cell.mrf { display: none; }
+  .rxn-sect.ot .rxn-row-x { display: inline; }
+  .rxn-sect.ot .rxn-cell.go { justify-self: stretch; padding-left: 44px; }
+  .rxn-sect.ot .rxn-reply { justify-content: flex-start; }
+  .rxn-sect.ot .rxn-reply .rxn-btn { flex: 1 1 auto; }
+}

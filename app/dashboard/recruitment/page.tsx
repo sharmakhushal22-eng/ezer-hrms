@@ -32,6 +32,10 @@ import type {
 // the two are adjacent stages of one flow.
 import OfferApprovalView, { type OaFilterSel } from '@/components/recruitment/rx/views/OfferApprovalView'
 import { oaTrail, type OaCandidateVM, type OaCount, type OaStatus } from '@/components/recruitment/rx/logic/offerApprovalView'
+// The redesigned Offer Tracking list. Third stage on the same rxn-* grammar.
+// Presentational only: the three reply writes and offerState stay below.
+import OfferTrackingView, { type OtFilterSel } from '@/components/recruitment/rx/views/OfferTrackingView'
+import { otTrail, OT_COUNT_TONE, type OtCandidateVM, type OtCount, type OtState } from '@/components/recruitment/rx/logic/offerTrackingView'
 import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
 // Every recruitment API route is guarded (docs/security/open-endpoints.md), so the
@@ -54,8 +58,8 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, daysUntil, Icon,
-  type ScreenResult, type ChainStepVM,
+  Segmented, SearchBox, Help, RxDialog, Track, daysUntil, Icon,
+  type ScreenResult,
 } from '@/components/recruitment/rx'
 // NOT imported: Ring and missingDocuments. Section 10 wants a documents ring
 // from document_collection_links, but PreOnboardTab reads preonboarding_links
@@ -5931,17 +5935,11 @@ function OffersTab({ supabase, companies, departments, locations, mrfs, candidat
     : c.offer_revised ? 'revision'
     : 'notsent'
 
-  /** Two steps, because that is the whole of this stage: it goes out, they reply. */
-  const offerChain = (c:Candidate): ChainStepVM[] => {
-    const st = offerState(c)
-    const sentOn = c.offer_sent_at ? new Date(c.offer_sent_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : null
-    return [
-      { role:'Sent', approverName: sentOn || (st==='notsent' ? 'Not yet' : 'Sent'), status: st==='notsent' ? 'PENDING' : 'APPROVED' },
-      { role:'Candidate reply',
-        approverName: st==='accepted' ? 'Accepted' : st==='backout' ? 'Backed out' : st==='revision' ? 'Revision asked' : st==='awaiting' ? 'Awaiting' : '—',
-        status: st==='accepted' ? 'APPROVED' : st==='backout' ? 'REJECTED' : 'PENDING' },
-    ]
-  }
+  /** The sent date, formatted exactly as the old two-step chain formatted it.
+   *  The two steps themselves moved to otTrail, which paints them with the same
+   *  states the Offer Approval trail uses. */
+  const sentOnOf = (c:Candidate): string|null =>
+    c.offer_sent_at ? new Date(c.offer_sent_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : null
 
   const OFFER_TILES: { key:OfferState; label:string }[] = [
     { key:'notsent',  label:'Not sent' },
@@ -5951,6 +5949,59 @@ function OffersTab({ supabase, companies, departments, locations, mrfs, candidat
     { key:'backout',  label:'Backed out' },
   ]
 
+  // ── The redesigned list ─────────────────────────────────
+  // Built from state this component already holds. offerState stays the single
+  // source of what has happened to an offer, including the ordering subtlety it
+  // documents; the view only draws the answer.
+  //
+  // The four selects are inline here rather than the shared RecFilterBar for
+  // the same reason as before: that component's root carried position:sticky
+  // with zIndex 30 and scrolled over the rail, and inline sticky cannot be
+  // unset by a parent.
+  const otFilters: OtFilterSel[] = [
+    { key:'company', label:'Company', value:f.company,
+      options:[{ value:'', label:'All companies' },
+        ...companies.map((co:Company)=>({ value:co.id, label:co.company_name||co.company_code }))] },
+    { key:'department', label:'Department', value:f.department,
+      options:[{ value:'', label:'All departments' },
+        ...departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=>({ value:d.id, label:d.dept_name }))] },
+    { key:'location', label:'Location', value:f.location,
+      options:[{ value:'', label:'All locations' },
+        ...locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=>({ value:l.id, label:l.location_name }))] },
+    { key:'position', label:'Position', value:f.position,
+      options:[{ value:'', label:'All positions' },
+        ...distinctPositions(candidates).map((p:string)=>({ value:p, label:p }))] },
+  ]
+  const onOtFilter = (key:string, value:string) => {
+    if (key === 'company') { setF({ ...f, company:value, department:'', location:'' }); return }
+    setF({ ...f, [key]: value })
+  }
+  // The same five read-outs the tiles showed, over the same list. Still counts
+  // only -- this screen has never filtered by them, and making them clickable
+  // would be new behaviour rather than a new look.
+  const otCounts: OtCount[] = OFFER_TILES.map(t => ({
+    key: t.key as OtState,
+    label: t.label,
+    count: shownOffered.filter((c:Candidate)=>offerState(c)===t.key).length,
+    tone: OT_COUNT_TONE[t.key as OtState],
+  }))
+  const otRows: OtCandidateVM[] = shownOffered.map((c:Candidate)=>({
+    id: c.id,
+    name: c.full_name,
+    currentCompany: c.current_company || '\u2014',
+    // The old card's wording, kept to the character.
+    expectedCtcLabel: c.expected_ctc ? `\u20B9${(c.expected_ctc/100000).toFixed(1)}L` : '\u20B9 \u2014',
+    mrfNumber: mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number ?? null,
+    stage: c.stage,
+    revised: !!c.offer_revised,
+    blacklisted: !!c.blacklisted,
+    state: offerState(c) as OtState,
+    // Unchanged: the reply can be recorded only on a sent, unaccepted offer.
+    canRecordReply: c.stage==='Offer Sent' && !c.offer_accepted,
+    trail: otTrail(offerState(c) as OtState, sentOnOf(c)),
+  }))
+  const byId = (id:string) => shownOffered.find((c:Candidate)=>c.id===id) ?? null
+
   return (
     <RxPage header={
       <RecruitmentHeader
@@ -5958,112 +6009,28 @@ function OffersTab({ supabase, companies, departments, locations, mrfs, candidat
         subtitle="Where every offer stands, and where you record how the candidate replied."
         help={<Help label="Who appears here">
           <p>A candidate reaches this list only after <b>HR Head approval</b>, or once an offer has already been sent. There is no bypass.</p>
-          <p>Letters are drafted and sent from <b>Offer Letters</b> — on the company&rsquo;s letterhead, by email. This screen tracks what came back.</p>
+          <p>Letters are drafted and sent from <b>Offer Letters</b> \u2014 on the company&rsquo;s letterhead, by email. This screen tracks what came back.</p>
           <p><b>Accepted</b> moves them to Pre-onboarding. <b>Revision</b> returns the offer to the HR Head and reopens the requisition. <b>Backout</b> rejects the candidate and reopens it for hiring.</p>
         </Help>}
       />}>
-      <div className="rx-grid rx-stag">
-        {/* Where every offer stands. Five tiles, not the kit's four: the data
-            distinguishes a revision request from a backout, and calling both
-            "Declined" would merge a candidate still in play with one who is
-            gone. Read-outs, not filters — section 9 asks for the counts, and
-            adding a filter here would be new behaviour rather than a new look. */}
-        {shownOffered.length>0 && (
-          <div className="s12" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:10 }}>
-            {OFFER_TILES.map(t => {
-              const n = shownOffered.filter((c:Candidate)=>offerState(c)===t.key).length
-              return (
-                <div key={t.key} className={t.key==='backout' && n>0 ? 'rx-tile crit' : 'rx-tile'}>
-                  <div style={{ ...eyebrow }}>{t.label}</div>
-                  <div className="rx-num" style={{ fontSize:20, fontWeight:700, marginTop:2, color: n===0 ? C.faint : undefined }}>{n}</div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-        <div className="s4" style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          <div className="rx-label">Shortlisted / offer stage ({shownOffered.length})</div>
-          <SearchBox value={offQ} onChange={setOffQ} placeholder="Search candidate…" label="Search candidates" />
-          {/* Inline rather than the old shared RecFilterBar, whose root
-              carried position:sticky; zIndex:30 and scrolled over the rail
-              (--ez-z-rail, 20); inline sticky cannot be unset by a parent.
-              Same four controls, same `f` state, same setF. */}
-          <div className="rx-bar" style={{ gap:8 }}>
-            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.company}
-              onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
-              <option value="">All companies</option>
-              {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
-            </select>
-            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.department}
-              onChange={e=>setF({ ...f, department:e.target.value })}>
-              <option value="">All departments</option>
-              {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
-            </select>
-            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.location}
-              onChange={e=>setF({ ...f, location:e.target.value })}>
-              <option value="">All locations</option>
-              {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
-            </select>
-            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.position}
-              onChange={e=>setF({ ...f, position:e.target.value })}>
-              <option value="">All positions</option>
-              {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-        {shownOffered.map((c:Candidate)=>(
-          <div key={c.id} className="rx-card" style={{ cursor:'pointer',
-              borderColor: sel?.id===c.id ? 'var(--ez-brand)' : undefined,
-              background:  sel?.id===c.id ? 'var(--ez-brand-tint)' : undefined }}
-            onClick={()=>setSel(c)}>
-            <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
-            <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
-            <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
-            {/* Out, then back. The same two facts the tiles count, said per
-                candidate. markAccepted/markRevision/markBackout are untouched —
-                each still writes exactly what it always did. */}
-            <div style={{ marginTop:8 }}><ApprovalChain steps={offerChain(c)} /></div>
-            {c.stage==='Offer Sent'&&!c.offer_accepted&&(
-              <div style={{ display:'flex', gap:6, marginTop:8 }}>
-                <button type="button" className="rx-btn sm ok" style={{ flex:1 }} onClick={(e)=>{ e.stopPropagation(); markAccepted(c) }}>Accepted</button>
-                <button type="button" className="rx-btn sm" style={{ flex:1, background:C.warningTint, color:C.warning, borderColor:C.warningTint }} onClick={(e)=>{ e.stopPropagation(); markRevision(c) }}>Revision</button>
-                <button type="button" className="rx-btn sm d" style={{ flex:1 }} onClick={(e)=>{ e.stopPropagation(); markBackout(c) }}>Backout</button>
-              </div>
-            )}
-            {c.stage==='Offer Sent'&&c.offer_accepted&&(
-              <div style={{ fontSize:F.micro, color:C.positive, marginTop:S.sm, fontWeight:W.semi }}>Accepted — moved to Pre-onboarding</div>
-            )}
-          </div>
-        ))}
-        {offeredCands.length===0&&(
-          <div className="rx-mod" style={{ textAlign:'center' as const, padding:24 }}>
-            <span className="rx-meta">No candidates have reached the offer stage yet.</span>
-          </div>
-        )}
-        </div>
-      {/* The letter composer that stood here is gone. It wrote an offer_letters
-          row and said "Email ready" — it never called send-offer-email, carried
-          no letterhead and no offer_request_id, so the candidate received
-          nothing and the draft/finalise flow could not see its rows. Two screens
-          both claiming to "send" an offer, one of which reached nobody.
-          Dispatch belongs to Offer Letters; this screen tracks the reply. */}
-      <div className="s8">
-        <div className="rx-mod">
-          <div className="rx-mod-h"><div className="rx-mod-t">Sending an offer letter</div></div>
-          <p style={{ fontSize:13, color:C.inkSoft, lineHeight:1.6, margin:0 }}>
-            Offer letters are drafted and sent from <b>Offer Letters</b>, where the body comes from the
-            template in Admin Setup, prints onto the company&rsquo;s letterhead and goes out by email.
-          </p>
-          <p style={{ fontSize:12.5, color:C.muted, lineHeight:1.6, marginBottom:0 }}>
-            Record the candidate&rsquo;s reply here once it arrives — <b>Accepted</b> moves them to
-            Pre-onboarding, <b>Revision</b> sends the offer back to the HR Head and reopens the
-            requisition, <b>Backout</b> rejects the candidate and reopens it for hiring.
-          </p>
-        </div>
-      </div>
-      </div>
+      <OfferTrackingView
+        search={offQ}
+        onSearch={setOffQ}
+        filters={otFilters}
+        onFilter={onOtFilter}
+        counts={otCounts}
+        rows={otRows}
+        total={offeredCands.length}
+        selectedId={sel?.id ?? null}
+        onSelect={(id:string)=>{ const c = byId(id); if (c) setSel(c) }}
+        onAccepted={(id:string)=>{ const c = byId(id); if (c) markAccepted(c) }}
+        onRevision={(id:string)=>{ const c = byId(id); if (c) markRevision(c) }}
+        onBackout={(id:string)=>{ const c = byId(id); if (c) markBackout(c) }}
+      />
     </RxPage>
   )
 }
+
 
 // ── PRE-ONBOARDING ────────────────────────────────────────────────
 function PreOnboardTab({ supabase, candidates, companies, departments, locations, mrfs, onRefresh, showNotify, rail }:any) {
