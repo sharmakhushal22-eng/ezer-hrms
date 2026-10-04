@@ -5448,6 +5448,22 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   const onNegFilter = (key:string, value:string) =>
     setF(key==='company' ? { ...f, company:value, department:'', location:'' } : { ...f, [key]:value })
 
+  // Negotiations saved before 27 Sep 2026 did not record the model inputs they
+  // used (hraMax, epfCeiling), so reopening one recomputes it at TODAY's rules
+  // and the figures can differ from the break-up the candidate was actually
+  // sent -- Nayan88 Ahuja's row, for instance, was computed with HRA at 50% of
+  // Basic and the bonus on Basic rather than on the minimum wage.
+  //
+  // Restoring the stored rules is not possible for exactly these rows: the ones
+  // that differ recorded nothing, and the ones that recorded something match
+  // today anyway. So the screen says so instead of looking authoritative.
+  const legacyRulesNotice: string | undefined = (() => {
+    if (!loadedNeg) return undefined
+    const cd = loadedNeg.calculation_data || {}
+    if (cd.hraMax != null && cd.epfCeiling != null) return undefined
+    return 'Saved before this screen recorded the rules it used, so these figures are recomputed at today\u2019s rules and may differ from the break-up the candidate was sent. Check the saved record before re-sending or re-saving.'
+  })()
+
   // The statement, exactly as ctcStatementRows() produces it today.
   const negBreakdown: BreakdownVM | null = !model ? null : (!model.ok
     ? { failure:{ minReqFixedAnn:model.minReqFixedAnn, fixedAnnual:model.fixedAnnual, basic:model.basic },
@@ -5456,6 +5472,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
         inHandMonthly:model.inHand, grossMonthly:model.gross, totalDedMonthly:model.totalDed,
         ctcAnnual:model.ctcAnnual, basicRule:model.basicRule, esicNearCeiling:model.esicNearCeiling,
         sections: calc ? negSections(statementRows(), model.totalDed) : [],
+        rulesNotice: legacyRulesNotice,
         // The ring's three amounts. The employer total is fixedMonthly - gross,
         // an identity the model itself guarantees (fixed = gross + employer
         // costs); it is not a new derivation of pay.

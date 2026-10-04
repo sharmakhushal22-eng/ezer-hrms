@@ -1301,6 +1301,14 @@ function PayslipPanel({ breakdown, onDownloadExcel, onPrintPdf }: PayslipPanelPr
         </div>
       </div>
 
+      {breakdown.rulesNotice !== undefined && (
+        <div className="rxn-alert warn">
+          <Icon d={I.alert} />
+          <div className="rxn-alert-b">
+            <span>{breakdown.rulesNotice}</span>
+          </div>
+        </div>
+      )}
       {breakdown.basicRule === 'minwage' && (
         <div className="rxn-alert info">
           <Icon d={I.info} />

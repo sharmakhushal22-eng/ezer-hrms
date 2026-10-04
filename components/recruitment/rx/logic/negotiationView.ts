@@ -158,6 +158,10 @@ export interface BreakdownVM {
   esicNearCeiling: boolean
   /** Optional. Leave out and the bar is not drawn. */
   composition?: CompositionPart[] | undefined
+  /** Optional. Set when the loaded negotiation predates the recording of the
+   *  model's own inputs, so its figures cannot be reproduced exactly and the
+   *  screen must say so rather than look authoritative. */
+  rulesNotice?: string | undefined
 }
 
 export interface BudgetLine {
