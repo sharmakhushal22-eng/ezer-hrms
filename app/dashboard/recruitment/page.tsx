@@ -14,6 +14,17 @@ import { api as essApi } from '@/lib/ess/api'
 import { MIN_WAGE_STATES, WAGE_CATS, CAT_TO_DB, resolveMinWage, OLD_CODE_TO_STATE, DEFAULT_STATE, DEFAULT_CATEGORY, stateFromLocation } from '@/lib/recruitment/min-wages'
 import { computeCtc, inr, EPF_WAGE_CEILING, hraMaxFor } from '@/lib/recruitment/ctc-model'
 import { ctcStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
+// The redesigned Negotiation stage. Presentational only: these draw and call
+// back. Every loader, every computeCtc() call, the budget rule, the statement
+// rows and the save stay in NegotiationTab / CtcDocLink. Imported by direct
+// path rather than the rx barrel, which pulls in the big list views.
+import NegotiationView from '@/components/recruitment/rx/views/NegotiationView'
+import DocLinkDrawerView from '@/components/recruitment/rx/views/DocLinkDrawerView'
+import { MinWagesDialogView, ConfirmDialogView } from '@/components/recruitment/rx/views/NegotiationDialogs'
+import type {
+  NegCandidateVM, NegFilter, NegForm, NegFormKey, AddItem, AddItemKey,
+  BreakdownVM, StatementSection, StatementRow, DocLinkState, CcPerson, UploadedDocVM,
+} from '@/components/recruitment/rx/logic/negotiationView'
 import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
 // Every recruitment API route is guarded (docs/security/open-endpoints.md), so the
@@ -4659,72 +4670,6 @@ function RecFilterBar({ companies, departments, locations, positions, f, setF }:
 // CTC calculator. HR edits the figures in Payroll → Minimum Wages; nothing here is editable.
 const MW_CAT_LABEL:Record<string,string> = { UNSKILLED:'Unskilled', SEMI_SKILLED:'Semi Skilled', SKILLED:'Skilled', HIGHLY_SKILLED:'Highly Skilled' }
 const MW_CAT_ORDER = ['UNSKILLED','SEMI_SKILLED','SKILLED','HIGHLY_SKILLED']
-function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?:string; category?:string; onClose:()=>void }) {
-  const [q, setQ] = useState('')
-  const curCat = (CAT_TO_DB as any)[category||''] || ''
-  const list = (rates||[]).filter(r => !q.trim() || (r.state||'').toLowerCase().includes(q.trim().toLowerCase()))
-  // group by state (+ zone) → one row per category
-  const groups:Record<string, any[]> = {}
-  for (const r of list) { const k = `${r.state}${r.zone && r.zone!=='ALL' ? ` · ${r.zone}` : ''}`; (groups[k] ||= []).push(r) }
-  const keys = Object.keys(groups).sort((a,b)=>a.localeCompare(b))
-  const rs = (n:any) => n==null||n==='' ? '—' : `₹${Math.round(Number(n)).toLocaleString('en-IN')}`
-  const isCur = (r:any) => (r.state||'').toLowerCase()===(state||'').toLowerCase()
-  if (typeof document === 'undefined') return null
-  // Portalled to <body>: inside the calculator column it sat under the nav band and the
-  // calculator's own sticky header (an ancestor's stacking context capped its z-index).
-  return createPortal(
-    <div onMouseDown={e=>{ if (e.target===e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:1000, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'28px 16px' }}>
-      <div style={{ background:C.surface, borderRadius:14, width:'min(960px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.35)', padding:'16px 18px', color:C.ink }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' as const }}>
-          <div>
-            <div style={{ fontSize:15, fontWeight:800 }}>Minimum wages — payroll master</div>
-            <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Monthly figures, currently effective · read-only here — HR maintains them under Payroll → Minimum Wages</div>
-          </div>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search state…" className="rx-input" style={{ width:200, marginLeft:'auto' }} />
-          <button onClick={onClose} style={T.btnOutline}>Close</button>
-        </div>
-        {keys.length===0 ? (
-          <div style={{ fontSize:12.5, color:C.faint, padding:'24px 0', textAlign:'center' as const }}>{rates?.length ? 'No state matches that search.' : 'No minimum-wage rows in the payroll master yet.'}</div>
-        ) : (
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-              <thead>
-                <tr style={{ background:C.sunken }}>
-                  {['State','Category','Basic','VDA','Total / month','Effective from','Notification'].map(h=>(
-                    <th key={h} style={{ textAlign: ['Basic','VDA','Total / month'].includes(h)?'right':'left', padding:'8px 10px', fontSize:10.5, fontWeight:700, color:C.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', borderBottom:`1px solid ${C.line}`, whiteSpace:'nowrap' as const }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {keys.map(k => {
-                  const rows = [...groups[k]].sort((a,b)=>MW_CAT_ORDER.indexOf(a.category)-MW_CAT_ORDER.indexOf(b.category))
-                  return rows.map((r,i) => {
-                    const hl = isCur(r)
-                    const exact = hl && r.category===curCat
-                    return (
-                      <tr key={`${k}-${r.category}-${i}`} style={{ background: exact ? C.brandTint : hl ? C.sunken : 'transparent' }}>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: i===0 ? 700 : 400, color: i===0 ? C.ink : 'transparent', whiteSpace:'nowrap' as const }}>{k}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: exact ? 700 : 500 }}>{MW_CAT_LABEL[r.category]||r.category}{exact && <span style={{ marginLeft:6, fontSize:9.5, fontWeight:700, color:C.brandDeep, background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:99, padding:'1px 6px' }}>in use</span>}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', ...numeric }}>{rs(r.basic_amount)}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', ...numeric }}>{rs(r.vda_amount)}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', fontWeight:700, ...numeric }}>{rs(r.total_minimum_wage)}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, color:C.muted, whiteSpace:'nowrap' as const }}>{r.effective_from ? new Date(r.effective_from).toLocaleDateString('en-IN',{ day:'2-digit', month:'short', year:'numeric' }) : '—'}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, color:C.muted, fontSize:11 }}>{r.notification_reference||'—'}</td>
-                      </tr>
-                    )
-                  })
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div style={{ fontSize:10.5, color:C.faint, marginTop:10 }}>{rates?.length||0} rows · the highlighted state is the one selected in this negotiation.</div>
-      </div>
-    </div>,
-    document.body,
-  )
-}
 
 function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwRates, locations }:any) {
   const [stipend, setStipend] = useState('')
@@ -4856,7 +4801,16 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwR
 // ── CTC Negotiation — document collection link (24h) ──────────────────────────
 // Replaces the old Aadhaar/offer uploader. The recruiter sends the candidate a
 // secure 24h link to upload their documents; CC colleagues; then Resend / see Status.
-function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, onRefresh, canEditEmail = false }:any) {
+/** Bytes -> a short label for the drawer's document rows. Display only. */
+function docSizeLabel(bytes?: number|null): string {
+  const n = Number(bytes)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, onRefresh, canEditEmail = false, nav }:any) {
   const [loading, setLoading] = useState(true)
   const [link, setLink] = useState<any>(null)
   const [docs, setDocs] = useState<any[]>([])
@@ -4877,6 +4831,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   const [ccQ, setCcQ] = useState('')
   const [emps, setEmps] = useState<any[]>([])
   const [sending, setSending] = useState(false)
+  const [sendErr, setSendErr] = useState('')   // shown in place on the send screen; send() keeps its toast
   const [meEmail, setMeEmail] = useState<string>('')
   const [busyDoc, setBusyDoc] = useState<string>('')          // doc id currently acting on
   const [viewDoc, setViewDoc] = useState<{url:string; name:string}|null>(null) // View popup
@@ -4984,7 +4939,8 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   }
 
   async function send() {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { showNotify('Enter a valid candidate email','error'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { setSendErr('Enter a valid candidate email'); showNotify('Enter a valid candidate email','error'); return }
+    setSendErr('')
     setSending(true)
     try {
       const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers: await authHeaders(),
@@ -4998,183 +4954,175 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   }
 
   return (
-    <div onMouseDown={e=>{ if(e.target===e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:Z.drawer, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}>
-      <div style={{ background:C.surface, borderRadius:16, width:'min(560px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', padding:'18px 20px', margin:'0 auto' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
-          <div style={{ fontSize:16, fontWeight:700, color:C.ink, flex:1 }}>CTC Negotiation — {candidate.full_name}{mrf?.mrf_number && <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mrf.mrf_number}</span>}</div>
-          <button onClick={onClose} style={{ ...T.btnOutline }}>Close</button>
+    <>
+      {/* No loading slot in the drawer. Rendering it early would flash
+          "Create CTC Negotiation Link" before the link card arrives, so it
+          waits instead -- the GET is one round trip. */}
+      {!loading && (
+      <DocLinkDrawerView
+        nav={nav}
+        mode={mode}
+        onMode={setMode}
+        onClose={onClose}
+        candidateName={candidate.full_name}
+        candidatePosition={candidate.designation || mrf?.designation || ''}
+        canEditEmail={canEditEmail}
+        registeredEmail={candidate.email || ''}
+        emailDraft={regEmail}
+        onEmailDraft={setRegEmail}
+        emailDirty={regDirty}
+        savingEmail={savingEmail}
+        onSaveEmail={saveRegisteredEmail}
+        link={link ? {
+          // The existing rule: active only while ACTIVE and not past expiry.
+          state: link.status==='SUBMITTED' ? 'SUBMITTED' : active ? 'ACTIVE' : 'EXPIRED',
+          hoursLeft: active ? timeLeft : null,
+          expiresAtLabel: link.expires_at ? new Date(link.expires_at).toLocaleString('en-IN',{ dateStyle:'medium', timeStyle:'short' }) : '',
+          submittedAtLabel: link.submitted_at ? fmtDay(link.submitted_at) : '',
+          sentAtLabel: link.sent_at ? fmtDay(link.sent_at) : undefined,
+          openedAtLabel: link.opened_at ? fmtDay(link.opened_at) : undefined,
+          // candidate_email, not candidates.email: this is what the OTP checks.
+          sentTo: link.candidate_email || candidate.email || '',
+          cc: Array.isArray(link.cc_emails) ? link.cc_emails : [],
+          docCount: docs.length,
+        } : null}
+        onCreate={()=>{ setEmail(candidate.email||''); setSendErr(''); setMode('send') }}
+        onResend={()=>{
+          setEmail(link?.candidate_email||candidate.email||'')
+          setCc(((link?.cc_emails)||[]).map((em:string)=>({ id:em, name:em, email:em })))
+          setSendErr(''); setMode('send')
+        }}
+        sendEmail={email}
+        onSendEmail={(v:string)=>{ setEmail(v); if (sendErr) setSendErr('') }}
+        sendError={sendErr || undefined}
+        ccQuery={ccQ}
+        onCcQuery={setCcQ}
+        ccSuggestions={ccHits.map((e:any)=>({ id:e.id, name:e.full_name||'', code:e.emp_code||'', email:empEmail(e) }))}
+        ccSelected={cc.map((c:any)=>({ id:c.id, name:c.name, code:'', email:c.email }))}
+        onAddCc={(p:CcPerson)=>{ setCc([...cc, { id:p.id, name:p.name, email:p.email }]); setCcQ('') }}
+        onRemoveCc={(id:string)=>setCc(cc.filter((x:any)=>x.id!==id))}
+        sending={sending}
+        onSend={send}
+        docs={docs.map((d:any):UploadedDocVM=>({
+          id: d.id,
+          label: d.doc_label || d.doc_type || 'Document',
+          fileName: d.file_name || '',
+          sizeLabel: docSizeLabel(d.file_size),
+          mandatory: d.is_mandatory !== false,
+          uploadedAtLabel: d.uploaded_at ? fmtDay(d.uploaded_at) : '',
+        }))}
+        selectedDocIds={Array.from(selDocs)}
+        onToggleDoc={toggleSel}
+        onToggleAllDocs={()=>setSelDocs(prev=> prev.size===docs.length ? new Set() : new Set(docs.map((d:any)=>d.id)))}
+        onDownloadZip={()=>{ void onDownloadZip(selDocs.size?Array.from(selDocs):undefined) }}
+        onViewDoc={(id:string)=>{ const d = docs.find((x:any)=>x.id===id); if (d) void onView(d) }}
+        onDownloadDoc={(id:string)=>{ const d = docs.find((x:any)=>x.id===id); if (d) void onDownload(d) }}
+        rejectingId={rejecting?.id ?? null}
+        onAskReject={(id:string)=>{ const d = docs.find((x:any)=>x.id===id); if (d) setRejecting(d) }}
+        onCancelReject={()=>setRejecting(null)}
+        onConfirmReject={()=>{ if (rejecting) void onReject(rejecting) }}
+        rejecting={!!rejecting && busyDoc===rejecting.id}
+      />
+      )}
+
+      {/* The document viewer. The drawer only asks (onViewDoc); this is what
+          actually shows the file, and the redesign has no slot for it, so it
+          is kept exactly as it was. */}
+      {viewDoc && (
+        <div onMouseDown={e=>{ if(e.target===e.currentTarget) setViewDoc(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.6)', zIndex:Z.modal, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'20px 16px' }}>
+          <div style={{ background:C.surface, borderRadius:12, width:'min(900px,100%)', height:'88vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:E.overlay }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${C.line}` }}>
+              <div style={{ fontSize:13, fontWeight:600, color:C.ink, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{viewDoc.name}</div>
+              <a href={viewDoc.url} target="_blank" rel="noreferrer" style={{ ...T.btnOutline, textDecoration:'none' }}>Open in new tab</a>
+              <button onClick={()=>setViewDoc(null)} style={T.btnOutline}>Close</button>
+            </div>
+            <iframe src={viewDoc.url} title={viewDoc.name} style={{ flex:1, width:'100%', border:'none', background:C.sunken }} />
+          </div>
         </div>
-
-        {loading ? <div style={{ fontSize:13, color:C.faint, padding:'10px 0' }}>Loading…</div> : (
-          <>
-          {mode==='main' && (
-            <div>
-              <label className="rx-label" style={{ display:'block', marginBottom:4 }}>Registered email</label>
-              {canEditEmail ? (
-                <div style={{ marginBottom:12 }}>
-                  <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                    <input className="rx-input" type="email" value={regEmail} onChange={e=>setRegEmail(e.target.value)}
-                      placeholder="candidate@email.com" style={{ flex:1 }} />
-                    <button onClick={saveRegisteredEmail} disabled={savingEmail || !regDirty}
-                      title={!regDirty ? 'No change to save' : 'Save this address on the candidate'}
-                      style={{ ...T.btnPrimary, padding:'7px 13px', fontSize:12, opacity:(savingEmail||!regDirty)?.5:1,
-                        cursor:(savingEmail||!regDirty)?'not-allowed':'pointer' }}>
-                      {savingEmail ? 'Saving…' : 'Save'}
-                    </button>
-                  </div>
-                  {!candidate.email && <div style={{ fontSize:11, color:C.critical, marginTop:4 }}>No email on file — add one before sending anything.</div>}
-                  {regDirty && (
-                    <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>
-                      Unsaved. Saving updates the candidate everywhere — document link, salary break-up and the offer letter.
-                      {link && ' A link already sent stays bound to the old address until you resend it.'}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ fontSize:13, fontWeight:600, marginBottom:12 }}>
-                  {candidate.email || <span style={{ color:C.critical }}>no email on file</span>}
-                  <div style={{ fontSize:11, color:C.faint, fontWeight:400, marginTop:3 }}>Only the assigned hiring manager can correct this.</div>
-                </div>
-              )}
-              {link ? (
-                <>
-                  <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:99,
-                        background: link.status==='SUBMITTED'?C.positiveTint : active?C.infoTint : C.criticalTint,
-                        color: link.status==='SUBMITTED'?C.positive : active?C.info : C.critical }}>
-                        {link.status==='SUBMITTED'?'Submitted ✓' : active?`Active · ${timeLeft}h left` : 'Expired'}
-                      </span>
-                      <span style={{ fontSize:11, color:C.faint }}>{docs.length} document{docs.length===1?'':'s'} uploaded</span>
-                    </div>
-                    <div style={{ fontSize:11, color:C.faint, marginTop:6 }}>Sent to {link.candidate_email||candidate.email}{Array.isArray(link.cc_emails)&&link.cc_emails.length?` · cc ${link.cc_emails.join(', ')}`:''}</div>
-                  </div>
-                  {link.status==='SUBMITTED' ? (
-                    <div style={{ display:'flex', gap:8 }}>
-                      <button onClick={()=>setMode('status')} style={{ ...T.btnPrimary, flex:1 }}>Review Documents</button>
-                    </div>
-                  ) : (
-                    <div style={{ display:'flex', gap:8 }}>
-                      <button onClick={()=>{ setEmail(link.candidate_email||candidate.email||''); setCc((link.cc_emails||[]).map((em:string)=>({id:em,name:em,email:em}))); setMode('send') }} style={{ ...T.btnPrimary, flex:1 }}>Resend link</button>
-                      <button onClick={()=>setMode('status')} style={{ ...T.btnOutline, flex:1 }}>Status</button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <button onClick={()=>{ setEmail(candidate.email||''); setMode('send') }} style={{ ...T.btnPrimary, width:'100%', padding:11 }}>Create CTC Negotiation Link</button>
-              )}
-            </div>
-          )}
-
-          {mode==='send' && (
-            <div>
-              <label className="rx-label">Candidate email</label>
-              <input className="rx-input" value={email} onChange={e=>setEmail(e.target.value)} placeholder="candidate@email.com" />
-              <label className="rx-label" style={{ marginTop:12 }}>CC <span style={{ color:C.faint, fontWeight:400 }}>— search employees to add to the email</span></label>
-              {cc.length>0 && (
-                <div style={{ display:'flex', flexWrap:'wrap' as const, gap:6, marginBottom:6 }}>
-                  {cc.map(c=>(
-                    <span key={c.id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:C.brandTint, color:C.brandDeep, borderRadius:99, padding:'3px 6px 3px 10px', fontSize:11.5, fontWeight:600 }}>
-                      {c.name}<button onClick={()=>setCc(cc.filter(x=>x.id!==c.id))} style={{ border:'none', background:'transparent', cursor:'pointer', color:C.brandDeep, fontSize:13, lineHeight:1 }}>×</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div style={{ position:'relative' }}>
-                <input className="rx-input" value={ccQ} onChange={e=>setCcQ(e.target.value)} placeholder="Type a name or emp code…" />
-                {ccHits.length>0 && (
-                  <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:C.surface, border:`1px solid ${C.line}`, borderRadius:8, marginTop:3, boxShadow:'0 8px 24px rgba(30,27,75,0.14)', maxHeight:220, overflowY:'auto' }}>
-                    {ccHits.map((e:any)=>(
-                      <button key={e.id} onClick={()=>{ setCc([...cc,{id:e.id,name:`${e.full_name} (${e.emp_code})`,email:empEmail(e)}]); setCcQ('') }}
-                        style={{ display:'block', width:'100%', textAlign:'left' as const, padding:'8px 11px', border:'none', borderBottom:`1px solid ${C.line}`, background:C.surface, cursor:'pointer', fontFamily:'inherit', fontSize:12.5, color:C.ink }}>
-                        {e.full_name} <span style={{ color:C.faint }}>· {e.emp_code} · {empEmail(e)}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div style={{ fontSize:11, color:C.faint, margin:'10px 0' }}>Sends a secure upload link, valid 24 hours, for PAN, Aadhaar, bank statement, education, appointment/appraisal letters, 3 salary slips, Form 16 and a photo.</div>
-              <div style={{ display:'flex', gap:8 }}>
-                <button onClick={send} disabled={sending} style={{ ...T.btnPrimary, flex:1, opacity:sending?.6:1 }}>{sending?'Sending…':'Send link'}</button>
-                <button onClick={()=>setMode('main')} style={T.btnOutline}>Back</button>
-              </div>
-            </div>
-          )}
-
-          {mode==='status' && (
-            <div>
-              <div style={{ fontSize:12, color:C.faint, marginBottom:8 }}>
-                {link?.status==='SUBMITTED' ? `Submitted on ${fmtDay(link.submitted_at)}` : active ? `Link active — ${timeLeft}h left (expires ${new Date(link.expires_at).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})})` : 'Link expired'}
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, flexWrap:'wrap' as const }}>
-                <div style={{ fontSize:12, fontWeight:600 }}>Uploaded documents ({docs.length})</div>
-                {docs.length>0 && (
-                  <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:10 }}>
-                    <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:11.5, color:C.faint, cursor:'pointer' }}>
-                      <input type="checkbox" checked={selDocs.size===docs.length && docs.length>0} onChange={e=>setSelDocs(e.target.checked ? new Set(docs.map((d:any)=>d.id)) : new Set())} />
-                      Select all
-                    </label>
-                    <button onClick={()=>onDownloadZip(selDocs.size?Array.from(selDocs):undefined)} disabled={zipping} style={{ ...T.btnPrimary, fontSize:11.5, opacity:zipping?.6:1 }}>
-                      {zipping?'Zipping…':selDocs.size?`Download ${selDocs.size} as ZIP`:'Download all as ZIP'}
-                    </button>
-                  </div>
-                )}
-              </div>
-              {docs.length===0 ? <div style={{ fontSize:12, color:C.faint }}>Nothing uploaded yet.</div> : (
-                <div style={{ maxHeight:'46vh', overflowY:'auto' }}>
-                  {docs.map((d:any)=>(
-                    <div key={d.id||d.doc_type} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${C.line}`, fontSize:12.5 }}>
-                      <input type="checkbox" checked={selDocs.has(d.id)} onChange={()=>toggleSel(d.id)} style={{ flexShrink:0 }} />
-                      <div style={{ minWidth:0, flex:1 }}>
-                        <div style={{ fontWeight:600 }}>{d.doc_label||d.doc_type}</div>
-                        <div style={{ color:C.faint, fontSize:11, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.file_name}</div>
-                      </div>
-                      <div style={{ display:'flex', gap:5, flexShrink:0 }}>
-                        <button onClick={()=>onView(d)} disabled={busyDoc===d.id} style={{ ...T.btnOutline, padding:'5px 9px', fontSize:11 }}>View</button>
-                        <button onClick={()=>onDownload(d)} disabled={busyDoc===d.id} style={{ ...T.btnOutline, padding:'5px 9px', fontSize:11 }}>Download</button>
-                        <button onClick={()=>setRejecting(d)} disabled={busyDoc===d.id} style={{ padding:'5px 9px', fontSize:11, borderRadius:7, border:`1px solid ${C.criticalEdge}`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Reject</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button onClick={()=>setMode('main')} style={{ ...T.btnOutline, marginTop:14 }}>Back</button>
-
-              {/* Reject confirm */}
-              {rejecting && (
-                <div onMouseDown={e=>{ if(e.target===e.currentTarget && !busyDoc) setRejecting(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:210, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-                  <div style={{ background:C.surface, borderRadius:14, width:'min(400px,100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.3)' }}>
-                    <div style={{ fontSize:15, fontWeight:700, color:C.ink, marginBottom:8 }}>Reject this document?</div>
-                    <div style={{ fontSize:12.5, color:C.faint, marginBottom:18, lineHeight:1.5 }}>“{rejecting.doc_label||rejecting.doc_type}” will be removed and the upload link reopened for 24h. Resend the link so the candidate re-uploads only this document.</div>
-                    <div style={{ display:'flex', gap:8 }}>
-                      <button onClick={()=>onReject(rejecting)} disabled={busyDoc===rejecting.id} style={{ ...T.btn, background:C.critical, color:C.onAccent, flex:1, opacity:busyDoc===rejecting.id?.6:1 }}>{busyDoc===rejecting.id?'Rejecting…':'Reject document'}</button>
-                      <button onClick={()=>setRejecting(null)} disabled={busyDoc===rejecting.id} style={{ ...T.btnOutline, flex:1 }}>Cancel</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* View popup */}
-              {viewDoc && (
-                <div onMouseDown={e=>{ if(e.target===e.currentTarget) setViewDoc(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.6)', zIndex:220, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'20px 16px' }}>
-                  <div style={{ background:C.surface, borderRadius:12, width:'min(900px,100%)', height:'88vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 70px rgba(30,27,75,0.4)' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${C.line}` }}>
-                      <div style={{ fontSize:13, fontWeight:600, color:C.ink, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{viewDoc.name}</div>
-                      <a href={viewDoc.url} target="_blank" rel="noreferrer" style={{ ...T.btnOutline, textDecoration:'none' }}>Open in new tab</a>
-                      <button onClick={()=>setViewDoc(null)} style={T.btnOutline}>Close</button>
-                    </div>
-                    <iframe src={viewDoc.url} title={viewDoc.name} style={{ flex:1, width:'100%', border:'none', background:C.sunken }} />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          </>
-        )}
-      </div>
-    </div>
+      )}
+    </>
   )
+}
+
+/* ── Negotiation redesign: row -> view-model mapping ────────────────────────
+ * DISPLAY ONLY. Not one figure is computed here. Every amount comes from
+ * ctcStatementRows(), which is the same source the on-screen table, the Excel
+ * export and the PDF already use, so the four can never disagree. The split
+ * below is presentational: which toned block of the payslip a row belongs to.
+ */
+
+/** The statement's own rows, bucketed into the five toned sections the payslip
+ *  draws. `head` splits the slip; `note` rows are dropped because the view
+ *  prints its own footnote and takes esicNearCeiling as a flag. */
+function negSections(rows: StmtRow[], totalDedMonthly: number): StatementSection[] {
+  const row = (r: StmtRow): StatementRow => ({
+    label: r.label,
+    monthly: r.monthly ?? null,
+    annual: r.annual ?? null,
+    note: r.basis,
+  })
+  const earn: StatementRow[] = [], ded: StatementRow[] = [], emp: StatementRow[] = [], ctc: StatementRow[] = []
+  let gross: StatementRow | undefined, net: StatementRow | undefined, ctcTotal: StatementRow | undefined
+  let afterHead = false
+  for (const r of rows) {
+    if (r.kind === 'head') { afterHead = true; continue }
+    if (r.kind === 'note') continue
+    if (r.kind === 'net') { net = row(r); continue }
+    if (r.kind === 'total') { ctcTotal = row(r); continue }
+    if (r.kind === 'ded') { ded.push(row(r)); continue }
+    if (r.kind === 'emp' || r.kind === 'grat') { emp.push(row(r)); continue }
+    if (r.kind === 'sum') {
+      // "Gross Earnings (A)" appears twice on purpose; the slip shows it once.
+      if (/^Gross Earnings/.test(r.label)) { if (!gross) gross = row(r); continue }
+      ctc.push(row(r))   // Fixed CTC Package
+      continue
+    }
+    if (r.kind === 'muted') { ctc.push(row(r)); continue }   // Variable / Performance CTC
+    // 'row' and 'bonus': in gross before the split, an employer cost after it.
+    if (!afterHead && (r.kind === 'row' || (r.kind === 'bonus' && r.remark !== 'In CTC'))) { earn.push(row(r)); continue }
+    if (r.kind === 'bonus') emp.push(row(r))
+  }
+  const out: StatementSection[] = [
+    { key: 'earn', title: 'Earnings', tone: 'earn', rows: earn, total: gross },
+    // The statement has no "Total deductions" line of its own; totalDed comes
+    // straight from the model, annualised the same way every other row is.
+    { key: 'deduct', title: 'Employee deductions', tone: 'deduct', rows: ded,
+      total: { label: 'Total deductions', monthly: totalDedMonthly, annual: totalDedMonthly * 12 } },
+    { key: 'net', title: 'Net pay', tone: 'net', rows: [], total: net },
+    { key: 'employer', title: 'Employer contributions', tone: 'employer', rows: emp },
+    { key: 'ctc', title: 'Cost to company', tone: 'ctc', rows: ctc, total: ctcTotal },
+  ]
+  return out
+}
+
+/** `form` (the container's shape) -> `NegForm` (the view's). Two keys differ in
+ *  name and gratuity is a 'yes'/'no' string here but a switch there. */
+function toNegForm(form: any): NegForm {
+  return {
+    ctc: form.ctc, varAmt: form.varAmt,
+    joining_bonus: form.joining_bonus, joining_bonus_freq: form.joining_freq,
+    retention_bonus: form.retention_bonus, retention_bonus_freq: form.retention_freq,
+    esop: form.esop, esop_plan: form.esop_plan, terms: form.terms,
+    state: form.state, category: form.category,
+    gratuity: form.gratuity === 'yes',
+    bonusPct: form.bonusPct, bonusMode: form.bonusMode,
+  }
+}
+
+/** The reverse, so onForm lands on the container's own keys and value shapes. */
+function fromNegFormKey(key: NegFormKey, value: any): [string, any] {
+  if (key === 'gratuity') return ['gratuity', value ? 'yes' : 'no']
+  if (key === 'joining_bonus_freq') return ['joining_freq', value]
+  if (key === 'retention_bonus_freq') return ['retention_freq', value]
+  return [key as string, value]
+}
+
+/** No CTC typed yet. `breakdown` is not nullable on the view's side, so the
+ *  payslip draws empty panels and the guidance lives where the design puts it:
+ *  the save dock, whose label already reads "Enter a valid CTC first". */
+const EMPTY_BREAKDOWN: BreakdownVM = {
+  failure: null, inHandMonthly: 0, grossMonthly: 0, totalDedMonthly: 0, ctcAnnual: 0,
+  sections: [], basicRule: '50pct', esicNearCeiling: false,
 }
 
 function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId, canEditAnyMrf, rail }:any) {
@@ -5186,14 +5134,21 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   // Map candidate_id -> latest doc-collection link status ('ACTIVE' | 'SUBMITTED' | 'EXPIRED').
   const [docStatusMap, setDocStatusMap] = useState<Record<string,string>>({})
+  const [docExpiryMap, setDocExpiryMap] = useState<Record<string,string>>({})
   useEffect(()=>{
     const ids = finalCands.map((c:Candidate)=>c.id)
     if (!ids.length) { setDocStatusMap({}); return }
-    supabase.from('document_collection_links').select('candidate_id, status, created_at').in('candidate_id', ids).order('created_at',{ascending:false})
+    // expires_at rides along on the query that ALREADY runs -- no new request,
+    // no new route. Without the date the redesign's "Expiring in 24h" filter
+    // and its "Link expired" section can never fire. docStatusMap keeps its
+    // exact old shape; the expiry lives beside it so docsReceived() and the
+    // existing badges are untouched.
+    supabase.from('document_collection_links').select('candidate_id, status, created_at, expires_at').in('candidate_id', ids).order('created_at',{ascending:false})
       .then(({data}:any)=>{
         const m:Record<string,string> = {}
-        for (const r of data||[]) { if(!(r.candidate_id in m)) m[r.candidate_id]=r.status }
-        setDocStatusMap(m)
+        const x:Record<string,string> = {}
+        for (const r of data||[]) { if(!(r.candidate_id in m)) { m[r.candidate_id]=r.status; if (r.expires_at) x[r.candidate_id]=r.expires_at } }
+        setDocStatusMap(m); setDocExpiryMap(x)
       })
   },[candidates]) // eslint-disable-line react-hooks/exhaustive-deps
   const docsReceived = (c:Candidate) => docStatusMap[c.id]==='SUBMITTED'
@@ -5216,7 +5171,27 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   const shownCands = activeList
     .filter((c:Candidate)=>!negQ || c.full_name.toLowerCase().includes(negQ.toLowerCase()))
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
-  const [sel, setSel] = useState<Candidate|null>(null)
+  // DERIVED, not snapshotted.
+  //
+  // `sel` used to hold a COPY of the candidate taken at click time. Correcting
+  // the registered address in the Checks drawer writes candidates.email and
+  // calls onRefresh(), which rebuilds the candidates array -- but nothing ever
+  // re-pointed `sel`, so it kept the old row. The salary-link Email button
+  // passes sel.email to /api/recruitment/salary-link, and that route prefers
+  // the address it is GIVEN over the one it just read (`body.email ||
+  // cand.email`), so a stale snapshot sends the break-up to the old address and
+  // still reports success. The same snapshot feeds what save writes:
+  // current_ctc, candidate_name, position_title and company_id.
+  //
+  // Deriving from the live array by id keeps every field current. setSel keeps
+  // its old signature, so all eleven existing call sites are untouched.
+  //
+  // One behaviour difference, on purpose: if the candidate leaves the array
+  // (stage change, filtered out at source), `sel` becomes null and the
+  // calculator closes, where before it lingered on a row that no longer existed.
+  const [selId, setSelId] = useState<string|null>(null)
+  const sel: Candidate|null = selId ? ((candidates as Candidate[]).find((c:Candidate)=>c.id===selId) ?? null) : null
+  const setSel = (c:Candidate|null) => setSelId(c ? c.id : null)
   const selMrf = mrfs.find((m:MRF)=>m.id===sel?.mrf_id)
   // The MRF's branch decides the minimum-wage state (e.g. Ahmedabad Branch → Gujarat).
   const mrfLocOf = (m:any) => (locations||[]).find((l:any)=>l.id===m?.location_id)
@@ -5245,9 +5220,19 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   const [saving, setSaving] = useState(false)
   const [savedLink, setSavedLink] = useState<string|null>(null)
   const [loadedNeg, setLoadedNeg] = useState<any>(null)
-  async function rejectCand(c:Candidate, e:React.MouseEvent) {
-    e.stopPropagation()
-    if (!window.confirm(`Move ${c.full_name} to Rejected? They'll leave the negotiation list.`)) return
+  // The stage's two confirms, as the styled dialog rather than the browser's.
+  // The document-reject confirm stays INLINE inside the drawer, which is what
+  // the design asks for, so it is not here.
+  const [confirm, setConfirm] = useState<{ kind:'reject'|'resend'; cand:Candidate }|null>(null)
+  // The ids in the order the list is showing them, so the drawer's previous /
+  // next follow what the recruiter can see. The comparator makes the setter
+  // idempotent: an identical array returns `prev`, so React bails out and the
+  // view cannot drive a render loop however often it reports the order.
+  const [visibleOrder, setVisibleOrder] = useState<string[]>([])
+  const reportVisibleOrder = (ids:string[]) =>
+    setVisibleOrder(prev => (prev.length===ids.length && prev.every((v,i)=>v===ids[i])) ? prev : ids)
+  // The dialog asks; this does it. Stage write, toast and refresh unchanged.
+  async function doRejectCand(c:Candidate) {
     const { error } = await supabase.from('candidates').update({ stage:'Rejected' }).eq('id', c.id)
     if (error) { showNotify('Error: '+error.message,'error'); return }
     showNotify(`${c.full_name} moved to Rejected.`); if (sel?.id===c.id) setSel(null); onRefresh()
@@ -5422,22 +5407,63 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   // The calculator panel is open for a regular employee → the candidate column narrows and
   // the panel slides in from the right (grid-template-columns is animatable in Chromium/Firefox).
   const calcOpen = subTab==='ctc' && !!sel && !isStipend
-  const compact = calcOpen
-  const [showFilters, setShowFilters] = useState(false)
   // The one-time payments / T&C / additional amounts fold away so the inputs card stays
   // short; the summary line says what is inside while it is closed.
   const [extrasOpen, setExtrasOpen] = useState(false)
-  const extrasSummary = (()=>{
-    const bits:string[] = []
-    if (Number(form.joining_bonus)>0) bits.push(`Joining ${lakh(Number(form.joining_bonus))}`)
-    if (Number(form.retention_bonus)>0) bits.push(`Retention ${lakh(Number(form.retention_bonus))}`)
-    if (Number(form.esop)>0) bits.push(`ESOP ${lakh(Number(form.esop))}`)
-    const n = addItems.filter(r=>Number(r.amount)>0).length
-    if (n) bits.push(`${n} additional`)
-    if ((form.terms||'').trim()) bits.push('T&C')
-    return bits.length ? bits.join(' · ') : 'none yet — joining / retention / ESOP / T&C / additional'
-  })()
-  const ceilingNote = `EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • Gratuity • Statutory bonus • Pan-India minimum wages`
+
+  // ── View models for the redesigned screen ────────────────────────────────
+  // Pure reshaping of rows already loaded. No query, no arithmetic.
+  const companyNameOf = (id?: string|null) => (companies||[]).find((co:any)=>co.id===id)?.company_name || ''
+  const negCandidates: NegCandidateVM[] = shownCands.map((c:Candidate) => {
+    const st = docStatusMap[c.id]
+    const exp = docExpiryMap[c.id]
+    const expired = st === 'ACTIVE' && !!exp && new Date(exp).getTime() <= Date.now()
+    const linkState: DocLinkState = st === 'SUBMITTED' ? 'SUBMITTED' : st === 'ACTIVE' ? (expired ? 'EXPIRED' : 'ACTIVE') : 'NONE'
+    return {
+      id: c.id,
+      name: c.full_name,
+      position: c.designation || '',
+      mrfNumber: mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number || '',
+      companyName: companyNameOf(c.company_id),
+      email: c.email || null,
+      linkState,
+      hoursLeft: st === 'ACTIVE' && exp && !expired ? Math.max(0, Math.floor((new Date(exp).getTime()-Date.now())/3600000)) : null,
+      response: (respMap[c.id] === 'ACCEPTED' ? 'ACCEPTED' : respMap[c.id] === 'REJECTED' ? 'REJECTED' : null),
+      revised: !!(c as any).offer_revised,
+      blacklisted: !!(c as any).blacklisted,
+    }
+  })
+  // '' is the "all" value on purpose: it is how the view knows a filter is in
+  // use, and what Clear all and the removable chips send back.
+  const negFilters: NegFilter[] = [
+    { key:'company', label:'Company', value:f.company,
+      options:[{ value:'', label:'All companies' }, ...(companies||[]).map((co:any)=>({ value:co.id, label:co.company_name||co.company_code }))] },
+    { key:'department', label:'Department', value:f.department,
+      options:[{ value:'', label:'All departments' }, ...(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=>({ value:d.id, label:d.dept_name }))] },
+    { key:'location', label:'Location', value:f.location,
+      options:[{ value:'', label:'All locations' }, ...(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=>({ value:l.id, label:l.location_name }))] },
+    { key:'position', label:'Position', value:f.position,
+      options:[{ value:'', label:'All positions' }, ...distinctPositions(candidates).map((p:string)=>({ value:p, label:p }))] },
+  ]
+  const onNegFilter = (key:string, value:string) =>
+    setF(key==='company' ? { ...f, company:value, department:'', location:'' } : { ...f, [key]:value })
+
+  // The statement, exactly as ctcStatementRows() produces it today.
+  const negBreakdown: BreakdownVM | null = !model ? null : (!model.ok
+    ? { failure:{ minReqFixedAnn:model.minReqFixedAnn, fixedAnnual:model.fixedAnnual, basic:model.basic },
+        inHandMonthly:0, grossMonthly:0, totalDedMonthly:0, ctcAnnual:0, sections:[], basicRule:'50pct', esicNearCeiling:false }
+    : { failure:null,
+        inHandMonthly:model.inHand, grossMonthly:model.gross, totalDedMonthly:model.totalDed,
+        ctcAnnual:model.ctcAnnual, basicRule:model.basicRule, esicNearCeiling:model.esicNearCeiling,
+        sections: calc ? negSections(statementRows(), model.totalDed) : [],
+        // The ring's three amounts. The employer total is fixedMonthly - gross,
+        // an identity the model itself guarantees (fixed = gross + employer
+        // costs); it is not a new derivation of pay.
+        composition: [
+          { key:'net', label:'In-hand', amount:model.inHand, tone:'net' as const },
+          { key:'ded', label:'Deductions', amount:model.totalDed, tone:'deduct' as const },
+          { key:'emp', label:'Employer contributions', amount:Math.max(0, model.fixedMonthly - model.gross), tone:'employer' as const },
+        ] })
 
   // Negotiation was the one tab of eleven that destructured `rail` and then
   // never rendered it, so opening Negotiation FROM the rail made the rail
@@ -5461,381 +5487,135 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
           <p>Saving a negotiation produces the candidate's salary link — OTP-protected, valid for 7 days.</p>
         </Help>}
       />}>
-    <div style={{ display:'grid', gridTemplateColumns: compact ? 'minmax(200px, 250px) minmax(0, 1fr)' : '1fr 1fr', gap:12, alignItems:'start', transition:'grid-template-columns .45s cubic-bezier(.4,0,.2,1)' }}>
-      {/* ── Candidate column — full cards normally, compact list while the calculator is open ── */}
-      <div style={{ minWidth:0 }}>
-        <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' as const }}>
-          <button onClick={()=>{ setSubTab('checks'); setSel(null) }} style={{ ...T.btnOutline, ...(compact?{ padding:'5px 9px', fontSize:11 }:{}), ...(subTab==='checks'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>{compact?'Checks':'Pre-negotiation Checks'} ({checksCands.length})</button>
-          <button onClick={()=>{ setSubTab('ctc'); setSel(null) }} style={{ ...T.btnOutline, ...(compact?{ padding:'5px 9px', fontSize:11 }:{}), ...(subTab==='ctc'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>{compact?'CTC':'CTC Negotiations'} ({ctcCands.length})</button>
-        </div>
-        <SearchBar placeholder="Search candidate…" onApply={setNegQ} width={compact?200:240} />
-        {compact
-          ? <button onClick={()=>setShowFilters(s=>!s)} style={{ ...T.btnOutline, padding:'4px 10px', fontSize:11, marginBottom:8 }}>{showFilters?'Hide filters ▴':'Filters ▾'}</button>
-          : null}
-        {(!compact || showFilters) && <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />}
-        {shownCands.map((c:Candidate)=>{
-          const on = sel?.id===c.id
-          const mn = mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number
-          return (
-            <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
-              style={{ ...T.card, cursor:'pointer', padding: compact ? '9px 11px' : T.card.padding, marginBottom: compact ? 6 : T.card.marginBottom,
-                border:on?`2px solid ${C.brand}`:'1px solid var(--ez-line)', background:on?C.brandTint: C.surface, transition:'padding .3s, background .2s' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:compact?12.5:13, fontWeight:600, color:C.ink, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}</div>
-                  {!compact && <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L exp':'—'}{mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null}</div>}
-                </div>
-                {subTab==='ctc' && (
-                  <button onClick={(e)=>rejectCand(c,e)} title="Move to Rejected" style={{ padding: compact?'2px 7px':'4px 10px', borderRadius:7, border: `1px solid ${C.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit', background:C.criticalTint, color:C.critical, flexShrink:0 }}>{compact?'✕':'Reject'}</button>
-                )}
-              </div>
-              <div style={{ marginTop:compact?4:6, display:'flex', gap:5, flexWrap:'wrap' as const, alignItems:'center' }}>
-                {compact && mn && <span style={{ fontSize:9.5, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 6px', borderRadius:99, whiteSpace:'nowrap' as const }}>{mn}</span>}
-                {!compact && <Badge text={c.stage} />}
-                {subTab==='checks' && docStatusMap[c.id]==='SUBMITTED' && (
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 10px', borderRadius:99, fontSize:10.5, fontWeight:700, background:C.positiveTint, color:C.positive }}>✓ Documents received</span>
-                )}
-                {subTab==='checks' && docStatusMap[c.id]==='ACTIVE' && (
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 10px', borderRadius:99, fontSize:10.5, fontWeight:700, background:C.infoTint, color:C.info }}>Link sent</span>
-                )}
-                {subTab==='ctc' && respMap[c.id]==='ACCEPTED' && <Badge text="Offer Accepted" />}
-                {subTab==='ctc' && respMap[c.id]==='REJECTED' && <Badge text="Offer Rejected" />}
-                {c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}
-              </div>
-            </div>
-          )
-        })}
-        {shownCands.length===0&&<div style={{ ...T.card, color:C.faint, fontSize:13, textAlign:'center' as const, padding:24 }}>{negQ?'No matching candidate':(subTab==='checks'?'No candidates awaiting pre-negotiation checks':'No candidates ready for CTC negotiation')}</div>}
-      </div>
+    <NegotiationView
+      subTab={subTab}
+      onSubTab={(t)=>{ setSubTab(t); setSel(null) }}
+      counts={{ checks: checksCands.length, ctc: ctcCands.length }}
+      search={negQ}
+      onSearch={setNegQ}
+      filters={negFilters}
+      onFilter={onNegFilter}
+      candidates={negCandidates}
+      selectedId={selId}
+      onSelect={(id:string)=>{
+        const c = (candidates as Candidate[]).find((x:Candidate)=>x.id===id)
+        if (!c) return
+        if (subTab==='ctc') { void selectCtcCandidate(c) } else { setSel(c) }
+      }}
+      stipend={subTab==='ctc' && sel && isStipend
+        ? <StipendCalc sel={sel} mrf={selMrf} companies={companies} supabase={supabase} showNotify={showNotify} onRefresh={onRefresh} mwRates={mwRates} locations={locations} />
+        : undefined}
+      onVisibleOrder={reportVisibleOrder}
+      onCloseStipend={()=>setSel(null)}
+      calc={calcOpen && sel ? {
+        currentCtc: sel.current_ctc ?? null,
+        hikePct: calc?.hike != null ? Number(calc.hike) : null,
+        budget: (mrfBudgetMin>0 || mrfBudgetMax>0) ? { min: mrfBudgetMin, max: mrfBudgetMax } : null,
+        form: toNegForm(form),
+        onForm: (k, v) => { const [key, val] = fromNegFormKey(k, v); F(key, val) },
+        needsCompany: !autoCompany,
+        companyOptions: (companies||[]).map((co:any)=>({ value:co.id, label:co.company_name||co.company_code })),
+        companyValue: companyOverride,
+        onCompany: setCompanyOverride,
+        stateOptions: MIN_WAGE_STATES.map((st:string)=>({ value:st, label:st })),
+        stateInherited: !!mrfStateOf(selMrf),
+        stateHint: mrfStateOf(selMrf) ? `From MRF branch: ${mrfLocOf(selMrf)?.location_name||'branch'}` : 'No branch on the MRF \u2014 choose',
+        categoryOptions: WAGE_CATS.map((ct:string)=>({ value:ct, label:ct })),
+        categoryInherited: !!(selMrf as any)?.wage_category,
+        categoryHint: (selMrf as any)?.wage_category ? 'From the MRF' : 'Not set on the MRF \u2014 choose',
+        ctcOverBudget,
+        ctcBelowBudget,
+        budgetLine: budgetRangeText
+          ? (ctcOverBudget
+              ? { tone:'bad' as const, text:`Above the MRF budget range (${budgetRangeText}) \u2014 reduce to ${lakh(mrfBudgetMax)} or less` }
+              : ctcBelowBudget
+              ? { tone:'bad' as const, text:`Below the MRF budget range (${budgetRangeText}) \u2014 must be at least ${lakh(mrfBudgetMin)}` }
+              : { tone:'ok' as const, text:`${form.ctc!=='' ? '\u2713 Within ' : ''}MRF budget range: ${budgetRangeText}` })
+          : null,
+        minWage: { amount: mw.amount, source: mw.source },
+        onOpenMinWages: ()=>setShowMw(true),
+        bonusRateOptions: [{ value:'8.33', label:'8.33% (Min)' }, { value:'20', label:'20% (Max)' }, { value:'0', label:'0% (N/A)' }],
+        bonusModeOptions: [{ value:'salary', label:'With Salary' }, { value:'ctc', label:'Only in CTC' }],
+        addItems: addItems as AddItem[],
+        onAddItem: addRow,
+        onRemoveItem: delRow,
+        onItem: (i:number, k:AddItemKey, v:any)=>setRow(i, k as 'amount'|'freq'|'remark', String(v)),
+        extrasOpen,
+        onToggleExtras: ()=>setExtrasOpen(o=>!o),
+        onRecalculate: recalc,
+        breakdown: negBreakdown ?? EMPTY_BREAKDOWN,
+        saveLabel: saving ? 'Saving\u2026' : ctcOverBudget ? 'CTC exceeds MRF budget' : ctcBelowBudget ? 'CTC below MRF budget' : !calc ? 'Enter a valid CTC first' : 'Save Negotiation & Generate Link',
+        saveDisabled: saving || !calc || ctcOutOfRange,
+        onSave: saveNegotiation,
+        savedLink,
+        onCopyLink: ()=>{ if (savedLink) { navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') } },
+        onEmailLink: ()=>{
+          if (!sel) return
+          // A candidate who already answered is confirmed first.
+          if (loadedNeg?.candidate_response) { setConfirm({ kind:'resend', cand:sel }); return }
+          emailSalaryLink(sel.id, sel.email, showNotify)
+        },
+        emailDisabledReason: sel.email ? undefined : 'No email address on this candidate',
+        onMoveToRejected: ()=>{ if (sel) setConfirm({ kind:'reject', cand:sel }) },
+        onCloseCalculator: ()=>setSel(null),
+        onDownloadExcel: downloadExcel,
+        onPrintPdf: printPdf,
+      } : null}
+    />
 
-      {subTab==='checks'&&sel&&(
-        <CtcDocLink candidate={sel} mrf={selMrf} companyId={effCompany} supabase={supabase} showNotify={showNotify}
-          /* Correcting a typo'd address belongs to the person running the hiring.
-             Same rule as canEditMrf: an admin, the raiser, or an assigned
-             hiring manager on this candidate's MRF. */
-          canEditEmail={!!canEditAnyMrf
-            || (!!employeeId && selMrf?.requested_by === employeeId)
-            || (!!employeeId && Array.isArray(selMrf?.assigned_recruiter_ids) && selMrf.assigned_recruiter_ids.includes(employeeId))}
-          onClose={()=>setSel(null)} onRefresh={onRefresh} />
-      )}
+    {subTab==='checks'&&sel&&(()=>{
+      // Previous / next in the order the list shows, not the raw array.
+      const order = visibleOrder.length ? visibleOrder : negCandidates.map((c:NegCandidateVM)=>c.id)
+      const at = order.indexOf(sel.id)
+      const jump = (to:number) => { const c = (candidates as Candidate[]).find((x:Candidate)=>x.id===order[to]); if (c) setSel(c) }
+      return (
+      <CtcDocLink candidate={sel} mrf={selMrf} companyId={effCompany} supabase={supabase} showNotify={showNotify}
+        nav={at >= 0 ? { index: at, total: order.length,
+          onPrev: at > 0 ? (()=>jump(at-1)) : null,
+          onNext: at < order.length-1 ? (()=>jump(at+1)) : null } : undefined}
+        canEditEmail={!!canEditAnyMrf
+          || (!!employeeId && selMrf?.requested_by === employeeId)
+          || (!!employeeId && Array.isArray(selMrf?.assigned_recruiter_ids) && selMrf.assigned_recruiter_ids.includes(employeeId))}
+        onClose={()=>setSel(null)} onRefresh={onRefresh} />
+      )
+    })()}
 
-      {subTab==='ctc'&&sel&&isStipend&&<StipendCalc sel={sel} mrf={selMrf} companies={companies} supabase={supabase} showNotify={showNotify} onRefresh={onRefresh} mwRates={mwRates} locations={locations} />}
+    {showMw && (
+      <MinWagesDialogView
+        rows={(mwRates||[]).map((r:any)=>({
+          id: String(r.id ?? `${r.state}-${r.zone||''}-${r.category}`),
+          state: r.state||'', zone: r.zone||'', category: r.category||'',
+          basic: r.basic_amount ?? null, vda: r.vda_amount ?? null, total: r.total_minimum_wage ?? null,
+          effectiveFrom: r.effective_from ? fmtDay(r.effective_from) : '',
+          reference: r.notification_reference ?? '',
+        }))}
+        activeState={form.state}
+        activeCategory={form.category}
+        onClose={()=>setShowMw(false)} />
+    )}
 
-      {/* ── Automated CTC Calculator — slides in; inputs (5) | statement (7), like the reference studio ── */}
-      {calcOpen&&sel&&(
-        <div key={sel.id} style={{ minWidth:0, animation:'ezSlideInRight .45s cubic-bezier(.4,0,.2,1)' }}>
-          {/* header strip */}
-          <div style={{ ...T.card, display:'flex', alignItems:'center', gap:12, padding:'12px 16px', marginBottom:12, position:'sticky', top:0, zIndex:31 }}>
-            <div style={{ width:40, height:40, borderRadius:12, background:C.brand, color:C.onAccent, display:'grid', placeItems:'center', fontSize:17, fontWeight:800, flexShrink:0, boxShadow:'0 8px 20px rgba(124,58,237,.30)' }}>₹</div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:15, fontWeight:700, color:C.ink, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
-                Automated CTC Calculator <span style={{ color:C.faint, fontWeight:500 }}>—</span> {sel.full_name}
-                {selMrf?.mrf_number && <span style={{ fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, whiteSpace:'nowrap' as const }}>{selMrf.mrf_number}</span>}
-                {loadedNeg?.candidate_response && (
-                  <span style={{ fontSize:10.5, fontWeight:700, padding:'2px 9px', borderRadius:99, background: loadedNeg.candidate_response==='ACCEPTED'?C.positiveTint:C.criticalTint, color: loadedNeg.candidate_response==='ACCEPTED'?C.positive:C.critical }}>
-                    {loadedNeg.candidate_response==='ACCEPTED'?'Candidate accepted':'Candidate rejected'}{loadedNeg.response_note?` — “${loadedNeg.response_note}”`:''}
-                  </span>
-                )}
-              </div>
-              <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{ceilingNote}</div>
-            </div>
-            <button onClick={()=>setSel(null)} style={T.btnOutline}>Close</button>
-          </div>
-
-          {/* minmax(0,…), not minmax(300px,…)/minmax(360px,…). Those floors sum
-              to 672px plus the gap, and with the rail and page padding the
-              calculator has less than that at 1440px — so the right track held
-              its 360px and pushed the document to 1544px, a 104px horizontal
-              overhang, measured. A grid track containing wide content needs a
-              zero minimum or it cannot honour its container. The fr ratios are
-              untouched, so nothing moves at widths where the room exists. */}
-          <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 5fr) minmax(0, 7fr)', gap:12, alignItems:'start' }}>
-            {/* ── Inputs & Rules Selection ── compact: two fields per row, the extras folded away ── */}
-            <div style={{ ...T.cardPurple, padding:'12px 14px' }}>
-              <div style={{ ...T.section, borderBottom:`1px solid ${C.brandEdge}`, paddingBottom:8, marginBottom:10 }}>Inputs &amp; Rules Selection</div>
-              {!autoCompany && (
-                <div style={{ marginBottom:10, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
-                  <label className="rx-label">Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
-                  <select className="rx-input" value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
-                    <option value="">Select company…</option>
-                    {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
-                  </select>
-                </div>
-              )}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
-                <div><label className="rx-label">State / UT</label>
-                  <select className="rx-input" value={form.state} onChange={e=>F('state',e.target.value)} disabled={!!mrfStateOf(selMrf)}>
-                    {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
-                  </select>
-                  <div style={{ fontSize:10, color:mrfStateOf(selMrf)?C.positive:C.faint, marginTop:2, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{mrfStateOf(selMrf) ? `From MRF branch: ${mrfLocOf(selMrf)?.location_name||'branch'}` : 'No branch on the MRF — choose'}</div>
-                </div>
-                <div><label className="rx-label">Worker Category</label>
-                  <select className="rx-input" value={form.category} onChange={e=>F('category',e.target.value)} disabled={!!(selMrf as any)?.wage_category}>
-                    {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
-                  </select>
-                  <div style={{ fontSize:10, color:(selMrf as any)?.wage_category?C.positive:C.faint, marginTop:2 }}>{(selMrf as any)?.wage_category ? 'From the MRF' : 'Not set on the MRF — choose'}</div>
-                </div>
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:6 }}>
-                <div><label className="rx-label">Total CTC (Annual ₹) *</label>
-                  <input className="rx-input" style={{ fontWeight:700, ...(ctcOutOfRange?{ borderColor:C.critical }:{}) }} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder={mrfBudgetMin>0?String(mrfBudgetMin):"600000"} />
-                  {budgetRangeText && (
-                    ctcOverBudget
-                      ? <div style={{ fontSize:10, color:C.critical, marginTop:2, fontWeight:600 }}>Above the MRF budget range ({budgetRangeText}) — reduce to {lakh(mrfBudgetMax)} or less</div>
-                      : ctcBelowBudget
-                      ? <div style={{ fontSize:10, color:C.critical, marginTop:2, fontWeight:600 }}>Below the MRF budget range ({budgetRangeText}) — must be at least {lakh(mrfBudgetMin)}</div>
-                      : <div style={{ fontSize:10, color: form.ctc!=='' ? C.positive : C.faint, marginTop:2 }}>{form.ctc!=='' ? '✓ Within ' : ''}MRF budget range: {budgetRangeText}</div>
-                  )}
-                </div>
-                <div><label className="rx-label">Variable CTC (Annual ₹)</label><input className="rx-input" style={{ fontWeight:700 }} type="number" value={form.varAmt} onChange={e=>F('varAmt',e.target.value)} placeholder="0" /></div>
-              </div>
-              <div style={{ fontSize:10.5, color:C.faint, margin:'2px 0 10px', lineHeight:1.5 }}>
-                Min wage · {form.state} · {form.category}: <b style={{ color:C.ink }}>₹{Math.round(mw.amount).toLocaleString('en-IN')}/mo</b>
-                <span style={{ marginLeft:6, fontSize:9.5, padding:'1px 7px', borderRadius:99, background:mw.source==='master'?C.positiveTint:C.sunken, color:mw.source==='master'?C.positive:C.faint }}>{mw.source==='master'?'HR master':mw.source==='default'?'default table':'fallback'}</span>
-                {' '}— Basic = higher of 50% of fixed CTC and this floor.
-              </div>
-
-              <div style={{ ...T.section, borderTop:`1px solid ${C.brandEdge}`, paddingTop:10, marginBottom:8 }}>Statutory &amp; Benefit Rules</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr 1fr', gap:8, marginBottom:10 }}>
-                <div><label className="rx-label">Gratuity in CTC?</label>
-                  <select className="rx-input" value={form.gratuity} onChange={e=>F('gratuity',e.target.value)}>
-                    <option value="yes">Yes (4.81% of Basic)</option>
-                    <option value="no">No (Over and above)</option>
-                  </select>
-                </div>
-                <div><label className="rx-label">Bonus Rate</label>
-                  <select className="rx-input" value={form.bonusPct} onChange={e=>F('bonusPct',e.target.value)}>
-                    <option value="8.33">8.33% (Min)</option>
-                    <option value="20">20% (Max)</option>
-                    <option value="0">0% (N/A)</option>
-                  </select>
-                </div>
-                <div><label className="rx-label">Bonus Mode</label>
-                  <select className="rx-input" value={form.bonusMode} onChange={e=>F('bonusMode',e.target.value)}>
-                    <option value="salary">With Salary</option>
-                    <option value="ctc">Only in CTC</option>
-                  </select>
-                </div>
-              </div>
-              <button onClick={recalc} style={{ ...T.btnPrimary, width:'100%', padding:'9px', fontSize:12.5, marginBottom:12, boxShadow:'0 6px 16px rgba(124,58,237,.25)' }}>Recalculate Breakdown</button>
-
-              {/* One-time payments, T&C and additional amounts — folded, with a summary line */}
-              <details open={extrasOpen} onToggle={e=>setExtrasOpen((e.target as HTMLDetailsElement).open)} style={{ border:`1px solid ${C.brandEdge}`, borderRadius:10, background:C.sunken, marginBottom:12 }}>
-                <summary style={{ listStyle:'none', cursor:'pointer', padding:'9px 12px', display:'flex', alignItems:'center', gap:8, userSelect:'none' as const }}>
-                  <span style={{ display:'inline-block', transform: extrasOpen?'rotate(90deg)':'none', transition:'transform .2s', color:C.brand, fontSize:11 }}>▶</span>
-                  <span style={{ ...T.section, marginBottom:0, marginTop:0 }}>One-time payments &amp; extras</span>
-                  <span style={{ marginLeft:'auto', fontSize:10.5, color:C.faint, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{extrasSummary}</span>
-                </summary>
-                <div style={{ padding:'4px 12px 12px', borderTop:`1px solid ${C.brandEdge}` }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr', gap:8, marginTop:8 }}>
-                    <div><label className="rx-label">Joining Bonus (₹)</label><input className="rx-input" type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
-                    <div><label className="rx-label">Paid</label>
-                      <select className="rx-input" style={{ opacity: Number(form.joining_bonus)>0 ? 1 : .45, cursor: Number(form.joining_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.joining_bonus)>0)} value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
-                        <option>With Salary</option><option>After 3 Months</option><option>After 6 Months</option><option>As per Policy</option>
-                      </select>
-                    </div>
-                    <div><label className="rx-label">Retention Bonus (₹)</label><input className="rx-input" type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
-                    <div><label className="rx-label">Paid</label>
-                      <select className="rx-input" style={{ opacity: Number(form.retention_bonus)>0 ? 1 : .45, cursor: Number(form.retention_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.retention_bonus)>0)} value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
-                        <option>After 3 Months</option><option>After 6 Months</option><option>After 1 Year</option><option>As per Policy</option>
-                      </select>
-                    </div>
-                    <div><label className="rx-label">ESOP (₹ Grant Value)</label><input className="rx-input" type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
-                    <div><label className="rx-label">ESOP Plan / Vesting</label><input className="rx-input" value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr, 1 yr cliff" /></div>
-                  </div>
-                  <div style={{ marginTop:8 }}>
-                    <label className="rx-label">Terms &amp; Conditions <span style={{ color:C.faint, fontWeight:400, textTransform:'none' as const, letterSpacing:0 }}>— shown on the salary link</span></label>
-                    <textarea className="rx-input" style={{ minHeight:52 }} value={form.terms} onChange={e=>F('terms',e.target.value)} placeholder="e.g. Joining bonus is recoverable if the employee leaves within 12 months…" />
-                  </div>
-                  {/* Additional Amounts — add as many as needed (amount + frequency + remark) */}
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:10, marginBottom:6 }}>
-                    <div style={{ ...T.section, marginBottom:0, marginTop:0 }}>Additional Amounts</div>
-                    <button onClick={addRow} style={{ ...T.btnOutline, padding:'4px 10px', fontSize:11.5, whiteSpace:'nowrap' as const }}>+ Add</button>
-                  </div>
-                  {addItems.length===0 && <div style={{ fontSize:10.5, color:C.faint }}>Optional — e.g. a monthly allowance or a quarterly incentive.</div>}
-                  {addItems.map((r,i)=>(
-                    <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1.4fr auto', gap:6, alignItems:'end', marginBottom:6, animation:'ezFadeUp .25s ease' }}>
-                      <div><label className="rx-label">Amount (₹)</label><input className="rx-input" type="number" value={r.amount} onChange={e=>setRow(i,'amount',e.target.value)} placeholder="5000" /></div>
-                      <div><label className="rx-label">Frequency</label>
-                        <select className="rx-input" value={r.freq} onChange={e=>setRow(i,'freq',e.target.value)}>{ADD_FREQS.map(o=><option key={o}>{o}</option>)}</select>
-                      </div>
-                      <div><label className="rx-label">Remark</label><input className="rx-input" value={r.remark} onChange={e=>setRow(i,'remark',e.target.value)} placeholder="Optional note" /></div>
-                      <button onClick={()=>delRow(i)} title="Remove" style={{ padding:'8px 10px', borderRadius:7, border:`1px solid ${C.criticalEdge}`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:700 }}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              </details>
-
-              {/* Candidate salary link — save the negotiation, then share */}
-              <div style={{ borderTop:`1px solid ${C.brandEdge}`, paddingTop:10 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-                  <div style={{ ...T.section, color:C.positive, marginBottom:0, marginTop:0 }}>Candidate salary link</div>
-                  <span style={{ fontSize:10.5, color:C.faint }}>— breakup + one-time payments only, valid 7 days</span>
-                </div>
-                <button onClick={saveNegotiation} disabled={saving||!calc||ctcOutOfRange} style={{ ...T.btnPrimary, width:'100%', padding:'9px', fontSize:12.5, background:C.positive, opacity:(saving||!calc||ctcOutOfRange)?.6:1, cursor:(saving||!calc||ctcOutOfRange)?'not-allowed':'pointer', boxShadow:'0 6px 16px rgba(5,150,105,.25)' }}>
-                  {saving?'Saving…':ctcOverBudget?'CTC exceeds MRF budget':ctcBelowBudget?'CTC below MRF budget':!calc?'Enter a valid CTC first':'Save Negotiation & Generate Link'}
-                </button>
-                {savedLink&&(
-                  <div style={{ marginTop:8, background:C.positiveTint, border:`1px solid ${C.positiveEdge}`, borderRadius:10, padding:'8px 10px', animation:'ezFadeUp .3s ease' }}>
-                    <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                      <input readOnly value={savedLink} onFocus={e=>e.target.select()} className="rx-input" style={{ fontSize:10.5, fontFamily:'monospace', flex:1, padding:'7px 9px' }} />
-                      <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btnOutline, background:C.surface, borderColor:C.positive, color:C.positive, fontWeight:700, padding:'6px 10px', fontSize:11.5 }}>Copy</button>
-                      {/* Sends the link the screen already minted. A candidate who
-                          has answered is confirmed first — re-sending a break-up
-                          to someone who accepted should be deliberate. */}
-                      <button
-                        onClick={()=>{
-                          const answered = loadedNeg?.candidate_response
-                          if (answered && !window.confirm(`${sel.full_name} has already ${String(answered).toLowerCase()} this offer. Send the break-up again?`)) return
-                          emailSalaryLink(sel.id, sel.email, showNotify)
-                        }}
-                        disabled={!sel.email}
-                        title={sel.email ? `Email to ${sel.email}` : 'No email address on this candidate'}
-                        style={{ ...T.btnOutline, background:C.surface, borderColor:C.positive, color:C.positive, fontWeight:700, padding:'6px 10px', fontSize:11.5, opacity:sel.email?1:.5, cursor:sel.email?'pointer':'not-allowed' }}>Email</button>
-                      <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.positive, color:C.onAccent, textDecoration:'none', padding:'6px 10px', fontSize:11.5 }}>Open ↗</a>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ── Salary Breakdown Statement ── */}
-            <div style={{ ...T.card, position:'sticky', top:64 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, borderBottom:`1px solid ${C.brandEdge}`, paddingBottom:10, marginBottom:10 }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:700, color:C.ink }}>Salary Breakdown Statement</div>
-                  <div style={{ fontSize:10.5, color:C.faint, marginTop:2 }}>Compliant with statutory minimum wage ({form.state} · {form.category}: ₹{Math.round(mw.amount).toLocaleString('en-IN')}/mo) &amp; EPFO regulations</div>
-                </div>
-                <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                  <button onClick={()=>setShowMw(true)} style={{ ...T.btnOutline, background:C.brandTint, borderColor:C.brandEdge, color:C.brandDeep, fontWeight:700, fontSize:11.5 }}>Min wages</button>
-                  <button onClick={downloadExcel} disabled={!calc} style={{ ...T.btnOutline, background:C.positiveTint, borderColor:C.positiveEdge, color:C.positive, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>Excel</button>
-                  <button onClick={printPdf} disabled={!calc} style={{ ...T.btnOutline, background:C.criticalTint, borderColor:C.criticalEdge, color:C.critical, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>PDF</button>
-                </div>
-                {showMw && <MinWagesPopup rates={mwRates} state={form.state} category={form.category} onClose={()=>setShowMw(false)} />}
-              </div>
-
-              {calcError&&(
-                <div style={{ background:C.criticalTint, border:`1px solid ${C.criticalEdge}`, color:C.critical, fontSize:12, lineHeight:1.6, borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
-                  <b>Given CTC is too low!</b> {calcError}
-                </div>
-              )}
-              {!model && (
-                <div style={{ padding:'28px 12px', textAlign:'center' as const, color:C.faint, fontSize:12.5 }}>Enter the Total CTC to see the live breakdown.</div>
-              )}
-
-              {calc&&(
-                <div key={pulse} style={{ animation:'ezFadeUp .3s ease' }}>
-                  <CtcStatementTable rows={statementRows()} />
-
-                  {calc.gratuity==='no'&&(
-                    <div style={{ marginTop:10, background:C.infoTint, border:`1px solid ${C.infoEdge}`, borderRadius:10, padding:'9px 13px', fontSize:12, color:C.info, lineHeight:1.5 }}>
-                      <b>Note:</b> Gratuity is Over and Above the mentioned CTC package as per The Payment of Gratuity Act, 1972.
-                    </div>
-                  )}
-
-                  {/* One-time Payments */}
-                  {(calc.joining_bonus>0||calc.retention_bonus>0||calc.esop>0)&&(
-                    <div style={{ marginTop:12 }}>
-                      <div style={T.section}>One-time Payments</div>
-                      {calc.joining_bonus>0&&(
-                        <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
-                          <span>Joining Bonus <span style={{ fontSize:10, color:C.faint }}>({form.joining_freq})</span></span>
-                          <span style={{ fontWeight:600, color:C.positive }}>₹{calc.joining_bonus.toLocaleString('en-IN')}</span>
-                        </div>
-                      )}
-                      {calc.retention_bonus>0&&(
-                        <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
-                          <span>Retention Bonus <span style={{ fontSize:10, color:C.faint }}>({form.retention_freq})</span></span>
-                          <span style={{ fontWeight:600, color:C.positive }}>₹{calc.retention_bonus.toLocaleString('en-IN')}</span>
-                        </div>
-                      )}
-                      {calc.esop>0&&(
-                        <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', fontSize:12 }}>
-                          <span>ESOP Grant Value <span style={{ fontSize:10, color:C.faint }}>{form.esop_plan&&`(${form.esop_plan})`}</span></span>
-                          <span style={{ fontWeight:600, color:C.brand }}>₹{calc.esop.toLocaleString('en-IN')}</span>
-                        </div>
-                      )}
-                      {calc.terms_conditions && <div style={{ fontSize:11, color:C.muted, padding:'6px 10px', lineHeight:1.5 }}><b style={{ color:C.ink }}>T&amp;C:</b> {calc.terms_conditions}</div>}
-                    </div>
-                  )}
-
-                  {/* Additional Amounts */}
-                  {Array.isArray(calc.additional_items)&&calc.additional_items.length>0&&(
-                    <div style={{ marginTop:12 }}>
-                      <div style={T.section}>Additional Amounts</div>
-                      {calc.additional_items.map((r:any,i:number)=>(
-                        <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom:`1px solid ${C.brandEdge}`, fontSize:12 }}>
-                          <span>Additional <span style={{ fontSize:10, color:C.faint }}>({r.freq}{r.remark?` · ${r.remark}`:''})</span></span>
-                          <span style={{ fontWeight:600, color:C.positive }}>₹{Number(r.amount).toLocaleString('en-IN')}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {calc.hike&&(
-                    <div style={{ marginTop:12, background:C.positiveTint, borderRadius:10, padding:'10px 14px', display:'flex', gap:16, flexWrap:'wrap' as const }}>
-                      <span style={{ fontSize:13, color:C.positive, fontWeight:600 }}>Hike: {calc.hike}%</span>
-                      <span style={{ fontSize:12, color:C.inkSoft }}>Current: ₹{((sel?.current_ctc||0)/100000).toFixed(1)}L → Offered: ₹{(calc.ctcAnnual/100000).toFixed(1)}L</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    {confirm && (
+      <ConfirmDialogView
+        title={confirm.kind==='reject' ? `Move ${confirm.cand.full_name} to Rejected?` : 'Send the break-up again?'}
+        confirmLabel={confirm.kind==='reject' ? 'Move to Rejected' : 'Send again'}
+        tone={confirm.kind==='reject' ? 'danger' : 'primary'}
+        onCancel={()=>setConfirm(null)}
+        onConfirm={()=>{
+          const c = confirm
+          setConfirm(null)
+          if (c.kind==='reject') { void doRejectCand(c.cand) }
+          else { emailSalaryLink(c.cand.id, c.cand.email, showNotify) }
+        }}>
+        {confirm.kind==='reject'
+          ? "They'll leave the negotiation list."
+          : `${confirm.cand.full_name} has already ${String(loadedNeg?.candidate_response||'').toLowerCase()} this offer.`}
+      </ConfirmDialogView>
+    )}
     </RxPage>
   )
 }
 
 // Module-scope (never re-mounts) — the statement table, themed like the reference studio.
-function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
-  const cell:React.CSSProperties = { padding:'6px 10px', fontSize:12 }
-  const num:React.CSSProperties = { ...cell, textAlign:'right' as const, whiteSpace:'nowrap' as const, fontVariantNumeric:'tabular-nums' }
-  const tone:Record<string,{ color?:string; bg?:string; weight?:number }> = {
-    row:{}, sum:{ bg:C.sunken, weight:700 }, emp:{ color:C.brandDeep }, grat:{ color:C.positive }, bonus:{ color:C.info },
-    muted:{ color:C.faint }, total:{ bg:C.brand, color:C.onAccent, weight:700 }, ded:{ color:C.critical }, net:{ bg:C.positive, color:C.onAccent, weight:700 },
-  }
-  // The ₹ columns are nowrap and cannot shrink, so once the grid track above
-  // was allowed a zero minimum this table became the thing that would overflow.
-  // A table is permitted to be wider than the page — but inside its own
-  // scroller, not by dragging the whole document sideways. Comment sits above
-  // the return: a JSX comment after `return (` parses as an empty object
-  // literal and breaks the file.
-  return (
-    <div style={{ overflowX:'auto' }}>
-    <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:0 }}>
-      <thead>
-        <tr style={{ background:C.sunken }}>
-          <th style={{ ...cell, textAlign:'left' as const, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700, borderRadius:'8px 0 0 8px' }}>Component</th>
-          <th style={{ ...num, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700 }}>Monthly (₹)</th>
-          <th style={{ ...num, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700, borderRadius:'0 8px 8px 0' }}>Annual (₹)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r,i)=>{
-          if (r.kind==='head') return <tr key={i}><td colSpan={3} style={{ ...cell, paddingTop:16, paddingBottom:4, fontSize:11, fontWeight:700, color:C.muted }}>{r.label}</td></tr>
-          if (r.kind==='note') return <tr key={i}><td colSpan={3} style={{ ...cell, fontSize:10, color:C.faint, lineHeight:1.5 }}>{r.label}</td></tr>
-          const t = tone[r.kind]||{}
-          const big = r.kind==='total'||r.kind==='net'
-          const base:React.CSSProperties = { background:t.bg, color:t.color||C.ink, fontWeight:t.weight||500, borderBottom: t.bg?'none':`1px solid ${C.brandEdge}` }
-          const nil = (r.monthly||0)===0 && (r.kind==='emp'||r.kind==='ded')
-          return (
-            <tr key={i}>
-              <td style={{ ...cell, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?13:12, borderRadius: t.bg?'10px 0 0 10px':0 }}>
-                {r.label}{r.basis && <span style={{ fontSize:10, color: t.bg&&t.color===C.onAccent ? 'rgba(255,255,255,.75)' : C.faint, fontWeight:400, marginLeft:6 }}>· {r.basis}</span>}
-              </td>
-              <td style={{ ...num, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?13:12, opacity: nil?.55:1 }}>{nil?'Nil':`₹${Math.round(r.monthly||0).toLocaleString('en-IN')}`}</td>
-              <td style={{ ...num, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?14:12, borderRadius: t.bg?'0 10px 10px 0':0, opacity: nil?.55:1 }}>{nil?'Nil':`₹${Math.round(r.annual||0).toLocaleString('en-IN')}`}</td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
-    </div>
-  )
-}
 
 // ── OFFERS TAB ────────────────────────────────────────────────────
 // ── OFFER APPROVAL TAB (Recruiter → HR Head) ──────────────────────
