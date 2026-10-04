@@ -77,6 +77,11 @@ export interface DocLinkDrawerViewProps {
   onCancelReject: () => void
   onConfirmReject: () => void
   rejecting: boolean
+
+  /** True while the container's GET is in flight. The header, the step
+   *  indicator and the close / previous / next controls all come from props
+   *  and are drawn at once; only the body waits. */
+  loading?: boolean
 }
 
 interface IconProps {
@@ -515,9 +520,17 @@ export default function DocLinkDrawerView(props: DocLinkDrawerViewProps) {
           </div>
         </div>
         <Steps mode={props.mode} />
-        {props.mode === 'main' && <MainMode {...props} />}
-        {props.mode === 'send' && <SendMode {...props} />}
-        {props.mode === 'status' && <StatusMode {...props} />}
+        {props.loading === true ? (
+          <div className="rxn-dbody">
+            <div className="rxn-hint">Loading this candidate's documents.</div>
+          </div>
+        ) : (
+          <>
+            {props.mode === 'main' && <MainMode {...props} />}
+            {props.mode === 'send' && <SendMode {...props} />}
+            {props.mode === 'status' && <StatusMode {...props} />}
+          </>
+        )}
       </div>
     </div>
   )

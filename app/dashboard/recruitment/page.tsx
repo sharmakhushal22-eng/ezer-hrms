@@ -4955,11 +4955,12 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
   return (
     <>
-      {/* No loading slot in the drawer. Rendering it early would flash
-          "Create CTC Negotiation Link" before the link card arrives, so it
-          waits instead -- the GET is one round trip. */}
-      {!loading && (
+      {/* Drawn at once: the header, the 1-2-3 steps and the close / previous /
+          next controls come from props, so only the body waits on the GET.
+          Gating the whole drawer showed a blank; rendering it ungated flashed
+          "Create CTC Negotiation Link" before the link card arrived. */}
       <DocLinkDrawerView
+        loading={loading}
         nav={nav}
         mode={mode}
         onMode={setMode}
@@ -5023,7 +5024,6 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
         onConfirmReject={()=>{ if (rejecting) void onReject(rejecting) }}
         rejecting={!!rejecting && busyDoc===rejecting.id}
       />
-      )}
 
       {/* The document viewer. The drawer only asks (onViewDoc); this is what
           actually shows the file, and the redesign has no slot for it, so it
