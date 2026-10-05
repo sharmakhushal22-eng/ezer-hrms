@@ -5777,8 +5777,14 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   // Choosing a company clears department and location, exactly as the old
   // selects did -- those two lists are scoped to the chosen company.
   const onOaFilter = (key:string, value:string) => {
-    if (key === 'company') { setF({ ...f, company:value, department:'', location:'' }); return }
-    setF({ ...f, [key]: value })
+    // Functional form on purpose. "Clear all" in the queue calls this once per
+    // set filter in a SINGLE tick; spreading a captured `f` let the last call
+    // reinstate what the earlier ones had just cleared, so clearing two filters
+    // left one behind. Reproduced as QA B6 (company stayed set, department went).
+    // The inline select handlers elsewhere in this file fire one per user event,
+    // so the same shape is harmless there.
+    if (key === 'company') { setF(cur => ({ ...cur, company:value, department:'', location:'' })); return }
+    setF(cur => ({ ...cur, [key]: value }))
   }
   // The same six counters the pills showed, over the same list. A zero one is
   // disabled rather than hidden, so the set of statuses never moves about.
