@@ -105,66 +105,114 @@ function CcPicker({ value, onChange }: { value: CcEmp[]; onChange: (v: CcEmp[]) 
   useEffect(() => { supabase.from('employees').select('id, full_name, emp_code, designation').is('date_of_leaving', null).order('full_name').then(({ data }) => setEmps((data as CcEmp[]) || [])) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const s = q.trim().toLowerCase()
   const hits = s ? emps.filter(e => !value.some(v => v.id === e.id) && ((e.full_name || '').toLowerCase().includes(s) || (e.emp_code || '').toLowerCase().includes(s))).slice(0, 8) : []
+  const initialsOf = (n: string) => n.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('')
   return (
-    <div>
-      {value.length > 0 && (
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
-          {value.map(e => (
-            <span key={e.id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:TK.brandTint, color:TK.brandDeep, borderRadius:99, padding:'3px 6px 3px 10px', fontSize:11.5, fontWeight:600 }}>
-              {e.full_name} <span style={{ color:TK.faint }}>{e.emp_code}</span>
-              <button type="button" onClick={() => onChange(value.filter(v => v.id !== e.id))} style={{ border:'none', background:'transparent', cursor:'pointer', color:TK.brandDeep, fontSize:13, lineHeight:1 }}>×</button>
-            </span>
+    <div style={{ position:'relative' }}>
+      {/* One bordered well holding the chosen people and the search box, so the
+          picker reads as a single field rather than a list above an input. */}
+      <div className="rxo-cc">
+        {value.map(e => (
+          <button key={e.id} type="button" className="rxo-cc-p" title={`Remove ${e.full_name}`} onClick={() => onChange(value.filter(v => v.id !== e.id))}>
+            <span className="rxo-cc-av">{initialsOf(e.full_name || '?')}</span>
+            {e.full_name}
+            <Icon d={I.close} size={12} />
+          </button>
+        ))}
+        <input className="rxo-cc-in" value={q} onChange={e => setQ(e.target.value)} placeholder={value.length ? 'Add another…' : 'Search by name or employee code to CC…'} aria-label="Add a colleague to copy" />
+      </div>
+      {hits.length > 0 && (
+        <div className="rxo-cc-hits">
+          {hits.map(e => (
+            <button key={e.id} type="button" className="rxo-cc-hit" onClick={() => { onChange([...value, e]); setQ('') }}>
+              <span className="rxo-cc-av">{initialsOf(e.full_name || '?')}</span>
+              <span>{e.full_name}<span className="rxo-cc-hit-m"> · {e.emp_code || '—'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
+            </button>
           ))}
         </div>
       )}
-      <div style={{ position:'relative' }}>
-        <input className="rx-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name or employee code to CC…" />
-        {hits.length > 0 && (
-          <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:Z.raised, background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:8, marginTop:3, boxShadow:E.floating, maxHeight:220, overflowY:'auto' }}>
-            {hits.map(e => (
-              <button key={e.id} type="button" onClick={() => { onChange([...value, e]); setQ('') }} style={{ display:'flex', width:'100%', textAlign:'left', gap:8, alignItems:'center', padding:'8px 11px', border:'none', borderBottom:`1px solid ${TK.line}`, background:TK.surface, cursor:'pointer', fontFamily:'inherit' }}>
-                <span style={{ flex:1, fontSize:12.5, color:TK.ink }}>{e.full_name} <span style={{ color:TK.faint }}>· {e.emp_code || '—'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
 
+
+// ── Icons for the request form. Module scope, same shape as the queue view's:
+// sized by `.rxo svg.rxo-ico.sNN`, which outranks the frame's `.rx svg` rule. ──
+interface OaIconProps {
+  d: string
+  size?: number
+}
+
+function Icon({ d, size = 16 }: OaIconProps) {
+  return (
+    <svg className={`rxo-ico s${size}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  )
+}
+
+const I = {
+  back: 'M15 6l-6 6 6 6',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  lock: 'M7 11V8a5 5 0 0110 0v3M6 11h12a1 1 0 011 1v7a1 1 0 01-1 1H6a1 1 0 01-1-1v-7a1 1 0 011-1z',
+  info: 'M12 11v5M12 7.5v.5M12 21a9 9 0 100-18 9 9 0 000 18z',
+  doc: 'M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5zM14 3v5h5M9 13h6M9 17h4',
+  send: 'M4 12l16-7-6 16-3-7-7-2z',
+  refresh: 'M20 11a8 8 0 10-2.3 5.7M20 5v6h-6',
+  eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 15a3 3 0 100-6 3 3 0 000 6z',
+  close: 'M6 6l12 12M18 6L6 18',
+}
 
 // ── Offer-approval form primitives (module scope: never re-mount while typing) ──
 function OaField({ label, hint, children, span }: { label: string; hint?: string; children: React.ReactNode; span?: number }) {
+  // Call sites mark a required field by ending the label with " *". That
+  // wording is kept exactly; the star is only lifted into its own span so the
+  // stylesheet can colour it. A div, not a label: this also wraps the buyout
+  // button pair and the CC picker, and a <label> around buttons misdirects
+  // clicks to the first control inside it.
+  const must = label.trimEnd().endsWith('*')
+  const text = must ? label.trimEnd().slice(0, -1).trimEnd() : label
   return (
-    <div className="rx-field" style={span ? { gridColumn: `span ${span}` } : undefined}>
-      <label className="rx-label">{label}</label>
+    <div className={span !== undefined && span > 1 ? 'rxo-field full' : 'rxo-field'}>
+      <span className="rxo-field-l">
+        {text}
+        {must && <span className="rxo-must" aria-hidden="true">*</span>}
+      </span>
       {children}
-      {hint && <div className="rx-hint">{hint}</div>}
+      {hint && <span className="rxo-field-h">{hint}</span>}
     </div>
   )
 }
-function OaCard({ n, title, sub, tag, children }: { n: number; title: string; sub?: string; tag?: React.ReactNode; children: React.ReactNode }) {
+function OaCard({ n, title, sub, tag, done = false, children }: { n: number; title: string; sub?: string; tag?: React.ReactNode; done?: boolean; children: React.ReactNode }) {
+  // `done` is optional and defaults to false, so existing call sites are
+  // unaffected. It only reads the readiness the form already computes; it
+  // decides nothing and gates nothing.
   return (
-    <div className="rx-mod">
-      <div className="rx-mod-h">
-        <div className="rx-mod-t"><span style={{ width:24, height:24, borderRadius:8, background:TK.brandTint, color:TK.brandDeep, display:'grid', placeItems:'center', fontSize:12, fontWeight:800 }}>{n}</span>{title}{tag}</div>
-        {sub && <div className="rx-mod-m">{sub}</div>}
+    <section className="rxo-panel" aria-label={title}>
+      <div className="rxo-panel-h">
+        <span className="rxo-panel-n" data-done={done}>{done ? <Icon d={I.check} size={14} /> : n}</span>
+        <div className="rxo-panel-hb">
+          <h3 className="rxo-panel-t">{title}</h3>
+          {sub && <span className="rxo-panel-s">{sub}</span>}
+        </div>
+        {tag}
       </div>
-      {children}
-    </div>
+      <div className="rxo-panel-b">{children}</div>
+    </section>
   )
 }
-function OaTile({ l, v, sub, tone }: { l: string; v: string; sub?: string; tone?: 'brand' | 'ok' }) {
+function OaTile({ l, v, sub }: { l: string; v: string; sub?: string; tone?: 'brand' | 'ok' }) {
+  // `tone` is still accepted so call sites are untouched, but it is no longer
+  // painted: the design's colour rule is that numbers are never tone-coloured,
+  // and the stylesheet defines no tile tone. Inventing one here would be the
+  // only hardcoded colour decision in the block.
   return (
-    <div className="rx-tile" style={tone === 'ok' ? { background:TK.positiveTint } : undefined}>
-      <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color: tone === 'ok' ? TK.positive : TK.muted }}>{l}</div>
-      <div style={{ fontSize:18, fontWeight:800, letterSpacing:'-.02em', color: tone === 'ok' ? TK.positive : TK.ink, marginTop:3, ...numeric }}>{v}</div>
-      {sub && <div style={{ fontSize:11.5, color:TK.faint, marginTop:2 }}>{sub}</div>}
+    <div className="rxo-tile">
+      <span className="rxo-tile-k">{l}</span>
+      <span className="rxo-tile-v">{v}</span>
+      {sub && <span className="rxo-tile-s">{sub}</span>}
     </div>
   )
 }
-const oaGrid = (cols: string): React.CSSProperties => ({ display:'grid', gridTemplateColumns: cols, gap:12 })
 
 // ═══════════════════════════════════════════════════════════════
 // RECRUITER: CREATE OFFER APPROVAL REQUEST
@@ -395,153 +443,216 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   const ready = readiness.every(x => x.ok) && !!negotiation
   const initials = (candidate?.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
   return (
-    <div className="rx-grid rx-stag">
-      {/* ── LEFT: the request, in four numbered steps ── */}
-      <div className="s8" style={{ display:'flex', flexDirection:'column', gap:16 }}>
-        {/* candidate strip */}
-        <div className="rx-mod" style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
-          <div style={{ width:48, height:48, borderRadius:14, background:`linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:16, flexShrink:0 }}>{initials}</div>
-          <div style={{ flex:'1 1 240px', minWidth:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-              <span style={{ fontSize:17, fontWeight:800, color:TK.ink, letterSpacing:'-.01em' }}>{candidate?.full_name}</span>
-              {mrf?.mrf_number && <span className="rx-chip">{mrf.mrf_number}</span>}
-              {candidate?.offer_revised && <span className="rx-chip" style={{ color:TK.warning, background:TK.warningTint }}>Revised offer</span>}
+    <div className="rxo">
+      {/* The band: who this is for, and the figure being signed off. Every
+          value here is already on screen below; nothing new is derived. */}
+      <div className="rxo-slip">
+        <div className="rxo-slip-who">
+          <span className="rxo-av on" aria-hidden="true">{initials}</span>
+          <div className="rxo-slip-b">
+            <span className="rxo-slip-n">{candidate?.full_name}</span>
+            <span className="rxo-slip-r">
+              {[mrf?.designation || candidate?.designation, candidate?.current_company ? `at ${candidate.current_company}` : null, candidate?.experience_years != null ? `${candidate.experience_years} yrs` : null].filter(Boolean).join(' · ')}
+            </span>
+            <div className="rxo-tags">
+              {mrf?.mrf_number && <span className="rxo-tag on">{mrf.mrf_number}</span>}
+              {candidate?.stage && <span className="rxo-tag on">{candidate.stage}</span>}
+              {candidate?.offer_revised && <span className="rxo-tag on">Revised offer</span>}
             </div>
-            <div className="rx-meta" style={{ marginTop:3 }}>
-              {[mrf?.designation || candidate?.designation, candidate?.current_company ? `at ${candidate.current_company}` : null, candidate?.experience_years != null ? `${candidate.experience_years} yrs` : null, candidate?.stage].filter(Boolean).join(' · ')}
-            </div>
-          </div>
-          <div style={{ textAlign:'right' }}>
-            <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted }}>Accepted offer</div>
-            <div style={{ fontSize:20, fontWeight:800, color:TK.positive, ...numeric }}>₹{fmt(ctcN)}</div>
-            <div className="rx-meta">per annum</div>
           </div>
         </div>
-
-        {/* 1 · offered package — read only, straight from the calculator */}
-        <OaCard n={1} title="Offered package" sub="from the negotiation calculator — change it there, not here">
-          {negotiation ? (<>
-            <div style={oaGrid('repeat(auto-fit, minmax(150px, 1fr))')}>
-              <OaTile l="Annual CTC" v={`₹${fmt(ctcN)}`} sub={varAmt ? `fixed ₹${fmt(fixedAmt)}` : 'all fixed'} />
-              <OaTile l="Variable" v={varAmt ? `₹${fmt(varAmt)}` : 'Nil'} sub={varAmt ? `${varPct}% of CTC` : undefined} />
-              <OaTile l="Monthly in-hand" v={`₹${fmt(negotiation.net_monthly || 0)}`} sub="estimated · before TDS" tone="ok" />
-              <OaTile l="Hike" v={hikeLive != null && isFinite(hikeLive) ? `${hikeLive > 0 ? '+' : ''}${hikeLive.toFixed(1)}%` : '—'} sub={prevTotal > 0 ? `over ₹${fmt(prevTotal)}` : 'enter previous CTC'} />
-            </div>
-            {(Number(negotiation.joining_bonus) > 0 || Number(negotiation.retention_bonus) > 0 || Number(negotiation.esop_value) > 0) && (
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
-                {Number(negotiation.joining_bonus) > 0 && <span className="rx-chip">Joining bonus ₹{fmt(negotiation.joining_bonus)}{negotiation.joining_bonus_freq ? ` · ${negotiation.joining_bonus_freq}` : ''}</span>}
-                {Number(negotiation.retention_bonus) > 0 && <span className="rx-chip">Retention ₹{fmt(negotiation.retention_bonus)}{negotiation.retention_bonus_freq ? ` · ${negotiation.retention_bonus_freq}` : ''}</span>}
-                {Number(negotiation.esop_value) > 0 && <span className="rx-chip">ESOP ₹{fmt(negotiation.esop_value)}{negotiation.esop_remark ? ` · ${negotiation.esop_remark}` : ''}</span>}
-              </div>
-            )}
-          </>) : (
-            <div className="rx-meta">No CTC negotiation found. Build the offer in the Negotiation tab first.</div>
-          )}
-        </OaCard>
-
-        {/* 2 · previous employer */}
-        <OaCard n={2} title="Previous employer" tag={<span className="rx-chip" style={{ color:TK.warning, background:TK.warningTint }}>Confidential — HR only</span>} sub="prefilled from the candidate record; not shown to the candidate">
-          <div style={oaGrid('1fr 1fr')}>
-            <OaField label="Previous company *"><input className="rx-input" value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></OaField>
-            <OaField label="Company address"><input className="rx-input" value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></OaField>
+        <div className="rxo-figs">
+          <div className="rxo-fig">
+            <span className="rxo-fig-k">Offered annual CTC</span>
+            <span className="rxo-fig-v">₹{fmt(ctcN)}</span>
           </div>
-          <div style={{ ...oaGrid('1fr 1fr 1fr'), marginTop:12 }}>
-            <OaField label="Previous total CTC (₹ p.a.) *" hint={prevTotal > 0 && ctcN > 0 ? `hike works out to ${hikeLive! > 0 ? '+' : ''}${hikeLive!.toFixed(1)}%` : undefined}><input className="rx-input" type="number" min={0} step={1} value={prevForm.prev_total_ctc} onChange={e=>P('prev_total_ctc',e.target.value)} placeholder="e.g. 900000" /></OaField>
-            <OaField label="Fixed (₹ p.a.)"><input className="rx-input" type="number" min={0} step={1} value={prevForm.prev_fixed_ctc} onChange={e=>P('prev_fixed_ctc',e.target.value)} placeholder="e.g. 810000" /></OaField>
-            <OaField label="Variable (₹ p.a.)"><input className="rx-input" type="number" min={0} step={1} value={prevForm.prev_variable} onChange={e=>P('prev_variable',e.target.value)} placeholder="e.g. 90000" /></OaField>
+          <div className="rxo-fig">
+            <span className="rxo-fig-k">Hike</span>
+            <span className="rxo-fig-v">{hikeLive != null && isFinite(hikeLive) ? `${hikeLive > 0 ? '+' : ''}${hikeLive.toFixed(1)}%` : '—'}</span>
           </div>
-          <div style={{ ...oaGrid('1fr 1fr'), marginTop:12 }}>
-            <OaField label="TA / DA (₹ monthly)"><input className="rx-input" type="number" min={0} step={1} value={prevForm.prev_ta_da} onChange={e=>P('prev_ta_da',e.target.value)} placeholder="0 if not applicable" /></OaField>
-            <OaField label="Any additional payment"><input className="rx-input" value={prevForm.prev_additional} onChange={e=>P('prev_additional',e.target.value)} placeholder="e.g. car allowance, retention, offer in hand" /></OaField>
+          <div className="rxo-fig">
+            <span className="rxo-fig-k">Monthly in hand</span>
+            <span className="rxo-fig-v">₹{fmt(negotiation?.net_monthly || 0)}</span>
           </div>
-        </OaCard>
-
-        {/* 3 · joining */}
-        <OaCard n={3} title="Joining" sub="when the candidate can start, and what it costs to get them">
-          <div style={oaGrid('1fr 1fr 1fr')}>
-            <OaField label="Proposed date of joining *" hint={joining.proposed_doj ? `${daysDiff(joining.proposed_doj)} days from today` : undefined}><input className="rx-input" type="date" value={joining.proposed_doj} onChange={e=>J('proposed_doj',e.target.value)} /></OaField>
-            <OaField label="Notice period (days)"><input className="rx-input" type="number" min={0} step={1} value={joining.notice_period_days} onChange={e=>J('notice_period_days',e.target.value)} placeholder="e.g. 30" /></OaField>
-            <OaField label="Notice buyout">
-              <div className="rx-seg" style={{ display:'inline-flex', gap:4, padding:4, borderRadius:11, background:TK.sunken }}>
-                {[['No', false], ['Yes', true]].map(([l, v]) => (
-                  <button key={String(l)} type="button" onClick={() => J('notice_buyout', v)} className="rx-btn sm" style={{ border:'none', boxShadow:'none', background: joining.notice_buyout === v ? TK.surface : 'transparent', color: joining.notice_buyout === v ? TK.ink : TK.muted, fontWeight: joining.notice_buyout === v ? 700 : 500 }}>{l as string}</button>
-                ))}
-              </div>
-            </OaField>
-          </div>
-          {joining.notice_buyout && (
-            <div style={{ ...oaGrid('1fr 2fr'), marginTop:12, alignItems:'end' }}>
-              <OaField label="Buyout amount (₹)"><input className="rx-input" type="number" min={0} step={1} value={joining.notice_buyout_amount} onChange={e=>J('notice_buyout_amount',e.target.value)} placeholder="e.g. 60000" /></OaField>
-              <div className="rx-hint" style={{ paddingBottom:10 }}>Goes into the approval mail as “Notice buyout” — leave blank if the amount is not known yet.</div>
-            </div>
-          )}
-        </OaCard>
-
-        {/* 4 · notes & recipients */}
-        <OaCard n={4} title="Notes & recipients" sub="context for the HR Head, and who else should get the mail">
-          <div style={oaGrid('1fr')}>
-            <OaField label="Hiring manager remark / target"><input className="rx-input" value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for the HR Head…" /></OaField>
-            <OaField label="Recruiter comments"><textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:76 }} value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for the HR Head…" /></OaField>
-            <OaField label="CC on the approval mail" hint="Everyone here receives the same mail and attachments as the HR Head."><CcPicker value={cc} onChange={setCc} /></OaField>
-          </div>
-        </OaCard>
-
-        {/* the approval request, as the HR Head will see it */}
-        {showTemplate && (
-          <div className="rx-mod" style={{ padding:0, overflow:'hidden' }}>
-            <div className="rx-mod-h" style={{ padding:'14px 22px 0' }}>
-              <div className="rx-mod-t">Approval request — preview</div>
-              <div style={{ display:'flex', gap:8 }}>
-                <button type="button" className="rx-btn sm" onClick={generateTemplate}>Regenerate</button>
-                <button type="button" className="rx-btn sm g" onClick={()=>setShowTemplate(false)}>Hide</button>
-              </div>
-            </div>
-            <div style={{ padding:'0 22px 20px' }}>
-              <div className="rx-paper" style={{ padding:'28px 32px', animation:'none' }}>
-                <pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.65, color:TK.inkSoft }}>{template}</pre>
-              </div>
-              <div className="rx-hint" style={{ marginTop:8 }}>This is what goes to the HR Head with the mail. Edit the fields above and click Regenerate to refresh it.</div>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* ── RIGHT: summary rail — who approves, what goes, and the two actions ── */}
-      <div className="s4" style={{ position:'sticky', top:16, display:'flex', flexDirection:'column', gap:16 }}>
-        <div className="rx-mod">
-          <div className="rx-mod-h"><div className="rx-mod-t">Approval summary</div></div>
-          <div style={{ display:'grid', gap:10 }}>
-            <div className="rx-tile" style={{ background:TK.brandTint, border:`1px solid ${TK.brandEdge}` }}>
-              <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.brandDeep }}>Will be approved by</div>
-              <div style={{ fontSize:14, fontWeight:700, color:TK.ink, marginTop:4 }}>
-                {hrHeads == null ? 'Looking up the HR Head…' : hrHeads.length ? hrHeads.map(h => `${h.name}${h.code ? ` (${h.code})` : ''}`).join(', ') : 'No HR Head set for this company'}
+      <div className="rxo-work">
+        <div className="rxo-main">
+          {/* 1 · offered package — read only, straight from the calculator */}
+          <OaCard n={1} done={!!negotiation} title="Offered package" sub="from the negotiation calculator — change it there, not here" tag={<span className="rxo-flag" data-tone="plain">Read-only</span>}>
+            {negotiation ? (<>
+              <div className="rxo-tiles">
+                <OaTile l="Annual CTC" v={`₹${fmt(ctcN)}`} sub={varAmt ? `fixed ₹${fmt(fixedAmt)}` : 'all fixed'} />
+                <OaTile l="Variable" v={varAmt ? `₹${fmt(varAmt)}` : 'Nil'} sub={varAmt ? `${varPct}% of CTC` : undefined} />
+                <OaTile l="Monthly in-hand" v={`₹${fmt(negotiation.net_monthly || 0)}`} sub="estimated · before TDS" tone="ok" />
+                <OaTile l="Hike" v={hikeLive != null && isFinite(hikeLive) ? `${hikeLive > 0 ? '+' : ''}${hikeLive.toFixed(1)}%` : '—'} sub={prevTotal > 0 ? `over ₹${fmt(prevTotal)}` : 'enter previous CTC'} />
               </div>
-              <div className="rx-hint" style={{ marginTop:2 }}>Notified in HRIS → Tasks & Approvals and by mail{cc.length ? `, CC ${cc.length}` : ''}.</div>
-            </div>
-            <div>
-              <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted, marginBottom:6 }}>Goes with the mail</div>
-              {[['MRF', mrf?.mrf_number ? `Requisition ${mrf.mrf_number} as a PDF` : 'Requisition as a PDF'], ['Interview summary', 'every candidate on this MRF, rounds, scores and decisions'], ['CTC acknowledgement', 'the accepted salary break-up · password-protected (candidate’s mobile number)']].map(([k, v]) => (
-                <div key={k} style={{ display:'flex', gap:8, padding:'6px 0', borderTop:`1px solid ${TK.line}`, fontSize:12.5 }}>
-                  <span style={{ color:TK.positive, fontWeight:800 }}>📎</span><div><b style={{ color:TK.ink }}>{k}</b><div className="rx-hint">{v}</div></div>
+              {(Number(negotiation.joining_bonus) > 0 || Number(negotiation.retention_bonus) > 0 || Number(negotiation.esop_value) > 0) && (
+                <div className="rxo-tags">
+                  {Number(negotiation.joining_bonus) > 0 && <span className="rxo-tag">Joining bonus ₹{fmt(negotiation.joining_bonus)}{negotiation.joining_bonus_freq ? ` · ${negotiation.joining_bonus_freq}` : ''}</span>}
+                  {Number(negotiation.retention_bonus) > 0 && <span className="rxo-tag">Retention ₹{fmt(negotiation.retention_bonus)}{negotiation.retention_bonus_freq ? ` · ${negotiation.retention_bonus_freq}` : ''}</span>}
+                  {Number(negotiation.esop_value) > 0 && <span className="rxo-tag">ESOP ₹{fmt(negotiation.esop_value)}{negotiation.esop_remark ? ` · ${negotiation.esop_remark}` : ''}</span>}
                 </div>
-              ))}
+              )}
+            </>) : (
+              <span className="rxo-hint">No CTC negotiation found. Build the offer in the Negotiation tab first.</span>
+            )}
+          </OaCard>
+
+          {/* 2 · previous employer */}
+          <OaCard n={2} done={readiness[0]?.ok === true && readiness[1]?.ok === true} title="Previous employer" tag={<span className="rxo-flag" data-tone="warn"><Icon d={I.lock} size={12} />Confidential — HR only</span>} sub="prefilled from the candidate record; not shown to the candidate">
+            <div className="rxo-fields">
+              <OaField label="Previous company *"><input className="rxo-input" value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></OaField>
+              <OaField label="Company address"><input className="rxo-input" value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></OaField>
+              <OaField label="Previous total CTC (₹ p.a.) *" hint={prevTotal > 0 && ctcN > 0 ? `hike works out to ${hikeLive! > 0 ? '+' : ''}${hikeLive!.toFixed(1)}%` : undefined}>
+                <span className="rxo-money"><span className="rxo-money-s">₹</span><input className="rxo-input" type="number" min={0} step={1} value={prevForm.prev_total_ctc} onChange={e=>P('prev_total_ctc',e.target.value)} placeholder="900000" /></span>
+              </OaField>
+              <OaField label="Fixed (₹ p.a.)">
+                <span className="rxo-money"><span className="rxo-money-s">₹</span><input className="rxo-input" type="number" min={0} step={1} value={prevForm.prev_fixed_ctc} onChange={e=>P('prev_fixed_ctc',e.target.value)} placeholder="810000" /></span>
+              </OaField>
+              <OaField label="Variable (₹ p.a.)">
+                <span className="rxo-money"><span className="rxo-money-s">₹</span><input className="rxo-input" type="number" min={0} step={1} value={prevForm.prev_variable} onChange={e=>P('prev_variable',e.target.value)} placeholder="90000" /></span>
+              </OaField>
+              <OaField label="TA / DA (₹ monthly)">
+                <span className="rxo-money"><span className="rxo-money-s">₹</span><input className="rxo-input" type="number" min={0} step={1} value={prevForm.prev_ta_da} onChange={e=>P('prev_ta_da',e.target.value)} placeholder="0 if not applicable" /></span>
+              </OaField>
+              <OaField label="Any additional payment" span={2}><input className="rxo-input" value={prevForm.prev_additional} onChange={e=>P('prev_additional',e.target.value)} placeholder="e.g. car allowance, retention, offer in hand" /></OaField>
             </div>
-            <div>
-              <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted, marginBottom:6 }}>Ready to submit?</div>
-              {readiness.map(x => (
-                <div key={x.k} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', fontSize:12.5, color: x.ok ? TK.ink : TK.muted }}>
-                  <span style={{ width:18, height:18, borderRadius:99, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, background: x.ok ? TK.positiveTint : TK.sunken, color: x.ok ? TK.positive : TK.faint }}>{x.ok ? '✓' : '·'}</span>{x.k}
+            {/* Two bar widths from two numbers already on screen. Nothing is
+                stored and no figure is derived from it. */}
+            {prevTotal > 0 && ctcN > 0 && (
+              <div className="rxo-cmp" role="img" aria-label={`Previous ₹${fmt(prevTotal)}, offered ₹${fmt(ctcN)}`}>
+                <div className="rxo-cmp-r">
+                  <span>Previous</span>
+                  <div className="rxo-cmp-bar"><div className="rxo-cmp-f" style={{ width: `${Math.round((prevTotal / Math.max(prevTotal, ctcN, 1)) * 100)}%` }} /></div>
+                  <span className="rxo-cmp-v">₹{fmt(prevTotal)}</span>
                 </div>
-              ))}
+                <div className="rxo-cmp-r">
+                  <span>Offered</span>
+                  <div className="rxo-cmp-bar"><div className="rxo-cmp-f now" style={{ width: `${Math.round((ctcN / Math.max(prevTotal, ctcN, 1)) * 100)}%` }} /></div>
+                  <span className="rxo-cmp-v">₹{fmt(ctcN)}</span>
+                </div>
+              </div>
+            )}
+          </OaCard>
+
+          {/* 3 · joining */}
+          <OaCard n={3} done={readiness[2]?.ok === true} title="Joining" sub="when the candidate can start, and what it costs to get them">
+            <div className="rxo-fields">
+              <OaField label="Proposed date of joining *" hint={joining.proposed_doj ? `${daysDiff(joining.proposed_doj)} days from today` : undefined}><input className="rxo-input" type="date" value={joining.proposed_doj} onChange={e=>J('proposed_doj',e.target.value)} /></OaField>
+              <OaField label="Notice period (days)"><input className="rxo-input" type="number" min={0} step={1} value={joining.notice_period_days} onChange={e=>J('notice_period_days',e.target.value)} placeholder="e.g. 30" /></OaField>
+              {/* Same boolean, same handler as the No/Yes pair it replaces. */}
+              <label className="rxo-switch">
+                <input type="checkbox" checked={joining.notice_buyout} onChange={e=>J('notice_buyout', e.target.checked)} />
+                <span className="rxo-switch-t" />
+                Notice buyout
+              </label>
+              {joining.notice_buyout && (
+                <OaField label="Buyout amount (₹)" hint="Goes into the approval mail as “Notice buyout” — leave blank if the amount is not known yet.">
+                  <span className="rxo-money"><span className="rxo-money-s">₹</span><input className="rxo-input" type="number" min={0} step={1} value={joining.notice_buyout_amount} onChange={e=>J('notice_buyout_amount',e.target.value)} placeholder="60000" /></span>
+                </OaField>
+              )}
             </div>
-          </div>
-          <div className="rx-sep" />
-          <div style={{ display:'grid', gap:8 }}>
-            <button type="button" className="rx-btn" onClick={generateTemplate} disabled={!negotiation}>{template ? 'Regenerate preview' : 'Generate preview'}</button>
-            <button type="button" className="rx-btn p" onClick={submitForApproval} disabled={saving || !ready} style={{ opacity: saving || !ready ? .55 : 1 }}>{saving ? 'Submitting…' : 'Submit to HR Head →'}</button>
-            {!ready && <div className="rx-hint" style={{ textAlign:'center' }}>{!template ? 'Generate the preview, then submit.' : 'Fill the starred fields to submit.'}</div>}
-          </div>
+          </OaCard>
+
+          {/* 4 · notes & recipients */}
+          <OaCard n={4} title="Notes & recipients" sub="context for the HR Head, and who else should get the mail">
+            <div className="rxo-fields">
+              <OaField label="Hiring manager remark / target" span={2}><input className="rxo-input" value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for the HR Head…" /></OaField>
+              <OaField label="Recruiter comments" span={2}><textarea className="rxo-input area" value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for the HR Head…" /></OaField>
+              <OaField label="CC on the approval mail" span={2} hint="Everyone here receives the same mail and attachments as the HR Head."><CcPicker value={cc} onChange={setCc} /></OaField>
+            </div>
+          </OaCard>
+
+          {/* the approval request, as the HR Head will see it */}
+          {showTemplate && (
+            <section className="rxo-panel" aria-label="Approval request preview">
+              <div className="rxo-panel-h">
+                <span className="rxo-panel-n" data-done={!!template}><Icon d={I.eye} size={14} /></span>
+                <div className="rxo-panel-hb">
+                  <h3 className="rxo-panel-t">Approval request — preview</h3>
+                  <span className="rxo-panel-s">What the HR Head will read. It is frozen when you send.</span>
+                </div>
+                <div className="rxo-panel-a">
+                  <button type="button" className="rxo-btn ghost sm" onClick={generateTemplate}><Icon d={I.refresh} size={14} />Regenerate</button>
+                  <button type="button" className="rxo-btn ghost sm" onClick={()=>setShowTemplate(false)}>Hide</button>
+                </div>
+              </div>
+              <div className="rxo-panel-b">
+                <div className="rxo-paper">{template}</div>
+                <span className="rxo-hint"><Icon d={I.info} size={14} />This is what goes to the HR Head with the mail. Edit the fields above and press Regenerate to refresh it.</span>
+              </div>
+            </section>
+          )}
         </div>
+
+        {/* The rail: what is still missing, who signs it off, and what travels with it. */}
+        <aside className="rxo-rail" aria-label="Before you send">
+          <section className="rxo-panel">
+            <div className="rxo-panel-b">
+              <div className="rxo-meter">
+                <div className="rxo-meter-r">
+                  <span>{ready ? 'Ready to send' : 'Before you send'}</span>
+                  <b>{readiness.filter(x => x.ok).length} of {readiness.length}</b>
+                </div>
+                <div className="rxo-meter-bar">
+                  <div className="rxo-meter-f" data-full={ready} style={{ width: `${Math.round((readiness.filter(x => x.ok).length / readiness.length) * 100)}%` }} />
+                </div>
+              </div>
+              <ul className="rxo-ready">
+                {readiness.map(x => (
+                  <li key={x.k} className="rxo-ready-i" data-ok={x.ok}>
+                    <span className="rxo-ready-d">{x.ok ? <Icon d={I.check} size={12} /> : null}</span>
+                    {x.k}
+                  </li>
+                ))}
+              </ul>
+              <button type="button" className="rxo-btn ghost wide" onClick={generateTemplate} disabled={!negotiation}>
+                <Icon d={I.refresh} size={14} />{template ? 'Regenerate preview' : 'Generate preview'}
+              </button>
+              <button type="button" className="rxo-btn p lg wide" onClick={submitForApproval} disabled={saving || !ready}>
+                <Icon d={I.send} />{saving ? 'Submitting…' : 'Submit for approval'}
+              </button>
+              {!ready && <span className="rxo-hint">{!template ? 'Generate the preview, then submit.' : 'Fill the starred fields to submit.'}</span>}
+            </div>
+          </section>
+
+          <section className="rxo-panel">
+            <div className="rxo-panel-b">
+              <span className="rxo-rail-k">Will be approved by</span>
+              {hrHeads == null ? (
+                <span className="rxo-hint">Looking up the HR Head…</span>
+              ) : hrHeads.length ? hrHeads.map(h => (
+                <div key={h.id} className="rxo-person">
+                  <span className="rxo-av" aria-hidden="true">{(h.name || '?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w => w.charAt(0).toUpperCase()).join('')}</span>
+                  <div className="rxo-person-b">
+                    <span className="rxo-person-n">{h.name}</span>
+                    <span className="rxo-person-c">HR Head{h.code ? `, ${h.code}` : ''}</span>
+                  </div>
+                </div>
+              )) : (
+                <span className="rxo-hint">No HR Head set for this company</span>
+              )}
+              <span className="rxo-hint">Notified in HRIS → Tasks &amp; Approvals and by mail{cc.length ? `, CC ${cc.length}` : ''}.</span>
+
+              <span className="rxo-rail-k">Goes with the mail</span>
+              <div className="rxo-docs">
+                {[['MRF', mrf?.mrf_number ? `Requisition ${mrf.mrf_number} as a PDF` : 'Requisition as a PDF', I.doc],
+                  ['Interview summary', 'every candidate on this MRF, rounds, scores and decisions', I.doc],
+                  ['CTC acknowledgement', 'password-protected with the candidate’s mobile number', I.lock]].map(([k, v, d]) => (
+                  <div key={k as string} className="rxo-doc">
+                    <span className="rxo-doc-i"><Icon d={d as string} /></span>
+                    <div className="rxo-doc-b">
+                      <span className="rxo-doc-n">{k as string}</span>
+                      <span className="rxo-doc-s">{v as string}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
   )

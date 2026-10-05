@@ -4078,3 +4078,734 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
   }
 }
 /* <<< EZER rxo offer-approval — end */
+
+/* >>> EZER rxo offer-request form — begin. Managed block: replace as a whole. */
+/* ==========================================================================
+   Offer Approval — the request form (CreateOfferApproval) — rxo-* classes
+   --------------------------------------------------------------------------
+   DESIGN STAGE. Append this block only when the form itself is re-skinned
+   (see docs/03-REQUEST-FORM.md). The queue does not need it.
+
+   It extends recruitment.offer-approval.css and must come AFTER it: the root
+   (.rxo), the tone variables, .rxo-input, .rxo-btn, .rxo-tag and .rxo-av are
+   defined there and reused here unchanged.
+
+   Same rules: tokens only, no stacking-order declarations, rxo- prefix,
+   button shapes restored with !important, icons sized as .rxo svg.rxo-ico.sNN.
+   ========================================================================== */
+
+/* ---- Way back to the queue ----------------------------------------------- */
+.rxo-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.rxo-nav-t {
+  font-size: 12.5px;
+  color: var(--ez-muted);
+}
+.rxo-nav-t b {
+  color: var(--ez-ink);
+  font-weight: 700;
+}
+
+/* ---- The band: who the request is for, and the figure being signed off --- */
+.rxo-slip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px 32px;
+  padding: 20px 26px;
+  border-radius: 18px;
+  background: var(--ez-brand);
+  background:
+    radial-gradient(90% 120% at 100% 0%, color-mix(in srgb, var(--ez-on-accent) 9%, transparent) 0%, transparent 55%),
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--ez-brand-deep) 68%, var(--ez-ink)) 0%,
+      var(--ez-brand-deep) 50%,
+      color-mix(in srgb, var(--ez-brand) 60%, var(--ez-brand-deep)) 100%
+    );
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--ez-brand) 28%, transparent);
+  color: var(--ez-on-accent);
+}
+.rxo-slip-who {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.rxo-av.on {
+  width: 48px;
+  height: 48px;
+  border: 1.5px solid color-mix(in srgb, var(--ez-on-accent) 55%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ez-on-accent) 18%, transparent);
+  color: var(--ez-on-accent);
+  font-size: 15px;
+}
+.rxo-slip-b {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rxo-slip-n {
+  overflow: hidden;
+  font-family: var(--rx-display, inherit);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rxo-slip-r {
+  font-size: 12.5px;
+  color: var(--ez-on-accent-soft);
+}
+.rxo-slip .rxo-tags {
+  margin-top: 5px;
+}
+.rxo-tag.on {
+  border-color: color-mix(in srgb, var(--ez-on-accent) 36%, transparent);
+  background: color-mix(in srgb, var(--ez-on-accent) 16%, transparent);
+  color: var(--ez-on-accent);
+}
+.rxo-figs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 28px;
+}
+.rxo-fig {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.rxo-fig-k {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ez-on-accent-soft);
+}
+.rxo-fig-v {
+  font-family: var(--rx-display, inherit);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.rxo-fig.lead .rxo-fig-v {
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+/* ---- Two columns: the cards, and the rail that says what is left --------- */
+.rxo-work {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 14px;
+}
+.rxo-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rxo-rail {
+  position: sticky;
+  top: 12px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- A card -------------------------------------------------------------- */
+.rxo-panel {
+  border: 1px solid var(--ez-line);
+  border-radius: var(--rxo-r-card);
+  background: var(--ez-surface);
+  box-shadow: var(--ez-shadow-flat);
+}
+.rxo-panel-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ez-line);
+}
+/* The card's number. The four cards are filled in order, so the number is
+   information; it turns into a tick once the card's required fields are in. */
+.rxo-panel-n {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ez-brand-edge);
+  border-radius: 999px;
+  background: var(--ez-brand-tint);
+  color: var(--ez-brand-deep);
+  font-family: var(--rx-display, inherit);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.rxo-panel-n[data-done='true'] {
+  border-color: var(--ez-positive);
+  background: var(--ez-positive);
+  color: var(--ez-on-accent);
+}
+.rxo-panel-hb {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rxo-panel-t {
+  font-family: var(--rx-display, inherit);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--ez-ink);
+}
+.rxo-panel-s {
+  font-size: 12px;
+  color: var(--ez-muted);
+}
+.rxo-panel-b {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+}
+.rxo-panel-a {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* "Read-only", "Confidential — HR only". */
+.rxo-flag {
+  flex: none;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--rxo-tone-edge);
+  border-radius: 999px;
+  background: var(--rxo-tone-tint);
+  color: var(--rxo-tone);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* ---- Read-only figures --------------------------------------------------- */
+.rxo-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.rxo-tile {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+  background: var(--ez-sunken);
+}
+.rxo-tile-k {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ez-muted);
+}
+.rxo-tile-v {
+  font-family: var(--rx-display, inherit);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ez-ink);
+  font-variant-numeric: tabular-nums;
+}
+.rxo-tile-s {
+  font-size: 11px;
+  color: var(--ez-muted);
+}
+.rxo-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ez-muted);
+}
+.rxo-hint svg.rxo-ico {
+  margin-top: 2px;
+}
+
+/* ---- Fields -------------------------------------------------------------- */
+.rxo-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.rxo-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ez-ink-soft);
+}
+.rxo-field.full {
+  grid-column: 1 / -1;
+}
+.rxo-field-l {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.rxo-must {
+  color: var(--ez-critical);
+}
+.rxo-field-h {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ez-muted);
+}
+.rxo-input.area {
+  height: auto;
+  min-height: 74px;
+  padding: 8px 11px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.rxo-input:disabled {
+  background-color: var(--ez-sunken);
+  color: var(--ez-ink-soft);
+  cursor: not-allowed;
+  opacity: 1;
+}
+.rxo-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.rxo-input[type='number']::-webkit-outer-spin-button,
+.rxo-input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* A rupee amount: the sign sits inside the field's left edge. */
+.rxo-money {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.rxo-money-s {
+  position: absolute;
+  left: 11px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ez-muted);
+  pointer-events: none;
+}
+.rxo-money .rxo-input {
+  padding-left: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.rxo-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: var(--rxo-h);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ez-ink-soft);
+  cursor: pointer;
+}
+.rxo-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.rxo-switch-t {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ez-muted) 70%, var(--ez-surface));
+  transition: background 0.16s;
+}
+.rxo-switch-t::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--ez-surface);
+  box-shadow: var(--ez-shadow-flat);
+  transition: transform 0.16s;
+}
+.rxo-switch input:checked + .rxo-switch-t {
+  background: var(--ez-brand);
+}
+.rxo-switch input:checked + .rxo-switch-t::after {
+  transform: translateX(16px);
+}
+.rxo-switch input:focus-visible + .rxo-switch-t {
+  outline: 2px solid var(--ez-brand);
+  outline-offset: 2px;
+}
+
+/* ---- Previous against offered -------------------------------------------- */
+.rxo-cmp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+  background: var(--ez-sunken);
+}
+.rxo-cmp-r {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 92px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ez-ink-soft);
+}
+.rxo-cmp-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ez-line);
+}
+.rxo-cmp-f {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ez-muted);
+  transition: width 0.3s ease;
+}
+.rxo-cmp-f.now {
+  background: var(--ez-brand);
+}
+.rxo-cmp-v {
+  font-family: var(--rx-display, inherit);
+  font-size: 13px;
+  color: var(--ez-ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Who is copied on the mail ------------------------------------------- */
+.rxo-cc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--rxo-h);
+  padding: 5px 6px;
+  border: 1px solid color-mix(in srgb, var(--ez-muted) 70%, var(--ez-surface));
+  border-radius: var(--rxo-r);
+  background: var(--ez-surface);
+}
+.rxo-cc:focus-within {
+  border-color: var(--ez-brand);
+  box-shadow: 0 0 0 3px var(--ez-brand-tint);
+}
+.rxo .rxo-cc-p {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 5px 0 3px;
+  border: 1px solid var(--ez-line);
+  border-radius: 999px !important;
+  background: var(--ez-sunken);
+  color: var(--ez-ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rxo-cc-av {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--ez-brand-tint);
+  color: var(--ez-brand-deep);
+  font-size: 9px;
+  font-weight: 800;
+}
+.rxo-cc-in {
+  flex: 1 1 120px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ez-ink);
+  font-size: 13px;
+}
+
+/* ---- The CC search results ----------------------------------------------
+   NOT in the handover's design: its CC control is a static chip row, because
+   the pack was built without the real CcPicker, which searches employees live.
+   Without these rules that dropdown renders with no surface at all and spills
+   over the form. This is the one stacking declaration in this block -- the
+   header above says there are none, which was true before this was added. It
+   is a theme variable, never a raw number. */
+.rxo-cc-hits {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: var(--ez-z-popover);
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--ez-line);
+  border-radius: var(--rxo-r);
+  background: var(--ez-surface);
+  box-shadow: var(--ez-shadow-floating);
+}
+.rxo .rxo-cc-hit {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 0 !important;
+  background: transparent;
+  color: var(--ez-ink);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.rxo .rxo-cc-hit + .rxo-cc-hit {
+  border-top: 1px solid var(--ez-line);
+}
+.rxo .rxo-cc-hit:hover,
+.rxo .rxo-cc-hit:focus-visible {
+  background: var(--ez-brand-tint);
+  color: var(--ez-brand-deep);
+}
+.rxo-cc-hit-m {
+  color: var(--ez-muted);
+}
+
+/* ---- The approval summary, as the HR Head will read it ------------------- */
+.rxo-paper {
+  max-height: 320px;
+  overflow: auto;
+  padding: 16px 18px;
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+  background: var(--ez-sunken);
+  color: var(--ez-ink-soft);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- The rail ------------------------------------------------------------ */
+.rxo-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rxo-meter-r {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ez-ink-soft);
+}
+.rxo-meter-r b {
+  font-family: var(--rx-display, inherit);
+  font-size: 15px;
+  color: var(--ez-ink);
+  font-variant-numeric: tabular-nums;
+}
+.rxo-meter-bar {
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--ez-line);
+}
+.rxo-meter-f {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ez-brand);
+  transition: width 0.3s ease;
+}
+.rxo-meter-f[data-full='true'] {
+  background: var(--ez-positive);
+}
+.rxo-ready {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rxo-ready-i {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 0;
+  border-top: 1px dashed var(--ez-line);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ez-muted);
+}
+.rxo-ready-i:first-child {
+  border-top: 0;
+}
+.rxo-ready-d {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--ez-line-strong);
+  border-radius: 999px;
+  background: var(--ez-surface);
+  color: var(--ez-on-accent);
+}
+.rxo-ready-i[data-ok='true'] {
+  color: var(--ez-ink);
+}
+.rxo-ready-i[data-ok='true'] .rxo-ready-d {
+  border-color: var(--ez-positive);
+  background: var(--ez-positive);
+}
+.rxo .rxo-btn.lg {
+  height: 42px;
+  font-size: 14px;
+}
+.rxo-rail-k {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--ez-muted);
+}
+.rxo-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.rxo-person .rxo-av {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.rxo-person-b {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rxo-person-n {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ez-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rxo-person-c {
+  font-size: 11.5px;
+  color: var(--ez-muted);
+}
+.rxo-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rxo-doc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+  background: var(--ez-surface);
+}
+.rxo-doc-i {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--ez-brand-tint);
+  color: var(--ez-brand-deep);
+}
+.rxo-doc-b {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rxo-doc-n {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ez-ink);
+}
+.rxo-doc-s {
+  font-size: 11px;
+  color: var(--ez-muted);
+}
+
+/* ---- Narrower screens ---------------------------------------------------- */
+@media (max-width: 1000px) {
+  .rxo-work {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rxo-rail {
+    position: static;
+  }
+}
+@media (max-width: 760px) {
+  .rxo-slip {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px 20px;
+  }
+  .rxo-fig.lead .rxo-fig-v {
+    font-size: 26px;
+  }
+}
+@media (max-width: 560px) {
+  .rxo-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rxo-cmp-r {
+    grid-template-columns: 66px minmax(0, 1fr) 84px;
+  }
+}
+/* <<< EZER rxo offer-request form — end */
