@@ -46,7 +46,7 @@ import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
 // The pipeline gates: one candidate per opening, three decided rounds before a
 // shortlist, and the offer-flow stages are not the funnel's to write. Shared
 // with /api/recruitment/interview-invite, which enforces them.
-import { occupiesSlot, openingsOf, slotsUsed, offerFlowGate } from '@/lib/recruitment/pipeline-gates'
+import { occupiesSlot, openingsOf, slotsUsed, offerFlowGate, roundStepGate } from '@/lib/recruitment/pipeline-gates'
 
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
@@ -4183,6 +4183,14 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     // through here — the assigned HR Manager sends from Offer Letters.
     const owned = offerFlowGate(stage)
     if (!owned.ok) { showNotify(owned.reason as string,'error'); return }
+
+    // The interview rounds run in order. Forward-only let a candidate at
+    // 'Applied' be moved straight to 'L2' — every round sits later in STAGES, so
+    // the index compare permitted it. The modal's own round flow was already
+    // stepwise (Telephonic is the default first round, and "+ Add round" unlocks
+    // only once the latest round is decided); this picker was the way around it.
+    const step = roundStepGate(stage, cur || '')
+    if (!step.ok) { showNotify(step.reason as string,'error'); return }
 
     // Shortlisted goes through the same endpoint the Shortlist button uses, so
     // the three-round rule and the one-per-opening cap are enforced ONCE, on the

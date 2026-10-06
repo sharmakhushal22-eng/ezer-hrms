@@ -171,13 +171,54 @@ export function offerFlowGate(target: string): Gate {
 }
 
 /**
+ * The interview rounds, in the order they must happen.
+ *
+ * Optional Round is last and remains OPTIONAL: this fixes where it sits, not
+ * that it has to occur. A candidate may go from L2 straight to Shortlisted,
+ * because Telephonic + L1 + L2 is already the three decided rounds the
+ * shortlist gate asks for.
+ */
+export const ROUND_LADDER: readonly string[] = ['Telephonic', 'L1', 'L2', 'Optional Round']
+
+/**
+ * The rounds run in order — no skipping.
+ *
+ * WHY THIS EXISTS. Forward-only let a candidate at 'Applied' be moved straight
+ * to 'L2': every round sits later in STAGES, so the index compare permitted it,
+ * and this module previously had "no opinion on the interview rounds". The
+ * modal's own round flow was already stepwise (Telephonic is the default first
+ * round, and "+ Add round" unlocks only once the latest round is decided) — the
+ * manual stage picker was the one way around it.
+ *
+ * This keys on the candidate's STAGE, not on whether the previous round
+ * recorded a decision. In the normal flow those coincide, because a decision
+ * moves the candidate onto that round's stage (applyInterviewDecision). The
+ * residue is that someone can still walk the ladder by hand without conducting
+ * interviews — and that is deliberately someone else's problem: the
+ * three-decided-rounds rule in canShortlist still refuses the shortlist, so the
+ * OUTCOME stays protected even when the stage label runs ahead.
+ */
+export function roundStepGate(target: string, currentStage: string): Gate {
+  const ti = ROUND_LADDER.indexOf(target)
+  // Not a round, or the first round — nothing has to come before it.
+  if (ti <= 0) return ALLOW
+  const ci = ROUND_LADDER.indexOf(currentStage)
+  // Already at the prerequisite round, or past it.
+  if (ci >= ti - 1) return ALLOW
+  // Name the step actually missing, not just the one before the target: from
+  // 'Applied' the answer is "Telephonic", not "L1".
+  const nextRequired = ROUND_LADDER[Math.max(0, ci + 1)]
+  return { ok: false, reason: `${nextRequired} comes next — the rounds run in order` }
+}
+
+/**
  * The gate for any target stage: what the picker shows, and what the write
- * checks. Stages this module has no opinion on are allowed — forward-only
- * ordering stays with the caller, which owns the STAGES array.
+ * checks. Forward-only ordering is NOT decided here; that stays with the
+ * caller, which owns the STAGES array.
  */
 export function stageGate(target: string, f: ShortlistFacts): Gate {
   const owned = offerFlowGate(target)
   if (!owned.ok) return owned
   if (target === 'Shortlisted') return canShortlist(f)
-  return ALLOW
+  return roundStepGate(target, f.currentStage)
 }

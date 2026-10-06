@@ -22,8 +22,9 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  SLOT_STAGES, OFFER_FLOW_STAGES, ROUNDS_BEFORE_SHORTLIST,
+  SLOT_STAGES, OFFER_FLOW_STAGES, ROUNDS_BEFORE_SHORTLIST, ROUND_LADDER,
   occupiesSlot, openingsOf, slotsUsed, canShortlist, offerFlowGate, stageGate,
+  roundStepGate,
   type ShortlistFacts,
 } from '../pipeline-gates.ts'
 
@@ -244,12 +245,75 @@ describe('stageGate composes the two', () => {
     assert.equal(stageGate('Shortlisted', facts()).ok, true)
   })
 
-  test('it has no opinion on the interview rounds themselves', () => {
-    // Telephonic/L1/L2/Optional/Hold are the funnel's own business, and
-    // forward-only ordering stays with whoever owns the STAGES array.
-    for (const s of ['Telephonic', 'L1', 'L2', 'Optional Round', 'Hold']) {
-      assert.deepEqual(stageGate(s, facts({ decidedRounds: 0 })), { ok: true })
+  test('it applies the round ladder to the round stages', () => {
+    // This test used to assert stageGate had "no opinion on the interview
+    // rounds". That was the gap: a candidate at Applied could be moved straight
+    // to L2. Note the old assertion would still have PASSED after the fix,
+    // because its fixture sits at L2 and so satisfies the ladder by accident —
+    // which is exactly why it is replaced rather than kept.
+    assert.equal(stageGate('L2', facts({ currentStage: 'Applied' })).ok, false)
+    assert.equal(stageGate('L1', facts({ currentStage: 'Telephonic' })).ok, true)
+  })
+
+  test('it still has no opinion on stages outside the ladder', () => {
+    // Hold is the funnel's own business, and forward-only ordering stays with
+    // whoever owns the STAGES array.
+    assert.deepEqual(stageGate('Hold', facts({ currentStage: 'Applied', decidedRounds: 0 })), { ok: true })
+  })
+})
+
+describe('the rounds run in order', () => {
+  test('the ladder is Telephonic -> L1 -> L2 -> Optional Round', () => {
+    assert.deepEqual([...ROUND_LADDER], ['Telephonic', 'L1', 'L2', 'Optional Round'])
+  })
+
+  test('THE REPORTED GAP: Applied cannot jump to L1 or L2', () => {
+    for (const target of ['L1', 'L2', 'Optional Round']) {
+      const g = roundStepGate(target, 'Applied')
+      assert.equal(g.ok, false, `Applied -> ${target} must be refused`)
+      assert.match(g.reason as string, /^Telephonic comes next/,
+        'from Applied the missing step is Telephonic — not whatever happens to precede the target')
     }
+  })
+
+  test('Telephonic is open from the pre-round stages', () => {
+    for (const from of ['Applied', 'AI Screened', '']) {
+      assert.deepEqual(roundStepGate('Telephonic', from), { ok: true }, `Telephonic from ${from || '(none)'}`)
+    }
+  })
+
+  test('each rung opens the next one, and only the next one', () => {
+    assert.equal(roundStepGate('L1', 'Telephonic').ok, true)
+    assert.equal(roundStepGate('L2', 'Telephonic').ok, false, 'L1 may not be skipped')
+    assert.equal(roundStepGate('L2', 'L1').ok, true)
+    assert.equal(roundStepGate('Optional Round', 'L1').ok, false, 'L2 may not be skipped')
+    assert.equal(roundStepGate('Optional Round', 'L2').ok, true)
+  })
+
+  test('the refusal names the step actually missing', () => {
+    assert.match(roundStepGate('L2', 'Telephonic').reason as string, /^L1 comes next/)
+    assert.match(roundStepGate('Optional Round', 'L1').reason as string, /^L2 comes next/)
+  })
+
+  test('being further along never blocks an earlier round', () => {
+    // Forward-only already refuses a backwards move; this gate must not ALSO
+    // claim a candidate who is ahead is missing a step, or the two rules would
+    // report different reasons for the same refusal.
+    assert.equal(roundStepGate('L1', 'L2').ok, true)
+    assert.equal(roundStepGate('Telephonic', 'Optional Round').ok, true)
+  })
+
+  test('it has no opinion on stages outside the ladder', () => {
+    for (const s of ['Applied', 'AI Screened', 'Hold', 'Shortlisted', 'Offer Sent', 'Rejected']) {
+      assert.deepEqual(roundStepGate(s, 'Applied'), { ok: true }, `${s} is not a round`)
+    }
+  })
+
+  test('Optional Round is ordered, not mandated', () => {
+    // L2 -> Shortlisted must stay open: Telephonic + L1 + L2 is already the
+    // three decided rounds the shortlist gate asks for, so skipping Optional
+    // Round is the normal path, not an exception.
+    assert.equal(canShortlist(facts({ currentStage: 'L2', decidedRounds: 3 })).ok, true)
   })
 })
 
@@ -317,6 +381,16 @@ describe('moveStage: the door the bug came through', () => {
       'cap are enforced once — server-side, where a concurrent shortlist is actually visible')
     assert.ok(body.indexOf("action:'shortlist'") < body.indexOf('update({ stage })'),
       'the delegation must return before execution reaches the generic stage write')
+  })
+
+  test('it enforces the round ladder, before the write', () => {
+    assert.ok(/roundStepGate\(stage, cur/.test(body),
+      "moveStage must ask roundStepGate. Forward-only permitted Applied -> L2 outright, because " +
+      'every round sits later in STAGES — the picker was the one way around the stepwise flow')
+    const guard = body.indexOf('roundStepGate(stage, cur')
+    const write = body.indexOf('update({ stage })')
+    assert.ok(guard !== -1 && write !== -1 && guard < write,
+      'the ladder check must run before the write, or a refused move has already happened')
   })
 })
 
