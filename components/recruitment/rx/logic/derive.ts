@@ -12,6 +12,10 @@
  * can mislabel a card but can never allow an action the app would refuse.
  */
 import type { CandidateVM, MrfVM, NextStep, RoundVM, TodoItem } from './types';
+// The one place that decides Shortlisted and the offer-flow stages, shared with
+// the server route that performs the write. Imported so the reason the picker
+// shows is the server's reason rather than a second opinion that can drift.
+import { stageGate, type ShortlistFacts } from '@/lib/recruitment/pipeline-gates';
 
 /* ── Money and units ─────────────────────────────────────────────────── */
 
@@ -110,19 +114,40 @@ export function countByStage(candidates: CandidateVM[], stages: readonly string[
 export interface MoveOption { stage: string; allowed: boolean; reason?: string }
 
 /**
- * What the "Move to" picker SHOWS. Mirrors moveStage's rules so the user sees
- * why a target is locked before trying it; moveStage still decides.
+ * What the "Move to" picker SHOWS. Every target stays VISIBLE; the ones that are
+ * not allowed carry the reason, so a user reads why rather than hunting for a
+ * control that isn't there.
+ *
  *  - earlier stages are never offered (forward-only)
- *  - stages AFTER Shortlisted need feedback on every scheduled round
- *    (moving TO Shortlisted is not gated, per CORE-WORKING.md)
+ *  - Shortlisted and the offer-flow stages are decided by stageGate(), the same
+ *    function the server calls — pass `facts` to get those answers
+ *  - stages after Shortlisted additionally need feedback on every scheduled round
+ *
+ * Without `facts` this falls back to the old behaviour, which did not gate
+ * Shortlisted at all. That gap, plus moveStage checking nothing but STAGES
+ * order, is how a candidate reached Shortlisted after one Telephonic round and
+ * Offer Sent with no negotiation. A caller that can measure the facts should
+ * always pass them; this stays optional only so a display-only caller with no
+ * requisition in hand is not forced to invent one.
  */
-export function moveOptions(stages: readonly string[], current: string, rounds: RoundVM[], shortlisted = 'Shortlisted'): MoveOption[] {
+export function moveOptions(
+  stages: readonly string[],
+  current: string,
+  rounds: RoundVM[],
+  shortlisted = 'Shortlisted',
+  facts?: ShortlistFacts,
+): MoveOption[] {
   const flow = stages.filter((s) => s !== REJECTED);
   const cur = flow.indexOf(current);
   const gate = flow.indexOf(shortlisted);
   const pending = rounds.filter((r) => !r.hasFeedback);
   return flow.slice(cur + 1).map((stage) => {
     const idx = flow.indexOf(stage);
+    // The policy module first: it owns Shortlisted and the offer-flow stages.
+    if (facts) {
+      const g = stageGate(stage, facts);
+      if (!g.ok) return { stage, allowed: false, reason: g.reason };
+    }
     if (gate >= 0 && idx > gate && pending.length) {
       return { stage, allowed: false, reason: `Record ${pending[0].name} feedback first` };
     }

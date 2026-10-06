@@ -43,6 +43,10 @@ import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/Recrui
 // credentials WITHOUT Content-Type — mandatory for FormData, because setting it by
 // hand suppresses the multipart boundary and the server cannot parse the parts.
 import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
+// The pipeline gates: one candidate per opening, three decided rounds before a
+// shortlist, and the offer-flow stages are not the funnel's to write. Shared
+// with /api/recruitment/interview-invite, which enforces them.
+import { occupiesSlot, openingsOf, slotsUsed, offerFlowGate } from '@/lib/recruitment/pipeline-gates'
 
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
@@ -4106,6 +4110,14 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       // Knockout screening: a "No" on either question drops the candidate into Rejected.
       const knockedOut = cForm.q1==='No' || cForm.q2==='No'
       const stage = knockedOut ? 'Rejected' : cForm.stage
+      // A candidate cannot be CREATED into one of the requisition's openings.
+      // Shortlisting needs three decided rounds, which a row that does not exist
+      // yet cannot have — so the Stage dropdown no longer offers 'Shortlisted'.
+      // This refuses a stale or tampered value, because the dropdown is a
+      // courtesy and the insert is the write.
+      if (occupiesSlot(stage)) {
+        showNotify(`A new candidate can't start at ${stage} — shortlisting needs three decided rounds.`,'error'); return
+      }
 
       const details = {
         requisition:{ job_location:cForm.job_location||mrf?.location_name||null, recruiter:cForm.recruiter||null, employment_type:cForm.employment_type },
@@ -4158,6 +4170,34 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       showNotify(`Can't move back to "${stage}" — the pipeline only moves forward`,'error')
       return
     }
+
+    // Forward-only was the ONLY check this function made, and both of the stages
+    // below sit later in STAGES — which is exactly how a candidate reached
+    // Shortlisted straight after Telephonic, and Offer Sent with no negotiation,
+    // no HR Head approval and no offer letter. Each is now refused here.
+
+    // Offer Sent / Joined belong to the offer flow. It writes the offer_letters
+    // row, the candidate's DOJ, the audit entry and the MRF auto-close ALONGSIDE
+    // the stage, so a bare stage change that looks equivalent leaves four other
+    // records wrong. Refused outright, not gated: the approved path doesn't come
+    // through here — the assigned HR Manager sends from Offer Letters.
+    const owned = offerFlowGate(stage)
+    if (!owned.ok) { showNotify(owned.reason as string,'error'); return }
+
+    // Shortlisted goes through the same endpoint the Shortlist button uses, so
+    // the three-round rule and the one-per-opening cap are enforced ONCE, on the
+    // server — where a second recruiter's concurrent write is actually visible.
+    // The server re-counts both; nothing is trusted from here.
+    if (stage === 'Shortlisted') {
+      const r = await fetch('/api/recruitment/interview-invite', {
+        method:'POST', headers: await authHeaders(),
+        body: JSON.stringify({ action:'shortlist', candidate_id:id }),
+      })
+      const j = await r.json().catch(()=>({}))
+      if (!r.ok) { showNotify(j.error || 'Could not shortlist','error'); return }
+      setSelCand(c=>c?{...c,stage:'Shortlisted'}:null); onRefresh(); return
+    }
+
     await supabase.from('candidates').update({ stage }).eq('id',id)
     setSelCand(c=>c?{...c,stage}:null); onRefresh()
   }
@@ -4535,8 +4575,13 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               </div>
               <div style={{ ...T.g2, marginBottom:6 }}>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Stage</label>
+                  {/* 'Shortlisted' is deliberately NOT offered. It needs three decided
+                      rounds, which a candidate being created cannot have, and it also
+                      claims one of the requisition's openings — so choosing it here
+                      inserted a shortlisted candidate directly, skipping the whole
+                      funnel and the cap together. addCandidate refuses it too. */}
                   <select className="rx-input" value={cForm.stage} onChange={e=>CF('stage',e.target.value)}>
-                    {['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted'].map(s=><option key={s}>{s}</option>)}
+                    {['Applied','AI Screened','Telephonic','L1','L2','Optional Round'].map(s=><option key={s}>{s}</option>)}
                   </select>
                 </div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Interview availability</label><input className="rx-input" value={cForm.availability} onChange={e=>CF('availability',e.target.value)} placeholder="Weekdays after 6 pm, Sat full day" /></div>
@@ -4561,12 +4606,19 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       )}
 
       {/* Candidate popup — centered modal; runs the round-by-round interview flow */}
+      {/* openings / slotsUsed are counted HERE, where the whole candidate list
+          lives — the modal only ever sees one candidate. slotsUsed EXCLUDES this
+          one, so a candidate sent back from the offer flow for a revision is not
+          refused their own slot. The server re-counts both before it writes;
+          these two are only what the picker SHOWS. */}
       {selCand&&(
         <CandidateInterviewModal
           candidate={selCand}
           mrf={mrfs.find((m:MRF)=>m.id===selCand.mrf_id) || null}
           stages={STAGES} stageColor={STAGE_COLOR} stageText={STAGE_TEXT}
           schedulerId={employeeId}
+          openings={openingsOf(mrfs.find((m:MRF)=>m.id===selCand.mrf_id) || null)}
+          slotsUsed={slotsUsed(candidates as any[], selCand.mrf_id, selCand.id)}
           onClose={()=>setSelCand(null)}
           onStageChange={moveStage}
           onChanged={(stage)=>{ if (stage) setSelCand(c=>c?{...c,stage}:null); onRefresh() }}

@@ -19,7 +19,11 @@ import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { notify as essNotify } from '@/lib/ess/session'
-import { applyInterviewDecision, distinctRounds, isDecision, roundOrdinal, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
+import { applyInterviewDecision, distinctRounds, isDecision, roundOrdinal } from '@/lib/recruitment/interview-decision'
+// The shortlist rules: three decided rounds, and one candidate per opening. The
+// browser's "Move to" picker calls the SAME canShortlist(), so the reason it
+// shows a user is the reason this route would have given them.
+import { canShortlist, openingsOf, slotsUsed, SLOT_STAGES } from '@/lib/recruitment/pipeline-gates'
 
 export const runtime = 'nodejs' // nodemailer needs Node, not Edge
 
@@ -198,8 +202,15 @@ async function directFeedback(body: any) {
   return NextResponse.json({ ok: true, id: ins.data?.[0]?.id, decision: feedback.decision, stage })
 }
 
-// Final Shortlist: allowed once ≥3 rounds carry a main-interviewer decision and the latest
-// decision is Shortlist or Hold (a Reject ends the pipeline).
+// Final Shortlist: allowed once ≥3 rounds carry a main-interviewer decision, the latest
+// decision is Shortlist or Hold (a Reject ends the pipeline), and the requisition still
+// has an opening free.
+//
+// THIS IS THE ONLY WRITE OF 'Shortlisted' THE FUNNEL MAKES. The pipeline's manual stage
+// picker used to update the column itself, checking nothing but STAGES order — so one
+// Telephonic round was enough. It now posts here instead, which is why both rules can
+// live in one place. The cap especially has to be server-side: two recruiters
+// shortlisting at the same moment both pass any check made in a browser.
 async function finalShortlist(body: any) {
   const { candidate_id } = body
   if (!candidate_id) return bad('candidate_id is required')
@@ -207,12 +218,34 @@ async function finalShortlist(body: any) {
     .eq('candidate_id', candidate_id).order('created_at', { ascending: true })
   const rows = ((data || []) as any[]).filter(r => (r.role || 'MAIN') === 'MAIN' && r.status === 'submitted')
   const decided = distinctRounds(rows.filter(r => r.decision || r.feedback?.decision))
-  if (decided.length < ROUNDS_BEFORE_SHORTLIST) return bad(`${ROUNDS_BEFORE_SHORTLIST} decided rounds are needed before shortlisting (have ${decided.length})`)
   const last = rows[rows.length - 1]
   const lastDecision = last?.decision || last?.feedback?.decision
   if (lastDecision === 'REJECT') return bad('The latest round rejected this candidate')
-  const { data: cand } = await sb.from('candidates').select('stage').eq('id', candidate_id).maybeSingle()
-  if (['Offer Sent', 'Joined'].includes((cand as any)?.stage)) return bad('Candidate is already past Shortlisted')
+
+  // The candidate's row carries the requisition; the cap needs both.
+  const { data: cand } = await sb.from('candidates').select('stage, mrf_id').eq('id', candidate_id).maybeSingle()
+  const mrfId = (cand as any)?.mrf_id || null
+  let openings = 1
+  let used = 0
+  if (mrfId) {
+    const [{ data: mrf }, { data: peers }] = await Promise.all([
+      sb.from('manpower_requisitions').select('no_of_openings, openings').eq('id', mrfId).maybeSingle(),
+      sb.from('candidates').select('id, mrf_id, stage').eq('mrf_id', mrfId).in('stage', [...SLOT_STAGES]),
+    ])
+    openings = openingsOf(mrf as any)
+    // exceptId is this candidate. One sent back from the offer flow for a revision
+    // still reads 'Shortlisted', and counting them would refuse them their own slot.
+    used = slotsUsed((peers || []) as any[], mrfId, candidate_id)
+  }
+
+  const gate = canShortlist({
+    currentStage: String((cand as any)?.stage || ''),
+    decidedRounds: decided.length,
+    openings,
+    slotsUsed: used,
+  })
+  if (!gate.ok) return bad(gate.reason as string)
+
   const { error } = await sb.from('candidates').update({ stage: 'Shortlisted' }).eq('id', candidate_id)
   if (error) return bad(error.message, 500)
   return NextResponse.json({ ok: true, stage: 'Shortlisted', rounds: decided.length })

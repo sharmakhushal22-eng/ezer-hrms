@@ -27,6 +27,9 @@ import {
 // quoted in the engagement's own period; offered_ctc is always annual. See
 // lib/recruitment/compensation.ts for why that lives outside this page.
 import { overCeiling, annualCeiling, compOf } from '@/lib/recruitment/compensation'
+// Rehire re-enters a REJECTED candidate into the funnel. It must not drop them
+// straight into one of the requisition's openings — see pipeline-gates.ts.
+import { occupiesSlot } from '@/lib/recruitment/pipeline-gates'
 
 // ── STYLES ───────────────────────────────────────────────────────
 // Bound to the design system. This file owns the name S, so the tokens are
@@ -918,7 +921,13 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   }
 
   // ── Rehire: HR Head re-enters a rejected candidate into the pipeline ──
-  const REHIRE_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted']
+  //
+  // 'Shortlisted' is NOT on this list any more. Rehire wrote whatever stage it
+  // was handed with no check at all, so a rejected candidate could be placed
+  // directly into one of the requisition's openings — skipping the three-round
+  // rule and the one-per-opening cap together. Re-entering the pipeline means
+  // re-running the rounds; the Shortlist button is what ends them.
+  const REHIRE_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round']
   async function loadRejected() {
     const { data } = await supabase.from('candidates')
       .select('id, full_name, designation, stage, blacklisted, mrf_id, company_id')
@@ -927,6 +936,11 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   }
   async function rehire(c: any, stage: string) {
     if (!stage) { alert('Pick a pipeline stage to place the candidate'); return }
+    // The list above is a courtesy. This is the write, so it checks for itself.
+    if (occupiesSlot(stage)) {
+      alert(`A rehired candidate can't be placed at ${stage} — that claims one of the requisition's openings. Re-run the interview rounds and use Shortlist.`)
+      return
+    }
     const { error } = await supabase.from('candidates')
       .update({ stage, blacklisted: false, blacklist_reason: null, status: 'active' }).eq('id', c.id)
     if (error) { alert('Error: ' + error.message); return }

@@ -26,10 +26,17 @@ import { supabase } from '@/lib/supabase'
 import { authHeaders } from '@/lib/auth-headers'
 import InterviewFeedbackForm, { type Feedback, bandOf } from './InterviewFeedbackForm'
 import { type Decision, DECISION_LABEL, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
+// The shortlist rules: three decided rounds, and one candidate per opening.
+// ALIASED deliberately — this file already has a local `canShortlist` boolean
+// and the two must not shadow each other. /api/recruitment/interview-invite
+// calls this same function, so the button and the server cannot drift apart
+// about whether a shortlist is allowed, or about why it is not.
+import { canShortlist as shortlistCheck } from '@/lib/recruitment/pipeline-gates'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
 import { C as TK, E, F, Z } from '@/lib/ui'
-// The move-stage picker adopts the kit's radiogroup. moveOptions() only LABELS
-// the targets; blockedReason() below still decides. See the note on roundVMs.
+// The move-stage picker adopts the kit's radiogroup. moveOptions() LABELS the
+// targets and now carries the gate's refusal reason too; blockedReason() below
+// still decides the round-feedback half. See the note on roundVMs.
 import { RxDialog, Icon, moveOptions, type RoundVM } from '@/components/recruitment/rx'
 
 // ── Palette ──────────────────────────────────────────────────────────────────
@@ -75,7 +82,8 @@ const isMain = (i: Invite) => (i.role || 'MAIN') === 'MAIN'
 const decisionOf = (i?: Invite | null): Decision | null => (i?.decision || i?.feedback?.decision || null) as Decision | null
 
 export default function CandidateInterviewModal({
-  candidate, mrf, stages, stageColor, stageText, schedulerId, onClose, onStageChange, onChanged, showNotify,
+  candidate, mrf, stages, stageColor, stageText, schedulerId, openings = 1, slotsUsed = 0,
+  onClose, onStageChange, onChanged, showNotify,
 }: {
   candidate: any
   mrf: any
@@ -83,6 +91,18 @@ export default function CandidateInterviewModal({
   stageColor: Record<string, string>
   stageText: Record<string, string>
   schedulerId: string | null | undefined
+  /**
+   * The requisition's opening count, and how many of those openings are already
+   * taken EXCLUDING this candidate. Counted by the caller, which holds the whole
+   * candidate list — this modal only ever sees one candidate.
+   *
+   * The defaults are permissive on purpose: a caller that cannot measure them
+   * gets the round rule but no cap, and the server re-counts both before it
+   * writes. A missing prop therefore mislabels a button; it cannot let a write
+   * through.
+   */
+  openings?: number
+  slotsUsed?: number
   onClose: () => void
   onStageChange: (id: string, stage: string, opts?: { blocked?: string }) => void
   /** The server moved the candidate (a decision or the final Shortlist) — refresh the list. */
@@ -165,7 +185,15 @@ export default function CandidateInterviewModal({
   const pipelineOver = ['Rejected', 'Shortlisted', 'Offer Sent', 'Joined'].includes(stageNow)
   const canAddRound = !pipelineOver && !lastPending && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
   const addRoundHint = pipelineOver ? `Candidate is ${stageNow}` : lastPending ? `Waiting on the ${lastRound} round's feedback` : lastDecision === 'REJECT' ? 'The last round rejected this candidate' : ''
-  const canShortlist = !pipelineOver && !lastPending && decidedRounds.length >= ROUNDS_BEFORE_SHORTLIST && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
+  // The three-round rule AND the one-per-opening cap, both from the policy
+  // module — the same function the shortlist route calls, so this button and the
+  // server cannot disagree. Still only the courtesy half: the route re-counts
+  // both before it writes, because a second recruiter shortlisting at the same
+  // moment is invisible from here.
+  const shortlistGate = shortlistCheck({
+    currentStage: stageNow, decidedRounds: decidedRounds.length, openings, slotsUsed,
+  })
+  const canShortlist = !pipelineOver && !lastPending && shortlistGate.ok && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
 
   const addRound = () => {
     const name = newRound.trim()
@@ -324,7 +352,14 @@ export default function CandidateInterviewModal({
   // so moveOptions' indexOf returns -1, slice(cur+1) becomes slice(0), and it
   // would offer every stage — including ones behind them.
   const inFlow = stages.filter(s => s !== 'Rejected').includes(stageNow)
-  const moveOpts = inFlow ? moveOptions(stages, stageNow, roundVMs) : []
+  // Shortlisted and the offer-flow stages stay VISIBLE in the picker and carry
+  // their refusal reason, so a user reads why rather than hunting for a control
+  // that is not there. Without these facts moveOptions falls back to its old
+  // behaviour, which did not gate Shortlisted at all.
+  const moveOpts = inFlow
+    ? moveOptions(stages, stageNow, roundVMs, 'Shortlisted',
+        { currentStage: stageNow, decidedRounds: decidedRounds.length, openings, slotsUsed })
+    : []
   // Rejected sits past Shortlisted, so blockedReason() already gates it today.
   // moveOptions strips it from the list entirely, hence its own button.
   const rejectBlocked = blockedReason('Rejected')
@@ -360,6 +395,12 @@ export default function CandidateInterviewModal({
       <div style={{ display:'flex', alignItems:'center', gap:8, margin:'2px 0 9px', flexWrap:'wrap' }}>
         <SectionTitle>Interview rounds</SectionTitle>
         <span style={{ fontSize:11, color:C.faint }}>{decidedRounds.length} of {ROUNDS_BEFORE_SHORTLIST} rounds decided</span>
+        {/* Why Shortlist is not on offer. The CAP especially needs saying: with
+            every opening taken, "3 of 3 rounds decided" and no button and no
+            explanation reads as a broken screen rather than a rule. */}
+        {!pipelineOver && !lastPending && !shortlistGate.ok && shortlistGate.reason && (
+          <span style={{ fontSize:11, color:C.faint }}>· {shortlistGate.reason}</span>
+        )}
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
           {canShortlist && (
             <button onClick={() => setConfirmShortlist(true)} style={{ ...btn.small, background:C.ok, color:TK.onAccent, border:'none' }}>★ Shortlist</button>
