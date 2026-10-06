@@ -9,6 +9,10 @@ import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, Audit
 import { compOf } from '@/lib/recruitment/compensation'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
 import CandidateInterviewModal from '@/components/recruitment/CandidateInterviewModal'
+// Interviews Scheduled — the scheduler's read-only mirror of ESS → Tasks &
+// Approvals. Loads interview_invites itself (loadAll does not fetch them) and
+// writes nothing; the round flow stays in CandidateInterviewModal.
+import InterviewsScheduledTab from '@/components/recruitment/InterviewsScheduled'
 import MrfForm, { mrfToForm } from '@/components/ess/MrfForm'
 import { api as essApi } from '@/lib/ess/api'
 import { MIN_WAGE_STATES, WAGE_CATS, CAT_TO_DB, resolveMinWage, OLD_CODE_TO_STATE, DEFAULT_STATE, DEFAULT_CATEGORY, stateFromLocation } from '@/lib/recruitment/min-wages'
@@ -311,7 +315,10 @@ export default function RecruitmentPage() {
   // RECRUITER and HR_MANAGER — so the merge needs no grant migration to stay
   // visible. Keeping 'offerletter' instead would have hidden the screen from
   // recruiters until a migration ran.
-  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
+  // Every key in TABS must appear here too, or `tab==='x'` in the render block
+  // is a no-overlap comparison (TS2367) rather than a working tab — which is
+  // exactly what adding 'interviews' to TABS alone produced.
+  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'interviews'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
   // Deep-link from ESS Tasks & Approvals: /ess-portal?module=recruitment&mrfSub=approvals&mrf=<id>
   // opens the MRF tab on its Approvals sub-tab with that requisition ready to review.
   const [mrfDeep, setMrfDeep] = useState<{ sub?:string; id?:string }>({})
@@ -384,7 +391,7 @@ export default function RecruitmentPage() {
 
   useEffect(() => { if (!grantLoading) loadAll() }, [loadAll, grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Eleven tabs is a lot to scan, and eleven different emoji in front of them
+  // Twelve tabs is a lot to scan, and twelve different emoji in front of them
   // made it harder rather than easier — each one drew the eye equally. The
   // words are the signal; they are also already in pipeline order.
   const TABS = [
@@ -392,6 +399,12 @@ export default function RecruitmentPage() {
     { k:'mrf', l:'MRF' },
     { k:'screening', l:'AI Screening' },
     { k:'pipeline', l:'Pipeline' },
+    // Sits after Pipeline because that is where rounds are scheduled, and this
+    // is what was scheduled. READ-ONLY: it adds no way to change a round, a
+    // feedback or a stage — the interviewer's half of this data stays in
+    // ESS -> Tasks & Approvals, where Acknowledge and Give feedback live.
+    // Seeded for RECRUITER by migration 142; see lib/rms/screens.ts.
+    { k:'interviews', l:'Interviews Scheduled' },
     { k:'negotiation', l:'Negotiation' },
     { k:'offerapproval', l:'Offer Approval' },
     // LABEL only. The key stays 'hrhead': it is the screen key seeded by
@@ -426,7 +439,13 @@ export default function RecruitmentPage() {
   // Scoped-HM MRF id set for the Send Offers tab (null = oversight, no filter). Memoised so
   // the child's fetch effect does not refire on every render.
   const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
-  const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId, mrfInitialSub: mrfDeep.sub, mrfFocusId: mrfDeep.id, canEditAnyMrf: !!(grant.isSuperAdmin || grant.legacy) }
+  // The same oversight test loadAll() uses to decide whether to scope rows to
+  // the viewer's own assignments. Hoisted here so the Interviews tab scopes by
+  // exactly the rule the rest of the module already applies, rather than a
+  // second copy of the role list that could drift from OVERSIGHT_CODES.
+  const isOversight = !!(grant.legacy || grant.isSuperAdmin || grant.crossCompany
+    || (grant.roles || []).some((r: any) => OVERSIGHT_CODES.includes(r.role_code)))
+  const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId, mrfInitialSub: mrfDeep.sub, mrfFocusId: mrfDeep.id, canEditAnyMrf: !!(grant.isSuperAdmin || grant.legacy), isOversight, companyId: companyFilter(grant, null) }
 
   // ── Redesign wiring ───────────────────────────────────────────────────
   // Adapters only reshape the rows loadAll already put in state. No query is
@@ -523,6 +542,12 @@ export default function RecruitmentPage() {
           stage move still goes through the modal, so moveStage's forward-only
           rule and the modal's own feedback gate cannot be bypassed. */}
       {tab==='pipeline' && <PipelineTab {...props} />}
+      {/* Interviews Scheduled — the scheduler's mirror of ESS → Tasks &
+          Approvals. Read-only by construction: it loads interview_invites and
+          renders them, and has no handler that writes anything. The round
+          flow ("+ Add round" → main interviewer → feedback → three decided
+          rounds unlock Shortlist) is untouched. */}
+      {tab==='interviews' && <InterviewsScheduledTab {...props} />}
       {/* AI Screening is a WRAP, not a replace: the kit has no ScreeningView.
           The tab keeps its upload flow and handlers; only the result rows
           move to ScreeningResultCard, with the API's field names mapped. */}

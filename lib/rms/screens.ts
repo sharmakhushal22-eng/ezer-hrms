@@ -29,6 +29,12 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'mrf', label: 'MRF' },
       { key: 'screening', label: 'AI Screening' },
       { key: 'pipeline', label: 'Pipeline' },
+      // The scheduler's list of every interview they have booked — join link,
+      // interviewer, and whether that interviewer has acknowledged or submitted
+      // feedback. Seeded for RECRUITER by migration 142. The INTERVIEWER's side
+      // of the same data is ESS -> Tasks & Approvals, which is why L1 / L2 / HOD
+      // are not granted this tab.
+      { key: 'interviews', label: 'Interviews Scheduled' },
       { key: 'negotiation', label: 'Negotiation' },
       { key: 'offerapproval', label: 'Offer Approval' },
       // Label only — the key 'hrhead' is seeded in migration 123 and asserted in
