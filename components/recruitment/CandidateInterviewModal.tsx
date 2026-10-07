@@ -178,7 +178,15 @@ export default function CandidateInterviewModal({
   }, [invitesByRound, addedRounds])
 
   // Decision flow: the LAST round on the candidate decides what the manager may do next.
-  const decidedRounds = rounds.filter(r => decisionOf(mainOf(r)))
+  //
+  // CLEARED, not merely decided. A round counts toward the three only when its
+  // main interviewer decided SHORTLIST. Hold and Reject do not count — this
+  // previously counted any recorded decision, so a candidate sitting on Hold
+  // could still be shortlisted. A Reject ends the pipeline anyway, so the rule
+  // bites on Hold, and because a submitted round cannot be re-decided (both
+  // feedback paths 409) a Hold permanently costs a round: the hiring manager
+  // recovers by adding another, which is why canAddRound still allows it.
+  const clearedRounds = rounds.filter(r => decisionOf(mainOf(r)) === 'SHORTLIST')
   const lastRound = rounds[rounds.length - 1]
   const lastDecision = decisionOf(mainOf(lastRound))
   const lastPending = !!lastRound && !roundComplete(lastRound)   // scheduled/awaiting or not even scheduled
@@ -191,7 +199,7 @@ export default function CandidateInterviewModal({
   // both before it writes, because a second recruiter shortlisting at the same
   // moment is invisible from here.
   const shortlistGate = shortlistCheck({
-    currentStage: stageNow, decidedRounds: decidedRounds.length, openings, slotsUsed,
+    currentStage: stageNow, clearedRounds: clearedRounds.length, openings, slotsUsed,
   })
   const canShortlist = !pipelineOver && !lastPending && shortlistGate.ok && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
 
@@ -358,7 +366,7 @@ export default function CandidateInterviewModal({
   // behaviour, which did not gate Shortlisted at all.
   const moveOpts = inFlow
     ? moveOptions(stages, stageNow, roundVMs, 'Shortlisted',
-        { currentStage: stageNow, decidedRounds: decidedRounds.length, openings, slotsUsed })
+        { currentStage: stageNow, clearedRounds: clearedRounds.length, openings, slotsUsed })
     : []
   // Rejected sits past Shortlisted, so blockedReason() already gates it today.
   // moveOptions strips it from the list entirely, hence its own button.
@@ -394,7 +402,7 @@ export default function CandidateInterviewModal({
       {/* rounds */}
       <div style={{ display:'flex', alignItems:'center', gap:8, margin:'2px 0 9px', flexWrap:'wrap' }}>
         <SectionTitle>Interview rounds</SectionTitle>
-        <span style={{ fontSize:11, color:C.faint }}>{decidedRounds.length} of {ROUNDS_BEFORE_SHORTLIST} rounds decided</span>
+        <span style={{ fontSize:11, color:C.faint }}>{clearedRounds.length} of {ROUNDS_BEFORE_SHORTLIST} rounds cleared</span>
         {/* Why Shortlist is not on offer. The CAP especially needs saying: with
             every opening taken, "3 of 3 rounds decided" and no button and no
             explanation reads as a broken screen rather than a rule. */}
@@ -568,7 +576,7 @@ export default function CandidateInterviewModal({
       {confirmShortlist && (
         <Popup onClose={() => !shortlisting && setConfirmShortlist(false)}>
           <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>Shortlist {candidate.full_name}?</div>
-          <div style={{ fontSize:12.5, color:C.muted, marginBottom:6 }}>{decidedRounds.length} rounds decided — latest: <b style={{ color: DECISION_COLOR[lastDecision || 'SHORTLIST'] }}>{lastDecision ? DECISION_LABEL[lastDecision] : '—'}</b>.</div>
+          <div style={{ fontSize:12.5, color:C.muted, marginBottom:6 }}>{clearedRounds.length} rounds cleared — latest: <b style={{ color: DECISION_COLOR[lastDecision || 'SHORTLIST'] }}>{lastDecision ? DECISION_LABEL[lastDecision] : '—'}</b>.</div>
           <div style={{ fontSize:12.5, color:C.muted, marginBottom:14 }}>The candidate will be marked <b style={{ color:C.ok }}>Shortlisted</b> and move on to offer negotiation.</div>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={doShortlist} disabled={shortlisting} style={{ ...btn.pri, background:C.ok, opacity: shortlisting ? .6 : 1 }}>{shortlisting ? 'Shortlisting…' : 'Yes, shortlist'}</button>

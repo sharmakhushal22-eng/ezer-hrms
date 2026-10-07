@@ -113,8 +113,16 @@ const ALLOW: Gate = { ok: true }
 export interface ShortlistFacts {
   /** The candidate's stage right now. */
   currentStage: string
-  /** Rounds carrying a main interviewer's decision. */
-  decidedRounds: number
+  /**
+   * Rounds the candidate has CLEARED — decided SHORTLIST by their main
+   * interviewer. Hold and Reject do not count.
+   *
+   * This used to be decidedRounds, counting any recorded decision, which let a
+   * candidate sitting on Hold be shortlisted. Renamed rather than redefined so
+   * a caller cannot keep passing a decided-count into a field that now means
+   * something stricter.
+   */
+  clearedRounds: number
   /** The requisition's opening count — see openingsOf. */
   openings: number
   /** Slots already taken on that requisition, EXCLUDING this candidate. */
@@ -129,10 +137,10 @@ export function canShortlist(f: ShortlistFacts): Gate {
   if (occupiesSlot(f.currentStage)) {
     return { ok: false, reason: `This candidate is already ${f.currentStage}` }
   }
-  if (f.decidedRounds < ROUNDS_BEFORE_SHORTLIST) {
+  if (f.clearedRounds < ROUNDS_BEFORE_SHORTLIST) {
     return {
       ok: false,
-      reason: `${ROUNDS_BEFORE_SHORTLIST} rounds need a decision before shortlisting — ${f.decidedRounds} so far`,
+      reason: `${ROUNDS_BEFORE_SHORTLIST} rounds must be cleared before shortlisting — ${f.clearedRounds} so far`,
     }
   }
   if (f.slotsUsed >= f.openings) {

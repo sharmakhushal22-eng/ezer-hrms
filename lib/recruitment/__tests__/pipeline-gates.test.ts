@@ -30,7 +30,7 @@ import {
 
 /** A candidate who SHOULD pass, so each test can spoil exactly one thing. */
 const facts = (o: Partial<ShortlistFacts> = {}): ShortlistFacts => ({
-  currentStage: 'L2', decidedRounds: 3, openings: 1, slotsUsed: 0, ...o,
+  currentStage: 'L2', clearedRounds: 3, openings: 1, slotsUsed: 0, ...o,
 })
 
 describe('the vocabulary', () => {
@@ -116,17 +116,49 @@ describe('canShortlist', () => {
   })
 
   test('THE REPORTED BUG: one round is not enough', () => {
-    const g = canShortlist(facts({ decidedRounds: 1, currentStage: 'Telephonic' }))
+    const g = canShortlist(facts({ clearedRounds: 1, currentStage: 'Telephonic' }))
     assert.equal(g.ok, false)
-    assert.match(g.reason as string, /3 rounds need a decision/)
+    assert.match(g.reason as string, /3 rounds must be cleared/)
     assert.match(g.reason as string, /1 so far/, 'the message should say how many there are')
   })
 
   test('two is not enough either; three is', () => {
-    assert.equal(canShortlist(facts({ decidedRounds: 0 })).ok, false)
-    assert.equal(canShortlist(facts({ decidedRounds: 2 })).ok, false)
-    assert.equal(canShortlist(facts({ decidedRounds: 3 })).ok, true)
-    assert.equal(canShortlist(facts({ decidedRounds: 9 })).ok, true)
+    assert.equal(canShortlist(facts({ clearedRounds: 0 })).ok, false)
+    assert.equal(canShortlist(facts({ clearedRounds: 2 })).ok, false)
+    assert.equal(canShortlist(facts({ clearedRounds: 3 })).ok, true)
+    assert.equal(canShortlist(facts({ clearedRounds: 9 })).ok, true)
+  })
+
+  test('CLEARED, not merely decided: a Hold does not count toward the three', () => {
+    // The rule: all three rounds must be decided SHORTLIST. This counted any
+    // recorded decision, so Telephonic ✓ / L1 Hold / L2 ✓ read as three and the
+    // button unlocked — and worse, Shortlist / Shortlist / Hold unlocked while
+    // the candidate's own stage was 'Hold'.
+    //
+    // The count is produced by the caller (the modal filters on SHORTLIST, and
+    // finalShortlist filters the same way server-side), so what this pins is
+    // that THREE is three cleared rounds and two is refused — i.e. a Hold costs
+    // a round rather than being quietly forgiven here.
+    const telephonicAndL2Cleared = 2   // L1 was Hold
+    const g = canShortlist(facts({ clearedRounds: telephonicAndL2Cleared, currentStage: 'L2' }))
+    assert.equal(g.ok, false, 'a Hold on L1 must leave the candidate one short')
+    assert.match(g.reason as string, /must be cleared/)
+    assert.match(g.reason as string, /2 so far/)
+
+    // And the recovery path: the hiring manager adds a fourth round, because a
+    // submitted round cannot be re-decided (both feedback paths return 409).
+    assert.equal(canShortlist(facts({ clearedRounds: 3, currentStage: 'Optional Round' })).ok, true,
+      'clearing a fourth round must unlock it — otherwise a single Hold is terminal')
+  })
+
+  test('a candidate parked on Hold is refused even with three cleared', () => {
+    // Guard for the sharpest version of the old hole: three cleared rounds but
+    // the LAST decision was Hold, so the stage is 'Hold'. occupiesSlot() does
+    // not cover 'Hold', so nothing else in this module would refuse it.
+    const g = canShortlist(facts({ clearedRounds: 3, currentStage: 'Hold' }))
+    assert.equal(g.ok, true,
+      'NOTE: the stage alone does not refuse this — the caller must not count the Hold round ' +
+      'as cleared, which is what the SHORTLIST-only filter in the modal and finalShortlist does')
   })
 
   test('THE CAP: one candidate per opening', () => {
@@ -158,7 +190,7 @@ describe('canShortlist', () => {
   })
 
   test('a rejected candidate is refused however good the rest looks', () => {
-    const g = canShortlist(facts({ currentStage: 'Rejected', decidedRounds: 9, slotsUsed: 0 }))
+    const g = canShortlist(facts({ currentStage: 'Rejected', clearedRounds: 9, slotsUsed: 0 }))
     assert.equal(g.ok, false)
     assert.match(g.reason as string, /rejected/i)
   })
@@ -166,13 +198,13 @@ describe('canShortlist', () => {
   test('the round rule is reported before the cap', () => {
     // Both are wrong here. The round count is the one the recruiter can act on,
     // so it should be what they are told first.
-    const g = canShortlist(facts({ decidedRounds: 0, openings: 1, slotsUsed: 1 }))
-    assert.match(g.reason as string, /rounds need a decision/)
+    const g = canShortlist(facts({ clearedRounds: 0, openings: 1, slotsUsed: 1 }))
+    assert.match(g.reason as string, /rounds must be cleared/)
   })
 
   test('a refusal always carries a reason, since the UI shows it verbatim', () => {
     const refusals = [
-      facts({ decidedRounds: 0 }), facts({ openings: 1, slotsUsed: 1 }),
+      facts({ clearedRounds: 0 }), facts({ openings: 1, slotsUsed: 1 }),
       facts({ currentStage: 'Rejected' }), facts({ currentStage: 'Offer Sent' }),
     ]
     for (const f of refusals) {
@@ -234,13 +266,13 @@ describe('offerFlowGate', () => {
 
 describe('stageGate composes the two', () => {
   test('the offer-flow stages are refused before anything else is weighed', () => {
-    const g = stageGate('Offer Sent', facts({ decidedRounds: 9, openings: 9, slotsUsed: 0 }))
+    const g = stageGate('Offer Sent', facts({ clearedRounds: 9, openings: 9, slotsUsed: 0 }))
     assert.equal(g.ok, false)
     assert.match(g.reason as string, /HR Manager/)
   })
 
   test('Shortlisted gets the shortlist rules', () => {
-    assert.equal(stageGate('Shortlisted', facts({ decidedRounds: 1 })).ok, false)
+    assert.equal(stageGate('Shortlisted', facts({ clearedRounds: 1 })).ok, false)
     assert.equal(stageGate('Shortlisted', facts({ openings: 2, slotsUsed: 2 })).ok, false)
     assert.equal(stageGate('Shortlisted', facts()).ok, true)
   })
@@ -258,7 +290,7 @@ describe('stageGate composes the two', () => {
   test('it still has no opinion on stages outside the ladder', () => {
     // Hold is the funnel's own business, and forward-only ordering stays with
     // whoever owns the STAGES array.
-    assert.deepEqual(stageGate('Hold', facts({ currentStage: 'Applied', decidedRounds: 0 })), { ok: true })
+    assert.deepEqual(stageGate('Hold', facts({ currentStage: 'Applied', clearedRounds: 0 })), { ok: true })
   })
 })
 
@@ -313,7 +345,7 @@ describe('the rounds run in order', () => {
     // L2 -> Shortlisted must stay open: Telephonic + L1 + L2 is already the
     // three decided rounds the shortlist gate asks for, so skipping Optional
     // Round is the normal path, not an exception.
-    assert.equal(canShortlist(facts({ currentStage: 'L2', decidedRounds: 3 })).ok, true)
+    assert.equal(canShortlist(facts({ currentStage: 'L2', clearedRounds: 3 })).ok, true)
   })
 })
 
@@ -381,6 +413,24 @@ describe('moveStage: the door the bug came through', () => {
       'cap are enforced once — server-side, where a concurrent shortlist is actually visible')
     assert.ok(body.indexOf("action:'shortlist'") < body.indexOf('update({ stage })'),
       'the delegation must return before execution reaches the generic stage write')
+  })
+
+  test('BOTH sides count CLEARED rounds, not merely decided ones', () => {
+    // canShortlist only sees a number — it cannot tell a cleared round from a
+    // held one. The MEANING of that number lives in two filters: the modal's,
+    // and finalShortlist's. If either reverted to counting any decision, every
+    // policy test above would still pass while a held candidate got shortlisted.
+    // So the filters themselves are pinned here.
+    const MODAL = readFileSync('components/recruitment/CandidateInterviewModal.tsx', 'utf8')
+    assert.ok(/clearedRounds = rounds\.filter\(r => decisionOf\(mainOf\(r\)\) === 'SHORTLIST'\)/.test(MODAL),
+      "the modal must count only rounds decided SHORTLIST — counting any decision is what let a " +
+      'candidate sitting on Hold reach the Shortlist button')
+    assert.ok(/distinctRounds\(rows\.filter\(r => decisionOf\(r\) === 'SHORTLIST'\)\)/.test(ROUTE),
+      'finalShortlist must count only rounds decided SHORTLIST — it is the real gate, and the ' +
+      'modal is only its mirror')
+    // Neither side may fall back to the old "any decision" shape.
+    assert.ok(!/filter\(r => r\.decision \|\| r\.feedback\?\.decision\)/.test(ROUTE),
+      'the any-decision filter is the old rule and must not return')
   })
 
   test('it enforces the round ladder, before the write', () => {

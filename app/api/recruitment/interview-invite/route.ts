@@ -8,7 +8,8 @@
 //   POST { action:'direct_feedback', … } -> the Telephonic (or any unscheduled) round: the recruiter
 //                                           records the 8-parameter feedback + decision straight from
 //                                           the candidate popup — no scheduling, no invite.
-//   POST { action:'shortlist', … }       -> the final Shortlist after ≥3 decided rounds.
+//   POST { action:'shortlist', … }       -> the final Shortlist after ≥3 CLEARED rounds
+//                                           (decided SHORTLIST; Hold and Reject do not count).
 //
 // Email is best-effort — if Gmail SMTP is not configured the invites and the
 // ESS tasks are still created, and the response says email was skipped.
@@ -20,7 +21,7 @@ import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { notify as essNotify } from '@/lib/ess/session'
 import { applyInterviewDecision, distinctRounds, isDecision, roundOrdinal } from '@/lib/recruitment/interview-decision'
-// The shortlist rules: three decided rounds, and one candidate per opening. The
+// The shortlist rules: three CLEARED rounds, and one candidate per opening. The
 // browser's "Move to" picker calls the SAME canShortlist(), so the reason it
 // shows a user is the reason this route would have given them.
 import { canShortlist, openingsOf, slotsUsed, SLOT_STAGES } from '@/lib/recruitment/pipeline-gates'
@@ -202,24 +203,34 @@ async function directFeedback(body: any) {
   return NextResponse.json({ ok: true, id: ins.data?.[0]?.id, decision: feedback.decision, stage })
 }
 
-// Final Shortlist: allowed once ≥3 rounds carry a main-interviewer decision, the latest
-// decision is Shortlist or Hold (a Reject ends the pipeline), and the requisition still
-// has an opening free.
+// Final Shortlist: allowed once ≥3 rounds have been CLEARED — decided SHORTLIST by
+// their main interviewer — and the requisition still has an opening free.
+//
+// CLEARED, NOT MERELY DECIDED. This counted any recorded decision, so a round decided
+// Hold counted toward the three and a candidate sitting on Hold could still be
+// shortlisted. A round is now cleared only when its decision is SHORTLIST; Hold and
+// Reject do not count. A Reject ends the pipeline anyway (applyInterviewDecision moves
+// the candidate to Rejected), so in practice this rule bites on Hold.
+//
+// A held round cannot be re-decided — both feedback paths return 409 once a round is
+// submitted — so a Hold permanently costs a round, and the hiring manager recovers by
+// adding another one. That is why canAddRound still permits a new round after a Hold.
 //
 // THIS IS THE ONLY WRITE OF 'Shortlisted' THE FUNNEL MAKES. The pipeline's manual stage
 // picker used to update the column itself, checking nothing but STAGES order — so one
-// Telephonic round was enough. It now posts here instead, which is why both rules can
-// live in one place. The cap especially has to be server-side: two recruiters
-// shortlisting at the same moment both pass any check made in a browser.
+// Telephonic round was enough. It posts here instead, which is why both rules live in
+// one place. The cap especially has to be server-side: two recruiters shortlisting at
+// the same moment both pass any check made in a browser.
 async function finalShortlist(body: any) {
   const { candidate_id } = body
   if (!candidate_id) return bad('candidate_id is required')
   const { data } = await sb.from('interview_invites').select('*')   // '*' — tolerant of a DB without migration 131
     .eq('candidate_id', candidate_id).order('created_at', { ascending: true })
   const rows = ((data || []) as any[]).filter(r => (r.role || 'MAIN') === 'MAIN' && r.status === 'submitted')
-  const decided = distinctRounds(rows.filter(r => r.decision || r.feedback?.decision))
+  const decisionOf = (r: any) => r.decision || r.feedback?.decision
+  const cleared = distinctRounds(rows.filter(r => decisionOf(r) === 'SHORTLIST'))
   const last = rows[rows.length - 1]
-  const lastDecision = last?.decision || last?.feedback?.decision
+  const lastDecision = decisionOf(last || {})
   if (lastDecision === 'REJECT') return bad('The latest round rejected this candidate')
 
   // The candidate's row carries the requisition; the cap needs both.
@@ -240,7 +251,7 @@ async function finalShortlist(body: any) {
 
   const gate = canShortlist({
     currentStage: String((cand as any)?.stage || ''),
-    decidedRounds: decided.length,
+    clearedRounds: cleared.length,
     openings,
     slotsUsed: used,
   })
@@ -248,5 +259,5 @@ async function finalShortlist(body: any) {
 
   const { error } = await sb.from('candidates').update({ stage: 'Shortlisted' }).eq('id', candidate_id)
   if (error) return bad(error.message, 500)
-  return NextResponse.json({ ok: true, stage: 'Shortlisted', rounds: decided.length })
+  return NextResponse.json({ ok: true, stage: 'Shortlisted', rounds: cleared.length })
 }
