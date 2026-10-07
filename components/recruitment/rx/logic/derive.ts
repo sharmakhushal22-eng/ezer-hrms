@@ -2,8 +2,10 @@
  * Pure display helpers for the redesign.
  *
  * RULE: nothing in this file decides anything the application enforces.
- * The authorities stay where they are in page.tsx:
- *   - moveStage()                → forward-only pipeline + feedback gate
+ * The authorities live elsewhere:
+ *   - /api/recruitment/interview-invite → the stage itself: three CLEARED rounds
+ *                                  unlock Shortlist, one candidate per opening,
+ *                                  and a reject needs a reason and a remark
  *   - QUICK_HIRE_CAP check       → lane validation in the MRF form
  *   - canSeeScreen()             → tab visibility
  *   - loadAll() query filters    → row scoping (oversight vs assigned)
@@ -12,10 +14,6 @@
  * can mislabel a card but can never allow an action the app would refuse.
  */
 import type { CandidateVM, MrfVM, NextStep, RoundVM, TodoItem } from './types';
-// The one place that decides Shortlisted and the offer-flow stages, shared with
-// the server route that performs the write. Imported so the reason the picker
-// shows is the server's reason rather than a second opinion that can drift.
-import { stageGate, type ShortlistFacts } from '@/lib/recruitment/pipeline-gates';
 
 /* ── Money and units ─────────────────────────────────────────────────── */
 
@@ -111,49 +109,11 @@ export function countByStage(candidates: CandidateVM[], stages: readonly string[
   return { counts, rejected: candidates.filter((c) => c.stage === REJECTED).length, max: Math.max(1, ...counts.map((c) => c.count)) };
 }
 
-export interface MoveOption { stage: string; allowed: boolean; reason?: string }
-
-/**
- * What the "Move to" picker SHOWS. Every target stays VISIBLE; the ones that are
- * not allowed carry the reason, so a user reads why rather than hunting for a
- * control that isn't there.
- *
- *  - earlier stages are never offered (forward-only)
- *  - Shortlisted and the offer-flow stages are decided by stageGate(), the same
- *    function the server calls — pass `facts` to get those answers
- *  - stages after Shortlisted additionally need feedback on every scheduled round
- *
- * Without `facts` this falls back to the old behaviour, which did not gate
- * Shortlisted at all. That gap, plus moveStage checking nothing but STAGES
- * order, is how a candidate reached Shortlisted after one Telephonic round and
- * Offer Sent with no negotiation. A caller that can measure the facts should
- * always pass them; this stays optional only so a display-only caller with no
- * requisition in hand is not forced to invent one.
- */
-export function moveOptions(
-  stages: readonly string[],
-  current: string,
-  rounds: RoundVM[],
-  shortlisted = 'Shortlisted',
-  facts?: ShortlistFacts,
-): MoveOption[] {
-  const flow = stages.filter((s) => s !== REJECTED);
-  const cur = flow.indexOf(current);
-  const gate = flow.indexOf(shortlisted);
-  const pending = rounds.filter((r) => !r.hasFeedback);
-  return flow.slice(cur + 1).map((stage) => {
-    const idx = flow.indexOf(stage);
-    // The policy module first: it owns Shortlisted and the offer-flow stages.
-    if (facts) {
-      const g = stageGate(stage, facts);
-      if (!g.ok) return { stage, allowed: false, reason: g.reason };
-    }
-    if (gate >= 0 && idx > gate && pending.length) {
-      return { stage, allowed: false, reason: `Record ${pending[0].name} feedback first` };
-    }
-    return { stage, allowed: true, reason: idx === cur + 1 ? 'Next stage' : undefined };
-  });
-}
+/* moveOptions() and MoveOption are gone with the "Move to" picker.
+ * Nothing in the product moves a candidate by hand any more: a stage is a
+ * consequence of the interview rounds, so there is no list of targets to
+ * label and no refusal reason to show. The rules it mirrored still exist,
+ * server-side, in /api/recruitment/interview-invite. */
 
 /** One-line "what to do next" for a candidate card. Needs the candidate's interview_rounds. */
 export function candidateNextStep(c: CandidateVM, rounds: RoundVM[] = [], today = new Date()): NextStep {

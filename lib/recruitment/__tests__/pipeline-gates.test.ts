@@ -4,27 +4,26 @@
 //
 // A candidate could be moved to 'Shortlisted' straight after the Telephonic
 // round, and to 'Offer Sent' with no negotiation, no HR Head approval and no
-// offer letter.
+// offer letter — because the pipeline's manual "Move to" picker checked only
+// that the target sat later in the STAGES array, and both of those do.
 //
-// NEITHER RULE WAS MISSING. The three-decided-rounds rule was enforced in
-// /api/recruitment/interview-invite's shortlist action, and the offer rules in
-// the dispatch path (which re-reads offer_approval_requests.status live). They
-// simply were not on the path the pipeline's "Move to" picker took — that one
-// checked only whether the target sat later in the STAGES array, and both
-// 'Shortlisted' and 'Offer Sent' do.
+// THAT PICKER IS GONE. A stage is now a consequence of the interview rounds,
+// never an input: a decision moves it, the Shortlist button posts
+// action:'shortlist', Reject posts action:'reject'. The gates that existed to
+// police the picker (offerFlowGate, roundStepGate, stageGate, the round ladder)
+// went with it, and their tests with them.
 //
-// So this file pins the POLICY first (pure, below), then pins that every write
-// path actually consults it. The second half matters more than the first: the
-// lesson already written down in mrf-assignment-rule.test.ts is that a rule
-// enforced at one write is not enforced, and four separate writes had to learn
-// it one at a time.
+// What remains is the rule the SERVER enforces: three CLEARED rounds, one
+// candidate per opening. This file pins that policy (pure, below), then pins
+// that every write path actually consults it — the lesson already written down
+// in mrf-assignment-rule.test.ts is that a rule enforced at one write is not
+// enforced, and four separate writes had to learn it one at a time.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  SLOT_STAGES, OFFER_FLOW_STAGES, ROUNDS_BEFORE_SHORTLIST, ROUND_LADDER,
-  occupiesSlot, openingsOf, slotsUsed, canShortlist, offerFlowGate, stageGate,
-  roundStepGate,
+  SLOT_STAGES, ROUNDS_BEFORE_SHORTLIST,
+  occupiesSlot, openingsOf, slotsUsed, canShortlist,
   type ShortlistFacts,
 } from '../pipeline-gates.ts'
 
@@ -44,10 +43,6 @@ describe('the vocabulary', () => {
     assert.equal(occupiesSlot('Rejected'), false, 'a rejected candidate frees their slot')
     assert.equal(occupiesSlot('Hold'), false, 'a held candidate has not claimed an opening')
     for (const junk of [null, undefined, '']) assert.equal(occupiesSlot(junk), false)
-  })
-
-  test('the offer flow owns Offer Sent and Joined', () => {
-    assert.deepEqual([...OFFER_FLOW_STAGES], ['Offer Sent', 'Joined'])
   })
 
   test('the shortlist gate is still three rounds', () => {
@@ -215,140 +210,6 @@ describe('canShortlist', () => {
   })
 })
 
-describe('offerFlowGate', () => {
-  test('Offer Sent is refused, and the reason says who sends it instead', () => {
-    const g = offerFlowGate('Offer Sent')
-    assert.equal(g.ok, false)
-    assert.match(g.reason as string, /HR Manager/)
-    assert.match(g.reason as string, /Offer Letters/)
-    assert.match(g.reason as string, /HR Head/)
-  })
-
-  test('Joined is refused too', () => {
-    // Both sit after Shortlisted in STAGES, so gating only 'Offer Sent' would
-    // leave Shortlisted -> Joined open as a perfectly "forward" move.
-    const g = offerFlowGate('Joined')
-    assert.equal(g.ok, false)
-    assert.match(g.reason as string, /sent and accepted/)
-  })
-
-  test('every other stage passes straight through', () => {
-    for (const s of ['Applied', 'AI Screened', 'Telephonic', 'L1', 'L2',
-      'Optional Round', 'Hold', 'Shortlisted', 'Rejected']) {
-      assert.deepEqual(offerFlowGate(s), { ok: true }, `${s} is not the offer flow's to own`)
-    }
-  })
-
-  test('it is unconditional — there is no approved-path branch', () => {
-    // The approved path does not come through this module at all; it comes
-    // through the dispatch in offer-flow-components.tsx, which writes the
-    // offer_letters row, the DOJ, the audit entry and the MRF close ALONGSIDE
-    // the stage. A branch here that admitted 'Offer Sent' "when approved" would
-    // reinstate the exact bug: the stage with none of the rest.
-    const src = readFileSync('lib/recruitment/pipeline-gates.ts', 'utf8')
-    const from = src.indexOf('export function offerFlowGate')
-    assert.notEqual(from, -1, 'offerFlowGate was renamed — re-read why it is unconditional')
-    const after = src.indexOf('\nexport ', from + 10)
-    const whole = src.slice(from, after === -1 ? undefined : after)
-    // Strip the quoted strings before grepping. The refusal text reads "once the
-    // HR Head has approved", which is COPY, not a branch — the first version of
-    // this assertion matched that sentence and failed on prose while the code
-    // was correct. An assertion about code has to look only at code.
-    const code = whole.replace(/'[^']*'/g, "''")
-    assert.ok(!/approved|HR_HEAD_APPROVED|offer_approval_requests/i.test(code),
-      'offerFlowGate must not consult an approval; it refuses the funnel outright')
-    // And it accepts nothing but the target, so there is nothing to consult:
-    // a second parameter is how a conditional exemption would arrive.
-    assert.ok(/offerFlowGate\(target: string\): Gate/.test(code),
-      'offerFlowGate must take only the target stage')
-  })
-})
-
-describe('stageGate composes the two', () => {
-  test('the offer-flow stages are refused before anything else is weighed', () => {
-    const g = stageGate('Offer Sent', facts({ clearedRounds: 9, openings: 9, slotsUsed: 0 }))
-    assert.equal(g.ok, false)
-    assert.match(g.reason as string, /HR Manager/)
-  })
-
-  test('Shortlisted gets the shortlist rules', () => {
-    assert.equal(stageGate('Shortlisted', facts({ clearedRounds: 1 })).ok, false)
-    assert.equal(stageGate('Shortlisted', facts({ openings: 2, slotsUsed: 2 })).ok, false)
-    assert.equal(stageGate('Shortlisted', facts()).ok, true)
-  })
-
-  test('it applies the round ladder to the round stages', () => {
-    // This test used to assert stageGate had "no opinion on the interview
-    // rounds". That was the gap: a candidate at Applied could be moved straight
-    // to L2. Note the old assertion would still have PASSED after the fix,
-    // because its fixture sits at L2 and so satisfies the ladder by accident —
-    // which is exactly why it is replaced rather than kept.
-    assert.equal(stageGate('L2', facts({ currentStage: 'Applied' })).ok, false)
-    assert.equal(stageGate('L1', facts({ currentStage: 'Telephonic' })).ok, true)
-  })
-
-  test('it still has no opinion on stages outside the ladder', () => {
-    // Hold is the funnel's own business, and forward-only ordering stays with
-    // whoever owns the STAGES array.
-    assert.deepEqual(stageGate('Hold', facts({ currentStage: 'Applied', clearedRounds: 0 })), { ok: true })
-  })
-})
-
-describe('the rounds run in order', () => {
-  test('the ladder is Telephonic -> L1 -> L2 -> Optional Round', () => {
-    assert.deepEqual([...ROUND_LADDER], ['Telephonic', 'L1', 'L2', 'Optional Round'])
-  })
-
-  test('THE REPORTED GAP: Applied cannot jump to L1 or L2', () => {
-    for (const target of ['L1', 'L2', 'Optional Round']) {
-      const g = roundStepGate(target, 'Applied')
-      assert.equal(g.ok, false, `Applied -> ${target} must be refused`)
-      assert.match(g.reason as string, /^Telephonic comes next/,
-        'from Applied the missing step is Telephonic — not whatever happens to precede the target')
-    }
-  })
-
-  test('Telephonic is open from the pre-round stages', () => {
-    for (const from of ['Applied', 'AI Screened', '']) {
-      assert.deepEqual(roundStepGate('Telephonic', from), { ok: true }, `Telephonic from ${from || '(none)'}`)
-    }
-  })
-
-  test('each rung opens the next one, and only the next one', () => {
-    assert.equal(roundStepGate('L1', 'Telephonic').ok, true)
-    assert.equal(roundStepGate('L2', 'Telephonic').ok, false, 'L1 may not be skipped')
-    assert.equal(roundStepGate('L2', 'L1').ok, true)
-    assert.equal(roundStepGate('Optional Round', 'L1').ok, false, 'L2 may not be skipped')
-    assert.equal(roundStepGate('Optional Round', 'L2').ok, true)
-  })
-
-  test('the refusal names the step actually missing', () => {
-    assert.match(roundStepGate('L2', 'Telephonic').reason as string, /^L1 comes next/)
-    assert.match(roundStepGate('Optional Round', 'L1').reason as string, /^L2 comes next/)
-  })
-
-  test('being further along never blocks an earlier round', () => {
-    // Forward-only already refuses a backwards move; this gate must not ALSO
-    // claim a candidate who is ahead is missing a step, or the two rules would
-    // report different reasons for the same refusal.
-    assert.equal(roundStepGate('L1', 'L2').ok, true)
-    assert.equal(roundStepGate('Telephonic', 'Optional Round').ok, true)
-  })
-
-  test('it has no opinion on stages outside the ladder', () => {
-    for (const s of ['Applied', 'AI Screened', 'Hold', 'Shortlisted', 'Offer Sent', 'Rejected']) {
-      assert.deepEqual(roundStepGate(s, 'Applied'), { ok: true }, `${s} is not a round`)
-    }
-  })
-
-  test('Optional Round is ordered, not mandated', () => {
-    // L2 -> Shortlisted must stay open: Telephonic + L1 + L2 is already the
-    // three decided rounds the shortlist gate asks for, so skipping Optional
-    // Round is the normal path, not an exception.
-    assert.equal(canShortlist(facts({ currentStage: 'L2', clearedRounds: 3 })).ok, true)
-  })
-})
-
 // ── Every write path must actually REACH the policy ─────────────────────────
 //
 // The tests above prove the rules. These prove the rules are reached, which is
@@ -387,63 +248,6 @@ test('all five sources were actually read', () => {
   assert.ok(OFFER.length > 40_000, `offer-flow looks truncated (${OFFER.length} chars)`)
 })
 
-describe('moveStage: the door the bug came through', () => {
-  const body = slice(PAGE, 'async function moveStage(', '\n  const [showRejected')
-
-  test('the body was isolated', () => {
-    assert.ok(body.length > 400 && body.length < 4_000, `moveStage slice looks wrong (${body.length} chars)`)
-  })
-
-  test('it refuses the offer-flow stages', () => {
-    assert.ok(/offerFlowGate\(stage\)/.test(body),
-      "moveStage must ask offerFlowGate. Forward-only was its ONLY check, and both 'Offer Sent' " +
-      "and 'Joined' sit later in STAGES — so both were permitted, which is the reported bug.")
-  })
-
-  test('the refusal precedes the Supabase write', () => {
-    const guard = body.indexOf('offerFlowGate(stage)')
-    const write = body.indexOf('update({ stage })')
-    assert.ok(guard !== -1 && write !== -1 && guard < write,
-      'the check must run before the write, or a refused move has already happened')
-  })
-
-  test('Shortlisted is delegated to the server, never written here', () => {
-    assert.ok(/action:'shortlist'/.test(body),
-      'moveStage must post the shortlist action, so the three-round rule and the one-per-opening ' +
-      'cap are enforced once — server-side, where a concurrent shortlist is actually visible')
-    assert.ok(body.indexOf("action:'shortlist'") < body.indexOf('update({ stage })'),
-      'the delegation must return before execution reaches the generic stage write')
-  })
-
-  test('BOTH sides count CLEARED rounds, not merely decided ones', () => {
-    // canShortlist only sees a number — it cannot tell a cleared round from a
-    // held one. The MEANING of that number lives in two filters: the modal's,
-    // and finalShortlist's. If either reverted to counting any decision, every
-    // policy test above would still pass while a held candidate got shortlisted.
-    // So the filters themselves are pinned here.
-    const MODAL = readFileSync('components/recruitment/CandidateInterviewModal.tsx', 'utf8')
-    assert.ok(/clearedRounds = rounds\.filter\(r => decisionOf\(mainOf\(r\)\) === 'SHORTLIST'\)/.test(MODAL),
-      "the modal must count only rounds decided SHORTLIST — counting any decision is what let a " +
-      'candidate sitting on Hold reach the Shortlist button')
-    assert.ok(/distinctRounds\(rows\.filter\(r => decisionOf\(r\) === 'SHORTLIST'\)\)/.test(ROUTE),
-      'finalShortlist must count only rounds decided SHORTLIST — it is the real gate, and the ' +
-      'modal is only its mirror')
-    // Neither side may fall back to the old "any decision" shape.
-    assert.ok(!/filter\(r => r\.decision \|\| r\.feedback\?\.decision\)/.test(ROUTE),
-      'the any-decision filter is the old rule and must not return')
-  })
-
-  test('it enforces the round ladder, before the write', () => {
-    assert.ok(/roundStepGate\(stage, cur/.test(body),
-      "moveStage must ask roundStepGate. Forward-only permitted Applied -> L2 outright, because " +
-      'every round sits later in STAGES — the picker was the one way around the stepwise flow')
-    const guard = body.indexOf('roundStepGate(stage, cur')
-    const write = body.indexOf('update({ stage })')
-    assert.ok(guard !== -1 && write !== -1 && guard < write,
-      'the ladder check must run before the write, or a refused move has already happened')
-  })
-})
-
 describe('addCandidate: a candidate cannot be CREATED into an opening', () => {
   const body = slice(PAGE, 'const knockedOut = cForm.q1', "let error = (await supabase.from('candidates').insert(")
 
@@ -476,6 +280,24 @@ describe('rehire: re-entering the pipeline is not re-entering an opening', () =>
 })
 
 describe('the shortlist route is the single enforcement point', () => {
+  test('BOTH sides count CLEARED rounds, not merely decided ones', () => {
+    // canShortlist only sees a number — it cannot tell a cleared round from a
+    // held one. The MEANING of that number lives in two filters: the modal's,
+    // and finalShortlist's. If either reverted to counting any decision, every
+    // policy test above would still pass while a held candidate got shortlisted.
+    // So the filters themselves are pinned here.
+    const MODAL = readFileSync('components/recruitment/CandidateInterviewModal.tsx', 'utf8')
+    assert.ok(/clearedRounds = rounds\.filter\(r => decisionOf\(mainOf\(r\)\) === 'SHORTLIST'\)/.test(MODAL),
+      "the modal must count only rounds decided SHORTLIST — counting any decision is what let a " +
+      'candidate sitting on Hold reach the Shortlist button')
+    assert.ok(/distinctRounds\(rows\.filter\(r => decisionOf\(r\) === 'SHORTLIST'\)\)/.test(ROUTE),
+      'finalShortlist must count only rounds decided SHORTLIST — it is the real gate, and the ' +
+      'modal is only its mirror')
+    // Neither side may fall back to the old "any decision" shape.
+    assert.ok(!/filter\(r => r\.decision \|\| r\.feedback\?\.decision\)/.test(ROUTE),
+      'the any-decision filter is the old rule and must not return')
+  })
+
   const body = slice(ROUTE, 'async function finalShortlist(')
 
   test('it asks canShortlist, and refuses before writing', () => {
@@ -507,35 +329,6 @@ describe('the shortlist route is the single enforcement point', () => {
   test('nothing about the cap is taken from the request body', () => {
     assert.ok(!/body\.openings|body\.slots|body\.cap/.test(body),
       'the client must not be able to state its own cap')
-  })
-})
-
-describe('the picker SHOWS the refusal rather than hiding the target', () => {
-  test('moveOptions consults stageGate', () => {
-    assert.ok(/stageGate\(stage, facts\)/.test(DERIVE),
-      'the picker must get its answer from the same function the server uses')
-  })
-
-  test('the stale CORE-WORKING.md justification is gone', () => {
-    // That comment cited a file which does not exist in the repo and never has
-    // (no git history for it), and what it described WAS the bug.
-    assert.ok(!/moving TO Shortlisted is not gated/.test(DERIVE))
-  })
-
-  test('the modal hands moveOptions the facts', () => {
-    assert.ok(/moveOptions\(stages, stageNow, roundVMs, 'Shortlisted',/.test(MODAL),
-      'without the facts moveOptions falls back to not gating Shortlisted at all')
-  })
-
-  test('the Shortlist button is gated by the same policy', () => {
-    assert.ok(/shortlistCheck\(\{/.test(MODAL),
-      'the button and the server must not disagree about whether — or why — a shortlist is allowed')
-  })
-
-  test('page.tsx supplies the counts the modal cannot measure', () => {
-    assert.ok(/openings=\{openingsOf\(/.test(PAGE))
-    assert.ok(/slotsUsed=\{slotsUsed\(/.test(PAGE),
-      'the modal sees one candidate; the cap needs the whole list, so the caller counts it')
   })
 })
 

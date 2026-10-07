@@ -3,10 +3,10 @@
 // Who may occupy one of a requisition's openings, and which pipeline stages the
 // funnel is allowed to write at all.
 //
-// Pure — no Supabase, no React — so the browser's "Move to" picker and the
-// server route that performs the write share ONE answer instead of each
-// carrying its own half of the rule. The reason the picker shows is literally
-// the reason the write would give, because both call the same function.
+// Pure — no Supabase, no React — so the modal's Shortlist button and the server
+// route that performs the write share ONE answer instead of each carrying its
+// own half of the rule. The reason the button shows is literally the reason the
+// write would give, because both call canShortlist().
 //
 // WHY THIS FILE EXISTS
 //
@@ -51,17 +51,6 @@ export { ROUNDS_BEFORE_SHORTLIST }
  * that moment rather than from the moment the offer goes out.
  */
 export const SLOT_STAGES: readonly string[] = ['Shortlisted', 'Offer Sent', 'Joined']
-
-/**
- * Stages only the offer flow may write.
- *
- * It sets them alongside the offer_letters row, the candidate's DOJ, the audit
- * entry and the MRF auto-close — none of which a stage change performs. So a
- * stage change that *looks* equivalent leaves four other records wrong: a
- * candidate reading 'Offer Sent' with no letter, no joining date for the
- * pre-onboarding countdown and nothing in the audit trail.
- */
-export const OFFER_FLOW_STAGES: readonly string[] = ['Offer Sent', 'Joined']
 
 export function occupiesSlot(stage: string | null | undefined): boolean {
   return !!stage && SLOT_STAGES.includes(stage)
@@ -154,79 +143,17 @@ export function canShortlist(f: ShortlistFacts): Gate {
   return ALLOW
 }
 
-/**
- * Refuses the stages the offer flow owns, whatever the funnel asks.
+/* REMOVED WITH THE "Move to" PICKER: OFFER_FLOW_STAGES, offerFlowGate(),
+ * ROUND_LADDER, roundStepGate() and stageGate().
  *
- * Unconditional on purpose. There is no "but the approval is in place" branch,
- * because the approved path does not come through here — it comes through the
- * dispatch in offer-flow-components.tsx, which re-reads the approval live and
- * writes the letter, the DOJ and the audit row with it.
- */
-export function offerFlowGate(target: string): Gate {
-  if (target === 'Offer Sent') {
-    return {
-      ok: false,
-      reason: 'The assigned HR Manager sends the offer from Offer Letters, once the HR Head has approved — sending it is what marks the candidate Offer Sent',
-    }
-  }
-  if (target === 'Joined') {
-    return {
-      ok: false,
-      reason: 'A candidate reaches Joined only after an offer has been sent and accepted',
-    }
-  }
-  return ALLOW
-}
-
-/**
- * The interview rounds, in the order they must happen.
+ * They existed to police manual stage changes — refuse Offer Sent / Joined,
+ * and keep the interview rounds in order. Nothing changes a stage by hand any
+ * more: a decision moves it (applyInterviewDecision), the Shortlist button
+ * posts action:'shortlist' and Reject posts action:'reject', all enforced in
+ * /api/recruitment/interview-invite.
  *
- * Optional Round is last and remains OPTIONAL: this fixes where it sits, not
- * that it has to occur. A candidate may go from L2 straight to Shortlisted,
- * because Telephonic + L1 + L2 is already the three decided rounds the
- * shortlist gate asks for.
- */
-export const ROUND_LADDER: readonly string[] = ['Telephonic', 'L1', 'L2', 'Optional Round']
-
-/**
- * The rounds run in order — no skipping.
- *
- * WHY THIS EXISTS. Forward-only let a candidate at 'Applied' be moved straight
- * to 'L2': every round sits later in STAGES, so the index compare permitted it,
- * and this module previously had "no opinion on the interview rounds". The
- * modal's own round flow was already stepwise (Telephonic is the default first
- * round, and "+ Add round" unlocks only once the latest round is decided) — the
- * manual stage picker was the one way around it.
- *
- * This keys on the candidate's STAGE, not on whether the previous round
- * recorded a decision. In the normal flow those coincide, because a decision
- * moves the candidate onto that round's stage (applyInterviewDecision). The
- * residue is that someone can still walk the ladder by hand without conducting
- * interviews — and that is deliberately someone else's problem: the
- * three-decided-rounds rule in canShortlist still refuses the shortlist, so the
- * OUTCOME stays protected even when the stage label runs ahead.
- */
-export function roundStepGate(target: string, currentStage: string): Gate {
-  const ti = ROUND_LADDER.indexOf(target)
-  // Not a round, or the first round — nothing has to come before it.
-  if (ti <= 0) return ALLOW
-  const ci = ROUND_LADDER.indexOf(currentStage)
-  // Already at the prerequisite round, or past it.
-  if (ci >= ti - 1) return ALLOW
-  // Name the step actually missing, not just the one before the target: from
-  // 'Applied' the answer is "Telephonic", not "L1".
-  const nextRequired = ROUND_LADDER[Math.max(0, ci + 1)]
-  return { ok: false, reason: `${nextRequired} comes next — the rounds run in order` }
-}
-
-/**
- * The gate for any target stage: what the picker shows, and what the write
- * checks. Forward-only ordering is NOT decided here; that stays with the
- * caller, which owns the STAGES array.
- */
-export function stageGate(target: string, f: ShortlistFacts): Gate {
-  const owned = offerFlowGate(target)
-  if (!owned.ok) return owned
-  if (target === 'Shortlisted') return canShortlist(f)
-  return roundStepGate(target, f.currentStage)
-}
+ * The rules did not disappear, they stopped being REACHABLE. A round's stage
+ * comes from its own position, so the rounds run in order by construction; and
+ * only the offer dispatch writes 'Offer Sent', alongside the letter, the DOJ,
+ * the audit row and the MRF close. Re-adding any manual stage control means
+ * re-adding these gates first. */

@@ -153,11 +153,12 @@ export function toCandidateVM(row: Row): CandidateVM {
  * a round records feedback by moving to `status === 'done'` and stamping
  * `feedback_submitted_at` (see InterviewPipeline's submit path). Reading a
  * non-existent column would have reported EVERY round as awaiting feedback,
- * so moveOptions() would have locked every stage past Shortlisted permanently.
+ * which is what the stage picker read before it was removed.
  *
- * Note this mirrors the ROUND-level rule. The candidate modal gates a move on
- * its own per-interviewer invite rows (`status === 'submitted'`), and that
- * check — blockedReason() — remains the authority. moveOptions() only labels.
+ * Note this mirrors the ROUND-level rule, and is now display-only. Nothing
+ * gates a stage change on it: the candidate modal has no manual stage control,
+ * and the Shortlist gate counts CLEARED rounds from its own per-interviewer
+ * invite rows (`decision === 'SHORTLIST'`), server-side.
  */
 export function toRoundVM(row: Row, nameOf: (id: string) => string): RoundVM {
   const done = String(pick(row, ['status'], '')).toLowerCase() === 'done';

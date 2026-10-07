@@ -38,10 +38,11 @@ import { canShortlist as shortlistCheck } from '@/lib/recruitment/pipeline-gates
 import { REJECTION_REASONS, validateRejection } from '@/lib/recruitment/rejection'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
 import { C as TK, E, F, Z } from '@/lib/ui'
-// The move-stage picker adopts the kit's radiogroup. moveOptions() LABELS the
-// targets and now carries the gate's refusal reason too; blockedReason() below
-// still decides the round-feedback half. See the note on roundVMs.
-import { RxDialog, Icon, moveOptions, type RoundVM } from '@/components/recruitment/rx'
+// No stage picker any more: every stage change comes from an interviewer's
+// decision (applyInterviewDecision) or from the Shortlist / Reject buttons in
+// INTERVIEW ROUNDS. The picker's helpers went with it, and so did the lock
+// glyph that explained why a target was refused.
+import { RxDialog } from '@/components/recruitment/rx'
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 //
@@ -86,13 +87,16 @@ const isMain = (i: Invite) => (i.role || 'MAIN') === 'MAIN'
 const decisionOf = (i?: Invite | null): Decision | null => (i?.decision || i?.feedback?.decision || null) as Decision | null
 
 export default function CandidateInterviewModal({
-  candidate, mrf, stages, stageColor, stageText, schedulerId, openings = 1, slotsUsed = 0,
-  onClose, onStageChange, onChanged, showNotify,
+  candidate, mrf, stageText, schedulerId, openings = 1, slotsUsed = 0,
+  onClose, onChanged, showNotify,
 }: {
   candidate: any
   mrf: any
-  stages: string[]
-  stageColor: Record<string, string>
+  /**
+   * Stage -> colour for the header chip. `stages` and `stageColor` used to come
+   * with it, for the "Move to" picker; the picker is gone and nothing else read
+   * them, so only this one survives.
+   */
   stageText: Record<string, string>
   schedulerId: string | null | undefined
   /**
@@ -108,8 +112,7 @@ export default function CandidateInterviewModal({
   openings?: number
   slotsUsed?: number
   onClose: () => void
-  onStageChange: (id: string, stage: string, opts?: { blocked?: string }) => void
-  /** The server moved the candidate (a decision or the final Shortlist) — refresh the list. */
+  /** The server moved the candidate (a decision, the Shortlist or a Reject) — refresh the list. */
   onChanged?: (stage?: string | null) => void
   showNotify: (m: string, t?: 'success' | 'error') => void
 }) {
@@ -131,7 +134,6 @@ export default function CandidateInterviewModal({
   const [rejectRemark, setRejectRemark] = useState('')
   const [rejecting, setRejecting] = useState(false)
   const [stageNow, setStageNow] = useState<string>(candidate.stage)
-  const [target, setTarget] = useState<string | null>(null)   // stage picked in the move radiogroup
 
   // schedule form state
   const [mainPick, setMainPick] = useState<Emp[]>([])
@@ -143,9 +145,6 @@ export default function CandidateInterviewModal({
   const [sending, setSending] = useState(false)
 
   useEffect(() => { setStageNow(candidate.stage) }, [candidate.stage])
-  // A move landed (or a decision moved the candidate): clear the picker so it
-  // never shows a selection that is now behind the candidate.
-  useEffect(() => { setTarget(null) }, [stageNow])
 
   const loadInvites = useCallback(async () => {
     try {
@@ -220,33 +219,6 @@ export default function CandidateInterviewModal({
     setNewRound(''); setShowAddRound(false)
     openScheduleFor(name)   // straight into scheduling, per the flow
   }
-
-  // Gating for the manual stage buttons: can't move a candidate to Shortlisted (or beyond)
-  // while any scheduled round is still waiting on its main interviewer's feedback.
-  const blockedReason = useCallback((target: string): string | null => {
-    const shortlistIdx = stages.indexOf('Shortlisted')
-    if (shortlistIdx === -1 || stages.indexOf(target) < shortlistIdx) return null
-    for (const r of Object.keys(invitesByRound)) {
-      if ((invitesByRound[r] || []).length && !roundComplete(r)) return r
-    }
-    return null
-  }, [stages, invitesByRound, roundComplete])
-
-  /**
-   * View models for the kit's stage picker. Built from invitesByRound — the SAME
-   * set blockedReason() walks — so a label can never disagree with the gate: a
-   * round that was named but never scheduled has no invite rows and gates
-   * nothing. moveOptions() reads only `name` and `hasFeedback`.
-   *
-   * This is deliberately NOT the interview_rounds table. That table is what the
-   * pipeline's own RoundVMs come from, and this modal never loads it — feeding
-   * moveOptions an empty array here would report every stage as open and quietly
-   * bypass the feedback gate.
-   */
-  const roundVMs = useMemo<RoundVM[]>(() => Object.keys(invitesByRound).map(r => {
-    const m = mainOf(r)
-    return { name: r, interviewer: m?.interviewer_name || '', at: m?.scheduled_at ?? null, hasFeedback: roundComplete(r) }
-  }), [invitesByRound, mainOf, roundComplete])
 
   const openScheduleFor = (r: string) => {
     setOpenRound(r); setViewing(null); setFbRound(null)
@@ -347,12 +319,6 @@ export default function CandidateInterviewModal({
     setShortlisting(false)
   }
 
-  function tryMove(stage: string) {
-    const reason = blockedReason(stage)
-    if (reason) { showNotify(`Complete the ${reason} round (needs interviewer feedback) before moving to ${stage}`, 'error'); return }
-    onStageChange(candidate.id, stage)
-  }
-
   const initials = (candidate.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
   const subLine = [mrf?.designation || mrf?.position, candidate.designation, candidate.mrf_id ? `MRF ${(mrf?.mrf_number || '').toString()}` : null].filter(Boolean).join(' · ')
   const candMeta = { name: candidate.full_name, sub: subLine, ai_score: candidate.ai_score ?? null }
@@ -388,25 +354,6 @@ export default function CandidateInterviewModal({
       </Shell>
     )
   }
-
-  // Forward-only targets, mirroring moveStage's own rule.
-  // GUARD: when the candidate is already Rejected they are not in `flow` at all,
-  // so moveOptions' indexOf returns -1, slice(cur+1) becomes slice(0), and it
-  // would offer every stage — including ones behind them.
-  const inFlow = stages.filter(s => s !== 'Rejected').includes(stageNow)
-  // Shortlisted and the offer-flow stages stay VISIBLE in the picker and carry
-  // their refusal reason, so a user reads why rather than hunting for a control
-  // that is not there. Without these facts moveOptions falls back to its old
-  // behaviour, which did not gate Shortlisted at all.
-  const moveOpts = inFlow
-    ? moveOptions(stages, stageNow, roundVMs, 'Shortlisted',
-        { currentStage: stageNow, clearedRounds: clearedRounds.length, openings, slotsUsed })
-    : []
-  // Rejected sits past Shortlisted, so blockedReason() already gates it today.
-  // moveOptions strips it from the list entirely, hence its own button.
-  const rejectBlocked = blockedReason('Rejected')
-  const canReject = stages.includes('Rejected') && stageNow !== 'Rejected'
-  const anyGated = !!rejectBlocked || moveOpts.some(o => !o.allowed)
 
   return (
     <Shell onClose={onClose}>
@@ -565,38 +512,10 @@ export default function CandidateInterviewModal({
         })}
       </div>
 
-      {/* stage move — gated */}
-      <SectionTitle>Move stage</SectionTitle>
-      {moveOpts.length === 0 && !canReject ? (
-        <div style={{ fontSize:12, color:C.faint }}>No stage left to move to — this candidate is {stageNow}.</div>
-      ) : (
-        <>
-          <div className="rx-move" role="radiogroup" aria-label="Next stage">
-            {moveOpts.map(o => {
-              // moveOptions does NOT gate Shortlisted itself; blockedReason does,
-              // and it is the authority in this modal. Whichever refuses, wins.
-              const reason = blockedReason(o.stage)
-              const allowed = o.allowed && !reason
-              return (
-                <label key={o.stage} className={allowed ? '' : 'off'}>
-                  <input type="radio" name="mv" disabled={!allowed} checked={target === o.stage} onChange={() => setTarget(o.stage)} />
-                  <b>{o.stage}</b>
-                  <small>{reason ? `Complete the ${reason} round first` : (o.reason ?? '')}</small>
-                </label>
-              )
-            })}
-          </div>
-          <div className="rx-row" style={{ gap:8, marginTop:12, flexWrap:'wrap' }}>
-            <button className="rx-btn p" disabled={!target} onClick={() => { if (target) tryMove(target) }}>Move candidate</button>
-            {canReject && (
-              <button className="rx-btn d" disabled={!!rejectBlocked} onClick={() => tryMove('Rejected')}
-                title={rejectBlocked ? `Complete the ${rejectBlocked} round first` : ''}>Reject</button>
-            )}
-            {anyGated && <span className="rx-why"><Icon name="lock" />Feedback still outstanding</span>}
-          </div>
-        </>
-      )}
-      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>Interview decisions move the candidate automatically (Reject → Rejected, Hold → Hold, Shortlist → the round's stage). Every scheduled round needs the main interviewer's feedback before Shortlisted or beyond.</div>
+      {/* No stage picker. It existed to move a candidate by hand during testing,
+          and it was the one way around every rule the rounds enforce. The stage
+          is now a consequence of the rounds, never an input. */}
+      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>Interview decisions move the candidate automatically (Reject → Rejected, Hold → Hold, Shortlist → the round&apos;s stage). Three rounds cleared — Telephonic included — unlock Shortlist.</div>
 
       {/* Add-round popup — name the round, then it opens straight into scheduling */}
       {showAddRound && (

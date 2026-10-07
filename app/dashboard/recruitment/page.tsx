@@ -50,7 +50,7 @@ import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
 // The pipeline gates: one candidate per opening, three decided rounds before a
 // shortlist, and the offer-flow stages are not the funnel's to write. Shared
 // with /api/recruitment/interview-invite, which enforces them.
-import { occupiesSlot, openingsOf, slotsUsed, offerFlowGate, roundStepGate } from '@/lib/recruitment/pipeline-gates'
+import { occupiesSlot, openingsOf, slotsUsed } from '@/lib/recruitment/pipeline-gates'
 
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
@@ -538,9 +538,11 @@ export default function RecruitmentPage() {
           The tab keeps its create/edit form, its detail drawer, its approval
           modal and its delete dialog. */}
       {tab==='mrf' && <MRFTab {...props} />}
-      {/* Pipeline renders PipelineView. No drag-and-drop by design: every
-          stage move still goes through the modal, so moveStage's forward-only
-          rule and the modal's own feedback gate cannot be bypassed. */}
+      {/* Pipeline renders PipelineView. No drag-and-drop, and no manual stage
+          control at all any more: a stage is a consequence of the interview
+          rounds. A decision moves it, the Shortlist button posts
+          action:'shortlist' and Reject posts action:'reject' — each enforced
+          server-side in /api/recruitment/interview-invite. */}
       {tab==='pipeline' && <PipelineTab {...props} />}
       {/* Interviews Scheduled — the scheduler's mirror of ESS → Tasks &
           Approvals. Read-only by construction: it loads interview_invites and
@@ -4187,53 +4189,14 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     }
   }
 
-  async function moveStage(id:string, stage:string) {
-    // Pipeline moves forward only — a candidate can't be sent back to an earlier round.
-    const cur = candidates.find((c:Candidate)=>c.id===id)?.stage
-    const ci = STAGES.indexOf(cur as string), ti = STAGES.indexOf(stage)
-    if (ci!==-1 && ti!==-1 && ti<ci) {
-      showNotify(`Can't move back to "${stage}" — the pipeline only moves forward`,'error')
-      return
-    }
+  // moveStage is gone. The pipeline's manual stage picker existed to move a
+  // candidate by hand during testing, and it was the one way around every rule
+  // the rounds enforce — one Telephonic round to Shortlisted, Offer Sent with no
+  // negotiation. A stage is now a CONSEQUENCE of the rounds, never an input:
+  // interview decisions move it (applyInterviewDecision), the Shortlist button
+  // posts action:'shortlist', and Reject posts action:'reject'. All three are
+  // enforced server-side in /api/recruitment/interview-invite.
 
-    // Forward-only was the ONLY check this function made, and both of the stages
-    // below sit later in STAGES — which is exactly how a candidate reached
-    // Shortlisted straight after Telephonic, and Offer Sent with no negotiation,
-    // no HR Head approval and no offer letter. Each is now refused here.
-
-    // Offer Sent / Joined belong to the offer flow. It writes the offer_letters
-    // row, the candidate's DOJ, the audit entry and the MRF auto-close ALONGSIDE
-    // the stage, so a bare stage change that looks equivalent leaves four other
-    // records wrong. Refused outright, not gated: the approved path doesn't come
-    // through here — the assigned HR Manager sends from Offer Letters.
-    const owned = offerFlowGate(stage)
-    if (!owned.ok) { showNotify(owned.reason as string,'error'); return }
-
-    // The interview rounds run in order. Forward-only let a candidate at
-    // 'Applied' be moved straight to 'L2' — every round sits later in STAGES, so
-    // the index compare permitted it. The modal's own round flow was already
-    // stepwise (Telephonic is the default first round, and "+ Add round" unlocks
-    // only once the latest round is decided); this picker was the way around it.
-    const step = roundStepGate(stage, cur || '')
-    if (!step.ok) { showNotify(step.reason as string,'error'); return }
-
-    // Shortlisted goes through the same endpoint the Shortlist button uses, so
-    // the three-round rule and the one-per-opening cap are enforced ONCE, on the
-    // server — where a second recruiter's concurrent write is actually visible.
-    // The server re-counts both; nothing is trusted from here.
-    if (stage === 'Shortlisted') {
-      const r = await fetch('/api/recruitment/interview-invite', {
-        method:'POST', headers: await authHeaders(),
-        body: JSON.stringify({ action:'shortlist', candidate_id:id }),
-      })
-      const j = await r.json().catch(()=>({}))
-      if (!r.ok) { showNotify(j.error || 'Could not shortlist','error'); return }
-      setSelCand(c=>c?{...c,stage:'Shortlisted'}:null); onRefresh(); return
-    }
-
-    await supabase.from('candidates').update({ stage }).eq('id',id)
-    setSelCand(c=>c?{...c,stage}:null); onRefresh()
-  }
 
   const [showRejected, setShowRejected] = useState(false)
 
@@ -4642,18 +4605,18 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       {/* openings / slotsUsed are counted HERE, where the whole candidate list
           lives — the modal only ever sees one candidate. slotsUsed EXCLUDES this
           one, so a candidate sent back from the offer flow for a revision is not
-          refused their own slot. The server re-counts both before it writes;
-          these two are only what the picker SHOWS. */}
+          refused their own slot. They decide whether the Shortlist button is
+          offered; the server re-counts both before it writes, so a wrong count
+          here mislabels a button and cannot let a write through. */}
       {selCand&&(
         <CandidateInterviewModal
           candidate={selCand}
           mrf={mrfs.find((m:MRF)=>m.id===selCand.mrf_id) || null}
-          stages={STAGES} stageColor={STAGE_COLOR} stageText={STAGE_TEXT}
+          stageText={STAGE_TEXT}
           schedulerId={employeeId}
           openings={openingsOf(mrfs.find((m:MRF)=>m.id===selCand.mrf_id) || null)}
           slotsUsed={slotsUsed(candidates as any[], selCand.mrf_id, selCand.id)}
           onClose={()=>setSelCand(null)}
-          onStageChange={moveStage}
           onChanged={(stage)=>{ if (stage) setSelCand(c=>c?{...c,stage}:null); onRefresh() }}
           showNotify={showNotify} />
       )}

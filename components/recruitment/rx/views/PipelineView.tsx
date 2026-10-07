@@ -15,8 +15,12 @@ import type { CandidateVM, NextStep } from '../logic/types';
  *   `filterBar` through unchanged).
  * - Clicking a card calls onOpen(id), which opens CandidateInterviewModal as today.
  * - onAddCandidate opens the existing eight-section form with its knockout questions.
- * There is no drag-and-drop on purpose: every stage move still goes through
- * moveStage inside the modal, so forward-only and the feedback gate cannot be bypassed.
+ * There is no drag-and-drop on purpose, and the reason is now stronger than it
+ * was: nothing moves a candidate by hand at all. A stage is a consequence of the
+ * interview rounds — a decision moves it, the Shortlist button posts
+ * action:'shortlist' and Reject posts action:'reject' — each enforced in
+ * /api/recruitment/interview-invite. A board that could drag a card would be
+ * re-inventing the picker that was removed.
  */
 export function PipelineView({ rail, candidates, stages, nextStepFor, onOpen, onAddCandidate, openingSelect, filterBar, onShowRejected }: {
   rail?: React.ReactNode; candidates: CandidateVM[]; stages: readonly string[]; nextStepFor: (c: CandidateVM) => NextStep;
