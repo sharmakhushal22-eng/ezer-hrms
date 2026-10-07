@@ -32,6 +32,10 @@ import { type Decision, DECISION_LABEL, ROUNDS_BEFORE_SHORTLIST } from '@/lib/re
 // calls this same function, so the button and the server cannot drift apart
 // about whether a shortlist is allowed, or about why it is not.
 import { canShortlist as shortlistCheck } from '@/lib/recruitment/pipeline-gates'
+// Rejecting needs a reason AND a remark. The same validator the route runs, so
+// this dialog and the server refuse for identical reasons — the dialog is the
+// courtesy half; /api/recruitment/interview-invite is the rule.
+import { REJECTION_REASONS, validateRejection } from '@/lib/recruitment/rejection'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
 import { C as TK, E, F, Z } from '@/lib/ui'
 // The move-stage picker adopts the kit's radiogroup. moveOptions() LABELS the
@@ -120,6 +124,12 @@ export default function CandidateInterviewModal({
   const [newRound, setNewRound] = useState('')
   const [confirmShortlist, setConfirmShortlist] = useState(false)
   const [shortlisting, setShortlisting] = useState(false)
+  // Reject lives in INTERVIEW ROUNDS now, beside Shortlist — rejecting is part
+  // of running the rounds, not a stage edit.
+  const [showReject, setShowReject] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectRemark, setRejectRemark] = useState('')
+  const [rejecting, setRejecting] = useState(false)
   const [stageNow, setStageNow] = useState<string>(candidate.stage)
   const [target, setTarget] = useState<string | null>(null)   // stage picked in the move radiogroup
 
@@ -297,6 +307,30 @@ export default function CandidateInterviewModal({
     setFbSaving(false)
   }
 
+  // The hiring manager rejects, at any round, with a reason and a remark. The
+  // route re-checks both and writes the stage, the reason, who and when, plus an
+  // audit row — none of which a bare stage change did.
+  async function doReject() {
+    const check = validateRejection({ reason: rejectReason, remark: rejectRemark })
+    if (!check.ok) { showNotify(check.reason as string, 'error'); return }
+    setRejecting(true)
+    try {
+      const r = await fetch('/api/recruitment/interview-invite', {
+        method: 'POST', headers: await authHeaders(),
+        body: JSON.stringify({
+          action: 'reject', candidate_id: candidate.id,
+          reason: rejectReason, remark: rejectRemark,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { showNotify(j.error || 'Could not reject', 'error'); setRejecting(false); return }
+      showNotify(`${candidate.full_name} moved to Rejected.`)
+      setShowReject(false); setStageNow('Rejected')
+      onChanged?.('Rejected')
+    } catch { showNotify('Could not reject', 'error') }
+    setRejecting(false)
+  }
+
   async function doShortlist() {
     setShortlisting(true)
     try {
@@ -415,6 +449,14 @@ export default function CandidateInterviewModal({
           )}
           <button onClick={() => { if (canAddRound) { setNewRound(''); setShowAddRound(true) } }} disabled={!canAddRound} title={canAddRound ? '' : addRoundHint}
             style={{ ...btn.small, background:C.brandTint, color:C.pdark, border:`1px solid ${TK.brandEdge}`, opacity: canAddRound ? 1 : .45, cursor: canAddRound ? 'pointer' : 'not-allowed' }}>+ Add round</button>
+          {/* Reject is available at ANY round — it is not gated on feedback, because
+              a candidate can be turned down before a scheduled round ever happens.
+              It IS refused once the offer flow owns them ('Offer Sent' / 'Joined'),
+              which has its own backout path; the route enforces that too. */}
+          {!pipelineOver && (
+            <button onClick={() => { setRejectReason(''); setRejectRemark(''); setShowReject(true) }}
+              style={{ ...btn.small, background:TK.criticalTint, color:C.dang, border:`1px solid ${TK.criticalEdge}` }}>Reject</button>
+          )}
         </div>
       </div>
       {!canAddRound && addRoundHint && (
@@ -568,6 +610,39 @@ export default function CandidateInterviewModal({
           <div style={{ display:'flex', gap:8, marginTop:14 }}>
             <button onClick={addRound} disabled={!newRound.trim()} style={{ ...btn.pri, opacity: newRound.trim() ? 1 : .5 }}>Add</button>
             <button onClick={() => setShowAddRound(false)} style={btn.ghost}>Cancel</button>
+          </div>
+        </Popup>
+      )}
+
+      {/* Reject — reason AND remark, both mandatory. validateRejection() decides,
+          the same function the route calls before it writes. */}
+      {showReject && (
+        <Popup onClose={() => !rejecting && setShowReject(false)}>
+          <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>Reject {candidate.full_name}?</div>
+          <div style={{ fontSize:12.5, color:C.muted, marginBottom:12 }}>
+            This is recorded against the candidate with who rejected them and when, and it frees
+            the requisition's opening. Currently at <b>{stageNow}</b>.
+          </div>
+
+          <label style={lbl}>Reason <span style={{ color:C.dang }}>*</span></label>
+          <select value={rejectReason} onChange={e => setRejectReason(e.target.value)} style={{ ...inp, cursor:'pointer' }}>
+            <option value="">Choose a reason…</option>
+            {REJECTION_REASONS.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
+          </select>
+
+          <label style={{ ...lbl, marginTop:10 }}>Remark <span style={{ color:C.dang }}>*</span></label>
+          <textarea value={rejectRemark} onChange={e => setRejectRemark(e.target.value)}
+            placeholder="What does that reason mean for this candidate?"
+            style={{ ...inp, height:'auto', minHeight:72, resize:'vertical', padding:'9px 11px' }} />
+
+          <div style={{ display:'flex', gap:8, marginTop:14 }}>
+            <button onClick={doReject}
+              disabled={rejecting || !validateRejection({ reason: rejectReason, remark: rejectRemark }).ok}
+              style={{ ...btn.pri, background:C.dang,
+                       opacity: (rejecting || !validateRejection({ reason: rejectReason, remark: rejectRemark }).ok) ? .5 : 1 }}>
+              {rejecting ? 'Rejecting…' : 'Reject candidate'}
+            </button>
+            <button onClick={() => setShowReject(false)} disabled={rejecting} style={btn.ghost}>Cancel</button>
           </div>
         </Popup>
       )}

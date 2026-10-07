@@ -25,6 +25,9 @@ import { applyInterviewDecision, distinctRounds, isDecision, roundOrdinal } from
 // browser's "Move to" picker calls the SAME canShortlist(), so the reason it
 // shows a user is the reason this route would have given them.
 import { canShortlist, openingsOf, slotsUsed, SLOT_STAGES } from '@/lib/recruitment/pipeline-gates'
+// A rejection needs a reason AND a remark. The dialog collects them; THIS route
+// is what refuses without them — the same split as the shortlist rules above.
+import { validateRejection, normaliseRemark, rejectionLabel } from '@/lib/recruitment/rejection'
 
 export const runtime = 'nodejs' // nodemailer needs Node, not Edge
 
@@ -65,6 +68,7 @@ export async function POST(req: NextRequest) {
 
   if (body.action === 'direct_feedback') return directFeedback(body)
   if (body.action === 'shortlist') return finalShortlist(body)
+  if (body.action === 'reject') return rejectCandidate(body, gate.user.employeeId)
   if (body.action !== 'schedule') return bad('Unknown action')
 
   const { candidate_id, mrf_id, company_id, round, scheduled_at, meet_link, meet_passcode, scheduled_by } = body
@@ -201,6 +205,67 @@ async function directFeedback(body: any) {
   try { stage = await applyInterviewDecision(sb as any, candidate_id, round, feedback.decision, roundOrdinal(rounds, round)) }
   catch (e: any) { return bad(e.message || 'Could not update the candidate', 500) }
   return NextResponse.json({ ok: true, id: ins.data?.[0]?.id, decision: feedback.decision, stage })
+}
+
+// The hiring manager rejects a candidate, at any round, with a mandatory reason and
+// remark. Both are checked HERE rather than only in the dialog: a disabled button is
+// not an enforcement point, which is the lesson mrf-assignment-rule.test.ts exists to
+// record.
+//
+// Rejecting is allowed from any stage the funnel owns. It deliberately does NOT touch a
+// candidate the offer flow already owns ('Offer Sent' / 'Joined') — those have their own
+// backout path, which blacklists the candidate and reopens the requisition, and none of
+// that would happen here.
+//
+// A rejection FREES the requisition's opening, because occupiesSlot() does not count
+// 'Rejected'. That is intended: the cap is about who is in play.
+async function rejectCandidate(body: any, actorEmployeeId: string | null) {
+  const { candidate_id, reason, remark } = body
+  if (!candidate_id) return bad('candidate_id is required')
+
+  const check = validateRejection({ reason, remark })
+  if (!check.ok) return bad(check.reason as string)
+
+  const { data: cand } = await sb.from('candidates')
+    .select('stage, mrf_id, company_id, full_name').eq('id', candidate_id).maybeSingle()
+  if (!cand) return bad('Candidate not found', 404)
+  const stage = String((cand as any).stage || '')
+  if (stage === 'Rejected') return bad('This candidate is already rejected')
+  if (['Offer Sent', 'Joined'].includes(stage)) {
+    return bad(`This candidate is ${stage}. Use the offer backout flow, which also reopens the requisition.`)
+  }
+
+  const patch: Record<string, unknown> = {
+    stage: 'Rejected',
+    rejection_reason: reason,
+    rejection_remark: normaliseRemark(remark),
+    rejected_at: new Date().toISOString(),
+    rejected_by: actorEmployeeId || null,
+  }
+  let up = await sb.from('candidates').update(patch).eq('id', candidate_id)
+  // Tolerate a database without migration 143: the rejection itself still lands,
+  // because losing the stage change would be worse than losing the reason. The
+  // reason is never lost outright — the audit row below carries it either way.
+  if (up.error && (up.error.code === '42703' || up.error.code === 'PGRST204')) {
+    up = await sb.from('candidates').update({ stage: 'Rejected' }).eq('id', candidate_id)
+  }
+  if (up.error) return bad(up.error.message, 500)
+
+  await sb.from('recruitment_audit_logs').insert({
+    candidate_id,
+    mrf_id: (cand as any).mrf_id || null,
+    company_id: (cand as any).company_id || null,
+    action_type: 'CANDIDATE_REJECTED',
+    details: {
+      name: (cand as any).full_name || null,
+      from_stage: stage,
+      reason, reason_label: rejectionLabel(reason as string),
+      remark: normaliseRemark(remark),
+    },
+    created_at: new Date().toISOString(),
+  }).then(() => null, () => null)   // the audit row must never fail the rejection
+
+  return NextResponse.json({ ok: true, stage: 'Rejected', from_stage: stage })
 }
 
 // Final Shortlist: allowed once ≥3 rounds have been CLEARED — decided SHORTLIST by
