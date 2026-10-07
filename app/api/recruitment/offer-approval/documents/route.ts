@@ -1,6 +1,6 @@
 // app/api/recruitment/offer-approval/documents/route.ts
 //
-//   GET ?request_id=<id>              -> { docs: [{ key, name, note?, url? }] }  what the HR Head can download
+//   GET ?request_id=<id>              -> { docs: [{ key, name, note?, url?, downloadUrl? }] }  what the HR Head can preview / download
 //   GET ?request_id=<id>&doc=<key>    -> the PDF itself (mrf | interview | ctc), as an attachment
 //
 // The approval pack (MRF, interview summary, CTC break-up acknowledgement) is built when the
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── the list ──
-  const docs: { key: string; name: string; note?: string; url?: string }[] = []
+  const docs: { key: string; name: string; note?: string; url?: string; downloadUrl?: string }[] = []
   let attachments: any[] = []
   if (r.mrf_id) {
     const { data: m } = await sb.from('manpower_requisitions').select('mrf_number, attachments').eq('id', r.mrf_id).maybeSingle()
@@ -67,10 +67,15 @@ export async function GET(req: NextRequest) {
     attachments = Array.isArray(m?.attachments) ? m!.attachments : (typeof m?.attachments === 'string' ? JSON.parse(m!.attachments) : [])
   }
   docs.push({ key: 'ctc', name: 'CTC break-up acknowledgement', note: "Password: the candidate's registered mobile number" })
+  // Two signed URLs per upload: `url` opens inline (the preview), `downloadUrl` saves it.
   for (const a of attachments) {
     if (!a?.path) continue
-    const { data: signed } = await sb.storage.from('onboarding-docs').createSignedUrl(a.path, 60 * 10, { download: a.name || true })
-    if (signed?.signedUrl) docs.push({ key: `file:${a.path}`, name: a.name || 'Document', note: KIND_LABEL[a.kind] || 'MRF document', url: signed.signedUrl })
+    const bucket = sb.storage.from('onboarding-docs')
+    const [{ data: view }, { data: dl }] = await Promise.all([
+      bucket.createSignedUrl(a.path, 60 * 10),
+      bucket.createSignedUrl(a.path, 60 * 10, { download: a.name || true }),
+    ])
+    if (view?.signedUrl) docs.push({ key: `file:${a.path}`, name: a.name || 'Document', note: KIND_LABEL[a.kind] || 'MRF document', url: view.signedUrl, downloadUrl: dl?.signedUrl || view.signedUrl })
   }
   return NextResponse.json({ docs })
 }
