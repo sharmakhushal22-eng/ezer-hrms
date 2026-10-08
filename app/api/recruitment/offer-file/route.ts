@@ -18,20 +18,13 @@ import { requireModule } from '@/lib/api-auth'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { loadDossier, setVerified, applyEdits, markLetterGenerated, type Dossier } from '@/lib/recruitment/offer-dossier'
 import { offerLetterPdf } from '@/lib/recruitment/offer-letter-pdf'
+import { actorName } from '@/lib/recruitment/actor'
 
 export const runtime = 'nodejs' // pdfkit + pdf-lib
 
 const bad = (m: string, s = 400) => NextResponse.json({ error: m }, { status: s })
 // Only while the offer is with the HR Head or approved — never once it has gone out.
 const OPEN = ['SUBMITTED', 'HR_HEAD_APPROVED']
-
-async function actorName(user: { employeeId: string | null; email: string | null }) {
-  if (user.employeeId) {
-    const { data } = await sb.from('employees').select('full_name, emp_code').eq('id', user.employeeId).maybeSingle()
-    if (data?.full_name) return `${data.full_name}${data.emp_code ? ` (${data.emp_code})` : ''}`
-  }
-  return user.email || 'HR'
-}
 
 function view(d: Dossier) {
   return {

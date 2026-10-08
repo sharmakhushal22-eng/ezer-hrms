@@ -789,7 +789,8 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
           req={selected} mrf={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id) || null}
           processing={processing} decided={decided}
           onClose={()=>{ setSelected(null); setDecided(null); setComment('') }}
-          onDecide={(act, note)=>processApproval(selected, act, note)} />
+          onDecide={(act, note)=>processApproval(selected, act, note)}
+          onRevised={(n)=>{ setDecided({ action:'approve', notified:n }); setComment(''); loadRequests() }} />
       )}
         </div>
       </div>
@@ -928,15 +929,70 @@ function OfferDocuments({ requestId }: { requestId: string }) {
   )
 }
 
+// ── HR Head: edit an offer (revision) ──
+// The compensation is recomputed on the server with the same CTC model and inputs the recruiter's
+// calculation used (app/api/recruitment/offer-revise), so only the headline figures are asked for.
+type OfferEditVals = { offered_ctc: string; variable_pct: string; joining_bonus: string; joining_bonus_freq: string; retention_bonus: string; esop_value: string; esop_vesting: string; proposed_doj: string }
+const offerEditVals = (r: any): OfferEditVals => ({
+  offered_ctc: r?.offered_ctc != null ? String(Math.round(Number(r.offered_ctc))) : '',
+  variable_pct: String(r?.offered_variable_pct ?? r?.ctc_negotiations?.variable_pct ?? 0),
+  joining_bonus: String(Number(r?.joining_bonus) || 0), joining_bonus_freq: r?.joining_bonus_freq || '',
+  retention_bonus: String(Number(r?.retention_bonus) || 0),
+  esop_value: String(Number(r?.esop_value) || 0), esop_vesting: r?.esop_vesting || '',
+  proposed_doj: r?.proposed_doj ? String(r.proposed_doj).slice(0, 10) : '',
+})
+function OfferEditForm({ vals, onChange, err }: { vals: OfferEditVals; onChange: (v: OfferEditVals) => void; err: string }) {
+  const field = (k: keyof OfferEditVals, label: string, type = 'number', hint?: string) => (
+    <div style={{ minWidth:0 }}>
+      <label className="rx-label" style={{ display:'block', marginBottom:5 }}>{label}</label>
+      <input className="rx-input" type={type} value={vals[k]} onChange={e => onChange({ ...vals, [k]: e.target.value })} style={{ width:'100%' }} />
+      {hint && <div style={{ fontSize:11, color:TK.faint, marginTop:3 }}>{hint}</div>}
+    </div>
+  )
+  const ctc = Number(vals.offered_ctc) || 0, vp = Number(vals.variable_pct) || 0
+  return (
+    <section style={{ border:`2px solid ${TK.brand}`, borderRadius:R.lg, padding:'16px 18px', marginBottom:16, background:TK.surface }}>
+      <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, marginBottom:12 }}>Edit offer</div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'12px 14px' }}>
+        {field('offered_ctc', 'Annual CTC (₹) *', 'number', ctc > 0 ? `₹${fmt(ctc)} · fixed ₹${fmt(ctc - ctc * vp / 100)}` : undefined)}
+        {field('variable_pct', 'Variable (% of CTC)')}
+        {field('proposed_doj', 'Date of joining *', 'date')}
+        {field('joining_bonus', 'Joining bonus (₹)')}
+        {field('joining_bonus_freq', 'Joining bonus paid', 'text', 'e.g. One-time, with first salary')}
+        {field('retention_bonus', 'Retention bonus (₹)')}
+        {field('esop_value', 'ESOP value (₹)')}
+        {field('esop_vesting', 'ESOP vesting', 'text')}
+      </div>
+      <div style={{ fontSize:12, color:TK.muted, marginTop:12, lineHeight:1.5 }}>The salary break-up (Basic, HRA, PF, in-hand) is recalculated from the new CTC with the same rules as the original calculation. Saving approves the revised offer and sends it back to Send Offers.</div>
+      {err && <div style={{ fontSize:12.5, color:TK.critical, background:TK.criticalTint, borderRadius:R.md, padding:'9px 12px', marginTop:10 }}>{err}</div>}
+    </section>
+  )
+}
+
 // ── HR Head review screen — full screen over the dashboard; one offer, one decision ──
-function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }: {
+function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide, onRevised }: {
   req: any; mrf: any; processing: boolean; decided: { action: 'approve'|'reject'; notified: number } | null
   onClose: () => void; onDecide: (action: 'approve'|'reject', note: string) => Promise<boolean>
+  /** the HR Head edited the offer and approved it (app/api/recruitment/offer-revise) */
+  onRevised: (notified: number) => void
 }) {
-  const [mode, setMode] = useState<'view'|'reject'|'approve'>('view')
+  const [mode, setMode] = useState<'view'|'reject'|'approve'|'edit'>('view')
   const [note, setNote] = useState('')
   const [showTpl, setShowTpl] = useState(false)
-  useEffect(() => { setMode('view'); setNote(''); setShowTpl(false) }, [req?.id])
+  const [edit, setEdit] = useState<OfferEditVals>(() => offerEditVals(req))
+  const [saving, setSaving] = useState(false)
+  const [editErr, setEditErr] = useState('')
+  useEffect(() => { setMode('view'); setNote(''); setShowTpl(false); setEdit(offerEditVals(req)); setEditErr('') }, [req?.id])
+  async function saveRevision() {
+    setSaving(true); setEditErr('')
+    try {
+      const r = await fetch('/api/recruitment/offer-revise', { method:'POST', headers: { ...(await authHeaders()), 'Content-Type':'application/json' }, body: JSON.stringify({ request_id: req.id, ...edit, comment: note }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setEditErr(j.error || 'Could not save the revised offer'); setSaving(false); return }
+      setSaving(false); onRevised(Number(j.notified || 0))
+    } catch { setEditErr('Network error — nothing was saved'); setSaving(false) }
+  }
+  const busyAny = processing || saving
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !processing) onClose() }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
@@ -991,6 +1047,14 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }:
             </div>
           ) : (<div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'flex-start' }}>
            <div style={{ flex:'1 1 480px', minWidth:0 }}>
+            {req.revision_note && pending && (
+              <div style={{ marginBottom:12 }}>
+                <Callout tone="warn">
+                  <b>Revision requested</b>{req.revision_requested_by ? ` by ${req.revision_requested_by}` : ''}{req.revision_requested_at ? ` on ${day(req.revision_requested_at)}` : ''}: “{req.revision_note}”. Edit the offer below and approve it — it goes back to Send Offers.
+                </Callout>
+              </div>
+            )}
+            {mode === 'edit' && <OfferEditForm vals={edit} onChange={setEdit} err={editErr} />}
             {overBudget && (
               <div style={{ marginBottom:12 }}>
                 <Callout tone="warn">
@@ -1084,9 +1148,14 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }:
             )}
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               {mode === 'view' ? (<>
-                <button type="button" className="rx-btn d" onClick={() => setMode('reject')} disabled={processing}>Reject</button>
+                <button type="button" className="rx-btn d" onClick={() => setMode('reject')} disabled={busyAny}>Reject</button>
                 <span style={{ flex:1 }} />
-                <button type="button" className="rx-btn p" onClick={() => setMode('approve')} disabled={processing}>Approve offer →</button>
+                <button type="button" className="rx-btn" onClick={() => { setEdit(offerEditVals(req)); setEditErr(''); setNote(''); setMode('edit') }} disabled={busyAny}>✎ Edit offer</button>
+                <button type="button" className="rx-btn p" onClick={() => setMode('approve')} disabled={busyAny}>Approve offer →</button>
+              </>) : mode === 'edit' ? (<>
+                <button type="button" className="rx-btn g" onClick={() => { setMode('view'); setEditErr('') }} disabled={saving}>← Cancel</button>
+                <input className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Comment for the HR Manager (optional)" style={{ flex:1, minWidth:160 }} />
+                <button type="button" className="rx-btn p" disabled={saving} onClick={saveRevision}>{saving ? 'Saving…' : 'Save & approve revised offer'}</button>
               </>) : (<>
                 <button type="button" className="rx-btn g" onClick={() => setMode('view')} disabled={processing}>← Back</button>
                 <span style={{ flex:1 }} />
@@ -1643,7 +1712,8 @@ ${company} — Human Resources`,
     }).eq('id', selected.id)
 
     // Update candidate stage
-    await supabase.from('candidates').update({ stage: 'Offer Sent', offer_accepted: false, offer_sent_at: new Date().toISOString(), offer_reminder_sent: false }).eq('id', selected.candidate_id)
+    // offer_response cleared: a revised offer that goes out is waiting on the candidate again.
+    await supabase.from('candidates').update({ stage: 'Offer Sent', offer_accepted: false, offer_response: null, offer_sent_at: new Date().toISOString(), offer_reminder_sent: false }).eq('id', selected.candidate_id)
 
     // Auto-close the MRF once its openings are filled by sent/joined offers.
     const { data: candRow } = await supabase.from('candidates').select('mrf_id').eq('id', selected.candidate_id).maybeSingle()

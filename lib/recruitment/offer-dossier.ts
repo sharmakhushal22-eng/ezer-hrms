@@ -48,6 +48,8 @@ export const FIELDS: Field[] = [
   { key: 'marital_status', section: 'Personal', label: 'Marital status', get: c => ad(c, 'personal', 'marital_status'), edit: { table: 'candidates', adPath: ['personal', 'marital_status'] } },
   { key: 'nationality', section: 'Personal', label: 'Nationality', get: c => ad(c, 'personal', 'nationality'), edit: { table: 'candidates', adPath: ['personal', 'nationality'] } },
   { key: 'languages', section: 'Personal', label: 'Languages', get: c => ad(c, 'personal', 'languages'), edit: { table: 'candidates', adPath: ['personal', 'languages'] } },
+  { key: 'pan', section: 'Personal', label: 'PAN', get: c => ad(c, 'identity', 'pan') },
+  { key: 'aadhaar_last4', section: 'Personal', label: 'Aadhaar (last 4 digits)', get: c => ad(c, 'identity', 'aadhaar_last4') ? `XXXX XXXX ${ad(c, 'identity', 'aadhaar_last4')}` : null },
   // Contact
   { key: 'email', section: 'Contact', label: 'Email', type: 'email', get: c => c.cand.email, edit: { table: 'candidates', column: 'email' } },
   { key: 'phone', section: 'Contact', label: 'Mobile', type: 'tel', get: c => c.cand.mobile || c.cand.phone, edit: { table: 'candidates', column: 'phone' } },
@@ -180,7 +182,8 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
       on: i.submitted_at || i.scheduled_at || null, remark: i.decision_remark || i.feedback?.remark || null,
     }))
 
-  const link = neg && !neg.is_stipend ? linkStatementRows(neg.calculation_data || {}, req.offered_ctc ?? neg.offered_ctc) : null
+  // The HR Head's revision (Offers → Revision → HR Head edits) replaces the negotiated calculation.
+  const link = neg && !neg.is_stipend ? linkStatementRows(req.revised_calculation || neg.calculation_data || {}, req.offered_ctc ?? neg.offered_ctc) : null
   const extras: [string, number | string][] = []
   if (Number(req.joining_bonus) > 0) extras.push([`Joining bonus${req.joining_bonus_freq ? ` (${req.joining_bonus_freq})` : ''}`, Number(req.joining_bonus)])
   if (Number(req.retention_bonus) > 0) extras.push(['Retention bonus', Number(req.retention_bonus)])
