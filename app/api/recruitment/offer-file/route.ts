@@ -2,11 +2,13 @@
 //
 //   GET  ?request_id=…                      -> the file: every detail, document, interview, the salary
 //                                              break-up, and which of them have been verified
-//   GET  ?request_id=…&letter=1[&mark=1]    -> the offer letter PDF (only once EVERYTHING is verified);
+//   GET  ?request_id=…&letter=1[&mark=1]    -> the offer letter PDF (only once the file is verified);
 //                                              mark=1 records that the letter was generated
-//   POST { action:'verify', request_id, key, checked }  -> tick / untick one item
-//   POST { action:'edit',   request_id, key, value }    -> change one editable detail (clears its tick
-//                                                          and the generated-letter mark)
+//   POST { action:'verify', request_id, checked }        -> the one checkbox: confirm (or withdraw) the
+//                                                           whole file as verified
+//   POST { action:'edit',   request_id, changes:{k:v} }  -> change editable details (one form part at a
+//                                                           time); clears the verification and the
+//                                                           generated-letter mark
 //
 // See lib/recruitment/offer-dossier.ts for what is in the file and where edits are written, and
 // lib/recruitment/offer-letter-pdf.ts for the letter.
@@ -14,7 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireModule } from '@/lib/api-auth'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { loadDossier, setVerified, applyEdit, markLetterGenerated, type Dossier } from '@/lib/recruitment/offer-dossier'
+import { loadDossier, setVerified, applyEdits, markLetterGenerated, type Dossier } from '@/lib/recruitment/offer-dossier'
 import { offerLetterPdf } from '@/lib/recruitment/offer-letter-pdf'
 
 export const runtime = 'nodejs' // pdfkit + pdf-lib
@@ -37,7 +39,9 @@ function view(d: Dossier) {
     candidate: { id: d.candidate.id, full_name: d.candidate.full_name, email: d.candidate.email },
     company: d.company ? { id: d.company.id, company_name: d.company.company_name, company_code: d.company.company_code } : null,
     rows: d.rows, documents: d.documents, interviews: d.interviews, salary: d.salary,
-    verification: d.verification, required: d.required, verifiedCount: d.verifiedCount, complete: d.complete,
+    verification: d.verification, required: d.required.length, complete: d.complete,
+    // what the screen shows — the confirmation is only accepted for exactly this file
+    fileHash: d.fileHash,
   }
 }
 
@@ -52,7 +56,7 @@ export async function GET(req: NextRequest) {
   if (!d) return bad('Offer request not found', 404)
   if (!wantsLetter) return NextResponse.json(view(d))
 
-  if (!d.complete) return bad(`Verify every detail first — ${d.verifiedCount} of ${d.required.length} done.`, 409)
+  if (!d.complete) return bad('Verify the offer file first — tick the confirmation in the last part.', 409)
   if (mark && !OPEN.includes(d.request.status)) return bad('This offer has already gone out — the letter cannot be regenerated.', 409)
   let pdf
   try { pdf = await offerLetterPdf(d) } catch (e: any) { return bad(`Could not build the offer letter: ${e?.message || 'failed'}`, 500) }
@@ -73,7 +77,7 @@ export async function POST(req: NextRequest) {
   const gate = await requireModule(req, 'Recruitment', 'EDIT')
   if (gate.error) return gate.error
   const body = await req.json().catch(() => null) as any
-  if (!body?.request_id || !body?.key) return bad('request_id and key are required')
+  if (!body?.request_id) return bad('request_id is required')
   const d = await loadDossier(String(body.request_id))
   if (!d) return bad('Offer request not found', 404)
   if (!OPEN.includes(d.request.status)) return bad('This offer has already gone out — its file can no longer be changed.', 409)
@@ -81,10 +85,13 @@ export async function POST(req: NextRequest) {
 
   try {
     if (body.action === 'verify') {
-      await setVerified(d, String(body.key), !!body.checked, by)
+      if (body.checked && body.hash !== d.fileHash) return bad('Something in this offer file changed since you opened it. Reopen it, check the changes, then confirm.', 409)
+      await setVerified(d, !!body.checked, by)
+      await sb.from('recruitment_audit_logs').insert({ candidate_id: d.candidate.id, company_id: d.request.company_id || null, action_type: body.checked ? 'OFFER_FILE_VERIFIED' : 'OFFER_FILE_UNVERIFIED', details: { request_id: d.request.id, by }, created_at: new Date().toISOString() })
     } else if (body.action === 'edit') {
-      const { from, to } = await applyEdit(d, String(body.key), body.value)
-      await sb.from('recruitment_audit_logs').insert({ candidate_id: d.candidate.id, company_id: d.request.company_id || null, action_type: 'OFFER_FILE_EDITED', details: { request_id: d.request.id, field: body.key, from: from ?? null, to: to ?? null, by }, created_at: new Date().toISOString() })
+      if (!body.changes || typeof body.changes !== 'object') return bad('changes are required')
+      const changed = await applyEdits(d, body.changes)
+      if (changed.length) await sb.from('recruitment_audit_logs').insert({ candidate_id: d.candidate.id, company_id: d.request.company_id || null, action_type: 'OFFER_FILE_EDITED', details: { request_id: d.request.id, changes: changed, by }, created_at: new Date().toISOString() })
     } else return bad('Unknown action')
   } catch (e: any) {
     return bad(e?.message || 'Failed')

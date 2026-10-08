@@ -1,24 +1,23 @@
 // lib/recruitment/offer-dossier.ts — SERVER ONLY.
 //
 // The HR Manager's "offer file" on Send Offers: everything captured about a candidate from
-// Add Candidate to the HR Head's approval, as one list of labelled rows, plus the documents
-// uploaded in the pre-negotiation check, the interview outcomes and the salary break-up.
+// Add Candidate to the HR Head's approval, as labelled rows, plus the documents uploaded in the
+// pre-negotiation check, the interview outcomes and the salary break-up.
 //
-// Every row with a value, every document, every interview and the salary break-up carries a
-// checkbox. The HR Manager ticks each one as verified; only when ALL are ticked can the offer
-// letter be generated (lib/recruitment/offer-letter-pdf.ts) and sent.
+// The HR Manager reads it as a form in four parts and confirms it with ONE checkbox at the end;
+// only then can the offer letter be generated (lib/recruitment/offer-letter-pdf.ts) and sent.
 //
 // Editing: candidate details and the joining details are editable; the offered compensation
-// the HR Head approved is locked (changing it needs a fresh approval). Editing a row clears
-// its tick and the "letter generated" mark, so a changed value is always re-verified and the
+// the HR Head approved is locked (changing it needs a fresh approval). Any edit clears the
+// verification and the "letter generated" mark, so a changed file is always re-verified and the
 // letter regenerated before it can go out.
 //
-// The ticks live in candidates.application_details.offer_verification (no migration needed):
-//   { request_id, items: { <key>: { by, at, h } }, letter: { by, at, h } | null }
-// Each tick carries a fingerprint (h) of the value it vouches for. A tick only counts while the
-// value still matches — so a change made anywhere (this screen, another screen, a renegotiated
-// salary, an offer sent back for revision) un-ticks that item by itself. The letter mark carries
-// a fingerprint of the whole verified file the same way.
+// The confirmation lives in candidates.application_details.offer_verification (no migration):
+//   { request_id, verified: { by, at, h } | null, letter: { by, at, h } | null }
+// Both carry a fingerprint (h) of the whole file — every detail, interview, the salary break-up
+// and every document. They only count while the file still matches, so a change made anywhere
+// (this screen, another screen, a renegotiated salary, an offer sent back for revision) undoes
+// the verification by itself.
 //
 // Writes re-read application_details just before saving and change only what they own, so two
 // saves close together cannot put back each other's stale copy.
@@ -122,9 +121,10 @@ export type Dossier = {
   request: any; candidate: any; company: any; mrf: any; negotiation: any; ctx: Ctx
   rows: DossierRow[]; documents: DossierDoc[]; interviews: DossierInterview[]
   salary: { rows: StmtRow[]; extras: [string, number | string][] } | null
-  verification: { items: Record<string, { by: string; at: string }>; letter: { by: string; at: string } | null }
-  required: string[]; verifiedCount: number; complete: boolean
-  /** fingerprint of every required item's current value, and of the whole file */
+  verification: { verified: { by: string; at: string } | null; letter: { by: string; at: string } | null }
+  /** every item the one checkbox vouches for */
+  required: string[]; complete: boolean
+  /** fingerprint of every item's current value, and of the whole file */
   fingerprints: Record<string, string>; fileHash: string
 }
 
@@ -187,7 +187,7 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
   if (Number(req.esop_value) > 0) extras.push([`ESOP${req.esop_vesting ? ` (${req.esop_vesting})` : ''}`, Number(req.esop_value)])
   const salary = link ? { rows: link.rows.filter(r => r.kind !== 'note'), extras } : null
 
-  // What each tick vouches for. Documents: the stored file, not its (expiring) signed URL.
+  // What the verification vouches for. Documents: the stored file, not its (expiring) signed URL.
   const fingerprints: Record<string, string> = {}
   for (const r of rows) if (r.value != null) fingerprints[r.key] = fp(r.raw)
   if (salary) fingerprints.salary_breakup = fp(salary)
@@ -201,76 +201,79 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
   ]
   const fileHash = fp(required.map(k => [k, fingerprints[k]]))
 
-  // Only ticks whose fingerprint still matches the current value count.
+  // Verification and the letter mark only count while the file is still what was verified.
   const ov = appDetails.offer_verification
   const stored = ov && ov.request_id === req.id ? ov : null
-  const items: Record<string, { by: string; at: string }> = {}
-  for (const k of required) { const t = stored?.items?.[k]; if (t && t.h === fingerprints[k]) items[k] = { by: t.by, at: t.at } }
-  const verifiedCount = required.filter(k => items[k]).length
-  const complete = required.length > 0 && verifiedCount === required.length
+  const verified = required.length > 0 && stored?.verified && stored.verified.h === fileHash ? { by: stored.verified.by, at: stored.verified.at } : null
+  const complete = !!verified
   const letter = complete && stored?.letter && stored.letter.h === fileHash ? { by: stored.letter.by, at: stored.letter.at } : null
-  return { request: req, candidate: cand, company, mrf, negotiation: neg, ctx, rows, documents, interviews, salary, verification: { items, letter }, required, verifiedCount, complete, fingerprints, fileHash }
+  return { request: req, candidate: cand, company, mrf, negotiation: neg, ctx, rows, documents, interviews, salary, verification: { verified, letter }, required, complete, fingerprints, fileHash }
 }
 
 function safeJson(s: string) { try { return JSON.parse(s) || {} } catch { return {} } }
 
 /**
  * Re-read application_details, let `change` edit the fresh copy (the verification blob, and for an
- * application-details edit the field itself), and write it back. Nothing else in the JSON is taken
- * from the dossier snapshot, so a concurrent save of another field is not undone.
+ * application-details edit the fields themselves), and write it back. Nothing else in the JSON is
+ * taken from the dossier snapshot, so a concurrent save of another field is not undone.
  */
-async function updateDetails(d: Dossier, change: (ad: any, ov: { request_id: string; items: Record<string, any>; letter: any }) => void) {
+type Ov = { request_id: string; verified: any; letter: any }
+async function updateDetails(d: Dossier, change: (ad: any, ov: Ov) => void) {
   const { data, error: rErr } = await sb.from('candidates').select('application_details').eq('id', d.candidate.id).maybeSingle()
   if (rErr) throw new Error(rErr.message)
   const fresh = typeof data?.application_details === 'string' ? safeJson(data.application_details) : { ...(data?.application_details || {}) }
   const cur = fresh.offer_verification
-  const ov = cur && cur.request_id === d.request.id ? { request_id: d.request.id, items: { ...(cur.items || {}) }, letter: cur.letter || null } : { request_id: d.request.id, items: {}, letter: null }
+  const ov: Ov = cur && cur.request_id === d.request.id ? { request_id: d.request.id, verified: cur.verified || null, letter: cur.letter || null } : { request_id: d.request.id, verified: null, letter: null }
   change(fresh, ov)
   fresh.offer_verification = ov
   const { error } = await sb.from('candidates').update({ application_details: fresh }).eq('id', d.candidate.id)
   if (error) throw new Error(error.message)
 }
 
-export async function setVerified(d: Dossier, key: string, on: boolean, by: string) {
-  if (!d.required.includes(key)) throw new Error('Unknown item')
+/** The one checkbox: the HR Manager confirms the whole file as it stands (or withdraws that). */
+export async function setVerified(d: Dossier, on: boolean, by: string) {
+  if (!d.required.length) throw new Error('There is nothing to verify')
   await updateDetails(d, (_ad, ov) => {
-    if (on) ov.items[key] = { by, at: new Date().toISOString(), h: d.fingerprints[key] }
-    else { delete ov.items[key]; ov.letter = null }
+    ov.verified = on ? { by, at: new Date().toISOString(), h: d.fileHash } : null
+    if (!on) ov.letter = null
   })
 }
 
 /** Record that the letter was generated from THIS file. The caller passes a dossier loaded after
  *  the PDF was built and checks it still matches the one the PDF was built from. */
 export async function markLetterGenerated(d: Dossier, by: string) {
-  if (!d.complete) throw new Error('Not everything is verified')
+  if (!d.complete) throw new Error('The offer file is not verified')
   await updateDetails(d, (_ad, ov) => { ov.letter = { by, at: new Date().toISOString(), h: d.fileHash } })
 }
 
-/** Apply one edit. Clears that item's tick and the generated-letter mark. Returns the old value. */
-export async function applyEdit(d: Dossier, key: string, value: any): Promise<{ from: any; to: any }> {
-  const f = FIELDS.find(x => x.key === key)
-  if (!f?.edit) throw new Error('This detail cannot be edited here')
-  let v: any = typeof value === 'string' ? value.trim() : value
-  if (v === '') v = null
-  if (f.type === 'number' && v != null) { v = Number(v); if (!isFinite(v)) throw new Error('Enter a number') }
-  if (f.type === 'email' && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error('Enter a valid email')
-  if (f.type === 'date' && v && isNaN(+new Date(v))) throw new Error('Enter a valid date')
-  if (key === 'full_name' && !v) throw new Error('Name cannot be empty')
-  const from = f.get(d.ctx)
-
-  const e = f.edit
-  if (e.table === 'request') {
-    const { error } = await sb.from('offer_approval_requests').update({ [e.column]: v }).eq('id', d.request.id)
-    if (error) throw new Error(error.message)
-  } else if ('column' in e) {
-    const patch: any = { [e.column]: v }
-    if (e.column === 'phone') patch.mobile = v
-    const { error } = await sb.from('candidates').update(patch).eq('id', d.candidate.id)
-    if (error) throw new Error(error.message)
+/** Apply several edits at once (one form part). All are validated before anything is written.
+ *  Clears the verification and the generated-letter mark. Returns what changed. */
+export async function applyEdits(d: Dossier, changes: Record<string, any>): Promise<{ field: string; from: any; to: any }[]> {
+  const done: { field: string; from: any; to: any }[] = []
+  const candPatch: any = {}, reqPatch: any = {}, adSets: [string, string, any][] = []
+  for (const [key, value] of Object.entries(changes || {})) {
+    const f = FIELDS.find(x => x.key === key)
+    if (!f?.edit) throw new Error(`${f?.label || key} cannot be edited here`)
+    let v: any = typeof value === 'string' ? value.trim() : value
+    if (v === '') v = null
+    if (f.type === 'number' && v != null) { v = Number(v); if (!isFinite(v)) throw new Error(`${f.label}: enter a number`) }
+    if (f.type === 'email' && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error(`${f.label}: enter a valid email`)
+    if (f.type === 'date' && v && isNaN(+new Date(v))) throw new Error(`${f.label}: enter a valid date`)
+    if (key === 'full_name' && !v) throw new Error('Name cannot be empty')
+    const from = f.get(d.ctx)
+    if (String(from ?? '') === String(v ?? '')) continue   // unchanged
+    const e = f.edit
+    if (e.table === 'request') reqPatch[e.column] = v
+    else if ('column' in e) { candPatch[e.column] = v; if (e.column === 'phone') candPatch.mobile = v }
+    else adSets.push([e.adPath[0], e.adPath[1], v])
+    done.push({ field: key, from: from ?? null, to: v })
   }
+  if (!done.length) return done
+  if (Object.keys(reqPatch).length) { const { error } = await sb.from('offer_approval_requests').update(reqPatch).eq('id', d.request.id); if (error) throw new Error(error.message) }
+  if (Object.keys(candPatch).length) { const { error } = await sb.from('candidates').update(candPatch).eq('id', d.candidate.id); if (error) throw new Error(error.message) }
   await updateDetails(d, (ad, ov) => {
-    if (e.table === 'candidates' && 'adPath' in e) { const [a, b] = e.adPath; ad[a] = { ...(ad[a] || {}), [b]: v } }
-    delete ov.items[key]; ov.letter = null
+    for (const [a, b, v] of adSets) ad[a] = { ...(ad[a] || {}), [b]: v }
+    ov.verified = null; ov.letter = null
   })
-  return { from, to: v }
+  return done
 }

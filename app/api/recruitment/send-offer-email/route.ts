@@ -42,14 +42,14 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
 
     // The letter is the generated multi-page PDF on the company letterhead, and it can only go
-    // once the HR Head has approved, every detail is verified and the letter has been generated
+    // once the HR Head has approved, the HR Manager has verified the file and the letter has been generated
     // from that verified file (lib/recruitment/offer-dossier.ts). Checked here, not just in the
     // browser — and there is no other way to send an offer through this route.
     if (!request_id) return NextResponse.json({ error: 'request_id is required' }, { status: 400 })
     const d = await loadDossier(String(request_id))
     if (!d) return NextResponse.json({ error: 'Offer request not found' }, { status: 404 })
     if (d.request.status !== 'HR_HEAD_APPROVED') return NextResponse.json({ error: 'The HR Head has not approved this offer.' }, { status: 409 })
-    if (!d.complete) return NextResponse.json({ error: `Verify every detail first — ${d.verifiedCount} of ${d.required.length} done.` }, { status: 409 })
+    if (!d.complete) return NextResponse.json({ error: 'The offer file has not been verified.' }, { status: 409 })
     if (!d.verification.letter) return NextResponse.json({ error: 'Generate the offer letter before sending it.' }, { status: 409 })
     const pdf = await offerLetterPdf(d)
     const attachments = [{ filename: pdf.name, content: pdf.content, contentType: 'application/pdf' }]

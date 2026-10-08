@@ -1104,13 +1104,13 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide }:
 }
 
 // ── Send Offers: the HR Manager's offer file ─────────────────────────────────────
-// Full screen. Every detail captured from Add Candidate to the HR Head's approval, the
-// pre-negotiation documents, the interview outcomes and the salary break-up — each with a
-// checkbox. Candidate and joining details can be edited (which clears that tick); the approved
-// compensation is locked. Once everything is ticked, "Generate offer letter" builds the
-// multi-page letter on the company letterhead; Send unlocks after that (and after the HR Head
-// has approved). The server enforces the same order: app/api/recruitment/offer-file and
-// send-offer-email.
+// Full screen, read like a filled form in four parts — Candidate, Background, Offer,
+// Interviews & documents — stepped with Back / Next, then a last part with ONE checkbox that
+// confirms the whole file. Candidate and joining details can be edited part by part (which
+// withdraws the confirmation); the approved compensation is locked. Once confirmed,
+// "Generate offer letter" builds the multi-page letter on the company letterhead; Send unlocks
+// after that (and after the HR Head has approved). The server enforces the same order:
+// app/api/recruitment/offer-file and send-offer-email.
 type FileRow = { key: string; section: string; label: string; value: string | null; raw: any; type: string; editable: boolean }
 type OfferFileData = {
   request: { id: string; status: string }
@@ -1120,68 +1120,59 @@ type OfferFileData = {
   documents: { key: string; id: string; name: string; label: string; size: number | null; uploaded_at: string | null; url: string | null; downloadUrl: string | null }[]
   interviews: { key: string; round: string; interviewer: string | null; decision: string | null; score: string | null; on: string | null; remark: string | null }[]
   salary: { rows: { kind: string; label: string; basis?: string; monthly?: number | null; annual?: number | null }[]; extras: [string, number | string][] } | null
-  verification: { items: Record<string, { by: string; at: string }>; letter: { by: string; at: string } | null }
-  required: string[]; verifiedCount: number; complete: boolean
+  verification: { verified: { by: string; at: string } | null; letter: { by: string; at: string } | null }
+  required: number; complete: boolean; fileHash: string
 }
 const fileApi = (id: string, extra = '') => `/api/recruitment/offer-file?request_id=${encodeURIComponent(id)}${extra}`
-const whenShort = (v?: string | null) => v ? new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
+const whenShort = (v?: string | null) => v ? new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+const OFFER_STEPS: { title: string; sub: string; sections?: string[]; salary?: boolean; extra?: 'review' }[] = [
+  { title: 'Candidate', sub: 'Personal & contact details', sections: ['Personal', 'Contact'] },
+  { title: 'Background', sub: 'Education, experience & previous employer', sections: ['Education & experience', 'Previous employer (as approved)', 'Source'] },
+  { title: 'Offer', sub: 'Position, joining & approved compensation', sections: ['Position & joining', 'Offered compensation (approved — locked)'], salary: true },
+  { title: 'Interviews & documents', sub: 'Interview outcomes and the pre-negotiation documents', extra: 'review' },
+]
+const draftOf = (r: FileRow) => r.raw == null ? '' : r.type === 'date' ? String(r.raw).slice(0, 10) : Array.isArray(r.raw) ? r.raw.join(', ') : String(r.raw)
+const formHead: React.CSSProperties = { fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, margin:'4px 0 12px' }
 
-/** The tick box beside every item. */
-function VerifyBox({ k, file, busy, onToggle }: { k: string; file: OfferFileData; busy: boolean; onToggle: (k: string, on: boolean) => void }) {
-  const v = file.verification.items[k]
+/** One field of the form: label over a filled box, or an input while the part is being edited. */
+function FormField({ row, editing, value, onChange }: { row: FileRow; editing: boolean; value: string; onChange: (v: string) => void }) {
+  const wide = row.type === 'textarea'
+  const live = editing && row.editable
   return (
-    <label title={v ? `Verified by ${v.by} · ${whenShort(v.at)}` : 'Mark as verified'}
-      style={{ display:'inline-flex', alignItems:'center', gap:6, cursor: busy ? 'wait' : 'pointer', fontSize:11.5, fontWeight:700, color: v ? TK.positive : TK.muted, whiteSpace:'nowrap', flexShrink:0 }}>
-      <input type="checkbox" checked={!!v} disabled={busy} onChange={e => onToggle(k, e.target.checked)} style={{ width:17, height:17, accentColor:TK.positive, cursor:'inherit' }} />
-      {v ? 'Verified' : 'Verify'}
-    </label>
-  )
-}
-
-/** One detail: label, value, inline edit (when editable), tick. */
-function FileDetailRow({ row, file, busy, anyBusy, onToggle, onSave }: { row: FileRow; file: OfferFileData; busy: boolean; anyBusy: boolean; onToggle: (k: string, on: boolean) => void; onSave: (k: string, v: string) => Promise<boolean> }) {
-  const [editing, setEditing] = useState(false)
-  const [val, setVal] = useState('')
-  const start = () => { setVal(row.raw == null ? '' : row.type === 'date' ? String(row.raw).slice(0, 10) : Array.isArray(row.raw) ? row.raw.join(', ') : String(row.raw)); setEditing(true) }
-  const save = async () => { if (await onSave(row.key, val)) setEditing(false) }
-  const verified = !!file.verification.items[row.key]
-  return (
-    <div style={{ display:'flex', alignItems: editing ? 'flex-start' : 'center', gap:12, padding:'9px 12px', borderBottom:`1px solid ${TK.line}`, background: verified ? TK.positiveTint : undefined, flexWrap:'wrap' }}>
-      <div style={{ flex:'0 0 190px', fontSize:12.5, color:TK.muted, paddingTop: editing ? 8 : 0 }}>{row.label}</div>
-      <div style={{ flex:'1 1 220px', minWidth:0 }}>
-        {editing ? (
-          <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'flex-start' }}>
-            {row.type === 'textarea'
-              ? <textarea className="rx-input" autoFocus value={val} onChange={e => setVal(e.target.value)} style={{ flex:'1 1 240px', height:'auto', minHeight:64, padding:'8px 11px', resize:'vertical' }} />
-              : <input className="rx-input" autoFocus type={row.type === 'number' ? 'number' : row.type === 'date' ? 'date' : row.type === 'email' ? 'email' : row.type === 'tel' ? 'tel' : 'text'} value={val}
-                  onChange={e => setVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !anyBusy) save(); if (e.key === 'Escape') setEditing(false) }} style={{ flex:'1 1 200px' }} />}
-            <button type="button" className="rx-btn sm p" disabled={anyBusy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
-            <button type="button" className="rx-btn sm g" disabled={busy} onClick={() => setEditing(false)}>Cancel</button>
-          </div>
-        ) : (
-          <span style={{ fontSize:13, fontWeight:600, color: row.value ? TK.ink : TK.faint, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{row.value || 'Not provided'}</span>
-        )}
+    <div style={{ gridColumn: wide ? '1 / -1' : undefined, minWidth:0 }}>
+      <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:TK.muted, marginBottom:5, display:'flex', gap:6, alignItems:'center' }}>
+        {row.label}{!row.editable && <span title="Locked" style={{ fontSize:10 }}>🔒</span>}
       </div>
-      {!editing && (
-        <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-          {row.editable ? <button type="button" className="rx-btn sm g" disabled={anyBusy} onClick={start} title="Edit this detail">✎ Edit</button>
-            : <span title="Locked" style={{ fontSize:11, color:TK.faint }}>🔒</span>}
-          {row.value != null ? <VerifyBox k={row.key} file={file} busy={anyBusy} onToggle={onToggle} /> : <span style={{ width:70 }} />}
+      {live ? (
+        wide
+          ? <textarea className="rx-input" value={value} onChange={e => onChange(e.target.value)} style={{ height:'auto', minHeight:70, padding:'9px 12px', resize:'vertical', width:'100%' }} />
+          : <input className="rx-input" value={value} onChange={e => onChange(e.target.value)} style={{ width:'100%' }}
+              type={row.type === 'number' ? 'number' : row.type === 'date' ? 'date' : row.type === 'email' ? 'email' : row.type === 'tel' ? 'tel' : 'text'} />
+      ) : (
+        <div style={{ minHeight:38, padding:'9px 12px', borderRadius:R.md, border:`1px solid ${TK.line}`, background: row.editable ? TK.surface : TK.sunken, fontSize:13.5, fontWeight:600, color: row.value ? TK.ink : TK.faint, whiteSpace:'pre-wrap', wordBreak:'break-word', boxSizing:'border-box' }}>
+          {row.value || '—'}
         </div>
       )}
     </div>
   )
 }
 
-function FileSection({ title, done, total, children }: { title: string; done: number; total: number; children: React.ReactNode }) {
+/** The numbered steps across the top; visited steps can be reopened. */
+function OfferStepper({ step, reached, onGo }: { step: number; reached: number; onGo: (i: number) => void }) {
+  const all = [...OFFER_STEPS.map(s => s.title), 'Verify & send']
   return (
-    <section style={{ background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:R.lg, marginBottom:14, overflow:'hidden' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 14px', borderBottom:`1px solid ${TK.line}`, background:TK.sunken }}>
-        <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, flex:1 }}>{title}</div>
-        {total > 0 && <span style={{ fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:99, background: done === total ? TK.positiveTint : TK.warningTint, color: done === total ? TK.positive : TK.warning }}>{done}/{total} verified</span>}
-      </div>
-      {children}
-    </section>
+    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+      {all.map((t, i) => {
+        const on = i === step, open = i <= reached
+        return (
+          <button key={t} type="button" disabled={!open} onClick={() => onGo(i)}
+            style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'6px 12px 6px 6px', borderRadius:99, border:`1px solid ${on ? TK.brand : TK.line}`, background: on ? TK.brandTint : TK.surface, color: on ? TK.brandDeep : open ? TK.ink : TK.faint, fontSize:12.5, fontWeight:700, fontFamily:'inherit', cursor: open ? 'pointer' : 'not-allowed' }}>
+            <span style={{ width:22, height:22, borderRadius:99, display:'grid', placeItems:'center', fontSize:11, background: on ? TK.brand : i < reached ? TK.positiveTint : TK.sunken, color: on ? TK.onAccent : i < reached ? TK.positive : TK.muted }}>{i < reached && !on ? '✓' : i + 1}</span>
+            {t}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -1194,43 +1185,63 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
 }) {
   const [file, setFile] = useState<OfferFileData | null>(null)
   const [err, setErr] = useState('')
-  const [busy, setBusy] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [step, setStep] = useState(0)
+  const [reached, setReached] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<Record<string, string>>({})
   const [preview, setPreview] = useState<OfferDoc | null>(null)
   const [letterPreview, setLetterPreview] = useState(false)
   const [generating, setGenerating] = useState(false)
   const approved = req.status === 'HR_HEAD_APPROVED'
+  const last = OFFER_STEPS.length   // index of the "Verify & send" part
 
   useEffect(() => {
     let live = true
-    setFile(null); setErr('')
+    setFile(null); setErr(''); setStep(0); setReached(0); setEditing(false)
     ;(async () => {
       try {
         const r = await fetch(fileApi(req.id), { headers: await authHeaders() })
         const j = await r.json().catch(() => ({}))
-        if (live) { if (r.ok) setFile(j); else setErr(j.error || 'Could not load the offer file') }
+        if (!live) return
+        if (r.ok) { setFile(j); if (j.verification?.verified) setReached(last) }   // already confirmed: every part is open
+        else setErr(j.error || 'Could not load the offer file')
       } catch { if (live) setErr('Could not load the offer file') }
     })()
     return () => { live = false }
-  }, [req.id])
+  }, [req.id, last])
 
-  async function post(body: any, busyKey: string): Promise<boolean> {
-    if (busy || generating) return false   // one write at a time — the server re-reads, but don't race it
-    setBusy(busyKey); setErr('')
+  async function post(body: any): Promise<OfferFileData | null> {
+    if (busy || generating) return null
+    setBusy(true); setErr('')
     try {
       const r = await fetch('/api/recruitment/offer-file', { method:'POST', headers: { ...(await authHeaders()), 'Content-Type':'application/json' }, body: JSON.stringify({ request_id: req.id, ...body }) })
       const j = await r.json().catch(() => ({}))
-      if (!r.ok) { setErr(j.error || 'Failed'); return false }
-      setFile(j)
-      if (body.action === 'edit' && ['email', 'full_name', 'designation', 'proposed_doj'].includes(body.key)) {
-        const raw = (k: string) => (j.rows || []).find((r: any) => r.key === k)?.raw ?? null
-        onFactsChanged({ email: raw('email'), name: raw('full_name'), designation: raw('designation'), doj: raw('proposed_doj') })
-      }
-      return true
-    } catch { setErr('Network error — nothing was saved'); return false }
-    finally { setBusy(null) }
+      if (!r.ok) { setErr(j.error || 'Failed'); return null }
+      setFile(j); return j
+    } catch { setErr('Network error — nothing was saved'); return null }
+    finally { setBusy(false) }
   }
-  const toggle = (key: string, checked: boolean) => { post({ action:'verify', key, checked }, key) }
-  const saveEdit = (key: string, value: string) => post({ action:'edit', key, value }, key)
+
+  const go = (i: number) => { if (editing) return; setStep(i); setReached(r => Math.max(r, i)); setErr('') }
+  const stepRows = (i: number) => (file?.rows || []).filter(r => (OFFER_STEPS[i]?.sections || []).includes(r.section))
+  function startEdit() {
+    const d: Record<string, string> = {}
+    for (const r of stepRows(step)) if (r.editable) d[r.key] = draftOf(r)
+    setDraft(d); setEditing(true)
+  }
+  async function saveEdit() {
+    const before = Object.fromEntries(stepRows(step).filter(r => r.editable).map(r => [r.key, draftOf(r)]))
+    const changes = Object.fromEntries(Object.entries(draft).filter(([k, v]) => v !== before[k]))
+    if (!Object.keys(changes).length) { setEditing(false); return }
+    const j = await post({ action:'edit', changes })
+    if (!j) return
+    setEditing(false)
+    if (['email', 'full_name', 'designation', 'proposed_doj'].some(k => k in changes)) {
+      const raw = (k: string) => (j.rows || []).find((r: any) => r.key === k)?.raw ?? null
+      onFactsChanged({ email: raw('email'), name: raw('full_name'), designation: raw('designation'), doj: raw('proposed_doj') })
+    }
+  }
 
   async function letterBlob(mark: boolean) {
     const r = await fetch(fileApi(req.id, `&letter=1${mark ? '&mark=1' : ''}`), { headers: await authHeaders() })
@@ -1253,158 +1264,214 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
   }
 
   if (typeof document === 'undefined') return null
-  const sections: { title: string; rows: FileRow[] }[] = []
-  for (const r of file?.rows || []) {
-    const last = sections[sections.length - 1]
-    if (last && last.title === r.section) last.rows.push(r); else sections.push({ title: r.section, rows: [r] })
-  }
-  const isOn = (k: string) => !!file?.verification.items[k]
-  const count = (keys: string[]) => keys.filter(isOn).length
-  const pct = file && file.required.length ? Math.round(file.verifiedCount / file.required.length * 100) : 0
+  const verified = file?.verification.verified || null
   const letter = file?.verification.letter || null
   const canSend = approved && !!file?.complete && !!letter
-  const locked = busy !== null || generating
+  const locked = busy || generating
+  const open = ['SUBMITTED', 'HR_HEAD_APPROVED'].includes(req.status)
+  const cur = OFFER_STEPS[step]
+  const editable = !!cur && stepRows(step).some(r => r.editable) && open
+  const grid: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:'14px 16px' }
+  const card: React.CSSProperties = { background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:R.lg, padding:'18px 20px', marginBottom:14 }
 
   return createPortal(
     <div role="dialog" aria-modal="true" aria-label={`Offer file — ${req.candidates?.full_name || ''}`}
       style={{ position:'fixed', inset:0, zIndex:Z.modal, background:TK.canvas, color:TK.ink, display:'flex', flexDirection:'column', animation:'rxFade .25s both' }}>
       {/* header */}
       <div style={{ background:TK.surface, borderBottom:`1px solid ${TK.line}` }}>
-        <div style={{ maxWidth:1360, margin:'0 auto', padding:'12px 24px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-          <button type="button" className="rx-btn sm g" onClick={onClose}>← Back</button>
-          <div style={{ flex:'1 1 260px', minWidth:0 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-              <span style={{ fontSize:17, fontWeight:800 }}>{req.candidates?.full_name}</span>
-              {mrfNumber && <span className="rx-chip">{mrfNumber}</span>}
-              <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 9px', borderRadius:99, background: approved ? TK.positiveTint : TK.warningTint, color: approved ? TK.positive : TK.warning }}>{approved ? 'HR Head approved' : `Awaiting HR Head${headNames ? ` · ${headNames}` : ''}`}</span>
-            </div>
-            <div className="rx-meta" style={{ marginTop:2 }}>{[req.candidates?.designation || req.manpower_requisitions?.designation, req.companies?.company_name].filter(Boolean).join(' · ')}</div>
-          </div>
-          {file && (
-            <div style={{ flex:'0 1 260px', minWidth:180 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5, fontWeight:700, color: file.complete ? TK.positive : TK.muted, marginBottom:4 }}>
-                <span>{file.complete ? 'Everything verified' : 'Verification'}</span><span>{file.verifiedCount}/{file.required.length}</span>
+        <div style={{ maxWidth:1120, margin:'0 auto', padding:'12px 24px', display:'flex', flexDirection:'column', gap:12 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+            <button type="button" className="rx-btn sm g" onClick={onClose}>← Back to list</button>
+            <div style={{ flex:'1 1 260px', minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <span style={{ fontSize:17, fontWeight:800 }}>{req.candidates?.full_name}</span>
+                {mrfNumber && <span className="rx-chip">{mrfNumber}</span>}
+                <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 9px', borderRadius:99, background: approved ? TK.positiveTint : TK.warningTint, color: approved ? TK.positive : TK.warning }}>{approved ? 'HR Head approved' : `Awaiting HR Head${headNames ? ` · ${headNames}` : ''}`}</span>
+                {verified && <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 9px', borderRadius:99, background:TK.positiveTint, color:TK.positive }}>✓ Verified</span>}
               </div>
-              <div style={{ height:7, borderRadius:99, background:TK.sunken, overflow:'hidden' }}><div style={{ width:`${pct}%`, height:'100%', background: file.complete ? TK.positive : TK.brand, transition:'width .3s' }} /></div>
+              <div className="rx-meta" style={{ marginTop:2 }}>{[req.candidates?.designation || req.manpower_requisitions?.designation, req.companies?.company_name].filter(Boolean).join(' · ')}</div>
             </div>
-          )}
+          </div>
+          {file && <OfferStepper step={step} reached={reached} onGo={go} />}
         </div>
       </div>
 
       {/* body */}
       <div style={{ flex:1, overflowY:'auto' }}>
-        <div style={{ maxWidth:1360, margin:'0 auto', padding:'20px 24px 40px', display:'flex', gap:22, flexWrap:'wrap', alignItems:'flex-start' }}>
-          <div style={{ flex:'1 1 620px', minWidth:0 }}>
-            {err && <div style={{ fontSize:12.5, color:TK.critical, background:TK.criticalTint, border:`1px solid ${TK.criticalEdge}`, borderRadius:R.md, padding:'9px 12px', marginBottom:12 }}>{err}</div>}
-            {!file && !err && [0, 1, 2].map(i => <div key={i} className="rx-tile" style={{ height:120, marginBottom:14, opacity:.5 }} />)}
-            {file && sections.map(sec => (
-              <FileSection key={sec.title} title={sec.title} done={count(sec.rows.filter(r => r.value != null).map(r => r.key))} total={sec.rows.filter(r => r.value != null).length}>
-                {sec.rows.map(r => <FileDetailRow key={r.key} row={r} file={file} busy={busy === r.key} anyBusy={locked} onToggle={toggle} onSave={saveEdit} />)}
-              </FileSection>
-            ))}
+        <div style={{ maxWidth:1120, margin:'0 auto', padding:'20px 24px 32px' }}>
+          {err && <div style={{ fontSize:12.5, color:TK.critical, background:TK.criticalTint, border:`1px solid ${TK.criticalEdge}`, borderRadius:R.md, padding:'9px 12px', marginBottom:12 }}>{err}</div>}
+          {!file && !err && [0, 1].map(i => <div key={i} className="rx-tile" style={{ height:160, marginBottom:14, opacity:.5 }} />)}
 
-            {file?.salary && (
-              <FileSection title="Salary break-up (approved — locked)" done={count(['salary_breakup'])} total={1}>
-                <div style={{ overflowX:'auto' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
-                    <thead><tr style={{ background:TK.sunken }}>{['Component', 'Basis', 'Monthly', 'Annual'].map((h, i) => <th key={h} style={{ textAlign: i >= 2 ? 'right' : 'left', padding:'8px 12px', fontWeight:700, color:TK.muted, borderBottom:`1px solid ${TK.line}` }}>{h}</th>)}</tr></thead>
-                    <tbody>{file.salary.rows.map((r, i) => {
-                      const strong = ['sum', 'total', 'net', 'head'].includes(r.kind)
-                      return (
-                        <tr key={i} style={{ background: r.kind === 'head' ? TK.sunken : undefined }}>
-                          <td style={{ padding:'7px 12px', fontWeight: strong ? 700 : 500, borderBottom:`1px solid ${TK.line}` }}>{r.label}</td>
-                          <td style={{ padding:'7px 12px', color:TK.muted, borderBottom:`1px solid ${TK.line}` }}>{r.basis || ''}</td>
-                          <td style={{ padding:'7px 12px', textAlign:'right', fontWeight: strong ? 700 : 500, borderBottom:`1px solid ${TK.line}`, ...numeric }}>{r.monthly != null ? `₹${fmt(r.monthly)}` : ''}</td>
-                          <td style={{ padding:'7px 12px', textAlign:'right', fontWeight: strong ? 700 : 500, borderBottom:`1px solid ${TK.line}`, ...numeric }}>{r.annual != null ? `₹${fmt(r.annual)}` : ''}</td>
-                        </tr>
-                      )
-                    })}</tbody>
-                  </table>
+          {file && cur && (
+            <>
+              <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom:14 }}>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800 }}>Part {step + 1} of {OFFER_STEPS.length} · {cur.title}</div>
+                  <div className="rx-meta">{cur.sub}</div>
                 </div>
-                {file.salary.extras.length > 0 && <div style={{ padding:'8px 12px', fontSize:12.5, color:TK.muted }}>{file.salary.extras.map(([k, v]) => `${k}: ${typeof v === 'number' ? `₹${fmt(v)}` : v}`).join(' · ')}</div>}
-                <div style={{ display:'flex', justifyContent:'flex-end', padding:'10px 12px' }}><VerifyBox k="salary_breakup" file={file} busy={locked} onToggle={toggle} /></div>
-              </FileSection>
-            )}
-
-            {file && file.interviews.length > 0 && (
-              <FileSection title="Interviews" done={count(file.interviews.map(i => i.key))} total={file.interviews.length}>
-                {file.interviews.map(i => (
-                  <div key={i.key} style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 12px', borderBottom:`1px solid ${TK.line}`, background: isOn(i.key) ? TK.positiveTint : undefined, flexWrap:'wrap' }}>
-                    <div style={{ flex:'0 0 190px', fontSize:12.5, color:TK.muted }}>{i.round}</div>
-                    <div style={{ flex:'1 1 220px', fontSize:13, fontWeight:600 }}>
-                      {[i.decision, i.score, i.interviewer ? `by ${i.interviewer}` : null].filter(Boolean).join(' · ') || 'Feedback recorded'}
-                      {i.remark && <div style={{ fontSize:11.5, fontWeight:500, color:TK.muted, marginTop:2 }}>“{i.remark}”</div>}
-                    </div>
-                    <VerifyBox k={i.key} file={file} busy={locked} onToggle={toggle} />
+                {editable && !editing && <button type="button" className="rx-btn sm" disabled={locked} onClick={startEdit}>✎ Edit details</button>}
+                {editing && (
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button type="button" className="rx-btn sm g" disabled={busy} onClick={() => setEditing(false)}>Cancel</button>
+                    <button type="button" className="rx-btn sm p" disabled={busy} onClick={saveEdit}>{busy ? 'Saving…' : 'Save changes'}</button>
                   </div>
-                ))}
-              </FileSection>
-            )}
-
-            {file && (
-              <FileSection title="Documents (pre-negotiation check)" done={count(file.documents.map(d => d.key))} total={file.documents.length}>
-                {file.documents.length === 0 && <div className="rx-hint" style={{ padding:'12px 14px' }}>The candidate has not uploaded any documents.</div>}
-                {file.documents.map(d => (
-                  <div key={d.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderBottom:`1px solid ${TK.line}`, background: isOn(d.key) ? TK.positiveTint : undefined, flexWrap:'wrap' }}>
-                    <div style={{ width:32, height:36, borderRadius:7, background:TK.criticalTint, color:TK.critical, display:'grid', placeItems:'center', fontSize:9, fontWeight:800, flexShrink:0 }}>{(d.name.split('.').pop() || 'FILE').slice(0, 4).toUpperCase()}</div>
-                    <div style={{ flex:'1 1 200px', minWidth:0 }}>
-                      <div style={{ fontSize:13, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.label}</div>
-                      <div style={{ fontSize:11, color:TK.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.name}{d.uploaded_at ? ` · uploaded ${whenShort(d.uploaded_at)}` : ''}</div>
-                    </div>
-                    <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
-                      <button type="button" className="rx-btn sm g" disabled={!d.url} onClick={() => setPreview({ key: d.key, name: d.name, url: d.url || undefined, downloadUrl: d.downloadUrl || undefined })}>👁 Preview</button>
-                      <button type="button" className="rx-btn sm" disabled={!d.downloadUrl} onClick={() => d.downloadUrl && window.open(d.downloadUrl, '_blank', 'noopener')}>↓ Download</button>
-                      <VerifyBox k={d.key} file={file} busy={locked} onToggle={toggle} />
-                    </div>
-                  </div>
-                ))}
-              </FileSection>
-            )}
-          </div>
-
-          {/* right rail: generate, then send */}
-          <div style={{ flex:'1 1 340px', maxWidth:460, minWidth:0, position:'sticky', top:0, display:'flex', flexDirection:'column', gap:14 }}>
-            <section style={{ background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:R.lg, padding:16 }}>
-              <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, marginBottom:8 }}>1 · Offer letter</div>
-              <div className="rx-meta" style={{ marginBottom:12, lineHeight:1.5 }}>
-                {file?.complete
-                  ? letter ? `Generated by ${letter.by} · ${whenShort(letter.at)}. Regenerate if you change anything.` : 'Everything is verified — generate the letter on the company letterhead.'
-                  : `Verify every detail, interview, the salary break-up and every document to unlock this (${file ? file.verifiedCount : 0} of ${file ? file.required.length : '…'} done).`}
+                )}
               </div>
-              <button type="button" className="rx-btn p" disabled={!file?.complete || locked} onClick={generate} style={{ width:'100%', opacity: file?.complete ? 1 : .5, cursor: file?.complete ? 'pointer' : 'not-allowed' }}>
-                {generating ? 'Generating…' : !file?.complete ? '🔒 Generate offer letter' : letter ? '↻ Regenerate offer letter' : 'Generate offer letter'}
-              </button>
-              {letter && file?.complete && (
-                <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                  <button type="button" className="rx-btn sm g" style={{ flex:1 }} onClick={() => setLetterPreview(true)}>👁 Preview</button>
-                  <button type="button" className="rx-btn sm" style={{ flex:1 }} onClick={downloadLetter}>↓ Download</button>
-                </div>
+              {editing && verified && <div style={{ fontSize:12, color:TK.warning, background:TK.warningTint, borderRadius:R.md, padding:'8px 12px', marginBottom:12 }}>Saving a change withdraws the verification — you will confirm the file again in the last part.</div>}
+
+              {(cur.sections || []).map(sec => {
+                const rows = stepRows(step).filter(r => r.section === sec)
+                if (!rows.length) return null
+                return (
+                  <section key={sec} style={card}>
+                    <div style={formHead}>{sec}</div>
+                    <div style={grid}>
+                      {rows.map(r => <FormField key={r.key} row={r} editing={editing} value={draft[r.key] ?? ''} onChange={v => setDraft(d => ({ ...d, [r.key]: v }))} />)}
+                    </div>
+                  </section>
+                )
+              })}
+
+              {cur.salary && file.salary && (
+                <section style={card}>
+                  <div style={formHead}>Salary break-up (approved — locked)</div>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
+                      <thead><tr style={{ background:TK.sunken }}>{['Component', 'Basis', 'Monthly', 'Annual'].map((h, i) => <th key={h} style={{ textAlign: i >= 2 ? 'right' : 'left', padding:'8px 12px', fontWeight:700, color:TK.muted, borderBottom:`1px solid ${TK.line}` }}>{h}</th>)}</tr></thead>
+                      <tbody>{file.salary.rows.map((r, i) => {
+                        const strong = ['sum', 'total', 'net', 'head'].includes(r.kind)
+                        return (
+                          <tr key={i} style={{ background: r.kind === 'head' ? TK.sunken : undefined }}>
+                            <td style={{ padding:'7px 12px', fontWeight: strong ? 700 : 500, borderBottom:`1px solid ${TK.line}` }}>{r.label}</td>
+                            <td style={{ padding:'7px 12px', color:TK.muted, borderBottom:`1px solid ${TK.line}` }}>{r.basis || ''}</td>
+                            <td style={{ padding:'7px 12px', textAlign:'right', fontWeight: strong ? 700 : 500, borderBottom:`1px solid ${TK.line}`, ...numeric }}>{r.monthly != null ? `₹${fmt(r.monthly)}` : ''}</td>
+                            <td style={{ padding:'7px 12px', textAlign:'right', fontWeight: strong ? 700 : 500, borderBottom:`1px solid ${TK.line}`, ...numeric }}>{r.annual != null ? `₹${fmt(r.annual)}` : ''}</td>
+                          </tr>
+                        )
+                      })}</tbody>
+                    </table>
+                  </div>
+                  {file.salary.extras.length > 0 && <div style={{ paddingTop:10, fontSize:12.5, color:TK.muted }}>{file.salary.extras.map(([k, v]) => `${k}: ${typeof v === 'number' ? `₹${fmt(v)}` : v}`).join(' · ')}</div>}
+                </section>
               )}
-            </section>
 
-            <section style={{ background:TK.surface, border:`1px solid ${canSend ? TK.brand : TK.line}`, borderRadius:R.lg, padding:16, opacity: letter ? 1 : .75 }}>
-              <div style={{ fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:TK.brandDeep, marginBottom:10 }}>2 · Send offer</div>
-              {[['To *', mail.to, mail.setTo, ''], ['CC (comma separated)', mail.cc, mail.setCc, 'hr@company.com, md@company.com'], ['Subject', mail.subject, mail.setSubject, '']].map(([l, v, set, ph]: any) => (
-                <div key={l} style={{ marginBottom:8 }}>
-                  <label className="rx-label" style={{ display:'block', marginBottom:5 }}>{l}</label>
-                  <input className="rx-input" value={v} placeholder={ph} onChange={e => set(e.target.value)} />
-                </div>
-              ))}
-              <label className="rx-label" style={{ display:'block', marginBottom:5 }}>Email body</label>
-              <textarea className="rx-input" value={mail.body} onChange={e => mail.setBody(e.target.value)} style={{ height:'auto', minHeight:200, resize:'vertical', padding:'10px 13px', marginBottom:10 }} />
-              <div style={{ fontSize:11.5, borderRadius:7, padding:'8px 12px', marginBottom:10, background: canSend ? TK.brandTint : TK.warningTint, color: canSend ? TK.brandDeep : TK.warning }}>
-                {!approved ? `Yet to be approved by the HR Head${headNames ? ` (${headNames})` : ''}. You can verify and generate meanwhile.`
-                  : !file?.complete ? 'Verify everything and generate the letter first.'
-                  : !letter ? 'Generate the offer letter first — it is attached to this mail.'
-                  : 'Emails the candidate with the offer letter PDF attached, records it, and moves the candidate to Offer Sent.'}
+              {cur.extra === 'review' && (<>
+                <section style={card}>
+                  <div style={formHead}>Interviews</div>
+                  {file.interviews.length === 0 ? <div className="rx-hint">No interview feedback is recorded for this candidate.</div> : (
+                    <div style={grid}>
+                      {file.interviews.map(i => (
+                        <div key={i.key} style={{ border:`1px solid ${TK.line}`, borderRadius:R.md, padding:'11px 13px', background:TK.surface }}>
+                          <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:TK.muted }}>{i.round}</div>
+                          <div style={{ fontSize:14, fontWeight:700, marginTop:3 }}>{i.decision || 'Feedback recorded'}{i.score ? <span style={{ fontWeight:600, color:TK.muted }}> · {i.score}</span> : null}</div>
+                          {i.interviewer && <div style={{ fontSize:12, color:TK.muted, marginTop:2 }}>by {i.interviewer}{i.on ? ` · ${whenShort(i.on)}` : ''}</div>}
+                          {i.remark && <div style={{ fontSize:12, marginTop:6 }}>“{i.remark}”</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+                <section style={card}>
+                  <div style={formHead}>Documents · pre-negotiation check ({file.documents.length})</div>
+                  {file.documents.length === 0 ? <div className="rx-hint">The candidate has not uploaded any documents.</div> : (
+                    <div style={grid}>
+                      {file.documents.map(d => (
+                        <div key={d.key} style={{ border:`1px solid ${TK.line}`, borderRadius:R.md, padding:'11px 13px', background:TK.surface, display:'flex', flexDirection:'column', gap:8 }}>
+                          <div style={{ display:'flex', gap:10, alignItems:'center', minWidth:0 }}>
+                            <div style={{ width:32, height:36, borderRadius:7, background:TK.criticalTint, color:TK.critical, display:'grid', placeItems:'center', fontSize:9, fontWeight:800, flexShrink:0 }}>{(d.name.split('.').pop() || 'FILE').slice(0, 4).toUpperCase()}</div>
+                            <div style={{ minWidth:0 }}>
+                              <div style={{ fontSize:13, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.label}</div>
+                              <div style={{ fontSize:11, color:TK.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.name}</div>
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', gap:6 }}>
+                            <button type="button" className="rx-btn sm g" style={{ flex:1 }} disabled={!d.url} onClick={() => setPreview({ key: d.key, name: d.name, url: d.url || undefined, downloadUrl: d.downloadUrl || undefined })}>👁 Preview</button>
+                            <button type="button" className="rx-btn sm" style={{ flex:1 }} disabled={!d.downloadUrl} onClick={() => d.downloadUrl && window.open(d.downloadUrl, '_blank', 'noopener')}>↓ Download</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </>)}
+            </>
+          )}
+
+          {/* the last part: one checkbox, then generate, then send */}
+          {file && step === last && (
+            <>
+              <div style={{ fontSize:18, fontWeight:800, marginBottom:4 }}>Verify & send</div>
+              <div className="rx-meta" style={{ marginBottom:14 }}>Confirm the file, generate the offer letter, then send it.</div>
+              <section style={{ ...card, border:`2px solid ${verified ? TK.positive : TK.brand}`, background: verified ? TK.positiveTint : TK.surface }}>
+                <label style={{ display:'flex', gap:14, alignItems:'flex-start', cursor: locked || !open ? 'not-allowed' : 'pointer' }}>
+                  <input type="checkbox" checked={!!verified} disabled={locked || !open}
+                    onChange={e => post({ action:'verify', checked: e.target.checked, hash: file.fileHash })}
+                    style={{ width:22, height:22, marginTop:2, accentColor:TK.positive, flexShrink:0, cursor:'inherit' }} />
+                  <div>
+                    <div style={{ fontSize:15, fontWeight:800 }}>I have verified all the details of {req.candidates?.full_name}</div>
+                    <div style={{ fontSize:12.5, color:TK.muted, marginTop:4, lineHeight:1.55 }}>
+                      Personal, contact, education, experience, previous employer, position, joining and the approved compensation in parts 1–3, the salary break-up,
+                      {` ${file.interviews.length} interview${file.interviews.length === 1 ? '' : 's'}`} and {file.documents.length} document{file.documents.length === 1 ? '' : 's'} — and they are correct.
+                    </div>
+                    {verified && <div style={{ fontSize:12, fontWeight:700, color:TK.positive, marginTop:8 }}>Verified by {verified.by} · {whenShort(verified.at)}</div>}
+                  </div>
+                </label>
+              </section>
+
+              <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-start' }}>
+                <section style={{ ...card, flex:'1 1 300px', marginBottom:0, opacity: verified ? 1 : .7 }}>
+                  <div style={formHead}>Offer letter</div>
+                  <div className="rx-meta" style={{ marginBottom:12, lineHeight:1.5 }}>
+                    {!verified ? 'Tick the confirmation above to unlock this.'
+                      : letter ? `Generated by ${letter.by} · ${whenShort(letter.at)}.` : 'Generate the letter on the company letterhead — letter, salary break-up (Annexure A) and terms (Annexure B).'}
+                  </div>
+                  <button type="button" className="rx-btn p" disabled={!verified || locked} onClick={generate} style={{ width:'100%', opacity: verified ? 1 : .5, cursor: verified ? 'pointer' : 'not-allowed' }}>
+                    {generating ? 'Generating…' : !verified ? '🔒 Generate offer letter' : letter ? '↻ Regenerate offer letter' : 'Generate offer letter'}
+                  </button>
+                  {letter && (
+                    <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                      <button type="button" className="rx-btn sm g" style={{ flex:1 }} onClick={() => setLetterPreview(true)}>👁 Preview</button>
+                      <button type="button" className="rx-btn sm" style={{ flex:1 }} onClick={downloadLetter}>↓ Download</button>
+                    </div>
+                  )}
+                </section>
+
+                <section style={{ ...card, flex:'2 1 420px', marginBottom:0, border:`1px solid ${canSend ? TK.brand : TK.line}`, opacity: letter ? 1 : .7 }}>
+                  <div style={formHead}>Send offer</div>
+                  {[['To *', mail.to, mail.setTo, ''], ['CC (comma separated)', mail.cc, mail.setCc, 'hr@company.com, md@company.com'], ['Subject', mail.subject, mail.setSubject, '']].map(([l, v, set, ph]: any) => (
+                    <div key={l} style={{ marginBottom:8 }}>
+                      <label className="rx-label" style={{ display:'block', marginBottom:5 }}>{l}</label>
+                      <input className="rx-input" value={v} placeholder={ph} onChange={e => set(e.target.value)} />
+                    </div>
+                  ))}
+                  <label className="rx-label" style={{ display:'block', marginBottom:5 }}>Email body</label>
+                  <textarea className="rx-input" value={mail.body} onChange={e => mail.setBody(e.target.value)} style={{ height:'auto', minHeight:200, resize:'vertical', padding:'10px 13px', marginBottom:10 }} />
+                  <div style={{ fontSize:11.5, borderRadius:7, padding:'8px 12px', marginBottom:10, background: canSend ? TK.brandTint : TK.warningTint, color: canSend ? TK.brandDeep : TK.warning }}>
+                    {!approved ? `Yet to be approved by the HR Head${headNames ? ` (${headNames})` : ''}. You can verify and generate meanwhile.`
+                      : !verified ? 'Tick the confirmation above first.'
+                      : !letter ? 'Generate the offer letter first — it is attached to this mail.'
+                      : 'Emails the candidate with the offer letter PDF attached, records it, and moves the candidate to Offer Sent.'}
+                  </div>
+                  <button type="button" className="rx-btn p" onClick={onSend} disabled={sending || !canSend || locked} style={{ width:'100%', opacity: canSend ? 1 : .5, cursor: canSend ? 'pointer' : 'not-allowed' }}>
+                    {sending ? 'Sending…' : canSend ? 'Send offer & mark as sent' : '🔒 Send offer'}
+                  </button>
+                </section>
               </div>
-              <button type="button" className="rx-btn p" onClick={onSend} disabled={sending || !canSend || locked} style={{ width:'100%', opacity: canSend ? 1 : .5, cursor: canSend ? 'pointer' : 'not-allowed' }}>
-                {sending ? 'Sending…' : canSend ? 'Send offer & mark as sent' : '🔒 Send offer'}
-              </button>
-            </section>
-          </div>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Back / Next */}
+      {file && (
+        <div style={{ background:TK.surface, borderTop:`1px solid ${TK.line}` }}>
+          <div style={{ maxWidth:1120, margin:'0 auto', padding:'12px 24px', display:'flex', alignItems:'center', gap:10 }}>
+            <button type="button" className="rx-btn g" disabled={step === 0 || editing} onClick={() => go(step - 1)}>← Back</button>
+            <span style={{ flex:1, textAlign:'center', fontSize:12, color:TK.muted }}>{editing ? 'Save or cancel your changes to move on' : `Step ${step + 1} of ${last + 1}`}</span>
+            {step < last && <button type="button" className="rx-btn p" disabled={editing} onClick={() => go(step + 1)}>{step === last - 1 ? 'Next: Verify & send →' : 'Next →'}</button>}
+          </div>
+        </div>
+      )}
 
       {preview && <DocPreview requestId={req.id} doc={preview} onClose={() => setPreview(null)} onDownload={() => preview.downloadUrl && window.open(preview.downloadUrl, '_blank', 'noopener')} />}
       {letterPreview && <DocPreview requestId={req.id} doc={{ key:'offer-letter', name:`Offer letter — ${req.candidates?.full_name || ''}` }} load={() => letterBlob(false)}
@@ -1613,11 +1680,11 @@ ${company} — Human Resources`,
     <RxPage header={
       <RecruitmentHeader
         title="Send offer letters"
-        subtitle="Every offer submitted to the HR Head. Open a candidate's offer file, verify every detail and document, generate the letter, then send it."
+        subtitle="Every offer submitted to the HR Head. Open a candidate's offer file, check it part by part, confirm it, generate the letter, then send it."
         help={<Help label="How this works">
           <p>A candidate appears the moment the recruiter <b>submits the offer to the HR Head</b>.</p>
-          <p>Open the <b>offer file</b>: tick every detail, interview, the salary break-up and every document as verified. Candidate and joining details can be edited; the approved compensation is locked.</p>
-          <p>Once everything is verified, <b>Generate offer letter</b> builds the multi-page letter on the company letterhead. <b>Send</b> unlocks after that and the HR Head's approval; it emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
+          <p>Open the <b>offer file</b>: four parts — candidate, background, offer, interviews &amp; documents — read like a filled form, with <b>Next</b> to move on. Candidate and joining details can be edited; the approved compensation is locked.</p>
+          <p>In the last part, one checkbox confirms the whole file. <b>Generate offer letter</b> then builds the multi-page letter on the company letterhead, and <b>Send</b> unlocks once the HR Head has approved; it emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
         </Help>}
       />}>
       <div className="rx-grid rx-stag">
