@@ -534,7 +534,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
   async function loadRequests() {
     const { data } = await supabase.from('offer_approval_requests')
-      .select('*, candidates(full_name, email, phone, experience_years, current_company, designation)')
+      .select('*, candidates(full_name, email, phone, experience_years, current_company, designation), ctc_negotiations(calculation_data)')
       .eq('status', tab === 'pending' ? 'SUBMITTED' : 'HR_HEAD_APPROVED')
       .order('submitted_at', { ascending: false })
     setRequests(data || [])
@@ -786,7 +786,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {selected && (
         <OfferReviewDrawer
-          req={selected} mrf={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id) || null}
+          req={selected} mrf={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id) || null} locations={locations || []}
           processing={processing} decided={decided}
           onClose={()=>{ setSelected(null); setDecided(null); setComment('') }}
           onDecide={(act, note)=>processApproval(selected, act, note)}
@@ -970,8 +970,8 @@ function OfferEditForm({ vals, onChange, err }: { vals: OfferEditVals; onChange:
 }
 
 // ── HR Head review screen — full screen over the dashboard; one offer, one decision ──
-function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide, onRevised }: {
-  req: any; mrf: any; processing: boolean; decided: { action: 'approve'|'reject'; notified: number } | null
+function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, onDecide, onRevised }: {
+  req: any; mrf: any; locations: any[]; processing: boolean; decided: { action: 'approve'|'reject'; notified: number } | null
   onClose: () => void; onDecide: (action: 'approve'|'reject', note: string) => Promise<boolean>
   /** the HR Head edited the offer and approved it (app/api/recruitment/offer-revise) */
   onRevised: (notified: number) => void
@@ -1006,6 +1006,9 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide, o
   const hike = req.hike_pct != null ? Number(req.hike_pct) : null
   const pending = req.status === 'SUBMITTED'
   const mrfNumber: string | null = mrf?.mrf_number || null
+  // The state the job is in: the one the salary was calculated for (its minimum wage, PF and PT
+  // rules), else the MRF location's — same order as the HR Manager's offer file.
+  const state: string | null = req.revised_calculation?.state || req.ctc_negotiations?.calculation_data?.state || (locations || []).find((l: any) => l.id === mrf?.location_id)?.state || null
   // The offer's ceiling is the MRF budget normalised to a year (budget_max is quoted in the
   // engagement's own period; offered_ctc is always annual) — lib/recruitment/compensation.ts.
   const ceiling = annualCeiling(mrf?.budget_max, mrf?.employment_type)
@@ -1074,6 +1077,7 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide, o
               ))}
             </div>
             <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
+              {state && <span className="rx-chip">State · {state}</span>}
               {req.proposed_doj && <span className="rx-chip">DOJ {day(req.proposed_doj)}{req.days_to_join != null ? ` · ${req.days_to_join} days` : ''}</span>}
               {Number(req.notice_period_days) > 0 && <span className="rx-chip">Notice {req.notice_period_days} days</span>}
               {req.notice_buyout && <span className="rx-chip" style={{ background:TK.warningTint, color:TK.warning }}>Buyout{Number(req.notice_buyout_amount) > 0 ? ` ${rs(req.notice_buyout_amount)}` : ''}</span>}
@@ -1081,6 +1085,7 @@ function OfferReviewDrawer({ req, mrf, processing, decided, onClose, onDecide, o
             </div>
 
             <Sec t="Offered package" />
+            <Row k="State" v={state ? `${state}${req.revised_calculation?.state || req.ctc_negotiations?.calculation_data?.state ? ' (salary calculated for this state)' : ''}` : null} />
             <Row k="Fixed CTC" v={vAmt > 0 ? `${rs(ctc - vAmt)} p.a.` : `${rs(ctc)} p.a. (all fixed)`} strong />
             <Row k="Variable" v={vAmt > 0 ? `${rs(vAmt)} p.a. · ${vp}% of CTC` : null} />
             <Row k="Joining bonus" v={Number(req.joining_bonus) > 0 ? `${rs(req.joining_bonus)}${req.joining_bonus_freq ? ` (${req.joining_bonus_freq})` : ''}` : null} />

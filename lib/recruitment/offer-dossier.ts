@@ -37,6 +37,9 @@ type Field = {
 }
 
 const ad = (c: Ctx, a: string, b: string) => c.ad?.[a]?.[b]
+/** Where the job is: an edited value first, then the state the salary was calculated for, then the MRF location's. */
+export const jobState = (c: Ctx): string | null =>
+  ad(c, 'requisition', 'job_state') || c.req?.revised_calculation?.state || c.neg?.calculation_data?.state || c.loc?.state || null
 const yn = (v: any) => v === true ? 'Yes' : v === false ? 'No' : v
 
 // The order here is the order on screen.
@@ -79,10 +82,13 @@ export const FIELDS: Field[] = [
   { key: 'prev_variable', section: 'Previous employer (as approved)', label: 'Variable', fmt: 'money', get: c => Number(c.req.prev_variable) > 0 ? c.req.prev_variable : null },
   { key: 'expected_ctc', section: 'Previous employer (as approved)', label: 'Expected CTC (at application)', fmt: 'money', get: c => Number(c.cand.expected_ctc) > 0 ? c.cand.expected_ctc : null },
   // Position & joining — the letter's facts; editable
-  { key: 'designation', section: 'Position & joining', label: 'Position offered', get: c => c.cand.designation || c.mrf?.designation || c.mrf?.position, edit: { table: 'candidates', column: 'designation' } },
+  { key: 'designation', section: 'Position & joining', label: 'Designation', get: c => c.cand.designation || c.mrf?.designation || c.mrf?.position, edit: { table: 'candidates', column: 'designation' } },
   { key: 'company', section: 'Position & joining', label: 'Company', get: c => c.company?.company_name },
   { key: 'department', section: 'Position & joining', label: 'Department', get: c => c.dept?.dept_name },
   { key: 'job_location', section: 'Position & joining', label: 'Job location', get: c => ad(c, 'requisition', 'job_location') || c.loc?.location_name, edit: { table: 'candidates', adPath: ['requisition', 'job_location'] } },
+  // The state the job is in — prefilled from the salary calculation (whose minimum wage, PF and PT
+  // rules used it), else the MRF location's state. Editing it changes the letter, not the salary.
+  { key: 'job_state', section: 'Position & joining', label: 'State', get: c => jobState(c), edit: { table: 'candidates', adPath: ['requisition', 'job_state'] } },
   { key: 'employment_type', section: 'Position & joining', label: 'Employment type', get: c => ad(c, 'requisition', 'employment_type') || c.mrf?.employment_type },
   { key: 'reports_to', section: 'Position & joining', label: 'Reports to', get: c => c.manager?.full_name ? `${c.manager.full_name}${c.mrf?.reports_to_designation ? `, ${c.mrf.reports_to_designation}` : ''}` : c.mrf?.reports_to_designation },
   { key: 'work_mode', section: 'Position & joining', label: 'Work mode', get: c => c.mrf?.work_mode },
@@ -150,7 +156,7 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
   ])
   const [{ data: dept }, { data: loc }, { data: manager }] = await Promise.all([
     mrf?.department_id ? sb.from('departments').select('dept_name').eq('id', mrf.department_id).maybeSingle() : Promise.resolve({ data: null } as any),
-    mrf?.location_id ? sb.from('locations').select('location_name').eq('id', mrf.location_id).maybeSingle() : Promise.resolve({ data: null } as any),
+    mrf?.location_id ? sb.from('locations').select('location_name, city, state').eq('id', mrf.location_id).maybeSingle() : Promise.resolve({ data: null } as any),
     mrf?.reporting_manager_id ? sb.from('employees').select('full_name').eq('id', mrf.reporting_manager_id).maybeSingle() : Promise.resolve({ data: null } as any),
   ])
   const appDetails = typeof cand.application_details === 'string' ? safeJson(cand.application_details) : (cand.application_details || {})

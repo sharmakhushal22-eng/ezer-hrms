@@ -17,7 +17,7 @@ import PDFDocument from 'pdfkit'
 import { PDFDocument as LibDoc, StandardFonts, rgb } from 'pdf-lib'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { resolveLetterhead } from '@/lib/letterheads'
-import type { Dossier } from './offer-dossier'
+import { jobState, type Dossier } from './offer-dossier'
 
 type Doc = PDFKit.PDFDocument
 const MM = 2.834645669
@@ -115,7 +115,9 @@ export async function offerLetterPdf(dossier: Dossier): Promise<{ name: string; 
   const first = String(name).split(' ')[0]
   const role = cand.designation || mrf?.designation || mrf?.position || 'the position'
   const companyName = company?.company_name || 'the Company'
-  const location = ctx.ad?.requisition?.job_location || ctx.loc?.location_name || null
+  const baseLocation = ctx.ad?.requisition?.job_location || ctx.loc?.location_name || null
+  const state = jobState(ctx)
+  const location = baseLocation && state && !baseLocation.toLowerCase().includes(state.toLowerCase()) ? `${baseLocation}, ${state}` : (baseLocation || state)
   const dept = ctx.dept?.dept_name || null
   const reportsTo = ctx.manager?.full_name ? `${ctx.manager.full_name}${mrf?.reports_to_designation ? `, ${mrf.reports_to_designation}` : ''}` : (mrf?.reports_to_designation || null)
   const address = ctx.ad?.contact?.permanent_address || ctx.ad?.contact?.current_city || null
@@ -187,7 +189,7 @@ export async function offerLetterPdf(dossier: Dossier): Promise<{ name: string; 
       ['Conditions of offer', `This offer is subject to satisfactory background and reference verification, submission of the original documents listed by the Company on or before your date of joining, and the accuracy of the information you have provided. If any information is found to be incorrect, the Company may withdraw this offer or terminate your employment.`],
       ['Validity', `This offer is valid for 7 days from the date of this letter. Please confirm your acceptance by signing the acceptance in Annexure B and returning a copy to us, or by replying to the offer e-mail.`],
     ])
-    ensure(140)   // the closing line stays with the signature
+    ensure(118)   // the closing line stays with the signature (2 lines + "For …" + signature + name)
     para(`We look forward to welcoming you to ${companyName} and wish you a long and rewarding career with us.`)
     d.moveDown(0.2)
     d.font('Helvetica').fontSize(10).fillColor(INK).text(`For ${clean(companyName)}`, x0, d.y)
