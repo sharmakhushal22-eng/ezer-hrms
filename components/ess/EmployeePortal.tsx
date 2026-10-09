@@ -36,7 +36,7 @@ import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
 import { useEssMenu, PendingOnYou, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
-import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
+import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, MODULE_TABS, type NavEntry } from '@/lib/rms/nav'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
 import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/components/employees/EmployeeProfileView'
@@ -46,7 +46,7 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 import {
   C, F, W, R, E, S, Z, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
-  IconLetters, IconReports, IconAi, IconBell, IconMail,
+  IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 
@@ -3436,7 +3436,123 @@ function ManageBand({ groups, activeKey, onPick }: {
   )
 }
 
-function TabHeader({ s }: { s: NavSection }) {
+// ── Feature search (Home header) ─────────────────────────────────────────────────
+// Type a feature's name — "task", "mrf", "payslip" — and jump straight to it. The list is
+// built from what THIS person can open: their own ESS tabs, the admin modules /api/ess/menu
+// says they hold, and the tabs inside those modules that Roles → Screen Access allows. So an
+// employee without MRF access never sees MRF offered. "/" or Ctrl/⌘ K focuses it.
+type SearchEntry = { id: string; label: string; crumb: string; icon: string; keywords: string; run: () => void }
+
+// Extra words people search ESS's own tabs by.
+const ESS_KEYWORDS: Record<string, string> = {
+  home: 'dashboard today landing', profile: 'my details personal info bank address',
+  documents: 'letter request certificate', letters: 'my letters offer letter appointment',
+  team: 'reportees manager my team', orgchart: 'org chart hierarchy reporting tree',
+  flexi: 'flexi benefits tax', declaration: 'investment declaration 80c tax', proofs: 'investment proofs tax',
+  flexiclaims: 'flexi claims bills reimbursement', vpf: 'voluntary pf provident fund', nps: 'corporate nps pension',
+  loans: 'loan advance', claims: 'travel claims expense reimbursement',
+  attendance: 'attendance punch regularise regularize', leave: 'leave apply holiday time off',
+  inbox: 'messages notifications mail', directory: 'team directory people colleagues employees',
+  requests: 'raise request helpdesk ticket', approvals: 'tasks approvals pending approve leave travel resignation offers interviews',
+  exit: 'resign resignation exit separation', company: 'company headcount attrition', reports: 'reports export',
+  performance: 'pms performance goals kra appraisal review', social: 'social wall fame appreciate', funzone: 'games fun zone',
+}
+
+function scoreEntry(e: SearchEntry, q: string): number {
+  const label = e.label.toLowerCase(), hay = `${label} ${e.crumb.toLowerCase()} ${e.keywords}`
+  const words = q.split(/\s+/).filter(Boolean)
+  if (!words.every(w => hay.includes(w))) return 0
+  if (label === q) return 100
+  if (label.startsWith(q)) return 80
+  if (label.split(/[\s&/-]+/).some(w => w.startsWith(words[0]))) return 60
+  if (label.includes(q)) return 45
+  return e.keywords.split(/\s+/).some(k => k.startsWith(words[0])) ? 30 : 15
+}
+
+function Highlight({ text, q }: { text: string; q: string }) {
+  const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1
+  if (i < 0) return <>{text}</>
+  return <>{text.slice(0, i)}<mark style={{ background:C.brandTint, color:C.brandDeep, borderRadius:4, padding:'0 2px' }}>{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>
+}
+
+function FeatureSearch({ entries }: { entries: SearchEntry[] }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const query = q.trim().toLowerCase()
+  const results = query
+    ? entries.map(e => ({ e, s: scoreEntry(e, query) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s || a.e.label.localeCompare(b.e.label)).slice(0, 8).map(x => x.e)
+    : []
+
+  // "/" or Ctrl/⌘ K from anywhere in the portal (not while typing in another field).
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      const t = ev.target as HTMLElement | null
+      const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+      if ((ev.key === 'k' && (ev.metaKey || ev.ctrlKey)) || (ev.key === '/' && !typing)) { ev.preventDefault(); inputRef.current?.focus(); setOpen(true) }
+    }
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  useEffect(() => {
+    const onDown = (ev: MouseEvent) => { if (boxRef.current && !boxRef.current.contains(ev.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDown); return () => document.removeEventListener('mousedown', onDown)
+  }, [])
+  useEffect(() => { setActive(0) }, [query])
+
+  const pick = (e: SearchEntry) => { setQ(''); setOpen(false); inputRef.current?.blur(); e.run() }
+  const onKeyDown = (ev: React.KeyboardEvent) => {
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); setActive(a => Math.min(a + 1, Math.max(results.length - 1, 0))) }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); setActive(a => Math.max(a - 1, 0)) }
+    else if (ev.key === 'Enter' && results[active]) { ev.preventDefault(); pick(results[active]) }
+    else if (ev.key === 'Escape') { setOpen(false); inputRef.current?.blur() }
+  }
+  const showList = open && query.length > 0
+
+  return (
+    <div ref={boxRef} style={{ position:'relative', marginTop:14, maxWidth:680 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, height:48, padding:'0 14px', borderRadius:R.lg, background:C.surface,
+        border:`1.5px solid ${open ? C.brand : C.line}`, boxShadow: open ? `0 0 0 4px ${C.brandTint}` : E.raised, transition:'border-color .15s, box-shadow .15s' }}>
+        <span style={{ color: open ? C.brand : C.muted, display:'flex', flexShrink:0 }}><IconSearch size={19} strokeWidth={2} /></span>
+        <input ref={inputRef} value={q} onChange={e => { setQ(e.target.value); setOpen(true) }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown}
+          placeholder="Search a feature — Tasks & Approvals, MRF, Leave, Payslip…" aria-label="Search features"
+          role="combobox" aria-expanded={showList} aria-controls="ess-feature-results" aria-autocomplete="list"
+          style={{ flex:1, minWidth:0, border:'none', outline:'none', background:'transparent', color:C.ink, fontSize:14.5, fontFamily:'inherit', height:'100%' }} />
+        {q ? <button type="button" aria-label="Clear search" onClick={() => { setQ(''); inputRef.current?.focus() }}
+               style={{ border:'none', background:C.sunken, color:C.muted, borderRadius:99, width:22, height:22, cursor:'pointer', fontSize:13, lineHeight:1, flexShrink:0 }}>×</button>
+           : <kbd style={{ fontSize:11, fontFamily:'inherit', fontWeight:700, color:C.muted, background:C.sunken, border:`1px solid ${C.line}`, borderRadius:6, padding:'2px 7px', flexShrink:0 }}>/</kbd>}
+      </div>
+
+      {showList && (
+        <div id="ess-feature-results" role="listbox" style={{ position:'absolute', top:'calc(100% + 8px)', left:0, right:0, zIndex:Z.navMenu, background:C.surface,
+          border:`1px solid ${C.line}`, borderRadius:R.lg, boxShadow:E.floating, padding:6, animation:'ezFadeUp .16s both' }}>
+          {results.length === 0 ? (
+            <div style={{ padding:'14px 12px', fontSize:13, color:C.muted }}>No feature matches “{q.trim()}” — or it isn’t part of your access.</div>
+          ) : results.map((e, i) => (
+            <button key={e.id} type="button" role="option" aria-selected={i === active} onMouseEnter={() => setActive(i)} onClick={() => pick(e)}
+              style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'9px 10px', border:'none', borderRadius:R.md, cursor:'pointer', textAlign:'left', fontFamily:'inherit',
+                background: i === active ? C.brandTint : 'transparent', color:C.ink }}>
+              <span style={{ width:34, height:34, borderRadius:10, display:'grid', placeItems:'center', flexShrink:0, background: i === active ? C.surface : C.sunken, color:C.brand }}>
+                {ESS_ICON[e.icon] ? <EssIcon k={e.icon} size={17} strokeWidth={1.8} /> : <IconSearch size={15} strokeWidth={2} />}
+              </span>
+              <span style={{ flex:1, minWidth:0 }}>
+                <span style={{ display:'block', fontSize:14, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}><Highlight text={e.label} q={q.trim()} /></span>
+                <span style={{ display:'block', fontSize:12, color:C.muted, marginTop:1 }}>{e.crumb}</span>
+              </span>
+              <span style={{ fontSize:12, fontWeight:700, color: i === active ? C.brand : 'transparent', flexShrink:0 }}>Open ↵</span>
+            </button>
+          ))}
+          <div style={{ display:'flex', gap:14, padding:'8px 10px 4px', borderTop:`1px solid ${C.line}`, marginTop:4, fontSize:11, color:C.faint }}>
+            <span>↑ ↓ to move</span><span>↵ to open</span><span>esc to close</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TabHeader({ s, search }: { s: NavSection; search?: React.ReactNode }) {
   const [label, bg, fg] = BADGE[s.status]
   // Same header band as the 32 dashboard routes. This sat directly on the
   // canvas, so ESS read as a different product from the admin side.
@@ -3450,6 +3566,7 @@ function TabHeader({ s }: { s: NavSection }) {
         <span style={{ fontSize:11, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
       </div>
       <div style={{ fontSize:13, color:C.muted }}>{s.desc}</div>
+      {search}
     </div>
   )
 }
@@ -3585,6 +3702,13 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     startTransition(() => setView(k))
   }
   const goAdmin = (k: string) => { setAdminKey(k); setBellOpen(false); setMoreOpen(false); window.scrollTo({ top: 0 }) }
+  // Open a tab inside a module (feature search → "Recruitment › MRF"). Modules read their tab
+  // from the URL when they mount, so the URL is set first and the module remounted.
+  const [adminNonce, setAdminNonce] = useState(0)
+  const goModuleTab = (mod: string, tab: string) => {
+    if (typeof window !== 'undefined') window.history.replaceState(null, '', `${window.location.pathname}?module=${encodeURIComponent(mod)}&tab=${encodeURIComponent(tab)}`)
+    setAdminNonce(n => n + 1); goAdmin(mod)
+  }
   // Deep-link: /ess-portal?module=recruitment opens that admin module on load (the module
   // reads its own further params, e.g. &mrfSub=approvals&mrf=<id> — the MRF approval link).
   useEffect(() => {
@@ -3627,6 +3751,33 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   // section, so it drops out of the sub-tabs for anyone who cannot raise one.
   const canRaiseMrf = essMenu.super_admin || essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals || essMenu.approval_types.length > 0
   const sectionItems = section.items.filter(i => i.k !== 'raise-mrf' || canRaiseMrf)
+
+  // Everything the feature search may offer — only what this person can open.
+  const searchEntries: SearchEntry[] = []
+  for (const sec of sections) {
+    if (sec.status === 'soon') continue
+    for (const it of sec.items) {
+      if ((it as any).needs) continue                              // not built yet — a placeholder
+      if (it.k === 'raise-mrf' && !canRaiseMrf) continue
+      searchEntries.push({ id: `ess:${it.k}`, label: it.label, crumb: sec.items.length > 1 ? `${sec.label} › ${it.label}` : 'My portal', icon: sec.k,
+        keywords: `${sec.label.toLowerCase()} ${ESS_KEYWORDS[it.k] || ''}`, run: () => go(it.k) })
+    }
+  }
+  const screenOk = (screen: string) => {
+    if (essMenu.super_admin) return true
+    const sc = essMenu.screens
+    if (!sc || !sc.configured[screen.split('.')[0]]) return true            // module not restricted by screen
+    return !!sc.allow[screen]
+  }
+  const isHrHeadMenu = essMenu.super_admin || essMenu.roles.some(r => r.code === 'HR_HEAD')
+  for (const g of adminGroups) for (const it of g.items) {
+    searchEntries.push({ id: `mod:${it.key}`, label: it.label, crumb: `${g.group} · module`, icon: '', keywords: `${g.group.toLowerCase()} ${it.key.replace(/-/g, ' ')}`, run: () => { if (typeof window !== 'undefined' && window.location.search) window.history.replaceState(null, '', window.location.pathname); setAdminNonce(n => n + 1); goAdmin(it.key) } })
+    for (const t of MODULE_TABS[it.key] || []) {
+      if (!screenOk(t.screen)) continue
+      if (it.key === 'recruitment' && t.key === 'hrhead' && !isHrHeadMenu) continue   // the module's own rule
+      searchEntries.push({ id: `tab:${it.key}:${t.key}`, label: t.label, crumb: `${it.label} › ${t.label}`, icon: '', keywords: `${it.label.toLowerCase()} ${t.keywords || ''}`, run: () => goModuleTab(it.key, t.key) })
+    }
+  }
 
   const renderView = () => {
     if (!emp) return null
@@ -3786,7 +3937,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           // The dashboard page renders exactly as it does at /dashboard/<module> —
           // same component, no wrapper of ours around it, because those pages bring
           // their own <Page> padding and expect the full width.
-          <AdminModuleHost moduleKey={adminKey} />
+          <AdminModuleHost key={`${adminKey}-${adminNonce}`} moduleKey={adminKey} />
         ) : (
           view === 'inbox' || section.k === 'hris' || section.k === 'funzone' ? (
             section.k === 'hris' || section.k === 'funzone' ? (
@@ -3825,7 +3976,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
             // Line length is still protected where it matters, inside the
             // sections that render prose (Wall of Fame's 70ch, and so on).
             <div style={{ padding: isMobile ? '14px 12px' : '18px 22px' }}>
-              <TabHeader s={section} />
+              <TabHeader s={section} search={section.k === 'home' ? <FeatureSearch entries={searchEntries} /> : undefined} />
               <SubTabs items={sectionItems} view={view} go={go} />
               {renderView()}
             </div>

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
+import { MODULE_TABS } from '@/lib/rms/nav'
 import { companyFilter, scopedCompanies, canSeeScreen } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
@@ -339,19 +340,8 @@ export default function RecruitmentPage() {
   // Eleven tabs is a lot to scan, and eleven different emoji in front of them
   // made it harder rather than easier — each one drew the eye equally. The
   // words are the signal; they are also already in pipeline order.
-  const TABS = [
-    { k:'dashboard', l:'Dashboard' },
-    { k:'mrf', l:'MRF' },
-    { k:'screening', l:'AI Screening' },
-    { k:'pipeline', l:'Pipeline' },
-    { k:'negotiation', l:'Negotiation' },
-    { k:'offerapproval', l:'Offer Approval' },
-    { k:'hrhead', l:'HR Head' },
-    { k:'sendoffer', l:'Send Offers' },
-    { k:'offers', l:'Offers' },
-    { k:'preonboarding', l:'Pre-onboarding' },
-    { k:'jobstatus', l:'Job Status' },
-  ]
+  // The same list the ESS feature search offers (lib/rms/nav.ts), so the two cannot drift.
+  const TABS = MODULE_TABS.recruitment.map(t => ({ k:t.key, l:t.label }))
   // hrhead stays HR-Head only; on top of that, role-wise tab visibility (Roles → Screen Access)
   const visibleTabs = TABS.filter(t => (t.k !== 'hrhead' || isHrHead) && canSeeScreen(grant, `recruitment.${t.k}`))
   // If the current tab is not one this role may see, fall back to the first it can.
