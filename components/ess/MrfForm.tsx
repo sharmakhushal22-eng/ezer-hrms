@@ -324,7 +324,7 @@ type Person = { id: string; full_name: string; emp_code: string; designation: st
 
 const EMPTY = {
   mrf_number: '',
-  mrf_type: 'Full MRF', hiring_type: 'New Hire', urgency: 'MEDIUM', raised_by_name: '', raised_by_role: '',
+  mrf_type: 'Full MRF', hiring_type: 'New Hire', urgency: 'MEDIUM', raised_by_name: '', raised_by_role: '', is_confidential: false,
   job_title: '', designation: '', business_unit: '', grade: '', job_code: '', no_of_openings: '1',
   employment_type: 'Employee', work_mode: 'Onsite', location_id: '',
   cost_center: '', is_budgeted: '', headcount_ref: '', currency: 'INR', budget_min: '', budget_max: '', wage_category: '', duration_months: '',
@@ -342,7 +342,7 @@ export function mrfToForm(m: any): Record<string, any> {
   return {
     ...EMPTY,
     mrf_number: m.mrf_number || '',
-    mrf_type: m.mrf_type || 'Full MRF', hiring_type: m.hiring_type || 'New Hire', urgency: m.urgency || 'MEDIUM',
+    mrf_type: m.mrf_type || 'Full MRF', hiring_type: m.hiring_type || 'New Hire', urgency: m.urgency || 'MEDIUM', is_confidential: !!m.is_confidential,
     raised_by_name: m.raised_by_name || '', raised_by_role: m.raised_by_role || '',
     job_title: m.job_title || '', designation: m.designation || m.position || '', business_unit: m.business_unit || '',
     grade: m.grade || '', job_code: m.job_code || '', no_of_openings: String(m.no_of_openings || m.openings || 1),
@@ -379,7 +379,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   actionBusy?: boolean
 }) {
   const [form, setForm] = useState<any>({ ...EMPTY, ...(initial || {}) })
-  const [done, setDone] = useState<null | { id: string; mrf_number?: string }>(null)   // success screen after submit
+  const [done, setDone] = useState<null | { id: string; mrf_number?: string; confidential?: boolean }>(null)   // success screen after submit
   const [replaceRef, setReplaceRef] = useState<string | null>(replaceId || null)
   const [masters, setMasters] = useState<Record<string, Master[]>>({})
   const [people, setPeople] = useState<Person[]>([])
@@ -390,6 +390,9 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   const [saving, setSaving] = useState(false)
   const [sbOpen, setSbOpen] = useState(false)   // send-back note box (read-only mode)
   const [sbNote, setSbNote] = useState('')
+  // Confidential hiring is the HR Head's alone — the toggle shows only when the raiser holds
+  // HR_HEAD (the server checks the same thing). See lib/recruitment/confidential.ts.
+  const [canConfidential, setCanConfidential] = useState(false)
   // In read-only approval mode the locked Company/Department/RM fields must reflect the
   // MRF's RAISER, not the approver looking at it — so the autofill reads the raiser's row.
   const raiserId = readOnly && viewRow?.requested_by ? String(viewRow.requested_by) : employeeId
@@ -433,6 +436,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         const { data: ur } = await supabase.from('ess_user_roles').select('ess_roles(role_name, role_code)').eq('ess_account_id', acct.id).eq('is_active', true)
         const names = (ur || []).map((r: any) => r.ess_roles).filter((r: any) => r && r.role_code !== 'EMPLOYEE')
         if (names.length) role = names[0].role_name
+        if (live) setCanConfidential(names.some((r: any) => String(r.role_code).toUpperCase() === 'HR_HEAD'))
       }
       const fmt = (p: any) => p ? `${p.full_name} (${p.emp_code})` : '—'
       const bundle = {
@@ -557,6 +561,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         mrf_number: form.mrf_number || null,   // the number shown in the form — kept on resubmit too
         replace_id: replaceRef || null,   // scrap the old requisition (resubmit / edit after send-back)
         mrf_type: form.mrf_type, hiring_type: form.hiring_type, urgency: form.urgency,
+        is_confidential: !!form.is_confidential && canConfidential,
         raised_by_name: form.raised_by_name || null, raised_by_role: form.raised_by_role || null,
         job_title: form.job_title || null, business_unit: form.business_unit || null, grade: form.grade || null, job_code: form.job_code || null,
         openings: Number(form.no_of_openings) || 1,
@@ -584,7 +589,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       if (status === 'DRAFT') { notify('MRF saved as draft.'); onDone(); return }
       // Submitted → show the success screen with "raise one more" / "resubmit".
       setReplaceRef(null)
-      setDone({ id: res?.id || '', mrf_number: res?.mrf_number || form.mrf_number || '' })
+      setDone({ id: res?.id || '', mrf_number: res?.mrf_number || form.mrf_number || '', confidential: !!res?.confidential })
     } catch (e: any) { notify(e.message, 'error') } finally { setSaving(false) }
   }
 
@@ -608,11 +613,13 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   if (done) return (
     <div style={{ border: `1px solid ${TK.positiveEdge}`, borderRadius: 20, padding: '32px 24px', marginBottom: 12, background: C.greenBg, boxShadow: E.raised, textAlign: 'center' }}>
       <div style={{ width: 64, height: 64, borderRadius: '50%', background: C.green, color: TK.onAccent, fontSize: 36, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>You have successfully raised the MRF</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>{done.confidential ? 'Confidential MRF raised and approved' : 'You have successfully raised the MRF'}</div>
       {done.mrf_number && <div style={{ display: 'inline-block', marginTop: 8, fontSize: 13, fontWeight: 700, color: C.purpleD, background: C.soft, borderRadius: 99, padding: '4px 14px', letterSpacing: '.03em' }}>Requisition ID: {done.mrf_number}</div>}
       <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
-        It’s been sent for approval through your reporting chain (RM2 → HR Head).
-        You can raise another, or resubmit this one if you spotted a mistake (the one you just submitted will be scrapped).
+        {done.confidential
+          ? <>It is <b>approved already</b> — no approval chain, and nobody has been notified. Only you and the HR Manager can see it; add the candidate from Recruitment → Pipeline.</>
+          : <>It’s been sent for approval through your reporting chain (RM2 → HR Head).</>}
+        {' '}You can raise another, or resubmit this one if you spotted a mistake (the one you just submitted will be scrapped).
       </div>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}>
         <button type="button" style={st.btn} onClick={raiseAnother}>＋ Raise one more MRF</button>
@@ -707,6 +714,20 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Raised By — Name"><input style={st.input} value={form.raised_by_name} onChange={e => F('raised_by_name', e.target.value)} placeholder="Your name" /></Field>
         <Field label="Raised By — Role"><input style={st.input} value={form.raised_by_role} onChange={e => F('raised_by_role', e.target.value)} placeholder="e.g. Department Head" /></Field>
       </div>
+      {/* Confidential hiring — HR Head only. Self-approved, invisible to everyone but the HR
+          Head and HR Manager, one Telephonic round, offer self-approved on acceptance. */}
+      {(canConfidential || form.is_confidential) && (
+        <label style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: `1px solid ${form.is_confidential ? TK.warningEdge : TK.line}`, background: form.is_confidential ? TK.warningTint : TK.surface, borderRadius: 12, padding: '11px 14px', margin: '10px 0 4px', cursor: readOnly ? 'default' : 'pointer' }}>
+          <input type="checkbox" checked={!!form.is_confidential} disabled={readOnly || !canConfidential} onChange={e => F('is_confidential', e.target.checked)} style={{ width: 18, height: 18, marginTop: 2, accentColor: TK.warning, flexShrink: 0 }} />
+          <span>
+            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: TK.ink }}>🔒 Confidential hiring</span>
+            <span style={{ display: 'block', fontSize: 12, color: TK.muted, lineHeight: 1.55, marginTop: 2 }}>
+              Approved the moment you submit — no RM2 / HR Head chain, nobody notified. The requisition and its candidates are visible only to you and the HR Manager of your company.
+              You add the candidate, record one Telephonic round yourself (a Shortlist takes them straight to Negotiation), and once they accept the salary link the offer is self-approved and goes to Send Offers.
+            </span>
+          </span>
+        </label>
+      )}
 
       </>)}
 

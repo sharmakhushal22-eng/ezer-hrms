@@ -44,6 +44,7 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, candidatesN
             {urgent && <Badge tone="crit" live>{d! < 0 ? 'Past target' : `${d} days left`}</Badge>}
             {/* Past its validity date: a warning the compact card must still carry. */}
             {m.expired && <Badge tone="crit" title="Past its validity date">Expired</Badge>}
+            {m.confidential && <Badge tone="dark" dot={false} title="Confidential hiring — visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
             <Badge tone={m.lane === 'Full MRF' ? 'brand' : 'mute'} dot={false}>{m.lane}</Badge>
             <Badge tone={MRF_TONE[m.status]}>{MRF_LABEL[m.status]}</Badge>
           </div>
@@ -112,7 +113,10 @@ export function CandidateCard({ c, next, onOpen }: { c: CandidateVM; next: NextS
       </span>
       <span className="rx-row" style={{ justifyContent: 'space-between' }}>
         <span className="rx-meta" style={{ fontSize: 12 }}>{c.source ?? ''}</span>
-        {c.aiScore != null && <Badge tone="pos" dot={false}>AI {c.aiScore}</Badge>}
+        <span className="rx-row" style={{ gap: 6 }}>
+          {c.confidential && <Badge tone="dark" dot={false} title="Confidential hiring — visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
+          {c.aiScore != null && <Badge tone="pos" dot={false}>AI {c.aiScore}</Badge>}
+        </span>
       </span>
       <NextStepLine step={next} />
     </button>

@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { mailAcceptance } from '@/lib/recruitment/offer-accepted-mail'
+import { autoApproveConfidentialOffer } from '@/lib/recruitment/confidential-flow'
 import { negotiationByToken, verifiedCaller, accessExpiryMs, OFFER_VALID_DAYS } from '../_shared'
 
 export const runtime = 'nodejs' // nodemailer + pdfkit need Node
@@ -30,7 +31,12 @@ export async function POST(req: NextRequest) {
     .eq('id', neg.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  let emailed = 0
-  if (response === 'ACCEPTED') emailed = await mailAcceptance(neg).catch(() => 0)
-  return NextResponse.json({ ok: true, response, emailed })
+  let emailed = 0, autoApproved: { requestId: string; notified: number } | null = null
+  if (response === 'ACCEPTED') {
+    emailed = await mailAcceptance(neg).catch(() => 0)
+    // Confidential hiring: the offer request is created already approved, so Send Offers can
+    // go ahead; the HR Head and HR Manager(s) are told. Nothing to do for a normal search.
+    autoApproved = await autoApproveConfidentialOffer(sb as any, neg).catch(() => null)
+  }
+  return NextResponse.json({ ok: true, response, emailed, ...(autoApproved ? { confidential: true, request_id: autoApproved.requestId } : {}) })
 }

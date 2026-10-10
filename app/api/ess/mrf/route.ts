@@ -7,6 +7,7 @@
 // Everything is scoped to the raiser's company: the RM2 is the raiser's own
 // l1_manager, and the HR Head is whoever holds HR_HEAD in that company.
 import { NextRequest, NextResponse } from 'next/server'
+import { rolesCanRaiseConfidential, selfApprovedChain } from '@/lib/recruitment/confidential'
 import { jobCodePrefix, nextJobCode } from '@/lib/recruitment/job-code'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden, notify } from '@/lib/ess/session'
@@ -142,7 +143,11 @@ export async function POST(req: NextRequest) {
     if (!designation) return NextResponse.json({ error: 'Designation is required.' }, { status: 400 })
 
     // DRAFT can be half-finished and routes to nobody; SUBMITTED builds the approval chain.
-    const status = body.status === 'DRAFT' ? 'DRAFT' : 'SUBMITTED'
+    // CONFIDENTIAL (HR Head only): approved on the spot, no chain, nobody told — see
+    // lib/recruitment/confidential.ts.
+    const wantConfidential = body.is_confidential === true || body.is_confidential === 'true'
+    if (wantConfidential && !rolesCanRaiseConfidential(ctx.menu.roles, !!ctx.grant.isSuperAdmin)) return forbidden('Only the HR Head can raise a confidential MRF.')
+    const status = body.status === 'DRAFT' ? 'DRAFT' : wantConfidential ? 'APPROVED' : 'SUBMITTED'
 
     const { data: meRow } = await sb.from('employees')
       .select('id, full_name, company_id, department_id, l1_manager_id').eq('id', me).maybeSingle()
@@ -170,11 +175,12 @@ export async function POST(req: NextRequest) {
     ])
 
     const chain: any[] = []
-    if (rm2Brief && rm2Brief.id !== me) {
+    if (wantConfidential) chain.push(...selfApprovedChain({ id: me, name: meRow.full_name as string, code: null }))
+    else if (rm2Brief && rm2Brief.id !== me) {
       chain.push({ order: 1, role: 'RM2', approver_id: rm2Brief.id, approver_name: rm2Brief.name, approver_code: rm2Brief.code, status: 'PENDING', acted_at: null, comment: null })
     }
     // HR Head is the final step — skipped only if they are the raiser or already the RM2 step.
-    if (hh && hh.id !== me && hh.id !== rm2Brief?.id) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
+    if (!wantConfidential && hh && hh.id !== me && hh.id !== rm2Brief?.id) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
     if (status === 'SUBMITTED' && !chain.length) return NextResponse.json({ error: 'No approver could be found — your company has no HR Head / manager set. Please contact HR.' }, { status: 400 })
 
     const openings = Math.max(1, Number(body.openings) || 1)
@@ -232,8 +238,13 @@ export async function POST(req: NextRequest) {
       rm2_id: (meRow.l1_manager_id as string) || null, // new hire's RM2 = raiser's manager
       hod_id: body.hod_id || null,
       approval_chain: chain,
+      // Confidential: flagged, self-approved now, and run by the HR Head themselves (so the
+      // flows that address "the hiring manager" reach the HR Head; the acknowledge task is
+      // pre-done so no task is raised).
+      ...(wantConfidential ? { is_confidential: true, confidential_by: me, approved_at: new Date().toISOString(), assigned_recruiter_ids: [me], acknowledged_recruiter_ids: [me] } : {}),
     }
     let { data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single()
+    if (error && wantConfidential && /is_confidential|confidential_by/i.test(error.message || '')) return NextResponse.json({ error: 'Confidential hiring needs migration 135 (manpower_requisitions.is_confidential) — run it in the SQL Editor first.' }, { status: 409 })
     // Until migration 130 adds manpower_requisitions.wage_category, PostgREST rejects the
     // unknown column — drop it and retry rather than blocking every MRF from being raised.
     if (error && /wage_category/i.test(error.message || '')) {
@@ -241,7 +252,8 @@ export async function POST(req: NextRequest) {
       ;({ data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single())
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, id: created?.id, mrf_number: created?.mrf_number || null, status })
+    if (wantConfidential && created?.id) await sb.from('recruitment_audit_logs').insert({ company_id: meRow.company_id, action_type: 'MRF_CONFIDENTIAL_SELF_APPROVED', details: { mrf_id: created.id, mrf_number: created.mrf_number, position: designation, by: meRow.full_name }, created_at: new Date().toISOString() }).then(() => null, () => null)
+    return NextResponse.json({ ok: true, id: created?.id, mrf_number: created?.mrf_number || null, status, confidential: wantConfidential })
   }
 
   // ── Approve / reject / send back for revision ──────────────────────────────

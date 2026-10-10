@@ -20,6 +20,8 @@ import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { notify as essNotify } from '@/lib/ess/session'
 import { applyInterviewDecision, distinctRounds, isDecision, roundOrdinal, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
+import { CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/confidential'
+import { mrfOfCandidate } from '@/lib/recruitment/confidential-flow'
 
 export const runtime = 'nodejs' // nodemailer needs Node, not Edge
 
@@ -72,6 +74,9 @@ export async function POST(req: NextRequest) {
     [mainId, ...panelIds] = body.interviewer_ids.filter(Boolean)
   }
   if (!mainId) return bad('Select the main interviewer')
+  // A confidential search invites nobody: the HR Head / HR Manager records the Telephonic
+  // round themselves (direct_feedback).
+  if ((await mrfOfCandidate(sb as any, candidate_id))?.is_confidential) return bad('Confidential hiring: interviews are not scheduled or shared. Record the Telephonic feedback directly from the candidate card.', 409)
   panelIds = [...new Set(panelIds.filter(id => id !== mainId))]
   const ids = [mainId, ...panelIds]
 
@@ -193,9 +198,18 @@ async function directFeedback(body: any) {
 
   const rounds = distinctRounds(rows)
   let stage: string | null = null
-  try { stage = await applyInterviewDecision(sb as any, candidate_id, round, feedback.decision, roundOrdinal(rounds, round)) }
-  catch (e: any) { return bad(e.message || 'Could not update the candidate', 500) }
-  return NextResponse.json({ ok: true, id: ins.data?.[0]?.id, decision: feedback.decision, stage })
+  // Confidential hiring: the Telephonic round is the only round, so a Shortlist decision
+  // takes the candidate straight to Shortlisted (Negotiation) — no further rounds, no
+  // separate Shortlist click.
+  const confidential = !!(await mrfOfCandidate(sb as any, candidate_id))?.is_confidential
+  try {
+    if (confidential && feedback.decision === 'SHORTLIST' && !['Offer Sent', 'Joined'].includes(String(cand.stage))) {
+      const { error } = await sb.from('candidates').update({ stage: 'Shortlisted' }).eq('id', candidate_id)
+      if (error) throw new Error(error.message)
+      stage = 'Shortlisted'
+    } else stage = await applyInterviewDecision(sb as any, candidate_id, round, feedback.decision, roundOrdinal(rounds, round))
+  } catch (e: any) { return bad(e.message || 'Could not update the candidate', 500) }
+  return NextResponse.json({ ok: true, id: ins.data?.[0]?.id, decision: feedback.decision, stage, confidential })
 }
 
 // Final Shortlist: allowed once ≥3 rounds carry a main-interviewer decision and the latest
@@ -207,7 +221,8 @@ async function finalShortlist(body: any) {
     .eq('candidate_id', candidate_id).order('created_at', { ascending: true })
   const rows = ((data || []) as any[]).filter(r => (r.role || 'MAIN') === 'MAIN' && r.status === 'submitted')
   const decided = distinctRounds(rows.filter(r => r.decision || r.feedback?.decision))
-  if (decided.length < ROUNDS_BEFORE_SHORTLIST) return bad(`${ROUNDS_BEFORE_SHORTLIST} decided rounds are needed before shortlisting (have ${decided.length})`)
+  const need = (await mrfOfCandidate(sb as any, candidate_id))?.is_confidential ? CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST : ROUNDS_BEFORE_SHORTLIST
+  if (decided.length < need) return bad(`${need} decided round${need === 1 ? ' is' : 's are'} needed before shortlisting (have ${decided.length})`)
   const last = rows[rows.length - 1]
   const lastDecision = last?.decision || last?.feedback?.decision
   if (lastDecision === 'REJECT') return bad('The latest round rejected this candidate')

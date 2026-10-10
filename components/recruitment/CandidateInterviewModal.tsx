@@ -26,6 +26,7 @@ import { supabase } from '@/lib/supabase'
 import { authHeaders } from '@/lib/auth-headers'
 import InterviewFeedbackForm, { type Feedback, bandOf } from './InterviewFeedbackForm'
 import { type Decision, DECISION_LABEL, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
+import { CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/confidential'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
 import { C as TK, E, F, Z } from '@/lib/ui'
 // The move-stage picker adopts the kit's radiogroup. moveOptions() only LABELS
@@ -75,10 +76,12 @@ const isMain = (i: Invite) => (i.role || 'MAIN') === 'MAIN'
 const decisionOf = (i?: Invite | null): Decision | null => (i?.decision || i?.feedback?.decision || null) as Decision | null
 
 export default function CandidateInterviewModal({
-  candidate, mrf, stages, stageColor, stageText, schedulerId, onClose, onStageChange, onChanged, showNotify,
+  candidate, mrf, confidential = false, stages, stageColor, stageText, schedulerId, onClose, onStageChange, onChanged, showNotify,
 }: {
   candidate: any
   mrf: any
+  /** Confidential hiring: one Telephonic round recorded here, no invites; a Shortlist decision moves the candidate straight to Negotiation. */
+  confidential?: boolean
   stages: string[]
   stageColor: Record<string, string>
   stageText: Record<string, string>
@@ -154,8 +157,10 @@ export default function CandidateInterviewModal({
       const k = r.toLowerCase()
       if (r && !seen.has(k)) { seen.add(k); out.push(r) }
     }
-    return out
-  }, [invitesByRound, addedRounds])
+    // Confidential: the Telephonic round is the whole interview.
+    return confidential ? out.filter(r => DIRECT_ROUNDS.has(r.toLowerCase())) : out
+  }, [invitesByRound, addedRounds, confidential])
+  const roundsNeeded = confidential ? CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST : ROUNDS_BEFORE_SHORTLIST
 
   // Decision flow: the LAST round on the candidate decides what the manager may do next.
   const decidedRounds = rounds.filter(r => decisionOf(mainOf(r)))
@@ -163,9 +168,9 @@ export default function CandidateInterviewModal({
   const lastDecision = decisionOf(mainOf(lastRound))
   const lastPending = !!lastRound && !roundComplete(lastRound)   // scheduled/awaiting or not even scheduled
   const pipelineOver = ['Rejected', 'Shortlisted', 'Offer Sent', 'Joined'].includes(stageNow)
-  const canAddRound = !pipelineOver && !lastPending && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
-  const addRoundHint = pipelineOver ? `Candidate is ${stageNow}` : lastPending ? `Waiting on the ${lastRound} round's feedback` : lastDecision === 'REJECT' ? 'The last round rejected this candidate' : ''
-  const canShortlist = !pipelineOver && !lastPending && decidedRounds.length >= ROUNDS_BEFORE_SHORTLIST && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
+  const canAddRound = !confidential && !pipelineOver && !lastPending && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
+  const addRoundHint = confidential ? 'Confidential hiring — one Telephonic round only' : pipelineOver ? `Candidate is ${stageNow}` : lastPending ? `Waiting on the ${lastRound} round's feedback` : lastDecision === 'REJECT' ? 'The last round rejected this candidate' : ''
+  const canShortlist = !pipelineOver && !lastPending && decidedRounds.length >= roundsNeeded && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
 
   const addRound = () => {
     const name = newRound.trim()
@@ -252,7 +257,7 @@ export default function CandidateInterviewModal({
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { showNotify(j.error || 'Could not save feedback', 'error'); setFbSaving(false); return }
       const d = fb.decision as Decision
-      showNotify(d === 'REJECT' ? 'Feedback saved — candidate rejected' : d === 'HOLD' ? 'Feedback saved — candidate on hold. You can still add a round.' : 'Feedback saved — candidate shortlisted for this round. Add the next round.')
+      showNotify(d === 'REJECT' ? 'Feedback saved — candidate rejected' : d === 'HOLD' ? (confidential ? 'Feedback saved — candidate on hold.' : 'Feedback saved — candidate on hold. You can still add a round.') : j.confidential && j.stage === 'Shortlisted' ? 'Feedback saved — candidate shortlisted and moved to Negotiation.' : 'Feedback saved — candidate shortlisted for this round. Add the next round.')
       setFbRound(null)
       if (j.stage) setStageNow(j.stage)
       onChanged?.(j.stage || null)
@@ -357,18 +362,24 @@ export default function CandidateInterviewModal({
       </div>
 
       {/* rounds */}
+      {confidential && (
+        <div style={{ display:'flex', gap:10, alignItems:'flex-start', background:TK.warningTint, border:`1px solid ${TK.warningEdge}`, borderRadius:10, padding:'9px 12px', marginBottom:10, fontSize:12, color:TK.ink, lineHeight:1.5 }}>
+          <span style={{ fontSize:16 }}>🔒</span>
+          <span><b>Confidential hiring.</b> Only the HR Head and HR Manager see this candidate. There is one round — Telephonic — which you record here yourself; nobody is invited. A <b>Shortlist</b> decision moves the candidate straight to Negotiation.</span>
+        </div>
+      )}
       <div style={{ display:'flex', alignItems:'center', gap:8, margin:'2px 0 9px', flexWrap:'wrap' }}>
         <SectionTitle>Interview rounds</SectionTitle>
-        <span style={{ fontSize:11, color:C.faint }}>{decidedRounds.length} of {ROUNDS_BEFORE_SHORTLIST} rounds decided</span>
+        <span style={{ fontSize:11, color:C.faint }}>{decidedRounds.length} of {roundsNeeded} round{roundsNeeded === 1 ? '' : 's'} decided</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
           {canShortlist && (
             <button onClick={() => setConfirmShortlist(true)} style={{ ...btn.small, background:C.ok, color:TK.onAccent, border:'none' }}>★ Shortlist</button>
           )}
-          <button onClick={() => { if (canAddRound) { setNewRound(''); setShowAddRound(true) } }} disabled={!canAddRound} title={canAddRound ? '' : addRoundHint}
-            style={{ ...btn.small, background:C.brandTint, color:C.pdark, border:`1px solid ${TK.brandEdge}`, opacity: canAddRound ? 1 : .45, cursor: canAddRound ? 'pointer' : 'not-allowed' }}>+ Add round</button>
+          {!confidential && <button onClick={() => { if (canAddRound) { setNewRound(''); setShowAddRound(true) } }} disabled={!canAddRound} title={canAddRound ? '' : addRoundHint}
+            style={{ ...btn.small, background:C.brandTint, color:C.pdark, border:`1px solid ${TK.brandEdge}`, opacity: canAddRound ? 1 : .45, cursor: canAddRound ? 'pointer' : 'not-allowed' }}>+ Add round</button>}
         </div>
       </div>
-      {!canAddRound && addRoundHint && (
+      {!confidential && !canAddRound && addRoundHint && (
         <div style={{ fontSize:11, color:C.faint, margin:'-4px 0 9px' }}>“+ Add round” unlocks once the latest round's feedback is Shortlist or Hold — {addRoundHint.toLowerCase()}.</div>
       )}
       <div style={{ display:'grid', gap:10, marginBottom:18 }}>

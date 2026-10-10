@@ -1608,12 +1608,18 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
   useEffect(() => {
     supabase.from('offer_approval_requests')
-      .select('*, candidates(full_name, email, phone, designation, experience_years, current_company, mrf_id, application_details), companies(company_name, company_code), manpower_requisitions(designation, employment_type, duration_months), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct, is_stipend, stipend_monthly, tds_applicable, tds_pct)')
+      .select('*, candidates(full_name, email, phone, designation, experience_years, current_company, mrf_id, application_details), companies(company_name, company_code), manpower_requisitions(designation, employment_type, duration_months, is_confidential), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct, is_stipend, stipend_monthly, tds_applicable, tds_pct)')
       .in('status',['SUBMITTED','HR_HEAD_APPROVED'])
       .order('submitted_at',{ ascending:false })
+      // Until migration 135 adds is_confidential, PostgREST rejects the column — retry without it.
+      .then(r => r.error && /is_confidential/i.test(r.error.message || '')
+        ? supabase.from('offer_approval_requests')
+            .select('*, candidates(full_name, email, phone, designation, experience_years, current_company, mrf_id, application_details), companies(company_name, company_code), manpower_requisitions(designation, employment_type, duration_months), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct, is_stipend, stipend_monthly, tds_applicable, tds_pct)')
+            .in('status',['SUBMITTED','HR_HEAD_APPROVED']).order('submitted_at',{ ascending:false })
+        : r)
       // A scoped hiring manager only sees offers for candidates under the MRFs assigned to
       // them; `allowedMrfIds` is null for oversight roles (no filter).
-      .then(({ data }) => {
+      .then(({ data }: any) => {
         const rows = (data || []).filter((r: any) => !allowedMrfIds || (r.candidates?.mrf_id && allowedMrfIds.has(r.candidates.mrf_id)))
         setApproved(rows)
         // keep the open one in sync — this is what flips the button from locked to live
@@ -1864,9 +1870,10 @@ ${company} — Human Resources`,
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years != null ? `${r.candidates.experience_years}yr · ` : ''}{payLine(r)}{monthsOfRow(r) && kindOf(r) !== 'EMPLOYMENT' ? ` · ${monthsOfRow(r)} months` : ''}
               </div>
-              {kindOf(r) !== 'EMPLOYMENT' && (
-                <div style={{ marginTop:5 }}>
-                  <span className="rx-chip" style={{ background:TK.infoTint, color:TK.info, border:`1px solid ${TK.infoEdge}` }}>{specOf(kindOf(r)).label} · {specOf(kindOf(r)).title}</span>
+              {(kindOf(r) !== 'EMPLOYMENT' || r.manpower_requisitions?.is_confidential) && (
+                <div style={{ marginTop:5, display:'flex', gap:6, flexWrap:'wrap' }}>
+                  {r.manpower_requisitions?.is_confidential && <span className="rx-chip" style={{ background:TK.warningTint, color:TK.warning, border:`1px solid ${TK.warningEdge}` }} title="Confidential hiring — self-approved by the HR Head">🔒 Confidential · self-approved</span>}
+                  {kindOf(r) !== 'EMPLOYMENT' && <span className="rx-chip" style={{ background:TK.infoTint, color:TK.info, border:`1px solid ${TK.infoEdge}` }}>{specOf(kindOf(r)).label} · {specOf(kindOf(r)).title}</span>}
                 </div>
               )}
               {isApproved(r) ? (

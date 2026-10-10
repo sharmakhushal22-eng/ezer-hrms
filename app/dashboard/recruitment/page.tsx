@@ -3,6 +3,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
+// Confidential hiring: who may raise / see it, and the hiding applied where data is loaded.
+import { canSeeConfidential, canRaiseConfidential, hideConfidential, isConfidentialMrf, selfApprovedChain } from '@/lib/recruitment/confidential'
 import { MODULE_TABS } from '@/lib/rms/nav'
 import { companyFilter, scopedCompanies, canSeeScreen } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
@@ -330,6 +332,9 @@ export default function RecruitmentPage() {
         mrf2 = mrf2.filter(m => mrfMine.has(m.id))
         cand2 = cand2.filter(c => c.mrf_id && assignedIds.has(c.mrf_id))
       }
+      // Confidential searches exist only for the HR Head / HR Manager of the company (and
+      // the super admin): everyone else never loads them — not the MRF, not its candidates.
+      ;({ mrfs: mrf2, candidates: cand2 } = hideConfidential(mrf2 as any[], cand2 as any[], grant))
       setMrfs(mrf2); setCandidates(cand2)
     } catch(e) { showNotify('Data load error','error') }
     setLoading(false)
@@ -353,7 +358,7 @@ export default function RecruitmentPage() {
   // Scoped-HM MRF id set for the Send Offers tab (null = oversight, no filter). Memoised so
   // the child's fetch effect does not refire on every render.
   const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
-  const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId, mrfInitialSub: mrfDeep.sub, mrfFocusId: mrfDeep.id, canEditAnyMrf: !!(grant.isSuperAdmin || grant.legacy) }
+  const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId, mrfInitialSub: mrfDeep.sub, mrfFocusId: mrfDeep.id, canEditAnyMrf: !!(grant.isSuperAdmin || grant.legacy), isHrHead, canConfidential: canRaiseConfidential(grant), confidentialViewer: canSeeConfidential(grant) }
 
   // ── Redesign wiring ───────────────────────────────────────────────────
   // Adapters only reshape the rows loadAll already put in state. No query is
@@ -1019,6 +1024,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
           </div>
           <div style={{ display:'flex', gap:7, marginTop:10, flexWrap:'wrap' as const }}>
             <Badge text={m.status} />
+            {m.is_confidential && <Badge text="🔒 Confidential" />}
             {m.mrf_type && <Badge text={m.mrf_type} />}
             {m.urgency && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:W.semi, lineHeight:1.45 }}>{m.urgency} priority</span>}
             {m.work_mode && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:W.semi, lineHeight:1.45 }}>{m.work_mode}</span>}
@@ -1289,10 +1295,10 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
 }
 
 // ── MRF TAB ───────────────────────────────────────────────────────
-function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId, mrfInitialSub, mrfFocusId, canEditAnyMrf, rail }:any) {
+function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId, mrfInitialSub, mrfFocusId, canEditAnyMrf, canConfidential, rail }:any) {
   const EMPTY = {
     // §1 Requisition Meta
-    mrf_type:'Full MRF', hiring_type:'New Hire', urgency:'MEDIUM',
+    mrf_type:'Full MRF', hiring_type:'New Hire', urgency:'MEDIUM', is_confidential:false,
     raised_by_name:'', raised_by_role:'',
     // §2 Position Details
     company_id:'', location_id:'', department_id:'', job_title:'', designation:'',
@@ -1515,7 +1521,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     setEditMRF(m); setErrors({})
     const a:any = m
     setForm({
-      mrf_type:a.mrf_type||'Full MRF', hiring_type:a.hiring_type||'New Hire', urgency:m.urgency||'MEDIUM',
+      mrf_type:a.mrf_type||'Full MRF', hiring_type:a.hiring_type||'New Hire', urgency:m.urgency||'MEDIUM', is_confidential:!!a.is_confidential,
       raised_by_name:a.raised_by_name||'', raised_by_role:a.raised_by_role||'',
       company_id:m.company_id||'', location_id:m.location_id||'', department_id:m.department_id||'',
       job_title:a.job_title||m.designation||m.position||'', designation:m.designation||m.position||'',
@@ -1583,7 +1589,15 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     // RM2 = the manager picked on this form (RM2, else the Reporting Manager);
     // HR Head = whoever holds HR_HEAD for this company.
     let approvalChain: any[] = form.approval_chain || []
-    if (status === 'SUBMITTED') {
+    let finalStatus = status
+    // Confidential hiring (HR Head / super admin only): approved on the spot with the HR
+    // Head's own step, no chain, no notification. See lib/recruitment/confidential.ts.
+    const confidential = !!form.is_confidential && !!canConfidential
+    if (status === 'SUBMITTED' && confidential) {
+      const meP = people.find((p:any)=>p.id===employeeId)
+      approvalChain = selfApprovedChain({ id: employeeId || '', name: meP?.full_name || 'HR Head', code: meP?.emp_code || null })
+      finalStatus = 'APPROVED'
+    } else if (status === 'SUBMITTED') {
       const rm2p = people.find((p:any)=>p.id===(form.rm2_id||form.reporting_manager_id))
       const hh = await resolveHrHead(form.company_id)
       const chain:any[] = []
@@ -1605,7 +1619,9 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       no_of_openings:Number(form.no_of_openings)||1, openings:Number(form.no_of_openings)||1,
       employment_type:form.employment_type, urgency:form.urgency,
       reason:form.reason, reason_for_hire:form.reason,
-      job_description:form.job_description||null, status,
+      job_description:form.job_description||null, status: finalStatus,
+      is_confidential: confidential,
+      ...(confidential && finalStatus==='APPROVED' ? { confidential_by: employeeId || null, approved_at: new Date().toISOString(), assigned_recruiter_ids: employeeId ? [employeeId] : [], acknowledged_recruiter_ids: employeeId ? [employeeId] : [] } : {}),
       budget_min:Number(form.budget_min)||null, budget_max:Number(form.budget_max)||null,
       ...(!editMRF && form.mrf_number ? { mrf_number:form.mrf_number } : {}),
       // only sent when chosen, so an edit still saves before migration 130 adds the column
@@ -1654,13 +1670,13 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       error = r.error; savedId = r.data?.id
     }
     setSaving(false)
-    if (error) { showNotify('Save failed: '+error.message,'error'); return }
+    if (error) { showNotify(/is_confidential|confidential_by/i.test(error.message||'') ? 'Confidential hiring needs migration 135 (manpower_requisitions.is_confidential) — run it in the SQL Editor first.' : 'Save failed: '+error.message,'error'); return }
     if (savedId) {
       await logMrfAudit(supabase, { id:savedId, company_id:form.company_id },
-        editMRF ? 'MRF_UPDATED' : status==='DRAFT' ? 'MRF_DRAFTED' : 'MRF_SUBMITTED',
-        { position:form.designation, openings:Number(form.no_of_openings)||1 })
+        editMRF ? 'MRF_UPDATED' : status==='DRAFT' ? 'MRF_DRAFTED' : confidential ? 'MRF_CONFIDENTIAL_SELF_APPROVED' : 'MRF_SUBMITTED',
+        { position:form.designation, openings:Number(form.no_of_openings)||1, ...(confidential ? { confidential:true } : {}) })
     }
-    showNotify(editMRF?'MRF updated!':status==='DRAFT'?'Draft saved!':'MRF submitted for approval!')
+    showNotify(editMRF?'MRF updated!':status==='DRAFT'?'Draft saved!':confidential?'Confidential MRF raised and approved — only you and the HR Manager can see it.':'MRF submitted for approval!')
     setShowForm(false); setEditMRF(null); setForm(EMPTY); setErrors({}); onRefresh()
   }
 
@@ -1914,6 +1930,14 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 <option value="LOW">Low</option>
               </select>
             </Field>
+            {(canConfidential || form.is_confidential) && (
+              <Field label="Confidential hiring" hint="HR Head only — approved on submit, visible to the HR Head and HR Manager alone">
+                <label style={{ display:'flex', gap:8, alignItems:'center', height:38, cursor:'pointer', fontSize:13, fontWeight:600, color:C.ink }}>
+                  <input type="checkbox" checked={!!form.is_confidential} disabled={!canConfidential} onChange={e=>F('is_confidential', e.target.checked)} style={{ width:17, height:17, accentColor:C.warning }} />
+                  🔒 {form.is_confidential ? 'Confidential' : 'Not confidential'}
+                </label>
+              </Field>
+            )}
             <Field label="Requisition ID" hint={editMRF?undefined:'Generated on save'}>
               <input className="rx-input" style={{ background:C.sunken, color:C.ink, fontWeight:700 }} value={(editMRF as any)?.mrf_number||form.mrf_number||'Auto-generated'} readOnly />
             </Field>
@@ -3361,7 +3385,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
 }
 
 // ── PIPELINE ──────────────────────────────────────────────────────
-function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId, rail }:any) {
+function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId, canConfidential, rail }:any) {
   const [interviewCand, setInterviewCand] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [selMRF, setSelMRF] = useState('all')
@@ -3520,6 +3544,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   const sel = (k:string):React.CSSProperties|undefined => (bad(k)?errStyle:undefined)
   const reqMark = <span style={{ color:C.critical }}> *</span>
   const approvedMRFs = mrfs.filter((m:MRF)=>m.status==='APPROVED')
+  // Only the HR Head adds candidates to a confidential search (the HR Manager sees them).
+  const addableMRFs = approvedMRFs.filter((m:MRF)=>!isConfidentialMrf(m) || canConfidential)
+  const confidentialIds = new Set(mrfs.filter((m:MRF)=>isConfidentialMrf(m)).map((m:MRF)=>m.id))
   const [stageF, setStageF] = useState('')   // '' = all stages
   const baseList = (selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF))
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
@@ -3635,9 +3662,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     return { text:`At ${c.stage}`, tone:'' as const, icon:'flow' as const }
   }
 
-  const candVMs = filtered.map((c:Candidate) => toCandidateVM(c as unknown as Record<string, unknown>))
+  const candVMs = filtered.map((c:Candidate) => ({ ...toCandidateVM(c as unknown as Record<string, unknown>), confidential: !!c.mrf_id && confidentialIds.has(c.mrf_id) }))
   const rejectedVMs = baseList.filter((c:Candidate)=>c.stage===REJECTED)
-    .map((c:Candidate) => toCandidateVM(c as unknown as Record<string, unknown>))
+    .map((c:Candidate) => ({ ...toCandidateVM(c as unknown as Record<string, unknown>), confidential: !!c.mrf_id && confidentialIds.has(c.mrf_id) }))
 
   const openingSelect = (
     <select className="rx-input" style={{ width:280 }} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
@@ -3755,9 +3782,10 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   <label className="rx-label" style={{ display:'block', marginBottom:6 }}>For Opening (MRF){reqMark}</label>
                   <select className="rx-input" style={sel('mrf_id')} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
                     <option value="">Select an approved opening</option>
-                    {approvedMRFs.map((m:MRF)=><option key={m.id} value={m.id}>{m.designation||m.position} ({m.no_of_openings||m.openings||0} openings){m.location_name?` · ${m.location_name}`:''}</option>)}
+                    {addableMRFs.map((m:MRF)=><option key={m.id} value={m.id}>{isConfidentialMrf(m)?'🔒 ':''}{m.designation||m.position} ({m.no_of_openings||m.openings||0} openings){m.location_name?` · ${m.location_name}`:''}</option>)}
                   </select>
-                  {approvedMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet — approve one in the MRF tab first.</div>}
+                  {addableMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet — approve one in the MRF tab first.</div>}
+                  {cForm.mrf_id && confidentialIds.has(cForm.mrf_id) && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>🔒 Confidential search — this candidate will be visible only to the HR Head and HR Manager.</div>}
                 </div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Company</label><input className="rx-input" style={{ opacity:.7 }} value={mrfCompanyName(cMrf)||'—'} readOnly placeholder="Auto-filled from the opening" /></div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Department</label><input className="rx-input" style={{ opacity:.7 }} value={mrfDeptName(cMrf)||'—'} readOnly /></div>
@@ -4024,6 +4052,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
         <CandidateInterviewModal
           candidate={selCand}
           mrf={mrfs.find((m:MRF)=>m.id===selCand.mrf_id) || null}
+          confidential={!!selCand.mrf_id && confidentialIds.has(selCand.mrf_id)}
           stages={STAGES} stageColor={STAGE_COLOR} stageText={STAGE_TEXT}
           schedulerId={employeeId}
           onClose={()=>setSelCand(null)}
