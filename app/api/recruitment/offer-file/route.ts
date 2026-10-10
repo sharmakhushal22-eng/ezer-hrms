@@ -19,6 +19,7 @@ import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { loadDossier, setVerified, applyEdits, markLetterGenerated, type Dossier } from '@/lib/recruitment/offer-dossier'
 import { offerLetterPdf } from '@/lib/recruitment/offer-letter-pdf'
 import { actorName } from '@/lib/recruitment/actor'
+import { specOf } from '@/lib/recruitment/engagement'
 
 export const runtime = 'nodejs' // pdfkit + pdf-lib
 
@@ -32,6 +33,10 @@ function view(d: Dossier) {
     candidate: { id: d.candidate.id, full_name: d.candidate.full_name, email: d.candidate.email },
     company: d.company ? { id: d.company.id, company_name: d.company.company_name, company_code: d.company.company_code } : null,
     rows: d.rows, documents: d.documents, interviews: d.interviews, salary: d.salary,
+    // which letter this engagement gets (employment / internship / NATS / NAPS / contract) —
+    // the screen labels the compensation part and the mail from this
+    letter: { ...specOf(d.kind), months: d.months },
+    warnings: d.warnings,
     verification: d.verification, required: d.required.length, complete: d.complete,
     // what the screen shows — the confirmation is only accepted for exactly this file
     fileHash: d.fileHash,

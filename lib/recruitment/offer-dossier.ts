@@ -24,12 +24,18 @@
 
 import { createHash } from 'crypto'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { linkStatementRows, type StmtRow } from './ctc-statement'
+import { linkStatementRows, engagementStatementRows, type StmtRow, type EngagementStatement } from './ctc-statement'
+import { letterKindOf, specOf, isFixedTerm, isApprenticeship, isStipendKind, isFeesKind, stipendBandFor, engagementEnd, SCHEMES, APPRENTICE_MIN_STIPEND, type LetterKind } from './engagement'
 
-type Ctx = { cand: any; ad: any; req: any; mrf: any; neg: any; company: any; dept: any; loc: any; manager: any }
+// `kind` is the letter the engagement gets (lib/recruitment/engagement.ts) — it decides which
+// rows the file carries (an intern has a stipend and a period, not a CTC and a notice period)
+// and which letter is generated. `months` is the fixed term, when the engagement has one.
+type Ctx = { cand: any; ad: any; req: any; mrf: any; neg: any; company: any; dept: any; loc: any; manager: any; kind: LetterKind; months: number | null }
 type FieldType = 'text' | 'textarea' | 'date' | 'number' | 'email' | 'tel'
 type Field = {
-  key: string; section: string; label: string; type?: FieldType
+  key: string; section: string; label: string | ((c: Ctx) => string); type?: FieldType
+  /** shown only for these engagements; absent = always */
+  when?: (c: Ctx) => boolean
   get: (c: Ctx) => any
   /** where an edit is written; absent = read-only */
   edit?: { table: 'candidates'; column: string } | { table: 'candidates'; adPath: [string, string] } | { table: 'request'; column: string }
@@ -41,6 +47,16 @@ const ad = (c: Ctx, a: string, b: string) => c.ad?.[a]?.[b]
 export const jobState = (c: Ctx): string | null =>
   ad(c, 'requisition', 'job_state') || c.req?.revised_calculation?.state || c.neg?.calculation_data?.state || c.loc?.state || null
 const yn = (v: any) => v === true ? 'Yes' : v === false ? 'No' : v
+const labelOf = (f: Field, c: Ctx) => typeof f.label === 'function' ? f.label(c) : f.label
+/** The engagement type the file is built for: an edit on the file, else the MRF's, else what the stipend calculator saved. */
+export const employmentTypeOf = (c: Pick<Ctx, 'ad' | 'mrf' | 'neg'>): string | null =>
+  c.ad?.requisition?.employment_type || c.mrf?.employment_type || c.neg?.calculation_data?.employment_type || null
+/** The fixed term in months: an edit on the file, else the MRF's. */
+export const monthsOf = (c: Pick<Ctx, 'ad' | 'mrf'>): number | null => {
+  const v = Number(c.ad?.requisition?.duration_months ?? c.mrf?.duration_months)
+  return v > 0 ? Math.round(v) : null
+}
+const notEmployment = (c: Ctx) => c.kind !== 'EMPLOYMENT'
 
 // The order here is the order on screen.
 export const FIELDS: Field[] = [
@@ -89,19 +105,39 @@ export const FIELDS: Field[] = [
   // The state the job is in — prefilled from the salary calculation (whose minimum wage, PF and PT
   // rules used it), else the MRF location's state. Editing it changes the letter, not the salary.
   { key: 'job_state', section: 'Position & joining', label: 'State', get: c => jobState(c), edit: { table: 'candidates', adPath: ['requisition', 'job_state'] } },
-  { key: 'employment_type', section: 'Position & joining', label: 'Employment type', get: c => ad(c, 'requisition', 'employment_type') || c.mrf?.employment_type },
+  { key: 'employment_type', section: 'Position & joining', label: 'Employment type', get: c => employmentTypeOf(c) },
+  // Fixed-term engagements: the period the letter states, and where it ends. Edited here when
+  // the MRF's duration is not what was agreed with this candidate.
+  { key: 'engagement_months', section: 'Position & joining', type: 'number', when: c => isFixedTerm(c.kind) || c.kind === 'CONSULTANT',
+    label: c => c.kind === 'INTERNSHIP' ? 'Internship duration (months)' : isApprenticeship(c.kind) ? 'Apprenticeship period (months)' : 'Engagement period (months)',
+    get: c => monthsOf(c), edit: { table: 'candidates', adPath: ['requisition', 'duration_months'] } },
+  { key: 'engagement_end', section: 'Position & joining', label: c => c.kind === 'INTERNSHIP' ? 'Internship ends on' : isApprenticeship(c.kind) ? 'Apprenticeship ends on' : 'Engagement ends on', fmt: 'date', when: c => isFixedTerm(c.kind),
+    get: c => engagementEnd(c.req.proposed_doj, monthsOf(c)) },
+  // Apprenticeships: the registration the letter cites, and (NAPS) the trade.
+  { key: 'scheme_registration', section: 'Position & joining', when: c => isApprenticeship(c.kind),
+    label: c => c.kind === 'NATS' ? 'NATS enrolment / registration no.' : 'NAPS registration no. (apprenticeshipindia.gov.in)',
+    get: c => ad(c, 'requisition', 'scheme_registration'), edit: { table: 'candidates', adPath: ['requisition', 'scheme_registration'] } },
+  { key: 'trade', section: 'Position & joining', label: 'Designated / optional trade', when: c => c.kind === 'NAPS',
+    get: c => ad(c, 'requisition', 'trade'), edit: { table: 'candidates', adPath: ['requisition', 'trade'] } },
+  { key: 'mentor', section: 'Position & joining', label: c => isApprenticeship(c.kind) ? 'Training supervisor / mentor' : 'Mentor', when: c => c.kind === 'INTERNSHIP' || isApprenticeship(c.kind),
+    get: c => ad(c, 'requisition', 'mentor'), edit: { table: 'candidates', adPath: ['requisition', 'mentor'] } },
   { key: 'reports_to', section: 'Position & joining', label: 'Reports to', get: c => c.manager?.full_name ? `${c.manager.full_name}${c.mrf?.reports_to_designation ? `, ${c.mrf.reports_to_designation}` : ''}` : c.mrf?.reports_to_designation },
   { key: 'work_mode', section: 'Position & joining', label: 'Work mode', get: c => c.mrf?.work_mode },
   { key: 'grade', section: 'Position & joining', label: 'Grade', get: c => c.mrf?.grade },
   { key: 'mrf_number', section: 'Position & joining', label: 'MRF', get: c => c.mrf?.mrf_number },
   { key: 'proposed_doj', section: 'Position & joining', label: 'Date of joining', type: 'date', fmt: 'date', get: c => c.req.proposed_doj, edit: { table: 'request', column: 'proposed_doj' } },
-  { key: 'notice_period_days', section: 'Position & joining', label: 'Notice period to serve (days)', type: 'number', get: c => c.req.notice_period_days, edit: { table: 'request', column: 'notice_period_days' } },
+  { key: 'notice_period_days', section: 'Position & joining', label: c => c.kind === 'EMPLOYMENT' ? 'Notice period to serve (days)' : 'Notice to end the engagement (days)', type: 'number', get: c => c.req.notice_period_days, edit: { table: 'request', column: 'notice_period_days' } },
   // Offered compensation — approved by the HR Head, locked
   { key: 'offered_ctc', section: 'Offered compensation (approved — locked)', label: 'Annual CTC', fmt: 'money', get: c => c.neg?.is_stipend ? null : c.req.offered_ctc },
-  { key: 'stipend', section: 'Offered compensation (approved — locked)', label: 'Monthly stipend', fmt: 'money', get: c => c.neg?.is_stipend ? c.neg.stipend_monthly : null },
-  { key: 'variable_pct', section: 'Offered compensation (approved — locked)', label: 'Variable', fmt: 'pct', get: c => Number(c.req.offered_variable_pct ?? c.neg?.variable_pct) > 0 ? (c.req.offered_variable_pct ?? c.neg?.variable_pct) : null },
-  { key: 'monthly_inhand', section: 'Offered compensation (approved — locked)', label: 'Monthly in-hand (est.)', fmt: 'money', get: c => c.req.monthly_inhand ?? c.neg?.net_monthly },
-  { key: 'hike_pct', section: 'Offered compensation (approved — locked)', label: 'Hike', fmt: 'pct', get: c => c.req.hike_pct != null ? Number(c.req.hike_pct).toFixed(1) : null },
+  { key: 'stipend', section: 'Offered compensation (approved — locked)', label: 'Monthly stipend', fmt: 'money', when: c => !isFeesKind(c.kind), get: c => c.neg?.is_stipend ? c.neg.stipend_monthly : null },
+  { key: 'fees', section: 'Offered compensation (approved — locked)', label: 'Monthly fees', fmt: 'money', when: c => isFeesKind(c.kind), get: c => c.neg?.is_stipend ? c.neg.stipend_monthly : null },
+  { key: 'tds', section: 'Offered compensation (approved — locked)', label: c => isFeesKind(c.kind) ? 'TDS (s.194J)' : 'TDS', when: c => !!c.neg?.is_stipend,
+    get: c => c.neg?.tds_applicable && Number(c.neg?.tds_pct) > 0 ? `${Number(c.neg.tds_pct)}%` : 'Not applicable' },
+  { key: 'variable_pct', section: 'Offered compensation (approved — locked)', label: 'Variable', fmt: 'pct', when: c => !c.neg?.is_stipend, get: c => Number(c.req.offered_variable_pct ?? c.neg?.variable_pct) > 0 ? (c.req.offered_variable_pct ?? c.neg?.variable_pct) : null },
+  { key: 'monthly_inhand', section: 'Offered compensation (approved — locked)', label: c => c.neg?.is_stipend ? 'Net monthly payable' : 'Monthly in-hand (est.)', fmt: 'money', get: c => c.req.monthly_inhand ?? c.neg?.net_monthly },
+  { key: 'engagement_total', section: 'Offered compensation (approved — locked)', label: c => `Total ${isFeesKind(c.kind) ? 'fees' : 'stipend'} for the period`, fmt: 'money', when: c => !!c.neg?.is_stipend && !!monthsOf(c),
+    get: c => Number(c.neg?.stipend_monthly) > 0 && monthsOf(c) ? Number(c.neg.stipend_monthly) * (monthsOf(c) as number) : null },
+  { key: 'hike_pct', section: 'Offered compensation (approved — locked)', label: 'Hike', fmt: 'pct', get: c => c.req.hike_pct != null && !c.neg?.is_stipend ? Number(c.req.hike_pct).toFixed(1) : null },
   { key: 'joining_bonus', section: 'Offered compensation (approved — locked)', label: 'Joining bonus', fmt: 'money', get: c => Number(c.req.joining_bonus) > 0 ? c.req.joining_bonus : null },
   { key: 'retention_bonus', section: 'Offered compensation (approved — locked)', label: 'Retention bonus', fmt: 'money', get: c => Number(c.req.retention_bonus) > 0 ? c.req.retention_bonus : null },
   { key: 'esop_value', section: 'Offered compensation (approved — locked)', label: 'ESOP', fmt: 'money', get: c => Number(c.req.esop_value) > 0 ? c.req.esop_value : null },
@@ -127,8 +163,14 @@ export type DossierDoc = { key: string; id: string; name: string; label: string;
 export type DossierInterview = { key: string; round: string; interviewer: string | null; decision: string | null; score: string | null; on: string | null; remark: string | null }
 export type Dossier = {
   request: any; candidate: any; company: any; mrf: any; negotiation: any; ctx: Ctx
+  /** which letter this engagement gets, and its fixed term */
+  kind: LetterKind; months: number | null
   rows: DossierRow[]; documents: DossierDoc[]; interviews: DossierInterview[]
-  salary: { rows: StmtRow[]; extras: [string, number | string][] } | null
+  salary: { rows: StmtRow[]; extras: [string, number | string][]; totalLabel: string } | null
+  /** the stipend / fees statement when the engagement is paid that way (null for a CTC) */
+  engagement: EngagementStatement | null
+  /** things the HR Manager should look at before confirming — never blocking */
+  warnings: string[]
   verification: { verified: { by: string; at: string } | null; letter: { by: string; at: string } | null }
   /** every item the one checkbox vouches for */
   required: string[]; complete: boolean
@@ -160,11 +202,13 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
     mrf?.reporting_manager_id ? sb.from('employees').select('full_name').eq('id', mrf.reporting_manager_id).maybeSingle() : Promise.resolve({ data: null } as any),
   ])
   const appDetails = typeof cand.application_details === 'string' ? safeJson(cand.application_details) : (cand.application_details || {})
-  const ctx: Ctx = { cand, ad: appDetails, req, mrf, neg, company, dept, loc, manager }
+  const kind = letterKindOf(employmentTypeOf({ ad: appDetails, mrf, neg }))
+  const months = monthsOf({ ad: appDetails, mrf })
+  const ctx: Ctx = { cand, ad: appDetails, req, mrf, neg, company, dept, loc, manager, kind, months }
 
-  const rows: DossierRow[] = FIELDS.map(f => {
+  const rows: DossierRow[] = FIELDS.filter(f => !f.when || f.when(ctx)).map(f => {
     const raw = f.get(ctx)
-    return { key: f.key, section: f.section, label: f.label, value: show(raw, f.fmt), raw: blank(raw) ? null : raw, type: f.type || 'text', editable: !!f.edit }
+    return { key: f.key, section: f.section, label: labelOf(f, ctx), value: show(raw, f.fmt), raw: blank(raw) ? null : raw, type: f.type || 'text', editable: !!f.edit }
   }).filter(r => r.value != null || r.editable)   // a blank read-only row says nothing
 
   // Documents from the pre-negotiation check — short-lived signed URLs, one inline, one download.
@@ -194,7 +238,24 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
   if (Number(req.joining_bonus) > 0) extras.push([`Joining bonus${req.joining_bonus_freq ? ` (${req.joining_bonus_freq})` : ''}`, Number(req.joining_bonus)])
   if (Number(req.retention_bonus) > 0) extras.push(['Retention bonus', Number(req.retention_bonus)])
   if (Number(req.esop_value) > 0) extras.push([`ESOP${req.esop_vesting ? ` (${req.esop_vesting})` : ''}`, Number(req.esop_value)])
-  const salary = link ? { rows: link.rows.filter(r => r.kind !== 'note'), extras } : null
+  // Stipend / fees: one monthly figure, TDS, net — and the scheme's minimum for an apprentice.
+  const stipCalc = neg?.is_stipend ? { ...(neg.calculation_data || {}), stipend_monthly: neg.stipend_monthly ?? neg.calculation_data?.stipend_monthly, tds_applicable: neg.tds_applicable ?? neg.calculation_data?.tds_applicable, tds_pct: neg.tds_pct ?? neg.calculation_data?.tds_pct } : null
+  const band = isApprenticeship(kind) ? stipendBandFor(kind, appDetails?.professional?.qualification) : null
+  const engagement = stipCalc ? engagementStatementRows(stipCalc, kind, months, band?.amount || 0) : null
+  if (engagement && Number(stipCalc?.additional_amount) > 0) extras.push([`Additional${stipCalc.additional_freq ? ` (${stipCalc.additional_freq})` : ''}`, Number(stipCalc.additional_amount)])
+  const salary = link ? { rows: link.rows.filter(r => r.kind !== 'note'), extras, totalLabel: 'Annual' }
+    : engagement ? { rows: engagement.rows.filter(r => r.kind !== 'note'), extras, totalLabel: engagement.totalLabel } : null
+
+  // What to look at before confirming. Advisory: the file can still be verified.
+  const warnings: string[] = []
+  const spec = specOf(kind)
+  if (kind !== 'EMPLOYMENT' && neg && !neg.is_stipend) warnings.push(`This is a ${spec.label.toLowerCase()} engagement, but the negotiation saved a CTC structure. The ${spec.title} will quote a monthly ${spec.payNoun}; re-run it from the ${spec.payNoun} calculator if the figures look wrong.`)
+  if (kind === 'EMPLOYMENT' && neg?.is_stipend) warnings.push('The MRF says Employee, but the negotiation saved a stipend. Check the employment type on the MRF before generating the letter.')
+  if (isFixedTerm(kind) && !months) warnings.push(`No ${kind === 'INTERNSHIP' ? 'internship duration' : isApprenticeship(kind) ? 'apprenticeship period' : 'engagement period'} is recorded — the letter needs one. Add it in Part 3 (Offer).`)
+  if (isApprenticeship(kind) && band && engagement && engagement.monthly < band.amount)
+    warnings.push(`Stipend Rs. ${engagement.monthly.toLocaleString('en-IN')}/month is below the prescribed minimum of Rs. ${band.amount.toLocaleString('en-IN')} for a ${band.label.toLowerCase()} (Rule 11, Apprenticeship Rules, 1992 — ${APPRENTICE_MIN_STIPEND.notification}). Raise it before the contract is registered.`)
+  if (isApprenticeship(kind) && !appDetails?.requisition?.scheme_registration) warnings.push(`No ${SCHEMES[kind as 'NATS' | 'NAPS'].short} registration number yet — the Contract of Apprenticeship must be registered on ${SCHEMES[kind as 'NATS' | 'NAPS'].portal}; add the number in Part 3 once it is.`)
+  if (isStipendKind(kind) && !appDetails?.requisition?.mentor) warnings.push(`No ${isApprenticeship(kind) ? 'training supervisor' : 'mentor'} named — the letter will fall back to the reporting line.`)
 
   // What the verification vouches for. Documents: the stored file, not its (expiring) signed URL.
   const fingerprints: Record<string, string> = {}
@@ -216,7 +277,7 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
   const verified = required.length > 0 && stored?.verified && stored.verified.h === fileHash ? { by: stored.verified.by, at: stored.verified.at } : null
   const complete = !!verified
   const letter = complete && stored?.letter && stored.letter.h === fileHash ? { by: stored.letter.by, at: stored.letter.at } : null
-  return { request: req, candidate: cand, company, mrf, negotiation: neg, ctx, rows, documents, interviews, salary, verification: { verified, letter }, required, complete, fingerprints, fileHash }
+  return { request: req, candidate: cand, company, mrf, negotiation: neg, ctx, kind, months, rows, documents, interviews, salary, engagement, warnings, verification: { verified, letter }, required, complete, fingerprints, fileHash }
 }
 
 function safeJson(s: string) { try { return JSON.parse(s) || {} } catch { return {} } }
@@ -262,12 +323,14 @@ export async function applyEdits(d: Dossier, changes: Record<string, any>): Prom
   const candPatch: any = {}, reqPatch: any = {}, adSets: [string, string, any][] = []
   for (const [key, value] of Object.entries(changes || {})) {
     const f = FIELDS.find(x => x.key === key)
-    if (!f?.edit) throw new Error(`${f?.label || key} cannot be edited here`)
+    if (!f?.edit || (f.when && !f.when(d.ctx))) throw new Error(`${f ? labelOf(f, d.ctx) : key} cannot be edited here`)
+    const label = labelOf(f, d.ctx)
     let v: any = typeof value === 'string' ? value.trim() : value
     if (v === '') v = null
-    if (f.type === 'number' && v != null) { v = Number(v); if (!isFinite(v)) throw new Error(`${f.label}: enter a number`) }
-    if (f.type === 'email' && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error(`${f.label}: enter a valid email`)
-    if (f.type === 'date' && v && isNaN(+new Date(v))) throw new Error(`${f.label}: enter a valid date`)
+    if (f.type === 'number' && v != null) { v = Number(v); if (!isFinite(v)) throw new Error(`${label}: enter a number`) }
+    if (key === 'engagement_months' && v != null && (v <= 0 || v > 60)) throw new Error(`${label}: enter between 1 and 60 months`)
+    if (f.type === 'email' && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new Error(`${label}: enter a valid email`)
+    if (f.type === 'date' && v && isNaN(+new Date(v))) throw new Error(`${label}: enter a valid date`)
     if (key === 'full_name' && !v) throw new Error('Name cannot be empty')
     const from = f.get(d.ctx)
     if (String(from ?? '') === String(v ?? '')) continue   // unchanged

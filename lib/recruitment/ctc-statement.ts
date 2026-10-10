@@ -95,3 +95,55 @@ export function linkStatementRows(calc: any, offeredAnnual?: number | null): { r
   rows.push({ kind:'note', label:'Net in-hand is shown before income tax (TDS). Use the calculator below to compare TDS under the old and new regimes.' })
   return { rows, basic, gross, epfEmployee, esicEmployee, inHand, fixedMonthly, special }
 }
+
+// ── Stipend / fees engagements ────────────────────────────────────────────────────────────
+//
+// An intern, a NATS/NAPS apprentice, a contractor or a consultant has no CTC structure: there
+// is one monthly figure, a tax deduction where it applies, and nothing statutory behind it
+// (an apprentice is not a worker under s.18 of the Apprentices Act, 1961; an intern is a
+// trainee; a contractor is paid fees). This is THE statement for those — the offer file, the
+// letter's Annexure A and the candidate's link all read it, so they can never disagree.
+// `calc` is the stipend calculator's calculation_data (is_stipend, stipend_monthly,
+// tds_applicable, tds_pct, net_monthly, additional_amount, additional_freq).
+
+import { isApprenticeship, isFeesKind, SCHEMES, governmentShare, type LetterKind } from './engagement'
+
+export type EngagementStatement = {
+  rows: StmtRow[]
+  monthly: number; tdsPct: number; tdsMonthly: number; netMonthly: number
+  /** months the engagement runs — 0 when open-ended; the total column is then a year */
+  months: number
+  totalLabel: string
+  /** the Government's DBT share, apprenticeships only (informational — the agreed stipend is what the apprentice receives) */
+  govShare: number
+}
+
+export function engagementStatementRows(calc: any, kind: LetterKind, months: number | null | undefined, prescribedMinimum = 0): EngagementStatement | null {
+  const monthly = Math.round(Number(calc?.stipend_monthly || 0))
+  if (!monthly) return null
+  const fees = isFeesKind(kind)
+  const noun = fees ? 'Fees' : 'Stipend'
+  const tdsOn = !!calc?.tds_applicable && Number(calc?.tds_pct) > 0
+  const tdsPct = tdsOn ? Number(calc.tds_pct) : 0
+  const tdsMonthly = tdsOn ? Math.round(monthly * tdsPct / 100) : 0
+  const netMonthly = monthly - tdsMonthly
+  const m = Number(months) > 0 ? Math.round(Number(months)) : 0
+  const span = m || 12
+  const totalLabel = m ? `Total · ${m} month${m === 1 ? '' : 's'}` : 'Annual'
+  const tot = (v: number) => v * span
+  const govShare = isApprenticeship(kind) ? governmentShare(kind, prescribedMinimum || monthly) : 0
+  const rows: StmtRow[] = [
+    { kind: 'row', label: `Monthly ${noun.toLowerCase()}`, basis: fees ? 'professional fees, against a monthly invoice' : isApprenticeship(kind) ? `stipend under the ${SCHEMES[kind as 'NATS' | 'NAPS'].short} · not below the prescribed minimum` : 'fixed monthly stipend', monthly, annual: tot(monthly) },
+    { kind: 'sum', label: `Gross ${noun.toLowerCase()} (A)`, monthly, annual: tot(monthly) },
+  ]
+  if (fees && calc?.gst_applicable) rows.push({ kind: 'muted', label: 'GST', basis: 'as applicable, over and above the fees, on a valid tax invoice', monthly: null, annual: null })
+  rows.push({ kind: 'head', label: 'Deductions & net payable' })
+  rows.push(tdsOn
+    ? { kind: 'ded', label: `(−) TDS`, basis: fees ? `${tdsPct}% under s.194J of the Income-tax Act, 1961` : `${tdsPct}% as applicable`, monthly: tdsMonthly, annual: tot(tdsMonthly), remark: 'Deduction' }
+    : { kind: 'muted', label: 'TDS', basis: fees ? 'nil at source — declare and pay as per your assessment' : 'not applicable on this stipend', monthly: 0, annual: 0 })
+  rows.push({ kind: 'net', label: `Net ${noun.toLowerCase()} payable`, basis: tdsOn ? 'after TDS' : undefined, monthly: netMonthly, annual: tot(netMonthly) })
+  if (isApprenticeship(kind)) rows.push({ kind: 'note', label: `${SCHEMES[kind as 'NATS' | 'NAPS'].govShare[0].toUpperCase()}${SCHEMES[kind as 'NATS' | 'NAPS'].govShare.slice(1)}, credited to the apprentice's Aadhaar-seeded bank account by Direct Benefit Transfer where admissible; the Company pays the balance so that the stipend above is received in full. No PF, ESIC, gratuity or bonus applies — an apprentice is not a worker (s.18, Apprentices Act, 1961).` })
+  else if (!fees) rows.push({ kind: 'note', label: 'A stipend, not a salary: no PF, ESIC, gratuity, bonus or other statutory benefit of employment applies to this internship.' })
+  else rows.push({ kind: 'note', label: 'Fees for services, not salary: no PF, ESIC, gratuity, bonus, leave encashment or other employee benefit applies. GST, where you are registered, is payable over and above on a valid tax invoice.' })
+  return { rows, monthly, tdsPct, tdsMonthly, netMonthly, months: m, totalLabel, govShare }
+}

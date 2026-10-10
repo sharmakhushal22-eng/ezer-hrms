@@ -16,6 +16,9 @@ import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help, Timeline, Callou
 // quoted in the engagement's own period; offered_ctc is always annual. See
 // lib/recruitment/compensation.ts for why that lives outside this page.
 import { overCeiling, annualCeiling, compOf } from '@/lib/recruitment/compensation'
+// Which letter an engagement gets — employment, internship, NATS / NAPS apprenticeship,
+// contract — and the words that go with it (stipend / fees instead of CTC, and so on).
+import { letterKindOf, specOf, isFeesKind, type LetterSpec } from '@/lib/recruitment/engagement'
 
 // ── STYLES ───────────────────────────────────────────────────────
 // Bound to the design system. This file owns the name S, so the tokens are
@@ -1193,7 +1196,11 @@ type OfferFileData = {
   rows: FileRow[]
   documents: { key: string; id: string; name: string; label: string; size: number | null; uploaded_at: string | null; url: string | null; downloadUrl: string | null }[]
   interviews: { key: string; round: string; interviewer: string | null; decision: string | null; score: string | null; on: string | null; remark: string | null }[]
-  salary: { rows: { kind: string; label: string; basis?: string; monthly?: number | null; annual?: number | null }[]; extras: [string, number | string][] } | null
+  salary: { rows: { kind: string; label: string; basis?: string; monthly?: number | null; annual?: number | null }[]; extras: [string, number | string][]; totalLabel?: string } | null
+  /** which letter this engagement gets, and its fixed term */
+  letter?: LetterSpec & { months: number | null }
+  /** things to look at before confirming — advisory */
+  warnings?: string[]
   verification: { verified: { by: string; at: string } | null; letter: { by: string; at: string } | null }
   required: number; complete: boolean; fileHash: string
 }
@@ -1227,6 +1234,16 @@ function FormField({ row, editing, value, onChange }: { row: FileRow; editing: b
           {row.value || '—'}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Advisory notes from the offer file (a stipend below the prescribed minimum, a missing period…). */
+function WarnList({ items }: { items: string[] }) {
+  return (
+    <div style={{ fontSize:12.5, color:TK.warning, background:TK.warningTint, border:`1px solid ${TK.warningEdge}`, borderRadius:R.md, padding:'10px 14px', marginBottom:12, lineHeight:1.55 }}>
+      <div style={{ fontWeight:800, fontSize:11, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:4 }}>Check before you confirm</div>
+      {items.map((w, i) => <div key={i} style={{ display:'flex', gap:8 }}><span>•</span><span>{w}</span></div>)}
     </div>
   )
 }
@@ -1391,6 +1408,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   </div>
                 )}
               </div>
+              {!!file.warnings?.length && cur.salary && <WarnList items={file.warnings} />}
               {editing && verified && <div style={{ fontSize:12, color:TK.warning, background:TK.warningTint, borderRadius:R.md, padding:'8px 12px', marginBottom:12 }}>Saving a change withdraws the verification — you will confirm the file again in the last part.</div>}
 
               {(cur.sections || []).map(sec => {
@@ -1408,10 +1426,10 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
 
               {cur.salary && file.salary && (
                 <section style={card}>
-                  <div style={formHead}>Salary break-up (approved — locked)</div>
+                  <div style={formHead}>{file.letter ? `${file.letter.annexA} (approved — locked)` : 'Salary break-up (approved — locked)'}</div>
                   <div style={{ overflowX:'auto' }}>
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
-                      <thead><tr style={{ background:TK.sunken }}>{['Component', 'Basis', 'Monthly', 'Annual'].map((h, i) => <th key={h} style={{ textAlign: i >= 2 ? 'right' : 'left', padding:'8px 12px', fontWeight:700, color:TK.muted, borderBottom:`1px solid ${TK.line}` }}>{h}</th>)}</tr></thead>
+                      <thead><tr style={{ background:TK.sunken }}>{['Component', 'Basis', 'Monthly', file.salary.totalLabel || 'Annual'].map((h, i) => <th key={h} style={{ textAlign: i >= 2 ? 'right' : 'left', padding:'8px 12px', fontWeight:700, color:TK.muted, borderBottom:`1px solid ${TK.line}` }}>{h}</th>)}</tr></thead>
                       <tbody>{file.salary.rows.map((r, i) => {
                         const strong = ['sum', 'total', 'net', 'head'].includes(r.kind)
                         return (
@@ -1475,7 +1493,8 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
           {file && step === last && (
             <>
               <div style={{ fontSize:18, fontWeight:800, marginBottom:4 }}>Verify & send</div>
-              <div className="rx-meta" style={{ marginBottom:14 }}>Confirm the file, generate the offer letter, then send it.</div>
+              <div className="rx-meta" style={{ marginBottom:14 }}>Confirm the file, generate the {file.letter?.title || 'offer letter'}, then send it.</div>
+              {!!file.warnings?.length && <WarnList items={file.warnings} />}
               <section style={{ ...card, border:`2px solid ${verified ? TK.positive : TK.brand}`, background: verified ? TK.positiveTint : TK.surface }}>
                 <label style={{ display:'flex', gap:14, alignItems:'flex-start', cursor: locked || !open ? 'not-allowed' : 'pointer' }}>
                   <input type="checkbox" checked={!!verified} disabled={locked || !open}
@@ -1484,7 +1503,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   <div>
                     <div style={{ fontSize:15, fontWeight:800 }}>I have verified all the details of {req.candidates?.full_name}</div>
                     <div style={{ fontSize:12.5, color:TK.muted, marginTop:4, lineHeight:1.55 }}>
-                      Personal, contact, education, experience, previous employer, position, joining and the approved compensation in parts 1–3, the salary break-up,
+                      Personal, contact, education, experience, previous employer, position, {file.letter?.months ? 'period, ' : ''}joining and the approved {file.letter?.payNoun || 'compensation'} in parts 1–3, the {file.letter ? file.letter.annexA.toLowerCase() : 'salary break-up'},
                       {` ${file.interviews.length} interview${file.interviews.length === 1 ? '' : 's'}`} and {file.documents.length} document{file.documents.length === 1 ? '' : 's'} — and they are correct.
                     </div>
                     {verified && <div style={{ fontSize:12, fontWeight:700, color:TK.positive, marginTop:8 }}>Verified by {verified.by} · {whenShort(verified.at)}</div>}
@@ -1494,13 +1513,18 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
 
               <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-start' }}>
                 <section style={{ ...card, flex:'1 1 300px', marginBottom:0, opacity: verified ? 1 : .7 }}>
-                  <div style={formHead}>Offer letter</div>
+                  <div style={formHead}>{file.letter?.title || 'Offer letter'}</div>
+                  {file.letter && file.letter.kind !== 'EMPLOYMENT' && (
+                    <div style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, padding:'3px 9px', borderRadius:99, background:TK.infoTint, color:TK.info, marginBottom:8 }}>
+                      {file.letter.label} · {file.letter.payNoun}{file.letter.months ? ` · ${file.letter.months} months` : ''}
+                    </div>
+                  )}
                   <div className="rx-meta" style={{ marginBottom:12, lineHeight:1.5 }}>
                     {!verified ? 'Tick the confirmation above to unlock this.'
-                      : letter ? `Generated by ${letter.by} · ${whenShort(letter.at)}.` : 'Generate the letter on the company letterhead — letter, salary break-up (Annexure A) and terms (Annexure B).'}
+                      : letter ? `Generated by ${letter.by} · ${whenShort(letter.at)}.` : `Generate the ${(file.letter?.title || 'offer letter').toLowerCase()} on the company letterhead — letter, ${(file.letter?.annexA || 'salary break-up').toLowerCase()} (Annexure A) and terms (Annexure B).`}
                   </div>
                   <button type="button" className="rx-btn p" disabled={!verified || locked} onClick={generate} style={{ width:'100%', opacity: verified ? 1 : .5, cursor: verified ? 'pointer' : 'not-allowed' }}>
-                    {generating ? 'Generating…' : !verified ? '🔒 Generate offer letter' : letter ? '↻ Regenerate offer letter' : 'Generate offer letter'}
+                    {generating ? 'Generating…' : !verified ? '🔒 Generate letter' : letter ? '↻ Regenerate letter' : `Generate ${file.letter?.kind === 'EMPLOYMENT' || !file.letter ? 'offer letter' : file.letter.title.toLowerCase()}`}
                   </button>
                   {letter && (
                     <div style={{ display:'flex', gap:8, marginTop:8 }}>
@@ -1523,7 +1547,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   <div style={{ fontSize:11.5, borderRadius:7, padding:'8px 12px', marginBottom:10, background: canSend ? TK.brandTint : TK.warningTint, color: canSend ? TK.brandDeep : TK.warning }}>
                     {!approved ? `Yet to be approved by the HR Head${headNames ? ` (${headNames})` : ''}. You can verify and generate meanwhile.`
                       : !verified ? 'Tick the confirmation above first.'
-                      : !letter ? 'Generate the offer letter first — it is attached to this mail.'
+                      : !letter ? 'Generate the letter first — it is attached to this mail.'
                       : 'Emails the candidate with the offer letter PDF attached, records it, and moves the candidate to Offer Sent.'}
                   </div>
                   <button type="button" className="rx-btn p" onClick={onSend} disabled={sending || !canSend || locked} style={{ width:'100%', opacity: canSend ? 1 : .5, cursor: canSend ? 'pointer' : 'not-allowed' }}>
@@ -1548,7 +1572,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
       )}
 
       {preview && <DocPreview requestId={req.id} doc={preview} onClose={() => setPreview(null)} onDownload={() => preview.downloadUrl && window.open(preview.downloadUrl, '_blank', 'noopener')} />}
-      {letterPreview && <DocPreview requestId={req.id} doc={{ key:'offer-letter', name:`Offer letter — ${req.candidates?.full_name || ''}` }} load={() => letterBlob(false)}
+      {letterPreview && <DocPreview requestId={req.id} doc={{ key:'offer-letter', name:`${file?.letter?.title || 'Offer letter'} — ${req.candidates?.full_name || ''}` }} load={() => letterBlob(false)}
         hint={`On the ${file?.company?.company_name || 'company'} letterhead`} onClose={() => setLetterPreview(false)} onDownload={downloadLetter} />}
     </div>,
     document.body,
@@ -1584,7 +1608,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
   useEffect(() => {
     supabase.from('offer_approval_requests')
-      .select('*, candidates(full_name, email, phone, designation, experience_years, current_company, mrf_id), companies(company_name, company_code), manpower_requisitions(designation), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct)')
+      .select('*, candidates(full_name, email, phone, designation, experience_years, current_company, mrf_id, application_details), companies(company_name, company_code), manpower_requisitions(designation, employment_type, duration_months), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct, is_stipend, stipend_monthly, tds_applicable, tds_pct)')
       .in('status',['SUBMITTED','HR_HEAD_APPROVED'])
       .order('submitted_at',{ ascending:false })
       // A scoped hiring manager only sees offers for candidates under the MRFs assigned to
@@ -1601,29 +1625,64 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
   const isApproved = (r: any) => r?.status === 'HR_HEAD_APPROVED'
   const headNames = (r: any) => (hrHeads[r?.company_id] || []).map(h => `${h.name}${h.code ? ` (${h.code})` : ''}`).join(', ')
+  // The engagement decides the letter: the offer file's own employment type if edited there,
+  // else the MRF's. Same rule as lib/recruitment/offer-dossier.ts.
+  const kindOf = (r: any) => letterKindOf(r?.candidates?.application_details?.requisition?.employment_type || r?.manpower_requisitions?.employment_type)
+  const monthsOfRow = (r: any) => { const v = Number(r?.candidates?.application_details?.requisition?.duration_months ?? r?.manpower_requisitions?.duration_months); return v > 0 ? Math.round(v) : null }
+  const payLine = (r: any) => {
+    const n = r.ctc_negotiations
+    if (n?.is_stipend && Number(n.stipend_monthly) > 0) return `₹${fmt(n.stipend_monthly)}/month ${isFeesKind(kindOf(r)) ? 'fees' : 'stipend'}`
+    return `₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}${r.hike_pct ? ` · Hike ${Number(r.hike_pct).toFixed(1)}%` : ''}`
+  }
 
   // The e-mail that carries the letter. Built from the row, then rebuilt whenever an edit in
   // the offer file changes something it quotes, so the mail never disagrees with the letter.
+  // Its words follow the engagement: an intern is offered an internship and a stipend, an
+  // apprentice a place under NATS / NAPS, a contractor an engagement and fees — never "the
+  // position of … at an annual CTC".
   function mailText(r: any, f: { name?: string | null; designation?: string | null; doj?: string | null } = {}) {
     const company = r.companies?.company_name || 'our organization'
     const role = f.designation || r.candidates?.designation || r.manpower_requisitions?.designation || 'the role'
     const name = f.name || r.candidates?.full_name || 'Candidate'
     const doj = f.doj !== undefined ? f.doj : r.proposed_doj
+    const kind = kindOf(r), spec = specOf(kind), months = monthsOfRow(r)
+    const n = r.ctc_negotiations
+    const monthly = n?.is_stipend && Number(n.stipend_monthly) > 0 ? Number(n.stipend_monthly) : (kind !== 'EMPLOYMENT' && r.offered_ctc ? Math.round(Number(r.offered_ctc) / 12) : 0)
+    const when = doj ? new Date(doj).toLocaleDateString('en-IN') : '—'
+    const periodLine = months ? `\n• Period: ${months} month${months === 1 ? '' : 's'}` : ''
+    const open: Record<string, string> = {
+      EMPLOYMENT: `Congratulations! We are delighted to offer you the position of ${role} at ${company}.`,
+      INTERNSHIP: `Congratulations! We are delighted to offer you an internship as ${role} at ${company}.`,
+      NATS: `Congratulations! We are pleased to offer you a place as an apprentice in ${role} at ${company} under the National Apprenticeship Training Scheme (NATS), governed by the Apprentices Act, 1961.`,
+      NAPS: `Congratulations! We are pleased to offer you an apprenticeship as ${role} at ${company} under the National Apprenticeship Promotion Scheme (NAPS), governed by the Apprentices Act, 1961.`,
+      CONTRACT: `We are pleased to engage you as an independent contractor to provide services as ${role} to ${company} for a fixed term.`,
+      CONSULTANT: `We are pleased to engage you as a consultant to provide services as ${role} to ${company}.`,
+    }
+    const pay = kind === 'EMPLOYMENT' ? `• Annual CTC: ₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}`
+      : `• Monthly ${spec.payNoun}: ₹${monthly ? fmt(monthly) : '—'}${n?.tds_applicable && Number(n?.tds_pct) > 0 ? ` (TDS ${Number(n.tds_pct)}%)` : ''}`
+    const startLabel = kind === 'EMPLOYMENT' ? 'Proposed Date of Joining' : kind === 'INTERNSHIP' ? 'Internship starts on' : kind === 'NATS' || kind === 'NAPS' ? 'Training commences on' : 'Engagement commences on'
+    const annexA = spec.annexA.toLowerCase()
+    const extra = kind === 'NATS' || kind === 'NAPS'
+      ? `\n\nThe Government of India's share of the stipend under the scheme is paid directly to your Aadhaar-seeded bank account by DBT; please complete your registration and e-KYC on the ${kind === 'NATS' ? 'NATS portal (nats.education.gov.in)' : 'apprenticeship portal (apprenticeshipindia.gov.in)'} before you join. This is apprenticeship training under the Apprentices Act, 1961 and not an offer of employment.`
+      : kind === 'INTERNSHIP' ? `\n\nThis is an internship for learning and training; it is not an offer of employment.`
+      : kind === 'CONTRACT' || kind === 'CONSULTANT' ? `\n\nThis is a contract for services, not employment. Fees are paid against your monthly invoice, with TDS under section 194J.` : ''
+    const docName = spec.kind === 'EMPLOYMENT' ? 'offer letter' : spec.title.toLowerCase()
+    const close = kind === 'EMPLOYMENT' ? 'We look forward to welcoming you to the team.' : kind === 'CONTRACT' || kind === 'CONSULTANT' ? 'We look forward to working with you.' : 'We look forward to having you with us.'
     return {
-      subject: `Offer of Employment — ${role} | ${company}`,
+      subject: `${spec.mailSubject} — ${role} | ${company}`,
       body: `Dear ${name},
 
-Congratulations! We are delighted to offer you the position of ${role} at ${company}.
+${open[kind]}
 
-Your offer letter is attached to this email as a PDF. Please read it, including the salary break-up in Annexure A and the terms in Annexure B.
+Your ${docName} is attached to this email as a PDF. Please read it, including the ${annexA} in Annexure A and the terms in Annexure B.
 
 Key details:
-• Annual CTC: ₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}
-• Proposed Date of Joining: ${doj ? new Date(doj).toLocaleDateString('en-IN') : '—'}
+${pay}
+• ${startLabel}: ${when}${periodLine}
 
-This offer is valid for 7 days and is subject to background verification and document submission. To accept, please sign the acceptance in Annexure B and send us a copy, or simply reply to this email confirming your acceptance.
+This offer is valid for 7 days and is subject to verification and document submission. To accept, please sign the acceptance in Annexure B and send us a copy, or simply reply to this email confirming your acceptance.${extra}
 
-We look forward to welcoming you to the team.
+${close}
 
 Warm regards,
 ${company} — Human Resources`,
@@ -1759,7 +1818,8 @@ ${company} — Human Resources`,
         help={<Help label="How this works">
           <p>A candidate appears the moment the recruiter <b>submits the offer to the HR Head</b>.</p>
           <p>Open the <b>offer file</b>: four parts — candidate, background, offer, interviews &amp; documents — read like a filled form, with <b>Next</b> to move on. Candidate and joining details can be edited; the approved compensation is locked.</p>
-          <p>In the last part, one checkbox confirms the whole file. <b>Generate offer letter</b> then builds the multi-page letter on the company letterhead, and <b>Send</b> unlocks once the HR Head has approved; it emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
+          <p>The letter follows the engagement on the MRF: an <b>Employee</b> gets an Offer of Employment with a CTC break-up; an <b>Intern</b> an Internship Offer with a stipend and period; <b>NATS</b> / <b>NAPS</b> an Offer of Apprenticeship under the Apprentices Act, 1961 (stipend, Government share by DBT, no PF/ESIC); <b>Contract</b> / <b>Consultant</b> an engagement letter with fees and TDS under s.194J. Each on its own company's letterhead.</p>
+          <p>In the last part, one checkbox confirms the whole file. <b>Generate letter</b> then builds the multi-page letter on the company letterhead, and <b>Send</b> unlocks once the HR Head has approved; it emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
         </Help>}
       />}>
       <div className="rx-grid rx-stag">
@@ -1802,8 +1862,13 @@ ${company} — Human Resources`,
               style={{ cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:undefined, background:selected?.id===r.id?TK.brandTint:undefined }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
-                {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}
+                {r.candidates?.experience_years != null ? `${r.candidates.experience_years}yr · ` : ''}{payLine(r)}{monthsOfRow(r) && kindOf(r) !== 'EMPLOYMENT' ? ` · ${monthsOfRow(r)} months` : ''}
               </div>
+              {kindOf(r) !== 'EMPLOYMENT' && (
+                <div style={{ marginTop:5 }}>
+                  <span className="rx-chip" style={{ background:TK.infoTint, color:TK.info, border:`1px solid ${TK.infoEdge}` }}>{specOf(kindOf(r)).label} · {specOf(kindOf(r)).title}</span>
+                </div>
+              )}
               {isApproved(r) ? (
                 <div style={{ fontSize:11, color:TK.positive, marginTop:4, display:'flex', alignItems:'center', gap:6 }}>
                   <span style={{ width:7, height:7, borderRadius:99, background:TK.positive, flexShrink:0 }} />
