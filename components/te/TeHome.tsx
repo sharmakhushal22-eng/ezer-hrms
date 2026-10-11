@@ -23,7 +23,7 @@
 //     is fetched again; no screen keeps its own copy of server state.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeExpense, TeQueueRow, TripScope } from '@/lib/te/types'
+import type { Snapshot, TeExpense, TeQueueRow, TeTrip, TripScope } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeSheet from './TeSheet'
 import TeSteps from './TeSteps'
@@ -32,12 +32,16 @@ import TeOtherExpenses from './TeOtherExpenses'
 import TePickTrip from './trip/TePickTrip'
 import TePlanner from './plan/TePlanner'
 import TeLimitsAndRates from './vehicle/TeLimitsAndRates'
+import TeTrips from './trip/TeTrips'
+import TeTripDetail from './trip/TeTripDetail'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
 import './te.css'
 
-type View = { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'claim'; id: string }
+type View =
+  | { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'trips' }
+  | { name: 'claim'; id: string } | { name: 'trip'; id: string }
 /** 'new' is step 1 of the entry flow (the four tiles in a drawer); 'kind' is its
  *  step 2, and `way: 'approved'` its step 3 (screen 07, choose the trip). */
 type Sheet =
@@ -46,21 +50,21 @@ type Sheet =
   | { name: 'kind'; kind: TripScope; way: WayId | null }
   | { name: 'expense'; line?: TeExpense }
   /** The three-step planner. `past` is "I already travelled". */
-  | { name: 'plan'; kind: TripScope; past: boolean }
+  | { name: 'plan'; kind: TripScope; past: boolean; editing?: TeTrip }
 
 /** The side rail, and the phone tab bar under it. `soon` names the build step
  *  that adds the screen: the row is shown, because leaving it out would make the
  *  module look smaller than it is, but it says it is not here yet. */
 /** The views the rail can land on. A claim is opened from a list, never from the rail. */
-type RailView = 'home' | 'expenses' | 'claims' | 'limits'
+type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'limits'
 const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'home', label: 'Home', icon: 'home' },
+  { k: 'trips', label: 'Trips', icon: 'local' },
   { k: 'expenses', label: 'Other expenses', icon: 'other' },
   { k: 'claims', label: 'My claims', icon: 'claims' },
   { k: 'limits', label: 'My limits and rates', icon: 'limits' },
 ]
 const RAIL_SOON: { label: string; icon: string; step: number }[] = [
-  { label: 'Trips', icon: 'local', step: 5 },
   { label: 'Advances', icon: 'advances', step: 7 },
 ]
 
@@ -77,7 +81,6 @@ const NOT_BUILT: Record<string, string> = {
   start: 'Starting a trip now is the next build step (6).',
   legOpen: 'Recording and reporting a leg is build step 6.',
   legStart: 'Starting a leg is build step 6.',
-  openTrip: 'The trip screen is build step 5.',
 }
 
 /** A notification link is "/ess?tab=claims&ref=<claim id>" (written by the database, migration 147).
@@ -170,6 +173,9 @@ export default function TeHome({ initialClaimId, onExit }: {
     international: nowBy.international.some(x => x.tone === 'live'),
   }
 
+  /** Opening a trip closes whatever sheet asked for it. */
+  const openTrip = (id: string) => { setSheet(null); setView({ name: 'trip', id }) }
+
   /** A Continue button or a way whose screen is a later build step. */
   const notBuilt = (key: ContinueAction | WayId) => { setSheet(null); setToast(NOT_BUILT[key] ?? 'Not built yet.') }
 
@@ -179,7 +185,13 @@ export default function TeHome({ initialClaimId, onExit }: {
    *  union does not narrow to a discriminated union, so that would need a cast. */
   const goto = (name: RailView) => {
     setSheet(null)
-    setView(name === 'claims' ? { name: 'claims' } : name === 'expenses' ? { name: 'expenses' } : name === 'limits' ? { name: 'limits' } : { name: 'home' })
+    setView(
+      name === 'claims' ? { name: 'claims' }
+        : name === 'expenses' ? { name: 'expenses' }
+          : name === 'limits' ? { name: 'limits' }
+            : name === 'trips' ? { name: 'trips' }
+              : { name: 'home' },
+    )
   }
 
   return (
@@ -292,6 +304,17 @@ export default function TeHome({ initialClaimId, onExit }: {
           ) : null}
           {view.name === 'claims' ? <TeClaimList snap={snap} onOpen={id => setView({ name: 'claim', id })} /> : null}
           {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}
+          {view.name === 'trips' ? <TeTrips snap={snap} onOpen={id => setView({ name: 'trip', id })} onNew={kind => setSheet({ name: 'plan', kind, past: false })} /> : null}
+          {view.name === 'trip' ? (
+            <TeTripDetail
+              tripId={view.id}
+              today={snap.today}
+              onBack={() => setView({ name: 'trips' })}
+              onChanged={message => { setToast(message); reload() }}
+              onEdit={d => setSheet({ name: 'plan', kind: d.trip.scope, past: d.trip.origin === 'POST_FACTO', editing: d.trip })}
+              onNotBuilt={setToast}
+            />
+          ) : null}
           {view.name === 'claim' ? <TeClaimDetail claimId={view.id} catName={catName} onBack={() => setView({ name: 'claims' })} onChanged={message => { setToast(message); reload() }} /> : null}
         </div>
       </main>
@@ -357,7 +380,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                 today={snap.today}
                 placeName={placeName}
                 onStartLeg={() => notBuilt('legStart')}
-                onOpenTrip={() => notBuilt('openTrip')}
+                onOpenTrip={openTrip}
               />
             ) : (
               <>
@@ -372,7 +395,11 @@ export default function TeHome({ initialClaimId, onExit }: {
                             <b>{x.title}</b>
                             <div className="small muted">{x.sub}</div>
                           </div>
-                          <button type="button" className={x.tone === 'go' || x.tone === 'live' ? 'btn pri sm' : 'btn sm'} onClick={() => notBuilt(x.action)}>
+                          <button
+                            type="button"
+                            className={x.tone === 'go' || x.tone === 'live' ? 'btn pri sm' : 'btn sm'}
+                            onClick={() => (x.action === 'openTrip' ? openTrip(x.id) : notBuilt(x.action))}
+                          >
                             {x.btn}<TeIcon name="go" size="sm" />
                           </button>
                         </div>
@@ -421,6 +448,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           snap={snap}
           scope={sheet.kind}
           origin={sheet.past ? 'POST_FACTO' : 'PRE_APPROVED'}
+          editing={sheet.editing}
           onClose={() => setSheet(null)}
           onSaved={(_id, message) => { done(message); setView({ name: 'home' }) }}
           // reload() only, never done(): done() closes the sheet, and the plan
