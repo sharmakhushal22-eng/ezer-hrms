@@ -8,8 +8,7 @@
 //   POST { action:'direct_feedback', … } -> the Telephonic (or any unscheduled) round: the recruiter
 //                                           records the 8-parameter feedback + decision straight from
 //                                           the candidate popup — no scheduling, no invite.
-//   POST { action:'shortlist', … }       -> the final Shortlist after ≥3 CLEARED rounds
-//                                           (decided SHORTLIST; Hold and Reject do not count).
+//   POST { action:'shortlist', … }       -> the final Shortlist after ≥3 decided rounds.
 //
 // Email is best-effort — if Gmail SMTP is not configured the invites and the
 // ESS tasks are still created, and the response says email was skipped.
@@ -20,14 +19,9 @@ import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { notify as essNotify } from '@/lib/ess/session'
-import { applyInterviewDecision, distinctRounds, isDecision, roundOrdinal } from '@/lib/recruitment/interview-decision'
-// The shortlist rules: three CLEARED rounds, and one candidate per opening. The
-// browser's "Move to" picker calls the SAME canShortlist(), so the reason it
-// shows a user is the reason this route would have given them.
-import { canShortlist, openingsOf, slotsUsed, SLOT_STAGES } from '@/lib/recruitment/pipeline-gates'
-// A rejection needs a reason AND a remark. The dialog collects them; THIS route
-// is what refuses without them — the same split as the shortlist rules above.
-import { validateRejection, normaliseRemark, rejectionLabel } from '@/lib/recruitment/rejection'
+import { applyInterviewDecision, distinctRounds, isDecision, roundOrdinal, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
+import { CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/confidential'
+import { mrfOfCandidate } from '@/lib/recruitment/confidential-flow'
 
 export const runtime = 'nodejs' // nodemailer needs Node, not Edge
 
@@ -68,7 +62,6 @@ export async function POST(req: NextRequest) {
 
   if (body.action === 'direct_feedback') return directFeedback(body)
   if (body.action === 'shortlist') return finalShortlist(body)
-  if (body.action === 'reject') return rejectCandidate(body, gate.user.employeeId)
   if (body.action !== 'schedule') return bad('Unknown action')
 
   const { candidate_id, mrf_id, company_id, round, scheduled_at, meet_link, meet_passcode, scheduled_by } = body
@@ -81,6 +74,9 @@ export async function POST(req: NextRequest) {
     [mainId, ...panelIds] = body.interviewer_ids.filter(Boolean)
   }
   if (!mainId) return bad('Select the main interviewer')
+  // A confidential search invites nobody: the HR Head / HR Manager records the Telephonic
+  // round themselves (direct_feedback).
+  if ((await mrfOfCandidate(sb as any, candidate_id))?.is_confidential) return bad('Confidential hiring: interviews are not scheduled or shared. Record the Telephonic feedback directly from the candidate card.', 409)
   panelIds = [...new Set(panelIds.filter(id => id !== mainId))]
   const ids = [mainId, ...panelIds]
 
@@ -202,127 +198,37 @@ async function directFeedback(body: any) {
 
   const rounds = distinctRounds(rows)
   let stage: string | null = null
-  try { stage = await applyInterviewDecision(sb as any, candidate_id, round, feedback.decision, roundOrdinal(rounds, round)) }
-  catch (e: any) { return bad(e.message || 'Could not update the candidate', 500) }
-  return NextResponse.json({ ok: true, id: ins.data?.[0]?.id, decision: feedback.decision, stage })
+  // Confidential hiring: the Telephonic round is the only round, so a Shortlist decision
+  // takes the candidate straight to Shortlisted (Negotiation) — no further rounds, no
+  // separate Shortlist click.
+  const confidential = !!(await mrfOfCandidate(sb as any, candidate_id))?.is_confidential
+  try {
+    if (confidential && feedback.decision === 'SHORTLIST' && !['Offer Sent', 'Joined'].includes(String(cand.stage))) {
+      const { error } = await sb.from('candidates').update({ stage: 'Shortlisted' }).eq('id', candidate_id)
+      if (error) throw new Error(error.message)
+      stage = 'Shortlisted'
+    } else stage = await applyInterviewDecision(sb as any, candidate_id, round, feedback.decision, roundOrdinal(rounds, round))
+  } catch (e: any) { return bad(e.message || 'Could not update the candidate', 500) }
+  return NextResponse.json({ ok: true, id: ins.data?.[0]?.id, decision: feedback.decision, stage, confidential })
 }
 
-// The hiring manager rejects a candidate, at any round, with a mandatory reason and
-// remark. Both are checked HERE rather than only in the dialog: a disabled button is
-// not an enforcement point, which is the lesson mrf-assignment-rule.test.ts exists to
-// record.
-//
-// Rejecting is allowed from any stage the funnel owns. It deliberately does NOT touch a
-// candidate the offer flow already owns ('Offer Sent' / 'Joined') — those have their own
-// backout path, which blacklists the candidate and reopens the requisition, and none of
-// that would happen here.
-//
-// A rejection FREES the requisition's opening, because occupiesSlot() does not count
-// 'Rejected'. That is intended: the cap is about who is in play.
-async function rejectCandidate(body: any, actorEmployeeId: string | null) {
-  const { candidate_id, reason, remark } = body
-  if (!candidate_id) return bad('candidate_id is required')
-
-  const check = validateRejection({ reason, remark })
-  if (!check.ok) return bad(check.reason as string)
-
-  const { data: cand } = await sb.from('candidates')
-    .select('stage, mrf_id, company_id, full_name').eq('id', candidate_id).maybeSingle()
-  if (!cand) return bad('Candidate not found', 404)
-  const stage = String((cand as any).stage || '')
-  if (stage === 'Rejected') return bad('This candidate is already rejected')
-  if (['Offer Sent', 'Joined'].includes(stage)) {
-    return bad(`This candidate is ${stage}. Use the offer backout flow, which also reopens the requisition.`)
-  }
-
-  const patch: Record<string, unknown> = {
-    stage: 'Rejected',
-    rejection_reason: reason,
-    rejection_remark: normaliseRemark(remark),
-    rejected_at: new Date().toISOString(),
-    rejected_by: actorEmployeeId || null,
-  }
-  let up = await sb.from('candidates').update(patch).eq('id', candidate_id)
-  // Tolerate a database without migration 143: the rejection itself still lands,
-  // because losing the stage change would be worse than losing the reason. The
-  // reason is never lost outright — the audit row below carries it either way.
-  if (up.error && (up.error.code === '42703' || up.error.code === 'PGRST204')) {
-    up = await sb.from('candidates').update({ stage: 'Rejected' }).eq('id', candidate_id)
-  }
-  if (up.error) return bad(up.error.message, 500)
-
-  await sb.from('recruitment_audit_logs').insert({
-    candidate_id,
-    mrf_id: (cand as any).mrf_id || null,
-    company_id: (cand as any).company_id || null,
-    action_type: 'CANDIDATE_REJECTED',
-    details: {
-      name: (cand as any).full_name || null,
-      from_stage: stage,
-      reason, reason_label: rejectionLabel(reason as string),
-      remark: normaliseRemark(remark),
-    },
-    created_at: new Date().toISOString(),
-  }).then(() => null, () => null)   // the audit row must never fail the rejection
-
-  return NextResponse.json({ ok: true, stage: 'Rejected', from_stage: stage })
-}
-
-// Final Shortlist: allowed once ≥3 rounds have been CLEARED — decided SHORTLIST by
-// their main interviewer — and the requisition still has an opening free.
-//
-// CLEARED, NOT MERELY DECIDED. This counted any recorded decision, so a round decided
-// Hold counted toward the three and a candidate sitting on Hold could still be
-// shortlisted. A round is now cleared only when its decision is SHORTLIST; Hold and
-// Reject do not count. A Reject ends the pipeline anyway (applyInterviewDecision moves
-// the candidate to Rejected), so in practice this rule bites on Hold.
-//
-// A held round cannot be re-decided — both feedback paths return 409 once a round is
-// submitted — so a Hold permanently costs a round, and the hiring manager recovers by
-// adding another one. That is why canAddRound still permits a new round after a Hold.
-//
-// THIS IS THE ONLY WRITE OF 'Shortlisted' THE FUNNEL MAKES. The pipeline's manual stage
-// picker used to update the column itself, checking nothing but STAGES order — so one
-// Telephonic round was enough. It posts here instead, which is why both rules live in
-// one place. The cap especially has to be server-side: two recruiters shortlisting at
-// the same moment both pass any check made in a browser.
+// Final Shortlist: allowed once ≥3 rounds carry a main-interviewer decision and the latest
+// decision is Shortlist or Hold (a Reject ends the pipeline).
 async function finalShortlist(body: any) {
   const { candidate_id } = body
   if (!candidate_id) return bad('candidate_id is required')
   const { data } = await sb.from('interview_invites').select('*')   // '*' — tolerant of a DB without migration 131
     .eq('candidate_id', candidate_id).order('created_at', { ascending: true })
   const rows = ((data || []) as any[]).filter(r => (r.role || 'MAIN') === 'MAIN' && r.status === 'submitted')
-  const decisionOf = (r: any) => r.decision || r.feedback?.decision
-  const cleared = distinctRounds(rows.filter(r => decisionOf(r) === 'SHORTLIST'))
+  const decided = distinctRounds(rows.filter(r => r.decision || r.feedback?.decision))
+  const need = (await mrfOfCandidate(sb as any, candidate_id))?.is_confidential ? CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST : ROUNDS_BEFORE_SHORTLIST
+  if (decided.length < need) return bad(`${need} decided round${need === 1 ? ' is' : 's are'} needed before shortlisting (have ${decided.length})`)
   const last = rows[rows.length - 1]
-  const lastDecision = decisionOf(last || {})
+  const lastDecision = last?.decision || last?.feedback?.decision
   if (lastDecision === 'REJECT') return bad('The latest round rejected this candidate')
-
-  // The candidate's row carries the requisition; the cap needs both.
-  const { data: cand } = await sb.from('candidates').select('stage, mrf_id').eq('id', candidate_id).maybeSingle()
-  const mrfId = (cand as any)?.mrf_id || null
-  let openings = 1
-  let used = 0
-  if (mrfId) {
-    const [{ data: mrf }, { data: peers }] = await Promise.all([
-      sb.from('manpower_requisitions').select('no_of_openings, openings').eq('id', mrfId).maybeSingle(),
-      sb.from('candidates').select('id, mrf_id, stage').eq('mrf_id', mrfId).in('stage', [...SLOT_STAGES]),
-    ])
-    openings = openingsOf(mrf as any)
-    // exceptId is this candidate. One sent back from the offer flow for a revision
-    // still reads 'Shortlisted', and counting them would refuse them their own slot.
-    used = slotsUsed((peers || []) as any[], mrfId, candidate_id)
-  }
-
-  const gate = canShortlist({
-    currentStage: String((cand as any)?.stage || ''),
-    clearedRounds: cleared.length,
-    openings,
-    slotsUsed: used,
-  })
-  if (!gate.ok) return bad(gate.reason as string)
-
+  const { data: cand } = await sb.from('candidates').select('stage').eq('id', candidate_id).maybeSingle()
+  if (['Offer Sent', 'Joined'].includes((cand as any)?.stage)) return bad('Candidate is already past Shortlisted')
   const { error } = await sb.from('candidates').update({ stage: 'Shortlisted' }).eq('id', candidate_id)
   if (error) return bad(error.message, 500)
-  return NextResponse.json({ ok: true, stage: 'Shortlisted', rounds: cleared.length })
+  return NextResponse.json({ ok: true, stage: 'Shortlisted', rounds: decided.length })
 }

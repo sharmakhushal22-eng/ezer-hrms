@@ -22,7 +22,10 @@ export async function GET(req: NextRequest) {
     sb.from('employees').select('id, department_id').eq('company_id', co).eq('employment_status', 'Active').or('is_test.is.null,is_test.eq.false').limit(10000),
     sb.from('departments').select('id, dept_name').eq('company_id', co),
     sb.from('locations').select('id').eq('company_id', co).neq('status', 'INACTIVE'),
-    sb.from('manpower_requisitions').select('id, no_of_openings, openings, status').eq('company_id', co).in('status', ['OPEN', 'APPROVED', 'IN_PROGRESS']),
+    // Confidential searches never count as open positions on the company dashboard.
+    sb.from('manpower_requisitions').select('id, no_of_openings, openings, status, is_confidential').eq('company_id', co).in('status', ['OPEN', 'APPROVED', 'IN_PROGRESS'])
+      .then(r => r.error && /is_confidential/i.test(r.error.message || '') ? sb.from('manpower_requisitions').select('id, no_of_openings, openings, status').eq('company_id', co).in('status', ['OPEN', 'APPROVED', 'IN_PROGRESS']) : r)
+      .then(r => ({ ...r, data: (r.data || []).filter((m: any) => !m.is_confidential) })),
     sb.from('v_attrition_reasons').select('*').eq('company_id', co).gte('quarter_start', q),
     sb.from('tds_declarations').select('regime, annual_tax_old, annual_tax_new').eq('company_id', co).eq('fy', fy),
     sb.from('employee_resignation').select('employee_id, employees!inner(department_id, company_id)').eq('employees.company_id', co).not('status', 'in', '("SETTLED","WITHDRAWN")'),

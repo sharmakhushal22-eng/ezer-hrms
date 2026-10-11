@@ -9,6 +9,7 @@
 import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { ctcAcknowledgementPdf } from '@/lib/recruitment/approval-pack'
+import { confidentialAudience } from '@/lib/recruitment/confidential-flow'
 
 const inr = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
 const empEmail = (e: any) => e?.office_email || e?.personal_email || null
@@ -21,9 +22,13 @@ export async function mailAcceptance(neg: any): Promise<number> {
   const { data: cand } = await sb.from('candidates').select('full_name, email, mobile, phone, designation, mrf_id').eq('id', neg.candidate_id).maybeSingle()
   const mrfId = cand?.mrf_id || null
   const { data: mrf } = mrfId
-    ? await sb.from('manpower_requisitions').select('mrf_number, designation, position, assigned_recruiter_ids').eq('id', mrfId).maybeSingle()
+    ? await sb.from('manpower_requisitions').select('*').eq('id', mrfId).maybeSingle()
     : { data: null as any }
-  const hmIds: string[] = Array.isArray(mrf?.assigned_recruiter_ids) ? mrf.assigned_recruiter_ids : []
+  // A confidential search tells the HR Head and HR Manager(s) only — never the assigned
+  // hiring managers (there are none; the HR Head runs it).
+  const hmIds: string[] = mrf?.is_confidential
+    ? (await confidentialAudience(sb as any, mrf.company_id || null)).map(p => p.id)
+    : Array.isArray(mrf?.assigned_recruiter_ids) ? mrf.assigned_recruiter_ids : []
   const { data: hms } = hmIds.length
     ? await sb.from('employees').select('full_name, office_email, personal_email').in('id', hmIds)
     : { data: [] as any[] }

@@ -92,6 +92,7 @@ export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
     filled: mine.filter((c) => (ctx.filledStages ?? [ctx.joinedStage ?? 'Joined']).includes(String(c.stage))).length,
     candidates: mine.length,
     budgetMaxRupees: budgetMax,
+    confidential: !!row.is_confidential,
     // RESOLVED, and these are two DIFFERENT fields the kit collapsed into one:
     //   target_joining_date = the intended date of joining  (what the card labels "Target")
     //   validity_date       = when the requisition itself expires

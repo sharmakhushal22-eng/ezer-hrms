@@ -2,10 +2,8 @@
  * Pure display helpers for the redesign.
  *
  * RULE: nothing in this file decides anything the application enforces.
- * The authorities live elsewhere:
- *   - /api/recruitment/interview-invite → the stage itself: three CLEARED rounds
- *                                  unlock Shortlist, one candidate per opening,
- *                                  and a reject needs a reason and a remark
+ * The authorities stay where they are in page.tsx:
+ *   - moveStage()                → forward-only pipeline + feedback gate
  *   - QUICK_HIRE_CAP check       → lane validation in the MRF form
  *   - canSeeScreen()             → tab visibility
  *   - loadAll() query filters    → row scoping (oversight vs assigned)
@@ -109,11 +107,28 @@ export function countByStage(candidates: CandidateVM[], stages: readonly string[
   return { counts, rejected: candidates.filter((c) => c.stage === REJECTED).length, max: Math.max(1, ...counts.map((c) => c.count)) };
 }
 
-/* moveOptions() and MoveOption are gone with the "Move to" picker.
- * Nothing in the product moves a candidate by hand any more: a stage is a
- * consequence of the interview rounds, so there is no list of targets to
- * label and no refusal reason to show. The rules it mirrored still exist,
- * server-side, in /api/recruitment/interview-invite. */
+export interface MoveOption { stage: string; allowed: boolean; reason?: string }
+
+/**
+ * What the "Move to" picker SHOWS. Mirrors moveStage's rules so the user sees
+ * why a target is locked before trying it; moveStage still decides.
+ *  - earlier stages are never offered (forward-only)
+ *  - stages AFTER Shortlisted need feedback on every scheduled round
+ *    (moving TO Shortlisted is not gated, per CORE-WORKING.md)
+ */
+export function moveOptions(stages: readonly string[], current: string, rounds: RoundVM[], shortlisted = 'Shortlisted'): MoveOption[] {
+  const flow = stages.filter((s) => s !== REJECTED);
+  const cur = flow.indexOf(current);
+  const gate = flow.indexOf(shortlisted);
+  const pending = rounds.filter((r) => !r.hasFeedback);
+  return flow.slice(cur + 1).map((stage) => {
+    const idx = flow.indexOf(stage);
+    if (gate >= 0 && idx > gate && pending.length) {
+      return { stage, allowed: false, reason: `Record ${pending[0].name} feedback first` };
+    }
+    return { stage, allowed: true, reason: idx === cur + 1 ? 'Next stage' : undefined };
+  });
+}
 
 /** One-line "what to do next" for a candidate card. Needs the candidate's interview_rounds. */
 export function candidateNextStep(c: CandidateVM, rounds: RoundVM[] = [], today = new Date()): NextStep {

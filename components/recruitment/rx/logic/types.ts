@@ -50,6 +50,8 @@ export interface MrfVM {
   experienceRequired?: string | null;
   durationMonths?: number | null;
   skills?: string | null;
+  /** Confidential hiring: visible to the HR Head / HR Manager only. */
+  confidential?: boolean;
   /** Shown only when the requisition was turned down. */
   remarks?: string | null;
   /** Past validity_date and not already CLOSED/REJECTED. */
@@ -76,6 +78,8 @@ export interface CandidateVM {
   noticeDays?: number | null;
   stage: string;
   aiScore?: number | null;
+  /** Under a confidential MRF — set by the page, which knows the MRF. */
+  confidential?: boolean;
   raw: unknown;
 }
 

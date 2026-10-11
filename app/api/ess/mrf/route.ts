@@ -7,6 +7,7 @@
 // Everything is scoped to the raiser's company: the RM2 is the raiser's own
 // l1_manager, and the HR Head is whoever holds HR_HEAD in that company.
 import { NextRequest, NextResponse } from 'next/server'
+import { rolesCanRaiseConfidential, selfApprovedChain } from '@/lib/recruitment/confidential'
 import { jobCodePrefix, nextJobCode } from '@/lib/recruitment/job-code'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden, notify } from '@/lib/ess/session'
@@ -52,12 +53,6 @@ async function hrHeadFor(companyId: string | null): Promise<Brief | null> {
 
 // The people an HR Head can assign an approved MRF to — only Hiring Managers / Recruiters
 // (the role that actually runs the hiring), never the broader HR team.
-// RECRUITER *is* the hiring-manager role — ess_roles seeds it as
-// 'Hiring Manager / Recruiter' (021_ess.sql), 082 maps "Hiring Manager" onto it,
-// and 114_seed_hiring_managers.sql grants it. There is no separate
-// HIRING_MANAGER code. HR_MANAGER is the senior HR tier (ORG scope, full salary
-// visibility, and listed in OVERSIGHT_CODES) — they watch every requisition
-// rather than being handed one, so they are deliberately NOT assignable.
 const HR_ROLE_CODES = ['RECRUITER']
 async function hrTeamFor(companyId: string | null): Promise<(Brief & { role: string })[]> {
   if (!companyId) return []
@@ -136,24 +131,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const r = await essRoute(req); if (r.error) return r.error
   const { ctx } = r
-  // viewAs covers two unrelated situations and the old single message described
-  // only one, so an ESS employee whose token had simply EXPIRED was told they
-  // were impersonating somebody. essCaller sets viewAs true unconditionally for
-  // the legacy dashboard login — and a lapsed ESS token lands there, because
-  // authToken() falls back to the Supabase session, verifyEssToken then fails,
-  // and requireDashboardUser returns kind:'legacy' with employeeId null. The GET
-  // still answers (it takes the id from the query string), so the form fills in
-  // normally and only the submit is refused.
-  //
-  // actorEmployeeId separates them: null = not attached to an employee record,
-  // non-null = a real person looking at a colleague's portal.
-  if (ctx.caller.viewAs) {
-    return forbidden(ctx.caller.actorEmployeeId === null
-      ? 'Your ESS session is not active, so this requisition has nobody to raise it. '
-        + 'Sign in again with your own ESS account and resubmit — your answers are still on screen.'
-      : 'An MRF is raised in your own name, so it cannot be submitted while you are '
-        + 'viewing somebody else\'s portal. Open your own portal to raise one.')
-  }
+  if (ctx.caller.viewAs) return forbidden('MRF actions cannot be done while viewing as somebody else.')
   const me = ctx.caller.employeeId
   const body = await req.json().catch(() => ({}))
   const action = String(body.action || '')
@@ -165,7 +143,11 @@ export async function POST(req: NextRequest) {
     if (!designation) return NextResponse.json({ error: 'Designation is required.' }, { status: 400 })
 
     // DRAFT can be half-finished and routes to nobody; SUBMITTED builds the approval chain.
-    const status = body.status === 'DRAFT' ? 'DRAFT' : 'SUBMITTED'
+    // CONFIDENTIAL (HR Head only): approved on the spot, no chain, nobody told — see
+    // lib/recruitment/confidential.ts.
+    const wantConfidential = body.is_confidential === true || body.is_confidential === 'true'
+    if (wantConfidential && !rolesCanRaiseConfidential(ctx.menu.roles, !!ctx.grant.isSuperAdmin)) return forbidden('Only the HR Head can raise a confidential MRF.')
+    const status = body.status === 'DRAFT' ? 'DRAFT' : wantConfidential ? 'APPROVED' : 'SUBMITTED'
 
     const { data: meRow } = await sb.from('employees')
       .select('id, full_name, company_id, department_id, l1_manager_id').eq('id', me).maybeSingle()
@@ -193,11 +175,12 @@ export async function POST(req: NextRequest) {
     ])
 
     const chain: any[] = []
-    if (rm2Brief && rm2Brief.id !== me) {
+    if (wantConfidential) chain.push(...selfApprovedChain({ id: me, name: meRow.full_name as string, code: null }))
+    else if (rm2Brief && rm2Brief.id !== me) {
       chain.push({ order: 1, role: 'RM2', approver_id: rm2Brief.id, approver_name: rm2Brief.name, approver_code: rm2Brief.code, status: 'PENDING', acted_at: null, comment: null })
     }
     // HR Head is the final step — skipped only if they are the raiser or already the RM2 step.
-    if (hh && hh.id !== me && hh.id !== rm2Brief?.id) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
+    if (!wantConfidential && hh && hh.id !== me && hh.id !== rm2Brief?.id) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
     if (status === 'SUBMITTED' && !chain.length) return NextResponse.json({ error: 'No approver could be found — your company has no HR Head / manager set. Please contact HR.' }, { status: 400 })
 
     const openings = Math.max(1, Number(body.openings) || 1)
@@ -206,9 +189,6 @@ export async function POST(req: NextRequest) {
     { const bMin = nOrNull(body.budget_min), bMax = nOrNull(body.budget_max)
       if (bMin && bMax && bMin > bMax) return NextResponse.json({ error: `Budget minimum (₹${bMin.toLocaleString('en-IN')}) cannot be more than the maximum (₹${bMax.toLocaleString('en-IN')}).` }, { status: 400 }) }
     const sOrNull = (v: any) => { const s = String(v ?? '').trim(); return s || null }
-    // Tri-state flag, same shape as is_budgeted below: unanswered stays null
-    // rather than becoming false, so "not decided" and "no" stay distinguishable.
-    const bOrNull = (v: any) => (v === '' || v === null || v === undefined) ? null : (v === 'yes' || v === true)
     const isBudgeted = body.is_budgeted === '' || body.is_budgeted == null ? null : (body.is_budgeted === 'yes' || body.is_budgeted === true)
     const reason = sOrNull(body.reason)
 
@@ -250,45 +230,6 @@ export async function POST(req: NextRequest) {
       skills_required: sOrNull(body.skills_required), good_to_have_skills: sOrNull(body.good_to_have_skills),
       job_description: sOrNull(body.job_description),
       sourcing_mode: sOrNull(body.sourcing_mode), sourcing_channels: Array.isArray(body.sourcing_channels) ? body.sourcing_channels : [],
-      // ── Field Master phase 1 (migration 134) ──────────────────────────────
-      // Optional throughout. The two flags follow is_budgeted's 'yes'/'no'/''
-      // convention rather than raw booleans, so the form sends one shape.
-      request_source: sOrNull(body.request_source),
-      headcount_sanctioned: nOrNull(body.headcount_sanctioned),
-      headcount_actual: nOrNull(body.headcount_actual),
-      headcount_open: nOrNull(body.headcount_open),
-      agency_vendor: sOrNull(body.agency_vendor),
-      agency_fee_pct: nOrNull(body.agency_fee_pct),
-      agency_exclusivity_days: nOrNull(body.agency_exclusivity_days),
-      agency_ownership_days: nOrNull(body.agency_ownership_days),
-      bgv_required: bOrNull(body.bgv_required), bgv_package: sOrNull(body.bgv_package),
-      medical_required: bOrNull(body.medical_required),
-      closure_offered_ctc: nOrNull(body.closure_offered_ctc),
-      closure_doj: body.closure_doj || null,
-      closure_source: sOrNull(body.closure_source),
-      // ── Field Master phase 2 (migration 135) — section E ──────────────────
-      role_summary: sOrNull(body.role_summary), kras: sOrNull(body.kras),
-      specialisation: sOrNull(body.specialisation), certifications: sOrNull(body.certifications),
-      relevant_experience_min: nOrNull(body.relevant_experience_min),
-      relevant_experience_max: nOrNull(body.relevant_experience_max),
-      industry_preference: sOrNull(body.industry_preference), target_companies: sOrNull(body.target_companies),
-      max_notice_period_days: nOrNull(body.max_notice_period_days),
-      languages: sOrNull(body.languages),
-      travel_percentage: nOrNull(body.travel_percentage),
-      relocation_required: bOrNull(body.relocation_required),
-      diversity_flag: bOrNull(body.diversity_flag),
-      licence_requirement: sOrNull(body.licence_requirement),
-      // ── Field Master phase 3 (migration 136) — section F ──────────────────
-      variable_percentage: nOrNull(body.variable_percentage),
-      joining_bonus_allowed: bOrNull(body.joining_bonus_allowed),
-      joining_bonus_cap: nOrNull(body.joining_bonus_cap),
-      relocation_allowance_allowed: bOrNull(body.relocation_allowance_allowed),
-      relocation_allowance_cap: nOrNull(body.relocation_allowance_cap),
-      notice_buyout_allowed: bOrNull(body.notice_buyout_allowed),
-      notice_buyout_cap: nOrNull(body.notice_buyout_cap),
-      esop_eligible: bOrNull(body.esop_eligible),
-      esop_retention_notes: sOrNull(body.esop_retention_notes),
-      budget_code: sOrNull(body.budget_code),
       status,
       requested_by: me,
       raised_by_name: sOrNull(body.raised_by_name) || meRow.full_name,
@@ -297,25 +238,22 @@ export async function POST(req: NextRequest) {
       rm2_id: (meRow.l1_manager_id as string) || null, // new hire's RM2 = raiser's manager
       hod_id: body.hod_id || null,
       approval_chain: chain,
+      // Confidential: flagged, self-approved now, and run by the HR Head themselves (so the
+      // flows that address "the hiring manager" reach the HR Head; the acknowledge task is
+      // pre-done so no task is raised).
+      ...(wantConfidential ? { is_confidential: true, confidential_by: me, approved_at: new Date().toISOString(), assigned_recruiter_ids: [me], acknowledged_recruiter_ids: [me] } : {}),
     }
     let { data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single()
-    // A column the database does not have yet must not block the requisition.
-    // Migrations here are applied by hand in the Supabase SQL editor, so there
-    // is always a window where the form sends more than the schema holds — 130
-    // (wage_category) and 134 (the Field Master batch) both opened one.
-    //
-    // Named columns were fine for a single field; by 134 that would be fifteen
-    // branches and a new one every time. So drop WHICHEVER column PostgREST
-    // names and retry, bounded so a different error can never spin here.
-    for (let drops = 0; error && drops < 20; drops++) {
-      // PGRST204: "Could not find the 'x' column of 'y' in the schema cache"
-      const miss = /'([a-z0-9_]+)' column/i.exec(error.message || '')?.[1]
-      if (!miss || !(miss in mrfRow)) break
-      delete mrfRow[miss]
+    if (error && wantConfidential && /is_confidential|confidential_by/i.test(error.message || '')) return NextResponse.json({ error: 'Confidential hiring needs migration 135 (manpower_requisitions.is_confidential) — run it in the SQL Editor first.' }, { status: 409 })
+    // Until migration 130 adds manpower_requisitions.wage_category, PostgREST rejects the
+    // unknown column — drop it and retry rather than blocking every MRF from being raised.
+    if (error && /wage_category/i.test(error.message || '')) {
+      delete mrfRow.wage_category
       ;({ data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single())
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, id: created?.id, mrf_number: created?.mrf_number || null, status })
+    if (wantConfidential && created?.id) await sb.from('recruitment_audit_logs').insert({ company_id: meRow.company_id, action_type: 'MRF_CONFIDENTIAL_SELF_APPROVED', details: { mrf_id: created.id, mrf_number: created.mrf_number, position: designation, by: meRow.full_name }, created_at: new Date().toISOString() }).then(() => null, () => null)
+    return NextResponse.json({ ok: true, id: created?.id, mrf_number: created?.mrf_number || null, status, confidential: wantConfidential })
   }
 
   // ── Approve / reject / send back for revision ──────────────────────────────
@@ -365,28 +303,6 @@ export async function POST(req: NextRequest) {
       cur.status = 'REJECTED'; cur.acted_at = now; cur.comment = note
       await sb.from('manpower_requisitions').update({ approval_chain: chain, status: 'REJECTED' }).eq('id', id)
       return NextResponse.json({ ok: true })
-    }
-
-    // The HR Head's approval IS the hand-off: approving without naming who runs
-    // the hiring leaves an open requisition belonging to nobody. myAssignments
-    // keys off assigned_recruiter_ids, so an empty one means the MRF reaches no
-    // queue at all. Enforced HERE rather than only in the form, because the
-    // dashboard modal and any direct POST reach this same branch — a disabled
-    // button is not an enforcement point.
-    //
-    // Checked BEFORE anything is mutated, so a refusal leaves the chain as it was.
-    // Only the HR_HEAD step: an RM2 approval carries no assignment.
-    const wantHr: string[] = Array.isArray(body.assigned_hr_ids)
-      ? body.assigned_hr_ids.map((x: any) => String(x)).filter(Boolean) : []
-    if (cur.role === 'HR_HEAD' && !wantHr.length) {
-      return NextResponse.json({ error: 'Assign at least one hiring manager or recruiter — approving hands them the requisition to run.' }, { status: 400 })
-    }
-    // And they must actually hold the role, so the picker cannot be bypassed by
-    // posting an arbitrary employee id.
-    if (wantHr.length) {
-      const allowed = new Set((await hrTeamFor(ctx.companyId)).map(h => h.id))
-      const strays = wantHr.filter(x => !allowed.has(x))
-      if (strays.length) return NextResponse.json({ error: 'Only hiring managers / recruiters in your company can be assigned a requisition.' }, { status: 400 })
     }
 
     cur.status = 'APPROVED'; cur.acted_at = now; cur.comment = note

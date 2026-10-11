@@ -26,23 +26,12 @@ import { supabase } from '@/lib/supabase'
 import { authHeaders } from '@/lib/auth-headers'
 import InterviewFeedbackForm, { type Feedback, bandOf } from './InterviewFeedbackForm'
 import { type Decision, DECISION_LABEL, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
-// The shortlist rules: three decided rounds, and one candidate per opening.
-// ALIASED deliberately — this file already has a local `canShortlist` boolean
-// and the two must not shadow each other. /api/recruitment/interview-invite
-// calls this same function, so the button and the server cannot drift apart
-// about whether a shortlist is allowed, or about why it is not.
-import { canShortlist as shortlistCheck } from '@/lib/recruitment/pipeline-gates'
-// Rejecting needs a reason AND a remark. The same validator the route runs, so
-// this dialog and the server refuse for identical reasons — the dialog is the
-// courtesy half; /api/recruitment/interview-invite is the rule.
-import { REJECTION_REASONS, validateRejection } from '@/lib/recruitment/rejection'
+import { CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/confidential'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
 import { C as TK, E, F, Z } from '@/lib/ui'
-// No stage picker any more: every stage change comes from an interviewer's
-// decision (applyInterviewDecision) or from the Shortlist / Reject buttons in
-// INTERVIEW ROUNDS. The picker's helpers went with it, and so did the lock
-// glyph that explained why a target was refused.
-import { RxDialog } from '@/components/recruitment/rx'
+// The move-stage picker adopts the kit's radiogroup. moveOptions() only LABELS
+// the targets; blockedReason() below still decides. See the note on roundVMs.
+import { RxDialog, Icon, moveOptions, type RoundVM } from '@/components/recruitment/rx'
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 //
@@ -87,32 +76,19 @@ const isMain = (i: Invite) => (i.role || 'MAIN') === 'MAIN'
 const decisionOf = (i?: Invite | null): Decision | null => (i?.decision || i?.feedback?.decision || null) as Decision | null
 
 export default function CandidateInterviewModal({
-  candidate, mrf, stageText, schedulerId, openings = 1, slotsUsed = 0,
-  onClose, onChanged, showNotify,
+  candidate, mrf, confidential = false, stages, stageColor, stageText, schedulerId, onClose, onStageChange, onChanged, showNotify,
 }: {
   candidate: any
   mrf: any
-  /**
-   * Stage -> colour for the header chip. `stages` and `stageColor` used to come
-   * with it, for the "Move to" picker; the picker is gone and nothing else read
-   * them, so only this one survives.
-   */
+  /** Confidential hiring: one Telephonic round recorded here, no invites; a Shortlist decision moves the candidate straight to Negotiation. */
+  confidential?: boolean
+  stages: string[]
+  stageColor: Record<string, string>
   stageText: Record<string, string>
   schedulerId: string | null | undefined
-  /**
-   * The requisition's opening count, and how many of those openings are already
-   * taken EXCLUDING this candidate. Counted by the caller, which holds the whole
-   * candidate list — this modal only ever sees one candidate.
-   *
-   * The defaults are permissive on purpose: a caller that cannot measure them
-   * gets the round rule but no cap, and the server re-counts both before it
-   * writes. A missing prop therefore mislabels a button; it cannot let a write
-   * through.
-   */
-  openings?: number
-  slotsUsed?: number
   onClose: () => void
-  /** The server moved the candidate (a decision, the Shortlist or a Reject) — refresh the list. */
+  onStageChange: (id: string, stage: string, opts?: { blocked?: string }) => void
+  /** The server moved the candidate (a decision or the final Shortlist) — refresh the list. */
   onChanged?: (stage?: string | null) => void
   showNotify: (m: string, t?: 'success' | 'error') => void
 }) {
@@ -127,13 +103,8 @@ export default function CandidateInterviewModal({
   const [newRound, setNewRound] = useState('')
   const [confirmShortlist, setConfirmShortlist] = useState(false)
   const [shortlisting, setShortlisting] = useState(false)
-  // Reject lives in INTERVIEW ROUNDS now, beside Shortlist — rejecting is part
-  // of running the rounds, not a stage edit.
-  const [showReject, setShowReject] = useState(false)
-  const [rejectReason, setRejectReason] = useState('')
-  const [rejectRemark, setRejectRemark] = useState('')
-  const [rejecting, setRejecting] = useState(false)
   const [stageNow, setStageNow] = useState<string>(candidate.stage)
+  const [target, setTarget] = useState<string | null>(null)   // stage picked in the move radiogroup
 
   // schedule form state
   const [mainPick, setMainPick] = useState<Emp[]>([])
@@ -145,6 +116,9 @@ export default function CandidateInterviewModal({
   const [sending, setSending] = useState(false)
 
   useEffect(() => { setStageNow(candidate.stage) }, [candidate.stage])
+  // A move landed (or a decision moved the candidate): clear the picker so it
+  // never shows a selection that is now behind the candidate.
+  useEffect(() => { setTarget(null) }, [stageNow])
 
   const loadInvites = useCallback(async () => {
     try {
@@ -183,34 +157,20 @@ export default function CandidateInterviewModal({
       const k = r.toLowerCase()
       if (r && !seen.has(k)) { seen.add(k); out.push(r) }
     }
-    return out
-  }, [invitesByRound, addedRounds])
+    // Confidential: the Telephonic round is the whole interview.
+    return confidential ? out.filter(r => DIRECT_ROUNDS.has(r.toLowerCase())) : out
+  }, [invitesByRound, addedRounds, confidential])
+  const roundsNeeded = confidential ? CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST : ROUNDS_BEFORE_SHORTLIST
 
   // Decision flow: the LAST round on the candidate decides what the manager may do next.
-  //
-  // CLEARED, not merely decided. A round counts toward the three only when its
-  // main interviewer decided SHORTLIST. Hold and Reject do not count — this
-  // previously counted any recorded decision, so a candidate sitting on Hold
-  // could still be shortlisted. A Reject ends the pipeline anyway, so the rule
-  // bites on Hold, and because a submitted round cannot be re-decided (both
-  // feedback paths 409) a Hold permanently costs a round: the hiring manager
-  // recovers by adding another, which is why canAddRound still allows it.
-  const clearedRounds = rounds.filter(r => decisionOf(mainOf(r)) === 'SHORTLIST')
+  const decidedRounds = rounds.filter(r => decisionOf(mainOf(r)))
   const lastRound = rounds[rounds.length - 1]
   const lastDecision = decisionOf(mainOf(lastRound))
   const lastPending = !!lastRound && !roundComplete(lastRound)   // scheduled/awaiting or not even scheduled
   const pipelineOver = ['Rejected', 'Shortlisted', 'Offer Sent', 'Joined'].includes(stageNow)
-  const canAddRound = !pipelineOver && !lastPending && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
-  const addRoundHint = pipelineOver ? `Candidate is ${stageNow}` : lastPending ? `Waiting on the ${lastRound} round's feedback` : lastDecision === 'REJECT' ? 'The last round rejected this candidate' : ''
-  // The three-round rule AND the one-per-opening cap, both from the policy
-  // module — the same function the shortlist route calls, so this button and the
-  // server cannot disagree. Still only the courtesy half: the route re-counts
-  // both before it writes, because a second recruiter shortlisting at the same
-  // moment is invisible from here.
-  const shortlistGate = shortlistCheck({
-    currentStage: stageNow, clearedRounds: clearedRounds.length, openings, slotsUsed,
-  })
-  const canShortlist = !pipelineOver && !lastPending && shortlistGate.ok && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
+  const canAddRound = !confidential && !pipelineOver && !lastPending && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
+  const addRoundHint = confidential ? 'Confidential hiring — one Telephonic round only' : pipelineOver ? `Candidate is ${stageNow}` : lastPending ? `Waiting on the ${lastRound} round's feedback` : lastDecision === 'REJECT' ? 'The last round rejected this candidate' : ''
+  const canShortlist = !pipelineOver && !lastPending && decidedRounds.length >= roundsNeeded && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
 
   const addRound = () => {
     const name = newRound.trim()
@@ -219,6 +179,33 @@ export default function CandidateInterviewModal({
     setNewRound(''); setShowAddRound(false)
     openScheduleFor(name)   // straight into scheduling, per the flow
   }
+
+  // Gating for the manual stage buttons: can't move a candidate to Shortlisted (or beyond)
+  // while any scheduled round is still waiting on its main interviewer's feedback.
+  const blockedReason = useCallback((target: string): string | null => {
+    const shortlistIdx = stages.indexOf('Shortlisted')
+    if (shortlistIdx === -1 || stages.indexOf(target) < shortlistIdx) return null
+    for (const r of Object.keys(invitesByRound)) {
+      if ((invitesByRound[r] || []).length && !roundComplete(r)) return r
+    }
+    return null
+  }, [stages, invitesByRound, roundComplete])
+
+  /**
+   * View models for the kit's stage picker. Built from invitesByRound — the SAME
+   * set blockedReason() walks — so a label can never disagree with the gate: a
+   * round that was named but never scheduled has no invite rows and gates
+   * nothing. moveOptions() reads only `name` and `hasFeedback`.
+   *
+   * This is deliberately NOT the interview_rounds table. That table is what the
+   * pipeline's own RoundVMs come from, and this modal never loads it — feeding
+   * moveOptions an empty array here would report every stage as open and quietly
+   * bypass the feedback gate.
+   */
+  const roundVMs = useMemo<RoundVM[]>(() => Object.keys(invitesByRound).map(r => {
+    const m = mainOf(r)
+    return { name: r, interviewer: m?.interviewer_name || '', at: m?.scheduled_at ?? null, hasFeedback: roundComplete(r) }
+  }), [invitesByRound, mainOf, roundComplete])
 
   const openScheduleFor = (r: string) => {
     setOpenRound(r); setViewing(null); setFbRound(null)
@@ -270,37 +257,13 @@ export default function CandidateInterviewModal({
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { showNotify(j.error || 'Could not save feedback', 'error'); setFbSaving(false); return }
       const d = fb.decision as Decision
-      showNotify(d === 'REJECT' ? 'Feedback saved — candidate rejected' : d === 'HOLD' ? 'Feedback saved — candidate on hold. You can still add a round.' : 'Feedback saved — candidate shortlisted for this round. Add the next round.')
+      showNotify(d === 'REJECT' ? 'Feedback saved — candidate rejected' : d === 'HOLD' ? (confidential ? 'Feedback saved — candidate on hold.' : 'Feedback saved — candidate on hold. You can still add a round.') : j.confidential && j.stage === 'Shortlisted' ? 'Feedback saved — candidate shortlisted and moved to Negotiation.' : 'Feedback saved — candidate shortlisted for this round. Add the next round.')
       setFbRound(null)
       if (j.stage) setStageNow(j.stage)
       onChanged?.(j.stage || null)
       await loadInvites()
     } catch { showNotify('Could not save feedback', 'error') }
     setFbSaving(false)
-  }
-
-  // The hiring manager rejects, at any round, with a reason and a remark. The
-  // route re-checks both and writes the stage, the reason, who and when, plus an
-  // audit row — none of which a bare stage change did.
-  async function doReject() {
-    const check = validateRejection({ reason: rejectReason, remark: rejectRemark })
-    if (!check.ok) { showNotify(check.reason as string, 'error'); return }
-    setRejecting(true)
-    try {
-      const r = await fetch('/api/recruitment/interview-invite', {
-        method: 'POST', headers: await authHeaders(),
-        body: JSON.stringify({
-          action: 'reject', candidate_id: candidate.id,
-          reason: rejectReason, remark: rejectRemark,
-        }),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) { showNotify(j.error || 'Could not reject', 'error'); setRejecting(false); return }
-      showNotify(`${candidate.full_name} moved to Rejected.`)
-      setShowReject(false); setStageNow('Rejected')
-      onChanged?.('Rejected')
-    } catch { showNotify('Could not reject', 'error') }
-    setRejecting(false)
   }
 
   async function doShortlist() {
@@ -317,6 +280,12 @@ export default function CandidateInterviewModal({
       onChanged?.('Shortlisted')
     } catch { showNotify('Could not shortlist', 'error') }
     setShortlisting(false)
+  }
+
+  function tryMove(stage: string) {
+    const reason = blockedReason(stage)
+    if (reason) { showNotify(`Complete the ${reason} round (needs interviewer feedback) before moving to ${stage}`, 'error'); return }
+    onStageChange(candidate.id, stage)
   }
 
   const initials = (candidate.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
@@ -355,6 +324,18 @@ export default function CandidateInterviewModal({
     )
   }
 
+  // Forward-only targets, mirroring moveStage's own rule.
+  // GUARD: when the candidate is already Rejected they are not in `flow` at all,
+  // so moveOptions' indexOf returns -1, slice(cur+1) becomes slice(0), and it
+  // would offer every stage — including ones behind them.
+  const inFlow = stages.filter(s => s !== 'Rejected').includes(stageNow)
+  const moveOpts = inFlow ? moveOptions(stages, stageNow, roundVMs) : []
+  // Rejected sits past Shortlisted, so blockedReason() already gates it today.
+  // moveOptions strips it from the list entirely, hence its own button.
+  const rejectBlocked = blockedReason('Rejected')
+  const canReject = stages.includes('Rejected') && stageNow !== 'Rejected'
+  const anyGated = !!rejectBlocked || moveOpts.some(o => !o.allowed)
+
   return (
     <Shell onClose={onClose}>
       {/* header */}
@@ -381,32 +362,24 @@ export default function CandidateInterviewModal({
       </div>
 
       {/* rounds */}
+      {confidential && (
+        <div style={{ display:'flex', gap:10, alignItems:'flex-start', background:TK.warningTint, border:`1px solid ${TK.warningEdge}`, borderRadius:10, padding:'9px 12px', marginBottom:10, fontSize:12, color:TK.ink, lineHeight:1.5 }}>
+          <span style={{ fontSize:16 }}>🔒</span>
+          <span><b>Confidential hiring.</b> Only the HR Head and HR Manager see this candidate. There is one round — Telephonic — which you record here yourself; nobody is invited. A <b>Shortlist</b> decision moves the candidate straight to Negotiation.</span>
+        </div>
+      )}
       <div style={{ display:'flex', alignItems:'center', gap:8, margin:'2px 0 9px', flexWrap:'wrap' }}>
         <SectionTitle>Interview rounds</SectionTitle>
-        <span style={{ fontSize:11, color:C.faint }}>{clearedRounds.length} of {ROUNDS_BEFORE_SHORTLIST} rounds cleared</span>
-        {/* Why Shortlist is not on offer. The CAP especially needs saying: with
-            every opening taken, "3 of 3 rounds decided" and no button and no
-            explanation reads as a broken screen rather than a rule. */}
-        {!pipelineOver && !lastPending && !shortlistGate.ok && shortlistGate.reason && (
-          <span style={{ fontSize:11, color:C.faint }}>· {shortlistGate.reason}</span>
-        )}
+        <span style={{ fontSize:11, color:C.faint }}>{decidedRounds.length} of {roundsNeeded} round{roundsNeeded === 1 ? '' : 's'} decided</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
           {canShortlist && (
             <button onClick={() => setConfirmShortlist(true)} style={{ ...btn.small, background:C.ok, color:TK.onAccent, border:'none' }}>★ Shortlist</button>
           )}
-          <button onClick={() => { if (canAddRound) { setNewRound(''); setShowAddRound(true) } }} disabled={!canAddRound} title={canAddRound ? '' : addRoundHint}
-            style={{ ...btn.small, background:C.brandTint, color:C.pdark, border:`1px solid ${TK.brandEdge}`, opacity: canAddRound ? 1 : .45, cursor: canAddRound ? 'pointer' : 'not-allowed' }}>+ Add round</button>
-          {/* Reject is available at ANY round — it is not gated on feedback, because
-              a candidate can be turned down before a scheduled round ever happens.
-              It IS refused once the offer flow owns them ('Offer Sent' / 'Joined'),
-              which has its own backout path; the route enforces that too. */}
-          {!pipelineOver && (
-            <button onClick={() => { setRejectReason(''); setRejectRemark(''); setShowReject(true) }}
-              style={{ ...btn.small, background:TK.criticalTint, color:C.dang, border:`1px solid ${TK.criticalEdge}` }}>Reject</button>
-          )}
+          {!confidential && <button onClick={() => { if (canAddRound) { setNewRound(''); setShowAddRound(true) } }} disabled={!canAddRound} title={canAddRound ? '' : addRoundHint}
+            style={{ ...btn.small, background:C.brandTint, color:C.pdark, border:`1px solid ${TK.brandEdge}`, opacity: canAddRound ? 1 : .45, cursor: canAddRound ? 'pointer' : 'not-allowed' }}>+ Add round</button>}
         </div>
       </div>
-      {!canAddRound && addRoundHint && (
+      {!confidential && !canAddRound && addRoundHint && (
         <div style={{ fontSize:11, color:C.faint, margin:'-4px 0 9px' }}>“+ Add round” unlocks once the latest round's feedback is Shortlist or Hold — {addRoundHint.toLowerCase()}.</div>
       )}
       <div style={{ display:'grid', gap:10, marginBottom:18 }}>
@@ -512,10 +485,38 @@ export default function CandidateInterviewModal({
         })}
       </div>
 
-      {/* No stage picker. It existed to move a candidate by hand during testing,
-          and it was the one way around every rule the rounds enforce. The stage
-          is now a consequence of the rounds, never an input. */}
-      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>Interview decisions move the candidate automatically (Reject → Rejected, Hold → Hold, Shortlist → the round&apos;s stage). Three rounds cleared — Telephonic included — unlock Shortlist.</div>
+      {/* stage move — gated */}
+      <SectionTitle>Move stage</SectionTitle>
+      {moveOpts.length === 0 && !canReject ? (
+        <div style={{ fontSize:12, color:C.faint }}>No stage left to move to — this candidate is {stageNow}.</div>
+      ) : (
+        <>
+          <div className="rx-move" role="radiogroup" aria-label="Next stage">
+            {moveOpts.map(o => {
+              // moveOptions does NOT gate Shortlisted itself; blockedReason does,
+              // and it is the authority in this modal. Whichever refuses, wins.
+              const reason = blockedReason(o.stage)
+              const allowed = o.allowed && !reason
+              return (
+                <label key={o.stage} className={allowed ? '' : 'off'}>
+                  <input type="radio" name="mv" disabled={!allowed} checked={target === o.stage} onChange={() => setTarget(o.stage)} />
+                  <b>{o.stage}</b>
+                  <small>{reason ? `Complete the ${reason} round first` : (o.reason ?? '')}</small>
+                </label>
+              )
+            })}
+          </div>
+          <div className="rx-row" style={{ gap:8, marginTop:12, flexWrap:'wrap' }}>
+            <button className="rx-btn p" disabled={!target} onClick={() => { if (target) tryMove(target) }}>Move candidate</button>
+            {canReject && (
+              <button className="rx-btn d" disabled={!!rejectBlocked} onClick={() => tryMove('Rejected')}
+                title={rejectBlocked ? `Complete the ${rejectBlocked} round first` : ''}>Reject</button>
+            )}
+            {anyGated && <span className="rx-why"><Icon name="lock" />Feedback still outstanding</span>}
+          </div>
+        </>
+      )}
+      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>Interview decisions move the candidate automatically (Reject → Rejected, Hold → Hold, Shortlist → the round's stage). Every scheduled round needs the main interviewer's feedback before Shortlisted or beyond.</div>
 
       {/* Add-round popup — name the round, then it opens straight into scheduling */}
       {showAddRound && (
@@ -533,44 +534,11 @@ export default function CandidateInterviewModal({
         </Popup>
       )}
 
-      {/* Reject — reason AND remark, both mandatory. validateRejection() decides,
-          the same function the route calls before it writes. */}
-      {showReject && (
-        <Popup onClose={() => !rejecting && setShowReject(false)}>
-          <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>Reject {candidate.full_name}?</div>
-          <div style={{ fontSize:12.5, color:C.muted, marginBottom:12 }}>
-            This is recorded against the candidate with who rejected them and when, and it frees
-            the requisition's opening. Currently at <b>{stageNow}</b>.
-          </div>
-
-          <label style={lbl}>Reason <span style={{ color:C.dang }}>*</span></label>
-          <select value={rejectReason} onChange={e => setRejectReason(e.target.value)} style={{ ...inp, cursor:'pointer' }}>
-            <option value="">Choose a reason…</option>
-            {REJECTION_REASONS.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
-          </select>
-
-          <label style={{ ...lbl, marginTop:10 }}>Remark <span style={{ color:C.dang }}>*</span></label>
-          <textarea value={rejectRemark} onChange={e => setRejectRemark(e.target.value)}
-            placeholder="What does that reason mean for this candidate?"
-            style={{ ...inp, height:'auto', minHeight:72, resize:'vertical', padding:'9px 11px' }} />
-
-          <div style={{ display:'flex', gap:8, marginTop:14 }}>
-            <button onClick={doReject}
-              disabled={rejecting || !validateRejection({ reason: rejectReason, remark: rejectRemark }).ok}
-              style={{ ...btn.pri, background:C.dang,
-                       opacity: (rejecting || !validateRejection({ reason: rejectReason, remark: rejectRemark }).ok) ? .5 : 1 }}>
-              {rejecting ? 'Rejecting…' : 'Reject candidate'}
-            </button>
-            <button onClick={() => setShowReject(false)} disabled={rejecting} style={btn.ghost}>Cancel</button>
-          </div>
-        </Popup>
-      )}
-
       {/* Shortlist confirmation */}
       {confirmShortlist && (
         <Popup onClose={() => !shortlisting && setConfirmShortlist(false)}>
           <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>Shortlist {candidate.full_name}?</div>
-          <div style={{ fontSize:12.5, color:C.muted, marginBottom:6 }}>{clearedRounds.length} rounds cleared — latest: <b style={{ color: DECISION_COLOR[lastDecision || 'SHORTLIST'] }}>{lastDecision ? DECISION_LABEL[lastDecision] : '—'}</b>.</div>
+          <div style={{ fontSize:12.5, color:C.muted, marginBottom:6 }}>{decidedRounds.length} rounds decided — latest: <b style={{ color: DECISION_COLOR[lastDecision || 'SHORTLIST'] }}>{lastDecision ? DECISION_LABEL[lastDecision] : '—'}</b>.</div>
           <div style={{ fontSize:12.5, color:C.muted, marginBottom:14 }}>The candidate will be marked <b style={{ color:C.ok }}>Shortlisted</b> and move on to offer negotiation.</div>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={doShortlist} disabled={shortlisting} style={{ ...btn.pri, background:C.ok, opacity: shortlisting ? .6 : 1 }}>{shortlisting ? 'Shortlisting…' : 'Yes, shortlist'}</button>
