@@ -19,8 +19,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeClaimDetail as ClaimDetail, TePlaceBrief, Uuid } from '@/lib/te/types'
 import {
-  decidedTotal, describe as describeDecision, emptyDecision, isTouched,
-  toDecideInput, whyNotReady, type DecideAction, type DecisionDraft,
+  actionsForStage, decidedTotal, describe as describeDecision, emptyDecision,
+  isTouched, toDecideInput, whyNotReady, type DecideAction, type DecisionDraft,
 } from '@/lib/te/claim-decide'
 import { claimChip, errorText, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
@@ -37,7 +37,10 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
   const [evidence, setEvidence] = useState<Uuid | null>(null)
   const [detail, setDetail] = useState<ClaimDetail | null>(null)
   const [draft, setDraft] = useState<DecisionDraft>(emptyDecision)
-  const [action, setAction] = useState<DecideAction>('approve')
+  // Set from the claim's own stage once it loads: a manager approves, Finance
+  // verifies. Starting on 'approve' and correcting later would flash the wrong
+  // verb at a Finance user.
+  const [action, setAction] = useState<DecideAction | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [tried, setTried] = useState(false)
@@ -83,8 +86,10 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
   const flagsFor = (id: Uuid) => detail.claim.flags.filter(f => f.lineId === id)
   const chip = claimChip(c)
   const sums = decidedTotal(lines, draft.lines)
-  const blocked = whyNotReady(action, draft, lines)
   const mayAct = detail.can.act
+  const verbs = actionsForStage(detail.can.stage)
+  const chosen: DecideAction = action ?? verbs[0].action
+  const blocked = whyNotReady(chosen, draft, lines)
 
   const setLine = (id: Uuid, patch: Partial<DecisionDraft['lines'][string]>) =>
     setDraft(d => ({ ...d, lines: { ...d.lines, [id]: { ...d.lines[id], ...patch } } }))
@@ -99,12 +104,14 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
     if (blocked) { setTried(true); setError(blocked); return }
     setBusy(true); setError('')
     try {
-      await te.claimDecide(c.id, action, toDecideInput(action, draft))
-      onDecided(
-        action === 'approve' ? `${c.no} approved.`
-          : action === 'sendback' ? `${c.no} sent back to ${who}.`
-            : `${c.no} rejected.`,
-      )
+      await te.claimDecide(c.id, chosen, toDecideInput(chosen, draft))
+      onDecided({
+        approve: `${c.no} approved.`,
+        verify: `${c.no} verified. It joins the next payout.`,
+        hold: `${c.no} put on hold.`,
+        sendback: `${c.no} sent back to ${who}.`,
+        reject: `${c.no} rejected.`,
+      }[chosen])
     } catch (e) {
       setError(errorText(e)); setBusy(false)
     }
@@ -167,7 +174,7 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
                   <div className="row tight">
                     <button type="button" className="btn sm" aria-pressed={d?.amount !== undefined} onClick={() => setLine(l.id, { amount: d?.amount ?? eligibleOf(l.id), reject: undefined })}>Reduce</button>
                     <button type="button" className="btn sm dan" aria-pressed={!!d?.reject} onClick={() => setLine(l.id, { reject: d?.reject ? undefined : 'refile', amount: undefined })}>Refuse</button>
-                    {action === 'sendback' ? (
+                    {chosen === 'sendback' ? (
                       <button type="button" className="btn sm" aria-pressed={marked} onClick={() => toggleFix(l.id)}>{marked ? 'Marked to fix' : 'Ask to fix'}</button>
                     ) : null}
                     {touched ? <button type="button" className="btn sm" onClick={() => clearLine(l.id)}>Undo</button> : null}
@@ -239,13 +246,15 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
         <div className="card">
           <div className="ch"><h3>Your decision</h3></div>
           <div className="seg" role="group" aria-label="Decision">
-            <button type="button" aria-pressed={action === 'approve'} onClick={() => { setAction('approve'); setTried(false) }}>Approve</button>
-            <button type="button" aria-pressed={action === 'sendback'} onClick={() => { setAction('sendback'); setTried(false) }}>Send back</button>
-            <button type="button" aria-pressed={action === 'reject'} onClick={() => { setAction('reject'); setTried(false) }}>Reject</button>
+            {verbs.map(v => (
+              <button key={v.action} type="button" aria-pressed={chosen === v.action} onClick={() => { setAction(v.action); setTried(false) }}>
+                {v.label}
+              </button>
+            ))}
           </div>
 
           <label className="fld">
-            <span>{action === 'approve' ? 'Comment, if any' : 'What the employee needs to know'}</span>
+            <span>{chosen === 'approve' || chosen === 'verify' ? 'Comment, if any' : 'What the employee needs to know'}</span>
             <textarea value={draft.comment} onChange={e => setDraft(d => ({ ...d, comment: e.target.value }))} />
           </label>
 
@@ -254,23 +263,23 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
             <dt>Eligible under policy</dt><dd>{rs(lines.reduce((a, l) => a + l.eligible, 0))}</dd>
             {sums.cut ? <><dt>Cut by you</dt><dd>{rs(-sums.cut)}</dd></> : null}
             {sums.rejected ? <><dt>Refused by you</dt><dd>{rs(-sums.rejected)}</dd></> : null}
-            <dt className="tot">{action === 'approve' ? 'Will be approved' : 'Would be approved'}</dt>
-            <dd className="tot">{rs(action === 'reject' ? 0 : sums.total)}</dd>
+            <dt className="tot">{chosen === 'approve' || chosen === 'verify' ? 'Will be approved' : 'Would be approved'}</dt>
+            <dd className="tot">{rs(chosen === 'reject' ? 0 : sums.total)}</dd>
           </dl>
 
           {/* Said before the click, not after. */}
-          <div className="note"><TeIcon name="info" size="sm" /><span>{describeDecision(action, draft, lines)}</span></div>
+          <div className="note"><TeIcon name="info" size="sm" /><span>{describeDecision(chosen, draft, lines)}</span></div>
 
           {tried && blocked ? <div className="ferr"><TeIcon name="alert" size="sm" />{blocked}</div> : null}
           {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
           <button
             type="button"
-            className={action === 'reject' ? 'btn dan lg wide' : 'btn pri lg wide'}
+            className={chosen === 'reject' ? 'btn dan lg wide' : 'btn pri lg wide'}
             disabled={busy}
             onClick={send}
           >
-            {busy ? 'Sending…' : action === 'approve' ? 'Approve the claim' : action === 'sendback' ? 'Send it back' : 'Reject the claim'}
+            {busy ? 'Sending…' : `${verbs.find(v => v.action === chosen)?.label ?? 'Send'} the claim`}
           </button>
         </div>
       ) : null}

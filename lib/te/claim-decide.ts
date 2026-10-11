@@ -14,7 +14,35 @@
 // said, is not a decision, it is a mystery arriving in somebody's inbox.
 import type { DecideInput, Uuid } from './types.ts'
 
-export type DecideAction = 'approve' | 'sendback' | 'reject'
+export type DecideAction = 'approve' | 'verify' | 'hold' | 'sendback' | 'reject'
+
+/**
+ * Which verbs belong at this stage.
+ *
+ * A manager and Finance are asking different questions of the same claim —
+ * should this have happened, versus is what is claimed for it right — so they
+ * are offered different answers. "Hold" exists only for Finance: it parks a
+ * claim for an audit without handing it back to the employee, which a manager
+ * has no use for.
+ */
+export function actionsForStage(stage: 'manager' | 'finance' | null): { action: DecideAction; label: string }[] {
+  if (stage === 'finance') {
+    return [
+      { action: 'verify', label: 'Verify' },
+      { action: 'hold', label: 'Hold' },
+      { action: 'sendback', label: 'Send back' },
+      { action: 'reject', label: 'Reject' },
+    ]
+  }
+  return [
+    { action: 'approve', label: 'Approve' },
+    { action: 'sendback', label: 'Send back' },
+    { action: 'reject', label: 'Reject' },
+  ]
+}
+
+/** The verbs that pass a claim onward rather than stopping or returning it. */
+const PASSES = new Set<DecideAction>(['approve', 'verify'])
 
 /** What an approver has done to one line. */
 export interface LineDecision {
@@ -94,6 +122,11 @@ export function whyNotReady(
   if (action === 'reject' && !draft.comment.trim()) {
     return 'A rejected claim needs a reason.'
   }
+  // A claim parked for an audit with no note is a claim nobody can pick up
+  // later and understand.
+  if (action === 'hold' && !draft.comment.trim()) {
+    return 'Say why it is on hold, so whoever picks it up knows.'
+  }
 
   for (const [id, d] of touched) {
     const line = lines.find(l => l.id === id)
@@ -140,15 +173,16 @@ export function toDecideInput(action: DecideAction, draft: DecisionDraft): Decid
 export function describe(action: DecideAction, draft: DecisionDraft, lines: { id: Uuid; eligible: number }[]): string {
   const { total, cut, rejected } = decidedTotal(lines, draft.lines)
   if (action === 'reject') return 'The whole claim is refused. Nothing is paid.'
+  if (action === 'hold') return 'Parked for an audit. The employee is not asked for anything yet.'
   if (action === 'sendback') {
     const marked = draft.fix.length
     return marked
       ? `Goes back to the employee with ${marked} line${marked === 1 ? '' : 's'} to fix.`
       : 'Goes back to the employee.'
   }
-  if (!cut && !rejected) return 'Passes as it stands.'
+  if (!cut && !rejected) return PASSES.has(action) ? 'Passes as it stands.' : 'Passes as it stands.'
   const bits: string[] = []
   if (cut) bits.push(`${cut} cut`)
   if (rejected) bits.push(`${rejected} refused`)
-  return `Approves ${total}, with ${bits.join(' and ')}.`
+  return `${action === 'verify' ? 'Verifies' : 'Approves'} ${total}, with ${bits.join(' and ')}.`
 }

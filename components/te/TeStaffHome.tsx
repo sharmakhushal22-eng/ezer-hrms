@@ -1,22 +1,43 @@
 'use client'
 // components/te/TeStaffHome.tsx — the landing of /dashboard/expenses.
 //
-// A STARTER for the back office: it proves the page, the menu entry and the
-// permissions end to end, and shows each person only what their role opens.
-//   everybody      what is waiting for them to approve          GET /api/te/queue
-//   Finance        the desk's counts                            GET /api/te/finance/overview?view=summary
-//   Travel admin   the setup check                              GET /api/te/admin/health
-// A section whose call comes back 403 is simply not shown. The Finance desk,
-// the Travel Desk and the Admin screens themselves are NOT built: see
-// app-code/UI-BUILD-GUIDE.md, steps 9 to 13.
+// The back office, behind one page. Each person sees only what their role
+// opens: a desk whose call comes back 403 is simply not offered.
+//   Dashboard      what is waiting, the desk's counts, the setup check
+//   Approvals      trips and claims waiting on this person
+//   Verification   claims a manager passed, now Finance's to check
+//   Advances       money out with employees
+//   Payouts        verified claims, and the batches they go out in
+//   Months         which months accept claims
+// The Travel Desk and the Admin screens are not built yet: see
+// app-code/UI-BUILD-GUIDE.md, steps 10 to 12.
 import { useEffect, useState } from 'react'
 import { te, type FinanceSummary } from '@/lib/te/client'
 import type { TeHealthRow, TeQueueRow } from '@/lib/te/types'
 import { TeClaimDetail } from './TeClaims'
+import TeApprovals from './approve/TeApprovals'
+import TeVerification from './finance/TeVerification'
+import TeAdvanceDesk from './finance/TeAdvanceDesk'
+import TePayouts from './finance/TePayouts'
+import TePeriods from './finance/TePeriods'
+import TeIcon from './TeIcon'
 import { errorText, rs, when } from '@/lib/te/format'
 import './te.css'
 
 const NO_NAMES = new Map<string, string>()
+
+type Desk = 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'periods'
+
+/** The desks, and what each needs before it is worth offering. A desk is shown
+ *  when its data loaded; one that 403s for this person simply is not there. */
+const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean }[] = [
+  { k: 'home', label: 'Dashboard', icon: 'home' },
+  { k: 'approvals', label: 'Approvals', icon: 'check' },
+  { k: 'verify', label: 'Verification', icon: 'verify', needsFinance: true },
+  { k: 'advances', label: 'Advances', icon: 'advances', needsFinance: true },
+  { k: 'payouts', label: 'Payouts', icon: 'claims', needsFinance: true },
+  { k: 'periods', label: 'Months', icon: 'cal', needsFinance: true },
+]
 
 export default function TeStaffHome() {
   const [queue, setQueue] = useState<TeQueueRow[] | null>(null)
@@ -24,6 +45,8 @@ export default function TeStaffHome() {
   const [health, setHealth] = useState<TeHealthRow[] | null>(null)
   const [error, setError] = useState('')
   const [openClaim, setOpenClaim] = useState<string | null>(null)
+  const [desk, setDesk] = useState<Desk>('home')
+  const [toast, setToast] = useState('')
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -34,11 +57,41 @@ export default function TeStaffHome() {
     return () => { current = false }
   }, [tick])
 
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 4000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // Finance's own counts loading is the proof that this person has the Finance
+  // permission; no role is named here.
+  const isFinance = summary !== null
+  const tabs = DESKS.filter(d => !d.needsFinance || isFinance)
+
+  const body = () => {
+    if (desk === 'approvals') return <TeApprovals onToast={setToast} />
+    if (desk === 'verify') return <TeVerification onToast={setToast} />
+    if (desk === 'advances') return <TeAdvanceDesk onToast={setToast} />
+    if (desk === 'payouts') return <TePayouts onToast={setToast} />
+    if (desk === 'periods') return <TePeriods onToast={setToast} />
+    return null
+  }
+
   return (
     <div className="te">
       <main className="main">
         <div className="page">
-          {openClaim ? (
+          {tabs.length > 1 ? (
+            <div className="seg scopes" role="group" aria-label="Desks">
+              {tabs.map(d => (
+                <button key={d.k} type="button" aria-pressed={desk === d.k} onClick={() => { setDesk(d.k); setOpenClaim(null) }}>
+                  <TeIcon name={d.icon} size="sm" />{d.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {desk !== 'home' ? body() : openClaim ? (
             <TeClaimDetail claimId={openClaim} catName={NO_NAMES} onBack={() => setOpenClaim(null)} onChanged={() => setTick(n => n + 1)} />
           ) : (
             <>
@@ -94,6 +147,7 @@ export default function TeStaffHome() {
           )}
         </div>
       </main>
+      <div className="toasts" aria-live="polite">{toast ? <div className="toast">{toast}</div> : null}</div>
     </div>
   )
 }
