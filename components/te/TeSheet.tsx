@@ -11,8 +11,9 @@ export default function TeSheet({ title, titleIcon, lead, crumb, back, bar, wide
   /** The small coloured square before the title, e.g. the trip kind. */
   titleIcon?: ReactNode
   lead?: string
-  /** The small line above the title, e.g. "Other expense › Add a bill". */
-  crumb?: string
+  /** The small line above the title. A node, not a string: the planner's crumb
+   *  is a "Step 3 of 3" pill followed by "Domestic trip › Plan a trip". */
+  crumb?: ReactNode
   /** Shows a "Back" link above the title. Given, it is the step before. */
   back?: () => void
   /** The strip under the header, for the three-step progress nav. */
