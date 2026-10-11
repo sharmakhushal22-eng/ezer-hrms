@@ -312,6 +312,7 @@ export default function TeHome({ initialClaimId, onExit }: {
               onBack={() => setView({ name: 'trips' })}
               onChanged={message => { setToast(message); reload() }}
               onEdit={d => setSheet({ name: 'plan', kind: d.trip.scope, past: d.trip.origin === 'POST_FACTO', editing: d.trip })}
+              onOpenClaim={id => setView({ name: 'claim', id })}
               onNotBuilt={setToast}
             />
           ) : null}
@@ -450,7 +451,10 @@ export default function TeHome({ initialClaimId, onExit }: {
           origin={sheet.past ? 'POST_FACTO' : 'PRE_APPROVED'}
           editing={sheet.editing}
           onClose={() => setSheet(null)}
-          onSaved={(_id, message) => { done(message); setView({ name: 'home' }) }}
+          // Screen 18: a plan you just sent lands on the trip itself, where the
+          // approval chain and the next leg are. Going Home would hide the
+          // thing that was just created behind a tile.
+          onSaved={(id, message) => { done(message); setView({ name: 'trip', id }) }}
           // reload() only, never done(): done() closes the sheet, and the plan
           // being written lives inside it.
           onVehicleAdded={reload}

@@ -9,7 +9,7 @@
 //
 // `trip.display` decides which — the server worked it out. This file chooses
 // which card that state gets and what the card says.
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
@@ -37,13 +37,14 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onNotBuilt }: {
+export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onNotBuilt }: {
   tripId: Uuid
   today: string
   onBack: () => void
   onChanged: (message: string) => void
   /** Opens the planner on this trip. */
   onEdit: (detail: TripDetail) => void
+  onOpenClaim: (claimId: Uuid) => void
   onNotBuilt: (what: string) => void
 }) {
   const [detail, setDetail] = useState<TripDetail | null>(null)
@@ -84,6 +85,12 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
     Object.entries(detail.places).map(([id, p]) => [id, { id, s: p.s, lat: p.lat, lng: p.lng }]),
   )
   const started = legs.some(l => l.startedAt || l.manual)
+  // `can.act` on a trip means "may this viewer APPROVE it" — the read model is
+  // explicit that the owner is excluded. This is the employee's own screen, so
+  // the guard for cancelling, editing and answering is `can.own`.
+  const mine = detail.can.own
+  // Legs still owing something before the trip can be claimed.
+  const openLegs = legs.filter(l => l.status !== 'SUBMITTED' && l.status !== 'SKIPPED' && l.status !== 'CANCELLED')
   // The next thing to deal with: a leg in progress, one waiting for its report,
   // or the next one planned.
   const nextLeg = legs.find(l => l.status === 'ACTIVE' || l.status === 'PAUSED' || l.status === 'ENDED')
@@ -152,7 +159,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           </div>
           {t.why?.length ? <p className="small muted">Added by the workflow: {t.why.join('; ')}.</p> : null}
 
-          {st === 'SENT_BACK' ? (
+          {st === 'SENT_BACK' && mine ? (
             <>
               {detail.messages.length ? (
                 <div className="thread">
@@ -193,7 +200,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
       ) : null}
 
       {/* ── the day came and went with no leg started ── (69a) */}
-      {st === 'MISSED' ? (
+      {st === 'MISSED' && mine ? (
         <div className="card">
           <div className="ch"><h3>Not travelled on {day(t.start)}</h3><span className="chip t-warn">Missed</span></div>
           <p className="small muted">No leg was started on the day, so there is no GPS record.</p>
@@ -256,7 +263,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           {t.start && t.start > today ? <p className="small muted">The first leg can start on {day(t.start)}.</p> : null}
 
           {/* Once a leg has been travelled the plan is history, not a draft. */}
-          {!started ? (
+          {!started && mine ? (
             <div className="row tight">
               {!(t.chain ?? []).length ? <button type="button" className="btn sm grow" onClick={() => onEdit(detail)}>Change the plan</button> : null}
               <button type="button" className="btn dan sm grow" onClick={() => setConfirming('cancel')}>Cancel trip</button>
@@ -266,13 +273,29 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
       ) : null}
 
       {/* ── recorded after travel, still a draft ── (39, 39b) */}
-      {isDraftPostFacto ? (
+      {isDraftPostFacto && mine ? (
         <div className="card">
           <div className="ch"><h3>Recorded after travel</h3><span className="chip t-info">Draft</span></div>
           <p className="small muted">Open each leg to add its fare, add your other bills, and submit. A draft that is not needed can be deleted.</p>
           <div className="row tight">
             <button type="button" className="btn sm grow" onClick={() => onEdit(detail)}>Edit the trip</button>
             <button type="button" className="btn dan sm grow" onClick={() => setConfirming('delete')}>Delete draft</button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── back, with legs still owing a report ── */}
+      {st === 'COMPLETED' && openLegs.length && mine ? (
+        <div className="card">
+          <div className="ch"><h3>Close every leg</h3><span className="chip plain t-warn">{plural(openLegs.length, 'leg')} open</span></div>
+          <p className="small muted">The claim goes once each leg has its report, was added without GPS, or was skipped.</p>
+          <div className="stack sm">
+            {openLegs.map(l => (
+              <button key={l.id} type="button" className="act flat" onClick={() => onNotBuilt('The leg report is build step 6.')}>
+                <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
+                <span><b>Leg {l.n}: {pname(l.from)} → {pname(l.to)}</b><small>{LEG_STATE[l.status] ?? l.status}</small></span>
+              </button>
+            ))}
           </div>
         </div>
       ) : null}
@@ -306,6 +329,30 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           ))}
         </div>
       </div>
+
+      {t.origin !== 'POST_FACTO' && t.estimateTotal ? (
+        <div className="card">
+          <div className="ch"><h3>Estimate</h3><span className="muted small">from the plan and your limits</span></div>
+          <dl className="kv">
+            {([['travel', 'Travel you pay'], ['desk', 'Tickets the Travel Desk books'], ['hotel', t.stayBy === 'desk' ? 'Hotel, Travel Desk books' : 'Hotel'], ['meals', 'Food'], ['conv', 'Local rides at the destination']] as const)
+              .filter(([k]) => t.estimate[k])
+              .map(([k, label]) => <Fragment key={k}><dt>{label}</dt><dd>{rs(t.estimate[k])}</dd></Fragment>)}
+            <dt className="tot">Total</dt><dd className="tot">{rs(t.estimateTotal)}</dd>
+          </dl>
+        </div>
+      ) : null}
+
+      {detail.claims.length ? detail.claims.map(c => (
+        <div key={c.id} className="card">
+          <div className="ch"><h3>Claim <span className="mono muted">{c.no}</span></h3><span className="chip plain">{c.status.replace(/_/g, ' ').toLowerCase()}</span></div>
+          <dl className="kv">
+            <dt>Claimed</dt><dd>{rs(c.claimed)}</dd>
+            <dt>Approved</dt><dd>{rs(c.approved)}</dd>
+            {c.net != null ? <><dt className="tot">{c.net >= 0 ? 'Paid to you' : 'Balance on advance'}</dt><dd className="tot">{rs(Math.abs(c.net))}</dd></> : null}
+          </dl>
+          <button type="button" className="btn wide sm" onClick={() => onOpenClaim(c.id)}>Track this claim</button>
+        </div>
+      )) : null}
 
       {detail.bookings.length ? (
         <div className="card">
