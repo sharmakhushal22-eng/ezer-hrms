@@ -6,7 +6,7 @@
 // place the trip returns to keeps its first letter.
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { arcPoints, mapHeight, tripMapGeometry, type MapPlace } from '../trip-map.ts'
+import { arcPoints, mapHeight, nudgePin, pinToPixel, pixelToPin, tripMapGeometry, zoomPin, type MapPlace } from '../trip-map.ts'
 
 const PLACES = new Map<string, MapPlace>([
   ['office', { id: 'office', s: 'EZER office', lat: 28.4595, lng: 77.0266 }],   // Gurugram
@@ -140,6 +140,61 @@ describe('arcPoints', () => {
     const b = { lat: 0, lng: 10 }
     const mid = arcPoints(a, b)[14]
     assert.ok(Math.abs(mid.lat) > 0.1, `the middle should leave the straight line, got lat ${mid.lat}`)
+  })
+})
+
+describe('the pin map', () => {
+  const view = { lat: 28.4595, lng: 77.0266, span: 8 }
+  const W = 640
+  const H = 220
+
+  it('puts the centre of the view in the middle of the panel', () => {
+    const p = pinToPixel({ lat: view.lat, lng: view.lng }, view, W, H)
+    assert.equal(Math.round(p.x), W / 2)
+    assert.equal(Math.round(p.y), H / 2)
+  })
+
+  it('round-trips a tap back to the position it means', () => {
+    // This is the property the whole thing rests on: tapping where a pin is
+    // drawn must give back that pin's position, or the pin walks on every tap.
+    for (const [x, y] of [[0, 0], [W, H], [123, 45], [W / 2, H / 2], [600, 10]]) {
+      const pos = pixelToPin(x, y, view, W, H)
+      const back = pinToPixel(pos, view, W, H)
+      assert.ok(Math.abs(back.x - x) < 0.001, `x ${x} came back as ${back.x}`)
+      assert.ok(Math.abs(back.y - y) < 0.001, `y ${y} came back as ${back.y}`)
+    }
+  })
+
+  it('reads a tap above the centre as further north', () => {
+    assert.ok(pixelToPin(W / 2, H / 2 - 40, view, W, H).lat > view.lat)
+    assert.ok(pixelToPin(W / 2, H / 2 + 40, view, W, H).lat < view.lat)
+  })
+
+  it('reads a tap right of the centre as further east', () => {
+    assert.ok(pixelToPin(W / 2 + 40, H / 2, view, W, H).lng > view.lng)
+    assert.ok(pixelToPin(W / 2 - 40, H / 2, view, W, H).lng < view.lng)
+  })
+
+  it('nudges the pin the way the arrow points', () => {
+    const p = { lat: view.lat, lng: view.lng }
+    assert.ok(nudgePin(p, 'n', view).lat > p.lat)
+    assert.ok(nudgePin(p, 's', view).lat < p.lat)
+    assert.ok(nudgePin(p, 'e', view).lng > p.lng)
+    assert.ok(nudgePin(p, 'w', view).lng < p.lng)
+  })
+
+  it('nudges by less when zoomed in, so the step stays useful', () => {
+    const p = { lat: view.lat, lng: view.lng }
+    const far = nudgePin(p, 'n', { ...view, span: 64 }).lat - p.lat
+    const near = nudgePin(p, 'n', { ...view, span: 2 }).lat - p.lat
+    assert.ok(near < far, 'a nudge at 2 km across should be smaller than at 64')
+  })
+
+  it('zooms within sane limits', () => {
+    assert.equal(zoomPin({ ...view, span: 8 }, 'in').span, 4)
+    assert.equal(zoomPin({ ...view, span: 8 }, 'out').span, 16)
+    assert.equal(zoomPin({ ...view, span: 1 }, 'in').span, 1, 'closer than a building is pointless')
+    assert.equal(zoomPin({ ...view, span: 96 }, 'out').span, 96, 'further than a city is pointless')
   })
 })
 

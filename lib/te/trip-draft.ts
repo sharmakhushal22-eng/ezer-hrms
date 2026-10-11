@@ -153,6 +153,70 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
 }
 
 /**
+ * A saved trip, opened for changing. Screens 68b and 68c.
+ *
+ * The trip comes back from the server with `arrive` filled in on every point;
+ * that is derived, not typed, so it is dropped here — the planner stores only
+ * what the person entered and lets the server work the rest out again.
+ *
+ * `answerNeeded` is the difference between editing a plan of your own and
+ * answering one your approver sent back: the second has to say what changed,
+ * and opens on Review where that box is.
+ */
+export function fromTrip(trip: {
+  id: Uuid; name: string; scope: TripScope; origin: TripOrigin; purpose: string; project: string
+  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; ret?: true }[]
+  segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
+  pax: number; people: { id: string; name?: string }[]; stayBy: 'self' | 'desk'; advance: number
+  pfReason: string; pfNote: string; status: string
+}, c: DraftContext): PlannerDraft {
+  const sentBack = trip.status === 'SENT_BACK'
+  return syncDraft({
+    // Answering a question starts where the answer is asked for; an ordinary
+    // edit starts at the beginning, because anything may be what you came for.
+    step: sentBack ? 3 : 1,
+    origin: trip.origin,
+    scope: trip.scope,
+    pattern: 'round',
+    name: trip.name ?? '',
+    // The name is already the person's, whether they typed it or accepted the
+    // generated one. Reopening a trip must not silently rename it.
+    nameTouched: true,
+    purpose: trip.purpose ?? '',
+    project: trip.project ?? '',
+    pax: trip.pax || 1,
+    people: (trip.people ?? []).map(p => ({ id: p.id ?? '', name: p.name ?? '' })),
+    points: (trip.points ?? []).map(p => ({
+      place: p.place ?? '', pt: p.pt ?? '', what: p.what ?? '', leave: p.leave ?? '',
+      ...(p.ret ? { ret: true as const } : {}),
+    })),
+    segs: (trip.segs ?? []).map(s => ({
+      mode: s.mode,
+      vehicleId: s.vehicleId ?? '',
+      bookedBy: s.bookedBy === 'self' ? 'self' : 'desk',
+      xfer: { first: s.xfer?.first ?? 'cab', last: s.xfer?.last ?? 'cab', hubA: s.xfer?.hubA, hubB: s.xfer?.hubB },
+    })),
+    // Whether the return mirrors the start is not stored on a saved trip, so it
+    // is read back off the route: the same place means it still does.
+    retSame: isReturnSameAsStart(trip.points ?? []),
+    stayBy: trip.stayBy ?? 'self',
+    advance: trip.advance || '',
+    pfReason: trip.pfReason ?? '',
+    pfNote: trip.pfNote ?? '',
+    editId: trip.id,
+    answerNeeded: sentBack,
+    // The kind can be changed when editing, so the picker is shown rather than
+    // the fixed row the entry flow leaves behind.
+    lockScope: false,
+  }, c)
+}
+
+function isReturnSameAsStart(points: { place: Uuid; ret?: true }[]): boolean {
+  const ret = points.find(p => p.ret)
+  return !!ret && !!points[0] && ret.place === points[0].place
+}
+
+/**
  * Repair the shape of the draft after any edit. Run this after every change to
  * the route or the people; the screens never build a draft by hand.
  *
@@ -200,6 +264,31 @@ export function syncDraft(d: PlannerDraft, c: DraftContext): PlannerDraft {
     : autoName(d.purpose, points.filter((p, i) => i > 0 && !p.ret && p.place).map(p => c.placeName(p.place)))
 
   return { ...d, points, segs, pattern, pax, people, name }
+}
+
+/**
+ * Change the kind of trip, on an edit. Screen 68c.
+ *
+ * The dates move with it, because the two kinds mean different things by a
+ * date. A local trip is one day and carries that day from the start; a trip
+ * with nights in it has a date per place, and none of them can be guessed.
+ */
+export function setScope(d: PlannerDraft, scope: TripScope, c: DraftContext, lastWorkday: IsoDate): PlannerDraft {
+  if (scope === d.scope) return d
+  let points = d.points
+  if (scope === 'local') {
+    // Becoming a one-day trip: it starts today (or the last working day, if it
+    // already happened), and the per-place dates stop meaning anything.
+    const start = d.origin === 'POST_FACTO' ? lastWorkday : c.today
+    points = points.map((p, i) => (i === 0 ? { ...p, leave: p.leave || start } : { ...p, leave: '' }))
+  } else if (d.origin !== 'POST_FACTO' && points[0]?.leave === c.today) {
+    // Leaving local behind, today was a default rather than a decision, so it
+    // is cleared and asked for. A date the person actually chose is kept.
+    points = points.map((p, i) => (i === 0 ? { ...p, leave: '' } : p))
+  }
+  // The reason belonged to the old kind: "no GPS" and "no prior approval" are
+  // different questions with different answers.
+  return syncDraft({ ...d, scope, points, pfReason: '', pfNote: '' }, c)
 }
 
 /** One way, or back again. A stop is added with addStop, not here. */

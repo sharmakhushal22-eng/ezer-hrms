@@ -5,16 +5,21 @@
 // already saved, or the complete address typed out. It takes the whole drawer
 // over rather than sitting beside the form, because it is a search with a map.
 //
-// A typed address is saved in TWO presses. The first geocodes it and shows the
-// pin; the second confirms it. That is deliberate — a claim's distance is
-// measured to this point, so an address dropped on the wrong side of a city is
-// a money error, and the person is asked to look at the pin before committing.
+// A TYPED ADDRESS NEEDS A PIN. The prototype geocodes the address and asks the
+// person to confirm the result; no geocoding provider is configured here
+// (lib/te/providers/geocode.ts says so in its header), so the address reaches
+// the server with no position unless one is given. A claim's distance is
+// measured to that point, so this is not a refinement — without it nothing can
+// be measured to the place at all. If a provider is ever wired in, the pin
+// becomes a confirmation step rather than the only source.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { PlaceInput, Snapshot, Uuid } from '@/lib/te/types'
 import { errorText } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
+import TePinMap from './TePinMap'
+import type { PinView } from '@/lib/te/trip-map'
 
 /** Where a chosen place is going back to. */
 export type PickTarget =
@@ -36,6 +41,13 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
   const [addr, setAddr] = useState<PlaceInput>({ src: 'address', country: intl ? '' : 'India', city: '', line: '', area: '', pin: '', state: '' })
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null)
+  // The panel opens over the employee's own office, which is the nearest
+  // thing to a useful starting view when there is no map behind it.
+  const [view, setView] = useState<PinView>(() => {
+    const base = snap.masters.places.find(p => p.pt === 'corp' && p.lat) ?? snap.masters.places.find(p => p.lat)
+    return { lat: base?.lat ?? 28.4595, lng: base?.lng ?? 77.0266, span: 8 }
+  })
   const searchRef = useRef<HTMLInputElement | null>(null)
 
   const typedAddressAllowed = snap.cfg.track.typedAddress !== false
@@ -73,11 +85,14 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
         : !addr.area?.trim() ? 'Enter the area or locality.'
           : !addr.city?.trim() ? 'Enter the city.'
             : !intl && !/^\d{6}$/.test(addr.pin ?? '') ? 'Enter the 6-digit PIN code.'
-              : ''
+              // No geocoder is configured, so an address without a pin reaches
+              // the server with no position and nothing can be measured to it.
+              : !pin ? 'Tap the exact spot on the map before you use this address.'
+                : ''
     if (missing) { setNote(missing); return }
     setBusy(true); setNote('')
     try {
-      const r = await te.placeAdd(addr)
+      const r = await te.placeAdd({ ...addr, src: 'address', lat: pin!.lat, lng: pin!.lng })
       onChosen(r.place_id)
     } catch (e) {
       setNote(errorText(e)); setBusy(false)
@@ -195,6 +210,9 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
                   onChange={e => setAddr(a => ({ ...a, pin: e.target.value }))}
                 />
               </label>
+              <div className="full">
+                <TePinMap pin={pin} view={view} onPin={setPin} onView={setView} />
+              </div>
             </div>
           )}
         </div>

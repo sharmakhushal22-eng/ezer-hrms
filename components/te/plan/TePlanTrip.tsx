@@ -5,7 +5,7 @@
 // The only thing this screen works out for itself is whether a typed employee
 // code is somebody: that is a lookup in the snapshot, not a rule. Whether the
 // roster is acceptable is the server's answer, and arrives as an issue on `pax`.
-import type { Snapshot, TripIssue } from '@/lib/te/types'
+import type { Snapshot, TripIssue, TripScope } from '@/lib/te/types'
 import { errorFor, MAX_NAME, MAX_PEOPLE, PURPOSES, type PlannerDraft } from '@/lib/te/trip-draft'
 import TeIcon from '../TeIcon'
 
@@ -21,11 +21,13 @@ const NAME_HINT: Record<string, string> = {
   international: 'Like Dubai distributor summit',
 }
 
-export default function TePlanTrip({ snap, draft, issues, edit }: {
+export default function TePlanTrip({ snap, draft, issues, edit, setScope }: {
   snap: Snapshot
   draft: PlannerDraft
   issues: TripIssue[]
   edit: (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
+  /** Changing the kind moves the dates with it, so the planner owns it. */
+  setScope: (s: TripScope) => void
 }) {
   const k = KIND[draft.scope]
   const tried = draft.tried
@@ -70,15 +72,33 @@ export default function TePlanTrip({ snap, draft, issues, edit }: {
         {err('name') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('name')}</div> : null}
       </div>
 
-      {/* The kind was chosen on the way in, so it is shown rather than asked again. */}
+      {/* Coming from the entry flow the kind is already chosen, so it is shown
+          rather than asked again. Editing a saved trip, it can be changed —
+          which is the whole point of screen 68c. */}
       <div className="sec">
-        <div className={`kindrow k-${draft.scope}`}>
-          <span className="ki"><TeIcon name={draft.scope} /></span>
-          <div className="grow">
-            <b>{k.name}{draft.origin === 'POST_FACTO' ? ', already travelled' : ''}</b>
-            <small>{k.tag} · {k.desc}</small>
+        {draft.lockScope ? (
+          <div className={`kindrow k-${draft.scope}`}>
+            <span className="ki"><TeIcon name={draft.scope} /></span>
+            <div className="grow">
+              <b>{k.name}{draft.origin === 'POST_FACTO' ? ', already travelled' : ''}</b>
+              <small>{k.tag} · {k.desc}</small>
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <h4>What kind of trip</h4>
+            <div className="scopes3">
+              {(['local', 'domestic', 'international'] as const).map(s => (
+                <button key={s} type="button" className="scopec" aria-pressed={draft.scope === s} onClick={() => setScope(s)}>
+                  <span className="ico-b"><TeIcon name={s} /></span>
+                  <b>{KIND[s].name.replace(' trip', '')}</b>
+                  <small>{KIND[s].desc}</small>
+                  <small className="muted">{KIND[s].tag}</small>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         {err('scope') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('scope')}</div> : null}
       </div>
 

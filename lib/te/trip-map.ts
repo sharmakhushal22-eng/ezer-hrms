@@ -161,6 +161,62 @@ export function tripMapGeometry(o: {
   }
 }
 
+// ── the pin map ─────────────────────────────────────────────────────────────
+// A typed address has no position until somebody gives it one. With no
+// geocoding provider configured that is the ONLY way an address gets a
+// position, so this is not a refinement — it is the whole mechanism.
+
+export interface PinView {
+  /** Where the panel is centred. */
+  lat: number
+  lng: number
+  /** How many kilometres across the panel is. Smaller is closer in. */
+  span: number
+}
+
+/** Pixels per kilometre, east-west and north-south, for a panel of this width. */
+function scaleOf(view: PinView, width: number) {
+  const kx = KM_PER_DEG * Math.cos((view.lat * Math.PI) / 180)
+  return { pxPerKm: width / view.span, kx }
+}
+
+/** Where a position sits on the panel. */
+export function pinToPixel(p: { lat: number; lng: number }, view: PinView, width: number, height: number): { x: number; y: number } {
+  const { pxPerKm, kx } = scaleOf(view, width)
+  return {
+    x: width / 2 + (p.lng - view.lng) * kx * pxPerKm,
+    y: height / 2 - (p.lat - view.lat) * KM_PER_DEG * pxPerKm,
+  }
+}
+
+/** What position the person just tapped. The inverse of pinToPixel, which is
+ *  what makes a tap mean something. */
+export function pixelToPin(x: number, y: number, view: PinView, width: number, height: number): { lat: number; lng: number } {
+  const { pxPerKm, kx } = scaleOf(view, width)
+  return {
+    lat: view.lat + (height / 2 - y) / (KM_PER_DEG * pxPerKm),
+    lng: view.lng + (x - width / 2) / (kx * pxPerKm),
+  }
+}
+
+/** One nudge of the arrows: a sixteenth of the panel, so it is useful at every
+ *  zoom rather than enormous when far out and invisible when close in. */
+export function nudgePin(p: { lat: number; lng: number }, dir: 'n' | 's' | 'e' | 'w', view: PinView): { lat: number; lng: number } {
+  const km = view.span / 16
+  const dLat = km / KM_PER_DEG
+  const dLng = km / (KM_PER_DEG * Math.cos((p.lat * Math.PI) / 180))
+  if (dir === 'n') return { lat: p.lat + dLat, lng: p.lng }
+  if (dir === 's') return { lat: p.lat - dLat, lng: p.lng }
+  if (dir === 'e') return { lat: p.lat, lng: p.lng + dLng }
+  return { lat: p.lat, lng: p.lng - dLng }
+}
+
+/** Zoom, clamped: 1 km across is a building, 96 km is a city and its districts. */
+export function zoomPin(view: PinView, dir: 'in' | 'out'): PinView {
+  const span = dir === 'in' ? view.span / 2 : view.span * 2
+  return { ...view, span: Math.max(1, Math.min(96, span)) }
+}
+
 /** The panel is shorter on a phone, and a local trip needs less of it. */
 export function mapHeight(scope: TripScope, narrow: boolean): number {
   if (narrow) return 150

@@ -8,7 +8,7 @@ import { describe, it } from 'node:test'
 import {
   addStop, autoName, blockingOn, defaultMode, errorFor, firstOpenLine, movePoint,
   newPlannerDraft, pointLabel, removePoint, setPattern, stepOfIssue, syncDraft,
-  toTripDraft,
+  toTripDraft, fromTrip, setScope,
   type DraftContext, type PlannerDraft,
 } from '../trip-draft.ts'
 import type { TeMode, TripIssue } from '../types.ts'
@@ -338,6 +338,126 @@ describe('which line to open next', () => {
   it('ignores warnings and keyless refusals', () => {
     assert.equal(firstOpenLine([{ block: false, t: 'x', k: 'p1' }]), null)
     assert.equal(firstOpenLine([{ block: true, t: 'x' }]), null)
+  })
+})
+
+describe('changing the kind of trip', () => {
+  const c = ctx()
+  const LAST = '2026-11-13'
+
+  it('does nothing when it is already that kind', () => {
+    const d = fresh('domestic')
+    assert.equal(setScope(d, 'domestic', c, LAST), d)
+  })
+
+  it('becoming local gives it today, and drops the per-place dates', () => {
+    const dated = syncDraft({ ...fresh('domestic'), points: fresh('domestic').points.map((p, i) => ({ ...p, leave: i === 1 ? '2026-12-09' : i === 0 ? '2026-12-07' : '' })) }, c)
+    const local = setScope(dated, 'local', c, LAST)
+    assert.equal(local.points[0].leave, '2026-12-07', 'a date already chosen is kept')
+    assert.equal(local.points[1].leave, '', 'a one-day trip has no second date')
+  })
+
+  it('becoming local dates an undated trip from today', () => {
+    assert.equal(setScope(fresh('domestic'), 'local', c, LAST).points[0].leave, '2026-11-16')
+  })
+
+  it('becoming local dates a past trip from the last working day', () => {
+    const past = newPlannerDraft({ scope: 'domestic', origin: 'POST_FACTO', lastWorkday: LAST }, c)
+    assert.equal(setScope(past, 'local', c, LAST).points[0].leave, LAST)
+  })
+
+  it('leaving local clears today, because it was a default and not a decision', () => {
+    const local = fresh('local')
+    assert.equal(local.points[0].leave, '2026-11-16')
+    assert.equal(setScope(local, 'domestic', c, LAST).points[0].leave, '')
+  })
+
+  it('leaving local keeps a date the person actually chose', () => {
+    const chosen = syncDraft({ ...fresh('local'), points: fresh('local').points.map((p, i) => (i === 0 ? { ...p, leave: '2026-12-01' } : p)) }, c)
+    assert.equal(setScope(chosen, 'domestic', c, LAST).points[0].leave, '2026-12-01')
+  })
+
+  it('forgets the reason, which belonged to the old kind', () => {
+    // "Why was GPS not used" and "why was there no prior approval" are
+    // different questions; an answer to one is not an answer to the other.
+    const past = { ...newPlannerDraft({ scope: 'local', origin: 'POST_FACTO', lastWorkday: LAST }, c), pfReason: 'Phone battery was low', pfNote: 'died at noon' }
+    const now = setScope(past, 'domestic', c, LAST)
+    assert.equal(now.pfReason, '')
+    assert.equal(now.pfNote, '')
+  })
+
+  it('repairs a mode the new kind cannot use', () => {
+    const local = fresh('local')
+    assert.equal(local.segs[0].mode, 'own')
+    assert.equal(setScope(local, 'international', c, LAST).segs[0].mode, 'flight', 'you cannot drive your own car abroad')
+  })
+})
+
+describe('opening a saved trip to change it', () => {
+  const saved = {
+    id: 'trip-7', name: 'Pune branch audit', scope: 'domestic' as const, origin: 'PRE_APPROVED' as const,
+    purpose: 'Audit or inspection', project: 'Corvin', status: 'APPROVED',
+    points: [
+      { place: 'off', pt: 'corp', what: '', leave: '2026-12-07' as const, arrive: '2026-12-07' },
+      { place: 'pune', pt: 'branch', what: 'Branch audit', leave: '2026-12-09' as const, arrive: '2026-12-07' },
+      { place: 'off', pt: 'corp', what: '', leave: '' as const, ret: true as const, arrive: '2026-12-09' },
+    ],
+    segs: [
+      { mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: { first: 'cab', last: 'cab' } },
+      { mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: {} },
+    ],
+    pax: 2, people: [{ id: 'STC9031', name: 'Sunita Shah' }],
+    stayBy: 'self' as const, advance: 5000, pfReason: '', pfNote: '',
+  }
+
+  it('reads the trip back into something editable', () => {
+    const d = fromTrip(saved, ctx())
+    assertShape(d, 'fromTrip')
+    assert.equal(d.editId, 'trip-7')
+    assert.equal(d.name, 'Pune branch audit')
+    assert.equal(d.pax, 2)
+    assert.deepEqual(d.people.map(p => p.id), ['STC9031'])
+    assert.equal(d.advance, 5000)
+    assert.deepEqual(d.points.map(p => p.place), ['off', 'pune', 'off'])
+  })
+
+  it('drops the arrival dates, which the server derives rather than the person typing', () => {
+    const d = fromTrip(saved, ctx())
+    for (const p of d.points) assert.equal('arrive' in p, false)
+  })
+
+  it('does not rename a trip that is reopened', () => {
+    // nameTouched must be true, or syncDraft would overwrite the saved name
+    // with one generated from the route.
+    const d = fromTrip({ ...saved, purpose: 'Client meeting' }, ctx())
+    assert.equal(d.nameTouched, true)
+    assert.equal(d.name, 'Pune branch audit')
+  })
+
+  it('lets the kind be changed, unlike a trip started from the entry flow', () => {
+    assert.equal(fromTrip(saved, ctx()).lockScope, false)
+  })
+
+  it('works out whether the return still mirrors the start', () => {
+    assert.equal(fromTrip(saved, ctx()).retSame, true)
+    const elsewhere = { ...saved, points: [saved.points[0], saved.points[1], { ...saved.points[2], place: 'mum' }] }
+    assert.equal(fromTrip(elsewhere, ctx()).retSame, false)
+  })
+
+  it('opens an ordinary edit at the beginning', () => {
+    const d = fromTrip(saved, ctx())
+    assert.equal(d.step, 1)
+    assert.equal(d.answerNeeded, false)
+  })
+
+  it('opens a sent-back trip on Review, where the answer is asked for', () => {
+    const d = fromTrip({ ...saved, status: 'SENT_BACK' }, ctx())
+    assert.equal(d.step, 3)
+    assert.equal(d.answerNeeded, true)
+  })
+
+  it('sends the id back, so the server updates rather than duplicates', () => {
+    assert.equal(toTripDraft(fromTrip(saved, ctx())).id, 'trip-7')
   })
 })
 

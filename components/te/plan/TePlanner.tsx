@@ -17,9 +17,9 @@
 // dropped, the same way TeExpenseForm does it.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TripIssue, TripOrigin, TripPreview, TripScope, Uuid } from '@/lib/te/types'
+import type { Snapshot, TeTrip, TripIssue, TripOrigin, TripPreview, TripScope, Uuid } from '@/lib/te/types'
 import {
-  blockingOn, firstOpenLine, newPlannerDraft, stepOfIssue, syncDraft, toTripDraft,
+  blockingOn, firstOpenLine, fromTrip, newPlannerDraft, setScope, stepOfIssue, syncDraft, toTripDraft,
   type DraftContext, type PlannerDraft,
 } from '@/lib/te/trip-draft'
 import { errorText, plural, rs } from '@/lib/te/format'
@@ -44,11 +44,14 @@ export function lastWorkday(today: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-export default function TePlanner({ snap, scope, origin, onClose, onSaved, onVehicleAdded }: {
+export default function TePlanner({ snap, scope, origin, editing, onClose, onSaved, onVehicleAdded }: {
   snap: Snapshot
   scope: TripScope
   /** POST_FACTO is "I already travelled": no approval before, a reason required. */
   origin: TripOrigin
+  /** A saved trip being changed. Screens 68b and 68c; `scope` and `origin` are
+   *  then taken from the trip itself rather than from these props. */
+  editing?: TeTrip
   onClose: () => void
   onSaved: (tripId: Uuid, message: string) => void
   /** A vehicle was registered from inside the plan, so the snapshot is stale.
@@ -67,8 +70,13 @@ export default function TePlanner({ snap, scope, origin, onClose, onSaved, onVeh
     placeName: (id: string) => snap.masters.places.find(p => p.id === id)?.s ?? '',
   }), [snap])
 
-  const [draft, setDraft] = useState<PlannerDraft>(() =>
-    ({ ...newPlannerDraft({ scope, origin, lastWorkday: lastWorkday(snap.today) }, ctx), lockScope: true }))
+  // Built once. An `edit` arriving later would throw away whatever has been
+  // typed since, so the trip to edit is read on mount and not watched.
+  const [draft, setDraft] = useState<PlannerDraft>(() => (
+    editing
+      ? fromTrip(editing, ctx)
+      : { ...newPlannerDraft({ scope, origin, lastWorkday: lastWorkday(snap.today) }, ctx), lockScope: true }
+  ))
   const [preview, setPreview] = useState<TripPreview | null>(null)
   const [previewFailed, setPreviewFailed] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -165,17 +173,25 @@ export default function TePlanner({ snap, scope, origin, onClose, onSaved, onVeh
     }
   }
 
-  const planning = origin !== 'POST_FACTO'
-  const title = planning ? 'Plan a trip' : 'Record a trip you already did'
-  const lead = planning
-    ? 'Three short steps. Every leg, stop and bill stays inside this trip.'
-    : 'For a trip that was not tracked. The legs are added without GPS and your approver sees why.'
+  // The kind and the origin of a trip being edited come from the trip, not from
+  // the props: the person may have changed the kind on step 1.
+  const planning = draft.origin !== 'POST_FACTO'
+  const editingThis = !!draft.editId
+
+  const title = editingThis ? `Edit ${draft.name || 'trip'}`
+    : planning ? 'Plan a trip'
+      : 'Record a trip you already did'
+  const lead = editingThis
+    ? (draft.answerNeeded ? 'Change what your approver asked about, then send it again.' : 'Change the plan.')
+    : planning ? 'Three short steps. Every leg, stop and bill stays inside this trip.'
+      : 'For a trip that was not tracked. The legs are added without GPS and your approver sees why.'
 
   // The send button says what will actually happen, which the server has already
   // decided: a short local trip needs no approval before you leave.
-  const sendLabel = !planning ? 'Save and add the fares'
-    : preview && !preview.needsApproval ? 'Save the plan'
-      : 'Send for approval'
+  const sendLabel = editingThis ? (draft.answerNeeded ? 'Send again' : 'Save changes')
+    : !planning ? 'Save and add the fares'
+      : preview && !preview.needsApproval ? 'Save the plan'
+        : 'Send for approval'
 
   const stepHasError = (n: 1 | 2 | 3) => !!draft.tried && blockingOn(issues, n).length > 0
 
@@ -245,13 +261,25 @@ export default function TePlanner({ snap, scope, origin, onClose, onSaved, onVeh
       wide
       title={title}
       lead={lead}
-      crumb={<span className="fpath"><span className="fstep">Step 3 of 3</span>{KIND_LABEL[scope]}<span className="muted"> › </span>{planning ? 'Plan a trip' : 'I already travelled'}</span>}
+      // No entry-flow crumb on an edit: the person did not come through the
+      // four tiles, so "Step 3 of 3" would be describing a journey they never made.
+      crumb={editingThis ? undefined : (
+        <span className="fpath">
+          <span className="fstep">Step 3 of 3</span>
+          {KIND_LABEL[draft.scope]}<span className="muted"> › </span>{planning ? 'Plan a trip' : 'I already travelled'}
+        </span>
+      )}
       bar={bar}
       onClose={onClose}
       footer={footer}
     >
       <div ref={bodyRef}>
-        {step === 1 ? <TePlanTrip snap={snap} draft={draft} issues={issues} edit={edit} /> : null}
+        {step === 1 ? (
+          <TePlanTrip
+            snap={snap} draft={draft} issues={issues} edit={edit}
+            setScope={s => setDraft(d => setScope(d, s, ctx, lastWorkday(snap.today)))}
+          />
+        ) : null}
         {step === 2 ? (
           <TePlanRoute
             snap={snap} draft={draft} issues={issues} preview={preview} edit={edit} onPick={setPicking}
