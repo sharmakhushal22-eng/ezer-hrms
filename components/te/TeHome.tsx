@@ -41,6 +41,7 @@ import TeLiveBar from './leg/TeLiveBar'
 import TeStartNow from './start/TeStartNow'
 import TeLegAdd from './leg/TeLegAdd'
 import TeAdvances from './claim/TeAdvances'
+import TeApprovals from './approve/TeApprovals'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
@@ -48,7 +49,7 @@ import './te.css'
 
 type View =
   | { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'trips' }
-  | { name: 'claim'; id: string } | { name: 'trip'; id: string } | { name: 'advances' }
+  | { name: 'claim'; id: string } | { name: 'trip'; id: string } | { name: 'advances' } | { name: 'approvals' }
   /** The claim for one trip: its lines, what they are worth, and submit. */
   | { name: 'tripClaim'; trip: TeTrip }
   /** A leg, opened from its trip. Which screen it gets is the leg's own
@@ -72,7 +73,7 @@ type Sheet =
  *  that adds the screen: the row is shown, because leaving it out would make the
  *  module look smaller than it is, but it says it is not here yet. */
 /** The views the rail can land on. A claim is opened from a list, never from the rail. */
-type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits'
+type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits' | 'approvals'
 const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'home', label: 'Home', icon: 'home' },
   { k: 'trips', label: 'Trips', icon: 'local' },
@@ -217,6 +218,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           : name === 'limits' ? { name: 'limits' }
             : name === 'trips' ? { name: 'trips' }
               : name === 'advances' ? { name: 'advances' }
+                : name === 'approvals' ? { name: 'approvals' }
               : { name: 'home' },
     )
   }
@@ -246,6 +248,11 @@ export default function TeHome({ initialClaimId, onExit }: {
           <div className="newc">
             <button type="button" className="btn pri wide" onClick={() => setSheet({ name: 'new' })}><TeIcon name="plus" size="sm" />New claim</button>
           </div>
+          {queue.length ? (
+            <button type="button" aria-current={view.name === 'approvals' ? 'page' : 'false'} onClick={() => goto('approvals')}>
+              <TeIcon name="check" /><span>Approvals</span><span className="ct">{queue.length}</span>
+            </button>
+          ) : null}
           {RAIL.map(r => (
             <button key={r.k} type="button" aria-current={view.name === r.k ? 'page' : 'false'} onClick={() => goto(r.k)}>
               <TeIcon name={r.icon} /><span>{r.label}</span>
@@ -318,13 +325,13 @@ export default function TeHome({ initialClaimId, onExit }: {
                     </button>
                   ) : null}
                   {queue.map(q => (
-                    <button key={q.step_id} type="button" className="li click needrow" disabled={q.entity_type !== 'claim'} onClick={() => setView({ name: 'claim', id: q.entity_id })}>
+                    <button key={q.step_id} type="button" className="li click needrow" onClick={() => setView({ name: 'approvals' })}>
                       <span className="ico"><TeIcon name={q.entity_type === 'claim' ? 'other' : 'local'} /></span>
                       <span className="grow">
                         <span className="b">{q.entity_type === 'claim' ? 'Claim' : 'Trip plan'} {q.ref_no} from {q.employee_name} is waiting for you.</span>
-                        <span className="small muted">{rs(q.amount)} · {q.role_label}{q.entity_type === 'trip' ? ' · the trip approval screen is not part of this starter' : ''}</span>
+                        <span className="small muted">{rs(q.amount)} · {q.role_label}</span>
                       </span>
-                      <span className="nr-go">{q.entity_type === 'claim' ? 'Open' : ''}<TeIcon name="go" size="sm" /></span>
+                      <span className="nr-go">Decide<TeIcon name="go" size="sm" /></span>
                     </button>
                   ))}
                 </div>
@@ -344,6 +351,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'claims' ? <TeClaimList snap={snap} onOpen={id => setView({ name: 'claim', id })} /> : null}
           {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}
           {view.name === 'advances' ? <TeAdvances snap={snap} onOpenTrip={id => setView({ name: 'trip', id })} /> : null}
+          {view.name === 'approvals' ? <TeApprovals onToast={message => { setToast(message); reload() }} /> : null}
           {view.name === 'tripClaim' ? (
             <TeOtherExpenses
               snap={snap}
