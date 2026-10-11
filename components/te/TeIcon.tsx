@@ -41,6 +41,11 @@ const PATHS: Record<string, string> = {
   car: 'M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11M3 16v-3a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3M6 19v-2M18 19v-2M3 16h18M7 14h.01M17 14h.01',
   bus: 'M6 4h12a2 2 0 0 1 2 2v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a2 2 0 0 1 2-2zM4 11h16M8 14h.01M16 14h.01M7 17v2.5M17 17v2.5',
   clock: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  // Vehicles and the RC check (build step 4).
+  verify: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.5-4.5M8.5 11l2 2 3-3.5',
+  bike: 'M5.5 18.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18.5 18.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM5.5 15.5l4-6.5h4.5l4.5 6.5M14 9l-1.2-3H10M9.5 9l3 6.5',
+  file: 'M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7zM14 3v4h4',
+  receipt: 'M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4',
 }
 
 export default function TeIcon({ name, size }: { name: keyof typeof PATHS | string; size?: 'sm' | 'lg' }) {

@@ -31,12 +31,13 @@ import TeExpenseForm from './TeExpenseForm'
 import TeOtherExpenses from './TeOtherExpenses'
 import TePickTrip from './trip/TePickTrip'
 import TePlanner from './plan/TePlanner'
+import TeLimitsAndRates from './vehicle/TeLimitsAndRates'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
 import './te.css'
 
-type View = { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'claim'; id: string }
+type View = { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'claim'; id: string }
 /** 'new' is step 1 of the entry flow (the four tiles in a drawer); 'kind' is its
  *  step 2, and `way: 'approved'` its step 3 (screen 07, choose the trip). */
 type Sheet =
@@ -51,16 +52,16 @@ type Sheet =
  *  that adds the screen: the row is shown, because leaving it out would make the
  *  module look smaller than it is, but it says it is not here yet. */
 /** The views the rail can land on. A claim is opened from a list, never from the rail. */
-type RailView = 'home' | 'expenses' | 'claims'
+type RailView = 'home' | 'expenses' | 'claims' | 'limits'
 const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'home', label: 'Home', icon: 'home' },
   { k: 'expenses', label: 'Other expenses', icon: 'other' },
   { k: 'claims', label: 'My claims', icon: 'claims' },
+  { k: 'limits', label: 'My limits and rates', icon: 'limits' },
 ]
 const RAIL_SOON: { label: string; icon: string; step: number }[] = [
   { label: 'Trips', icon: 'local', step: 5 },
   { label: 'Advances', icon: 'advances', step: 7 },
-  { label: 'My limits and rates', icon: 'limits', step: 4 },
 ]
 
 const KINDS: { id: TripScope | 'other'; title: string; text: string; foot: string }[] = [
@@ -178,7 +179,7 @@ export default function TeHome({ initialClaimId, onExit }: {
    *  union does not narrow to a discriminated union, so that would need a cast. */
   const goto = (name: RailView) => {
     setSheet(null)
-    setView(name === 'claims' ? { name: 'claims' } : name === 'expenses' ? { name: 'expenses' } : { name: 'home' })
+    setView(name === 'claims' ? { name: 'claims' } : name === 'expenses' ? { name: 'expenses' } : name === 'limits' ? { name: 'limits' } : { name: 'home' })
   }
 
   return (
@@ -290,6 +291,7 @@ export default function TeHome({ initialClaimId, onExit }: {
             />
           ) : null}
           {view.name === 'claims' ? <TeClaimList snap={snap} onOpen={id => setView({ name: 'claim', id })} /> : null}
+          {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}
           {view.name === 'claim' ? <TeClaimDetail claimId={view.id} catName={catName} onBack={() => setView({ name: 'claims' })} onChanged={message => { setToast(message); reload() }} /> : null}
         </div>
       </main>
@@ -421,6 +423,9 @@ export default function TeHome({ initialClaimId, onExit }: {
           origin={sheet.past ? 'POST_FACTO' : 'PRE_APPROVED'}
           onClose={() => setSheet(null)}
           onSaved={(_id, message) => { done(message); setView({ name: 'home' }) }}
+          // reload() only, never done(): done() closes the sheet, and the plan
+          // being written lives inside it.
+          onVehicleAdded={reload}
         />
       ) : null}
       {sheet?.name === 'expense' ? (

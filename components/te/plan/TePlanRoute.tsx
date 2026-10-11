@@ -9,11 +9,13 @@
 // `arrive` is never stored on the draft — the server works out when you get
 // somewhere from when you left the place before. It is read off the preview's
 // legs for display only.
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
 import { errorFor, pointLabel, addStop, movePoint, removePoint, setPattern, type DraftContext, type PlannerDraft } from '@/lib/te/trip-draft'
 import { day, plural } from '@/lib/te/format'
+import { vehicleSubtitle } from '@/lib/te/vehicle'
 import TeIcon from '../TeIcon'
+import TeVehicleAdd from '../vehicle/TeVehicleAdd'
 import type { PickTarget } from './TePlacePicker'
 
 const MODE_ICON: Record<string, string> = {
@@ -26,13 +28,15 @@ const PAY_WORDS: Record<string, string> = {
 }
 const PATTERN_WORD: Record<string, string> = { oneway: 'Single', round: 'Round trip', multi: 'Multi-city' }
 
-export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick }: {
+export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick, onVehicleAdded }: {
   snap: Snapshot
   draft: PlannerDraft
   issues: TripIssue[]
   preview: TripPreview | null
   edit: (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
   onPick: (t: PickTarget) => void
+  /** A vehicle was registered from inside the plan; the snapshot needs refetching. */
+  onVehicleAdded: (message: string) => void
 }) {
   const local = draft.scope === 'local'
   const planning = draft.origin !== 'POST_FACTO'
@@ -220,6 +224,7 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
                   snap={snap} draft={draft} issues={issues} i={i}
                   open={draft.open === `s${i}`} tried={!!tried}
                   onToggle={() => toggle(`s${i}`)} edit={edit} onPick={onPick}
+                  onVehicleAdded={onVehicleAdded}
                 />
               ) : null}
             </Fragment>
@@ -233,7 +238,7 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
 
 /** How you travel between two places. Defined outside the parent, or it would
  *  remount on every keystroke and drop focus. */
-function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick }: {
+function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, onVehicleAdded }: {
   snap: Snapshot
   draft: PlannerDraft
   issues: TripIssue[]
@@ -243,8 +248,11 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick }:
   onToggle: () => void
   edit: (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
   onPick: (t: PickTarget) => void
+  onVehicleAdded: (message: string) => void
 }) {
+  const [addingVehicle, setAddingVehicle] = useState(false)
   const s = draft.segs[i]
+  const mine = snap.vehicles.filter(v => v.emp === snap.me)
   if (!s) return null
   const md = snap.cfg.modes.find(m => m.id === s.mode) ?? null
   const place = (id: string) => snap.masters.places.find(p => p.id === id) ?? null
@@ -297,16 +305,43 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick }:
             ))}
           </div>
 
+          {/* Picking the vehicle, and adding one without leaving the plan: a
+              person who gets here has already chosen to drive, and sending them
+              to another screen to register the car loses the trip they were
+              halfway through writing. */}
           {s.mode === 'own' ? (
             <div className="vpick">
               <div className="vchips">
-                {snap.vehicles.map(v => (
+                {mine.map(v => (
                   <button key={v.id} type="button" className="vchip" aria-pressed={s.vehicleId === v.id} onClick={() => setSeg({ vehicleId: v.id })}>
-                    <TeIcon name="car" size="sm" />{v.reg}
+                    <TeIcon name={v.type === 'bike' ? 'bike' : 'car'} size="sm" />
+                    <span>
+                      <b className="mono">{v.reg}</b>
+                      <small>{vehicleSubtitle(v, snap.cfg.vehicles, snap.cfg.fuelPrice)}{v.verified ? '' : ' · HR to check'}</small>
+                    </span>
                   </button>
                 ))}
+                {mine.length ? (
+                  <button type="button" className="vchip add" aria-expanded={addingVehicle} onClick={() => setAddingVehicle(v => !v)}>
+                    <TeIcon name="plus" size="sm" />
+                    <span><b>Another vehicle</b><small>Any vehicle, by its number</small></span>
+                  </button>
+                ) : null}
               </div>
-              {snap.vehicles.length ? null : <p className="small muted">No vehicle on file. Adding one is build step 4.</p>}
+              {addingVehicle || !mine.length ? (
+                <TeVehicleAdd
+                  snap={snap}
+                  first={!mine.length}
+                  onClose={mine.length ? () => setAddingVehicle(false) : undefined}
+                  onAdded={(vehicleId, message) => {
+                    setAddingVehicle(false)
+                    // Use it on this leg straight away, and on any other
+                    // own-vehicle leg still waiting for one.
+                    edit(d => ({ ...d, segs: d.segs.map((q, k) => (k === i || (q.mode === 'own' && !q.vehicleId) ? { ...q, mode: 'own', vehicleId } : q)) }))
+                    onVehicleAdded(message)
+                  }}
+                />
+              ) : null}
             </div>
           ) : null}
 

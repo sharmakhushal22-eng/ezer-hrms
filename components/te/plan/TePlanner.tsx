@@ -44,13 +44,17 @@ export function lastWorkday(today: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-export default function TePlanner({ snap, scope, origin, onClose, onSaved }: {
+export default function TePlanner({ snap, scope, origin, onClose, onSaved, onVehicleAdded }: {
   snap: Snapshot
   scope: TripScope
   /** POST_FACTO is "I already travelled": no approval before, a reason required. */
   origin: TripOrigin
   onClose: () => void
   onSaved: (tripId: Uuid, message: string) => void
+  /** A vehicle was registered from inside the plan, so the snapshot is stale.
+   *  Refetching must NOT close the planner: the half-built trip lives in this
+   *  component's state and would go with it. */
+  onVehicleAdded?: () => void
 }) {
   const ctx = useMemo<DraftContext>(() => ({
     today: snap.today,
@@ -248,7 +252,12 @@ export default function TePlanner({ snap, scope, origin, onClose, onSaved }: {
     >
       <div ref={bodyRef}>
         {step === 1 ? <TePlanTrip snap={snap} draft={draft} issues={issues} edit={edit} /> : null}
-        {step === 2 ? <TePlanRoute snap={snap} draft={draft} issues={issues} preview={preview} edit={edit} onPick={setPicking} /> : null}
+        {step === 2 ? (
+          <TePlanRoute
+            snap={snap} draft={draft} issues={issues} preview={preview} edit={edit} onPick={setPicking}
+            onVehicleAdded={message => { setToast(message); onVehicleAdded?.() }}
+          />
+        ) : null}
         {step === 3 ? <TePlanReview snap={snap} draft={draft} issues={issues} preview={preview} edit={edit} onGoStep={goStep} /> : null}
       </div>
       {toast ? <div className="toasts"><div className="toast err"><TeIcon name="warn" size="sm" />{toast}</div></div> : null}
