@@ -33,6 +33,7 @@ import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconOrgChart, IconUpload, IconTransfer,
   IconPerformance,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
+  IconReceipt, IconDot,
   IconLoans, IconCompliance, IconLetters, IconMobile, IconAdmin, IconPolicies,
   IconSliders, IconBuilding, IconReports, IconDatabase, IconAi, IconSupport,
   IconChevron, IconLogout, type IconProps,
@@ -80,7 +81,8 @@ const ICON: Record<string, (p: IconProps) => React.ReactElement> = {
   recruitment: IconRecruitment, onboarding: IconOnboarding, pms: IconPerformance,
   employees: IconEmployees, 'org-chart': IconOrgChart, 'bulk-upload': IconUpload, transfer: IconTransfer,
   attendance: IconCalendar, 'attendance-reports': IconClock, 'leave-upload': IconLeave,
-  payroll: IconPayroll, finance: IconFinance, 'flexi-claims': IconCard, 'travel-claims': IconTravel, loans: IconLoans,
+  payroll: IconPayroll, finance: IconFinance, 'flexi-claims': IconCard, 'travel-claims': IconTravel,
+  expenses: IconReceipt, loans: IconLoans,
   compliance: IconCompliance, letters: IconLetters, policies: IconPolicies, reports: IconReports,
   ess: IconMobile, admin: IconAdmin, 'flexi-policy': IconSliders, 'company-profile': IconBuilding, 'db-export': IconDatabase,
   ai: IconAi, support: IconSupport,
@@ -90,7 +92,11 @@ const ICON: Record<string, (p: IconProps) => React.ReactElement> = {
 // Org Chart, which did not exist when this grouping was first drawn.
 const NAV: NavGroup[] = NAV_GROUPS.map(g => ({
   group: g.group,
-  items: g.items.map(i => ({ label: i.label, href: i.href, module: i.module, Icon: ICON[i.key] })),
+  // ?? IconDot, never a bare lookup: RailItem destructures `Icon` and renders it,
+  // so one nav key missing from ICON above throws inside EVERY row and takes the
+  // whole dashboard down, not just its own. That is what adding `expenses` to
+  // lib/rms/nav.ts without an icon did.
+  items: g.items.map(i => ({ label: i.label, href: i.href, module: i.module, Icon: ICON[i.key] ?? IconDot })),
 }));
 
 const OPEN_W = 244;

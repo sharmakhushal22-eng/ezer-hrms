@@ -3,7 +3,9 @@
 //
 // THIS IS A STARTER, NOT THE FULL MODULE. What is built and wired to the real API:
 //   · the home screen: the four buttons, the three numbers, "Needs you"
-//   · the option sheet of a trip kind (Start now / Plan a trip / I already travelled)
+//   · the option sheet of a trip kind: the "Continue" list of what needs you on
+//     trips of that kind, the ways in (with the ones your company has turned off
+//     saying so), and choosing which approved trip to start
 //   · ONE complete flow: Other expense -> the form with live checks -> saved line
 //     -> claim review -> submit -> the claim with its timeline
 //   · My claims, and what is waiting for you to approve
@@ -24,14 +26,19 @@ import { te } from '@/lib/te/client'
 import type { Snapshot, TeExpense, TeQueueRow, TripScope } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeSheet from './TeSheet'
+import TeSteps from './TeSteps'
 import TeExpenseForm from './TeExpenseForm'
 import TeOtherExpenses from './TeOtherExpenses'
+import TePickTrip from './trip/TePickTrip'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
+import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
 import './te.css'
 
 type View = { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'claim'; id: string }
-type Sheet = null | { name: 'kind'; kind: TripScope } | { name: 'expense'; line?: TeExpense }
+/** The kind sheet is step 2 of the entry flow; `way: 'approved'` is its step 3
+ *  (screen 07, choose which approved trip to start). */
+type Sheet = null | { name: 'kind'; kind: TripScope; way: WayId | null } | { name: 'expense'; line?: TeExpense }
 
 const KINDS: { id: TripScope | 'other'; title: string; text: string; foot: string }[] = [
   { id: 'local', title: 'Local trip', text: 'Office, factory, client or warehouse in your city. Back the same day.', foot: 'Any travel except flight' },
@@ -39,11 +46,17 @@ const KINDS: { id: TripScope | 'other'; title: string; text: string; foot: strin
   { id: 'international', title: 'International trip', text: 'Any country. Flights, cabs abroad, hotel and food in one trip.', foot: 'Any country' },
   { id: 'other', title: 'Other expense', text: 'Client meal, courier, parking, printing. A bill with no travel.', foot: 'Bill with no trip' },
 ]
-const WAYS = [
-  { id: 'start', title: 'Start now', text: 'Leaving now. Your phone records each leg, with stops, until you are back.' },
-  { id: 'plan', title: 'Plan a trip', text: 'For later today or another day. Add stops and the people going with you.' },
-  { id: 'past', title: 'I already travelled', text: 'The trip was not tracked and you want the reimbursement.' },
-]
+
+/** The screens a way or a Continue button leads to, and the build step that adds
+ *  each. Until then the button says so rather than doing nothing. */
+const NOT_BUILT: Record<string, string> = {
+  start: 'Starting a trip now is the next build step (6).',
+  plan: 'The trip planner is the next build step (3).',
+  past: 'Recording a past trip is part of the trip planner, build step 3.',
+  legOpen: 'Recording and reporting a leg is build step 6.',
+  legStart: 'Starting a leg is build step 6.',
+  openTrip: 'The trip screen is build step 5.',
+}
 
 /** A notification link is "/ess?tab=claims&ref=<claim id>" (written by the database, migration 147).
  *  When the page was opened from one, start on that claim. */
@@ -94,7 +107,34 @@ export default function TeHome({ initialClaimId }: { initialClaimId?: string }) 
   const advance = snap.advances.reduce((a, x) => a + (x.outstanding || 0), 0)
   const unclaimed = snap.expenses.filter(x => !x.other && !x.tripId && x.status === 'UNCLAIMED')
   const sentBack = snap.claims.filter(c => c.status === 'SENT_BACK')
-  const todo: Record<string, string> = { other: unclaimed.length ? `${unclaimed.length} unclaimed` : '' }
+
+  // Everything the entry flow shows comes from the one snapshot. placeName and
+  // modeName turn the ids the server sends into the words the prototype used.
+  const placeName = (id: string) => snap.masters.places.find(p => p.id === id)?.s ?? ''
+  const modeName = (id: string) => snap.cfg.modes.find(m => m.id === id)?.name ?? ''
+  const facts = { me: snap.me, today: snap.today, trips: snap.trips, journeys: snap.journeys, placeName, modeName }
+
+  // The badge on a trip tile: how many of its trips need the employee, or "On
+  // the way" when a leg of that kind is running. The prototype's kindBadge.
+  const nowBy = {
+    local: continueItems('local', facts),
+    domestic: continueItems('domestic', facts),
+    international: continueItems('international', facts),
+  }
+  const todo: Record<string, string> = {
+    other: unclaimed.length ? `${unclaimed.length} unclaimed` : '',
+    local: nowBy.local.length ? `${nowBy.local.length} to do` : '',
+    domestic: nowBy.domestic.length ? `${nowBy.domestic.length} to do` : '',
+    international: nowBy.international.length ? `${nowBy.international.length} to do` : '',
+  }
+  const live: Record<string, boolean> = {
+    local: nowBy.local.some(x => x.tone === 'live'),
+    domestic: nowBy.domestic.some(x => x.tone === 'live'),
+    international: nowBy.international.some(x => x.tone === 'live'),
+  }
+
+  /** A Continue button or a way whose screen is a later build step. */
+  const notBuilt = (key: ContinueAction | WayId) => { setSheet(null); setToast(NOT_BUILT[key] ?? 'Not built yet.') }
 
   return (
     <div className="te">
@@ -118,9 +158,9 @@ export default function TeHome({ initialClaimId }: { initialClaimId?: string }) 
 
               <div className="kinds" role="list">
                 {KINDS.map(k => (
-                  <button key={k.id} type="button" role="listitem" className={`kind k-${k.id}`} onClick={() => setSheet(k.id === 'other' ? { name: 'expense' } : { name: 'kind', kind: k.id })}>
+                  <button key={k.id} type="button" role="listitem" className={`kind k-${k.id}`} onClick={() => setSheet(k.id === 'other' ? { name: 'expense' } : { name: 'kind', kind: k.id, way: null })}>
                     <span className="ki"><TeIcon name={k.id} size="lg" /></span>
-                    {todo[k.id] ? <span className="kb">{todo[k.id]}</span> : null}
+                    {live[k.id] ? <span className="kb live"><i />On the way</span> : todo[k.id] ? <span className="kb">{todo[k.id]}</span> : null}
                     <span className="kt"><b>{k.title}</b><small>{k.text}</small></span>
                     <span className="kf"><span className="kg">{k.foot}</span><TeIcon name="go" size="sm" /></span>
                   </button>
@@ -177,22 +217,90 @@ export default function TeHome({ initialClaimId }: { initialClaimId?: string }) 
         </div>
       </main>
 
-      {sheet?.name === 'kind' ? (
-        <TeSheet wide title={KINDS.find(k => k.id === sheet.kind)?.title ?? ''} lead={KINDS.find(k => k.id === sheet.kind)?.text} onClose={() => setSheet(null)}>
-          <div className="sec">
-            <h4>Start something new</h4>
-            <div className="ways">
-              {WAYS.map((w, i) => (
-                <button key={w.id} type="button" className={i === 0 ? 'way pri' : 'way'} disabled>
-                  <span className="wi"><TeIcon name={sheet.kind} /></span>
-                  <span className="grow"><b>{w.title}</b><small>{w.text}</small></span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="note"><TeIcon name="info" size="sm" /><span>These three flows are the next build step (trip planner, live leg recording, past trip). The API behind them is finished and tested: see UI-BUILD-GUIDE.md, steps 3 to 6.</span></div>
-        </TeSheet>
-      ) : null}
+      {sheet?.name === 'kind' ? (() => {
+        const kind = sheet.kind
+        const items = continueItems(kind, facts)
+        const wayFacts = {
+          manualAllowed: Boolean(snap.cfg.track.manualAllowed),
+          postFacto: snap.cfg.postFacto,
+          savedBills: unclaimed.length,
+          approved: approvedTrips(kind, facts).length,
+        }
+        const onApproved = sheet.way === 'approved'
+        return (
+          <TeSheet
+            wide
+            title={KIND_NAME[kind]}
+            titleIcon={<span className={`hk k-${kind}`}><TeIcon name={kind} size="sm" /></span>}
+            lead={KINDS.find(k => k.id === kind)?.text}
+            back={() => (onApproved ? setSheet({ name: 'kind', kind, way: null }) : setSheet(null))}
+            bar={<TeSteps on={onApproved ? 3 : 2} kind={kind} way={sheet.way} onTo={step => (step === 1 ? setSheet(null) : setSheet({ name: 'kind', kind, way: null }))} />}
+            onClose={() => setSheet(null)}
+          >
+            {onApproved ? (
+              <TePickTrip
+                scope={kind}
+                me={snap.me}
+                trips={snap.trips}
+                journeys={snap.journeys}
+                today={snap.today}
+                placeName={placeName}
+                onStartLeg={() => notBuilt('legStart')}
+                onOpenTrip={() => notBuilt('openTrip')}
+              />
+            ) : (
+              <>
+                {items.length ? (
+                  <div className="sec">
+                    <h4>Continue</h4>
+                    <div className="stack sm">
+                      {items.map(x => (
+                        <div key={x.id} className={x.tone ? `cont ${x.tone}` : 'cont'}>
+                          <div className="grow">
+                            <div className="eyebrow">{x.trip}</div>
+                            <b>{x.title}</b>
+                            <div className="small muted">{x.sub}</div>
+                          </div>
+                          <button type="button" className={x.tone === 'go' || x.tone === 'live' ? 'btn pri sm' : 'btn sm'} onClick={() => notBuilt(x.action)}>
+                            {x.btn}<TeIcon name="go" size="sm" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="sec">
+                  <h4>{items.length ? 'Or start something new' : 'How do you want to start?'}</h4>
+                  <div className="ways">
+                    {FLOW_WAYS[kind].map((w, i) => {
+                      const off = wayOff(kind, w.id, wayFacts)
+                      const count = wayCount(w.id, wayFacts)
+                      return (
+                        <button
+                          key={w.id}
+                          type="button"
+                          className={i === 0 && !off ? 'way pri' : 'way'}
+                          disabled={!!off}
+                          onClick={() => (w.id === 'approved' ? setSheet({ name: 'kind', kind, way: 'approved' }) : notBuilt(w.id))}
+                        >
+                          <span className="wi"><TeIcon name={w.icon} size="lg" /></span>
+                          <span className="grow">
+                            <b>{w.title}{count ? <span className="chip plain t-brand">{count}</span> : null}</b>
+                            <small>{off || w.text}</small>
+                            {off ? null : <span className="wc">{w.chips.map(c => <span key={c}>{c}</span>)}</span>}
+                          </span>
+                          {off ? null : <TeIcon name="go" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </TeSheet>
+        )
+      })() : null}
       {sheet?.name === 'expense' ? (
         <TeExpenseForm key={sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} onClose={() => setSheet(null)} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
       ) : null}

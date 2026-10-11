@@ -88,6 +88,17 @@ export const IconCard = (p: IconProps) => (
 export const IconTravel = (p: IconProps) => (
   <Svg {...p}><path d="M17.4 2.6 2.6 8.9l6.2 2.3 2.3 6.2Z" /><path d="M17.4 2.6 8.8 11.2" /></Svg>
 );
+/** Travel & Expenses (v2). A bill, so it is not mistaken for the paper plane
+ *  of Travel Claims (v1) — the two sit next to each other in the Money group. */
+export const IconReceipt = (p: IconProps) => (
+  <Svg {...p}><path d="M5 2.2h10v15.6l-2.5-1.7-2.5 1.7-2.5-1.7-2.5 1.7Z" /><path d="M7.5 6.3h5M7.5 9.3h5M7.5 12.3h3" /></Svg>
+);
+/** The stand-in when a navigation entry has no icon of its own. It exists so a
+ *  missing entry in a shell's icon map renders a dot instead of taking the
+ *  whole rail down: `Icon` undefined is a crash in every row, not just one. */
+export const IconDot = (p: IconProps) => (
+  <Svg {...p}><circle cx="10" cy="10" r="3.4" /></Svg>
+);
 export const IconLoans = (p: IconProps) => (
   <Svg {...p}><circle cx="10" cy="10" r="7.2" /><path d="M7.6 6.4h4.8M7.6 8.8h4.8" /><path d="M11.4 6.4c0 2.1-1.3 2.9-3 2.9l3.4 4.3" /></Svg>
 );

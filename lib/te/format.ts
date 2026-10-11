@@ -28,6 +28,12 @@ export function when(iso: string | null | undefined): string {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${hh}:${mm}`
 }
 
+/** '1 leg', '6 legs'. The prototype's `pl`: a plain -s, which is all the words
+ *  this module counts ever need (leg, trip, bill, stop, day, claim). */
+export function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
 export type Tone = 't-pos' | 't-warn' | 't-crit' | 't-info' | 't-brand' | 'plain'
 
 /** The chip on a claim: what state it is in, in the employee's words. */

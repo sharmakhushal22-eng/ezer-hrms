@@ -6,11 +6,17 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import TeIcon from './TeIcon'
 
-export default function TeSheet({ title, lead, crumb, wide, onClose, footer, children }: {
+export default function TeSheet({ title, titleIcon, lead, crumb, back, bar, wide, onClose, footer, children }: {
   title: string
+  /** The small coloured square before the title, e.g. the trip kind. */
+  titleIcon?: ReactNode
   lead?: string
   /** The small line above the title, e.g. "Other expense › Add a bill". */
   crumb?: string
+  /** Shows a "Back" link above the title. Given, it is the step before. */
+  back?: () => void
+  /** The strip under the header, for the three-step progress nav. */
+  bar?: ReactNode
   wide?: boolean
   onClose: () => void
   footer?: ReactNode
@@ -35,12 +41,18 @@ export default function TeSheet({ title, lead, crumb, wide, onClose, footer, chi
       <div className="dl">
         <header>
           <div>
-            {crumb ? <div className="fcrumb"><span className="fpath">{crumb}</span></div> : null}
-            <h2>{title}</h2>
+            {back || crumb ? (
+              <div className="fcrumb">
+                {back ? <button type="button" className="link small" onClick={back}><TeIcon name="back" size="sm" />Back</button> : null}
+                {crumb ? <span className="fpath">{crumb}</span> : null}
+              </div>
+            ) : null}
+            <h2>{titleIcon}{title}</h2>
             {lead ? <p className="muted small">{lead}</p> : null}
           </div>
           <button type="button" className="iconbtn" onClick={onClose} aria-label="Close"><TeIcon name="close" /></button>
         </header>
+        {bar ? <div className="wbar">{bar}</div> : null}
         <div className="body">{children}</div>
         {footer ? <footer>{footer}</footer> : null}
       </div>
