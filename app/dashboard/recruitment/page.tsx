@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
+import { MODULE_TABS } from '@/lib/rms/nav'
 import { companyFilter, scopedCompanies, canSeeScreen } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
@@ -66,8 +67,8 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
-  Segmented, SearchBox, Help, RxDialog, Track, daysUntil, Icon,
-  type ScreenResult,
+  Segmented, SearchBox, Help, RxDialog, Track, ApprovalChain, daysUntil, Icon,
+  type ScreenResult, type ChainStepVM,
 } from '@/components/recruitment/rx'
 // NOT imported: Ring and missingDocuments. Section 10 wants a documents ring
 // from document_collection_links, but PreOnboardTab reads preonboarding_links
@@ -118,6 +119,7 @@ interface Candidate {
   hr_email?:string; offer_accepted?:boolean; offer_sent_at?:string
   onboarding_date?:string
   aadhaar_url?:string; prev_offer_url?:string; pre_negotiation_done?:boolean
+  offer_response?:string|null; application_details?:any
 }
 
 // 'Hold' is where an interviewer's Hold decision parks a candidate — still in play (a round
@@ -394,40 +396,8 @@ export default function RecruitmentPage() {
   // Twelve tabs is a lot to scan, and twelve different emoji in front of them
   // made it harder rather than easier — each one drew the eye equally. The
   // words are the signal; they are also already in pipeline order.
-  const TABS = [
-    { k:'dashboard', l:'Dashboard' },
-    { k:'mrf', l:'MRF' },
-    { k:'screening', l:'AI Screening' },
-    { k:'pipeline', l:'Pipeline' },
-    // Sits after Pipeline because that is where rounds are scheduled, and this
-    // is what was scheduled. READ-ONLY: it adds no way to change a round, a
-    // feedback or a stage — the interviewer's half of this data stays in
-    // ESS -> Tasks & Approvals, where Acknowledge and Give feedback live.
-    // Seeded for RECRUITER by migration 142; see lib/rms/screens.ts.
-    { k:'interviews', l:'Interviews Scheduled' },
-    { k:'negotiation', l:'Negotiation' },
-    { k:'offerapproval', l:'Offer Approval' },
-    // LABEL only. The key stays 'hrhead': it is the screen key seeded by
-    // migration 123, what canSeeScreen resolves, what ?tab=hrhead deep-links to,
-    // and what recruitment-authority.test.ts asserts. Renaming the key would
-    // detach every seeded permission row from the tab it grants.
-    //
-    // Named for both things it does — this console holds MRF sign-off AND the
-    // escalated offer approvals (plus rehire). "MRF approvals" alone would
-    // under-describe it and collide with the section of that name inside it.
-    { k:'hrhead', l:'MRF & Offer Approvals' },
-    // ONE screen, role-aware. These were two tabs rendering the same component
-    // with different props; the difference was never about the screen, it was
-    // about who is looking at it. A recruiter sees offers in flight read-only;
-    // the assigned HR Manager reviews, edits, generates and sends. Same tab.
-    { k:'sendoffer', l:'Offer Letters' },
-    // Tracking, not dispatch. Its letter composer was retired: it wrote a row
-    // and claimed "Email ready" without ever sending. Offer Letters owns
-    // sending; this screen owns the reply.
-    { k:'offers', l:'Offer Tracking' },
-    { k:'preonboarding', l:'Pre-onboarding' },
-    { k:'jobstatus', l:'Job Status' },
-  ]
+  // The same list the ESS feature search offers (lib/rms/nav.ts), so the two cannot drift.
+  const TABS = MODULE_TABS.recruitment.map(t => ({ k:t.key, l:t.label }))
   // hrhead stays HR-Head only; on top of that, role-wise tab visibility (Roles → Screen Access)
   const visibleTabs = TABS.filter(t => (t.k !== 'hrhead' || isHrHead) && canSeeScreen(grant, `recruitment.${t.k}`))
   // If the current tab is not one this role may see, fall back to the first it can.
@@ -3963,6 +3933,8 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     mrf_id:'', job_location:'', recruiter:'', employment_type:'Full time — permanent',
     // 2 personal
     first_name:'', middle_name:'', last_name:'', dob:'', gender:'', marital_status:'', nationality:'Indian', languages:'',
+    // identity — checked against the backout blacklist; only PAN and Aadhaar's last 4 are stored
+    aadhaar:'', pan:'',
     // 3 contact
     email:'', dial_code:'+91', phone:'', alt_mobile:'', current_city:'', preferred_location:'', permanent_address:'', relocate:'Not applicable',
     // permanent address — structured (permanent_address is kept as the composed string for compatibility)
@@ -4119,6 +4091,18 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     try {
       const phone = cForm.phone.trim()
       const email = cForm.email.trim()
+      // Blacklist: a candidate who backed out after an offer and was blacklisted by Aadhaar / PAN
+      // cannot be added again (Offers → Backout → "Yes, blacklist").
+      const aadhaarNo = String(cForm.aadhaar||'').replace(/\D/g,''), panNo = String(cForm.pan||'').replace(/\s/g,'').toUpperCase()
+      if (aadhaarNo && !/^[2-9]\d{11}$/.test(aadhaarNo)) { showNotify('Aadhaar must be 12 digits.','error'); return }
+      if (panNo && !/^[A-Z]{5}\d{4}[A-Z]$/.test(panNo)) { showNotify('PAN must look like ABCDE1234F.','error'); return }
+      if (aadhaarNo || panNo) {
+        const bl = await fetch('/api/recruitment/blacklist-check', { method:'POST', headers:{ ...(await authHeaders()), 'Content-Type':'application/json' }, body: JSON.stringify({ aadhaar:aadhaarNo, pan:panNo }) }).then(r=>r.json()).catch(()=>({}))
+        if (bl?.blocked) {
+          showNotify(`Cannot add: this ${bl.blocked.by === 'AADHAAR' ? 'Aadhaar' : 'PAN'} is blacklisted${bl.blocked.candidate_name ? ` (${bl.blocked.candidate_name}` : ' ('}${bl.blocked.reason ? ` — ${bl.blocked.reason}` : ''}).`,'error')
+          return
+        }
+      }
       const { data:dup } = await supabase.from('candidates').select('id').or(`phone.eq.${phone},email.eq.${email||'none'}`).limit(1)
       if (dup?.length && !window.confirm('A candidate with the same phone/email already exists. Add anyway?')) { setSaving(false); return }
 
@@ -4149,6 +4133,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       const details = {
         requisition:{ job_location:cForm.job_location||mrf?.location_name||null, recruiter:cForm.recruiter||null, employment_type:cForm.employment_type },
         personal:{ first_name:cForm.first_name, middle_name:cForm.middle_name, last_name:cForm.last_name, dob:cForm.dob||null, gender:cForm.gender||null, marital_status:cForm.marital_status||null, nationality:cForm.nationality||null, languages:cForm.languages||null },
+        identity:{ pan:panNo||null, aadhaar_last4: aadhaarNo ? aadhaarNo.slice(-4) : null },
         contact:{ dial_code:cForm.dial_code, alt_mobile:cForm.alt_mobile||null, current_city:cForm.current_city, preferred_location:cForm.preferred_location||null,
           permanent_address:[cForm.perm_line1, cForm.perm_line2, cForm.perm_city, cForm.perm_state, cForm.perm_pincode, cForm.perm_country].map((x:string)=>(x||'').trim()).filter(Boolean).join(', ') || cForm.permanent_address || null,
           permanent_address_parts:{ line1:cForm.perm_line1||null, line2:cForm.perm_line2||null, pincode:cForm.perm_pincode||null, city:cForm.perm_city||null, state:cForm.perm_state||null, country:cForm.perm_country||null },
@@ -4369,6 +4354,8 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   </select>
                 </div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Nationality</label><input className="rx-input" value={cForm.nationality} onChange={e=>CF('nationality',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Aadhaar number</label><input className="rx-input" inputMode="numeric" maxLength={14} value={cForm.aadhaar} onChange={e=>CF('aadhaar',e.target.value.replace(/[^\d ]/g,''))} placeholder="12 digits — checked against the blacklist" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>PAN</label><input className="rx-input" maxLength={10} value={cForm.pan} onChange={e=>CF('pan',e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
                 <div style={{ gridColumn:'span 2' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input className="rx-input" value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
               </div>
 
@@ -5903,91 +5890,197 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   )
 }
 
+// ── The candidate's reply to a sent offer (Offers tab) ───────────────────────────
+// Accepted → upload the signed offer letter (PDF) and a screenshot of the acceptance mail; the
+//            candidate moves to Pre-onboarding.
+// Backout  → "Blacklist this candidate?" Yes: Aadhaar / PAN go on the blacklist (Add Candidate
+//            refuses them from then on) and the candidate is out; No: just out of the pipeline.
+// Revision → back to the HR Head, who edits the offer and re-approves it; the HR Manager then
+//            verifies, generates and sends the revised letter from Send Offers.
+// All three go through app/api/recruitment/offer-response.
+type OfferReply = { kind: 'accept' | 'backout' | 'revision'; cand: Candidate }
+
+function OfferReplyModal({ reply, onClose, onDone }: { reply: OfferReply; onClose: () => void; onDone: (msg: string) => void }) {
+  const { kind, cand } = reply
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [signed, setSigned] = useState<File | null>(null)
+  const [proof, setProof] = useState<File | null>(null)
+  const [blacklist, setBlacklist] = useState<boolean | null>(null)
+  const [aadhaar, setAadhaar] = useState('')
+  const [pan, setPan] = useState(String((cand as any).application_details?.identity?.pan || ''))
+  const [reason, setReason] = useState('')
+  const [note, setNote] = useState('')
+  const [idDocs, setIdDocs] = useState<{ id: string; doc_type: string; doc_label?: string; file_name?: string }[]>([])
+
+  // For the blacklist: the PAN / Aadhaar documents the candidate uploaded, to read the numbers from.
+  useEffect(() => {
+    if (kind !== 'backout') return
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/recruitment/doc-collection?candidate_id=${encodeURIComponent(cand.id)}`, { headers: await authHeaders() })
+        const j = await r.json().catch(() => ({}))
+        setIdDocs((j.docs || []).filter((d: any) => ['PAN', 'AADHAAR'].includes(d.doc_type)))
+      } catch { /* the numbers can still be typed */ }
+    })()
+  }, [kind, cand.id])
+  async function openDoc(id: string) {
+    try {
+      const r = await fetch(`/api/recruitment/doc-collection/file?doc_id=${encodeURIComponent(id)}&mode=view`, { headers: await authHeaders() })
+      const j = await r.json(); if (j.url) window.open(j.url, '_blank', 'noopener'); else setErr(j.error || 'Could not open the document')
+    } catch { setErr('Could not open the document') }
+  }
+
+  async function submit() {
+    setErr('')
+    if (kind === 'accept' && (!signed || !proof)) { setErr('Upload both the signed offer letter and the mail screenshot.'); return }
+    if (kind === 'backout' && blacklist && !aadhaar.trim() && !pan.trim()) { setErr('Enter the Aadhaar or PAN number to blacklist.'); return }
+    if (kind === 'revision' && !note.trim()) { setErr('Write what should be revised — the HR Head reads this.'); return }
+    setBusy(true)
+    try {
+      let r: Response
+      if (kind === 'accept') {
+        const fd = new FormData()
+        fd.append('action', 'accept'); fd.append('candidate_id', cand.id); fd.append('signed_offer', signed!); fd.append('mail_proof', proof!)
+        r = await fetch('/api/recruitment/offer-response', { method: 'POST', body: fd, headers: await uploadAuthHeaders() })
+      } else {
+        const body = kind === 'backout'
+          ? { action: 'backout', candidate_id: cand.id, blacklist: !!blacklist, aadhaar, pan, reason }
+          : { action: 'revision', candidate_id: cand.id, note }
+        r = await fetch('/api/recruitment/offer-response', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      }
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setErr(j.error || 'Failed'); setBusy(false); return }
+      onDone(kind === 'accept' ? `${cand.full_name} accepted — moved to Pre-onboarding.`
+        : kind === 'backout' ? `${cand.full_name} is out of the pipeline${j.blacklisted ? ' and blacklisted' : ''}.`
+        : `Sent to the HR Head for revision${j.notified ? ` (${j.notified} notified)` : ''}.`)
+    } catch { setErr('Network error — nothing was saved'); setBusy(false) }
+  }
+
+  const fileBox = (label: string, hint: string, accept: string, file: File | null, set: (f: File | null) => void) => (
+    <label style={{ display:'block', border:`1.5px dashed ${file ? C.positive : C.brandEdge}`, background: file ? C.positiveTint : C.sunken, borderRadius:R.md, padding:'14px 16px', cursor:'pointer', marginBottom:12 }}>
+      <div style={{ fontSize:13, fontWeight:700, color:C.ink }}>{label}</div>
+      <div style={{ fontSize:12, color: file ? C.positive : C.muted, marginTop:3 }}>{file ? `✓ ${file.name} · ${(file.size / 1024).toFixed(0)} KB` : hint}</div>
+      <input type="file" accept={accept} style={{ display:'none' }} onChange={e => set(e.target.files?.[0] || null)} />
+    </label>
+  )
+  const title = kind === 'accept' ? 'Offer accepted' : kind === 'backout' ? 'Candidate backed out' : 'Send to HR Head for offer revision'
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }}
+      style={{ position:'fixed', inset:0, zIndex:Z.modal, background:'rgba(15,23,42,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div role="dialog" aria-modal="true" style={{ width:'min(520px, 100%)', maxHeight:'calc(100vh - 32px)', overflowY:'auto', background:C.surface, color:C.ink, borderRadius:R.xl, boxShadow:E.overlay, padding:'20px 22px' }}>
+        <div style={{ fontSize:17, fontWeight:800 }}>{title}</div>
+        <div className="rx-meta" style={{ marginTop:3, marginBottom:16 }}>{cand.full_name}{cand.designation ? ` · ${cand.designation}` : ''}</div>
+
+        {kind === 'accept' && (<>
+          <div style={{ fontSize:12.5, color:C.muted, marginBottom:12, lineHeight:1.5 }}>Upload the signed offer letter the candidate mailed back, and a screenshot of that mail.</div>
+          {fileBox('Signed offer letter (PDF) *', 'Click to choose the PDF', 'application/pdf,.pdf', signed, setSigned)}
+          {fileBox('Screenshot of the acceptance mail *', 'Click to choose an image (PNG / JPG) or PDF', 'image/*,application/pdf', proof, setProof)}
+        </>)}
+
+        {kind === 'backout' && (<>
+          <div style={{ fontSize:14, fontWeight:700, marginBottom:10 }}>Blacklist this candidate?</div>
+          <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+            <button type="button" className="rx-btn" style={{ flex:1, ...(blacklist === true ? { background:C.criticalTint, color:C.critical, borderColor:C.critical } : {}) }} onClick={() => setBlacklist(true)}>Yes, blacklist</button>
+            <button type="button" className="rx-btn" style={{ flex:1, ...(blacklist === false ? { background:C.brandTint, color:C.brandDeep, borderColor:C.brand } : {}) }} onClick={() => setBlacklist(false)}>No</button>
+          </div>
+          {blacklist === true && (<>
+            <div style={{ fontSize:12.5, color:C.critical, background:C.criticalTint, borderRadius:R.md, padding:'9px 12px', marginBottom:12 }}>Their Aadhaar and PAN will be blacklisted — Add Candidate will refuse them from now on — and the candidate leaves the pipeline.</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:10, marginBottom:10 }}>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:5 }}>Aadhaar number</label><input className="rx-input" inputMode="numeric" maxLength={14} value={aadhaar} onChange={e => setAadhaar(e.target.value.replace(/[^\d ]/g, ''))} placeholder="12 digits" /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:5 }}>PAN</label><input className="rx-input" maxLength={10} value={pan} onChange={e => setPan(e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
+            </div>
+            {idDocs.length > 0 && (
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
+                <span className="rx-meta" style={{ alignSelf:'center' }}>Read them from:</span>
+                {idDocs.map(d => <button key={d.id} type="button" className="rx-btn sm g" onClick={() => openDoc(d.id)}>👁 {d.doc_label || d.doc_type}</button>)}
+              </div>
+            )}
+          </>)}
+          {blacklist === false && <div style={{ fontSize:12.5, color:C.muted, background:C.sunken, borderRadius:R.md, padding:'9px 12px', marginBottom:12 }}>The candidate will be taken out of the pipeline (not blacklisted). The MRF re-opens for hiring.</div>}
+          {blacklist !== null && <div><label className="rx-label" style={{ display:'block', marginBottom:5 }}>Reason (optional)</label><input className="rx-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Accepted another offer" /></div>}
+        </>)}
+
+        {kind === 'revision' && (<>
+          <div style={{ fontSize:12.5, color:C.muted, marginBottom:10, lineHeight:1.5 }}>The offer goes back to the HR Head, who will edit it and approve it again. You then verify the offer file, generate the revised letter and send it from Send Offers.</div>
+          <label className="rx-label" style={{ display:'block', marginBottom:5 }}>What should be revised? *</label>
+          <textarea className="rx-input" autoFocus value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Candidate asks for ₹12 L CTC and joining on 1 Dec" style={{ height:'auto', minHeight:90, resize:'vertical', padding:'9px 12px' }} />
+        </>)}
+
+        {err && <div style={{ fontSize:12.5, color:C.critical, background:C.criticalTint, borderRadius:R.md, padding:'9px 12px', marginTop:12 }}>{err}</div>}
+        <div style={{ display:'flex', gap:8, marginTop:16 }}>
+          <button type="button" className="rx-btn g" disabled={busy} onClick={onClose}>Cancel</button>
+          <span style={{ flex:1 }} />
+          {(kind !== 'backout' || blacklist !== null) && (
+            <button type="button" className={`rx-btn ${kind === 'backout' ? 'd' : 'p'}`} disabled={busy} onClick={submit}>
+              {busy ? 'Saving…' : kind === 'accept' ? 'Submit' : kind === 'revision' ? 'Send to HR Head' : blacklist ? 'Blacklist & remove' : 'Remove from pipeline'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/** The signed letter and mail screenshot recorded when the offer was accepted. */
+async function openAcceptanceFile(candidateId: string, which: 'signed_offer' | 'mail_proof', showNotify: (m: string, t?: any) => void) {
+  try {
+    const r = await fetch(`/api/recruitment/offer-response?candidate_id=${encodeURIComponent(candidateId)}`, { headers: await authHeaders() })
+    const j = await r.json()
+    const url = j.acceptance?.[which]?.view
+    if (url) window.open(url, '_blank', 'noopener'); else showNotify('No file recorded for this acceptance.', 'error')
+  } catch { showNotify('Could not open the file.', 'error') }
+}
 
 function OffersTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, rail }:any) {
-  const [sel, setSel] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
+  const [reply, setReply] = useState<OfferReply | null>(null)
   // A candidate reaches Offers only AFTER HR Head has APPROVED the offer (offer_approval_requests
-  // status = HR_HEAD_APPROVED) — or an offer is already sent. So the flow is:
-  // shortlist → Negotiation → Offer Approval → HR Head approves → Offers. No bypass.
-  const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set())
+  // status = HR_HEAD_APPROVED) — or an offer is already sent. The letter itself is generated and
+  // sent from Send Offers; this tab records how the candidate replied.
+  const [reqStatus, setReqStatus] = useState<Record<string, string>>({})
   useEffect(() => {
-    supabase.from('offer_approval_requests').select('candidate_id, status').then(({ data }: any) => {
-      setApprovedIds(new Set((data || []).filter((r: any) => r.status === 'HR_HEAD_APPROVED').map((r: any) => r.candidate_id)))
+    supabase.from('offer_approval_requests').select('candidate_id, status, submitted_at').order('submitted_at', { ascending: true }).then(({ data }: any) => {
+      const m: Record<string, string> = {}
+      for (const r of data || []) m[r.candidate_id] = r.status   // ascending: the latest wins
+      setReqStatus(m)
     })
-  }, [supabase])
-  const offeredCands = candidates.filter((c:Candidate)=> approvedIds.has(c.id) || c.stage==='Offer Sent')
+  }, [supabase, candidates])
+  const offeredCands = candidates.filter((c:Candidate)=> reqStatus[c.id] === 'HR_HEAD_APPROVED' || c.stage==='Offer Sent')
   const [offQ, setOffQ] = useState('')
   const shownOffered = offeredCands
     .filter((c:Candidate)=>!offQ || c.full_name.toLowerCase().includes(offQ.toLowerCase()))
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
 
-  // generateLetter and sendOffer lived here and are deliberately gone.
-  //
-  // sendOffer never sent anything: it inserted an offer_letters row with status
-  // 'SENT' and reported "Email ready", with no send-offer-email call, no
-  // letterhead, no PDF and no offer_request_id — so the candidate received
-  // nothing, and the draft/finalise flow on the Offer Letters tab could not see
-  // the rows it left behind. Two screens claiming to send the same offer, one of
-  // which reached nobody, is worse than one screen that does it properly.
-  //
-  // Its only irreplaceable side effect was writing candidates.doj, which
-  // Pre-onboarding counts down to and the joining-reminder cron fires off. That
-  // write moved to the real send (offer-flow-components.tsx) rather than being
-  // dropped.
-  //
-  // What stays here is the half nothing else does: recording the reply.
-
-  // ── Post-offer-letter response (#13): Accepted / Revision / Backout ──
-  // Accepted → moves into Pre-onboarding; MRF stays/closes per openings.
-  async function markAccepted(c:Candidate) {
-    const { error } = await supabase.from('candidates').update({ offer_accepted:true, offer_response:'ACCEPTED' }).eq('id', c.id)
-    if (error) { showNotify('Error: '+error.message,'error'); return }
-    await closeMrfIfFilled(supabase, c.mrf_id)
-    await supabase.from('recruitment_audit_logs').insert({ candidate_id:c.id, company_id:c.company_id||null, action_type:'OFFER_ACCEPTED', details:{ name:c.full_name }, created_at:new Date().toISOString() })
-    showNotify(`${c.full_name} marked Accepted — moved to Pre-onboarding.`); onRefresh()
-  }
-  // Revision → send the offer back to HR Head for re-approval.
-  async function markRevision(c:Candidate) {
-    const reason = window.prompt(`Revision requested for ${c.full_name}.\nWhat needs to change? (sent back to HR Head)`); if (reason===null) return
-    const { error } = await supabase.from('candidates').update({ offer_response:'REVISION', offer_revised:true, offer_accepted:false, stage:'Shortlisted' }).eq('id', c.id)
-    if (error) { showNotify('Error: '+error.message,'error'); return }
-    // Re-open the candidate's latest approval request so HR Head sees it again.
-    const { data:reqs } = await supabase.from('offer_approval_requests').select('id').eq('candidate_id', c.id).order('submitted_at',{ascending:false}).limit(1)
-    if (reqs?.[0]) await supabase.from('offer_approval_requests').update({ status:'SUBMITTED', hr_head_action:null, submitted_at:new Date().toISOString() }).eq('id', reqs[0].id)
-    await reopenMrf(supabase, c.mrf_id)   // free the slot while it's re-approved
-    await supabase.from('recruitment_audit_logs').insert({ candidate_id:c.id, company_id:c.company_id||null, action_type:'OFFER_REVISE_REQUESTED', details:{ name:c.full_name, reason }, created_at:new Date().toISOString() })
-    showNotify(`Revision sent back to HR Head for ${c.full_name}.`); onRefresh()
-  }
-  // Backout → candidate declined; reopen the MRF so it's hiring again.
-  async function markBackout(c:Candidate) {
-    if (!window.confirm(`Mark ${c.full_name} as Backed Out?\nThe candidate will be rejected and the MRF re-opened for hiring.`)) return
-    const { error } = await supabase.from('candidates').update({ offer_response:'BACKOUT', offer_accepted:false, stage:'Rejected', blacklist_reason:'Backed out after offer' }).eq('id', c.id)
-    if (error) { showNotify('Error: '+error.message,'error'); return }
-    await reopenMrf(supabase, c.mrf_id)
-    await supabase.from('recruitment_audit_logs').insert({ candidate_id:c.id, company_id:c.company_id||null, action_type:'OFFER_BACKOUT', details:{ name:c.full_name }, created_at:new Date().toISOString() })
-    showNotify(`${c.full_name} marked Backed Out — MRF re-opened.`); onRefresh()
-  }
-
   /**
-   * Where an offer has got to, derived ONLY from fields the Candidate interface
-   * actually declares. The writes also set `offer_response`
-   * ('ACCEPTED' | 'REVISION' | 'BACKOUT'), but that column is not on the
-   * interface, so reading it here would not type-check — and every state it
-   * encodes is recoverable from what is typed.
-   *
-   * Order matters. `awaiting` is tested before `revision` because a revised
-   * offer that has been re-sent carries offer_revised AND stage 'Offer Sent';
-   * it is waiting on the candidate again, and the "Revised Offer" badge already
-   * says how it got there.
+   * Where an offer has got to. A revision is tested before `awaiting`: a candidate whose offer
+   * is back with the HR Head still carries stage 'Offer Sent', but nothing is waiting on them.
    */
   type OfferState = 'accepted' | 'awaiting' | 'backout' | 'revision' | 'notsent'
   const offerState = (c:Candidate): OfferState =>
     c.offer_accepted ? 'accepted'
+    : c.offer_response === 'REVISION' && c.stage==='Offer Sent' ? 'revision'
     : c.stage==='Offer Sent' ? 'awaiting'
     : c.stage==='Rejected' ? 'backout'
     : c.offer_revised ? 'revision'
     : 'notsent'
+
+  /** Two steps, because that is the whole of this stage: it goes out, they reply.
+   *  Came across with main's offer-tracking rework — the JSX below renders it, and
+   *  the definition sat in a region of this file where the other side of the merge
+   *  won, so it had to be brought over by hand. */
+  const offerChain = (c:Candidate): ChainStepVM[] => {
+    const st = offerState(c)
+    const sentOn = c.offer_sent_at ? new Date(c.offer_sent_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : null
+    return [
+      { role:'Sent', approverName: sentOn || (st==='notsent' ? 'Not yet' : 'Sent'), status: st==='notsent' ? 'PENDING' : 'APPROVED' },
+      { role:'Candidate reply',
+        approverName: st==='accepted' ? 'Accepted' : st==='backout' ? 'Backed out' : st==='revision' ? 'Revision asked' : st==='awaiting' ? 'Awaiting' : '—',
+        status: st==='accepted' ? 'APPROVED' : st==='backout' ? 'REJECTED' : 'PENDING' },
+    ]
+  }
 
   /** The sent date, formatted exactly as the old two-step chain formatted it.
    *  The two steps themselves moved to otTrail, which paints them with the same
@@ -6059,28 +6152,97 @@ function OffersTab({ supabase, companies, departments, locations, mrfs, candidat
   return (
     <RxPage header={
       <RecruitmentHeader
-        title="Offer tracking"
-        subtitle="Where every offer stands, and where you record how the candidate replied."
-        help={<Help label="Who appears here">
-          <p>A candidate reaches this list only after <b>HR Head approval</b>, or once an offer has already been sent. There is no bypass.</p>
-          <p>Letters are drafted and sent from <b>Offer Letters</b> \u2014 on the company&rsquo;s letterhead, by email. This screen tracks what came back.</p>
-          <p><b>Accepted</b> moves them to Pre-onboarding. <b>Revision</b> returns the offer to the HR Head and reopens the requisition. <b>Backout</b> rejects the candidate and reopens it for hiring.</p>
+        title="Offer letters"
+        subtitle="Record how each candidate replied to their offer: accepted, revision, or backout."
+        help={<Help label="How this works">
+          <p>A candidate appears here once the <b>HR Head approves</b> their offer; the letter is generated and sent from <b>Send Offers</b>.</p>
+          <p><b>Accepted</b>: upload the signed offer letter and a screenshot of the candidate&rsquo;s mail — they move to Pre-onboarding.</p>
+          <p><b>Revision</b>: the offer goes back to the HR Head to edit and approve; you then send the revised letter from Send Offers.</p>
+          <p><b>Backout</b>: the candidate leaves the pipeline, and can be blacklisted by Aadhaar and PAN.</p>
         </Help>}
       />}>
-      <OfferTrackingView
-        search={offQ}
-        onSearch={setOffQ}
-        filters={otFilters}
-        onFilter={onOtFilter}
-        counts={otCounts}
-        rows={otRows}
-        total={offeredCands.length}
-        selectedId={sel?.id ?? null}
-        onSelect={(id:string)=>{ const c = byId(id); if (c) setSel(c) }}
-        onAccepted={(id:string)=>{ const c = byId(id); if (c) markAccepted(c) }}
-        onRevision={(id:string)=>{ const c = byId(id); if (c) markRevision(c) }}
-        onBackout={(id:string)=>{ const c = byId(id); if (c) markBackout(c) }}
-      />
+      <div className="rx-grid rx-stag">
+        {shownOffered.length>0 && (
+          <div className="s12" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:10 }}>
+            {OFFER_TILES.map(t => {
+              const n = shownOffered.filter((c:Candidate)=>offerState(c)===t.key).length
+              return (
+                <div key={t.key} className={t.key==='backout' && n>0 ? 'rx-tile crit' : 'rx-tile'}>
+                  <div style={{ ...eyebrow }}>{t.label}</div>
+                  <div className="rx-num" style={{ fontSize:20, fontWeight:700, marginTop:2, color: n===0 ? C.faint : undefined }}>{n}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div className="s12 rx-bar" style={{ gap:8 }}>
+          <SearchBox value={offQ} onChange={setOffQ} placeholder="Search candidate…" label="Search candidates" />
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="s12" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:12, alignContent:'start' }}>
+        {shownOffered.map((c:Candidate)=>{
+          const st = offerState(c)
+          const rs = reqStatus[c.id]
+          return (
+          <div key={c.id} className="rx-card">
+            <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
+            <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
+            <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
+            <div style={{ marginTop:8 }}><ApprovalChain steps={offerChain(c)} /></div>
+            {st==='awaiting' && (
+              <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                <button type="button" className="rx-btn sm ok" style={{ flex:1 }} onClick={()=>setReply({ kind:'accept', cand:c })}>Accepted</button>
+                <button type="button" className="rx-btn sm" style={{ flex:1, background:C.warningTint, color:C.warning, borderColor:C.warningTint }} onClick={()=>setReply({ kind:'revision', cand:c })}>Revision</button>
+                <button type="button" className="rx-btn sm d" style={{ flex:1 }} onClick={()=>setReply({ kind:'backout', cand:c })}>Backout</button>
+              </div>
+            )}
+            {st==='revision' && c.stage==='Offer Sent' && (
+              <div style={{ fontSize:F.micro, marginTop:S.sm, fontWeight:W.semi, color: rs==='HR_HEAD_APPROVED' ? C.positive : C.warning }}>
+                {rs==='HR_HEAD_APPROVED' ? 'Revised by the HR Head — verify, generate and send it from Send Offers' : 'With the HR Head for revision'}
+                {c.offer_revision_note ? <div style={{ fontWeight:500, color:C.muted, marginTop:2 }}>“{c.offer_revision_note}”</div> : null}
+              </div>
+            )}
+            {st==='notsent' && rs==='HR_HEAD_APPROVED' && (
+              <div style={{ fontSize:F.micro, color:C.muted, marginTop:S.sm }}>Approved — generate and send the letter from Send Offers.</div>
+            )}
+            {st==='accepted' && (
+              <div style={{ marginTop:S.sm }}>
+                <div style={{ fontSize:F.micro, color:C.positive, fontWeight:W.semi }}>Accepted — moved to Pre-onboarding</div>
+                <div style={{ display:'flex', gap:6, marginTop:6 }}>
+                  <button type="button" className="rx-btn sm g" style={{ flex:1 }} onClick={()=>openAcceptanceFile(c.id, 'signed_offer', showNotify)}>📄 Signed letter</button>
+                  <button type="button" className="rx-btn sm g" style={{ flex:1 }} onClick={()=>openAcceptanceFile(c.id, 'mail_proof', showNotify)}>✉ Mail proof</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )})}
+        {offeredCands.length===0&&(
+          <div className="rx-mod" style={{ textAlign:'center' as const, padding:24 }}>
+            <span className="rx-meta">No candidates have reached the offer stage yet.</span>
+          </div>
+        )}
+        </div>
+      </div>
+      {reply && <OfferReplyModal reply={reply} onClose={()=>setReply(null)} onDone={(m)=>{ setReply(null); showNotify(m); onRefresh() }} />}
     </RxPage>
   )
 }

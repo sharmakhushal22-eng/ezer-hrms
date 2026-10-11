@@ -1,9 +1,16 @@
 // app/api/salary-view/respond/route.ts — Accept / Decline the offer (needs the OTP access token).
 //   POST { token, response:'ACCEPTED'|'REJECTED', note? }  (header x-salary-access)
+//
+// On ACCEPTED, the hiring manager(s) and the candidate are mailed the salary break-up PDF —
+// see lib/recruitment/offer-accepted-mail.ts. Email is best-effort: the response is recorded
+// whatever happens to the mail.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
+import { mailAcceptance } from '@/lib/recruitment/offer-accepted-mail'
 import { negotiationByToken, verifiedCaller, accessExpiryMs, OFFER_VALID_DAYS } from '../_shared'
+
+export const runtime = 'nodejs' // nodemailer + pdfkit need Node
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as any
@@ -22,5 +29,8 @@ export async function POST(req: NextRequest) {
     .update({ candidate_response: response, response_at: new Date().toISOString(), response_note: String(body?.note || '').trim() || null })
     .eq('id', neg.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, response })
+
+  let emailed = 0
+  if (response === 'ACCEPTED') emailed = await mailAcceptance(neg).catch(() => 0)
+  return NextResponse.json({ ok: true, response, emailed })
 }

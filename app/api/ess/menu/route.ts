@@ -23,6 +23,9 @@ export async function GET(req: NextRequest) {
     // are not: the admin's modules would render inside the employee's sidebar.
     modules: ctx.grant.modules,
     can: { approvals: ctx.canApprovals, company: ctx.canCompany, reports: ctx.canReports },
+    // Roles → Screen Access, for the tabs inside a module (the ESS feature search offers only
+    // the tabs this person can open — the same rule as canSeeScreen()).
+    screens: { allow: ctx.grant.screenAllow, configured: ctx.grant.screenConfigured },
     super_admin: ctx.grant.isSuperAdmin,
     view_as: ctx.caller.viewAs,
   })

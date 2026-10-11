@@ -1,5 +1,6 @@
 // app/api/recruitment/send-offer-email/route.ts
-// Sends the offer-letter email to the candidate via Gmail (SMTP + App Password).
+// Sends the offer-letter email to the candidate via Gmail (SMTP + App Password), with the
+// generated offer letter PDF (POST { to, cc, subject, body, request_id }).
 //
 // Required env vars (set in .env.local locally and in Vercel for production):
 //   GMAIL_USER          - the sending Gmail address, e.g. hr@yourco.com / you@gmail.com
@@ -10,11 +11,8 @@ import { NextRequest, NextResponse } from 'next/server'
 // Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
 import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
-import { createClient } from '@supabase/supabase-js'
-import { renderOfferLetterPng, pngToPdf } from '@/lib/offer-letter-image'
-// Prints the configured template onto the company's uploaded letterhead PDF.
-// Falls back to renderOfferLetterPng above when nothing is configured yet.
-import { buildOfferLetterPdf, OfferTemplateTokenError } from '@/lib/recruitment/offer-letter-pdf'
+import { loadDossier } from '@/lib/recruitment/offer-dossier'
+import { offerLetterPdf } from '@/lib/recruitment/offer-letter-pdf'
 
 export const runtime = 'nodejs' // nodemailer needs the Node.js runtime, not Edge
 
@@ -23,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (gate.error) return gate.error
 
   try {
-    const { to, cc, subject, body, offer, offer_request_id } = await req.json()
+    const { to, cc, subject, body, request_id } = await req.json()
 
     if (!to || !subject || !body) {
       return NextResponse.json({ error: 'Missing recipient, subject, or body' }, { status: 400 })
@@ -43,49 +41,18 @@ export async function POST(req: NextRequest) {
       .map((e: string) => e.trim())
       .filter(Boolean)
 
-    // ── The attachment ────────────────────────────────────────────────────
-    // Preferred: the admin-configured template printed onto the company's own
-    // uploaded letterhead PDF (Admin Setup › Offer Letter). Fallback: the drawn
-    // letter this route has always produced, used when no template or no
-    // letterhead has been configured yet.
-    //
-    // A template with an unfillable {{token}} is NOT a fallback case — it stops
-    // the send with a 400, because the alternative is emailing a candidate a
-    // letter with "{{offer_ctc_annual}}" printed on it. Nothing is marked sent
-    // on a non-2xx, so the HR Manager can fix the template and retry.
-    const attachments: any[] = []
-    let letterheadUsed: string | null = null
-
-    if (offer_request_id) {
-      try {
-        const supa = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
-        )
-        const built = await buildOfferLetterPdf(supa, offer_request_id)
-        if (built) {
-          attachments.push({ filename: 'Offer_Letter.pdf', content: built.pdf, contentType: 'application/pdf' })
-          letterheadUsed = built.letterheadFile
-        }
-      } catch (e) {
-        if (e instanceof OfferTemplateTokenError) {
-          return NextResponse.json({ error: e.message, unknown_tokens: e.tokens }, { status: 400 })
-        }
-        // Any other failure (storage hiccup, malformed stationery) falls through
-        // to the drawn letter rather than blocking an approved offer.
-        console.error('letterhead merge failed — falling back to the drawn letter:', e)
-      }
-    }
-
-    if (!attachments.length && offer) {
-      try {
-        const png = await renderOfferLetterPng({ ...offer, from_name: process.env.GMAIL_FROM_NAME })
-        const pdf = await pngToPdf(png)
-        attachments.push({ filename: 'Offer_Letter.pdf', content: pdf, contentType: 'application/pdf' })
-      } catch (e) {
-        console.error('offer letter PDF build failed — sending without attachment:', e)
-      }
-    }
+    // The letter is the generated multi-page PDF on the company letterhead, and it can only go
+    // once the HR Head has approved, the HR Manager has verified the file and the letter has been generated
+    // from that verified file (lib/recruitment/offer-dossier.ts). Checked here, not just in the
+    // browser — and there is no other way to send an offer through this route.
+    if (!request_id) return NextResponse.json({ error: 'request_id is required' }, { status: 400 })
+    const d = await loadDossier(String(request_id))
+    if (!d) return NextResponse.json({ error: 'Offer request not found' }, { status: 404 })
+    if (d.request.status !== 'HR_HEAD_APPROVED') return NextResponse.json({ error: 'The HR Head has not approved this offer.' }, { status: 409 })
+    if (!d.complete) return NextResponse.json({ error: 'The offer file has not been verified.' }, { status: 409 })
+    if (!d.verification.letter) return NextResponse.json({ error: 'Generate the offer letter before sending it.' }, { status: 409 })
+    const pdf = await offerLetterPdf(d)
+    const attachments = [{ filename: pdf.name, content: pdf.content, contentType: 'application/pdf' }]
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -103,7 +70,7 @@ export async function POST(req: NextRequest) {
       attachments,
     })
 
-    return NextResponse.json({ ok: true, messageId: info.messageId, letterhead: letterheadUsed })
+    return NextResponse.json({ ok: true, messageId: info.messageId })
   } catch (err: any) {
     console.error('send-offer-email failed:', err)
     return NextResponse.json({ error: err?.message || 'Failed to send email' }, { status: 502 })

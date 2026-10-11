@@ -15,7 +15,7 @@ import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute } from '@/lib/ess/session'
 import { notifyDecided } from '@/lib/recruitment/offer-approval-notify'
 
-const SEL = 'id, status, company_id, mrf_id, candidate_id, offered_ctc, offered_variable_pct, monthly_inhand, joining_bonus, joining_bonus_freq, retention_bonus, esop_value, esop_vesting, hike_pct, proposed_doj, days_to_join, notice_period_days, notice_buyout, notice_buyout_amount, prev_company_name, prev_company_address, prev_total_ctc, prev_fixed_ctc, prev_variable, prev_ta_da, prev_additional, hiring_manager_remark, recruiter_comments, template_content, submitted_at, hr_head_actioned_at, hr_head_comments, candidates:candidate_id(full_name, designation, current_company, experience_years, email, mobile), manpower_requisitions:mrf_id(mrf_number, designation, position, raised_by_name, assigned_recruiter)'
+const SEL = 'id, status, company_id, mrf_id, candidate_id, offered_ctc, offered_variable_pct, monthly_inhand, joining_bonus, joining_bonus_freq, retention_bonus, esop_value, esop_vesting, hike_pct, proposed_doj, days_to_join, notice_period_days, notice_buyout, notice_buyout_amount, prev_company_name, prev_company_address, prev_total_ctc, prev_fixed_ctc, prev_variable, prev_ta_da, prev_additional, hiring_manager_remark, recruiter_comments, template_content, submitted_at, hr_head_actioned_at, hr_head_comments, revised_calculation, revision_note, candidates:candidate_id(full_name, designation, current_company, experience_years, email, mobile), manpower_requisitions:mrf_id(mrf_number, designation, position, raised_by_name, assigned_recruiter, location_id), ctc_negotiations:ctc_negotiation_id(calculation_data)'
 
 const shape = (x: any) => ({
   id: x.id, status: x.status, company_id: x.company_id,
@@ -28,7 +28,20 @@ const shape = (x: any) => ({
   candidate: x.candidates?.full_name || 'Candidate', designation: x.candidates?.designation || x.manpower_requisitions?.designation || x.manpower_requisitions?.position || '',
   current_company: x.candidates?.current_company || null, experience_years: x.candidates?.experience_years ?? null,
   mrf_number: x.manpower_requisitions?.mrf_number || null, raised_by: x.manpower_requisitions?.raised_by_name || null, recruiter: x.manpower_requisitions?.assigned_recruiter || null,
+  // the job's state: the one the salary was calculated for, else the MRF location's (filled in by withState)
+  state: x.revised_calculation?.state || x.ctc_negotiations?.calculation_data?.state || null,
+  location_id: x.manpower_requisitions?.location_id || null,
+  revision_note: x.revision_note || null,
 })
+
+/** Rows whose salary calculation carries no state fall back to their MRF location's state. */
+async function withState(rows: any[]) {
+  const ids = [...new Set(rows.filter(r => !r.state && r.location_id).map(r => r.location_id))]
+  if (!ids.length) return rows
+  const { data } = await sb.from('locations').select('id, state').in('id', ids)
+  const by = new Map((data || []).map((l: any) => [l.id, l.state]))
+  return rows.map(r => r.state ? r : { ...r, state: by.get(r.location_id) || null })
+}
 
 async function callerIsHrHead(ctx: any): Promise<boolean> {
   const roles = (ctx.menu.roles || []).map((x: string) => String(x).toUpperCase())
@@ -57,7 +70,7 @@ export async function GET(req: NextRequest) {
     ]) as Promise<[{ data: any[] | null; error: any }, { data: any[] | null; error: any }]>
     let [a, b] = await fetchMgr(SEL)
     if (a.error && /notice_buyout_amount/.test(a.error.message)) [a, b] = await fetchMgr(SEL.replace(', notice_buyout_amount', ''))
-    return NextResponse.json({ ...empty, awaiting: (a.data || []).map(shape), ready: (b.data || []).map(shape) })
+    return NextResponse.json({ ...empty, awaiting: await withState((a.data || []).map(shape)), ready: await withState((b.data || []).map(shape)) })
   }
 
   const since = new Date(Date.now() - 30 * 86400_000).toISOString()
@@ -67,7 +80,7 @@ export async function GET(req: NextRequest) {
   ]) as Promise<[{ data: any[] | null; error: any }, { data: any[] | null; error: any }]>
   let [p, q] = await fetchBoth(SEL)
   if (p.error && /notice_buyout_amount/.test(p.error.message)) [p, q] = await fetchBoth(SEL.replace(', notice_buyout_amount', ''))   // migration 133 not applied yet
-  return NextResponse.json({ isHrHead: true, isHrManager, pending: (p.data || []).map(shape), recent: (q.data || []).map(shape), awaiting: [], ready: [] })
+  return NextResponse.json({ isHrHead: true, isHrManager, pending: await withState((p.data || []).map(shape)), recent: await withState((q.data || []).map(shape)), awaiting: [], ready: [] })
 }
 
 export async function POST(req: NextRequest) {

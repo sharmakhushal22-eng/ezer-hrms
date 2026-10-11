@@ -69,6 +69,8 @@ export interface EssMenuData {
   /** Module name → NONE | VIEW | EDIT | FULL, for the employee whose portal this is. */
   modules: Record<string, string>
   can: { approvals: boolean; company: boolean; reports: boolean }
+  /** Roles → Screen Access: screen key → allowed, and module key → whether any screen is configured. */
+  screens?: { allow: Record<string, boolean>; configured: Record<string, boolean> }
   super_admin: boolean; view_as: boolean
 }
 const EMPTY_MENU: EssMenuData = { tabs: [{ id: 'home', label: 'Home' }], is_rm: false, direct_reports: 0, is_hod: false, hod_departments: [], roles: [], approval_types: [], modules: {}, can: { approvals: false, company: false, reports: false }, super_admin: false, view_as: false }
@@ -653,7 +655,7 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
               <span style={{ fontSize: 18, flexShrink: 0 }}>💼</span>
               <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{o.candidate} · {o.designation || '—'}{o.mrf_number ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.purpleD, background: C.soft, padding: '1px 7px', borderRadius: 99, verticalAlign: 'middle' }}>{o.mrf_number}</span> : null}</div>
-                <div style={{ fontSize: 11.5, color: C.amber }}>Offer of {lakh(o.offered_ctc)}{o.variable_pct ? ` (${o.variable_pct}% variable)` : ''}{o.hike_pct ? ` · ${Number(o.hike_pct).toFixed(1)}% hike` : ''}{o.proposed_doj ? ` · DOJ ${day(o.proposed_doj)}` : ''} · needs your review &amp; approval · submitted {day(o.submitted_at)}</div>
+                <div style={{ fontSize: 11.5, color: C.amber }}>{o.state ? `${o.state} · ` : ''}Offer of {lakh(o.offered_ctc)}{o.variable_pct ? ` (${o.variable_pct}% variable)` : ''}{o.hike_pct ? ` · ${Number(o.hike_pct).toFixed(1)}% hike` : ''}{o.proposed_doj ? ` · DOJ ${day(o.proposed_doj)}` : ''} · needs your review &amp; approval · submitted {day(o.submitted_at)}</div>
               </div>
               <button onClick={() => { setOpen(o); setMode('view'); setReason('') }} style={{ ...S.btn, background: C.green }}>Review &amp; approve</button>
             </div>
@@ -698,6 +700,7 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
             <Line k="ESOP" v={Number(open.esop_value) > 0 ? `${rs(open.esop_value)}${open.esop_vesting ? ` (${open.esop_vesting})` : ''}` : null} />
 
             <div style={{ ...S.section, marginTop: 12 }}>Joining</div>
+            <Line k="State" v={open.state} />
             <Line k="Proposed DOJ" v={open.proposed_doj ? `${day(open.proposed_doj)}${open.days_to_join != null ? ` · ${open.days_to_join} days from submission` : ''}` : null} />
             <Line k="Notice period" v={open.notice_period_days ? `${open.notice_period_days} days` : null} />
             <Line k="Notice buyout" v={open.notice_buyout ? (Number(open.notice_buyout_amount) > 0 ? `Yes · ${rs(open.notice_buyout_amount)}` : 'Yes') : null} />

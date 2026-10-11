@@ -70,3 +70,32 @@ export const ADMIN_NAV_GROUPS: NavGroupDef[] = NAV_GROUPS.filter(g => g.group !=
 
 export const NAV_ENTRY_BY_KEY: Record<string, NavEntry> =
   Object.fromEntries(NAV_GROUPS.flatMap(g => g.items).map(i => [i.key, i]))
+
+/**
+ * Tabs inside a module that are worth reaching directly — the ESS feature search lists them
+ * (so typing "MRF" offers Recruitment → MRF), and the module renders the same list, so the two
+ * cannot drift. `screen` is the Roles → Screen Access key that gates the tab; `keywords` are
+ * extra words people search by.
+ */
+export interface ModuleTab { key: string; label: string; screen: string; keywords?: string }
+export const MODULE_TABS: Record<string, ModuleTab[]> = {
+  recruitment: [
+    { key: 'dashboard',     label: 'Dashboard',      screen: 'recruitment.dashboard',     keywords: 'recruitment overview hiring' },
+    { key: 'mrf',           label: 'MRF',            screen: 'recruitment.mrf',           keywords: 'manpower requisition raise mrf hiring request' },
+    { key: 'screening',     label: 'AI Screening',   screen: 'recruitment.screening',     keywords: 'resume cv screening ai shortlist' },
+    { key: 'pipeline',      label: 'Pipeline',       screen: 'recruitment.pipeline',      keywords: 'candidates interviews add candidate' },
+    // The scheduler's own list of the interviews they booked: join link, interviewer,
+    // and whether that interviewer has acknowledged or given feedback. The INTERVIEWER's
+    // side of the same data is ESS -> Tasks & Approvals. Seeded for RECRUITER by
+    // migration 142; page.tsx derives its TABS from this list, so a tab missing here
+    // does not render at all.
+    { key: 'interviews',    label: 'Interviews Scheduled', screen: 'recruitment.interviews', keywords: 'scheduled interviews join link interviewer feedback acknowledged' },
+    { key: 'negotiation',   label: 'Negotiation',    screen: 'recruitment.negotiation',   keywords: 'ctc salary calculator salary link documents' },
+    { key: 'offerapproval', label: 'Offer Approval', screen: 'recruitment.offerapproval', keywords: 'offer approval request' },
+    { key: 'hrhead',        label: 'HR Head',        screen: 'recruitment.hrhead',        keywords: 'hr head offer approvals revision' },
+    { key: 'sendoffer',     label: 'Send Offers',    screen: 'recruitment.sendoffer',     keywords: 'offer letter generate send offer file verify' },
+    { key: 'offers',        label: 'Offers',         screen: 'recruitment.offers',        keywords: 'offer accepted backout revision signed' },
+    { key: 'preonboarding', label: 'Pre-onboarding', screen: 'recruitment.preonboarding', keywords: 'joining doj pre onboarding' },
+    { key: 'jobstatus',     label: 'Job Status',     screen: 'recruitment.jobstatus',     keywords: 'job status openings' },
+  ],
+}
