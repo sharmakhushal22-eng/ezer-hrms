@@ -11,7 +11,7 @@
 // which card that state gets and what the card says.
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
+import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
 import { day, errorText, plural, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
@@ -37,7 +37,7 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onNotBuilt }: {
+export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg }: {
   tripId: Uuid
   today: string
   onBack: () => void
@@ -45,7 +45,10 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
   /** Opens the planner on this trip. */
   onEdit: (detail: TripDetail) => void
   onOpenClaim: (claimId: Uuid) => void
-  onNotBuilt: (what: string) => void
+  /** Opens a leg: recording it, reporting on it, or saying it was not recorded.
+   *  Which of the three is the leg's own state, so the trip screen only says
+   *  which leg. */
+  onOpenLeg: (leg: TeLeg) => void
 }) {
   const [detail, setDetail] = useState<TripDetail | null>(null)
   const [error, setError] = useState('')
@@ -252,7 +255,11 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
                   </div>
                 </div>
               </div>
-              <button type="button" className="btn pri wide" onClick={() => onNotBuilt('Recording a leg is build step 6.')}>
+              <button
+                type="button"
+                className="btn pri wide"
+                onClick={() => onOpenLeg(nextLeg)}
+              >
                 <TeIcon name="play" size="sm" />
                 {nextLeg.status === 'PLANNED' && nextLeg.date <= today
                   ? (nextLeg.gps === 'checkin' ? 'Check in and go' : 'Start this leg')
@@ -291,7 +298,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           <p className="small muted">The claim goes once each leg has its report, was added without GPS, or was skipped.</p>
           <div className="stack sm">
             {openLegs.map(l => (
-              <button key={l.id} type="button" className="act flat" onClick={() => onNotBuilt('The leg report is build step 6.')}>
+              <button key={l.id} type="button" className="act flat" onClick={() => onOpenLeg(l)}>
                 <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
                 <span><b>Leg {l.n}: {pname(l.from)} → {pname(l.to)}</b><small>{LEG_STATE[l.status] ?? l.status}</small></span>
               </button>
@@ -311,7 +318,10 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
         />
         <div className="tw-legs">
           {legs.map(l => (
-            <div key={l.id} className="row tight tw-leg">
+            <div key={l.id} className="row tight tw-leg click" role="button" tabIndex={0}
+              onClick={() => onOpenLeg(l)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLeg(l) } }}
+            >
               <span className="ln">{l.n}</span>
               <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
               <div className="grow">

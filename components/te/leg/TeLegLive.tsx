@@ -299,6 +299,34 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
           <TeIcon name="play" size="sm" />{busy === 'continue' ? 'Starting…' : 'Continue the leg'}
         </button>
       ) : null}
+
+      {/* ── not started yet ── (55) */}
+      {leg.status === 'PLANNED' ? (
+        <div className="card">
+          <div className="ch"><h3>{leg.gps === 'checkin' ? 'Check in to start' : 'Ready to start'}</h3></div>
+          <p className="small muted">
+            {leg.gps === 'checkin'
+              ? 'Your position is recorded at both ends of this leg rather than along the way.'
+              : 'Your position is recorded along the way until you end the leg. Keep this screen open while you travel.'}
+          </p>
+          {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
+          <button
+            type="button"
+            className="btn pri lg wide"
+            disabled={busy === 'start'}
+            onClick={() => run('start', async () => {
+              // The server wants the position the leg began at, and checks it
+              // against where the leg was supposed to begin.
+              const fix = await here()
+              await te.legStart(leg.id, fix)
+              return leg.gps === 'checkin' ? 'Checked in.' : `Leg ${leg.n} started. Keep this screen open.`
+            })}
+          >
+            <TeIcon name="play" size="sm" />
+            {busy === 'start' ? 'Reading your location…' : leg.gps === 'checkin' ? 'Check in and go' : 'Start this leg'}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -1,18 +1,18 @@
 'use client'
 // components/te/TeHome.tsx — the employee's entry to Travel and Expenses.
 //
-// THIS IS A STARTER, NOT THE FULL MODULE. What is built and wired to the real API:
-//   · the home screen: the four buttons, the three numbers, "Needs you"
-//   · the option sheet of a trip kind: the "Continue" list of what needs you on
-//     trips of that kind, the ways in (with the ones your company has turned off
-//     saying so), and choosing which approved trip to start
-//   · ONE complete flow: Other expense -> the form with live checks -> saved line
-//     -> claim review -> submit -> the claim with its timeline
-//   · My claims, and what is waiting for you to approve
-// What is NOT built: planning a trip, recording legs with GPS, the leg report,
-// vehicles, the approval and Finance screens, the Travel Desk and Admin. The
-// prototype has about 130 screens; app-code/UI-BUILD-GUIDE.md lists every one
-// with the snapshot to copy and the client call that feeds it, in build order.
+// WHAT IS BUILT, and wired to the real API:
+//   · the home screen, and the option sheet of a trip kind: what needs you on
+//     trips of that kind, the ways in, and choosing an approved trip to start
+//   · the three-step planner, for a plan or a trip already travelled, with the
+//     place picker and editing a saved trip
+//   · vehicles and My limits and rates
+//   · trips, and one trip in whatever state it is in
+//   · a leg: recording it with GPS, its report, or saying it was not recorded
+//   · Other expense end to end, My claims, and what waits for you to approve
+// NOT BUILT: starting a trip from scratch on the spot ("Start now"), advances,
+// the approval and Finance screens, the Travel Desk and Admin.
+// app-code/UI-BUILD-GUIDE.md lists every screen in build order.
 //
 // HOW IT IS BUILT, so the rest can follow the same way
 //   · One root element with class "te"; everything, the drawer included, is
@@ -23,7 +23,7 @@
 //     is fetched again; no screen keeps its own copy of server state.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeExpense, TeQueueRow, TeTrip, TripScope } from '@/lib/te/types'
+import type { Snapshot, TeExpense, TeLeg, TeQueueRow, TeTrip, TripScope } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeSheet from './TeSheet'
 import TeSteps from './TeSteps'
@@ -34,6 +34,9 @@ import TePlanner from './plan/TePlanner'
 import TeLimitsAndRates from './vehicle/TeLimitsAndRates'
 import TeTrips from './trip/TeTrips'
 import TeTripDetail from './trip/TeTripDetail'
+import TeLegLive from './leg/TeLegLive'
+import TeLegReport from './leg/TeLegReport'
+import TeLegMissed from './leg/TeLegMissed'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
@@ -42,6 +45,9 @@ import './te.css'
 type View =
   | { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'trips' }
   | { name: 'claim'; id: string } | { name: 'trip'; id: string }
+  /** A leg, opened from its trip. Which screen it gets is the leg's own
+   *  state, decided in legScreen() below. */
+  | { name: 'leg'; tripId: string; leg: TeLeg }
 /** 'new' is step 1 of the entry flow (the four tiles in a drawer); 'kind' is its
  *  step 2, and `way: 'approved'` its step 3 (screen 07, choose the trip). */
 type Sheet =
@@ -78,9 +84,7 @@ const KINDS: { id: TripScope | 'other'; title: string; text: string; foot: strin
 /** The screens a way or a Continue button leads to, and the build step that adds
  *  each. Until then the button says so rather than doing nothing. */
 const NOT_BUILT: Record<string, string> = {
-  start: 'Starting a trip now is the next build step (6).',
-  legOpen: 'Recording and reporting a leg is build step 6.',
-  legStart: 'Starting a leg is build step 6.',
+  start: 'Starting a trip now is the last piece of build step 6.',
 }
 
 /** A notification link is "/ess?tab=claims&ref=<claim id>" (written by the database, migration 147).
@@ -175,6 +179,15 @@ export default function TeHome({ initialClaimId, onExit }: {
 
   /** Opening a trip closes whatever sheet asked for it. */
   const openTrip = (id: string) => { setSheet(null); setView({ name: 'trip', id }) }
+
+  /** The Continue list knows a leg by its id; the screen needs the leg itself,
+   *  which is in the snapshot it was listed from. */
+  const openLeg = (tripId: string, legId: string) => {
+    const leg = snap.journeys.find(j => j.id === legId)
+    if (!leg) { setToast('That leg is no longer there. Open the trip to see what changed.'); return }
+    setSheet(null)
+    setView({ name: 'leg', tripId, leg })
+  }
 
   /** A Continue button or a way whose screen is a later build step. */
   const notBuilt = (key: ContinueAction | WayId) => { setSheet(null); setToast(NOT_BUILT[key] ?? 'Not built yet.') }
@@ -305,6 +318,41 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'claims' ? <TeClaimList snap={snap} onOpen={id => setView({ name: 'claim', id })} /> : null}
           {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}
           {view.name === 'trips' ? <TeTrips snap={snap} onOpen={id => setView({ name: 'trip', id })} onNew={kind => setSheet({ name: 'plan', kind, past: false })} /> : null}
+          {view.name === 'leg' ? (() => {
+            const leg = view.leg
+            const backToTrip = () => setView({ name: 'trip', id: view.tripId })
+            const placeName = (id: string) => snap.masters.places.find(p => p.id === id)?.s ?? ''
+            // Which screen a leg gets is the leg's own state, not a choice the
+            // trip screen makes: on the road, ended and owing a report, or
+            // never recorded at all.
+            if (leg.status === 'ACTIVE' || leg.status === 'PAUSED' || leg.status === 'PLANNED') {
+              return (
+                <TeLegLive
+                  snap={snap} leg={leg} placeName={placeName}
+                  onBack={backToTrip}
+                  onEnded={() => { setToast('Leg ended. Add what it cost.'); reload(); backToTrip() }}
+                  onChanged={message => { setToast(message); reload() }}
+                />
+              )
+            }
+            if (leg.status === 'ENDED') {
+              return (
+                <TeLegReport
+                  snap={snap} leg={leg} placeName={placeName}
+                  onBack={backToTrip}
+                  onFiled={message => { setToast(message); reload(); backToTrip() }}
+                />
+              )
+            }
+            return (
+              <TeLegMissed
+                snap={snap} leg={leg} placeName={placeName}
+                onBack={backToTrip}
+                onDone={message => { setToast(message); reload(); backToTrip() }}
+              />
+            )
+          })() : null}
+
           {view.name === 'trip' ? (
             <TeTripDetail
               tripId={view.id}
@@ -313,7 +361,7 @@ export default function TeHome({ initialClaimId, onExit }: {
               onChanged={message => { setToast(message); reload() }}
               onEdit={d => setSheet({ name: 'plan', kind: d.trip.scope, past: d.trip.origin === 'POST_FACTO', editing: d.trip })}
               onOpenClaim={id => setView({ name: 'claim', id })}
-              onNotBuilt={setToast}
+              onOpenLeg={leg => setView({ name: 'leg', tripId: view.id, leg })}
             />
           ) : null}
           {view.name === 'claim' ? <TeClaimDetail claimId={view.id} catName={catName} onBack={() => setView({ name: 'claims' })} onChanged={message => { setToast(message); reload() }} /> : null}
@@ -399,7 +447,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                           <button
                             type="button"
                             className={x.tone === 'go' || x.tone === 'live' ? 'btn pri sm' : 'btn sm'}
-                            onClick={() => (x.action === 'openTrip' ? openTrip(x.id) : notBuilt(x.action))}
+                            onClick={() => (x.action === 'openTrip' ? openTrip(x.id) : openLeg(x.tripId, x.id))}
                           >
                             {x.btn}<TeIcon name="go" size="sm" />
                           </button>
