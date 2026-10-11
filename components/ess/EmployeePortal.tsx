@@ -80,8 +80,10 @@ const FlexiClaims          = dynamic(() => import('@/components/ess/FlexiClaims'
 const InvestmentDeclaration= dynamic(() => import('@/components/ess/InvestmentDeclaration'), { ssr: false, loading: SectionLoading })
 const InvestmentProofs     = dynamic(() => import('@/components/ess/InvestmentProofs'), { ssr: false, loading: SectionLoading })
 const TravelClaims         = dynamic(() => import('@/components/ess/TravelClaims'), { ssr: false, loading: SectionLoading })
-// Travel & Expenses v2. Lives beside the old Travel Claims screen until that one is retired.
-const TravelExpenses       = dynamic(() => import('@/components/te/TeHome'), { ssr: false, loading: SectionLoading })
+// Travel & Expenses v2 is NOT imported here. It is a page of its own
+// (app/ess/travel), so the portal does not carry ~135 screens of module in its
+// bundle for the employees who never open it. It still sits beside the old
+// Travel Claims screen in the Payroll tabs until that one is retired.
 const Performance          = dynamic(() => import('@/components/ess/Performance'), { ssr: false, loading: SectionLoading })
 const Profile360           = dynamic(() => import('@/components/profile/Profile360'), { ssr: false, loading: SectionLoading })
 const MyTeam               = dynamic(() => import('@/components/ess/team/MyTeam'), { ssr: false, loading: SectionLoading })
@@ -3088,7 +3090,11 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
 // A tab that isn't built shows its feature grid — what is coming — instead of an empty
 // screen or a fake one.
 type Ready = 'ready' | 'partial' | 'soon'
-interface NavItem { k: string; label: string; phase?: number; needs?: string }
+/** `href` makes the tab leave the portal for a page of its own, instead of
+ *  rendering inside it. Travel & Expenses is the only one: it is roughly 135
+ *  screens with its own rail, and a module that size inside the portal's chrome
+ *  is a tab within a tab. See app/ess/travel/page.tsx. */
+interface NavItem { k: string; label: string; phase?: number; needs?: string; href?: string }
 interface Feature { icon: string; name: string; note: string }
 interface NavSection {
   k: string; label: string; short: string; icon: string
@@ -3154,7 +3160,7 @@ const SECTIONS: NavSection[] = [
       { k:'nps',         label:'Corporate NPS' },
       { k:'loans',       label:'Loans' },
       { k:'claims',      label:'Travel Claims' },
-      { k:'expenses',    label:'Travel & Expenses' },
+      { k:'expenses',    label:'Travel & Expenses',     href:'/ess/travel' },
       { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
     ]},
 
@@ -3231,6 +3237,13 @@ const SECTIONS: NavSection[] = [
 ]
 
 const VIEWS = SECTIONS.flatMap(s => s.items.map(i => ({ ...i, section: s.k })))
+/** The tabs that are pages of their own. go() sends the browser there rather than
+ *  switching `view`, so every route in — a sub-tab pill, the feature search, the
+ *  sidebar, a ?tab= deep link — lands on the page and none of them can render the
+ *  module inside the portal by accident. */
+const AWAY: Record<string, string> = Object.fromEntries(
+  VIEWS.filter(v => v.href).map(v => [v.k, v.href as string]),
+)
 const viewMeta = (k: string) => VIEWS.find(v => v.k === k) || VIEWS[0]
 /** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
 const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
@@ -3590,6 +3603,21 @@ function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: 
   )
 }
 
+/**
+ * A tab whose module is a page of its own. go() redirects before `view` can reach
+ * it, so this should never be seen; it exists so that if some future path does set
+ * the view directly, the person is sent on rather than shown an empty panel.
+ */
+function GoneToItsOwnPage({ href, label }: { href: string; label: string }) {
+  useEffect(() => { window.location.replace(href) }, [href])
+  return (
+    <div style={{ padding: 28, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+      Opening {label}…{' '}
+      <a href={href} style={{ color: C.brand, fontWeight: 600 }}>Continue</a>
+    </div>
+  )
+}
+
 /** What a tab will hold once it's built. Shown instead of the module, never alongside. */
 function FeatureGrid({ features }: { features: Feature[] }) {
   return (
@@ -3701,6 +3729,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   // setBellOpen/setMoreOpen stay urgent deliberately: a menu that waits for a
   // heavy section to finish rendering before it closes feels broken.
   const go = (k: string) => {
+    // A tab that is a page of its own leaves the portal instead of becoming a view.
+    if (AWAY[k]) { window.location.href = AWAY[k]; return }
     setAdminKey(null); setBellOpen(false); setMoreOpen(false)
     startTransition(() => setView(k))
   }
@@ -3724,8 +3754,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     // Travel & Expenses v2 notifications are written by the database as
     // "/ess?tab=claims&ref=<claim id>" (migration 147). Only they carry ref with
     // tab=claims; that pair opens the new screen, which reads the claim id itself.
-    if (tab === 'claims' && params.get('ref') && !mod) go('expenses')
-    else if (tab && !mod) go(tab)
+    // The module is its own page now, so the pair is forwarded whole — TeHome's
+    // claimFromLink() looks for exactly these two params in the address it is on.
+    const ref = params.get('ref')
+    if (tab === 'claims' && ref && !mod) { window.location.replace(`${AWAY.expenses}?tab=claims&ref=${encodeURIComponent(ref)}`); return }
+    if (tab && !mod) go(tab)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Clicking a section lands on its first item — the section itself is never a
@@ -3828,7 +3861,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'proofs':        return <InvestmentProofs employeeId={emp.id} />
       case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
       case 'claims':        return <TravelClaims employeeId={emp.id} />
-      case 'expenses':      return <TravelExpenses />
+      // Travel & Expenses is a page of its own (app/ess/travel). go() redirects
+      // before `view` can ever become 'expenses', so this is only the belt to
+      // that braces — and it is why the module is no longer imported here at all.
+      case 'expenses':      return <GoneToItsOwnPage href={AWAY.expenses} label="Travel and Expenses" />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />

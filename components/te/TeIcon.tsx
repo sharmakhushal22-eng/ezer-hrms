@@ -17,6 +17,12 @@ const PATHS: Record<string, string> = {
   back: 'M19 12H5M11 6l-6 6 6 6',
   check: 'M5 12l5 5L20 7',
   plus: 'M12 5v14M5 12h14',
+  // The side rail and the phone tab bar of the full-page module.
+  home: 'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  claims: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  advances: 'M3 7a2 2 0 0 1 2-2h14v4M3 7v10a2 2 0 0 0 2 2h16V9H5a2 2 0 0 1-2-2zM17 14h.01',
+  limits: 'M5 4h13a1 1 0 0 1 1 1v15H6a1 1 0 0 1-1-1zM5 19a2 2 0 0 1 2-2h12M9 8h6',
+  more: 'M4 6h16M4 12h16M4 18h16',
 }
 
 export default function TeIcon({ name, size }: { name: keyof typeof PATHS | string; size?: 'sm' | 'lg' }) {

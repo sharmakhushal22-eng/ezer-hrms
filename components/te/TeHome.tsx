@@ -36,9 +36,25 @@ import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, t
 import './te.css'
 
 type View = { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'claim'; id: string }
-/** The kind sheet is step 2 of the entry flow; `way: 'approved'` is its step 3
- *  (screen 07, choose which approved trip to start). */
-type Sheet = null | { name: 'kind'; kind: TripScope; way: WayId | null } | { name: 'expense'; line?: TeExpense }
+/** 'new' is step 1 of the entry flow (the four tiles in a drawer); 'kind' is its
+ *  step 2, and `way: 'approved'` its step 3 (screen 07, choose the trip). */
+type Sheet = null | { name: 'new' } | { name: 'kind'; kind: TripScope; way: WayId | null } | { name: 'expense'; line?: TeExpense }
+
+/** The side rail, and the phone tab bar under it. `soon` names the build step
+ *  that adds the screen: the row is shown, because leaving it out would make the
+ *  module look smaller than it is, but it says it is not here yet. */
+/** The views the rail can land on. A claim is opened from a list, never from the rail. */
+type RailView = 'home' | 'expenses' | 'claims'
+const RAIL: { k: RailView; label: string; icon: string }[] = [
+  { k: 'home', label: 'Home', icon: 'home' },
+  { k: 'expenses', label: 'Other expenses', icon: 'other' },
+  { k: 'claims', label: 'My claims', icon: 'claims' },
+]
+const RAIL_SOON: { label: string; icon: string; step: number }[] = [
+  { label: 'Trips', icon: 'local', step: 5 },
+  { label: 'Advances', icon: 'advances', step: 7 },
+  { label: 'My limits and rates', icon: 'limits', step: 4 },
+]
 
 const KINDS: { id: TripScope | 'other'; title: string; text: string; foot: string }[] = [
   { id: 'local', title: 'Local trip', text: 'Office, factory, client or warehouse in your city. Back the same day.', foot: 'Any travel except flight' },
@@ -67,7 +83,11 @@ function claimFromLink(): string | null {
   return q.get('tab') === 'claims' && /^[0-9a-f-]{36}$/i.test(ref) ? ref : null
 }
 
-export default function TeHome({ initialClaimId }: { initialClaimId?: string }) {
+export default function TeHome({ initialClaimId, onExit }: {
+  initialClaimId?: string
+  /** Leaves the module. The standalone page passes "back to the ESS portal". */
+  onExit?: () => void
+}) {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [queue, setQueue] = useState<TeQueueRow[]>([])
   const [error, setError] = useState('')
@@ -98,7 +118,18 @@ export default function TeHome({ initialClaimId }: { initialClaimId?: string }) 
   const done = (message: string) => { setSheet(null); setToast(message); reload() }
 
   if (!snap) {
-    return <div className="te"><main className="main"><div className="page"><div className="card"><p className="muted">{error || 'Loading Travel and Expenses…'}</p>{error ? <button type="button" className="btn sm" onClick={reload}>Try again</button> : null}</div></div></main></div>
+    return (
+      <div className="te">
+        <header className="top">
+          <div className="brand"><i>E</i><div>EZER<small>Travel and Expenses</small></div></div>
+          {onExit ? <div className="tools"><button type="button" className="btn sm" onClick={onExit}><TeIcon name="back" size="sm" />Back to ESS</button></div> : null}
+        </header>
+        <main className="main"><div className="page"><div className="card">
+          <p className="muted">{error || 'Loading Travel and Expenses…'}</p>
+          {error ? <button type="button" className="btn sm" onClick={reload}>Try again</button> : null}
+        </div></div></main>
+      </div>
+    )
   }
 
   const me = snap.emp[snap.me]
@@ -136,11 +167,56 @@ export default function TeHome({ initialClaimId }: { initialClaimId?: string }) 
   /** A Continue button or a way whose screen is a later build step. */
   const notBuilt = (key: ContinueAction | WayId) => { setSheet(null); setToast(NOT_BUILT[key] ?? 'Not built yet.') }
 
+  const initials = (me?.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  /** The rail and the tab bar both land on a view; the sheets close with it.
+   *  Spelled out rather than `setView({ name })`: a literal whose property is a
+   *  union does not narrow to a discriminated union, so that would need a cast. */
+  const goto = (name: RailView) => {
+    setSheet(null)
+    setView(name === 'claims' ? { name: 'claims' } : name === 'expenses' ? { name: 'expenses' } : { name: 'home' })
+  }
+
   return (
     <div className="te">
+      {/* The module's own header. te.css makes it sticky at 57px, which is what
+          .side's sticky offset is measured from — the two go together. */}
+      <header className="top">
+        <div className="brand">
+          <i>E</i>
+          <div>EZER<small>Travel and Expenses</small></div>
+        </div>
+        <div className="tools">
+          {onExit ? <button type="button" className="btn sm" onClick={onExit}><TeIcon name="back" size="sm" />Back to ESS</button> : null}
+          <div className="who">
+            <span className="av">{initials}</span>
+            <div className="n"><b>{me?.name}</b><small>{me?.title || me?.code}</small></div>
+          </div>
+        </div>
+      </header>
+
+      {/* w-ess: on a phone te.css hides this rail and shows .tabbar instead, so
+          the two together are the module's only navigation. */}
+      <div className="shell w-ess">
+        <nav className="side" aria-label="Sections">
+          <div className="newc">
+            <button type="button" className="btn pri wide" onClick={() => setSheet({ name: 'new' })}><TeIcon name="plus" size="sm" />New claim</button>
+          </div>
+          {RAIL.map(r => (
+            <button key={r.k} type="button" aria-current={view.name === r.k ? 'page' : 'false'} onClick={() => goto(r.k)}>
+              <TeIcon name={r.icon} /><span>{r.label}</span>
+              {r.k === 'expenses' && unclaimed.length ? <span className="ct">{unclaimed.length}</span> : null}
+              {r.k === 'claims' && open.length ? <span className="ct">{open.length}</span> : null}
+            </button>
+          ))}
+          {RAIL_SOON.map(r => (
+            <button key={r.label} type="button" aria-current="false" onClick={() => setToast(`${r.label} is build step ${r.step}.`)}>
+              <TeIcon name={r.icon} /><span>{r.label}</span><span className="ct">soon</span>
+            </button>
+          ))}
+        </nav>
+
       <main className="main">
         <div className="page">
-          {view.name !== 'home' ? <div className="row"><button type="button" className="btn sm" onClick={() => setView({ name: 'home' })}>Travel and Expenses</button></div> : null}
 
           {view.name === 'home' ? (
             <>
@@ -197,10 +273,6 @@ export default function TeHome({ initialClaimId }: { initialClaimId?: string }) 
                 </div>
               ) : null}
 
-              <div className="row">
-                <button type="button" className="btn" onClick={() => setView({ name: 'claims' })}>My claims</button>
-                <button type="button" className="btn" onClick={() => setView({ name: 'expenses' })}>Other expenses</button>
-              </div>
             </>
           ) : null}
 
@@ -216,6 +288,38 @@ export default function TeHome({ initialClaimId }: { initialClaimId?: string }) 
           {view.name === 'claim' ? <TeClaimDetail claimId={view.id} catName={catName} onBack={() => setView({ name: 'claims' })} onChanged={message => { setToast(message); reload() }} /> : null}
         </div>
       </main>
+      </div>
+
+      {/* Phone only — te.css hides the rail at this width and shows this. */}
+      <nav className="tabbar" aria-label="Quick navigation">
+        <button type="button" aria-current={view.name === 'home' ? 'page' : 'false'} onClick={() => goto('home')}><TeIcon name="home" /><span>Home</span></button>
+        <button type="button" aria-current={view.name === 'expenses' ? 'page' : 'false'} onClick={() => goto('expenses')}><TeIcon name="other" /><span>Expenses</span>{unclaimed.length ? <i className="dot" /> : null}</button>
+        <button type="button" className="plus" onClick={() => setSheet({ name: 'new' })} aria-label="New claim"><i><TeIcon name="plus" /></i><span>New claim</span></button>
+        <button type="button" aria-current={view.name === 'claims' || view.name === 'claim' ? 'page' : 'false'} onClick={() => goto('claims')}><TeIcon name="claims" /><span>Claims</span>{sentBack.length ? <i className="dot" /> : null}</button>
+        <button type="button" onClick={() => (onExit ? onExit() : goto('home'))}><TeIcon name="more" /><span>{onExit ? 'ESS' : 'More'}</span></button>
+      </nav>
+
+      {/* Step 1 of the entry flow: what the claim is about. The prototype's dlgNew. */}
+      {sheet?.name === 'new' ? (
+        <TeSheet
+          wide
+          title="New claim"
+          lead="Three steps: what, how, then the form."
+          bar={<TeSteps on={1} kind={null} way={null} onTo={() => setSheet({ name: 'new' })} />}
+          onClose={() => setSheet(null)}
+        >
+          <div className="kinds" role="list">
+            {KINDS.map(k => (
+              <button key={k.id} type="button" role="listitem" className={`kind k-${k.id}`} onClick={() => setSheet(k.id === 'other' ? { name: 'expense' } : { name: 'kind', kind: k.id, way: null })}>
+                <span className="ki"><TeIcon name={k.id} size="lg" /></span>
+                {live[k.id] ? <span className="kb live"><i />On the way</span> : todo[k.id] ? <span className="kb">{todo[k.id]}</span> : null}
+                <span className="kt"><b>{k.title}</b><small>{k.text}</small></span>
+                <span className="kf"><span className="kg">{k.foot}</span><TeIcon name="go" size="sm" /></span>
+              </button>
+            ))}
+          </div>
+        </TeSheet>
+      ) : null}
 
       {sheet?.name === 'kind' ? (() => {
         const kind = sheet.kind
@@ -233,8 +337,8 @@ export default function TeHome({ initialClaimId }: { initialClaimId?: string }) 
             title={KIND_NAME[kind]}
             titleIcon={<span className={`hk k-${kind}`}><TeIcon name={kind} size="sm" /></span>}
             lead={KINDS.find(k => k.id === kind)?.text}
-            back={() => (onApproved ? setSheet({ name: 'kind', kind, way: null }) : setSheet(null))}
-            bar={<TeSteps on={onApproved ? 3 : 2} kind={kind} way={sheet.way} onTo={step => (step === 1 ? setSheet(null) : setSheet({ name: 'kind', kind, way: null }))} />}
+            back={() => (onApproved ? setSheet({ name: 'kind', kind, way: null }) : setSheet({ name: 'new' }))}
+            bar={<TeSteps on={onApproved ? 3 : 2} kind={kind} way={sheet.way} onTo={step => setSheet(step === 1 ? { name: 'new' } : { name: 'kind', kind, way: null })} />}
             onClose={() => setSheet(null)}
           >
             {onApproved ? (
