@@ -115,6 +115,12 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'FINANCE', label: 'Finance' },
       { key: 'RATES', label: 'Rate card' },
       { key: 'PERIODS', label: 'Expense months' },
+      // Travel & Expenses v2 (/dashboard/expenses). Granted by migration 152_te_rbac_grants.sql.
+      { key: 'TE_APPROVALS', label: 'Expenses: approvals' },
+      { key: 'TE_FINANCE', label: 'Expenses: Finance desk' },
+      { key: 'TE_DESK', label: 'Expenses: Travel Desk' },
+      { key: 'TE_ADMIN', label: 'Expenses: setup' },
+      { key: 'TE_REPORTS', label: 'Expenses: reports' },
     ],
   },
   {

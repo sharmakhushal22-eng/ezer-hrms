@@ -89,6 +89,9 @@ export const ROUTE_MODULE: Record<string, Module> = {
   '/dashboard/flexi-policy':       'Flexi Claims',
   '/dashboard/flexi-invoices':     'Flexi Claims',
   '/dashboard/travel-claims':      'Travel Claims',
+  // Travel & Expenses v2 (te_ tables). Same module as the screen it replaces, so the roles
+  // that hold Travel Claims today reach it without a new row in role_permissions.
+  '/dashboard/expenses':           'Travel Claims',
   '/dashboard/loans':              'Loans',
   '/dashboard/compliance':         'Compliance',
   '/dashboard/letters':            'HR Letters',

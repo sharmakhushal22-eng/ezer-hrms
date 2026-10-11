@@ -44,6 +44,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { key: 'finance',           label: 'Finance Department',      href: '/dashboard/finance',         module: 'Finance' },
     { key: 'flexi-claims',      label: 'Flexi Claims',            href: '/dashboard/flexi-claims',    module: 'Flexi Claims' },
     { key: 'travel-claims',     label: 'Travel Claims',           href: '/dashboard/travel-claims',   module: 'Travel Claims' },
+    { key: 'expenses',          label: 'Travel & Expenses',       href: '/dashboard/expenses',        module: 'Travel Claims' },
     { key: 'loans',             label: 'Loans',                   href: '/dashboard/loans',           module: 'Loans' },
   ]},
   { group: 'Compliance & Docs', items: [

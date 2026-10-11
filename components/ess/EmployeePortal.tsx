@@ -80,6 +80,8 @@ const FlexiClaims          = dynamic(() => import('@/components/ess/FlexiClaims'
 const InvestmentDeclaration= dynamic(() => import('@/components/ess/InvestmentDeclaration'), { ssr: false, loading: SectionLoading })
 const InvestmentProofs     = dynamic(() => import('@/components/ess/InvestmentProofs'), { ssr: false, loading: SectionLoading })
 const TravelClaims         = dynamic(() => import('@/components/ess/TravelClaims'), { ssr: false, loading: SectionLoading })
+// Travel & Expenses v2. Lives beside the old Travel Claims screen until that one is retired.
+const TravelExpenses       = dynamic(() => import('@/components/te/TeHome'), { ssr: false, loading: SectionLoading })
 const Performance          = dynamic(() => import('@/components/ess/Performance'), { ssr: false, loading: SectionLoading })
 const Profile360           = dynamic(() => import('@/components/profile/Profile360'), { ssr: false, loading: SectionLoading })
 const MyTeam               = dynamic(() => import('@/components/ess/team/MyTeam'), { ssr: false, loading: SectionLoading })
@@ -3152,6 +3154,7 @@ const SECTIONS: NavSection[] = [
       { k:'nps',         label:'Corporate NPS' },
       { k:'loans',       label:'Loans' },
       { k:'claims',      label:'Travel Claims' },
+      { k:'expenses',    label:'Travel & Expenses' },
       { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
     ]},
 
@@ -3718,7 +3721,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     if (mod) setAdminKey(mod)
     // Notification links are "/ess?tab=<view>" (approvals, funzone, …) — open that view.
     const tab = params.get('tab')
-    if (tab && !mod) go(tab)
+    // Travel & Expenses v2 notifications are written by the database as
+    // "/ess?tab=claims&ref=<claim id>" (migration 147). Only they carry ref with
+    // tab=claims; that pair opens the new screen, which reads the claim id itself.
+    if (tab === 'claims' && params.get('ref') && !mod) go('expenses')
+    else if (tab && !mod) go(tab)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Clicking a section lands on its first item — the section itself is never a
@@ -3821,6 +3828,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'proofs':        return <InvestmentProofs employeeId={emp.id} />
       case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
       case 'claims':        return <TravelClaims employeeId={emp.id} />
+      case 'expenses':      return <TravelExpenses />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
