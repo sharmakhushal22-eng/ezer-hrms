@@ -10,7 +10,7 @@
 // runs the same checks again. The form only shows what comes back.
 import { useEffect, useMemo, useState } from 'react'
 import { te, TeApiError } from '@/lib/te/client'
-import type { ExpenseInput, ExpensePreview, Snapshot, TeExpense, TeUploadedFile } from '@/lib/te/types'
+import type { ExpenseInput, ExpensePreview, Snapshot, TeExpense, TeUploadedFile, Uuid } from '@/lib/te/types'
 import TeSheet from './TeSheet'
 import TeIcon from './TeIcon'
 import { errorText, flagClass, rs } from '@/lib/te/format'
@@ -25,16 +25,27 @@ function fromLine(x: TeExpense): ExpenseInput {
   }
 }
 
-export default function TeExpenseForm({ snap, line, onClose, onSaved }: {
+export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: {
   snap: Snapshot
   /** A saved line to change; left out = a new line. */
   line?: TeExpense
+  /** The trip this bill belongs to. Changes which categories are offered:
+   *  hotel and food only exist on a trip, and the form must not pretend
+   *  otherwise on a loose monthly bill. */
+  tripId?: Uuid
   onClose: () => void
   onSaved: (message: string) => void
 }) {
-  // Categories an "other expense" can be: switched on, not tied to a trip, not the own-vehicle one.
-  const cats = useMemo(() => snap.cfg.cats.filter(c => c.on && !c.needsTrip && c.id !== 'mileage'), [snap])
-  const [f, setF] = useState<ExpenseInput>(() => (line ? fromLine(line) : { cat: '', date: snap.today, bill: '', claimed: '', payMode: 'UPI' }))
+  // On a trip, every category applies except mileage, which comes from the
+  // leg's own recorded distance rather than from a bill. Off a trip, only the
+  // categories that do not need one.
+  const cats = useMemo(
+    () => snap.cfg.cats.filter(c => c.on && c.id !== 'mileage' && (tripId ? true : !c.needsTrip)),
+    [snap, tripId],
+  )
+  const [f, setF] = useState<ExpenseInput>(() => (
+    line ? fromLine(line) : { cat: '', date: snap.today, bill: '', claimed: '', payMode: 'UPI', ...(tripId ? { tripId } : {}) }
+  ))
   const [file, setFile] = useState<TeUploadedFile | null>(null)
   const [fileName, setFileName] = useState(line?.file?.name ?? '')
   const [preview, setPreview] = useState<ExpensePreview | null>(null)

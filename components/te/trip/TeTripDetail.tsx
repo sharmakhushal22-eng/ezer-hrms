@@ -37,7 +37,7 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg }: {
+export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onClaim }: {
   tripId: Uuid
   today: string
   onBack: () => void
@@ -51,6 +51,8 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
   onOpenLeg: (leg: TeLeg) => void
   /** Add a leg the plan did not have. Only while the trip is under way. */
   onAddLeg: (detail: TripDetail) => void
+  /** The claim for this trip: its lines, what they are worth, and submit. */
+  onClaim: (detail: TripDetail) => void
 }) {
   const [detail, setDetail] = useState<TripDetail | null>(null)
   const [error, setError] = useState('')
@@ -306,6 +308,17 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
               </button>
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {/* ── back, every leg closed: the claim is what is left ── (65) */}
+      {mine && !openLegs.length && (st === 'COMPLETED' || isDraftPostFacto) && !detail.claims.some(c => c.status !== 'CANCELLED' && c.status !== 'REJECTED') ? (
+        <div className="card">
+          <div className="ch"><h3>Claim for this trip</h3><span className="chip plain t-brand">Every leg is closed</span></div>
+          <p className="small muted">Check what each line is worth, add any other bills, and send it.</p>
+          <button type="button" className="btn pri wide" onClick={() => onClaim(detail)}>
+            Review and submit the claim<TeIcon name="go" size="sm" />
+          </button>
         </div>
       ) : null}
 

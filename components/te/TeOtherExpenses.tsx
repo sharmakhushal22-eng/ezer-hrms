@@ -1,6 +1,11 @@
 'use client'
-// components/te/TeOtherExpenses.tsx — "Other expenses": saved lines with no
-// trip, and the claim they become.
+// components/te/TeOtherExpenses.tsx — saved expense lines, and the claim they
+// become. Two screens from one component:
+//   no trip   "Other expenses" — client meals, courier, parking (screens 80-82)
+//   a trip    the claim for that trip, once you are back (screens 65, 66)
+// They are the same screen because they are the same act: lines waiting, what
+// they add up to, what is wrong with them, and one submit. The only real
+// difference is which lines belong and what the claim is called.
 //
 // Markup and class names: design/html/other-expenses.html.
 // The aside is the claim review: POST /api/te/claims/preview gives the totals,
@@ -8,18 +13,25 @@
 // is POST /api/te/claims with the declaration. Nothing is added up in the browser.
 import { useEffect, useMemo, useState } from 'react'
 import { te, TeApiError } from '@/lib/te/client'
-import type { ClaimPreview, Snapshot, TeExpense, TeFlag } from '@/lib/te/types'
+import type { ClaimPreview, Snapshot, TeExpense, TeFlag, TeTrip } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import { errorText, flagClass, rs } from '@/lib/te/format'
 
-export default function TeOtherExpenses({ snap, onAdd, onEdit, onSubmitted }: {
+export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted, onBack }: {
   snap: Snapshot
+  /** Set to claim one trip; left out for the standing "Other expenses" claim. */
+  trip?: TeTrip
   onAdd: () => void
   onEdit: (line: TeExpense) => void
   onSubmitted: (claimId: string, message: string) => void
+  onBack?: () => void
 }) {
-  // My own saved lines that belong to no trip. Colleagues' lines in the snapshot (other: true) are only there for the duplicate checks.
-  const lines = useMemo(() => snap.expenses.filter(x => !x.other && !x.tripId && x.status === 'UNCLAIMED'), [snap])
+  // My own saved lines. Colleagues' lines are in the snapshot (other: true)
+  // only so the server can check for duplicates; they are never mine to claim.
+  const lines = useMemo(
+    () => snap.expenses.filter(x => !x.other && x.status === 'UNCLAIMED' && (trip ? x.tripId === trip.id : !x.tripId)),
+    [snap, trip],
+  )
   const catName = useMemo(() => new Map(snap.cfg.cats.map(c => [c.id, c.name])), [snap])
   const [preview, setPreview] = useState<ClaimPreview | null>(null)
   const [declared, setDeclared] = useState(false)
@@ -27,18 +39,23 @@ export default function TeOtherExpenses({ snap, onAdd, onEdit, onSubmitted }: {
   const [error, setError] = useState<{ text: string; flags: TeFlag[] } | null>(null)
   // The preview is asked again whenever the set of lines, or one of their amounts, changes.
   const signature = lines.map(x => `${x.id}:${x.claimed}:${x.reason}`).join('|')
+  const tripId = trip?.id ?? null
 
   useEffect(() => {
-    if (!signature) return
     let current = true
-    te.claimPreview({}).then(p => { if (current) setPreview(p) }).catch(e => { if (current) { setPreview(null); setError({ text: errorText(e), flags: [] }) } })
+    // Nothing to price. A stale preview cannot leak through: `review` below is
+    // null whenever there are no lines.
+    if (!signature) return
+    te.claimPreview(tripId ? { tripId } : {})
+      .then(p => { if (current) setPreview(p) })
+      .catch(e => { if (current) { setPreview(null); setError({ text: errorText(e), flags: [] }) } })
     return () => { current = false }
-  }, [signature])
+  }, [signature, tripId])
 
   async function submit() {
     setBusy(true); setError(null)
     try {
-      const c = await te.claimSubmit({ declared })
+      const c = await te.claimSubmit(tripId ? { tripId, declared } : { declared })
       onSubmitted(c.claim_id, `Claim ${c.claim_no} sent.`)
     } catch (e) {
       setError({ text: errorText(e), flags: e instanceof TeApiError ? e.flags : [] })
@@ -53,10 +70,18 @@ export default function TeOtherExpenses({ snap, onAdd, onEdit, onSubmitted }: {
 
   return (
     <>
+      {trip && onBack ? (
+        <div className="row"><button type="button" className="btn sm" onClick={onBack}><TeIcon name="back" size="sm" />Trip</button><span className="mono muted">{trip.no}</span></div>
+      ) : null}
+
       <div className="ph">
         <div>
-          <h1>Other expenses</h1>
-          <p>Client meals, courier, parking, printing and other work spends with no travel. Saved lines wait here until you submit them together as one claim.</p>
+          <h1>{trip ? `Claim for ${trip.name}` : 'Other expenses'}</h1>
+          <p>
+            {trip
+              ? 'Every bill and every leg of this trip, in one claim. Check what each line is worth, then send it.'
+              : 'Client meals, courier, parking, printing and other work spends with no travel. Saved lines wait here until you submit them together as one claim.'}
+          </p>
         </div>
         <button type="button" className="btn pri" onClick={onAdd}>Add an expense</button>
       </div>
@@ -65,7 +90,12 @@ export default function TeOtherExpenses({ snap, onAdd, onEdit, onSubmitted }: {
         <div className="stack">
           <div className="card pad0">
             <div className="day"><span>Not submitted yet</span><span>{lines.length}</span></div>
-            {lines.length === 0 ? <div className="empty"><b>Nothing waiting</b>Add a bill and it appears here.</div> : null}
+            {lines.length === 0 ? (
+              <div className="empty">
+                <b>Nothing waiting</b>
+                {trip ? 'Close the trip’s legs and add any other bills, and they appear here.' : 'Add a bill and it appears here.'}
+              </div>
+            ) : null}
             {lines.map(x => {
               const flags = review?.lines.find(l => l.id === x.id)?.flags ?? []
               return (
@@ -83,13 +113,15 @@ export default function TeOtherExpenses({ snap, onAdd, onEdit, onSubmitted }: {
               )
             })}
           </div>
-          <div className="note"><TeIcon name="info" size="sm" /><span>Travelled within the city? Start a local trip instead. It records the route and works out the amount for you.</span></div>
+          {trip ? null : (
+            <div className="note"><TeIcon name="info" size="sm" /><span>Travelled within the city? Start a local trip instead. It records the route and works out the amount for you.</span></div>
+          )}
         </div>
 
         <div className="aside">
           <div className="card">
             <div className="ch">
-              <h3>This month’s claim</h3>
+              <h3>{trip ? 'This claim' : 'This month’s claim'}</h3>
               {period ? <span className="chip plain t-brand">{period}</span> : null}
             </div>
             {review ? (

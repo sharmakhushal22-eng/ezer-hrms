@@ -40,6 +40,7 @@ import TeLegMissed from './leg/TeLegMissed'
 import TeLiveBar from './leg/TeLiveBar'
 import TeStartNow from './start/TeStartNow'
 import TeLegAdd from './leg/TeLegAdd'
+import TeAdvances from './claim/TeAdvances'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
@@ -47,7 +48,9 @@ import './te.css'
 
 type View =
   | { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'trips' }
-  | { name: 'claim'; id: string } | { name: 'trip'; id: string }
+  | { name: 'claim'; id: string } | { name: 'trip'; id: string } | { name: 'advances' }
+  /** The claim for one trip: its lines, what they are worth, and submit. */
+  | { name: 'tripClaim'; trip: TeTrip }
   /** A leg, opened from its trip. Which screen it gets is the leg's own
    *  state, decided in legScreen() below. */
   | { name: 'leg'; tripId: string; leg: TeLeg }
@@ -57,7 +60,7 @@ type Sheet =
   | null
   | { name: 'new' }
   | { name: 'kind'; kind: TripScope; way: WayId | null }
-  | { name: 'expense'; line?: TeExpense }
+  | { name: 'expense'; line?: TeExpense; tripId?: string }
   /** The three-step planner. `past` is "I already travelled". */
   | { name: 'plan'; kind: TripScope; past: boolean; editing?: TeTrip }
   /** Leaving now: one form that creates the trip and starts leg 1. */
@@ -69,17 +72,18 @@ type Sheet =
  *  that adds the screen: the row is shown, because leaving it out would make the
  *  module look smaller than it is, but it says it is not here yet. */
 /** The views the rail can land on. A claim is opened from a list, never from the rail. */
-type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'limits'
+type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits'
 const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'home', label: 'Home', icon: 'home' },
   { k: 'trips', label: 'Trips', icon: 'local' },
   { k: 'expenses', label: 'Other expenses', icon: 'other' },
   { k: 'claims', label: 'My claims', icon: 'claims' },
+  { k: 'advances', label: 'Advances', icon: 'advances' },
   { k: 'limits', label: 'My limits and rates', icon: 'limits' },
 ]
-const RAIL_SOON: { label: string; icon: string; step: number }[] = [
-  { label: 'Advances', icon: 'advances', step: 7 },
-]
+/** Nothing is left: every rail entry has a screen. Kept because the next
+ *  thing added to the module will want it again. */
+const RAIL_SOON: { label: string; icon: string; step: number }[] = []
 
 const KINDS: { id: TripScope | 'other'; title: string; text: string; foot: string }[] = [
   { id: 'local', title: 'Local trip', text: 'Office, factory, client or warehouse in your city. Back the same day.', foot: 'Any travel except flight' },
@@ -212,6 +216,7 @@ export default function TeHome({ initialClaimId, onExit }: {
         : name === 'expenses' ? { name: 'expenses' }
           : name === 'limits' ? { name: 'limits' }
             : name === 'trips' ? { name: 'trips' }
+              : name === 'advances' ? { name: 'advances' }
               : { name: 'home' },
     )
   }
@@ -338,6 +343,17 @@ export default function TeHome({ initialClaimId, onExit }: {
           ) : null}
           {view.name === 'claims' ? <TeClaimList snap={snap} onOpen={id => setView({ name: 'claim', id })} /> : null}
           {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}
+          {view.name === 'advances' ? <TeAdvances snap={snap} onOpenTrip={id => setView({ name: 'trip', id })} /> : null}
+          {view.name === 'tripClaim' ? (
+            <TeOtherExpenses
+              snap={snap}
+              trip={view.trip}
+              onBack={() => setView({ name: 'trip', id: view.trip.id })}
+              onAdd={() => setSheet({ name: 'expense', tripId: view.trip.id })}
+              onEdit={line => setSheet({ name: 'expense', line, tripId: view.trip.id })}
+              onSubmitted={(id, message) => { setToast(message); reload(); setView({ name: 'claim', id }) }}
+            />
+          ) : null}
           {view.name === 'trips' ? <TeTrips snap={snap} onOpen={id => setView({ name: 'trip', id })} onNew={kind => setSheet({ name: 'plan', kind, past: false })} /> : null}
           {view.name === 'leg' ? (() => {
             const leg = view.leg
@@ -384,6 +400,7 @@ export default function TeHome({ initialClaimId, onExit }: {
               onOpenClaim={id => setView({ name: 'claim', id })}
               onOpenLeg={leg => setView({ name: 'leg', tripId: view.id, leg })}
               onAddLeg={detail => setSheet({ name: 'addLeg', detail })}
+              onClaim={detail => setView({ name: 'tripClaim', trip: detail.trip })}
             />
           ) : null}
           {view.name === 'claim' ? <TeClaimDetail claimId={view.id} catName={catName} onBack={() => setView({ name: 'claims' })} onChanged={message => { setToast(message); reload() }} /> : null}
@@ -553,7 +570,7 @@ export default function TeHome({ initialClaimId, onExit }: {
         />
       ) : null}
       {sheet?.name === 'expense' ? (
-        <TeExpenseForm key={sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} onClose={() => setSheet(null)} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
+        <TeExpenseForm key={sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} tripId={sheet.tripId} onClose={() => setSheet(null)} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
       ) : null}
 
       <div className="toasts" aria-live="polite">{toast ? <div className="toast">{toast}</div> : null}</div>
