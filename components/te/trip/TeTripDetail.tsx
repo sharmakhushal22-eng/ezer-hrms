@@ -37,7 +37,7 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg }: {
+export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg }: {
   tripId: Uuid
   today: string
   onBack: () => void
@@ -49,6 +49,8 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
    *  Which of the three is the leg's own state, so the trip screen only says
    *  which leg. */
   onOpenLeg: (leg: TeLeg) => void
+  /** Add a leg the plan did not have. Only while the trip is under way. */
+  onAddLeg: (detail: TripDetail) => void
 }) {
   const [detail, setDetail] = useState<TripDetail | null>(null)
   const [error, setError] = useState('')
@@ -309,7 +311,17 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
 
       {/* ── the route and its legs ── */}
       <div className="card">
-        <div className="ch"><h3>Route</h3><span className="muted small">{plural(legs.length, 'leg')}</span></div>
+        <div className="ch">
+          <h3>Route</h3>
+          <span className="row tight">
+            <span className="muted small">{plural(legs.length, 'leg')}</span>
+            {mine && (st === 'ONGOING' || st === 'COMPLETED') ? (
+              <button type="button" className="btn sm" onClick={() => onAddLeg(detail)}>
+                <TeIcon name="plus" size="sm" />Add a leg
+              </button>
+            ) : null}
+          </span>
+        </div>
         <TeTripMap
           legs={legs.map(l => ({ from: l.from, to: l.to, mode: l.mode }))}
           points={(t.points || []).map(p => p.place).filter(Boolean)}

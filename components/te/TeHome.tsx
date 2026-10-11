@@ -23,7 +23,7 @@
 //     is fetched again; no screen keeps its own copy of server state.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeExpense, TeLeg, TeQueueRow, TeTrip, TripScope } from '@/lib/te/types'
+import type { Snapshot, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail as TeTripDetailT, TripScope } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeSheet from './TeSheet'
 import TeSteps from './TeSteps'
@@ -37,6 +37,9 @@ import TeTripDetail from './trip/TeTripDetail'
 import TeLegLive from './leg/TeLegLive'
 import TeLegReport from './leg/TeLegReport'
 import TeLegMissed from './leg/TeLegMissed'
+import TeLiveBar from './leg/TeLiveBar'
+import TeStartNow from './start/TeStartNow'
+import TeLegAdd from './leg/TeLegAdd'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
@@ -57,6 +60,10 @@ type Sheet =
   | { name: 'expense'; line?: TeExpense }
   /** The three-step planner. `past` is "I already travelled". */
   | { name: 'plan'; kind: TripScope; past: boolean; editing?: TeTrip }
+  /** Leaving now: one form that creates the trip and starts leg 1. */
+  | { name: 'startNow' }
+  /** A leg the plan did not have, added to a trip under way. */
+  | { name: 'addLeg'; detail: TeTripDetailT }
 
 /** The side rail, and the phone tab bar under it. `soon` names the build step
  *  that adds the screen: the row is shown, because leaving it out would make the
@@ -151,6 +158,8 @@ export default function TeHome({ initialClaimId, onExit }: {
   const advance = snap.advances.reduce((a, x) => a + (x.outstanding || 0), 0)
   const unclaimed = snap.expenses.filter(x => !x.other && !x.tripId && x.status === 'UNCLAIMED')
   const sentBack = snap.claims.filter(c => c.status === 'SENT_BACK')
+  // A leg of mine that is running right now, if there is one.
+  const liveLeg = snap.journeys.find(j => j.emp === snap.me && (j.status === 'ACTIVE' || j.status === 'PAUSED')) ?? null
 
   // Everything the entry flow shows comes from the one snapshot. placeName and
   // modeName turn the ids the server sends into the words the prototype used.
@@ -248,6 +257,18 @@ export default function TeHome({ initialClaimId, onExit }: {
 
       <main className="main">
         <div className="page">
+          {/* A leg collects fixes only while its own screen is open, so
+              wandering off mid-journey quietly stops the recording. The bar is
+              the way back, and it says plainly that nothing is being collected
+              here. Hidden on the leg screen itself, which is already it. */}
+          {liveLeg && view.name !== 'leg' ? (
+            <TeLiveBar
+              leg={liveLeg}
+              tripName={snap.trips.find(t => t.id === liveLeg.tripId)?.name ?? ''}
+              placeName={id => snap.masters.places.find(p => p.id === id)?.s ?? ''}
+              onOpen={leg => setView({ name: 'leg', tripId: leg.tripId, leg })}
+            />
+          ) : null}
 
           {view.name === 'home' ? (
             <>
@@ -362,6 +383,7 @@ export default function TeHome({ initialClaimId, onExit }: {
               onEdit={d => setSheet({ name: 'plan', kind: d.trip.scope, past: d.trip.origin === 'POST_FACTO', editing: d.trip })}
               onOpenClaim={id => setView({ name: 'claim', id })}
               onOpenLeg={leg => setView({ name: 'leg', tripId: view.id, leg })}
+              onAddLeg={detail => setSheet({ name: 'addLeg', detail })}
             />
           ) : null}
           {view.name === 'claim' ? <TeClaimDetail claimId={view.id} catName={catName} onBack={() => setView({ name: 'claims' })} onChanged={message => { setToast(message); reload() }} /> : null}
@@ -472,6 +494,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                           onClick={() => {
                             if (w.id === 'approved') return setSheet({ name: 'kind', kind, way: 'approved' })
                             if (w.id === 'plan' || w.id === 'past') return setSheet({ name: 'plan', kind, past: w.id === 'past' })
+                            if (w.id === 'start') return setSheet({ name: 'startNow' })
                             return notBuilt(w.id)
                           }}
                         >
@@ -492,6 +515,27 @@ export default function TeHome({ initialClaimId, onExit }: {
           </TeSheet>
         )
       })() : null}
+      {sheet?.name === 'addLeg' ? (
+        <TeLegAdd
+          snap={snap}
+          detail={sheet.detail}
+          onClose={() => setSheet(null)}
+          onAdded={(_legId, message) => done(message)}
+        />
+      ) : null}
+      {sheet?.name === 'startNow' ? (
+        <TeStartNow
+          snap={snap}
+          onClose={() => setSheet(null)}
+          onStarted={(tripId, legId, message) => {
+            setSheet(null); setToast(message); reload()
+            const leg = snap.journeys.find(j => j.id === legId)
+            // The leg was created a moment ago, so it is not in the snapshot
+            // this screen is holding. Land on the trip and let it load.
+            setView(leg ? { name: 'leg', tripId, leg } : { name: 'trip', id: tripId })
+          }}
+        />
+      ) : null}
       {sheet?.name === 'plan' ? (
         <TePlanner
           snap={snap}
