@@ -30,6 +30,7 @@ import TeSteps from './TeSteps'
 import TeExpenseForm from './TeExpenseForm'
 import TeOtherExpenses from './TeOtherExpenses'
 import TePickTrip from './trip/TePickTrip'
+import TePlanner from './plan/TePlanner'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
@@ -38,7 +39,13 @@ import './te.css'
 type View = { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'claim'; id: string }
 /** 'new' is step 1 of the entry flow (the four tiles in a drawer); 'kind' is its
  *  step 2, and `way: 'approved'` its step 3 (screen 07, choose the trip). */
-type Sheet = null | { name: 'new' } | { name: 'kind'; kind: TripScope; way: WayId | null } | { name: 'expense'; line?: TeExpense }
+type Sheet =
+  | null
+  | { name: 'new' }
+  | { name: 'kind'; kind: TripScope; way: WayId | null }
+  | { name: 'expense'; line?: TeExpense }
+  /** The three-step planner. `past` is "I already travelled". */
+  | { name: 'plan'; kind: TripScope; past: boolean }
 
 /** The side rail, and the phone tab bar under it. `soon` names the build step
  *  that adds the screen: the row is shown, because leaving it out would make the
@@ -67,8 +74,6 @@ const KINDS: { id: TripScope | 'other'; title: string; text: string; foot: strin
  *  each. Until then the button says so rather than doing nothing. */
 const NOT_BUILT: Record<string, string> = {
   start: 'Starting a trip now is the next build step (6).',
-  plan: 'The trip planner is the next build step (3).',
-  past: 'Recording a past trip is part of the trip planner, build step 3.',
   legOpen: 'Recording and reporting a leg is build step 6.',
   legStart: 'Starting a leg is build step 6.',
   openTrip: 'The trip screen is build step 5.',
@@ -386,7 +391,11 @@ export default function TeHome({ initialClaimId, onExit }: {
                           type="button"
                           className={i === 0 && !off ? 'way pri' : 'way'}
                           disabled={!!off}
-                          onClick={() => (w.id === 'approved' ? setSheet({ name: 'kind', kind, way: 'approved' }) : notBuilt(w.id))}
+                          onClick={() => {
+                            if (w.id === 'approved') return setSheet({ name: 'kind', kind, way: 'approved' })
+                            if (w.id === 'plan' || w.id === 'past') return setSheet({ name: 'plan', kind, past: w.id === 'past' })
+                            return notBuilt(w.id)
+                          }}
                         >
                           <span className="wi"><TeIcon name={w.icon} size="lg" /></span>
                           <span className="grow">
@@ -405,6 +414,15 @@ export default function TeHome({ initialClaimId, onExit }: {
           </TeSheet>
         )
       })() : null}
+      {sheet?.name === 'plan' ? (
+        <TePlanner
+          snap={snap}
+          scope={sheet.kind}
+          origin={sheet.past ? 'POST_FACTO' : 'PRE_APPROVED'}
+          onClose={() => setSheet(null)}
+          onSaved={(_id, message) => { done(message); setView({ name: 'home' }) }}
+        />
+      ) : null}
       {sheet?.name === 'expense' ? (
         <TeExpenseForm key={sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} onClose={() => setSheet(null)} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
       ) : null}

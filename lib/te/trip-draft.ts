@@ -330,8 +330,3 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
   }
 }
 
-/** Is there enough of a route to ask the server about it? Below this every
- *  preview would come back as the same "choose the places" refusal. */
-export function worthPreviewing(d: PlannerDraft): boolean {
-  return d.points.some((p, i) => i > 0 && !p.ret && p.place) && !!d.points[0].place
-}

@@ -8,7 +8,7 @@ import { describe, it } from 'node:test'
 import {
   addStop, autoName, blockingOn, defaultMode, errorFor, firstOpenLine, movePoint,
   newPlannerDraft, pointLabel, removePoint, setPattern, stepOfIssue, syncDraft,
-  toTripDraft, worthPreviewing,
+  toTripDraft,
   type DraftContext, type PlannerDraft,
 } from '../trip-draft.ts'
 import type { TeMode, TripIssue } from '../types.ts'
@@ -382,17 +382,3 @@ describe('what gets sent to the server', () => {
   })
 })
 
-describe('worthPreviewing', () => {
-  it('waits until there is a start and somewhere to go', () => {
-    const d = fresh()
-    assert.equal(worthPreviewing(d), false, 'nowhere chosen yet')
-    const c = ctx()
-    const going = syncDraft({ ...d, points: [d.points[0], { ...d.points[1], place: 'plant' }, d.points[2]] }, c)
-    assert.equal(worthPreviewing(going), true)
-  })
-
-  it('does not count the place you come back to as somewhere to go', () => {
-    const d = fresh()
-    assert.equal(worthPreviewing({ ...d, points: [d.points[0], { ...d.points[1], place: '' }, { ...d.points[2], place: 'off' }] }), false)
-  })
-})

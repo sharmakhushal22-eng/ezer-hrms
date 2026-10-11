@@ -23,6 +23,24 @@ const PATHS: Record<string, string> = {
   advances: 'M3 7a2 2 0 0 1 2-2h14v4M3 7v10a2 2 0 0 0 2 2h16V9H5a2 2 0 0 1-2-2zM17 14h.01',
   limits: 'M5 4h13a1 1 0 0 1 1 1v15H6a1 1 0 0 1-1-1zM5 19a2 2 0 0 1 2-2h12M9 8h6',
   more: 'M4 6h16M4 12h16M4 18h16',
+  // The trip planner (build step 3): the route, the modes, the place picker.
+  people: 'M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 19v-1a4 4 0 0 0-3-3.9M16 3.1a3.5 3.5 0 0 1 0 6.8',
+  minus: 'M5 12h14',
+  flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
+  alert: 'M12 9v4M12 17h.01M10.3 3.9L2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  target: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3',
+  pin: 'M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  rightc: 'M9 6l6 6-6 6',
+  up: 'M6 15l6-6 6 6',
+  down: 'M6 9l6 6 6-6',
+  compass: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z',
+  plane: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
+  route: 'M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 17h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7',
+  swap: 'M7 20V5M7 5L4 8M7 5l3 3M17 4v15M17 19l-3-3M17 19l3-3',
+  shield: 'M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z',
+  car: 'M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11M3 16v-3a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3M6 19v-2M18 19v-2M3 16h18M7 14h.01M17 14h.01',
+  bus: 'M6 4h12a2 2 0 0 1 2 2v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a2 2 0 0 1 2-2zM4 11h16M8 14h.01M16 14h.01M7 17v2.5M17 17v2.5',
+  clock: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
 }
 
 export default function TeIcon({ name, size }: { name: keyof typeof PATHS | string; size?: 'sm' | 'lg' }) {
