@@ -16,8 +16,8 @@
 import { useEffect, useState } from 'react'
 import { te, type FinanceSummary } from '@/lib/te/client'
 import type { TeConfig, TeHealthRow, TeQueueRow } from '@/lib/te/types'
-import { TeClaimDetail } from './TeClaims'
 import TeApprovals from './approve/TeApprovals'
+import TeClaimApproval from './approve/TeClaimApproval'
 import TeVerification from './finance/TeVerification'
 import TeAdvanceDesk from './finance/TeAdvanceDesk'
 import TePayouts from './finance/TePayouts'
@@ -35,8 +35,6 @@ import TeTripLog from './admin/TeTripLog'
 import TeIcon from './TeIcon'
 import { errorText, rs, when } from '@/lib/te/format'
 import './te.css'
-
-const NO_NAMES = new Map<string, string>()
 
 type Desk =
   | 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'periods' | 'deskwork'
@@ -141,7 +139,16 @@ export default function TeStaffHome() {
           ) : null}
 
           {desk !== 'home' ? body() : openClaim ? (
-            <TeClaimDetail claimId={openClaim} catName={NO_NAMES} onBack={() => setOpenClaim(null)} onChanged={() => setTick(n => n + 1)} />
+            // The full approval screen, not the read-mostly detail: a row in
+            // "Waiting for you" is there because this person has to decide it,
+            // and deciding means line amounts, flags and the four-eyes refusal.
+            // This used to open TeClaimDetail, whose own text then apologised
+            // that line decisions were elsewhere.
+            <TeClaimApproval
+              claimId={openClaim}
+              onBack={() => setOpenClaim(null)}
+              onDecided={message => { setToast(message); setOpenClaim(null); setTick(n => n + 1) }}
+            />
           ) : (
             <>
               <div className="ph">

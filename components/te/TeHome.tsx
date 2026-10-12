@@ -1,18 +1,17 @@
 'use client'
 // components/te/TeHome.tsx — the employee's entry to Travel and Expenses.
 //
-// WHAT IS BUILT, and wired to the real API:
-//   · the home screen, and the option sheet of a trip kind: what needs you on
-//     trips of that kind, the ways in, and choosing an approved trip to start
-//   · the three-step planner, for a plan or a trip already travelled, with the
-//     place picker and editing a saved trip
-//   · vehicles and My limits and rates
-//   · trips, and one trip in whatever state it is in
-//   · a leg: recording it with GPS, its report, or saying it was not recorded
-//   · Other expense end to end, My claims, and what waits for you to approve
-// NOT BUILT: starting a trip from scratch on the spot ("Start now"), advances,
-// the approval and Finance screens, the Travel Desk and Admin.
-// app-code/UI-BUILD-GUIDE.md lists every screen in build order.
+// Every employee-facing screen in app-code/UI-BUILD-GUIDE.md is built and
+// wired to the real API: the home screen and the option sheet of a trip kind,
+// the three-step planner (plan, or a trip already travelled) with the place
+// picker and editing, Start now, vehicles and My limits and rates, trips and
+// one trip in any state, a leg recorded with GPS or reported or declared not
+// recorded, Other expense end to end, My claims, Advances, and the approvals
+// queue. The back office lives in TeStaffHome.tsx.
+//
+// This header used to list most of that as NOT BUILT. If a screen moves, say
+// so here — a stale "not built" note is how a finished screen stays unwired,
+// which is exactly what happened to the Start-a-leg button below.
 //
 // HOW IT IS BUILT, so the rest can follow the same way
 //   · One root element with class "te"; everything, the drawer included, is
@@ -44,7 +43,7 @@ import TeAdvances from './claim/TeAdvances'
 import TeApprovals from './approve/TeApprovals'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
-import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type ContinueAction, type WayId } from '@/lib/te/entry-flow'
+import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type WayId } from '@/lib/te/entry-flow'
 import './te.css'
 
 type View =
@@ -69,9 +68,6 @@ type Sheet =
   /** A leg the plan did not have, added to a trip under way. */
   | { name: 'addLeg'; detail: TeTripDetailT }
 
-/** The side rail, and the phone tab bar under it. `soon` names the build step
- *  that adds the screen: the row is shown, because leaving it out would make the
- *  module look smaller than it is, but it says it is not here yet. */
 /** The views the rail can land on. A claim is opened from a list, never from the rail. */
 type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits' | 'approvals'
 const RAIL: { k: RailView; label: string; icon: string }[] = [
@@ -92,12 +88,6 @@ const KINDS: { id: TripScope | 'other'; title: string; text: string; foot: strin
   { id: 'international', title: 'International trip', text: 'Any country. Flights, cabs abroad, hotel and food in one trip.', foot: 'Any country' },
   { id: 'other', title: 'Other expense', text: 'Client meal, courier, parking, printing. A bill with no travel.', foot: 'Bill with no trip' },
 ]
-
-/** The screens a way or a Continue button leads to, and the build step that adds
- *  each. Until then the button says so rather than doing nothing. */
-const NOT_BUILT: Record<string, string> = {
-  start: 'Starting a trip now is the last piece of build step 6.',
-}
 
 /** A notification link is "/ess?tab=claims&ref=<claim id>" (written by the database, migration 147).
  *  When the page was opened from one, start on that claim. */
@@ -203,8 +193,11 @@ export default function TeHome({ initialClaimId, onExit }: {
     setView({ name: 'leg', tripId, leg })
   }
 
-  /** A Continue button or a way whose screen is a later build step. */
-  const notBuilt = (key: ContinueAction | WayId) => { setSheet(null); setToast(NOT_BUILT[key] ?? 'Not built yet.') }
+  /** The guard for a way this screen does not know how to open. Every way in
+   *  FLOW_WAYS is built and handled below, so this is unreachable today; it
+   *  exists so that adding a WayId fails visibly rather than silently doing
+   *  nothing. It used to carry messages naming unfinished build steps. */
+  const noSuchWay = (id: WayId) => { setSheet(null); setToast(`There is no screen for “${id}”.`) }
 
   const initials = (me?.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   /** The rail and the tab bar both land on a view; the sheets close with it.
@@ -411,7 +404,17 @@ export default function TeHome({ initialClaimId, onExit }: {
               onClaim={detail => setView({ name: 'tripClaim', trip: detail.trip })}
             />
           ) : null}
-          {view.name === 'claim' ? <TeClaimDetail claimId={view.id} catName={catName} onBack={() => setView({ name: 'claims' })} onChanged={message => { setToast(message); reload() }} /> : null}
+          {view.name === 'claim' ? (
+            <TeClaimDetail
+              claimId={view.id}
+              catName={catName}
+              onBack={() => setView({ name: 'claims' })}
+              onChanged={message => { setToast(message); reload() }}
+              // Screen 83d: a line the approver marked opens in the expense
+              // form that already exists here, on that line and its trip.
+              onFixLine={(line, tripId) => setSheet({ name: 'expense', line, tripId })}
+            />
+          ) : null}
         </div>
       </main>
       </div>
@@ -475,7 +478,10 @@ export default function TeHome({ initialClaimId, onExit }: {
                 journeys={snap.journeys}
                 today={snap.today}
                 placeName={placeName}
-                onStartLeg={() => notBuilt('legStart')}
+                // Straight to the leg's own screen, the same way the live bar
+                // and the trip detail open one. This said "not built yet"
+                // while TeLegLive was already wired to every other route in.
+                onStartLeg={(_legId, leg) => { setSheet(null); setView({ name: 'leg', tripId: leg.tripId, leg }) }}
                 onOpenTrip={openTrip}
               />
             ) : (
@@ -520,7 +526,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                             if (w.id === 'approved') return setSheet({ name: 'kind', kind, way: 'approved' })
                             if (w.id === 'plan' || w.id === 'past') return setSheet({ name: 'plan', kind, past: w.id === 'past' })
                             if (w.id === 'start') return setSheet({ name: 'startNow' })
-                            return notBuilt(w.id)
+                            return noSuchWay(w.id)
                           }}
                         >
                           <span className="wi"><TeIcon name={w.icon} size="lg" /></span>

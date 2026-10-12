@@ -5,15 +5,16 @@
 // The list renders from the snapshot (GET /api/te/me). The detail is one call,
 // GET /api/te/claims/[id], which also says what the person looking at it may do
 // (`can`). The owner can take a claim back or answer a send-back; an approver
-// or a Finance member gets the plain decision buttons. Reducing or rejecting
-// single lines is part of the full approval screen, which is NOT built here
-// (see app-code/UI-BUILD-GUIDE.md, "Approvals").
+// or a Finance member gets the plain decision buttons here. Reducing or
+// rejecting single lines belongs to the full approval screen,
+// components/te/approve/TeClaimApproval.tsx, which the Approvals desk opens.
 import { useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeClaim, TeClaimDetail } from '@/lib/te/types'
+import type { Snapshot, TeClaim, TeClaimDetail, TeExpense, TePlaceBrief } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeFileLink from './TeFileLink'
-import { claimChip, claimHolder, day, errorText, flagClass, rs, when } from '@/lib/te/format'
+import TeLegEvidence from './approve/TeLegEvidence'
+import { claimChip, claimHolder, day, errorText, flagClass, plural, rs, when } from '@/lib/te/format'
 
 export function TeClaimList({ snap, onOpen }: { snap: Snapshot; onOpen: (claimId: string) => void }) {
   const tripName = useMemo(() => new Map(snap.trips.map(t => [t.id, t.name])), [snap])
@@ -67,22 +68,45 @@ function Tracker({ c }: { c: TeClaim }) {
   )
 }
 
-export function TeClaimDetail({ claimId, catName, onBack, onChanged }: {
+export function TeClaimDetail({ claimId, catName, onBack, onChanged, onFixLine }: {
   claimId: string
   catName: Map<string, string>
   onBack: () => void
   /** Called after an action changed the claim, so the caller reloads its own data. */
   onChanged: (message: string) => void
+  /** Open the expense form on one line of this claim (screens 83c, 83d).
+   *  Left out in the back office, where fixing a line is not the viewer's job
+   *  — the buttons simply do not appear. */
+  onFixLine?: (line: TeExpense, tripId?: string) => void
 }) {
   const [d, setD] = useState<TeClaimDetail | null>(null)
   const [error, setError] = useState('')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [tick, setTick] = useState(0)
+  // Taking a claim back is undone only by submitting it again, which puts it
+  // at the bottom of every queue it had climbed. Worth one question first.
+  const [recalling, setRecalling] = useState(false)
+  // The legs behind the claim open their evidence over this screen. A claim
+  // carries its legs but no place book, so the trip is read alongside for the
+  // names — otherwise the evidence shows raw ids.
+  const [evidence, setEvidence] = useState<string | null>(null)
+  const [places, setPlaces] = useState<Record<string, TePlaceBrief>>({})
 
   useEffect(() => {
     let current = true
-    te.claim(claimId).then(r => { if (current) { setD(r); setError('') } }).catch(e => { if (current) setError(errorText(e)) })
+    te.claim(claimId)
+      .then(r => {
+        if (!current) return
+        setD(r); setError('')
+        if (r.trip) {
+          te.trip(r.trip.id)
+            .then(t => { if (current) setPlaces(t.places) })
+            // Names are a nicety; the distances still stand without them.
+            .catch(() => { if (current) setPlaces({}) })
+        }
+      })
+      .catch(e => { if (current) setError(errorText(e)) })
     return () => { current = false }
   }, [claimId, tick])
 
@@ -102,6 +126,9 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged }: {
   const c = d.claim
   const chip = claimChip(c)
   const finance = d.can.stage === 'finance'
+
+  const openLeg = evidence ? d.legs.find(l => l.id === evidence) ?? null : null
+  if (openLeg) return <TeLegEvidence leg={openLeg} places={places} onBack={() => setEvidence(null)} />
 
   return (
     <>
@@ -125,13 +152,22 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged }: {
                 <tbody>
                   <tr><th>Date</th><th>Expense</th><th className="r">Claimed</th><th className="r">Approved</th><th>Why</th></tr>
                   {d.lines.map(x => (
-                    <tr key={x.id}>
+                    // A line the approver marked is picked out, not just
+                    // annotated: on a long claim the one thing to change has
+                    // to be findable at a glance (screen 83c).
+                    <tr key={x.id} className={x.fix ? 'bad' : undefined}>
                       <td className="nowrap">{day(x.date)}</td>
                       <td>
                         <b>{x.merchant || catName.get(x.cat) || x.cat}</b>
                         <div className="small muted">{catName.get(x.cat) || x.cat}{x.pay === 'company' ? ' · paid by company' : ''}</div>
                         {/* Your own bill, back out of the private bucket. */}
                         {x.file?.path ? <TeFileLink path={x.file.path} name={x.file.name} kind={x.file.kind} small /> : null}
+                        {/* Screen 83d: straight into the form on this line. */}
+                        {x.fix && onFixLine && d.can.own ? (
+                          <button type="button" className="btn sm pri" onClick={() => onFixLine(x, d.trip?.id)}>
+                            <TeIcon name="receipt" size="sm" />Fix this line
+                          </button>
+                        ) : null}
                       </td>
                       <td className="r">{x.pay === 'company' ? '—' : rs(x.claimed)}</td>
                       <td className="r b">{x.pay === 'company' ? '—' : x.approved === null ? '…' : rs(x.approved)}</td>
@@ -148,6 +184,34 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged }: {
               <div className="tx"><b><span className="code">{f.code}</span> {f.title}</b><p>{f.evidence}</p></div>
             </div>
           ))}
+
+          {/* The legs and their GPS. Screens 80, 82, 83b — the part of the
+              claim that says where the distance came from. The employee sees
+              the same evidence their approver sees, which is the point: an
+              amount argued about later is argued about from one record. */}
+          {d.legs?.length ? (
+            <div className="card pad0">
+              <div className="day"><span>Travel on this claim</span><span>{d.legs.length}</span></div>
+              {d.legs.map(l => (
+                <button key={l.id} type="button" className="li click" onClick={() => setEvidence(l.id)}>
+                  <span className="ico"><TeIcon name="route" /></span>
+                  <span className="grow">
+                    <span className="b">Leg {l.n}</span>
+                    <span className="small muted">
+                      {[
+                        l.mode,
+                        `${l.payKm ?? l.plannedKm} km`,
+                        l.gps === 'checkin' ? 'check-ins' : null,
+                        l.stats?.gaps ? plural(l.stats.gaps, 'gap') : null,
+                        l.manual ? 'added without GPS' : null,
+                      ].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  <span className="nr-go">Evidence<TeIcon name="go" size="sm" /></span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="aside">
@@ -168,10 +232,33 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged }: {
                   <button type="button" className="btn pri wide" disabled={busy || !text.trim()} onClick={() => run('Answer sent.', () => te.claimRespond(c.id, text))}>Send answer</button>
                 </div>
               ) : null}
-              {d.can.own ? <button type="button" className="btn wide" disabled={busy} onClick={() => run('Claim taken back.', () => te.claimRecall(c.id))}>Take this claim back</button> : null}
+              {/* Screen 84. Asked first, because taking a claim back is only
+                  undone by submitting it again, and it then starts at the
+                  bottom of every queue it had already climbed. */}
+              {d.can.own ? (
+                recalling ? (
+                  <div className="stack sm">
+                    <div className="flag crit">
+                      <TeIcon name="warn" />
+                      <div className="tx">
+                        <b>Take {c.no} back?</b>
+                        <p>It leaves the approval chain and becomes yours to change again. Sending it back in starts the approvals from the beginning.</p>
+                      </div>
+                    </div>
+                    <div className="row tight">
+                      <button type="button" className="btn" onClick={() => setRecalling(false)}>Never mind</button>
+                      <button type="button" className="btn dan" disabled={busy} onClick={() => run('Claim taken back.', () => te.claimRecall(c.id))}>
+                        {busy ? 'Taking it back…' : 'Take it back'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="btn wide" disabled={busy} onClick={() => setRecalling(true)}>Take this claim back</button>
+                )
+              ) : null}
               {d.can.act ? (
                 <div className="stack sm">
-                  <p className="small muted">You are deciding as {d.can.role}. To reduce or reject single lines, use the full approval screen (not part of this starter).</p>
+                  <p className="small muted">You are deciding as {d.can.role}. To reduce or refuse single lines, or to answer a check, open this claim from the Approvals desk.</p>
                   <label className="fld"><span>Comment</span><textarea value={text} onChange={e => setText(e.target.value)} /></label>
                   <button type="button" className="btn pri wide" disabled={busy} onClick={() => run(finance ? 'Verified.' : 'Approved.', () => te.claimDecide(c.id, finance ? 'verify' : 'approve', { comment: text }))}>{finance ? 'Verify' : 'Approve'}</button>
                   <div className="row">

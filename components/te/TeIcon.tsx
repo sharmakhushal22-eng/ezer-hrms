@@ -40,6 +40,9 @@ const PATHS: Record<string, string> = {
   shield: 'M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z',
   car: 'M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11M3 16v-3a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3M6 19v-2M18 19v-2M3 16h18M7 14h.01M17 14h.01',
   bus: 'M6 4h12a2 2 0 0 1 2 2v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a2 2 0 0 1 2-2zM4 11h16M8 14h.01M16 14h.01M7 17v2.5M17 17v2.5',
+  // The prototype's path (design/prototype/source). Two screens already asked
+  // for "train" and were silently getting the information glyph instead.
+  train: 'M7 3h10a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2zM5 11h14M9 14h.01M15 14h.01M8 17l-2 4M16 17l2 4',
   clock: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
   // Vehicles and the RC check (build step 4).
   verify: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.5-4.5M8.5 11l2 2 3-3.5',
