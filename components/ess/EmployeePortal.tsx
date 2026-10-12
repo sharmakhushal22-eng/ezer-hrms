@@ -46,7 +46,7 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 import {
   C, F, W, R, E, S, Z, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
-  IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch,
+  IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch, IconReceipt,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 
@@ -3118,6 +3118,9 @@ const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => R
   // is a different thing that still uses IconBell.
   inbox: IconMail,
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
+  // The same glyph the dashboard rail gives this module, so the employee side
+  // and the back office are recognisably the same thing.
+  expenses: IconReceipt,
   social: IconEmployees, rnr: IconAi, funzone: IconAi,
 }
 function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
@@ -3160,7 +3163,9 @@ const SECTIONS: NavSection[] = [
       { k:'nps',         label:'Corporate NPS' },
       { k:'loans',       label:'Loans' },
       { k:'claims',      label:'Travel Claims' },
-      { k:'expenses',    label:'Travel & Expenses',     href:'/ess/travel' },
+      // 'expenses' (Travel & Expenses) moved OUT of Payroll to a section of its
+      // own above HRIS — see below. The legacy 'claims' tab above is a different
+      // thing and stays here.
       { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
     ]},
 
@@ -3178,6 +3183,17 @@ const SECTIONS: NavSection[] = [
   { k:'inbox', label:'Inbox', short:'Inbox', icon:'', status:'ready',
     desc:'Messages from colleagues and departments, and every notification in full',
     items:[{ k:'inbox', label:'Inbox' }] },
+
+  // Travel & Expenses, in the rail in its own right rather than under Payroll.
+  // It is a module of roughly 135 screens with its own navigation, and people
+  // open it to record a trip or send a claim — not to look at their salary.
+  //
+  // The section key and its single item key are BOTH 'expenses', deliberately:
+  // AWAY, go(), the ?tab=claims&ref= deep link and the render case below are all
+  // keyed on that, so moving the tab changes where it sits and nothing else.
+  { k:'expenses', label:'Travel & Expenses', short:'T&E', icon:'', status:'ready',
+    desc:'Trips, legs, bills and claims — travel from planning to payout',
+    items:[{ k:'expenses', label:'Travel & Expenses', href:'/ess/travel' }] },
 
   { k:'hris', label:'HRIS', short:'HRIS', icon:'', status:'partial',
     desc:'Directory, requests, approvals and the exit process',
