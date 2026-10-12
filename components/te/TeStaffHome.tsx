@@ -10,8 +10,9 @@
 //   Payouts        verified claims, and the batches they go out in
 //   Months         which months accept claims
 //   Travel Desk    tickets and hotels to book, vehicles to check
-// The Admin screens and the reports are not built yet: see
-// app-code/UI-BUILD-GUIDE.md, steps 11 and 12.
+//   Setup          rates, limits, GPS rules, checks, categories, who approves
+// The reports and the audit log are not built yet: see
+// app-code/UI-BUILD-GUIDE.md, step 12.
 import { useEffect, useState } from 'react'
 import { te, type FinanceSummary } from '@/lib/te/client'
 import type { TeConfig, TeHealthRow, TeQueueRow } from '@/lib/te/types'
@@ -22,17 +23,25 @@ import TeAdvanceDesk from './finance/TeAdvanceDesk'
 import TePayouts from './finance/TePayouts'
 import TePeriods from './finance/TePeriods'
 import TeTravelDesk from './desk/TeTravelDesk'
+import TeModesVehicles from './admin/TeModesVehicles'
+import TePolicy from './admin/TePolicy'
+import TeGpsRules from './admin/TeGpsRules'
+import TeChecks from './admin/TeChecks'
+import TeCategories from './admin/TeCategories'
+import TeWorkflow from './admin/TeWorkflow'
 import TeIcon from './TeIcon'
 import { errorText, rs, when } from '@/lib/te/format'
 import './te.css'
 
 const NO_NAMES = new Map<string, string>()
 
-type Desk = 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'periods' | 'deskwork'
+type Desk =
+  | 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'periods' | 'deskwork'
+  | 'rates' | 'policy' | 'gps' | 'checks' | 'categories' | 'workflow'
 
 /** The desks, and what each needs before it is worth offering. A desk is shown
  *  when its data loaded; one that 403s for this person simply is not there. */
-const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; needsDesk?: boolean }[] = [
+const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; needsDesk?: boolean; needsAdmin?: boolean }[] = [
   { k: 'home', label: 'Dashboard', icon: 'home' },
   { k: 'approvals', label: 'Approvals', icon: 'check' },
   { k: 'verify', label: 'Verification', icon: 'verify', needsFinance: true },
@@ -40,6 +49,12 @@ const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; nee
   { k: 'payouts', label: 'Payouts', icon: 'claims', needsFinance: true },
   { k: 'periods', label: 'Months', icon: 'cal', needsFinance: true },
   { k: 'deskwork', label: 'Travel Desk', icon: 'plane', needsDesk: true },
+  { k: 'rates', label: 'Modes and rates', icon: 'car', needsAdmin: true },
+  { k: 'policy', label: 'Policy limits', icon: 'limits', needsAdmin: true },
+  { k: 'gps', label: 'GPS rules', icon: 'target', needsAdmin: true },
+  { k: 'checks', label: 'Checks', icon: 'verify', needsAdmin: true },
+  { k: 'categories', label: 'Categories', icon: 'other', needsAdmin: true },
+  { k: 'workflow', label: 'Who approves', icon: 'people', needsAdmin: true },
 ]
 
 export default function TeStaffHome() {
@@ -77,7 +92,10 @@ export default function TeStaffHome() {
   // Finance's own counts loading is the proof that this person has the Finance
   // permission; no role is named here.
   const isFinance = summary !== null
-  const tabs = DESKS.filter(d => (!d.needsFinance || isFinance) && (!d.needsDesk || hasDesk))
+  // The admin config loading IS the admin permission; nothing else is named.
+  const isAdmin = cfg !== null
+  const tabs = DESKS.filter(d =>
+    (!d.needsFinance || isFinance) && (!d.needsDesk || hasDesk) && (!d.needsAdmin || isAdmin))
 
   const body = () => {
     if (desk === 'approvals') return <TeApprovals onToast={setToast} />
@@ -86,6 +104,15 @@ export default function TeStaffHome() {
     if (desk === 'payouts') return <TePayouts onToast={setToast} />
     if (desk === 'periods') return <TePeriods onToast={setToast} />
     if (desk === 'deskwork') return <TeTravelDesk vehicleTypes={cfg?.vehicles ?? []} fuelPrice={cfg?.fuelPrice ?? {}} onToast={setToast} />
+    if (desk === 'workflow') return <TeWorkflow onToast={setToast} />
+    // The rest edit the config, so they all need it and all reload it after.
+    if (!cfg) return null
+    const reloadCfg = () => setTick(n => n + 1)
+    if (desk === 'rates') return <TeModesVehicles key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
+    if (desk === 'policy') return <TePolicy key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
+    if (desk === 'gps') return <TeGpsRules key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
+    if (desk === 'checks') return <TeChecks key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
+    if (desk === 'categories') return <TeCategories key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
     return null
   }
 
