@@ -62,7 +62,7 @@
  * hero's right column is `auto`, so this declares its own width; the left
  * column of the hero is 1fr and gives way. */
 .ezt .pz {
-  width:486px; max-width:100%;
+  width:540px; max-width:100%;
   display:grid;
   grid-template-columns:minmax(0,1fr) auto;
   grid-template-areas:
@@ -144,8 +144,8 @@
 .ezt .pz-btn.is-done .pz-ic .pz-main { opacity:0; transform:scale(.4); }
 .ezt .pz-btn.is-done .pz-ic .pz-tick { opacity:1; transform:scale(1); }
 
-.ezt .pz-lbl { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1; }
-.ezt .pz-lbl b { font-size:15px; font-weight:700; letter-spacing:-.15px; line-height:1.05; }
+.ezt .pz-lbl { display:flex; flex-direction:column; gap:3px; flex:1 1 auto; min-width:92px; }
+.ezt .pz-lbl b { font-size:15px; font-weight:700; letter-spacing:-.15px; line-height:1.05; white-space:nowrap; }
 .ezt .pz-lbl small { font-size:10.8px; font-weight:600; opacity:.72; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ezt .pz-stamp { font-variant-numeric:tabular-nums; font-weight:800; opacity:.92; }
 
@@ -170,7 +170,7 @@
 .ezt .pz-run {
   display:none; align-items:center; gap:6px; padding:4px 9px; border-radius:999px;
   font-size:10.5px; font-weight:800; letter-spacing:.03em; font-variant-numeric:tabular-nums;
-  background:rgba(180,83,9,.11); color:#B45309; flex:none;
+  background:rgba(180,83,9,.11); color:#B45309; flex:0 1 auto; min-width:0; overflow:hidden;
 }
 .ezt .pz-key.is-ready .pz-run { display:inline-flex; }
 .ezt .pz-run i { width:5px; height:5px; border-radius:50%; background:var(--pz-out); animation:pz-pulse 1.6s infinite; }

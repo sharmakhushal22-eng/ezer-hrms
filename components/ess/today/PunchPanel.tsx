@@ -28,7 +28,6 @@ import {
   punchState, shiftLengthMs, shiftProgress, toDate, type PunchKind,
 } from '@/lib/today/punch';
 import AnalogPunchWatch from './AnalogPunchWatch';
-import { Flame } from './icons';
 import { useReducedMotion } from './hooks';
 import './punch-hero.css';
 
@@ -328,9 +327,6 @@ export default function PunchPanel({ data, prefs, onToast, onPunched, confettiRe
         <span>{targetLabel}</span>
       </div>
 
-      {data.streak > 0 && (
-        <div className="streak"><span className="fl"><Flame width={16} height={16} /></span>{data.streak}-day on-time streak</div>
-      )}
       </div>
     </div>
   );
