@@ -9,34 +9,37 @@
 //   Advances       money out with employees
 //   Payouts        verified claims, and the batches they go out in
 //   Months         which months accept claims
-// The Travel Desk and the Admin screens are not built yet: see
-// app-code/UI-BUILD-GUIDE.md, steps 10 to 12.
+//   Travel Desk    tickets and hotels to book, vehicles to check
+// The Admin screens and the reports are not built yet: see
+// app-code/UI-BUILD-GUIDE.md, steps 11 and 12.
 import { useEffect, useState } from 'react'
 import { te, type FinanceSummary } from '@/lib/te/client'
-import type { TeHealthRow, TeQueueRow } from '@/lib/te/types'
+import type { TeConfig, TeHealthRow, TeQueueRow } from '@/lib/te/types'
 import { TeClaimDetail } from './TeClaims'
 import TeApprovals from './approve/TeApprovals'
 import TeVerification from './finance/TeVerification'
 import TeAdvanceDesk from './finance/TeAdvanceDesk'
 import TePayouts from './finance/TePayouts'
 import TePeriods from './finance/TePeriods'
+import TeTravelDesk from './desk/TeTravelDesk'
 import TeIcon from './TeIcon'
 import { errorText, rs, when } from '@/lib/te/format'
 import './te.css'
 
 const NO_NAMES = new Map<string, string>()
 
-type Desk = 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'periods'
+type Desk = 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'periods' | 'deskwork'
 
 /** The desks, and what each needs before it is worth offering. A desk is shown
  *  when its data loaded; one that 403s for this person simply is not there. */
-const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean }[] = [
+const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; needsDesk?: boolean }[] = [
   { k: 'home', label: 'Dashboard', icon: 'home' },
   { k: 'approvals', label: 'Approvals', icon: 'check' },
   { k: 'verify', label: 'Verification', icon: 'verify', needsFinance: true },
   { k: 'advances', label: 'Advances', icon: 'advances', needsFinance: true },
   { k: 'payouts', label: 'Payouts', icon: 'claims', needsFinance: true },
   { k: 'periods', label: 'Months', icon: 'cal', needsFinance: true },
+  { k: 'deskwork', label: 'Travel Desk', icon: 'plane', needsDesk: true },
 ]
 
 export default function TeStaffHome() {
@@ -47,6 +50,12 @@ export default function TeStaffHome() {
   const [openClaim, setOpenClaim] = useState<string | null>(null)
   const [desk, setDesk] = useState<Desk>('home')
   const [toast, setToast] = useState('')
+  // Vehicle types, for the Travel Desk to say what a rate becomes. Admin-only,
+  // so it may be absent for a desk user — the rates degrade, the desk works.
+  const [cfg, setCfg] = useState<TeConfig | null>(null)
+  // Whether this person may use the Travel Desk at all. Its own permission,
+  // not the admin one: the desk's own call is the only honest test.
+  const [hasDesk, setHasDesk] = useState(false)
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -54,6 +63,8 @@ export default function TeStaffHome() {
     te.queue().then(q => { if (current) { setQueue(q); setError('') } }).catch(e => { if (current) { setQueue([]); setError(errorText(e)) } })
     te.finance.summary().then(r => { if (current) setSummary(r.summary) }).catch(() => { if (current) setSummary(null) })
     te.admin.health().then(r => { if (current) setHealth(r.health) }).catch(() => { if (current) setHealth(null) })
+    te.admin.config().then(r => { if (current) setCfg(r.config) }).catch(() => { if (current) setCfg(null) })
+    te.desk.list().then(() => { if (current) setHasDesk(true) }).catch(() => { if (current) setHasDesk(false) })
     return () => { current = false }
   }, [tick])
 
@@ -66,7 +77,7 @@ export default function TeStaffHome() {
   // Finance's own counts loading is the proof that this person has the Finance
   // permission; no role is named here.
   const isFinance = summary !== null
-  const tabs = DESKS.filter(d => !d.needsFinance || isFinance)
+  const tabs = DESKS.filter(d => (!d.needsFinance || isFinance) && (!d.needsDesk || hasDesk))
 
   const body = () => {
     if (desk === 'approvals') return <TeApprovals onToast={setToast} />
@@ -74,6 +85,7 @@ export default function TeStaffHome() {
     if (desk === 'advances') return <TeAdvanceDesk onToast={setToast} />
     if (desk === 'payouts') return <TePayouts onToast={setToast} />
     if (desk === 'periods') return <TePeriods onToast={setToast} />
+    if (desk === 'deskwork') return <TeTravelDesk vehicleTypes={cfg?.vehicles ?? []} fuelPrice={cfg?.fuelPrice ?? {}} onToast={setToast} />
     return null
   }
 
@@ -98,7 +110,7 @@ export default function TeStaffHome() {
               <div className="ph">
                 <div>
                   <h1>Travel and Expenses</h1>
-                  <p>Approvals, the Finance desk and setup. This page is a starter: it shows what is waiting and whether the module is set up.</p>
+                  <p>What is waiting on you, how the Finance desk stands, and whether the module is set up.</p>
                 </div>
               </div>
               {error ? <div className="flag crit" role="alert"><div className="tx"><b>{error}</b></div></div> : null}
