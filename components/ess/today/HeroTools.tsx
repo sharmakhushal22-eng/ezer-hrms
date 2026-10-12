@@ -1,16 +1,16 @@
 'use client';
-// components/ess/today/HeroTools.tsx — the hero's top-right cluster.
+// components/ess/today/HeroTools.tsx — the hero's top-left cluster.
 //
 // The on-time streak, the time/date format picker and the theme switch. All
-// three are things you set or glance at rather than act on, so they sit above
-// everything in the top-right corner instead of competing with the clock on
-// one line and the punch buttons on the other.
+// three are things you set or glance at rather than act on, so they sit in a
+// row above the clock instead of competing with it on one line.
 //
 // The streak used to live under the punch dial, where it was the third thing
 // stacked beneath the control you came to press.
 import { useEffect, useRef, useState } from 'react';
 import type { Prefs, TodayPayload } from '@/lib/today/types';
 import { fmtDate } from '@/lib/today/format';
+import { streakText } from '@/lib/today/punch';
 import { Auto, Clock, Flame, Moon, Search, Sun } from './icons';
 
 type ToolProps = { prefs: Prefs; onPrefs: (p: Partial<Prefs>) => void };
@@ -20,11 +20,19 @@ export default function HeroTools({ data, prefs, onPrefs, now, onSearch }: ToolP
 }) {
   return (
     <div className="hero-tools">
-      {data.streak > 0 && (
-        <div className="streak" title={`${data.streak} days in a row on time`}>
-          <span className="fl"><Flame width={16} height={16} /></span>{data.streak}-day on-time streak
-        </div>
-      )}
+      {/* Always rendered, including at 0. The chip used to disappear on any
+          late day, and because one late morning zeroes the whole run (see
+          ess_attendance_streak) that happened often enough to read as the
+          hero having lost a component. */}
+      <div
+        className={data.streak > 0 ? 'streak' : 'streak is-none'}
+        title={data.streak > 0
+          ? `${data.streak} days in a row, punched in on time`
+          : 'One late day resets the run to zero'}
+      >
+        <span className="fl"><Flame width={16} height={16} /></span>
+        {streakText(data.streak, !!data.today?.punch_in)}
+      </div>
       {/* Only when there is something to open. The drop rendered this
           unconditionally, so with no command palette in this portal it sat in
           the hero doing nothing and advertising a shortcut that was not bound.

@@ -9,7 +9,7 @@ import {
   CHIP_CLEAR_DEG, DEG_PER_MINUTE, canPunch, dayFromToday, degFromDate,
   degFromMinutes, dialSeparation, formatDuration, gradeIn, gradeOut,
   gradeWorked, hhmmToMinutes, outChipOffsetDeg, punchState, shiftLengthMs,
-  shiftProgress, toDate,
+  shiftProgress, streakText, toDate,
 } from '../punch.ts'
 
 const at = (h: number, m: number, s = 0) => new Date(2026, 9, 12, h, m, s)
@@ -236,5 +236,33 @@ describe('keeping the two punch capsules apart', () => {
     // The inward version cleared the other capsule and then sat on the digital
     // readout in the centre of the face. This returns an ANGLE, not a radius.
     assert.ok(Math.abs(outChipOffsetDeg(at(9, 0), at(9, 1))) <= 180)
+  })
+})
+
+describe('what the streak chip reads', () => {
+  it('counts the run when there is one', () => {
+    assert.equal(streakText(1, false), '1-day on-time streak')
+    assert.equal(streakText(12, true), '12-day on-time streak')
+  })
+
+  it('states a zero streak rather than saying nothing', () => {
+    // The chip used to vanish at 0, which reads as a broken hero rather than
+    // as "no streak" — and 0 is ordinary, because one late day zeroes the run.
+    assert.match(streakText(0, true), /No streak/)
+    assert.match(streakText(0, false), /No streak/)
+  })
+
+  it('points at today while today can still be earned', () => {
+    assert.match(streakText(0, false), /start one today/)
+  })
+
+  it('points at tomorrow once today is already recorded', () => {
+    // Today is punched and the streak is still 0, so today was late: the next
+    // chance really is tomorrow.
+    assert.match(streakText(0, true), /start one tomorrow/)
+  })
+
+  it('never claims a negative run', () => {
+    assert.match(streakText(-1, false), /No streak/)
   })
 })

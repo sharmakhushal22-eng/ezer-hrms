@@ -184,6 +184,11 @@
   .ezt .hero-tools .streak { height:32px; }
   .ezt .streak { display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 11px 0 8px; border-radius:99px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); font-size:12px; font-weight:600; color:var(--on-hero); }
   .ezt .streak .fl { width:18px; height:18px; display:grid; place-items:center; color:var(--sun); }
+  /* At zero the chip states a fact rather than celebrating one, so it steps
+     back: no lit flame, quieter text. */
+  .ezt .streak.is-none { color:var(--on-hero-soft); }
+  .ezt .streak.is-none .fl { color:var(--on-hero-soft); opacity:.65; }
+  .ezt .streak.is-none .fl svg { animation:none; }
   .ezt .streak .fl svg { animation: flick 1.4s ease-in-out infinite alternate; --animation-reduced:none; transform-origin:50% 100%; }
   @keyframes flick { from { scale:1; } to { scale:1.12 .96; } }
 

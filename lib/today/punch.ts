@@ -195,3 +195,19 @@ export function outChipOffsetDeg(inAt: Date | null, outAt: Date | null): number 
   const signed = (((b - a + 540) % 360) - 180)
   return signed >= 0 ? CHIP_CLEAR_DEG : -CHIP_CLEAR_DEG
 }
+
+// ── the on-time streak ──────────────────────────────────────────────────────
+//
+// ess_attendance_streak() counts back from today over days that were punched
+// and not late, and it ZEROES on the newest late day rather than decrementing:
+// one late morning takes a 20-day run to nothing. So 0 is a common, ordinary
+// value, not an edge case — which is why the chip states it instead of
+// disappearing and making the hero look like it lost an element.
+
+/** What the streak chip reads. `punchedToday` decides whether a fresh run can
+ *  still start today: being told to "start one tomorrow" at nine in the
+ *  morning, with the day not yet punched, is both wrong and discouraging. */
+export function streakText(streak: number, punchedToday: boolean): string {
+  if (streak > 0) return `${streak}-day on-time streak`
+  return punchedToday ? 'No streak — start one tomorrow' : 'No streak — start one today'
+}
