@@ -27,6 +27,18 @@ export interface DraftPoint {
   pt: string
   /** The day you leave this place. On point 0 it is the trip's start date. */
   leave: IsoDate | ''
+  /**
+   * The day you ARRIVE here. Only asked for on the return point, where it is
+   * the day you are back at your starting point — the second half of what a
+   * round trip means, and the one date the planner used to derive instead of
+   * ask for.
+   *
+   * It is a real date and not a calculation because the journey home can cross
+   * midnight: leaving the client at 10pm on the 16th and reaching home at 6am
+   * on the 17th is one trip ending on the 17th, and nothing but the traveller
+   * knows that. Everywhere else the server fills arrival in from the legs.
+   */
+  arrive?: IsoDate | ''
   /** What you will do there, or why you stop. */
   what: string
   /** Only ever set on the one point you come back to. */
@@ -145,7 +157,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
     points: [
       { place: c.officePlace, pt: 'corp', leave: start, what: '' },
       blankPoint(),
-      { place: c.officePlace, pt: 'corp', leave: '', what: '', ret: true },
+      { place: c.officePlace, pt: 'corp', leave: '', arrive: '', what: '', ret: true },
     ],
     segs: [newSeg(mode, veh), newSeg(mode, veh)],
     retSame: true, stayBy: 'self', advance: '', pfReason: '', pfNote: '',
@@ -155,9 +167,10 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
 /**
  * A saved trip, opened for changing. Screens 68b and 68c.
  *
- * The trip comes back from the server with `arrive` filled in on every point;
- * that is derived, not typed, so it is dropped here — the planner stores only
- * what the person entered and lets the server work the rest out again.
+ * The trip comes back from the server with `arrive` filled in on every point.
+ * That is derived, not typed, so it is dropped — except on the return point,
+ * where the arrival IS what the person typed (the day they are back). The
+ * planner stores only what was entered and lets the server work out the rest.
  *
  * `answerNeeded` is the difference between editing a plan of your own and
  * answering one your approver sent back: the second has to say what changed,
@@ -165,7 +178,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
  */
 export function fromTrip(trip: {
   id: Uuid; name: string; scope: TripScope; origin: TripOrigin; purpose: string; project: string
-  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; ret?: true }[]
+  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; ret?: true }[]
   segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
   pax: number; people: { id: string; name?: string }[]; stayBy: 'self' | 'desk'; advance: number
   pfReason: string; pfNote: string; status: string
@@ -188,6 +201,11 @@ export function fromTrip(trip: {
     people: (trip.people ?? []).map(p => ({ id: p.id ?? '', name: p.name ?? '' })),
     points: (trip.points ?? []).map(p => ({
       place: p.place ?? '', pt: p.pt ?? '', what: p.what ?? '', leave: p.leave ?? '',
+      // Only the return point's arrival is kept. The server fills `arrive` in
+      // on every point from the legs, and that is derived — pulling it all
+      // back into the draft would have the planner storing answers it did not
+      // ask for. The return point is the one place the person typed it.
+      ...(p.ret && p.arrive ? { arrive: p.arrive } : {}),
       ...(p.ret ? { ret: true as const } : {}),
     })),
     segs: (trip.segs ?? []).map(s => ({
@@ -270,8 +288,9 @@ export function syncDraft(d: PlannerDraft, c: DraftContext): PlannerDraft {
  * Change the kind of trip, on an edit. Screen 68c.
  *
  * The dates move with it, because the two kinds mean different things by a
- * date. A local trip is one day and carries that day from the start; a trip
- * with nights in it has a date per place, and none of them can be guessed.
+ * date. A local trip carries its start date from point 0 and is not asked for
+ * a date per place; a trip with nights in it has one per place, and none of
+ * them can be guessed. The day you are back survives either way.
  */
 export function setScope(d: PlannerDraft, scope: TripScope, c: DraftContext, lastWorkday: IsoDate): PlannerDraft {
   if (scope === d.scope) return d
@@ -280,6 +299,14 @@ export function setScope(d: PlannerDraft, scope: TripScope, c: DraftContext, las
     // Becoming a one-day trip: it starts today (or the last working day, if it
     // already happened), and the per-place dates stop meaning anything.
     const start = d.origin === 'POST_FACTO' ? lastWorkday : c.today
+    // The per-place LEAVE dates go: a local trip is not asked for them. The
+    // return arrival STAYS, because a local trip can run over more than one
+    // day. What makes a trip local is where it goes, not whether it ends the
+    // day it started — Dwarka to Green Park is local because both are in one
+    // state. (The engine's own test for that is a distance: every place within
+    // cfg.localMaxKm, 120 km by default. It agrees with "same state" for a city
+    // like Delhi and disagrees across a large one.) So "the day I am back" is
+    // as true of a local trip as of any other, and it was typed, not derived.
     points = points.map((p, i) => (i === 0 ? { ...p, leave: p.leave || start } : { ...p, leave: '' }))
   } else if (d.origin !== 'POST_FACTO' && points[0]?.leave === c.today) {
     // Leaving local behind, today was a default rather than a decision, so it
@@ -300,7 +327,7 @@ export function setPattern(d: PlannerDraft, pattern: 'oneway' | 'round', c: Draf
   }
   if (has) return d
   const first = d.points[0]
-  return syncDraft({ ...d, retSame: true, points: [...d.points, { place: first.place, pt: first.pt, leave: '', what: '', ret: true }] }, c)
+  return syncDraft({ ...d, retSame: true, points: [...d.points, { place: first.place, pt: first.pt, leave: '', arrive: '', what: '', ret: true }] }, c)
 }
 
 /** A stop on the way, inserted after point `i`. */
@@ -405,7 +432,14 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
     origin: d.origin,
     purpose: d.purpose,
     project: d.project || '',
-    points: d.points.map(p => ({ place: p.place, pt: p.pt, what: p.what, leave: p.leave, ...(p.ret ? { ret: true } : {}) })),
+    // `arrive` is sent only where it was asked for — the return point. The
+    // engine computes t.end as the latest of every point's (leave || arrive),
+    // so this date becomes the trip's end without the engine changing at all.
+    points: d.points.map(p => ({
+      place: p.place, pt: p.pt, what: p.what, leave: p.leave,
+      ...(p.ret && p.arrive ? { arrive: p.arrive } : {}),
+      ...(p.ret ? { ret: true } : {}),
+    })),
     segs: d.segs.map(s => ({ mode: s.mode, bookedBy: s.bookedBy, vehicleId: s.vehicleId || null, xfer: { ...s.xfer } })),
     pax: Number(d.pax) || 1,
     people,

@@ -55,6 +55,16 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
     return target ? legs.find(l => l.to === target)?.date ?? '' : ''
   }
 
+  // The latest day you leave anywhere on the route. The day you get back
+  // cannot be before it, so it is the floor on that input — the same native
+  // `min` guard the other date fields use, not a rule of its own.
+  const retPoint = draft.points.find(p => p.ret)
+  const lastLeave = draft.points
+    .filter(p => !p.ret && p.leave)
+    .map(p => p.leave)
+    .sort()
+    .pop() ?? ''
+
   const toggle = (key: string) => edit(d => ({ ...d, open: d.open === key ? null : key }))
 
   return (
@@ -82,6 +92,33 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
             onChange={e => edit(d => ({ ...d, points: d.points.map((p, i) => (i === 0 ? { ...p, leave: e.target.value } : p)) }))}
           />
         </label>
+        {/* The other half of a round trip, next to the date it pairs with.
+            Asked for rather than derived because the journey home can cross
+            midnight: leaving at 10pm on the 16th and reaching home at 6am on
+            the 17th is a trip that ends on the 17th, and only the traveller
+            knows that. Left empty, the server works the end date out from the
+            last place you left, exactly as it did before.
+
+            It sits HERE and not on the return point's own row because that row
+            collapses to "Same as the start" whenever the return mirrors the
+            start — which is the default — and its fields are not rendered at
+            all in that state.
+
+            Shown for local trips too: a local trip can run over more than
+            one day. What makes it local is staying inside the one state, not
+            finishing the day it started. */}
+        {hasReturn ? (
+          <label className="fld sm">
+            <span>Back at the start on</span>
+            <input
+              type="date"
+              value={retPoint?.arrive || ''}
+              min={lastLeave || draft.points[0]?.leave || undefined}
+              max={planning ? undefined : snap.today}
+              onChange={e => edit(d => ({ ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: e.target.value } : p)) }))}
+            />
+          </label>
+        ) : null}
         <p className="small muted">
           {PATTERN_WORD[draft.pattern]}{stops > 0 ? `, ${plural(stops, 'stop')}` : ''}. Tap a line to change it.
         </p>
@@ -99,8 +136,8 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
           const issue = issues.find(x => x.block && (x.k === key || (i > 0 && x.k === `d${i}`)))
           const bad = !!issue && !!tried
 
-          const when = local ? ''
-            : p.ret ? (arrive ? `Back on ${day(arrive)}` : '')
+          const when = p.ret ? (p.arrive ? `Back on ${day(p.arrive)}` : arrive ? `Back on ${day(arrive)}` : '')
+            : local ? ''
               : i > 0 ? [arrive ? day(arrive) : '', p.leave && p.leave !== arrive ? day(p.leave) : ''].filter(Boolean).join(' to ')
                 : ''
           const sub = (lockRet ? ['Same as the start', when] : [pc && p.pt ? ptName(p.pt) : '', i > 0 && !p.ret ? p.what : '', when])

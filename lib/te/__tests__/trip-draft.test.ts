@@ -421,9 +421,13 @@ describe('opening a saved trip to change it', () => {
     assert.deepEqual(d.points.map(p => p.place), ['off', 'pune', 'off'])
   })
 
-  it('drops the arrival dates, which the server derives rather than the person typing', () => {
+  it('drops the arrival dates the server derived, but keeps the one that was typed', () => {
+    // This used to drop every arrival, because every arrival WAS derived. The
+    // return point's arrival is now an answer — the day you are back at your
+    // starting point — so it is the one that survives a reopen. Everything
+    // else is still the server's calculation off the legs.
     const d = fromTrip(saved, ctx())
-    for (const p of d.points) assert.equal('arrive' in p, false)
+    for (const p of d.points) if (!p.ret) assert.equal('arrive' in p, false, 'a derived arrival must not be stored')
   })
 
   it('does not rename a trip that is reopened', () => {
@@ -502,3 +506,64 @@ describe('what gets sent to the server', () => {
   })
 })
 
+
+describe('the day you are back at the start', () => {
+  // The second half of what "round trip" means. The planner used to derive it
+  // from the last place you left, which is wrong whenever the journey home
+  // crosses midnight.
+  
+  it('a new round trip has a return point with an empty arrival to fill in', () => {
+    const d = newPlannerDraft({ scope: 'domestic', origin: 'PRE_APPROVED', lastWorkday: '2026-10-09' }, ctx())
+    const ret = d.points.find(p => p.ret)
+    assert.ok(ret, 'a round trip comes back somewhere')
+    assert.equal(ret!.arrive, '')
+  })
+
+  it('sends the return arrival to the server, and only for the return point', () => {
+    // Every other point's arrival is the server's own answer, read off the
+    // legs. Sending ours back would have the planner arguing with it.
+    let d = newPlannerDraft({ scope: 'domestic', origin: 'PRE_APPROVED', lastWorkday: '2026-10-09' }, ctx())
+    d = { ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: '2026-10-17' } : { ...p, arrive: '2026-10-14' })) }
+    const payload = toTripDraft(d)
+    const sent = payload.points as { arrive?: string; ret?: true }[]
+    assert.equal(sent.find(p => p.ret)?.arrive, '2026-10-17')
+    assert.equal(sent.filter(p => !p.ret).every(p => p.arrive === undefined), true)
+  })
+
+  it('drops the arrival when the trip stops coming back', () => {
+    let d = newPlannerDraft({ scope: 'domestic', origin: 'PRE_APPROVED', lastWorkday: '2026-10-09' }, ctx())
+    d = { ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: '2026-10-17' } : p)) }
+    const oneWay = setPattern(d, 'oneway', ctx())
+    assert.equal(oneWay.points.some(p => p.ret), false)
+    assert.equal(oneWay.points.some(p => p.arrive), false, 'no return point, no return date')
+  })
+
+  it('keeps it when the trip becomes local, because a local trip can span days', () => {
+    // A local trip is bounded by distance (localMaxKm), not by ending the day
+    // it started, so "the day I am back" means the same thing there. It was
+    // typed rather than derived, so switching the kind does not discard it.
+    let d = newPlannerDraft({ scope: 'domestic', origin: 'PRE_APPROVED', lastWorkday: '2026-10-09' }, ctx())
+    d = { ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: '2026-10-17' } : p)) }
+    const local = setScope(d, 'local', ctx(), '2026-10-09')
+    assert.equal(local.points.find(p => p.ret)?.arrive, '2026-10-17')
+    // The per-place leave dates still go: local is not asked for them.
+    assert.equal(local.points.filter(p => !p.ret).slice(1).every(p => !p.leave), true)
+  })
+
+  it('survives a save and a reopen', () => {
+    const reopened = fromTrip({
+      id: 't1', name: 'Pune client visit', scope: 'domestic', origin: 'PRE_APPROVED',
+      purpose: 'Client meeting', project: '', pax: 1, people: [], stayBy: 'self',
+      advance: 0, pfReason: '', pfNote: '', status: 'DRAFT',
+      points: [
+        { place: 'off', pt: 'corp', what: '', leave: '2026-10-14' },
+        { place: 'pune', pt: 'client', what: 'Review', leave: '2026-10-16', arrive: '2026-10-14' },
+        { place: 'off', pt: 'corp', what: '', leave: '', arrive: '2026-10-17', ret: true },
+      ],
+      segs: [{ mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: {} }, { mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: {} }],
+    }, ctx())
+    assert.equal(reopened.points.find(p => p.ret)?.arrive, '2026-10-17')
+    // The middle point's arrival was the server's calculation, not an answer.
+    assert.equal(reopened.points[1].arrive, undefined)
+  })
+})
