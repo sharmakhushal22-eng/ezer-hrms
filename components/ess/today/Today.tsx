@@ -8,7 +8,7 @@ import { usePrefs } from '@/lib/today/prefs-client';
 import { tabTarget } from '@/lib/today/schema';
 import { authHeaders } from '@/lib/auth-headers';
 import HeroPanel from './HeroPanel';
-import PunchDial from './PunchDial';
+import PunchPanel from './PunchPanel';
 import StatTiles from './StatTiles';
 import WeekStrip from './WeekStrip';
 import PendingList from './PendingList';
@@ -112,7 +112,7 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
     <div className="ezt">
       <div className="page">
         <HeroPanel data={data} prefs={prefs} onPrefs={(p: Partial<Prefs>) => update(p)} onSearch={onSearch}>
-          <PunchDial data={data} prefs={prefs} onToast={show} confettiRef={confettiRef}
+          <PunchPanel data={data} prefs={prefs} onToast={show} confettiRef={confettiRef}
             onPunched={(kind, at) => { setLiveIn(kind === 'in' ? at : null);
               setData(d => d && ({ ...d, today: kind === 'in' ? { punch_in: at.toISOString(), punch_out: null, work_mode: 'office' } : { ...(d.today ?? { punch_in: null, work_mode: null }), punch_out: at.toISOString() } })); }} />
         </HeroPanel>

@@ -26,7 +26,9 @@
 // THIS TOOL FINDS FROZEN LITERALS, NOT WRONG TOKENS. A file at zero can still
 // render badly in dark mode: a text token used as a surface, a hairline token
 // used as ink, a tint used where a colour belongs. Those need eyes on a screen.
-//   * PunchDial / Toast        SVG colours inside deliberately-coloured shapes.
+//   * Toast                    SVG colours inside deliberately-coloured shapes.
+//     (PunchDial was here; it was replaced by PunchPanel + AnalogPunchWatch,
+//      which keep every colour in punch-hero.css and so carry none.)
 // Before 'fixing' an entry, check it is actually frozen rather than intended.
 export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'app/board/[pairCode]/page.tsx': 1,
@@ -88,7 +90,6 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/ess/FlexiTdsCalculator.tsx': 21,
   'components/ess/LeaveSection.tsx': 7,
   'components/ess/RoleTabs.tsx': 0,
-  'components/ess/today/PunchDial.tsx': 1,
   'components/ess/today/Toast.tsx': 1,
   'components/letters/LetterheadConfig.tsx': 2,
   'components/payroll/Appraisal.tsx': 2,
@@ -119,4 +120,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 216;
+export const THEME_AUDIT_TOTAL = 215;
