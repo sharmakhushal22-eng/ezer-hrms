@@ -75,6 +75,18 @@ export type VehicleLookup =
   | { reg: string; rc: RcChecked; type: string; typeName: string; ownerMasked: string; match: 'match' | 'partial' | 'no'; valid: { rc: boolean; ins: boolean; puc: boolean } }
 export interface ClaimResult { claim_id: Uuid; status: ClaimStatus; stage: ClaimStage; net_amount?: number | null; advance_adjusted?: number }
 export interface BookingInput { trip_id: Uuid; leg_id?: Uuid; point_seq?: number; vendor: string; reference: string; amount: number; ticket_url?: string }
+/** A stay the employee found and wants the desk to book. No reference: there
+ *  is no PNR until somebody books it. `ticket_url` is the page it was found on
+ *  — MakeMyTrip or any other — and is shown as a link, not fetched. */
+export interface StayRequestInput {
+  trip_id: Uuid
+  point_seq?: number
+  leg_id?: Uuid
+  vendor: string
+  amount: number
+  ticket_url?: string
+  details?: { address?: string; room?: string; platform?: string; check_in?: string; check_out?: string; note?: string }
+}
 export interface WorkflowSample { employee_id: Uuid; total?: number; scope?: string | null; postFacto?: boolean; exception?: boolean; band?: RiskBand; co?: Uuid[] }
 export interface ClaimSummaryRow {
   id: Uuid; company_id: Uuid; claim_no: string; claim_type: string; claim_seq: number; status: ClaimStatus; stage: ClaimStage
@@ -152,6 +164,11 @@ export const te = {
   /** Everything my own screens show. Render from this; call it again after every change. */
   me: () => get<Snapshot>('me'),
   placeAdd: (input: PlaceInput) => post<{ place_id: Uuid; matched?: true }>('places', input),
+  /** Ask the Travel Desk to book a stay on my own trip. Not te.desk.* — that
+   *  is the desk acting on somebody else's trip and needs Travel Claims EDIT;
+   *  this is the traveller asking, and the SQL checks the trip is theirs. */
+  stayRequest: (input: StayRequestInput) =>
+    post<{ booking_id: Uuid; booking_no: string; status: 'REQUESTED' }>('bookings/request', input),
   vehicleLookup: (reg: string) => get<VehicleLookup>('vehicles/lookup', { reg }),
   vehicleAdd: (input: VehicleInput) => post<{ vehicle_id: Uuid; vehicle_type_code: string; is_verified: boolean }>('vehicles', input),
 

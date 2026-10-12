@@ -77,6 +77,19 @@ export function tripCancel(ctx: TeCtx, tripId: Uuid, admin?: boolean): Promise<{
 export function tripRecordMissed(ctx: TeCtx, tripId: Uuid, reason: string, note?: string | null): Promise<{ trip_id: Uuid; status: TripDisplayStatus }>
 export interface BookingInput { trip_id: Uuid; leg_id?: Uuid; point_seq?: number; vendor: string; reference: string; amount: number; ticket_url?: string }
 export function bookingRecord(ctx: TeCtx, input: BookingInput): Promise<{ booking_id: Uuid; booking_no: string; expense_id: Uuid }>
+/** What the employee found and is asking the desk to book. No `reference`: a
+ *  request has no PNR yet, which is why 153 made that column nullable. */
+export interface StayRequestInput {
+  trip_id: Uuid
+  point_seq?: number
+  leg_id?: Uuid
+  vendor: string
+  amount: number
+  ticket_url?: string
+  details: { address?: string; room?: string; platform?: string; check_in?: string; check_out?: string; note?: string }
+}
+/** Asks the Travel Desk for a stay. Writes no expense — nothing is bought yet. */
+export function bookingRequest(ctx: TeCtx, input: StayRequestInput): Promise<{ booking_id: Uuid; booking_no: string; status: 'REQUESTED' }>
 export function bookingCancel(ctx: TeCtx, bookingId: Uuid, reason: string): Promise<{ booking_id: Uuid; status: 'CANCELLED' }>
 
 // ── legs ────────────────────────────────────────────────────────────────────
