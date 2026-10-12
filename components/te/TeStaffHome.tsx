@@ -11,8 +11,8 @@
 //   Months         which months accept claims
 //   Travel Desk    tickets and hotels to book, vehicles to check
 //   Setup          rates, limits, GPS rules, checks, categories, who approves
-// The reports and the audit log are not built yet: see
-// app-code/UI-BUILD-GUIDE.md, step 12.
+//   Reports        the claim register, the flag report, the trip GPS log
+//   Audit          who did what, and when
 import { useEffect, useState } from 'react'
 import { te, type FinanceSummary } from '@/lib/te/client'
 import type { TeConfig, TeHealthRow, TeQueueRow } from '@/lib/te/types'
@@ -29,6 +29,9 @@ import TeGpsRules from './admin/TeGpsRules'
 import TeChecks from './admin/TeChecks'
 import TeCategories from './admin/TeCategories'
 import TeWorkflow from './admin/TeWorkflow'
+import TeReports from './admin/TeReports'
+import TeAudit from './admin/TeAudit'
+import TeTripLog from './admin/TeTripLog'
 import TeIcon from './TeIcon'
 import { errorText, rs, when } from '@/lib/te/format'
 import './te.css'
@@ -38,6 +41,7 @@ const NO_NAMES = new Map<string, string>()
 type Desk =
   | 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'periods' | 'deskwork'
   | 'rates' | 'policy' | 'gps' | 'checks' | 'categories' | 'workflow'
+  | 'reports' | 'triplog' | 'audit'
 
 /** The desks, and what each needs before it is worth offering. A desk is shown
  *  when its data loaded; one that 403s for this person simply is not there. */
@@ -55,6 +59,9 @@ const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; nee
   { k: 'checks', label: 'Checks', icon: 'verify', needsAdmin: true },
   { k: 'categories', label: 'Categories', icon: 'other', needsAdmin: true },
   { k: 'workflow', label: 'Who approves', icon: 'people', needsAdmin: true },
+  { k: 'reports', label: 'Reports', icon: 'claims', needsAdmin: true },
+  { k: 'triplog', label: 'Trip log', icon: 'route', needsAdmin: true },
+  { k: 'audit', label: 'Audit', icon: 'clock', needsAdmin: true },
 ]
 
 export default function TeStaffHome() {
@@ -105,6 +112,9 @@ export default function TeStaffHome() {
     if (desk === 'periods') return <TePeriods onToast={setToast} />
     if (desk === 'deskwork') return <TeTravelDesk vehicleTypes={cfg?.vehicles ?? []} fuelPrice={cfg?.fuelPrice ?? {}} onToast={setToast} />
     if (desk === 'workflow') return <TeWorkflow onToast={setToast} />
+    if (desk === 'reports') return <TeReports onToast={setToast} />
+    if (desk === 'triplog') return <TeTripLog />
+    if (desk === 'audit') return <TeAudit />
     // The rest edit the config, so they all need it and all reload it after.
     if (!cfg) return null
     const reloadCfg = () => setTick(n => n + 1)

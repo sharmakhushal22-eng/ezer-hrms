@@ -92,6 +92,18 @@ export interface PayoutBatch {
   items: { id: Uuid; claim_id: Uuid; employee_id: Uuid; amount: number; status: 'PENDING' | 'PAID' | 'FAILED'; bank_ref: string | null; failure_reason: string | null }[]
 }
 export interface AuditRow { id: number; entity_type: string; entity_id: Uuid | null; entity_ref: string | null; action: string; actor_id: Uuid | null; actor_role: string | null; summary: string; employee_visible: boolean; at: string; before?: unknown; after?: unknown }
+export interface FlagReportRow {
+  id: Uuid; check_code: string; title: string; evidence: string | null; severity: string
+  is_blocking: boolean; status: string; resolve_reason: string | null; raised_at: string
+  claim_no: string; claim_status: string; emp_code: string; employee_name: string
+}
+export interface AdminTripRow {
+  id: Uuid; trip_no: string; name: string; display_status: string; status: string
+  emp_code: string; employee_name: string; employee_id: Uuid; scope: string; pattern: string; origin: string
+  start_date: string | null; end_date: string | null; leg_count: number; open_leg_count: number
+  planned_km: number | null; estimate_total: number | null; advance_outstanding: number | null
+  purpose: string | null; project: string | null; created_at: string
+}
 export interface FinanceSummary { inApproval: number; inVerification: number; onHold: number; payable: number; advancesToPay: number; advancesOut: number; openBatches: number }
 export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null; kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null }
 export interface DeskVehicle { id: Uuid; employee_id: Uuid; emp_code: string | null; full_name: string | null; reg_no: string; vehicle_type_code: string; declared_type_code: string | null; ownership: string; rc_file_url: string | null; created_at: string }
@@ -200,5 +212,18 @@ export const te = {
     health: (q?: { company_id?: string }) => get<{ company_id: Uuid; status: 'ok' | 'warn' | 'fail'; health: TeHealthRow[] }>('admin/health', q),
     audit: (q?: PageQuery & { entity_type?: string; entity_id?: string; action?: string; actor_id?: string; from?: string; to?: string; detail?: 1 }) => get<Page<AuditRow>>('admin/audit', q),
     claimsReport: (q?: PageQuery & { status?: string; period?: string; employee_id?: string; from?: string; to?: string }) => get<Page<ClaimSummaryRow>>('admin/reports/claims', q),
+    /** Every flag raised across claims. Says which checks earn their keep. */
+    flagsReport: (q?: PageQuery & { check_code?: string; status?: string; blocking?: '0' | '1'; from?: string; to?: string }) => get<Page<FlagReportRow>>('admin/reports/flags', q),
+    /** Every trip in the company, for the GPS log. The per-leg detail is te.trip(id). */
+    trips: (q?: PageQuery & { employee_id?: string; scope?: string; status?: string; from?: string; to?: string }) => get<Page<AdminTripRow>>('admin/trips', q),
+    /** A report as a file. The same filters, plus format=csv. */
+    reportCsv: async (report: 'claims' | 'flags' | 'trips', q: Record<string, string> = {}): Promise<Blob> => {
+      const path = report === 'trips' ? 'admin/trips' : `admin/reports/${report}`
+      const url = new URL(`/api/te/${path}`, window.location.origin)
+      for (const [k, v] of Object.entries({ ...q, format: 'csv' })) if (v) url.searchParams.set(k, v)
+      const res = await fetch(url, { cache: 'no-store', headers: await authHeaders() })
+      if (!res.ok) throw new TeApiError(res.status, await res.json().catch(() => null))
+      return res.blob()
+    },
   },
 }
