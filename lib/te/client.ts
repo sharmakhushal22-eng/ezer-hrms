@@ -122,7 +122,20 @@ export interface AdminTripRow {
   planned_km: number | null; estimate_total: number | null; advance_outstanding: number | null
   purpose: string | null; project: string | null; created_at: string
 }
-export interface FinanceSummary { inApproval: number; inVerification: number; onHold: number; payable: number; advancesToPay: number; advancesOut: number; openBatches: number }
+export interface FinanceSummary {
+  inApproval: number; inVerification: number; onHold: number; payable: number
+  advancesToPay: number; advancesOut: number; openBatches: number
+  /** Claimed, on everything still moving through approval or Finance. */
+  pipelineAmount: number
+  /** Net, on claims verified and waiting for a payout. */
+  payableAmount: number
+  /** Still outstanding with employees. */
+  advancesOutAmount: number
+  /** Where the money goes, biggest first. `cat` is te_categories.code. */
+  byCategory: { cat: string; amount: number }[]
+  /** false = a row cap was reached, so the amounts above are a floor. */
+  amountsComplete: boolean
+}
 export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null; kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null }
 export interface DeskVehicle { id: Uuid; employee_id: Uuid; emp_code: string | null; full_name: string | null; reg_no: string; vehicle_type_code: string; declared_type_code: string | null; ownership: string; rc_file_url: string | null; created_at: string }
 /** A booking the desk has already recorded. Live ones only — the one thing

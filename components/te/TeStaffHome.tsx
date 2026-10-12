@@ -35,7 +35,7 @@ import TeReports from './admin/TeReports'
 import TeAudit from './admin/TeAudit'
 import TeTripLog from './admin/TeTripLog'
 import TeIcon from './TeIcon'
-import { errorText, rs, when } from '@/lib/te/format'
+import { errorText, plural, rs, when } from '@/lib/te/format'
 import './te.css'
 
 type Desk =
@@ -102,6 +102,11 @@ export default function TeStaffHome() {
   const isFinance = summary !== null
   // The admin config loading IS the admin permission; nothing else is named.
   const isAdmin = cfg !== null
+  /** Category codes come back on the spend split; the names live in the admin
+   *  config, which a Finance-only user cannot read. The code is then shown as
+   *  it is rather than hidden. */
+  const catName = (code: string) => cfg?.cats.find(c => c.id === code)?.name ?? code
+
   const tabs = DESKS.filter(d =>
     (!d.needsFinance || isFinance) && (!d.needsDesk || hasDesk) && (!d.needsAdmin || isAdmin))
 
@@ -177,18 +182,64 @@ export default function TeStaffHome() {
                 ))}
               </div>
 
+              {/* Screen a0: the tiles. Markup is the prototype's g6/tile. */}
               {summary ? (
+                <div className="g6">
+                  <div className="tile">
+                    <div className="l">In the pipeline</div>
+                    <div className="v num">{rs(summary.pipelineAmount)}</div>
+                    <div className="s">{plural(summary.inApproval + summary.inVerification + summary.onHold, 'claim')}</div>
+                  </div>
+                  <div className="tile">
+                    <div className="l">With managers</div>
+                    <div className="v num">{summary.inApproval}</div>
+                    <div className="s">waiting to be approved</div>
+                  </div>
+                  <div className="tile">
+                    <div className="l">With Finance</div>
+                    <div className="v num">{summary.inVerification}</div>
+                    <div className="s">{summary.onHold ? `${summary.onHold} on hold` : 'none on hold'}</div>
+                  </div>
+                  <div className="tile">
+                    <div className="l">To pay out</div>
+                    <div className="v num">{rs(summary.payableAmount)}</div>
+                    <div className="s">{plural(summary.payable, 'claim')} verified</div>
+                  </div>
+                  <div className="tile">
+                    <div className="l">Advances out</div>
+                    <div className="v num">{rs(summary.advancesOutAmount)}</div>
+                    <div className="s">{plural(summary.advancesOut, 'advance')} with employees</div>
+                  </div>
+                  <div className="tile">
+                    <div className="l">Payout batches</div>
+                    <div className="v num">{summary.openBatches}</div>
+                    <div className="s">{summary.advancesToPay ? `${summary.advancesToPay} advances to pay` : 'open'}</div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Where the money goes. CSS bars, as the prototype has them —
+                  no charting library, and none is needed for one series. */}
+              {summary?.byCategory.length ? (
                 <div className="card">
-                  <div className="ch"><h3>Finance desk</h3></div>
-                  <dl className="kv">
-                    <dt>With managers</dt><dd>{summary.inApproval}</dd>
-                    <dt>In verification</dt><dd>{summary.inVerification}</dd>
-                    <dt>On hold</dt><dd>{summary.onHold}</dd>
-                    <dt>Verified, waiting for payout</dt><dd>{summary.payable}</dd>
-                    <dt>Advances to pay</dt><dd>{summary.advancesToPay}</dd>
-                    <dt>Advances with employees</dt><dd>{summary.advancesOut}</dd>
-                    <dt>Open payout batches</dt><dd>{summary.openBatches}</dd>
-                  </dl>
+                  <div className="ch"><h3>What it is spent on</h3></div>
+                  <div className="bars">
+                    {summary.byCategory.slice(0, 8).map(b => {
+                      const top = summary.byCategory[0].amount || 1
+                      return (
+                        <div key={b.cat} className="b1" title={`${catName(b.cat)}: ${rs(b.amount)}`}>
+                          <span>{catName(b.cat)}</span>
+                          <div className="trk1"><i style={{ width: `${Math.max(2, (b.amount / top) * 100)}%` }} /></div>
+                          <span className="num right b">{rs(b.amount)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {!summary.amountsComplete ? (
+                    <p className="small muted">
+                      There is more than this screen adds up in one go, so these are at least this much, not exactly this much.
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 

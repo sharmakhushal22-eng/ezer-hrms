@@ -51,7 +51,67 @@ export async function GET(req: NextRequest) {
         count('te_advances', 'status', ['PAID', 'PART_SETTLED', 'RECOVERY_DUE']),
         count('te_payout_batches', 'status', ['DRAFT', 'FILE_GENERATED']),
       ])
-      return { view, company_id: company, summary: { inApproval, inVerification, onHold, payable, advancesToPay, advancesOut, openBatches } }
+
+      // Amounts and the spend split, for the dashboard tiles and bars.
+      //
+      // These are sums, and PostgREST aggregate functions are not enabled on
+      // this project, so the rows are read and added up here. That is bounded:
+      // at most SUM_CAP rows per query, and `complete` says whether the cap was
+      // reached — a tile that is quietly short is worse than one that admits it.
+      const SUM_CAP = 2000
+      const sumOf = async (table: string, col: string, values: string[], amountCol: string) => {
+        const { data, error } = await sb.from(table)
+          .select(amountCol).eq('company_id', company).in(col, values).limit(SUM_CAP)
+        if (error) throw rpcError(error, table)
+        // The column is chosen at runtime, so the generated types cannot narrow
+        // it and infer an error row instead. The name is from this function's
+        // own call sites, never from a request.
+        const rows = (data ?? []) as unknown as Record<string, number | null>[]
+        const total = rows.reduce((a, r) => a + Number(r[amountCol] ?? 0), 0)
+        return { amount: Math.round(total * 100) / 100, complete: rows.length < SUM_CAP }
+      }
+
+      const [pipe, pay, out, spend] = await Promise.all([
+        // Everything still moving: with a manager, with Finance, or held.
+        sumOf('te_claims', 'status', ['IN_APPROVAL', 'IN_VERIFICATION', 'ON_HOLD'], 'claimed_total'),
+        sumOf('te_claims', 'status', ['VERIFIED'], 'net_amount'),
+        sumOf('te_advances', 'status', ['PAID', 'PART_SETTLED', 'RECOVERY_DUE'], 'outstanding_amount'),
+        // What the money is actually spent on, by category, across claims that
+        // have been submitted. Unclaimed lines are not spend yet.
+        (async () => {
+          const { data, error } = await sb.from('te_expenses')
+            .select('category_code, eligible_amount, claimed_amount')
+            .eq('company_id', company).not('claim_id', 'is', null)
+            .order('created_at', { ascending: false }).limit(SUM_CAP)
+          if (error) throw rpcError(error, 'te_expenses')
+          const rows = (data ?? []) as { category_code: string; eligible_amount: number | null; claimed_amount: number | null }[]
+          const by = new Map<string, number>()
+          for (const r of rows) {
+            const amount = Number(r.eligible_amount ?? r.claimed_amount ?? 0)
+            if (amount) by.set(r.category_code, (by.get(r.category_code) ?? 0) + amount)
+          }
+          return {
+            byCategory: [...by.entries()]
+              .map(([cat, amount]) => ({ cat, amount: Math.round(amount * 100) / 100 }))
+              .sort((a, b) => b.amount - a.amount),
+            complete: rows.length < SUM_CAP,
+          }
+        })(),
+      ])
+
+      return {
+        view,
+        company_id: company,
+        summary: {
+          inApproval, inVerification, onHold, payable, advancesToPay, advancesOut, openBatches,
+          pipelineAmount: pipe.amount,
+          payableAmount: pay.amount,
+          advancesOutAmount: out.amount,
+          byCategory: spend.byCategory,
+          /** false = a cap was hit, so the amounts are a floor, not a total. */
+          amountsComplete: pipe.complete && pay.complete && out.complete && spend.complete,
+        },
+      }
     }
 
     let rows: unknown[] = []
