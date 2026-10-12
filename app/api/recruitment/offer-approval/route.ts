@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
       m.id,
       `Offer yet to be approved — ${who}${role ? ` (${role})` : ''}`,
       `${who}'s offer of ${lakh(r.offered_ctc)}${ref} has been submitted to the HR Head${headNames.length ? ` (${headNames.join(', ')})` : ''} and is yet to be approved. The candidate is on your Send Offers screen; the Send Offer button unlocks once the HR Head approves.`,
-      '/ess-portal?module=recruitment&tab=sendoffer',
+      '/ess/recruitment/sendoffer',
       'APPROVAL',
     ).catch(() => null)))
     await Promise.all(heads.map(h => notify(

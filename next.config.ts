@@ -39,6 +39,13 @@ const nextConfig: NextConfig = {
     '/api/recruitment/offer-approval': ['./node_modules/pdfkit/js/data/**'],
   },
 
+  // The ESS portal is one page with many addresses (/ess/leave, /ess/recruitment/mrf …),
+  // see app/ess/page.tsx. Every /ess/* address is served by that page; the client reads the
+  // path. afterFiles, so a real file under /ess/ would still win if one is ever added.
+  async rewrites() {
+    return { afterFiles: [{ source: '/ess/:path*', destination: '/ess' }] }
+  },
+
   // Never let a browser reuse a cached HTML document for dashboard pages.
   //
   // Next.js fingerprints its JS chunks, so every build produces new chunk URLs —

@@ -57,7 +57,7 @@ export async function notifyDecided(sb: SupabaseClient, requestId: string): Prom
     approved
       ? `The HR Head approved the ${lakh(r.offered_ctc)} offer for ${who}${ref}.${note} Send the offer letter from Recruitment → Send Offers.`
       : `The HR Head rejected the ${lakh(r.offered_ctc)} offer for ${who}${ref}.${note} Revise the negotiation and raise a fresh approval request.`,
-    approved ? '/ess-portal?module=recruitment&tab=sendoffer' : '/ess-portal?module=recruitment&tab=offerapproval',
+    approved ? '/ess/recruitment/sendoffer' : '/ess/recruitment/offerapproval',
     'APPROVAL',
   ).catch(() => null)))
   return { notified: targets.size, outcome: approved ? 'APPROVED' : 'REJECTED' }

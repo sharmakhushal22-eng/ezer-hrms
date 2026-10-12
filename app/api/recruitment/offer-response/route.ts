@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
       const heads = await roleHolders(sb as any, companyId, ['HR_HEAD'])
       await Promise.all(heads.map(h => notify(h.id, `Offer revision — ${cand.full_name}`,
         `${by} has sent ${cand.full_name}'s offer back for revision: "${note}". Edit the offer and approve it from Recruitment → HR Head.`,
-        `/ess-portal?module=recruitment&tab=hrhead&offer=${request.id}`, 'APPROVAL').catch(() => null)))
+        `/ess/recruitment/hrhead?offer=${request.id}`, 'APPROVAL').catch(() => null)))
       const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
       const to = heads.map(h => h.email).filter(Boolean) as string[]
       let emailed = 0

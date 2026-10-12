@@ -22,7 +22,7 @@ export default function OfferApproveClient({ id }: { id: string }) {
   }, [id])
 
   const notify = (m: string, t: 'success' | 'error' = 'success') => { setToast({ m, t }); setTimeout(() => setToast(null), 3200) }
-  const goBack = () => { window.location.href = '/ess-portal?tab=approvals' }
+  const goBack = () => { window.location.href = '/ess/approvals' }
 
   if (!ready || !employeeId) {
     return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.canvas, fontFamily: font, color: C.muted, fontSize: 14 }}>Loading offer…</div>
