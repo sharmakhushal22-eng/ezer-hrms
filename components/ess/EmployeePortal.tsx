@@ -3261,6 +3261,11 @@ const AWAY: Record<string, string> = Object.fromEntries(
   VIEWS.filter(v => v.href).map(v => [v.k, v.href as string]),
 )
 const viewMeta = (k: string) => VIEWS.find(v => v.k === k) || VIEWS[0]
+/** The address a whole section leads to, when the section IS a page of its own.
+ *  Only a section with a single item can be one: a section with sub-tabs has to
+ *  land on one of them, and which one depends on where the person already is. */
+const awayOf = (s: NavSection): string | undefined =>
+  s.items.length === 1 ? AWAY[s.items[0].k] : undefined
 /** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
 const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 
@@ -3272,22 +3277,50 @@ const BADGE: Record<Ready, [string, string, string]> = {
 }
 
 // ── Sidebar / sub-tab / feature-grid bits (outside the parent — no focus loss) ──
-function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
+function SectionButton({ s, active, href, onClick }: { s: NavSection; active: boolean; href?: string; onClick: () => void }) {
   // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
   const [hover, setHover] = useState(false)
   const bg = active ? C.railActiveBg : hover ? C.railHover : 'transparent'
-  return (
-    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        // The rail follows the theme now — white in day, #171B21 in night —
-        // so its text comes from the rail family, which is defined for both.
-        // It must NOT use the onDark family: those are fixed near-white and
-        // would be invisible on a white rail in day mode. That was the
-        // original complaint. The earlier onDark fix was right for a rail
-        // that stayed dark; this replaces the premise, not the reasoning.
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}` }}>
+  // The rail follows the theme now — white in day, #171B21 in night — so its
+  // text comes from the rail family, which is defined for both. It must NOT use
+  // the onDark family: those are fixed near-white and would be invisible on a
+  // white rail in day mode. That was the original complaint. The earlier onDark
+  // fix was right for a rail that stayed dark; this replaces the premise, not
+  // the reasoning.
+  const style: React.CSSProperties = {
+    width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px',
+    color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600,
+    fontFamily:'inherit', background:bg, border:'none',
+    borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}`,
+    textDecoration:'none', boxSizing:'border-box',
+  }
+  const inner = (
+    <>
       <EssIcon k={s.k} size={16} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
+    </>
+  )
+
+  // A section that is a page of its own is a real link, not a scripted popup.
+  // That buys the browser's own behaviour for free: ctrl/cmd-click, middle
+  // click, "Open in new tab", and the address shown on hover. No onClick —
+  // the anchor's default opens the tab, and calling go() as well would open
+  // two.
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer"
+        title={`${s.label} — opens in a new tab`}
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+        style={style}>
+        {inner}
+      </a>
+    )
+  }
+
+  return (
+    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={style}>
+      {inner}
     </button>
   )
 }
@@ -3745,8 +3778,22 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   // setBellOpen/setMoreOpen stay urgent deliberately: a menu that waits for a
   // heavy section to finish rendering before it closes feels broken.
   const go = (k: string) => {
-    // A tab that is a page of its own leaves the portal instead of becoming a view.
-    if (AWAY[k]) { window.location.href = AWAY[k]; return }
+    // A tab that is a page of its own leaves the portal instead of becoming a
+    // view, and it opens in a tab of its own so the portal stays where it was.
+    //
+    // The fallback is not defensive padding. window.open is only permitted
+    // during the click that asked for it, and go() is ALSO called from the
+    // ?tab= deep-link effect below — no gesture there, so the browser returns
+    // null and this tab is the right place to land: the intent of a deep link
+    // is to arrive at the module, not to spawn a second window. A popup
+    // blocker gets the same treatment.
+    const away = AWAY[k]
+    if (away) {
+      setBellOpen(false); setMoreOpen(false)
+      const opened = window.open(away, '_blank', 'noopener,noreferrer')
+      if (!opened) window.location.href = away
+      return
+    }
     setAdminKey(null); setBellOpen(false); setMoreOpen(false)
     startTransition(() => setView(k))
   }
@@ -3948,7 +3995,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
             <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
           </div>
           {sections.map(s => (
-            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
+            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} href={awayOf(s)} onClick={() => goSection(s)} />
           ))}
           {/* A silent empty sidebar is indistinguishable from "you hold nothing", so
               say when the answer could not be fetched rather than implying it. */}
