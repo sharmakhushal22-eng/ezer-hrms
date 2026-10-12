@@ -188,7 +188,8 @@
   @keyframes flick { from { scale:1; } to { scale:1.12 .96; } }
 
   /* ── STATS ───────────────────────────────────────────────────────────── */
-  .ezt .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:-30px 18px 0; position:relative; z-index:2; perspective:900px; }
+  /* Three tiles since Net salary came out of this row. */
+  .ezt .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:-30px 18px 0; position:relative; z-index:2; perspective:900px; }
   .ezt .tile {
     background:var(--glass); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
     border:1px solid var(--ez-line); border-radius:18px; padding:15px 16px 13px;
