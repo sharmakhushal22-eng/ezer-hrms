@@ -104,6 +104,31 @@ export function batchActions(status: string): { file: boolean; paid: boolean; ca
   }
 }
 
+/**
+ * What one line of a batch allows.
+ *
+ * A bank file is not all-or-nothing: on any real run a few transfers bounce on
+ * a closed account or a wrong IFSC while the rest land. Marking that line
+ * failed is what returns its claim to the payable list so it can go out again
+ * — without it, a claim that never reached anybody reads as paid.
+ *
+ * It only makes sense once the batch has actually gone to the bank. A DRAFT
+ * has not been sent, so nothing in it can have failed yet: cancel the batch
+ * instead. And a line already failed is not failed twice.
+ */
+export function itemActions(batchStatus: string, itemStatus: string): { failed: boolean } {
+  return {
+    failed: (batchStatus === 'FILE_GENERATED' || batchStatus === 'PAID') && itemStatus !== 'FAILED',
+  }
+}
+
+/** Cancelling a batch and failing one line both say why, and for the same
+ *  reason: each sends a claim back to be paid again, and the next person needs
+ *  to know what went wrong the first time. */
+export function whyPayoutNotReady(reason: string): string {
+  return reason.trim() ? '' : 'Say what went wrong. It is kept on the claim, which goes back to be paid again.'
+}
+
 /** A claim can only be in one batch, so anything already batched is not
  *  payable again. The list the server returns is already filtered; this is the
  *  guard for a stale page. */

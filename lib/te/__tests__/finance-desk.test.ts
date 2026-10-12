@@ -7,8 +7,8 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
 import {
-  advanceActions, batchActions, payableTotal, periodActions, periodNeedsReason,
-  PAYOUT_ROUTES,
+  advanceActions, batchActions, itemActions, payableTotal, periodActions,
+  periodNeedsReason, whyPayoutNotReady, PAYOUT_ROUTES,
 } from '../finance-desk.ts'
 
 const names = (list: { action: string }[]) => list.map(a => a.action)
@@ -116,5 +116,46 @@ describe('payout batches', () => {
     const rows = [{ id: 'a', net_amount: 1000 }]
     const id = (r: { id: string }) => r.id
     assert.equal(payableTotal(rows, new Set(['a', 'gone']), id), 1000)
+  })
+})
+
+describe('one line of a batch', () => {
+  it('can be failed once the batch has gone to the bank', () => {
+    assert.equal(itemActions('FILE_GENERATED', 'PENDING').failed, true)
+    assert.equal(itemActions('PAID', 'PENDING').failed, true)
+  })
+
+  it('cannot be failed while the batch is still a draft', () => {
+    // Nothing has been sent, so nothing can have bounced. Cancel the batch.
+    assert.equal(itemActions('DRAFT', 'PENDING').failed, false)
+  })
+
+  it('cannot be failed twice', () => {
+    assert.equal(itemActions('PAID', 'FAILED').failed, false)
+  })
+
+  it('cannot be failed on a cancelled batch', () => {
+    assert.equal(itemActions('CANCELLED', 'PENDING').failed, false)
+  })
+
+  it('can be failed even after the batch was marked paid', () => {
+    // The whole point: the batch was paid, the bank bounced one line, and
+    // that claim has to go back to the payable list.
+    assert.equal(itemActions('PAID', 'PAID').failed, true)
+  })
+})
+
+describe('saying why a payout went wrong', () => {
+  it('insists on a reason', () => {
+    assert.match(whyPayoutNotReady(''), /Say what went wrong/)
+    assert.match(whyPayoutNotReady('   '), /Say what went wrong/)
+  })
+
+  it('says where the reason ends up, because that is why it is required', () => {
+    assert.match(whyPayoutNotReady(''), /goes back to be paid again/)
+  })
+
+  it('accepts a reason', () => {
+    assert.equal(whyPayoutNotReady('Account closed.'), '')
   })
 })

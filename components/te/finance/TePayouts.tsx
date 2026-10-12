@@ -14,7 +14,7 @@
 // after.
 import { useCallback, useEffect, useState } from 'react'
 import { te, type PayoutBatch } from '@/lib/te/client'
-import { batchActions, payableTotal, PAYOUT_ROUTES } from '@/lib/te/finance-desk'
+import { batchActions, itemActions, payableTotal, whyPayoutNotReady, PAYOUT_ROUTES } from '@/lib/te/finance-desk'
 import { errorText, rs, when } from '@/lib/te/format'
 import type { PayoutRoute } from '@/lib/te/types'
 import TeIcon from '../TeIcon'
@@ -27,6 +27,10 @@ export default function TePayouts({ onToast }: { onToast: (message: string) => v
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [route, setRoute] = useState<PayoutRoute>('PAYROLL')
   const [markPaid, setMarkPaid] = useState<{ id: string; ref: string } | null>(null)
+  // Undoing a batch, and failing one line of it. Both send a claim back to be
+  // paid again and both say why, so they share one panel and one reason box.
+  const [undo, setUndo] = useState<{ kind: 'cancel' | 'item'; batchId: string; itemId?: string } | null>(null)
+  const [reason, setReason] = useState('')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [tick, setTick] = useState(0)
@@ -79,6 +83,25 @@ export default function TePayouts({ onToast }: { onToast: (message: string) => v
       await te.finance.payoutPaid(markPaid.id, markPaid.ref.trim())
       onToast('Batch marked paid.')
       setMarkPaid(null); reload()
+    } catch (e) { setError(errorText(e)) } finally { setBusy('') }
+  }
+
+  /** Cancel a whole batch, or fail one line of it. Both return claims to the
+   *  payable list, which is why both insist on a reason. */
+  async function sendUndo() {
+    if (!undo) return
+    const why = whyPayoutNotReady(reason)
+    if (why) { setError(why); return }
+    setBusy('undo'); setError('')
+    try {
+      if (undo.kind === 'cancel') {
+        const r = await te.finance.payoutCancel(undo.batchId, reason.trim())
+        onToast(`Batch cancelled. ${r.claims_returned} claim${r.claims_returned === 1 ? '' : 's'} went back to be paid.`)
+      } else if (undo.itemId) {
+        await te.finance.payoutItemFailed(undo.batchId, undo.itemId, reason.trim())
+        onToast('Marked as not reached. The claim is payable again.')
+      }
+      setUndo(null); setReason(''); reload()
     } catch (e) { setError(errorText(e)) } finally { setBusy('') }
   }
 
@@ -155,7 +178,95 @@ export default function TePayouts({ onToast }: { onToast: (message: string) => v
                   {can.paid ? (
                     <button type="button" className="btn sm pri" onClick={() => setMarkPaid({ id: b.id, ref: '' })}>Mark paid</button>
                   ) : null}
+                  {can.cancel ? (
+                    <button
+                      type="button"
+                      className="btn sm dan"
+                      aria-pressed={undo?.kind === 'cancel' && undo.batchId === b.id}
+                      onClick={() => {
+                        setUndo(undo?.kind === 'cancel' && undo.batchId === b.id ? null : { kind: 'cancel', batchId: b.id })
+                        setReason(''); setError('')
+                      }}
+                    >
+                      Cancel the batch
+                    </button>
+                  ) : null}
                 </div>
+
+                {undo?.kind === 'cancel' && undo.batchId === b.id ? (
+                  <div className="form">
+                    <div className="flag crit">
+                      <TeIcon name="alert" size="sm" />
+                      <span>
+                        The batch is undone and every claim in it goes back to the payable list.
+                        {b.route === 'OFF_CYCLE' ? ' If the bank file has already been uploaded, cancelling here does not stop the bank.' : ''}
+                      </span>
+                    </div>
+                    <label className="fld sm"><span>Why</span>
+                      <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Kept on each claim that goes back" />
+                    </label>
+                    <div className="row tight">
+                      <button type="button" className="btn" onClick={() => { setUndo(null); setReason('') }}>Never mind</button>
+                      <button type="button" className="btn dan" disabled={busy === 'undo' || !!whyPayoutNotReady(reason)} onClick={sendUndo}>
+                        {busy === 'undo' ? 'Cancelling…' : 'Cancel the batch'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* The lines of the batch, once it has gone to the bank. A real
+                    run always bounces a few: a closed account, a wrong IFSC.
+                    Without this, a transfer that never arrived reads as paid. */}
+                {b.items.some(it => itemActions(b.status, it.status).failed || it.status === 'FAILED') ? (
+                  <div className="stack sm">
+                    {b.items.map(it => {
+                      const canFail = itemActions(b.status, it.status).failed
+                      const openItem = undo?.kind === 'item' && undo.itemId === it.id
+                      return (
+                        <div key={it.id} className="row tight sp">
+                          <span className="grow small">
+                            {it.employees?.full_name ?? 'This employee'}
+                            {it.te_claims ? <span className="mono muted"> {it.te_claims.claim_no}</span> : null}
+                            {' · '}{rs(it.amount)}
+                            {it.status === 'FAILED' ? (
+                              <span className="small muted"> · did not reach{it.failure_reason ? `: ${it.failure_reason}` : ''}</span>
+                            ) : null}
+                          </span>
+                          {canFail ? (
+                            <button
+                              type="button"
+                              className="btn sm"
+                              aria-pressed={openItem}
+                              onClick={() => {
+                                setUndo(openItem ? null : { kind: 'item', batchId: b.id, itemId: it.id })
+                                setReason(''); setError('')
+                              }}
+                            >
+                              Did not reach
+                            </button>
+                          ) : null}
+                          {openItem ? (
+                            <div className="form">
+                              <div className="note">
+                                <TeIcon name="info" size="sm" />
+                                <span>The claim goes back to the payable list so it can be sent again. The rest of the batch is untouched.</span>
+                              </div>
+                              <label className="fld sm"><span>What the bank said</span>
+                                <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Account closed" />
+                              </label>
+                              <div className="row tight">
+                                <button type="button" className="btn" onClick={() => { setUndo(null); setReason('') }}>Never mind</button>
+                                <button type="button" className="btn pri" disabled={busy === 'undo' || !!whyPayoutNotReady(reason)} onClick={sendUndo}>
+                                  {busy === 'undo' ? 'Saving…' : 'Mark it not reached'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : null}
                 {markPaid?.id === b.id ? (
                   <div className="form">
                     <label className="fld sm"><span>Bank reference</span>

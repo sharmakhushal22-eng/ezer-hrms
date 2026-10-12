@@ -89,7 +89,14 @@ export interface ClaimSummaryRow {
 export interface PayoutBatch {
   id: Uuid; company_id: Uuid; batch_no: string; route: PayoutRoute; payout_date: string; total_amount: number
   status: 'DRAFT' | 'FILE_GENERATED' | 'PAID' | 'CANCELLED'; bank_ref: string | null; paid_at: string | null; created_at: string
-  items: { id: Uuid; claim_id: Uuid; employee_id: Uuid; amount: number; status: 'PENDING' | 'PAID' | 'FAILED'; bank_ref: string | null; failure_reason: string | null }[]
+  items: {
+    id: Uuid; claim_id: Uuid; employee_id: Uuid; amount: number
+    status: 'PENDING' | 'PAID' | 'FAILED'; bank_ref: string | null; failure_reason: string | null
+    /** Joined so one failed transfer can be identified by name, not by uuid.
+     *  Null only if the row it points at has gone. */
+    employees: { emp_code: string; full_name: string } | null
+    te_claims: { claim_no: string } | null
+  }[]
 }
 export interface AuditRow { id: number; entity_type: string; entity_id: Uuid | null; entity_ref: string | null; action: string; actor_id: Uuid | null; actor_role: string | null; summary: string; employee_visible: boolean; at: string; before?: unknown; after?: unknown }
 export interface FlagReportRow {

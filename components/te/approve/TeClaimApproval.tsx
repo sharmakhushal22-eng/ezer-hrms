@@ -22,6 +22,9 @@ import {
   actionsForStage, decidedTotal, describe as describeDecision, emptyDecision,
   isTouched, toDecideInput, whyNotReady, type DecideAction, type DecisionDraft,
 } from '@/lib/te/claim-decide'
+import {
+  flagOffers, flagResolvedText, flagTone, openFlags, whyFlagNotReady, type FlagVerdict,
+} from '@/lib/te/flag-review'
 import { claimChip, errorText, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeLegEvidence from './TeLegEvidence'
@@ -46,6 +49,12 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
   const [tried, setTried] = useState(false)
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick(n => n + 1), [])
+  // Answering a check (screens a4, a4b). One flag at a time, because the
+  // reason belongs to the flag it is about and a shared box would attach the
+  // wrong words to the wrong check.
+  const [resolving, setResolving] = useState<{ id: Uuid; verdict: FlagVerdict } | null>(null)
+  const [note, setNote] = useState('')
+  const [flagBusy, setFlagBusy] = useState(false)
   // A claim carries its legs but not a place book, so leg evidence would show
   // raw ids. The trip has the names; it is fetched alongside when there is one.
   const [places, setPlaces] = useState<Record<Uuid, TePlaceBrief>>({})
@@ -117,6 +126,26 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
     }
   }
 
+  async function resolveFlag() {
+    if (!resolving) return
+    const why = whyFlagNotReady(resolving.verdict, note)
+    if (why) { setError(why); return }
+    setFlagBusy(true); setError('')
+    try {
+      await te.flagResolve(resolving.id, resolving.verdict, note.trim())
+      setResolving(null); setNote('')
+      // The band is recomputed by the server when a flag is answered, so the
+      // claim is re-read rather than patched: the risk chip, the line chips
+      // and the remaining count all come from it. Nothing is reported upward —
+      // onDecided ends this screen, and answering a check does not.
+      reload()
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setFlagBusy(false)
+    }
+  }
+
   const openLeg = evidence ? detail.legs.find(l => l.id === evidence) ?? null : null
   if (openLeg) {
     return <TeLegEvidence leg={openLeg} places={places} onBack={() => setEvidence(null)} />
@@ -165,7 +194,7 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
                 {flagsFor(l.id).length ? (
                   <div className="row tight">
                     {flagsFor(l.id).map(fl => (
-                      <span key={fl.code} className={fl.block ? 'chip t-crit' : 'chip t-warn'}>{fl.code} {fl.title}</span>
+                      <span key={fl.id} className={`chip ${flagTone(fl.status, fl.block)}`}>{fl.code} {fl.title}</span>
                     ))}
                   </div>
                 ) : null}
@@ -220,6 +249,93 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
           )
         })}
       </div>
+
+      {/* The checks that fired, and what Finance made of them. Screens a4, a4b.
+          Separate from the per-line chips on purpose: the chips are context for
+          the money, this is where a check is actually answered — and a flag can
+          be about the whole claim rather than any one line. */}
+      {detail.claim.flags.length ? (
+        <div className="card pad0">
+          <div className="day">
+            <span>Checks that fired</span>
+            <span>{openFlags(detail.claim.flags) || 'all answered'}</span>
+          </div>
+          {detail.claim.flags.map(fl => {
+            const offers = flagOffers(fl.status, detail.can.stage, mayAct)
+            const open = resolving?.id === fl.id ? resolving : null
+            const chosen = open ? offers.find(o => o.verdict === open.verdict) : null
+            const line = fl.lineId ? detail.lines.find(l => l.id === fl.lineId) : null
+            return (
+              <div key={fl.id} className="li">
+                <span className="ico"><TeIcon name={fl.block ? 'alert' : 'verify'} /></span>
+                <div className="grow">
+                  <div className="b"><span className="code">{fl.code}</span> {fl.title}</div>
+                  <div className="small muted">
+                    {[fl.evidence, line ? `on ${line.merchant || line.cat}` : fl.claimLevel ? 'about the whole claim' : null]
+                      .filter(Boolean).join(' · ')}
+                  </div>
+                  {!offers.length && fl.status !== 'open' ? (
+                    <p className="small muted">{flagResolvedText(fl.status, fl.note)}</p>
+                  ) : null}
+
+                  {offers.length ? (
+                    <div className="row tight">
+                      {offers.map(o => (
+                        <button
+                          key={o.verdict}
+                          type="button"
+                          className={o.grave ? 'btn sm dan' : 'btn sm'}
+                          aria-pressed={open?.verdict === o.verdict}
+                          onClick={() => {
+                            setResolving(open?.verdict === o.verdict ? null : { id: fl.id, verdict: o.verdict })
+                            setNote(''); setError('')
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {chosen ? (
+                    <div className="form">
+                      {/* The consequence, before the click. */}
+                      <div className={chosen.grave ? 'flag crit' : 'note'}>
+                        <TeIcon name={chosen.grave ? 'alert' : 'info'} size="sm" />
+                        <span>{chosen.effect}</span>
+                      </div>
+                      <label className="fld sm">
+                        <span>{chosen.verdict === 'dismissed' ? 'Why the check was wrong' : 'Anything to add'}</span>
+                        <input
+                          value={note}
+                          placeholder={chosen.verdict === 'dismissed' ? 'Kept on the flag and counted in the flag report' : 'Optional'}
+                          onChange={e => setNote(e.target.value)}
+                        />
+                      </label>
+                      <div className="row tight">
+                        <button type="button" className="btn" onClick={() => { setResolving(null); setNote('') }}>Never mind</button>
+                        <button
+                          type="button"
+                          className={chosen.grave ? 'btn dan' : 'btn pri'}
+                          disabled={flagBusy || !!whyFlagNotReady(chosen.verdict, note)}
+                          onClick={resolveFlag}
+                        >
+                          {flagBusy ? 'Saving…' : chosen.label}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="amt">
+                  <span className={`chip ${flagTone(fl.status, fl.block)}`}>
+                    {fl.status === 'open' ? (fl.block ? 'blocking' : 'open') : fl.status}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
 
       {/* The legs behind the claim, each with its evidence a tap away. */}
       {detail.legs?.length ? (

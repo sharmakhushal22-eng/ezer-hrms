@@ -88,8 +88,12 @@ export async function GET(req: NextRequest) {
       if (error) throw rpcError(error, 'v_te_advance_ledger')
       rows = data ?? []; total = count ?? 0
     } else if (view === 'batches') {
+      // Each line carries who and which claim, not just the ids. A batch that
+      // has gone to the bank is where a single transfer gets marked as failed,
+      // and that decision is unmakeable against a bare uuid — the claim it
+      // belongs to is no longer in the payable list to look the name up from.
       let r = sb.from('te_payout_batches')
-        .select('*, items:te_payout_items(id, claim_id, employee_id, amount, status, bank_ref, failure_reason)', { count: 'exact' })
+        .select('*, items:te_payout_items(id, claim_id, employee_id, amount, status, bank_ref, failure_reason, employees(emp_code, full_name), te_claims(claim_no))', { count: 'exact' })
         .eq('company_id', company)
       if (status) r = r.eq('status', status)
       const { data, count, error } = await r.order('created_at', { ascending: false }).range(page.from, page.to)
