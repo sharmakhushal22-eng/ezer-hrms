@@ -25,7 +25,7 @@
 // to refs. No React state, so no re-render per frame and none per second; it
 // re-renders only when the punch times change.
 import { memo, useEffect, useMemo, useRef } from 'react';
-import { DEG_PER_MINUTE, degFromDate, degFromMinutes, hhmmToMinutes, shiftLengthMs } from '@/lib/today/punch';
+import { DEG_PER_MINUTE, degFromDate, degFromMinutes, hhmmToMinutes, outChipRadius, shiftLengthMs } from '@/lib/today/punch';
 
 export type AnalogPunchWatchProps = {
   inAt: Date | null;
@@ -190,13 +190,11 @@ function AnalogPunchWatchBase({
     return { bandD: arcD(a1, a2, RING), shiftTicks: ticks };
   }, [shiftStart, shiftEnd]);
 
-  // When the two punches land close together on a 12-hour face — roughly 12
-  // hours apart — their capsules would overlap, so the OUT one drops inward.
-  let outChipR = 77;
-  if (inAt && outAt) {
-    const delta = Math.abs(((degFromDate(outAt) - degFromDate(inAt) + 540) % 360) - 180);
-    if (delta > 160) outChipR = 57;
-  }
+  // Where the OUT capsule sits, so the two never overlap. The rule is tested
+  // geometry in lib/today/punch.ts — the version here was inverted, moving the
+  // capsule when the punches were furthest apart and leaving it when they
+  // coincided, which is the case that actually collides.
+  const outChipR = outChipRadius(inAt, outAt);
 
   return (
     <svg className="pz-dial" viewBox="0 0 240 240" style={{ width: size, height: size }}

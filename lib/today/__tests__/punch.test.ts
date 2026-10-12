@@ -6,8 +6,9 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
 import {
-  DEG_PER_MINUTE, canPunch, dayFromToday, degFromDate, degFromMinutes,
-  formatDuration, gradeIn, gradeOut, gradeWorked, hhmmToMinutes, punchState,
+  CHIP_INNER_R, CHIP_OUTER_R, DEG_PER_MINUTE, canPunch, dayFromToday,
+  degFromDate, degFromMinutes, dialSeparation, formatDuration, gradeIn,
+  gradeOut, gradeWorked, hhmmToMinutes, outChipRadius, punchState,
   shiftLengthMs, shiftProgress, toDate,
 } from '../punch.ts'
 
@@ -192,5 +193,42 @@ describe('elapsed time on screen', () => {
 
   it('keeps counting past 24 hours rather than wrapping to zero', () => {
     assert.equal(formatDuration(25 * 3600_000), '25:00:00')
+  })
+})
+
+describe('keeping the two punch capsules apart', () => {
+  it('measures separation the short way round', () => {
+    assert.equal(dialSeparation(10, 40), 30)
+    assert.equal(dialSeparation(350, 20), 30, 'across the top of the dial')
+    assert.equal(dialSeparation(0, 180), 180)
+    assert.equal(dialSeparation(90, 90), 0)
+  })
+
+  it('drops the out capsule inward for a short session', () => {
+    // The case that actually overlapped on screen: in 19:42, out 19:50.
+    assert.equal(outChipRadius(at(19, 42), at(19, 50)), CHIP_INNER_R)
+  })
+
+  it('drops it inward for a session exactly twelve hours long', () => {
+    // 09:30 and 21:30 are the same place on a 12-hour face.
+    assert.equal(outChipRadius(at(9, 30), at(21, 30)), CHIP_INNER_R)
+  })
+
+  it('leaves it alone when the two are well apart', () => {
+    assert.equal(outChipRadius(at(9, 30), at(18, 30)), CHIP_OUTER_R)
+    assert.equal(outChipRadius(at(9, 0), at(12, 0)), CHIP_OUTER_R, '3h is 90° apart')
+  })
+
+  it('does not move it when there is only one punch', () => {
+    assert.equal(outChipRadius(at(9, 30), null), CHIP_OUTER_R)
+    assert.equal(outChipRadius(null, at(18, 30)), CHIP_OUTER_R)
+  })
+
+  it('is NOT the inverted rule it replaces', () => {
+    // The old condition pulled the capsule in at ~6h apart and left it alone
+    // when the punches coincided. Both directions are asserted so a future
+    // edit cannot quietly restore it.
+    assert.equal(outChipRadius(at(9, 0), at(15, 0)), CHIP_OUTER_R, '6h apart needs no help')
+    assert.equal(outChipRadius(at(9, 0), at(9, 1)), CHIP_INNER_R, 'a minute apart does')
   })
 })

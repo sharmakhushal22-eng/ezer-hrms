@@ -144,3 +144,40 @@ export function dayFromToday(
 ): PunchDay {
   return { inAt: today?.punch_in ?? null, outAt: today?.punch_out ?? null }
 }
+
+// ── keeping the two punch capsules apart ────────────────────────────────────
+//
+// Each punch plants a capsule carrying its time. Both sit on the same ring, so
+// two punches at a similar DIAL POSITION put the capsules on top of each other
+// — and on a 12-hour face that happens two ways: a short session (in and out
+// minutes apart) and a session exactly twelve hours long, which lands back on
+// the same spot. The fix is to drop the OUT capsule to an inner radius, where
+// the radial gap keeps it clear.
+//
+// The rule this replaces was inverted. It read
+//     |((degOut - degIn + 540) % 360) - 180| > 160
+// which is true when the two are about SIX hours apart — the furthest apart
+// they can be on a 12-hour dial, the one case needing no help — and false when
+// they coincide, which is the case that overlaps. Its own comment said it moved
+// the capsule when the punches were "close together", so the code and the
+// comment disagreed and the comment was right.
+
+/** How far apart two dial angles are, 0–180°, the short way round. */
+export function dialSeparation(degA: number, degB: number): number {
+  const d = (((degB - degA) % 360) + 360) % 360
+  return Math.min(d, 360 - d)
+}
+
+export const CHIP_OUTER_R = 77
+export const CHIP_INNER_R = 57
+/** A capsule is 33 units wide at the outer radius, which subtends about 25°.
+ *  Below ~30° of separation two of them touch. */
+export const CHIP_CLEAR_DEG = 30
+
+/** Which radius the OUT capsule should sit at. */
+export function outChipRadius(inAt: Date | null, outAt: Date | null): number {
+  if (!inAt || !outAt) return CHIP_OUTER_R
+  return dialSeparation(degFromDate(inAt), degFromDate(outAt)) < CHIP_CLEAR_DEG
+    ? CHIP_INNER_R
+    : CHIP_OUTER_R
+}
