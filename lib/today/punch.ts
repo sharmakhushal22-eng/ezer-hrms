@@ -168,16 +168,30 @@ export function dialSeparation(degA: number, degB: number): number {
   return Math.min(d, 360 - d)
 }
 
-export const CHIP_OUTER_R = 77
-export const CHIP_INNER_R = 57
-/** A capsule is 33 units wide at the outer radius, which subtends about 25°.
+/** Both capsules ride this radius. */
+export const CHIP_R = 77
+/** A capsule is 33 units wide at that radius, which subtends about 25°.
  *  Below ~30° of separation two of them touch. */
 export const CHIP_CLEAR_DEG = 30
 
-/** Which radius the OUT capsule should sit at. */
-export function outChipRadius(inAt: Date | null, outAt: Date | null): number {
-  if (!inAt || !outAt) return CHIP_OUTER_R
-  return dialSeparation(degFromDate(inAt), degFromDate(outAt)) < CHIP_CLEAR_DEG
-    ? CHIP_INNER_R
-    : CHIP_OUTER_R
+/**
+ * How far to slide the OUT capsule ALONG the ring to clear the IN one.
+ *
+ * Sliding, not pulling inward. The first fix moved it to an inner radius,
+ * which cleared the other capsule and then landed on the digital readout in
+ * the middle of the face — one collision traded for another. The label is
+ * free to sit beside its node because the stem is drawn from the node to the
+ * label, so the true time is still marked where it belongs.
+ *
+ * The offset is signed AWAY from the IN capsule, so the two always open out
+ * rather than one being pushed through the other.
+ */
+export function outChipOffsetDeg(inAt: Date | null, outAt: Date | null): number {
+  if (!inAt || !outAt) return 0
+  const a = degFromDate(inAt)
+  const b = degFromDate(outAt)
+  if (dialSeparation(a, b) >= CHIP_CLEAR_DEG) return 0
+  // Which side of the IN capsule the OUT one already leans towards.
+  const signed = (((b - a + 540) % 360) - 180)
+  return signed >= 0 ? CHIP_CLEAR_DEG : -CHIP_CLEAR_DEG
 }

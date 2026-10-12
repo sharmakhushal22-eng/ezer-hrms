@@ -6,10 +6,10 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
 import {
-  CHIP_INNER_R, CHIP_OUTER_R, DEG_PER_MINUTE, canPunch, dayFromToday,
-  degFromDate, degFromMinutes, dialSeparation, formatDuration, gradeIn,
-  gradeOut, gradeWorked, hhmmToMinutes, outChipRadius, punchState,
-  shiftLengthMs, shiftProgress, toDate,
+  CHIP_CLEAR_DEG, DEG_PER_MINUTE, canPunch, dayFromToday, degFromDate,
+  degFromMinutes, dialSeparation, formatDuration, gradeIn, gradeOut,
+  gradeWorked, hhmmToMinutes, outChipOffsetDeg, punchState, shiftLengthMs,
+  shiftProgress, toDate,
 } from '../punch.ts'
 
 const at = (h: number, m: number, s = 0) => new Date(2026, 9, 12, h, m, s)
@@ -204,31 +204,37 @@ describe('keeping the two punch capsules apart', () => {
     assert.equal(dialSeparation(90, 90), 0)
   })
 
-  it('drops the out capsule inward for a short session', () => {
-    // The case that actually overlapped on screen: in 19:42, out 19:50.
-    assert.equal(outChipRadius(at(19, 42), at(19, 50)), CHIP_INNER_R)
+  it('slides the out capsule aside for a short session', () => {
+    // The case that overlapped on screen: in 19:42, out 19:50.
+    assert.equal(Math.abs(outChipOffsetDeg(at(19, 42), at(19, 50))), CHIP_CLEAR_DEG)
   })
 
-  it('drops it inward for a session exactly twelve hours long', () => {
+  it('slides it for a session exactly twelve hours long', () => {
     // 09:30 and 21:30 are the same place on a 12-hour face.
-    assert.equal(outChipRadius(at(9, 30), at(21, 30)), CHIP_INNER_R)
+    assert.equal(Math.abs(outChipOffsetDeg(at(9, 30), at(21, 30))), CHIP_CLEAR_DEG)
   })
 
-  it('leaves it alone when the two are well apart', () => {
-    assert.equal(outChipRadius(at(9, 30), at(18, 30)), CHIP_OUTER_R)
-    assert.equal(outChipRadius(at(9, 0), at(12, 0)), CHIP_OUTER_R, '3h is 90° apart')
+  it('leaves it alone when the two are already clear', () => {
+    assert.equal(outChipOffsetDeg(at(9, 30), at(18, 30)), 0)
+    assert.equal(outChipOffsetDeg(at(9, 0), at(12, 0)), 0, '3h is 90 degrees apart')
+    assert.equal(outChipOffsetDeg(at(9, 0), at(15, 0)), 0, '6h apart needs no help')
+  })
+
+  it('slides AWAY from the in capsule, never through it', () => {
+    // Out after in leans one way, out before in the other. Pushing the label
+    // through its neighbour would swap which one reads first.
+    assert.ok(outChipOffsetDeg(at(9, 0), at(9, 20)) > 0)
+    assert.ok(outChipOffsetDeg(at(9, 20), at(9, 0)) < 0)
   })
 
   it('does not move it when there is only one punch', () => {
-    assert.equal(outChipRadius(at(9, 30), null), CHIP_OUTER_R)
-    assert.equal(outChipRadius(null, at(18, 30)), CHIP_OUTER_R)
+    assert.equal(outChipOffsetDeg(at(9, 30), null), 0)
+    assert.equal(outChipOffsetDeg(null, at(18, 30)), 0)
   })
 
-  it('is NOT the inverted rule it replaces', () => {
-    // The old condition pulled the capsule in at ~6h apart and left it alone
-    // when the punches coincided. Both directions are asserted so a future
-    // edit cannot quietly restore it.
-    assert.equal(outChipRadius(at(9, 0), at(15, 0)), CHIP_OUTER_R, '6h apart needs no help')
-    assert.equal(outChipRadius(at(9, 0), at(9, 1)), CHIP_INNER_R, 'a minute apart does')
+  it('does not go back to pulling it inward', () => {
+    // The inward version cleared the other capsule and then sat on the digital
+    // readout in the centre of the face. This returns an ANGLE, not a radius.
+    assert.ok(Math.abs(outChipOffsetDeg(at(9, 0), at(9, 1))) <= 180)
   })
 })

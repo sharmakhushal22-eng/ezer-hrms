@@ -25,7 +25,7 @@
 // to refs. No React state, so no re-render per frame and none per second; it
 // re-renders only when the punch times change.
 import { memo, useEffect, useMemo, useRef } from 'react';
-import { DEG_PER_MINUTE, degFromDate, degFromMinutes, hhmmToMinutes, outChipRadius, shiftLengthMs } from '@/lib/today/punch';
+import { CHIP_R, DEG_PER_MINUTE, degFromDate, degFromMinutes, hhmmToMinutes, outChipOffsetDeg, shiftLengthMs } from '@/lib/today/punch';
 
 export type AnalogPunchWatchProps = {
   inAt: Date | null;
@@ -60,20 +60,22 @@ function arcD(a1: number, a2: number, r: number) {
 }
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** A punch on the ring: a node, a thin stem, and a capsule with the time. */
-function PunchMarker({ at, kind, chipR, hourFormat }: { at: Date; kind: 'IN' | 'OUT'; chipR: number; hourFormat: 12 | 24 }) {
+/** A punch on the ring: a node at the true time, a thin stem, and a capsule
+ *  carrying the time. `offsetDeg` slides the capsule along the ring to clear
+ *  its neighbour; the stem still runs from the node, so the label never
+ *  misreports where the punch actually was. */
+function PunchMarker({ at, kind, offsetDeg, hourFormat }: { at: Date; kind: 'IN' | 'OUT'; offsetDeg: number; hourFormat: 12 | 24 }) {
   const deg = degFromDate(at);
   const colour = kind === 'IN' ? 'var(--pz-in)' : 'var(--pz-out)';
   const node = pt(deg, RING);
-  const stem = pt(deg, 89);
-  const chip = pt(deg, chipR);
+  const chip = pt(deg + offsetDeg, CHIP_R);
   const hh = hourFormat === 12 ? at.getHours() % 12 || 12 : at.getHours();
 
   return (
     <g className="pz-flag">
       <circle cx={node.x} cy={node.y} r={4.2} fill="var(--pz-marker-halo)" />
       <circle cx={node.x} cy={node.y} r={2.8} fill={colour} />
-      <line x1={node.x} y1={node.y} x2={stem.x} y2={stem.y} stroke={colour} strokeWidth={1.2} strokeLinecap="round" opacity={0.8} />
+      <line x1={node.x} y1={node.y} x2={chip.x} y2={chip.y} stroke={colour} strokeWidth={1.2} strokeLinecap="round" opacity={0.8} />
       <g transform={`translate(${chip.x.toFixed(2)},${chip.y.toFixed(2)})`}>
         <rect x={-16.5} y={-7.5} width={33} height={15} rx={7.5} fill={colour} />
         <rect x={-16.5} y={-7.5} width={33} height={15} rx={7.5} fill="none" stroke="var(--pz-chip-edge)" />
@@ -190,11 +192,11 @@ function AnalogPunchWatchBase({
     return { bandD: arcD(a1, a2, RING), shiftTicks: ticks };
   }, [shiftStart, shiftEnd]);
 
-  // Where the OUT capsule sits, so the two never overlap. The rule is tested
-  // geometry in lib/today/punch.ts — the version here was inverted, moving the
-  // capsule when the punches were furthest apart and leaving it when they
-  // coincided, which is the case that actually collides.
-  const outChipR = outChipRadius(inAt, outAt);
+  // How far the OUT capsule slides along the ring to clear the IN one. Tested
+  // geometry in lib/today/punch.ts. Two earlier versions were wrong: the
+  // package's moved the capsule when the punches were FURTHEST apart, and my
+  // first fix pulled it inward, where it sat on the digital readout instead.
+  const outOffset = outChipOffsetDeg(inAt, outAt);
 
   return (
     <svg className="pz-dial" viewBox="0 0 240 240" style={{ width: size, height: size }}
@@ -242,8 +244,8 @@ function AnalogPunchWatchBase({
       <g>{dots}</g>
       <g>{indices}</g>
 
-      {inAt ? <PunchMarker at={inAt} kind="IN" chipR={77} hourFormat={hourFormat} /> : null}
-      {outAt ? <PunchMarker at={outAt} kind="OUT" chipR={outChipR} hourFormat={hourFormat} /> : null}
+      {inAt ? <PunchMarker at={inAt} kind="IN" offsetDeg={0} hourFormat={hourFormat} /> : null}
+      {outAt ? <PunchMarker at={outAt} kind="OUT" offsetDeg={outOffset} hourFormat={hourFormat} /> : null}
 
       {/* The digital readout sits low, not centred: the second hand would sweep
           across text in the middle of the face once a minute. */}
