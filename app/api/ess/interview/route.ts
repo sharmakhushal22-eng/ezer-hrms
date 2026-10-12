@@ -12,7 +12,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { essRoute, notify as essNotify } from '@/lib/ess/session'
+import { essRoute } from '@/lib/ess/session'
+import { mrfScope } from '@/lib/config/store'
+import { notifyFromTemplate } from '@/lib/config/notify'
 import { applyInterviewDecision, DECISION_LABEL, distinctRounds, isDecision, roundOrdinal } from '@/lib/recruitment/interview-decision'
 
 export async function GET(req: NextRequest) {
@@ -86,13 +88,12 @@ export async function POST(req: NextRequest) {
     if (inv.scheduled_by) {
       const me2 = await sb.from('employees').select('full_name').eq('id', me).maybeSingle()
       const who = me2.data?.full_name || 'The main interviewer'
-      await essNotify(
-        inv.scheduled_by,
-        `Interview feedback in — ${inv.candidate_name || 'candidate'} (${inv.round}) · ${DECISION_LABEL[fb.decision as keyof typeof DECISION_LABEL]}`,
-        `${who} submitted feedback for the ${inv.round} round${fb.band ? ` · ${fb.total}/80 (${fb.band})` : ''}. Decision: ${DECISION_LABEL[fb.decision as keyof typeof DECISION_LABEL]}${fb.decision_remark ? ` — ${fb.decision_remark}` : ''}.`,
-        '/dashboard/recruitment',
-        'INTERVIEW',
-      ).catch(() => null)
+      // Words: Configuration → Recruitment → Notifications → "Interview feedback in".
+      await notifyFromTemplate(inv.scheduled_by, 'notify.interview.feedback', {
+        candidate_name: inv.candidate_name || 'candidate', round: inv.round,
+        decision: DECISION_LABEL[fb.decision as keyof typeof DECISION_LABEL],
+        interviewer_name: who, score: fb.band ? `${fb.total}/80 (${fb.band})` : '', decision_remark: fb.decision_remark || '',
+      }, { scope: await mrfScope(inv.mrf_id, inv.company_id), link: '/dashboard/recruitment', category: 'INTERVIEW' })
     }
     return NextResponse.json({ ok: true, status: 'submitted', decision: fb.decision, stage })
   }

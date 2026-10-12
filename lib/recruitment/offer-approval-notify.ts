@@ -6,7 +6,8 @@
 // MRF raiser on rejection).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { notify } from '@/lib/ess/session'
+import { notifyFromTemplate } from '@/lib/config/notify'
+import { mrfScope } from '@/lib/config/store'
 
 export type Person = { id: string; name: string; code: string | null; role: string; email: string | null }
 
@@ -45,20 +46,16 @@ export async function notifyDecided(sb: SupabaseClient, requestId: string): Prom
   const companyId = r.company_id || cand?.company_id || (mrf as any)?.company_id || null
   const who = cand?.full_name || 'a candidate'
   const role = (mrf as any)?.designation || (mrf as any)?.position || cand?.designation || ''
-  const ref = (mrf as any)?.mrf_number ? ` · ${(mrf as any).mrf_number}` : ''
   const recruiterIds: string[] = Array.isArray((mrf as any)?.assigned_recruiter_ids) ? (mrf as any).assigned_recruiter_ids : []
   const managers = approved ? await roleHolders(sb, companyId, ['HR_MANAGER']) : []
   const targets = new Set<string>([...recruiterIds, ...managers.map(m => m.id)])
   if ((mrf as any)?.requested_by && !approved) targets.add((mrf as any).requested_by)
-  const note = r.hr_head_comments ? ` Comment: “${r.hr_head_comments}”` : ''
-  await Promise.all([...targets].map(id => notify(
-    id,
-    approved ? `Offer approved — ${who}${role ? ` (${role})` : ''}` : `Offer rejected — ${who}${role ? ` (${role})` : ''}`,
-    approved
-      ? `The HR Head approved the ${lakh(r.offered_ctc)} offer for ${who}${ref}.${note} Send the offer letter from Recruitment → Send Offers.`
-      : `The HR Head rejected the ${lakh(r.offered_ctc)} offer for ${who}${ref}.${note} Revise the negotiation and raise a fresh approval request.`,
-    approved ? '/ess-portal?module=recruitment&tab=sendoffer' : '/ess-portal?module=recruitment&tab=offerapproval',
-    'APPROVAL',
-  ).catch(() => null)))
+  // Words: Configuration → Recruitment → Notifications ("Offer approved" / "Offer rejected"),
+  // for the offer's company / branch.
+  const scope = await mrfScope(r.mrf_id, companyId)
+  const vars = { candidate_name: who, role, ctc_lakh: lakh(r.offered_ctc), mrf_number: (mrf as any)?.mrf_number || '', comment: r.hr_head_comments || '' }
+  await Promise.all([...targets].map(id => notifyFromTemplate(id, approved ? 'notify.offer.approved' : 'notify.offer.rejected', vars, {
+    scope, link: approved ? '/ess-portal?module=recruitment&tab=sendoffer' : '/ess-portal?module=recruitment&tab=offerapproval',
+  })))
   return { notified: targets.size, outcome: approved ? 'APPROVED' : 'REJECTED' }
 }

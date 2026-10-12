@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Internal security/architecture notes — this repo is public, keep them out of it
 EZER_HRMS_TECHNICAL_SPECS.txt
+
+# Supabase CLI local link state (project ref, pooler URL) — machine-specific
+supabase/.temp/

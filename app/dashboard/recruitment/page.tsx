@@ -5284,7 +5284,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   useEffect(()=>{
     const ids = Array.from(new Set((companies||[]).map((co:Company)=>co.id).filter(Boolean)))
     if (!ids.length) return
-    fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`).then(r=>r.json()).then((j:any)=>setHrHeads(j.heads||{})).catch(()=>{})
+    authHeaders().then((h:any)=>fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`, { headers: h })).then(r=>r.json()).then((j:any)=>setHrHeads(j.heads||{})).catch(()=>{})
   },[companies])
   const hrHeadLabel = (companyId?:string|null) => { const hs = hrHeads[companyId||''] || []; return hs.length ? hs.map(h=>`${h.name}${h.code?` (${h.code})`:''}`).join(', ') : 'HR Head not set for this company' }
   const fmtOn = (d?:string|null) => d ? new Date(d).toLocaleDateString('en-IN',{ day:'numeric', month:'short', year:'numeric' }) : ''
@@ -5862,29 +5862,14 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
     if (!c.email) { showNotify('Candidate has no email on file','error'); return }
     setBusy(c.id)
     const row = await ensureRow(c); if (!row) { setBusy(''); return }
-    const company = companyName(c)
-    const role = c.designation || 'the role'
-    const doj = row.doj || c.doj || 'to be confirmed'
     const exp = type==='EXPERIENCED'
-    const title = exp ? 'OFFER ACCEPTANCE & RESIGNATION ADVISORY' : 'JOINING CONFIRMATION LETTER'
-    const subject = exp
-      ? `Acceptance Confirmed & Next Steps — ${role} | ${company}`
-      : `Joining Confirmation — ${role} | ${company}`
-    const paragraphs = exp ? [
-      `Thank you for accepting our offer for the position of ${role} at ${company}. We are delighted to have you join us.`,
-      `As your next step, kindly submit your resignation to your current employer and share your acceptance / relieving documentation with us. Please keep us informed of your last working day so we can finalise your date of joining.`,
-      `Do ensure all notice-period formalities are completed in time for a smooth transition. We look forward to welcoming you on board.`,
-    ] : [
-      `Congratulations and welcome to ${company}! We are pleased to confirm your joining as ${role}.`,
-      `Please report on your date of joining with the required documents. Our HR team will guide you through the onboarding formalities and your workspace setup.`,
-      `We are excited to have you begin your career with us and look forward to a great journey together.`,
-    ]
-    const letter = { company_name:company, title, recipient:c.full_name, paragraphs,
-      highlights:[ { label:'Position', value:role }, { label:'Date of Joining', value:String(doj) } ] }
+    // The letter and its email are built on the server from Configuration → Recruitment
+    // ("Offer acceptance & resignation advisory" / "Joining confirmation letter" and their
+    // emails), for the candidate's company and branch.
     try {
       const r = await fetch('/api/recruitment/send-letter', { method:'POST', headers: await authHeaders(),
-        body:JSON.stringify({ to:c.email, cc:'', subject,
-          body:`Dear ${c.full_name},\n\n${paragraphs.join('\n\n')}\n\nWarm regards,\n${company} — Human Resources`, letter }) })
+        body:JSON.stringify({ to:c.email, cc:'', acceptance:type, candidate_id:c.id,
+          company_id: row.company_id || c.company_id || null, doj: row.doj || c.doj || null }) })
       const d = await r.json().catch(()=>({}))
       if (!r.ok || !d.ok) { showNotify('Letter email failed: '+(d.error||r.status),'error'); setBusy(''); return }
     } catch { showNotify('Letter email failed (network)','error'); setBusy(''); return }

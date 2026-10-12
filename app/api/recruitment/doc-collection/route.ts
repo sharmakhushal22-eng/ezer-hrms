@@ -9,9 +9,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 // Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
 import { requireModule } from '@/lib/api-auth'
-import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { inviteEmail, reuploadEmail, LINK_TTL_HOURS, COLLECT_DOCS } from '@/lib/recruitment/collect-docs'
+import { LINK_TTL_HOURS, COLLECT_DOCS } from '@/lib/recruitment/collect-docs'
+import { renderEmail } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
 
 export const runtime = 'nodejs'
 
@@ -97,7 +98,8 @@ export async function POST(req: NextRequest) {
 
   // If some documents are already uploaded on this link (i.e. HR rejected one and is
   // resending), send the re-upload template listing ONLY what is still missing.
-  let subject: string, mailBody: string
+  // The words come from Configuration (Document collection — invite / re-upload request)
+  // for this company.
   const linkId = existing?.id
   const { data: haveDocs } = linkId
     ? await sb.from('candidate_documents_uploaded').select('doc_type').eq('link_id', linkId)
@@ -105,28 +107,22 @@ export async function POST(req: NextRequest) {
   const uploadedCount = (haveDocs || []).length
   const haveSet = new Set((haveDocs || []).map((d: any) => d.doc_type))
   const missingMandatory = COLLECT_DOCS.filter(d => d.mandatory && !haveSet.has(d.type)).map(d => d.label)
-  if (uploadedCount > 0 && missingMandatory.length > 0) {
-    ({ subject, body: mailBody } = reuploadEmail({ candidateName: cand?.full_name || 'Candidate', jobTitle, companyName, link, missing: missingMandatory, senderName: created_by }))
-  } else {
-    ({ subject, body: mailBody } = inviteEmail({ candidateName: cand?.full_name || 'Candidate', jobTitle, companyName, link, senderName: created_by }))
-  }
+  const reupload = uploadedCount > 0 && missingMandatory.length > 0
+  const mail = await renderEmail(reupload ? 'doc_collection.reupload' : 'doc_collection.invite', company_id || (mrf as any)?.company_id || null, {
+    candidate_name: cand?.full_name || 'Candidate',
+    job_title: jobTitle,
+    company_name: companyName,
+    upload_link: link,
+    link_validity_hours: String(LINK_TTL_HOURS),
+    sender_name: created_by || 'The Hiring Team',
+    missing_documents: missingMandatory.map(m => `• ${m}`).join('\n'),
+  })
 
   // Email — best effort (Gmail SMTP).
   let emailed = false, emailSkipped: string | null = null
-  const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
-  if (user && pass) {
-    try {
-      const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-      await t.sendMail({
-        from: `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`,
-        to, cc: ccList.length ? ccList.join(',') : undefined, subject,
-        text: mailBody, html: mailBody.replace(/\n/g, '<br>'),
-      })
-      emailed = true
-    } catch (e: any) { emailSkipped = e?.message || 'email failed' }
-  } else {
-    emailSkipped = 'Email not configured (GMAIL_USER / GMAIL_APP_PASSWORD).'
-  }
+  const sent = await sendMail({ to, cc: ccList, subject: mail.subject, text: mail.text, html: mail.html, fromName: 'HR Team' })
+  if (sent.sent) emailed = true
+  else emailSkipped = sent.skipped || sent.error || 'email failed'
 
   return NextResponse.json({ ok: true, token, link, expires_at: expiresAt, emailed, emailSkipped, cc: ccList })
 }

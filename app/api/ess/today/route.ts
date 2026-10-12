@@ -17,6 +17,7 @@ import { getSessionEmployee } from '@/lib/session';
 import { TODAY_RPC } from '@/lib/today/schema';
 import { essRoute } from '@/lib/ess/session';
 import { buildPending } from '@/lib/ess/pending';
+import { ledgerFor } from '@/lib/leave/ledger';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,22 @@ export async function GET(req: NextRequest) {
   }
 
   const payload = data as Record<string, unknown> & { pending?: PendingEntry[] };
+
+  // Leave balance, from the same ledger as the Leave tab and Home. The RPC's
+  // own figure sums accrued − used over every stored row — every year and
+  // every type, Maternity entitlement and LWP included — so it is replaced.
+  try {
+    const ledger = await ledgerFor(me.id);
+    if (ledger) {
+      payload.leave = {
+        total: ledger.headlineTotal,
+        accrued_this_month: 0,
+        by_type: Object.fromEntries(ledger.headline.map(b => [b.name, b.available ?? 0])),
+      };
+    }
+  } catch {
+    // keep the RPC's figure rather than blank the tile
+  }
 
   // Approvals, from the app's own builder. A failure here must not blank the
   // whole tab: the rest of Today is unrelated, so it degrades to action items.

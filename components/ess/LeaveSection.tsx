@@ -35,10 +35,18 @@ interface LeaveType {
   id: string; short_name: string; name: string
   allow_half_day: boolean; allow_without_balance: boolean
   available: number | null; eligible: boolean; reason: string | null
+  /** available minus what is already pending — what a new request may use. */
+  bookable?: number | null; pending?: number
 }
+/** Who a request is waiting on, as the server names them. */
+interface Waiting { id: string; name: string; role: string }
+/** The over-balance offer from a 409: file the extra days as LWP. */
+interface SplitOffer { message: string; paid_days: number; lwp_days: number; lwp_type: string; key: string }
 interface Payload {
   year: string; fyLabel: string
   balances: any[]; types: LeaveType[]; applications: any[]; holidays: any[]
+  /** Sum of the headline balances (EL, CL, SL …), as Home and Today show it. */
+  balance_total?: number
   // The employee's own configured weekly offs, resolved server-side from
   // weekly_off_config. `weekly_offs` is exact for a rolling year from today;
   // `weekly_off_weekdays` is the weekday fallback beyond that window.
@@ -162,6 +170,10 @@ export default function LeaveSection({ emp, notify }: {
   const [hover, setHover] = useState('')
   const [focusDay, setFocusDay] = useState(() => iso(new Date()))
   const [confirmId, setConfirmId] = useState('')
+  // Cancelling an APPROVED request: which one is open, and the reason typed.
+  const [cancelId, setCancelId] = useState('')
+  const [cancelReason, setCancelReason] = useState('')
+  const [splitOffer, setSplitOffer] = useState<SplitOffer | null>(null)
   const [typeNote, setTypeNote] = useState('')
   // Motion state. `lit` flips one tick after the data lands so the balance
   // meters transition up from zero instead of appearing at full width; `dir`
@@ -235,7 +247,7 @@ export default function LeaveSection({ emp, notify }: {
     isWeeklyOff(key) || holByDate.has(key), [isWeeklyOff, holByDate])
 
   const totalAvailable = useMemo(
-    () => (data?.balances || []).reduce((s: number, b: any) => s + avail(b), 0),
+    () => data?.balance_total ?? (data?.balances || []).reduce((s: number, b: any) => s + avail(b), 0),
     [data],
   )
 
@@ -269,9 +281,11 @@ export default function LeaveSection({ emp, notify }: {
     return { span, offs, hols, working }
   }, [form.from_date, form.to_date, form.half_day, holByDate, isWeeklyOff])
 
+  // Against what can be BOOKED — pending requests already hold their days.
   const balanceAfter = useMemo(() => {
-    if (!sel || sel.available == null || !estimate) return null
-    return sel.available - estimate.working
+    const base = sel?.bookable ?? sel?.available
+    if (!sel || base == null || !estimate) return null
+    return Math.round((base - estimate.working) * 10) / 10
   }, [sel, estimate])
 
   // ── Calendar grid — rows of weeks, so a week the selection touches can
@@ -379,7 +393,9 @@ export default function LeaveSection({ emp, notify }: {
   }
 
   // ── Submit — the payload is identical to the shipped component ───────────
-  const submit = async () => {
+  const formKey = `${form.leave_type_id}|${form.from_date}|${form.to_date}|${form.half_day}`
+
+  const submit = async (splitWithLwp = false) => {
     if (!form.leave_type_id || !form.from_date || !form.to_date) { notify('Select leave type and dates', 'error'); return }
     if (form.half_day && !form.half_session) { notify('Select 1st half or 2nd half', 'error'); return }
     setBusy(true)
@@ -392,14 +408,47 @@ export default function LeaveSection({ emp, notify }: {
           half_day: form.half_day,
           half_session: form.half_day ? form.half_session : '',
           reason: form.reason,
+          split_with_lwp: splitWithLwp,
         }),
       })
-      notify(`Leave request submitted — ${res.days} day${res.days === 1 ? '' : 's'} ✓`)
-      if (res.unrouted) notify('No approver is configured for you — please tell HR.', 'error')
+      const to: Waiting | null = res.waiting_on || null
+      if (res.split?.length) {
+        notify(`Sent as ${res.split.map((x: any) => `${x.days} day${x.days === 1 ? '' : 's'} ${x.leave_type}`).join(' + ')}${to ? ` to ${to.name}` : ''} ✓`)
+      } else {
+        notify(`${res.days} day${res.days === 1 ? '' : 's'} sent${to ? ` to ${to.name} (${to.role})` : ''} for approval ✓`)
+      }
+      if (res.unrouted) notify('No approver is configured for you — HR will see it in their Requests list. Please tell HR.', 'error')
       setForm(BLANK)
+      setSplitOffer(null)
       load()
     } catch (e: any) {
-      notify(e.message || 'Could not submit', 'error')
+      const b = e?.body
+      if (b?.can_split && b.split_preview) {
+        // Over balance: say so, and offer the usual remedy — the extra days as LWP.
+        setSplitOffer({ key: formKey, message: e.message, paid_days: b.split_preview.paid_days, lwp_days: b.split_preview.lwp_days, lwp_type: b.split_preview.lwp_type || 'Leave Without Pay' })
+      } else {
+        setSplitOffer(null)
+        notify(e.message || 'Could not submit', 'error')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // The over-balance offer belongs to the dates it was made for; change the
+  // form and it no longer shows.
+  const offer = splitOffer && splitOffer.key === formKey ? splitOffer : null
+
+  // Approved leave that has not started: ask the approver to cancel it.
+  const requestCancel = async (id: string) => {
+    setBusy(true)
+    try {
+      const res = await api('/api/ess/leave', emp.id, { method: 'PATCH', body: JSON.stringify({ id, action: 'cancel', reason: cancelReason }) })
+      notify(res.message || 'Cancellation requested')
+      setCancelId(''); setCancelReason('')
+      load()
+    } catch (e: any) {
+      notify(e.message || 'Could not request cancellation', 'error')
     } finally {
       setBusy(false)
     }
@@ -480,9 +529,8 @@ export default function LeaveSection({ emp, notify }: {
 
         {!data.balances.length ? (
           <div className="ezlv-hero-empty">
-            <b>No balances have been loaded for {data.fyLabel}.</b> Your entitlement is set by HR
-            from the leave upload. You can still apply below — requests go to your approver as
-            usual, and balances will appear here once they are uploaded.
+            <b>No paid leave entitlement is set up for you in {data.fyLabel}.</b> HR sets it in Leave
+            configuration. You can still apply for leave that needs no balance, such as Leave Without Pay.
           </div>
         ) : (
           <div className="ezlv-tiles">
@@ -491,13 +539,14 @@ export default function LeaveSection({ emp, notify }: {
               const av = avail(b)
               const pct = total > 0 ? Math.round(av / total * 100) : 0
               return (
-                <div className="ezlv-tile ezlv-in-pop" key={b.id}
+                <div className="ezlv-tile ezlv-in-pop" key={b.leave_type_id || b.id}
                   style={{ animationDelay: `${120 + i * 60}ms` }}>
                   <div className="ezlv-tile-head">
                     <span className="ezlv-code">{b.leave_types?.short_name}</span>
                     <span className="ezlv-tile-name" title={b.leave_types?.name}>{b.leave_types?.name}</span>
                   </div>
                   <div className="ezlv-tile-num">{av}<small> / {total}</small></div>
+                  {Number(b.pending) > 0 && <div className="ezlv-tile-name">{b.pending} pending approval</div>}
                   <div className="ezlv-meter" role="img" aria-label={`${av} of ${total} days left`}>
                     <i className={barClass(pct)}
                       style={{
@@ -536,7 +585,7 @@ export default function LeaveSection({ emp, notify }: {
                 </button>
               ))}
             </div>
-            {sel && <p className="ezlv-hint">{sel.name}{sel.available != null ? ` · ${sel.available} day${sel.available === 1 ? '' : 's'} left` : ''}</p>}
+            {sel && <p className="ezlv-hint">{sel.name}{sel.available != null ? ` · ${sel.available} day${sel.available === 1 ? '' : 's'} left` : ' · no balance needed'}{sel.pending ? ` · ${sel.pending} pending` : ''}</p>}
             {typeNote && <p className="ezlv-hint is-warn">{typeNote}</p>}
           </div>
 
@@ -694,7 +743,7 @@ export default function LeaveSection({ emp, notify }: {
                       <p className="ezlv-summary-note is-alert">Every day here is a weekly-off or holiday, so there is nothing to apply for.</p>
                     )}
                     {balanceAfter != null && balanceAfter < 0 && sel && (
-                      <p className="ezlv-summary-note is-alert">That is {Math.abs(balanceAfter)} day{Math.abs(balanceAfter) === 1 ? '' : 's'} more {sel.short_name} than you have left.</p>
+                      <p className="ezlv-summary-note is-alert">That is {Math.abs(balanceAfter)} day{Math.abs(balanceAfter) === 1 ? '' : 's'} more {sel.short_name} than you can book{sel.pending ? ' (pending requests included)' : ''}. Submitting will offer to apply the extra days as Leave Without Pay.</p>
                     )}
                   </>
                 )}
@@ -725,7 +774,7 @@ export default function LeaveSection({ emp, notify }: {
           </div>
 
           <div className="ezlv-actions">
-            <button className="ezlv-submit" onClick={submit}
+            <button className="ezlv-submit" onClick={() => submit(false)}
               disabled={busy || !form.leave_type_id || !form.from_date || !form.to_date}>
               {busy ? <><i className="ezlv-spin" />Submitting…</> : 'Submit request'}
             </button>
@@ -734,6 +783,23 @@ export default function LeaveSection({ emp, notify }: {
                 onClick={() => { setForm(BLANK); setTypeNote('') }}>Clear</button>
             )}
           </div>
+
+          {offer && (
+            <div className="ezlv-notice" role="alert"><Warn />
+              <span>
+                {offer.message}{' '}
+                {offer.paid_days > 0
+                  ? <>You can apply <b>{offer.paid_days} day{offer.paid_days === 1 ? '' : 's'} as {sel?.short_name}</b> and the remaining <b>{offer.lwp_days} as {offer.lwp_type}</b> (unpaid).</>
+                  : <>You can apply all <b>{offer.lwp_days} day{offer.lwp_days === 1 ? '' : 's'} as {offer.lwp_type}</b> (unpaid) instead.</>}
+                <span style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <button className="ezlv-ghost" disabled={busy} onClick={() => submit(true)}>
+                    {offer.paid_days > 0 ? `Apply ${offer.paid_days} + ${offer.lwp_days} LWP` : `Apply as ${offer.lwp_type}`}
+                  </button>
+                  <button className="ezlv-ghost" onClick={() => setSplitOffer(null)}>Change dates</button>
+                </span>
+              </span>
+            </div>
+          )}
 
           {data.diagnostics.noApprover && (
             <div className="ezlv-notice"><Warn />
@@ -777,10 +843,54 @@ export default function LeaveSection({ emp, notify }: {
                       {status === 'PENDING' && a.approval_stage ? ` · stage ${a.approval_stage}` : ''}
                     </div>
 
+                    {/* Who it is with, by name — not just "PENDING" or "stage L1". */}
+                    {status === 'PENDING' && (
+                      <div className="ezlv-req-sub">
+                        {a.waiting_on
+                          ? <>Waiting on <b>{a.waiting_on.name}</b> · {a.waiting_on.role}</>
+                          : 'No approver is set for you — HR has been shown this request.'}
+                      </div>
+                    )}
+                    {(status === 'APPROVED' || status === 'REJECTED') && a.approver && (
+                      <div className="ezlv-req-sub">
+                        {status === 'APPROVED' ? 'Approved' : 'Declined'} by <b>{a.approver}</b>
+                        {a.resolved_at ? ` on ${new Date(a.resolved_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` : ''}
+                      </div>
+                    )}
                     {a.remark && (
                       <div className="ezlv-remark">
                         {a.approver && <b>{a.approver}</b>}
                         {a.remark}
+                      </div>
+                    )}
+                    {a.cancel_status === 'REQUESTED' && (
+                      <div className="ezlv-req-sub">
+                        Cancellation requested — waiting on <b>{a.cancel_waiting_on?.name || 'HR'}</b>
+                      </div>
+                    )}
+                    {a.cancel_status === 'DECLINED' && (
+                      <div className="ezlv-remark">
+                        <b>Cancellation declined{a.cancel_decided_by ? ` by ${a.cancel_decided_by}` : ''}</b>
+                        {a.cancel_remark || 'The leave stands.'}
+                      </div>
+                    )}
+                    {status === 'CANCELLED' && a.cancel_status === 'APPROVED' && (
+                      <div className="ezlv-req-sub">Cancelled{a.cancel_decided_by ? ` — approved by ${a.cancel_decided_by}` : ''}; the days are back in your balance.</div>
+                    )}
+
+                    {status === 'APPROVED' && a.cancel_status !== 'REQUESTED' && a.from_date > today && (
+                      <div className="ezlv-req-foot">
+                        {cancelId === a.id ? (
+                          <>
+                            <input className="ezlv-input" style={{ flex: '1 1 160px' }} value={cancelReason}
+                              placeholder="Why cancel? (your approver reads this)"
+                              onChange={e => setCancelReason(e.target.value)} />
+                            <button className="ezlv-ghost is-danger" disabled={busy} onClick={() => requestCancel(a.id)}>Send to approver</button>
+                            <button className="ezlv-ghost" onClick={() => { setCancelId(''); setCancelReason('') }}>Keep it</button>
+                          </>
+                        ) : (
+                          <button className="ezlv-ghost" disabled={busy} onClick={() => setCancelId(a.id)}>Request cancellation</button>
+                        )}
                       </div>
                     )}
 

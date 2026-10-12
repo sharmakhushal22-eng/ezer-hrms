@@ -10,7 +10,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useGrant } from '@/lib/rms/client';
+import { useGrant, authToken } from '@/lib/rms/client';
+import { leaveYearOf } from '@/lib/ess/leave-year';
 import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve';
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -778,6 +779,18 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
   const ids = emps.map((e: any) => e.id);
   if (!ids.length) return [];
 
+  // The Leave Report reads leave_balances, which is only as current as its last
+  // write. Bring it up to date first — accrual to the last completed month and
+  // every approved day — so the report agrees with the employee's Leave tab.
+  if (report.id === 'leave_report') {
+    const t = await authToken();
+    await fetch('/api/leave/balances', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+      body: JSON.stringify({ company: companyId || null }),
+    }).catch(() => null);
+  }
+
   const rows: any[] = [];
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500);
@@ -887,7 +900,33 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
     return out
   }
 
-  // vpf / nps / tds / leave — one row per secondary record.
+  if (report.id === 'leave_report') {
+    // This financial year only, with the type named and the closing worked out —
+    // the columns are leave_type / opening_balance / closing_balance, which the
+    // raw leave_balances row does not carry, so they used to print blank.
+    const year = leaveYearOf();
+    const { data: types } = await supabase.from('leave_types').select('id, name, short_name, sort_order, allow_without_balance');
+    const typeBy: Record<string, any> = {};
+    (types || []).forEach((t: any) => { typeBy[t.id] = t; });
+    return rows
+      .filter(rec => String(rec.year) === year && empById[rec.employee_id])
+      .map(rec => {
+        const t = typeBy[rec.leave_type_id] || {};
+        const opening = Number(rec.opening) || 0, accrued = Number(rec.accrued) || 0;
+        const used = Number(rec.used) || 0, encashed = Number(rec.encashed) || 0;
+        return {
+          ...empSubset(empById[rec.employee_id]), ...rec,
+          leave_type: t.short_name ? `${t.name} (${t.short_name})` : (t.name || '—'),
+          opening_balance: opening, accrued, used, encashed,
+          // LWP / Sabbatical carry no balance — their row is days taken, not a deficit.
+          closing_balance: t.allow_without_balance ? '—' : Math.round((opening + accrued - used - encashed) * 10) / 10,
+          _sort: t.sort_order ?? 99,
+        };
+      })
+      .sort((a, b) => String(a.emp_code).localeCompare(String(b.emp_code)) || a._sort - b._sort);
+  }
+
+  // vpf / nps / tds — one row per secondary record.
   return rows.map(rec => {
     const e = empById[rec.employee_id];
     return { ...(e ? empSubset(e) : {}), ...rec };

@@ -10,7 +10,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rolesCanRaiseConfidential, selfApprovedChain } from '@/lib/recruitment/confidential'
 import { jobCodePrefix, nextJobCode } from '@/lib/recruitment/job-code'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { essRoute, forbidden, notify } from '@/lib/ess/session'
+import { essRoute, forbidden } from '@/lib/ess/session'
+import { mrfScope } from '@/lib/config/store'
+import { notifyFromTemplate } from '@/lib/config/notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -275,8 +277,9 @@ export async function POST(req: NextRequest) {
       chain.push({ order: chain.length + 1, role: 'HIRING_MANAGER', approver_id: me, approver_name: meB?.name || null, approver_code: meB?.code || null, status: 'REVISION', acted_at: new Date().toISOString(), comment: hmNote })
       await sb.from('manpower_requisitions').update({ approval_chain: chain, status: 'NEEDS_REVISION', remarks: hmNote }).eq('id', id)
       const label = `${mrf.designation || mrf.position || 'your requisition'}${mrf.mrf_number ? ` (${mrf.mrf_number})` : ''}`
-      await notify(mrf.requested_by as string, 'MRF sent back by the hiring manager',
-        `${label} was sent back by ${meB?.name || 'the hiring manager'}: “${hmNote}”. Open Tasks & Approvals to edit and resubmit it.`, '/ess?tab=approvals', 'MRF')
+      await notifyFromTemplate(mrf.requested_by as string, 'notify.mrf.sent_back_hm',
+        { mrf_label: label, actor_name: meB?.name || 'the hiring manager', note: hmNote },
+        { scope: await mrfScope(id), link: '/ess?tab=approvals', category: 'MRF' })
       return NextResponse.json({ ok: true, sentBack: true })
     }
 
@@ -294,8 +297,9 @@ export async function POST(req: NextRequest) {
       cur.status = 'REVISION'; cur.acted_at = now; cur.comment = note
       await sb.from('manpower_requisitions').update({ approval_chain: chain, status: 'NEEDS_REVISION', remarks: note }).eq('id', id)
       const label = `${mrf.designation || mrf.position || 'your requisition'}${mrf.mrf_number ? ` (${mrf.mrf_number})` : ''}`
-      await notify(mrf.requested_by as string, 'MRF sent back for changes',
-        `${label} was sent back by ${cur.approver_name || 'an approver'}: “${note}”. Open Tasks & Approvals to edit and resubmit it.`, '/ess?tab=approvals', 'MRF')
+      await notifyFromTemplate(mrf.requested_by as string, 'notify.mrf.sent_back',
+        { mrf_label: label, actor_name: cur.approver_name || 'an approver', note },
+        { scope: await mrfScope(id), link: '/ess?tab=approvals', category: 'MRF' })
       return NextResponse.json({ ok: true })
     }
 
@@ -325,8 +329,8 @@ export async function POST(req: NextRequest) {
     if (assignedHr.length) {
       const { data: info } = await sb.from('manpower_requisitions').select('designation, position, mrf_number').eq('id', id).maybeSingle()
       const label = `${info?.designation || info?.position || 'a role'}${info?.mrf_number ? ` (${info.mrf_number})` : ''}`
-      await Promise.all(assignedHr.map(hid => notify(hid, 'You have been assigned an MRF',
-        `You have been assigned to hire for ${label}. Acknowledge it in Tasks & Approvals, then run the hiring in Recruitment.`, '/ess?tab=approvals', 'MRF')))
+      const scope = await mrfScope(id)
+      await Promise.all(assignedHr.map(hid => notifyFromTemplate(hid, 'notify.mrf.assigned', { mrf_label: label }, { scope, link: '/ess?tab=approvals', category: 'MRF' })))
     }
     return NextResponse.json({ ok: true })
   }

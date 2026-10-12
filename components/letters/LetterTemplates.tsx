@@ -1,23 +1,25 @@
 // ================================================================
 // EZER HRMS — Letter Templates: Design & Generate
-// Path: app/dashboard/admin/letters/page.tsx
+// Path: components/letters/LetterTemplates.tsx (HR Letters → Design & Generate Letters)
 //
-// Tab 1 — Templates: create/edit named letter templates with
-//   {{merge_field}} tokens, preview against sample data.
+// Tab 1 — Templates: the letter text is edited in Configuration now
+//   (Global default + per-company versions, with history). This tab only
+//   points there; the designer that used to live here wrote straight to
+//   letter_templates from the browser and had no versions.
 // Tab 2 — Generate: pick a template + company, paste employee codes,
 //   generate real letters (letterhead + signatory resolved per
-//   employee's branch), then download / email / publish to ESS.
+//   employee's branch), then download / email / publish to ESS. The
+//   text used is the company's Configuration version (api/letters/generate).
 //
-// Depends on: migration 052_letter_templates.sql, lib/letters/*,
-// lib/letterhead/* (from the previous delivery), api/letters/generate.
+// Depends on: lib/letters/*, lib/letterhead/*, api/letters/generate,
+// lib/config/* (Configuration templates).
 // ================================================================
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { MERGE_FIELDS, sampleMergeFields } from '@/lib/letters/mergeFields'
-import { renderTemplate, extractTokens } from '@/lib/letters/renderTemplate'
 import { getGeneratedLetterDownloadUrl, publishLetterToEss } from '@/lib/letters/actions'
-import type { MergeField } from '@/lib/letters/mergeFields'
+// Both letter routes are guarded server-side; the session has to go along.
+import { authHeaders } from '@/lib/auth-headers'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -61,55 +63,10 @@ function TabBar({ active, onChange }: { active: 'templates' | 'generate'; onChan
   )
 }
 
-function TemplateListRow({ tpl, selected, onSelect }: { tpl: Template; selected: boolean; onSelect: () => void }) {
-  return (
-    <div onClick={onSelect} style={{
-      padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4,
-      background: selected ? C.purpleBg : C.card, border: `1px solid ${selected ? C.purple : C.border}`,
-    }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: C.navy }}>{tpl.name}</div>
-      {tpl.description && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{tpl.description}</div>}
-    </div>
-  )
-}
-
-function FieldPickerButton({ field, onInsert }: { field: MergeField; onInsert: (token: string) => void }) {
-  return (
-    <button onClick={() => onInsert(field.token)}
-      style={{ padding: '4px 10px', fontSize: 11, borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-      + {field.label}
-    </button>
-  )
-}
-
-function NewTemplateModal({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string, description: string) => void }) {
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: TK.surface, borderRadius: 14, padding: 22, width: '100%', maxWidth: 420 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, marginBottom: 14 }}>Add new letter</div>
-        <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Name of letter *</label>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Offer Letter"
-          style={{ width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }} />
-        <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Description</label>
-        <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional — what this letter is for"
-          style={{ width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button disabled={!name.trim()} onClick={() => onCreate(name.trim(), description.trim())}
-            style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: !name.trim() ? 0.5 : 1 }}>
-            Create & design
-          </button>
-          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function ResultRow({ r }: { r: GenResult }) {
   const [downloading, setDownloading] = useState(false)
   const [emailing, setEmailing] = useState(false)
+  const [emailNote, setEmailNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
 
@@ -136,7 +93,12 @@ function ResultRow({ r }: { r: GenResult }) {
   async function handleEmail() {
     if (!r.generated_letter_id) return
     setEmailing(true)
-    await fetch('/api/letters/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generated_letter_id: r.generated_letter_id }) })
+    setEmailNote(null)
+    try {
+      const res = await fetch('/api/letters/email', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ generated_letter_id: r.generated_letter_id }) })
+      const d = await res.json().catch(() => ({}))
+      setEmailNote(res.ok ? { ok: true, text: `Emailed to ${d.to}` } : { ok: false, text: d.error || `HTTP ${res.status}` })
+    } catch { setEmailNote({ ok: false, text: 'Network error' }) }
     setEmailing(false)
   }
 
@@ -174,6 +136,7 @@ function ResultRow({ r }: { r: GenResult }) {
             </button>
           </div>
         )}
+        {emailNote && <div style={{ fontSize: 10, marginTop: 4, color: emailNote.ok ? C.green : C.red }}>{emailNote.text}</div>}
       </td>
     </tr>
   )
@@ -181,25 +144,18 @@ function ResultRow({ r }: { r: GenResult }) {
 
 // ── Main component (rendered inside the HR Letters section) ──────
 export default function LetterTemplates() {
-  const [tab, setTab] = useState<'templates' | 'generate'>('templates')
-
-  // Templates tab state
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [selectedTpl, setSelectedTpl] = useState<Template | null>(null)
-  const [showNewModal, setShowNewModal] = useState(false)
-  const [content, setContent] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [previewing, setPreviewing] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const editorRef = useRef<HTMLTextAreaElement>(null)
+  // Generate is the working half of this screen now; template text lives in Configuration.
+  const [tab, setTab] = useState<'templates' | 'generate'>('generate')
 
   // Generate tab state
+  const [templates, setTemplates] = useState<Template[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [genCompanyId, setGenCompanyId] = useState('')
   const [genTemplateId, setGenTemplateId] = useState('')
   const [codesText, setCodesText] = useState('')
   const [generating, setGenerating] = useState(false)
   const [genResults, setGenResults] = useState<GenResult[] | null>(null)
+  const [genError, setGenError] = useState('')
 
   const loadTemplates = useCallback(async () => {
     const { data } = await supabase.from('letter_templates').select('*').eq('is_active', true).order('updated_at', { ascending: false })
@@ -208,60 +164,19 @@ export default function LetterTemplates() {
 
   useEffect(() => { loadTemplates() }, [loadTemplates])
   useEffect(() => { supabase.from('companies').select('id, company_name').order('company_name').then(({ data }) => setCompanies((data ?? []) as Company[])) }, [])
-  useEffect(() => { setContent(selectedTpl?.content ?? ''); setPreviewUrl(null) }, [selectedTpl])
-
-  async function createTemplate(name: string, description: string) {
-    const { data } = await supabase.from('letter_templates').insert({ name, description }).select().single()
-    setShowNewModal(false)
-    await loadTemplates()
-    if (data) setSelectedTpl(data as Template)
-  }
-
-  async function saveContent() {
-    if (!selectedTpl) return
-    setSaving(true)
-    await supabase.from('letter_templates').update({ content }).eq('id', selectedTpl.id)
-    setSaving(false)
-    loadTemplates()
-  }
-
-  function insertField(token: string) {
-    const ta = editorRef.current
-    if (!ta) { setContent(c => c + `{{${token}}}`); return }
-    const start = ta.selectionStart, end = ta.selectionEnd
-    const next = content.slice(0, start) + `{{${token}}}` + content.slice(end)
-    setContent(next)
-    requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + token.length + 4 })
-  }
-
-  async function previewSample() {
-    if (!selectedTpl) return
-    setPreviewing(true)
-    const { text } = renderTemplate(content, sampleMergeFields())
-    const res = await fetch('/api/letters/preview', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ letter_name: selectedTpl.name, body_text: text }),
-    })
-    if (res.ok) {
-      const blob = await res.blob()
-      setPreviewUrl(URL.createObjectURL(blob))
-    }
-    setPreviewing(false)
-  }
-
-  const usedTokens = extractTokens(content)
-  const unknownInEditor = usedTokens.filter(t => !MERGE_FIELDS.some(f => f.token === t))
 
   async function handleGenerate() {
     const codes = codesText.split(/[\n,]+/).map(c => c.trim()).filter(Boolean)
     if (!genCompanyId || !genTemplateId || codes.length === 0) return
     setGenerating(true)
     setGenResults(null)
+    setGenError('')
     const res = await fetch('/api/letters/generate', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: await authHeaders(),
       body: JSON.stringify({ template_id: genTemplateId, company_id: genCompanyId, employee_codes: codes }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) setGenError(data.error || `HTTP ${res.status}`)
     setGenResults(data.results ?? [])
     setGenerating(false)
   }
@@ -273,60 +188,17 @@ export default function LetterTemplates() {
       <TabBar active={tab} onChange={setTab} />
 
       {tab === 'templates' && (
-        <div style={{ display: 'flex', gap: 20 }}>
-          {/* Template list */}
-          <div style={{ width: 260, flexShrink: 0 }}>
-            <button onClick={() => setShowNewModal(true)}
-              style={{ width: '100%', padding: '9px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 12 }}>
-              + Add new letter
-            </button>
-            {templates.map(t => (
-              <TemplateListRow key={t.id} tpl={t} selected={selectedTpl?.id === t.id} onSelect={() => setSelectedTpl(t)} />
-            ))}
+        <div style={{ maxWidth: 640, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 6 }}>Letter text is edited in Configuration</div>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
+            Add a letter type and write its text in <b>Configuration → Letters</b>. There you can keep a Global version
+            and a different version for each company, preview it with sample data, and see who changed what.
+            Letters you generate here always use the version for the company you pick.
           </div>
-
-          {/* Designer */}
-          <div style={{ flex: 1, minWidth: 0, maxWidth: 700 }}>
-            {!selectedTpl ? (
-              <div style={{ color: C.muted }}>Select a letter on the left, or add a new one, to start designing.</div>
-            ) : (
-              <>
-                <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, marginBottom: 10 }}>{selectedTpl.name}</div>
-
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 10, color: C.muted, marginBottom: 5 }}>Insert field:</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {MERGE_FIELDS.map(f => <FieldPickerButton key={f.token} field={f} onInsert={insertField} />)}
-                  </div>
-                </div>
-
-                <textarea ref={editorRef} value={content} onChange={e => setContent(e.target.value)}
-                  placeholder={'Dear {{employee_name}},\n\nWe are pleased to confirm...'}
-                  style={{ width: '100%', height: 280, padding: '14px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, lineHeight: 1.6, fontFamily: 'Georgia, serif', boxSizing: 'border-box', resize: 'vertical' }} />
-
-                {unknownInEditor.length > 0 && (
-                  <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '6px 10px', borderRadius: 7, marginTop: 6 }}>Unknown field{unknownInEditor.length > 1 ? 's' : ''}: {unknownInEditor.map(t => `{{${t}}}`).join(', ')} — these will print literally on the letter.
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button onClick={saveContent} disabled={saving}
-                    style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-                    {saving ? 'Saving…' : 'Save'}
-                  </button>
-                  <button onClick={previewSample} disabled={previewing}
-                    style={{ padding: '9px 18px', borderRadius: 10, border: `1px solid ${C.purple}`, background: TK.surface, color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {previewing ? 'Rendering…' : 'Preview sample'}
-                  </button>
-                  {previewUrl && (
-                    <a href={previewUrl} target="_blank" rel="noreferrer"
-                      style={{ padding: '9px 18px', borderRadius: 10, border: `1px solid ${C.greenBd}`, background: C.greenBg, color: C.green, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>Open preview PDF
-                    </a>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          <a href="/dashboard/configuration?tab=letters"
+            style={{ display: 'inline-block', padding: '9px 18px', borderRadius: 10, background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
+            Open Configuration → Letters
+          </a>
         </div>
       )}
 
@@ -357,6 +229,7 @@ export default function LetterTemplates() {
               style={{ marginTop: 10, padding: '10px 20px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: (generating || !genCompanyId || !genTemplateId || !codesText.trim()) ? 0.5 : 1 }}>
               {generating ? 'Generating…' : 'Generate letters'}
             </button>
+            {genError && <div style={{ fontSize: 11, color: C.red, marginTop: 8 }}>{genError}</div>}
           </div>
 
           {genResults && (
@@ -381,7 +254,6 @@ export default function LetterTemplates() {
         </div>
       )}
 
-      {showNewModal && <NewTemplateModal onClose={() => setShowNewModal(false)} onCreate={createTemplate} />}
     </div>
   )
 }

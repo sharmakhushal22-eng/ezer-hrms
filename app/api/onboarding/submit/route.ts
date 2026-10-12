@@ -2,11 +2,27 @@
 // Final submission — validates, generates employee ID, moves to HR review
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { renderEmail, onboardingScope, isUuid } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
+
+export const runtime = 'nodejs' // nodemailer needs the Node.js runtime
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!
 )
+
+/** Who hears that a joining form is in: the HR SPOC, else the employee who created the
+ *  onboarding, else the default HR address. */
+async function hrRecipient(...employeeIds: (string | null | undefined)[]): Promise<string | null> {
+  for (const id of employeeIds) {
+    if (!isUuid(id)) continue
+    const { data } = await supa.from('employees').select('office_email, personal_email').eq('id', id).maybeSingle()
+    const to = data?.office_email || data?.personal_email
+    if (to) return to
+  }
+  return process.env.HR_DEFAULT_EMAIL || null
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const { data: cand, error } = await supa
       .from('onboarding_candidates')
-      .select('id, company_id, full_name, email, designation, status, form_data')
+      .select('id, company_id, full_name, email, designation, status, form_data, hr_spoc_id, created_by')
       .eq('magic_link_token', token)
       .single()
 
@@ -76,15 +92,26 @@ export async function POST(req: NextRequest) {
       }))
     )
 
-    // HR notification
+    // HR notification — "Joining form submitted — HR" (Configuration → Onboarding). This used to
+    // be logged here as SENT without being emailed; it is now sent, to the onboarding's HR SPOC,
+    // else the employee who sent the link, else HR_DEFAULT_EMAIL, and the log says what happened.
+    const hrTo = await hrRecipient(cand.hr_spoc_id, cand.created_by)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || ''
+    const mail = await renderEmail('onboarding.form_submitted', await onboardingScope(cand.id), {
+      candidate_name: cand.full_name, role: cand.designation || '',
+      review_link: appUrl ? `${appUrl}/dashboard/onboarding` : '',
+    })
+    const hrSent = hrTo
+      ? await sendMail({ to: hrTo, subject: mail.subject, text: mail.text, html: mail.html })
+      : { sent: false }
     await supa.from('onboarding_notifications').insert({
       onboarding_id:  cand.id,
       recipient_type: 'HR',
       channel:        'EMAIL',
-      subject:        `New Joining Form Submitted — ${cand.full_name}`,
-      body:           `${cand.full_name} has submitted their joining form. Please review and approve.`,
-      status:         'SENT',
-      sent_at:        new Date().toISOString(),
+      subject:        mail.subject,
+      body:           mail.text,
+      status:         hrSent.sent ? 'SENT' : 'FAILED',
+      sent_at:        hrSent.sent ? new Date().toISOString() : null,
     })
 
     // Audit

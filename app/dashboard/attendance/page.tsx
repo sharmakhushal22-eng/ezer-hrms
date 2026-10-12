@@ -10,11 +10,12 @@ import {
   type LocationLite, type DeptLite,
 } from '@/lib/supabase-shift'
 import LeaveRulesTab from '@/components/attendance/LeaveRulesTab'
+import RequestsTab from '@/components/attendance/RequestsTab'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import { useGrant } from '@/lib/rms/client'
-import { canSeeScreen, scopedCompanies } from '@/lib/rms/resolve'
+import { canSeeScreen, scopedCompanies, canEdit } from '@/lib/rms/resolve'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
@@ -207,9 +208,10 @@ function RecordsTab({ employees, records, from, to, onFrom, onTo }: {
 // ══════════════════════════════════════════════════════════════════
 export default function AttendancePage() {
   const { grant } = useGrant()
-  const [tab, setTab] = useState<'shifts' | 'assign' | 'records' | 'leaverules'>('shifts')
+  // Requests first: it is the tab with work waiting in it.
+  const [tab, setTab] = useState<'requests' | 'shifts' | 'assign' | 'records' | 'leaverules'>('requests')
   useEffect(() => {
-    const vis = (['shifts','assign','records','leaverules'] as const).filter(k => canSeeScreen(grant, 'attendance.'+k))
+    const vis = (['requests','shifts','assign','records','leaverules'] as const).filter(k => canSeeScreen(grant, 'attendance.'+k))
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [loading, setLoading] = useState(true)
@@ -273,7 +275,7 @@ export default function AttendancePage() {
     reload()
   }
 
-  const tabs: [typeof tab, string][] = [['shifts', 'Shifts'], ['assign', 'Assign'], ['records', 'Attendance Records'], ['leaverules', 'Leave Rules']]
+  const tabs: [typeof tab, string][] = [['requests', 'Leave & Attendance Requests'], ['shifts', 'Shifts'], ['assign', 'Assign'], ['records', 'Attendance Records'], ['leaverules', 'Leave Rules']]
 
   return (
     <div style={{ ...T.page, padding:'20px 24px' }}>
@@ -285,6 +287,7 @@ export default function AttendancePage() {
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>{tabs.filter(([k]) => canSeeScreen(grant, 'attendance.'+k)).map(([k, l]) => <button key={k} style={T.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}</div>
         {loading ? <div style={{ ...T.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>
+            {tab === 'requests' && <RequestsTab companies={scopedCompanies(grant, companies)} canAct={canEdit(grant, 'Attendance')} notify={notify} />}
             {tab === 'shifts' && <ShiftsTab companies={companies} locations={locations} departments={departments} shifts={shifts} onCreate={doCreate} onToggle={doToggle} onDelete={doDelete} />}
             {tab === 'assign' && <AssignTab shifts={shifts} employees={employees} assignments={assignments} onAssign={doAssign} />}
             {tab === 'records' && <RecordsTab employees={employees} records={records} from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />}

@@ -17,12 +17,12 @@ import {
   type ServiceRequest, type LetterRequest, type Announcement, type Kudo,
 } from '@/lib/supabase-ess'
 import {
-  loadMonthlyAttendance, loadDayPunches, loadRegularisationRequests,
-  submitRegularisation, submitRegularisationBulk,
+  loadMonthlyAttendance, loadDayPunches,
   resolveDay, computeSummary,
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
 import * as HR from '@/lib/employees/hr-actions'
+import { api as essApi } from '@/lib/ess/api'
 import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import dynamic from 'next/dynamic'
@@ -1916,8 +1916,11 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
   )
 }
 
-function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
+function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, correction }: {
   emp: EmployeeDetail; date: string; dayInfo: ReturnType<typeof resolveDay>; isMobile: boolean; onRaise: (d: string) => void
+  todayStr: string
+  /** A correction already filed for this day, if any. */
+  correction?: RegularisationRequest | null
 }) {
   const [punches, setPunches] = useState<DayPunch[]>([])
   const [loading, setLoading] = useState(true)
@@ -1966,8 +1969,27 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
           </div>
         ))}
 
-      {status === 'MISS_PUNCH' && (
-        <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:C.warning }}>Raise regularisation</button>
+      {rec?.regularized_at && (
+        <div style={{ fontSize:12, color:C.positive, background:C.positiveTint, borderRadius:7, padding:'8px 11px', marginTop:10 }}>
+          Corrected through an approved regularisation.
+        </div>
+      )}
+      {correction?.status === 'PENDING' && (
+        <div style={{ fontSize:12, color:C.warning, background:C.warningTint, borderRadius:7, padding:'8px 11px', marginTop:10 }}>
+          Correction to {String(correction.requested_in).slice(0,5)}–{String(correction.requested_out).slice(0,5)} is waiting on {correction.waiting_on?.name || 'HR'}{correction.waiting_on?.role ? ` (${correction.waiting_on.role})` : ''}.
+        </div>
+      )}
+      {correction?.status === 'REJECTED' && (
+        <div style={{ fontSize:12, color:C.critical, background:C.criticalTint, borderRadius:7, padding:'8px 11px', marginTop:10 }}>
+          Your correction was declined{correction.decided_by ? ` by ${correction.decided_by}` : ''}{correction.review_remark ? `: ${correction.review_remark}` : '.'}
+        </div>
+      )}
+      {/* Past days only, and not while one is pending or already approved. */}
+      {date < todayStr && ['MISS_PUNCH', 'ABSENT', 'HALF_DAY'].includes(status) && !rec?.regularized_at
+        && correction?.status !== 'PENDING' && correction?.status !== 'APPROVED' && (
+        <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:C.warning }}>
+          {correction?.status === 'REJECTED' ? 'Raise again' : 'Raise regularisation'}
+        </button>
       )}
     </div>
   )
@@ -2072,11 +2094,18 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
     if (!reason.trim()) { setMsg({ text: 'Reason is required', ok: false }); return }
 
     setBusy(true); setMsg(null)
-    const { inserted, error } = await submitRegularisationBulk(emp.id, preview.eligible, actualIn, actualOut, reason.trim())
-    setBusy(false)
-    if (error) { setMsg({ text: error, ok: false }); return }
-    setMsg({ text: `✓ ${inserted} day${inserted === 1 ? '' : 's'} sent to HR for approval`, ok: true })
-    onDone()
+    try {
+      const res = await essApi('/api/ess/attendance', emp.id, { method: 'POST', body: JSON.stringify({
+        dates: preview.eligible.map(d => d.date), requested_in: actualIn, requested_out: actualOut, reason: reason.trim(),
+      }) })
+      const to = res.waiting_on
+      setMsg({ text: `✓ ${res.filed} day${res.filed === 1 ? '' : 's'} sent${to ? ` to ${to.name} (${to.role})` : ' — no approver is set for you, so HR will see it'} for approval`, ok: true })
+      onDone()
+    } catch (e: any) {
+      setMsg({ text: e.message || 'Could not submit', ok: false })
+    } finally {
+      setBusy(false)
+    }
   }
 
   const short = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
@@ -2160,7 +2189,7 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
                 style={{ ...T.btnP, flex: 2, opacity: busy || scanning || !preview?.eligible.length ? .5 : 1 }}>
           {busy ? 'Sending…'
             : preview?.eligible.length
-              ? `Send ${preview.eligible.length} day${preview.eligible.length === 1 ? '' : 's'} to HR`
+              ? `Send ${preview.eligible.length} day${preview.eligible.length === 1 ? '' : 's'} for approval`
               : 'Nothing to send'}
         </button>
       </div>
@@ -2191,11 +2220,18 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
     if (actualIn >= actualOut) { setMsg({ text:'Actual IN must be before Actual OUT', ok:false }); return }
     if (!reason.trim()) { setMsg({ text:'Reason is required', ok:false }); return }
     setBusy(true); setMsg(null)
-    const { error } = await submitRegularisation(emp.id, dateVal, rec?.work_in || null, rec?.work_out || null, actualIn, actualOut, reason.trim())
-    setBusy(false)
-    if (error) { setMsg({ text: error, ok:false }); return }
-    setMsg({ text:'Regularisation request submitted', ok:true })
-    onDone()
+    try {
+      const res = await essApi('/api/ess/attendance', emp.id, { method: 'POST', body: JSON.stringify({
+        date: dateVal, requested_in: actualIn, requested_out: actualOut, reason: reason.trim(),
+      }) })
+      const to = res.waiting_on
+      setMsg({ text: to ? `Sent to ${to.name} (${to.role}) for approval` : 'Submitted — no approver is set for you, so HR will see it', ok:true })
+      onDone()
+    } catch (e: any) {
+      setMsg({ text: e.message || 'Could not submit', ok:false })
+    } finally {
+      setBusy(false)
+    }
   }
   const dateLbl = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
   return (
@@ -2221,8 +2257,13 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
 }
 
 // 5) Regularisation list ─────────────────────────────────────────
-function RegularisationList({ requests }: { requests: RegularisationRequest[] }) {
-  const STY: Record<string,[string,string]> = { PENDING:[C.warningTint,C.warning], APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical] }
+function RegularisationList({ requests, onWithdraw, busyId }: {
+  requests: RegularisationRequest[]
+  onWithdraw: (id: string) => void
+  busyId: string
+}) {
+  const STY: Record<string,[string,string]> = { PENDING:[C.warningTint,C.warning], APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical], CANCELLED:[C.sunken,C.faint] }
+  const LABEL: Record<string,string> = { PENDING:'PENDING', APPROVED:'APPROVED', REJECTED:'DECLINED', CANCELLED:'WITHDRAWN' }
   return (
     <div style={T.card}>
       <div style={T.section}>My Regularisation Requests</div>
@@ -2231,12 +2272,28 @@ function RegularisationList({ requests }: { requests: RegularisationRequest[] })
         <div key={r.id} style={{ padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{fmt(r.attendance_date)}</div>
-            <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{r.status}</span>
+            <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{LABEL[r.status] || r.status}</span>
           </div>
           <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>
           <div style={{ fontSize:11, color:C.inkSoft, marginTop:1 }}>Requested: {r.requested_in} → {r.requested_out}</div>
           {r.reason && <div style={{ fontSize:12, color:C.inkSoft, marginTop:3 }}>{r.reason}</div>}
-          <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>Submitted {fmtDT(r.created_at)}</div>
+          {r.status === 'PENDING' && (
+            <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:3 }}>
+              {r.waiting_on ? <>Waiting on <b>{r.waiting_on.name}</b> · {r.waiting_on.role}</> : 'No approver is set for you — HR has been shown this request.'}
+            </div>
+          )}
+          {(r.status === 'APPROVED' || r.status === 'REJECTED') && (
+            <div style={{ fontSize:11.5, color: r.status === 'APPROVED' ? C.positive : C.critical, marginTop:3 }}>
+              {r.status === 'APPROVED' ? 'Approved — your attendance shows the corrected times' : 'Declined'}{r.decided_by ? ` by ${r.decided_by}` : ''}{r.reviewed_at ? ` on ${fmt(r.reviewed_at)}` : ''}{r.review_remark ? `: “${r.review_remark}”` : ''}
+            </div>
+          )}
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:3 }}>
+            <span style={{ fontSize:10, color:C.faint }}>Submitted {fmtDT(r.created_at)}</span>
+            {r.status === 'PENDING' && (
+              <button onClick={() => onWithdraw(r.id)} disabled={busyId === r.id}
+                style={{ ...T.btnO, marginLeft:'auto', padding:'3px 10px', fontSize:11 }}>{busyId === r.id ? 'Withdrawing…' : 'Withdraw'}</button>
+            )}
+          </div>
         </div>
       )})}
     </div>
@@ -2256,14 +2313,31 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const [bulkRaise, setBulkRaise] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [loading, setLoading] = useState(true)
-  const todayStr = new Date().toISOString().slice(0, 10)
+  // Local date, not UTC: before 05:30 IST the UTC date is still yesterday.
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+  const [withdrawing, setWithdrawing] = useState('')
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 1024)
     check(); window.addEventListener('resize', check); return () => window.removeEventListener('resize', check)
   }, [])
 
-  const loadRegs = useCallback(() => { loadRegularisationRequests(emp.id).then(setRegs) }, [emp.id])
+  // Through the API, which names the approver of each request.
+  const loadRegs = useCallback(() => {
+    essApi('/api/ess/attendance', emp.id).then(d => setRegs((d.regularisations || []) as RegularisationRequest[])).catch(() => setRegs([]))
+  }, [emp.id])
+  const withdraw = async (id: string) => {
+    setWithdrawing(id)
+    try { await essApi('/api/ess/attendance', emp.id, { method: 'PATCH', body: JSON.stringify({ id }) }); loadRegs() }
+    catch { /* the row stays as it was; the list shows the truth */ }
+    finally { setWithdrawing('') }
+  }
+  // The latest correction per day, for the day panel.
+  const regByDate = useMemo(() => {
+    const m = new Map<string, RegularisationRequest>()
+    for (const r of regs) if (!m.has(r.attendance_date) && r.status !== 'CANCELLED') m.set(r.attendance_date, r)
+    return m
+  }, [regs])
   const loadMonth = useCallback(() => {
     setLoading(true)
     loadMonthlyAttendance(emp.id, year, month).then(d => { setMonthData(d); setLoading(false) })
@@ -2318,7 +2392,8 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
         <div key={selectedDate || 'resting'} className="ezer-day-panel"
              style={{ flex:'1 1 300px', minWidth: isMobile ? '100%' : 280 }}>
           {selectedDate && dayInfo
-            ? <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)} />
+            ? <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)}
+                todayStr={todayStr} correction={regByDate.get(selectedDate) || null} />
             : <DayPanelResting summary={stats} />}
         </div>
       </div>
@@ -2330,7 +2405,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
       <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: ((manualRaise || bulkRaise) && !raiseDate) ? 0 : undefined }}>
         <div>
           <div style={{ fontSize:13, fontWeight:600 }}>Attendance Regularisation</div>
-          <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → HR approval. Use a range when several days share the same reason.</div>
+          <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → your reporting manager approves it → your attendance is updated. Use a range when several days share the same reason.</div>
         </div>
         {!manualRaise && !bulkRaise && !raiseDate && (
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
@@ -2341,7 +2416,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
       </div>
       {manualRaise && !raiseDate && <RegularisationForm emp={emp} date={todayStr} rec={null} editable onDone={() => { loadRegs(); loadMonth(); setManualRaise(false) }} onCancel={() => setManualRaise(false)} />}
       {bulkRaise && !raiseDate && <BulkRegularisationForm emp={emp} onDone={() => { loadRegs(); loadMonth(); setBulkRaise(false) }} onCancel={() => setBulkRaise(false)} />}
-      <RegularisationList requests={regs} />
+      <RegularisationList requests={regs} onWithdraw={withdraw} busyId={withdrawing} />
     </div>
   )
 }

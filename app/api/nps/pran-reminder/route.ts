@@ -10,6 +10,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPranCreationEmail } from '@/lib/nps/pran-email'
+import { requireModule } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -41,6 +42,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Mails real employees: Payroll (edit) from the NPS report, or a scheduled job holding CRON_SECRET.
+  const cron = !!process.env.CRON_SECRET && req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`
+  if (!cron) {
+    const gate = await requireModule(req, 'Payroll', 'EDIT')
+    if (gate.error) return gate.error
+  }
   let employee_id: string | undefined
   try { ({ employee_id } = await req.json()) } catch { /* empty body = everyone */ }
 
@@ -68,6 +75,7 @@ export async function POST(req: NextRequest) {
       // true enough for somebody who is already overdue.
       deadline: d.pran_deadline || new Date().toISOString().slice(0, 10),
       reminder: true,
+      employeeId: d.employee_id,
     })
     results.push({ emp_code: e.emp_code, sent: r.sent, reason: (r as any).reason })
 
