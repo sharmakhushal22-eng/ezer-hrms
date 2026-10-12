@@ -15,9 +15,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { te, TeApiError } from '@/lib/te/client'
 import type { ClaimPreview, Snapshot, TeExpense, TeFlag, TeTrip } from '@/lib/te/types'
 import TeIcon from './TeIcon'
-import { errorText, flagClass, rs } from '@/lib/te/format'
+import { errorText, flagClass, plural, rs } from '@/lib/te/format'
+import { linesWaitingInTrips } from '@/lib/te/trips-list'
 
-export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted, onBack }: {
+export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted, onBack, onOpenTrip }: {
   snap: Snapshot
   /** Set to claim one trip; left out for the standing "Other expenses" claim. */
   trip?: TeTrip
@@ -25,6 +26,8 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
   onEdit: (line: TeExpense) => void
   onSubmitted: (claimId: string, message: string) => void
   onBack?: () => void
+  /** Open a trip whose bills are waiting in it (screen 44). */
+  onOpenTrip?: (tripId: string) => void
 }) {
   // My own saved lines. Colleagues' lines are in the snapshot (other: true)
   // only so the server can check for duplicates; they are never mine to claim.
@@ -33,6 +36,12 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
     [snap, trip],
   )
   const catName = useMemo(() => new Map(snap.cfg.cats.map(c => [c.id, c.name])), [snap])
+  // Only on the standing monthly claim: on a trip's own claim these lines ARE
+  // the list above.
+  const waitingInTrips = useMemo(
+    () => (trip ? [] : linesWaitingInTrips(snap.expenses, snap.trips)),
+    [snap, trip],
+  )
   const [preview, setPreview] = useState<ClaimPreview | null>(null)
   const [declared, setDeclared] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -113,6 +122,32 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
               )
             })}
           </div>
+          {/* Screen 44. Lines saved against a trip are real, unclaimed, and not
+              part of this claim — so without this card they are invisible here
+              and get entered a second time. */}
+          {!trip && waitingInTrips.length ? (
+            <div className="card pad0">
+              <div className="day"><span>Waiting inside trips</span><span>{waitingInTrips.length}</span></div>
+              {waitingInTrips.map(w => (
+                <div
+                  key={w.tripId}
+                  className={onOpenTrip ? 'li click' : 'li'}
+                  role={onOpenTrip ? 'button' : undefined}
+                  tabIndex={onOpenTrip ? 0 : undefined}
+                  onClick={onOpenTrip ? () => onOpenTrip(w.tripId) : undefined}
+                  onKeyDown={onOpenTrip ? e => { if (e.key === 'Enter') onOpenTrip(w.tripId) } : undefined}
+                >
+                  <span className="ico"><TeIcon name="route" /></span>
+                  <div className="grow">
+                    <div className="b">{w.name}</div>
+                    <div className="small muted">{plural(w.count, 'bill')} · claimed with that trip, not here</div>
+                  </div>
+                  <div className="amt"><b>{rs(w.total)}</b>{onOpenTrip ? <span className="nr-go">Open<TeIcon name="go" size="sm" /></span> : null}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           {trip ? null : (
             <div className="note"><TeIcon name="info" size="sm" /><span>Travelled within the city? Start a local trip instead. It records the route and works out the amount for you.</span></div>
           )}

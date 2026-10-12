@@ -135,3 +135,73 @@ export function whyPayoutNotReady(reason: string): string {
 export function payableTotal<T extends { net_amount: number }>(rows: T[], chosen: Set<string>, idOf: (r: T) => string): number {
   return Math.round(rows.filter(r => chosen.has(idOf(r))).reduce((a, r) => a + (r.net_amount || 0), 0) * 100) / 100
 }
+
+// ── corrections after a claim is paid ───────────────────────────────────────
+//
+// A claim is settled and then found to be wrong: a toll counted twice, a fare
+// that should have been reimbursed and was not. The claim itself is finished
+// and must not be rewritten — it has been approved, verified and paid, and the
+// audit trail of that is the point. So the correction is a separate row:
+// `recover` means the employee owes the company, `pay` means the company owes
+// the employee.
+//
+// WHY IT MATTERS THAT THIS IS VISIBLE. A recovery nobody can see is money the
+// company has quietly written off; the employee is also entitled to know what
+// is being taken back and why.
+
+export type AdjustmentAction = 'done' | 'cancel'
+
+export interface AdjustmentOffer {
+  action: AdjustmentAction
+  label: string
+  effect: string
+  grave: boolean
+  /** A reference is kept for money that actually moved. */
+  reference: boolean
+}
+
+/** What can be done to a correction in this state. Only an open one is live. */
+export function adjustmentActions(status: string): AdjustmentOffer[] {
+  if (status !== 'OPEN') return []
+  return [
+    {
+      action: 'done',
+      label: 'Settled',
+      effect: 'The money has moved. The correction is closed and the reference is kept against it.',
+      grave: false,
+      reference: true,
+    },
+    {
+      action: 'cancel',
+      label: 'Cancel it',
+      effect: 'The correction was raised in error. Nothing moves, and it stops being chased.',
+      grave: true,
+      reference: false,
+    },
+  ]
+}
+
+/** Which way the money goes, in the words a desk uses. */
+export function adjustmentWay(direction: string): { label: string; who: string } {
+  return direction === 'recover'
+    ? { label: 'To recover', who: 'The employee owes this back.' }
+    : { label: 'To pay', who: 'The company owes the employee this.' }
+}
+
+/** Why a new correction cannot be raised yet, or '' when it can. */
+export function whyAdjustmentNotReady(amount: number, reason: string, claimId: string): string {
+  if (!claimId) return 'Find the claim this correction is about.'
+  if (!(amount > 0)) return 'Enter how much the correction is for.'
+  if (!reason.trim()) return 'Say what the correction is for. The employee sees it.'
+  return ''
+}
+
+/** Open corrections, split by direction and totalled — the two numbers a desk
+ *  is actually accountable for. */
+export function adjustmentTotals<T extends { status: string; direction: string; amount: number }>(
+  rows: T[],
+): { recover: number; pay: number; open: number } {
+  const open = rows.filter(r => r.status === 'OPEN')
+  const sum = (d: string) => Math.round(open.filter(r => r.direction === d).reduce((a, r) => a + (r.amount || 0), 0) * 100) / 100
+  return { recover: sum('recover'), pay: sum('pay'), open: open.length }
+}

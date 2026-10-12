@@ -7,8 +7,9 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
 import {
-  advanceActions, batchActions, itemActions, payableTotal, periodActions,
-  periodNeedsReason, whyPayoutNotReady, PAYOUT_ROUTES,
+  adjustmentActions, adjustmentTotals, adjustmentWay, advanceActions, batchActions,
+  itemActions, payableTotal, periodActions, periodNeedsReason, whyAdjustmentNotReady,
+  whyPayoutNotReady, PAYOUT_ROUTES,
 } from '../finance-desk.ts'
 
 const names = (list: { action: string }[]) => list.map(a => a.action)
@@ -157,5 +158,57 @@ describe('saying why a payout went wrong', () => {
 
   it('accepts a reason', () => {
     assert.equal(whyPayoutNotReady('Account closed.'), '')
+  })
+})
+
+describe('corrections after a claim is paid', () => {
+  it('offers settling or cancelling an open one', () => {
+    assert.deepEqual(names(adjustmentActions('OPEN')), ['done', 'cancel'])
+  })
+
+  it('offers nothing once it is closed', () => {
+    assert.deepEqual(adjustmentActions('DONE'), [])
+    assert.deepEqual(adjustmentActions('CANCELLED'), [])
+    assert.deepEqual(adjustmentActions('WHAT'), [])
+  })
+
+  it('keeps a reference for money that moved, and not for one raised in error', () => {
+    const done = adjustmentActions('OPEN').find(a => a.action === 'done')!
+    assert.equal(done.reference, true)
+    const cancel = adjustmentActions('OPEN').find(a => a.action === 'cancel')!
+    assert.equal(cancel.reference, false)
+    assert.equal(cancel.grave, true)
+  })
+
+  it('says which way the money goes', () => {
+    assert.match(adjustmentWay('recover').who, /employee owes this back/)
+    assert.match(adjustmentWay('pay').who, /company owes the employee/)
+  })
+
+  it('will not raise one without a claim, an amount and a reason', () => {
+    assert.match(whyAdjustmentNotReady(100, 'Toll twice', ''), /Find the claim/)
+    assert.match(whyAdjustmentNotReady(0, 'Toll twice', 'c1'), /how much/)
+    assert.match(whyAdjustmentNotReady(-5, 'Toll twice', 'c1'), /how much/)
+    assert.match(whyAdjustmentNotReady(100, '   ', 'c1'), /what the correction is for/)
+    assert.equal(whyAdjustmentNotReady(100, 'Toll counted twice', 'c1'), '')
+  })
+
+  it('says the employee reads the reason, because they do', () => {
+    assert.match(whyAdjustmentNotReady(100, '', 'c1'), /employee sees it/)
+  })
+
+  it('totals only what is still open, by direction', () => {
+    const rows = [
+      { status: 'OPEN', direction: 'recover', amount: 100 },
+      { status: 'OPEN', direction: 'recover', amount: 20.5 },
+      { status: 'OPEN', direction: 'pay', amount: 300 },
+      { status: 'DONE', direction: 'recover', amount: 9999 },
+      { status: 'CANCELLED', direction: 'pay', amount: 7777 },
+    ]
+    assert.deepEqual(adjustmentTotals(rows), { recover: 120.5, pay: 300, open: 3 })
+  })
+
+  it('totals nothing when there is nothing open', () => {
+    assert.deepEqual(adjustmentTotals([{ status: 'DONE', direction: 'pay', amount: 50 }]), { recover: 0, pay: 0, open: 0 })
   })
 })

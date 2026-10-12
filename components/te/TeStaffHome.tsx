@@ -8,6 +8,7 @@
 //   Verification   claims a manager passed, now Finance's to check
 //   Advances       money out with employees
 //   Payouts        verified claims, and the batches they go out in
+//   Corrections    money owed either way after a claim was paid
 //   Months         which months accept claims
 //   Travel Desk    tickets and hotels to book, vehicles to check
 //   Setup          rates, limits, GPS rules, checks, categories, who approves
@@ -21,6 +22,7 @@ import TeClaimApproval from './approve/TeClaimApproval'
 import TeVerification from './finance/TeVerification'
 import TeAdvanceDesk from './finance/TeAdvanceDesk'
 import TePayouts from './finance/TePayouts'
+import TeAdjustments from './finance/TeAdjustments'
 import TePeriods from './finance/TePeriods'
 import TeTravelDesk from './desk/TeTravelDesk'
 import TeModesVehicles from './admin/TeModesVehicles'
@@ -37,7 +39,7 @@ import { errorText, rs, when } from '@/lib/te/format'
 import './te.css'
 
 type Desk =
-  | 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'periods' | 'deskwork'
+  | 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'corrections' | 'periods' | 'deskwork'
   | 'rates' | 'policy' | 'gps' | 'checks' | 'categories' | 'workflow'
   | 'reports' | 'triplog' | 'audit'
 
@@ -49,6 +51,7 @@ const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; nee
   { k: 'verify', label: 'Verification', icon: 'verify', needsFinance: true },
   { k: 'advances', label: 'Advances', icon: 'advances', needsFinance: true },
   { k: 'payouts', label: 'Payouts', icon: 'claims', needsFinance: true },
+  { k: 'corrections', label: 'Corrections', icon: 'swap', needsFinance: true },
   { k: 'periods', label: 'Months', icon: 'cal', needsFinance: true },
   { k: 'deskwork', label: 'Travel Desk', icon: 'plane', needsDesk: true },
   { k: 'rates', label: 'Modes and rates', icon: 'car', needsAdmin: true },
@@ -107,6 +110,7 @@ export default function TeStaffHome() {
     if (desk === 'verify') return <TeVerification onToast={setToast} />
     if (desk === 'advances') return <TeAdvanceDesk onToast={setToast} />
     if (desk === 'payouts') return <TePayouts onToast={setToast} />
+    if (desk === 'corrections') return <TeAdjustments onToast={setToast} />
     if (desk === 'periods') return <TePeriods onToast={setToast} />
     if (desk === 'deskwork') return <TeTravelDesk vehicleTypes={cfg?.vehicles ?? []} fuelPrice={cfg?.fuelPrice ?? {}} onToast={setToast} />
     if (desk === 'workflow') return <TeWorkflow onToast={setToast} />

@@ -128,3 +128,40 @@ export function myTrips(trips: TeTrip[], me: Uuid, scope: TripScope | null): TeT
     .filter(t => t.emp === me && (!scope || t.scope === scope))
     .sort((a, b) => (b.start ?? '').localeCompare(a.start ?? ''))
 }
+
+/**
+ * My unclaimed lines that belong to a trip, grouped by that trip. Screen 44.
+ *
+ * WHY THIS CARD EXISTS. "Other expenses" is the standing monthly claim, and it
+ * holds only lines with no trip. A bill saved against a trip is real, saved and
+ * unclaimed — and completely invisible on that screen, because it is not part
+ * of that claim and never will be. Without this an employee adds a hotel bill
+ * to a trip, opens Other expenses, sees nothing, and adds it again.
+ *
+ * Colleagues' lines (`other`) are in the snapshot only so the server can check
+ * for duplicates, and are never mine to claim.
+ */
+export function linesWaitingInTrips<L extends { tripId: Uuid | null; status: string; other?: boolean; claimed?: number }>(
+  expenses: L[],
+  trips: Pick<TeTrip, 'id' | 'name'>[],
+): { tripId: Uuid; name: string; count: number; total: number }[] {
+  const byTrip = new Map<Uuid, { tripId: Uuid; name: string; count: number; total: number }>()
+  for (const x of expenses) {
+    if (x.other || x.status !== 'UNCLAIMED' || !x.tripId) continue
+    const seen = byTrip.get(x.tripId)
+    if (seen) {
+      seen.count += 1
+      seen.total += x.claimed ?? 0
+    } else {
+      byTrip.set(x.tripId, {
+        tripId: x.tripId,
+        // A trip missing from the snapshot still gets a row: the lines exist
+        // either way, and hiding them is the bug this card is here to stop.
+        name: trips.find(t => t.id === x.tripId)?.name ?? 'A trip',
+        count: 1,
+        total: x.claimed ?? 0,
+      })
+    }
+  }
+  return [...byTrip.values()].sort((a, b) => a.name.localeCompare(b.name))
+}

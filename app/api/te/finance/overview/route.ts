@@ -100,11 +100,27 @@ export async function GET(req: NextRequest) {
       if (error) throw rpcError(error, 'te_payout_batches')
       rows = data ?? []; total = count ?? 0
     } else if (view === 'adjustments') {
-      let r = sb.from('te_adjustments').select('*', { count: 'exact' }).eq('company_id', company)
+      // The claim is embedded (te_adjustments links to te_claims once), but the
+      // employee is NOT: this table references employees twice, as employee_id
+      // and created_by, so an embed would be ambiguous and fail at request
+      // time. The names are read separately below, as app/api/te/desk does.
+      let r = sb.from('te_adjustments')
+        .select('*, te_claims(claim_no, status)', { count: 'exact' })
+        .eq('company_id', company)
       if (status) r = r.eq('status', status)
       const { data, count, error } = await r.order('created_at', { ascending: false }).range(page.from, page.to)
       if (error) throw rpcError(error, 'te_adjustments')
-      rows = data ?? []; total = count ?? 0
+      const who = [...new Set((data ?? []).map(a => a.employee_id as string).filter(Boolean))]
+      const names = new Map<string, { emp_code: string | null; full_name: string | null }>()
+      if (who.length) {
+        const e = await sb.from('employees').select('id, emp_code, full_name').in('id', who)
+        if (e.error) throw rpcError(e.error, 'employees')
+        for (const row of e.data ?? []) {
+          names.set(row.id as string, { emp_code: row.emp_code as string | null, full_name: row.full_name as string | null })
+        }
+      }
+      rows = (data ?? []).map(a => ({ ...a, ...(names.get(a.employee_id as string) ?? { emp_code: null, full_name: null }) }))
+      total = count ?? 0
     } else {
       const { data, count, error } = await sb.from('travel_periods')
         .select('id, period_month, period_label, status, closed_at, locked_at', { count: 'exact' })

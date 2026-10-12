@@ -99,6 +99,17 @@ export interface PayoutBatch {
   }[]
 }
 export interface AuditRow { id: number; entity_type: string; entity_id: Uuid | null; entity_ref: string | null; action: string; actor_id: Uuid | null; actor_role: string | null; summary: string; employee_visible: boolean; at: string; before?: unknown; after?: unknown }
+/** A correction raised against a claim that was already paid (te_adjustments).
+ *  `emp_code`/`full_name` are joined on by the route; the employee is NOT
+ *  embedded, because te_adjustments references employees twice. */
+export interface AdjustmentRow {
+  id: Uuid; company_id: Uuid; claim_id: Uuid | null; employee_id: Uuid
+  emp_code: string | null; full_name: string | null
+  direction: 'recover' | 'pay' | string; amount: number; reason: string
+  status: 'OPEN' | 'DONE' | 'CANCELLED' | string; reference: string | null
+  created_by: Uuid | null; created_at: string
+  te_claims: { claim_no: string; status: string } | null
+}
 export interface FlagReportRow {
   id: Uuid; check_code: string; title: string; evidence: string | null; severity: string
   is_blocking: boolean; status: string; resolve_reason: string | null; raised_at: string
@@ -187,7 +198,7 @@ export const te = {
     claims: (q?: PageQuery & { status?: string; stage?: string; employee_id?: string; period?: string; from?: string; to?: string; q?: string }) => get<Page<ClaimSummaryRow>>('finance/overview', { view: 'claims', ...q }),
     payable: (q?: PageQuery) => get<Page<{ claim_id: Uuid; claim_no: string; employee_id: Uuid; emp_code: string; employee_name: string; net_amount: number; verified_at: string; bank_account_last4: string | null; ifsc_code: string | null }>>('finance/overview', { view: 'payable', ...q }),
     advances: (q?: PageQuery & { status?: string }) => get<Page<Record<string, unknown>>>('finance/overview', { view: 'advances', ...q }),
-    adjustments: (q?: PageQuery & { status?: string }) => get<Page<Record<string, unknown>>>('finance/overview', { view: 'adjustments', ...q }),
+    adjustments: (q?: PageQuery & { status?: string }) => get<Page<AdjustmentRow>>('finance/overview', { view: 'adjustments', ...q }),
     periods: (q?: PageQuery) => get<Page<{ id: Uuid; period_month: string; period_label: string; status: string; closed_at: string | null; locked_at: string | null }>>('finance/overview', { view: 'periods', ...q }),
     advanceAct: (id: Uuid, action: 'pay' | 'reject' | 'refund' | 'payroll' | 'carry', o: { amount?: number; ref?: string } = {}) => post<{ advance_id: Uuid; status: string; outstanding_amount: number; carried_to: Uuid | null }>(`advances/${id}`, { action, ...o }),
     payouts: (q?: PageQuery & { status?: string }) => get<Page<PayoutBatch>>('payouts', q),

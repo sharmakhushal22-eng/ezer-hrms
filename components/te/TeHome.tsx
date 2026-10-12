@@ -339,6 +339,9 @@ export default function TeHome({ initialClaimId, onExit }: {
               onAdd={() => setSheet({ name: 'expense' })}
               onEdit={line => setSheet({ name: 'expense', line })}
               onSubmitted={(id, message) => { setToast(message); reload(); setView({ name: 'claim', id }) }}
+              // Screen 44: bills saved against a trip are claimed with that
+              // trip, so the card that lists them goes to it.
+              onOpenTrip={openTrip}
             />
           ) : null}
           {view.name === 'claims' ? <TeClaimList snap={snap} onOpen={id => setView({ name: 'claim', id })} /> : null}

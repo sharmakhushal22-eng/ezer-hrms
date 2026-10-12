@@ -5,7 +5,7 @@
 // different headings, which is exactly the kind of rule that rots quietly.
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { groupTrips, myTrips, scopeCounts, tripChip, tripGroup, tripMoney, TRIP_GROUPS } from '../trips-list.ts'
+import { groupTrips, myTrips, scopeCounts, tripChip, tripGroup, tripMoney, TRIP_GROUPS, linesWaitingInTrips } from '../trips-list.ts'
 import type { TeTrip, TripDisplayStatus } from '../types.ts'
 
 const TODAY = '2026-11-16'
@@ -149,5 +149,47 @@ describe('the list itself', () => {
   it('sorts an undated trip last rather than dropping it', () => {
     const undated = trip({ id: 'z', start: null, display: 'DRAFT' })
     assert.deepEqual(myTrips([undated, trips[0]], 'me', null).map(t => t.id), ['a', 'z'])
+  })
+})
+
+describe('lines waiting inside trips', () => {
+  const trips = [{ id: 't1', name: 'Pune factory' }, { id: 't2', name: 'Delhi review' }]
+  const line = (over: Partial<{ tripId: string | null; status: string; other: boolean; claimed: number }> = {}) =>
+    ({ tripId: 't1', status: 'UNCLAIMED', claimed: 100, ...over })
+
+  it('groups my unclaimed trip lines by trip, with counts and totals', () => {
+    const out = linesWaitingInTrips(
+      [line(), line({ claimed: 50 }), line({ tripId: 't2', claimed: 400 })],
+      trips,
+    )
+    assert.deepEqual(out, [
+      { tripId: 't2', name: 'Delhi review', count: 1, total: 400 },
+      { tripId: 't1', name: 'Pune factory', count: 2, total: 150 },
+    ])
+  })
+
+  it('ignores lines with no trip, which are the monthly claim itself', () => {
+    assert.deepEqual(linesWaitingInTrips([line({ tripId: null })], trips), [])
+  })
+
+  it('ignores lines already on a claim', () => {
+    assert.deepEqual(linesWaitingInTrips([line({ status: 'CLAIMED' })], trips), [])
+  })
+
+  it("ignores a colleague's line, which is never mine to claim", () => {
+    // Those are in the snapshot only so the server can spot duplicates.
+    assert.deepEqual(linesWaitingInTrips([line({ other: true })], trips), [])
+  })
+
+  it('still lists lines whose trip is not in the snapshot', () => {
+    // Hiding them is exactly the bug this card exists to prevent.
+    const out = linesWaitingInTrips([line({ tripId: 'gone' })], trips)
+    assert.equal(out.length, 1)
+    assert.equal(out[0].name, 'A trip')
+  })
+
+  it('treats a missing amount as nothing rather than NaN', () => {
+    const out = linesWaitingInTrips([{ tripId: 't1', status: 'UNCLAIMED' }], trips)
+    assert.equal(out[0].total, 0)
   })
 })
