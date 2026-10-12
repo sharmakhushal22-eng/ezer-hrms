@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { Snapshot, TeClaim, TeClaimDetail } from '@/lib/te/types'
 import TeIcon from './TeIcon'
+import TeFileLink from './TeFileLink'
 import { claimChip, claimHolder, day, errorText, flagClass, rs, when } from '@/lib/te/format'
 
 export function TeClaimList({ snap, onOpen }: { snap: Snapshot; onOpen: (claimId: string) => void }) {
@@ -126,7 +127,12 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged }: {
                   {d.lines.map(x => (
                     <tr key={x.id}>
                       <td className="nowrap">{day(x.date)}</td>
-                      <td><b>{x.merchant || catName.get(x.cat) || x.cat}</b><div className="small muted">{catName.get(x.cat) || x.cat}{x.pay === 'company' ? ' · paid by company' : ''}</div></td>
+                      <td>
+                        <b>{x.merchant || catName.get(x.cat) || x.cat}</b>
+                        <div className="small muted">{catName.get(x.cat) || x.cat}{x.pay === 'company' ? ' · paid by company' : ''}</div>
+                        {/* Your own bill, back out of the private bucket. */}
+                        {x.file?.path ? <TeFileLink path={x.file.path} name={x.file.name} kind={x.file.kind} small /> : null}
+                      </td>
                       <td className="r">{x.pay === 'company' ? '—' : rs(x.claimed)}</td>
                       <td className="r b">{x.pay === 'company' ? '—' : x.approved === null ? '…' : rs(x.approved)}</td>
                       <td className="small">{x.dreason || (x.fix ? 'Needs your correction' : '')}</td>

@@ -114,6 +114,14 @@ export interface AdminTripRow {
 export interface FinanceSummary { inApproval: number; inVerification: number; onHold: number; payable: number; advancesToPay: number; advancesOut: number; openBatches: number }
 export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null; kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null }
 export interface DeskVehicle { id: Uuid; employee_id: Uuid; emp_code: string | null; full_name: string | null; reg_no: string; vehicle_type_code: string; declared_type_code: string | null; ownership: string; rc_file_url: string | null; created_at: string }
+/** A booking the desk has already recorded. Live ones only — the one thing
+ *  left to do with it is cancel it when the trip changes under it. */
+export interface DeskBooked {
+  id: Uuid; booking_no: string; trip_id: Uuid; trip_no: string; trip_name: string
+  employee_id: Uuid; emp_code: string | null; full_name: string | null
+  leg_id: Uuid | null; point_seq: number | null; kind: 'travel' | 'hotel' | string
+  vendor: string; reference: string; amount: number; paid_by: string; status: string; booked_at: string
+}
 
 export const te = {
   // ── the employee ──────────────────────────────────────────────────────────
@@ -201,7 +209,7 @@ export const te = {
 
   // ── the Travel Desk (dashboard Travel Claims permission, edit) ─────────────
   desk: {
-    list: (q?: { company_id?: string }) => get<{ company_id: Uuid; to_book: DeskToBook[]; vehicles: DeskVehicle[] }>('desk', q),
+    list: (q?: { company_id?: string }) => get<{ company_id: Uuid; to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[] }>('desk', q),
     bookingRecord: (input: BookingInput) => post<{ booking_id: Uuid; booking_no: string; expense_id: Uuid }>('bookings', input),
     bookingCancel: (id: Uuid, reason: string) => post<{ booking_id: Uuid; status: 'CANCELLED' }>(`bookings/${id}/cancel`, { reason }),
     vehicleVerify: (id: Uuid, typeCode?: string) => post<{ vehicle_id: Uuid; vehicle_type_code: string }>(`vehicles/${id}/verify`, { type_code: typeCode }),

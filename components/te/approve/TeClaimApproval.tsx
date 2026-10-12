@@ -27,6 +27,7 @@ import {
 } from '@/lib/te/flag-review'
 import { claimChip, errorText, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
+import TeFileLink from '../TeFileLink'
 import TeLegEvidence from './TeLegEvidence'
 
 export default function TeClaimApproval({ claimId, onBack, onDecided }: {
@@ -191,6 +192,16 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
               <div className="grow">
                 <div className="b">{l.merchant || l.cat}</div>
                 <div className="small muted">{[l.cat, l.desc, l.date].filter(Boolean).join(' · ')}</div>
+                {/* The evidence for the amount, next to the amount. An approver
+                    asked to agree to a number should be able to see the bill. */}
+                {l.file?.path ? (
+                  <div className="row tight">
+                    <TeFileLink path={l.file.path} name={l.file.name} kind={l.file.kind} claimId={c.id} small />
+                    {l.files > 1 ? <span className="small muted">+{l.files - 1} more on this line</span> : null}
+                  </div>
+                ) : (
+                  <p className="small muted">No bill attached.</p>
+                )}
                 {flagsFor(l.id).length ? (
                   <div className="row tight">
                     {flagsFor(l.id).map(fl => (

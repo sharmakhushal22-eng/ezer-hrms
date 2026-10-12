@@ -32,6 +32,7 @@ export default function TeWorkflow({ onToast }: { onToast: (message: string) => 
   const [sampleScope, setSampleScope] = useState<TripScope>('domestic')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [resetting, setResetting] = useState(false)
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick(n => n + 1), [])
 
@@ -65,6 +66,18 @@ export default function TeWorkflow({ onToast }: { onToast: (message: string) => 
       await te.admin.workflowSave(code, levels)
       onToast(`The ${code === 'claim' ? 'claim' : 'trip'} chain was saved.`)
       reload()
+    } catch (e) { setError(errorText(e)) } finally { setBusy('') }
+  }
+
+  /** Back to the chain the module ships with. The server returns the restored
+   *  levels, but the chain is re-read anyway so saved and edited start equal
+   *  again and the screen does not immediately look dirty. */
+  async function reset() {
+    setBusy('reset'); setError('')
+    try {
+      await te.admin.workflowReset(code)
+      onToast(`The ${code === 'claim' ? 'claim' : 'trip'} chain is back to the default.`)
+      setResetting(false); reload()
     } catch (e) { setError(errorText(e)) } finally { setBusy('') }
   }
 
@@ -235,6 +248,40 @@ export default function TeWorkflow({ onToast }: { onToast: (message: string) => 
           </div>
         </div>
       ) : null}
+
+      {/* Back to the chain the module ships with. Screens c7, d1b.
+          Offered only when there is nothing unsaved: resetting on top of edits
+          would throw away two different things at once and the admin could not
+          tell afterwards which had gone. */}
+      <div className="card">
+        <div className="ch"><h3>Start again</h3></div>
+        {dirty ? (
+          <p className="small muted">Save or undo your changes first, then the default chain can be restored.</p>
+        ) : resetting ? (
+          <div className="form">
+            <div className="flag crit">
+              <TeIcon name="alert" size="sm" />
+              <span>
+                Every level you have set up for {code === 'claim' ? 'claims' : 'trip plans'} is replaced by the
+                default chain. {whatChangingAffects('workflow')}
+              </span>
+            </div>
+            <div className="row tight">
+              <button type="button" className="btn" onClick={() => setResetting(false)}>Never mind</button>
+              <button type="button" className="btn dan" disabled={busy === 'reset'} onClick={reset}>
+                {busy === 'reset' ? 'Restoring…' : 'Restore the default chain'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="small muted">Replace this chain with the one the module ships with.</p>
+            <button type="button" className="btn dan" onClick={() => { setResetting(true); setError('') }}>
+              Restore the default chain
+            </button>
+          </>
+        )}
+      </div>
     </div>
   )
 }

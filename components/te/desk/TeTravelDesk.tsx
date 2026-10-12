@@ -16,11 +16,12 @@
 // employee called an SUV and the RC shows as a hatchback is paid as a
 // hatchback from here on. The screen says what the rate becomes.
 import { useCallback, useEffect, useState } from 'react'
-import { te, type DeskToBook, type DeskVehicle } from '@/lib/te/client'
+import { te, type DeskBooked, type DeskToBook, type DeskVehicle } from '@/lib/te/client'
 import { ratePerKm } from '@/lib/te/vehicle'
 import { errorText, day, rs } from '@/lib/te/format'
 import type { TeVehicleType } from '@/lib/te/types'
 import TeIcon from '../TeIcon'
+import TeFileLink from '../TeFileLink'
 
 export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   /** cfg.vehicles — the types a vehicle can be, and what each pays. */
@@ -29,6 +30,9 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   onToast: (message: string) => void
 }) {
   const [toBook, setToBook] = useState<DeskToBook[] | null>(null)
+  const [booked, setBooked] = useState<DeskBooked[]>([])
+  const [cancelling, setCancelling] = useState<string | null>(null)
+  const [why, setWhy] = useState('')
   const [vehicles, setVehicles] = useState<DeskVehicle[]>([])
   const [error, setError] = useState('')
   const [booking, setBooking] = useState<DeskToBook | null>(null)
@@ -41,7 +45,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   useEffect(() => {
     let current = true
     te.desk.list()
-      .then(r => { if (current) { setToBook(r.to_book ?? []); setVehicles(r.vehicles ?? []); setError('') } })
+      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setError('') } })
       .catch(e => { if (current) { setToBook([]); setError(errorText(e)) } })
     return () => { current = false }
   }, [tick])
@@ -63,6 +67,23 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
       })
       onToast(`Booking ${r.booking_no} recorded against ${booking.trip_no}.`)
       setBooking(null); setForm({ vendor: '', reference: '', amount: '' }); reload()
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  /** Cancel a booking the desk made. The expense recorded against the trip is
+   *  reversed by the server, which is the whole point: otherwise a ticket
+   *  nobody travelled on stays on the employee's trip as company-paid. */
+  async function cancelBooking(b: DeskBooked) {
+    if (!why.trim()) return
+    setBusy(b.id); setError('')
+    try {
+      await te.desk.bookingCancel(b.id, why.trim())
+      onToast(`${b.booking_no} cancelled.`)
+      setCancelling(null); setWhy(''); reload()
     } catch (e) {
       setError(errorText(e))
     } finally {
@@ -150,6 +171,47 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
         })}
       </div>
 
+      {/* What the desk has already booked. A trip can change after a ticket is
+          bought, and an uncancelled booking stays on it as company-paid. */}
+      {booked.length ? (
+        <div className="card pad0">
+          <div className="day"><span>Booked</span><span>{booked.length}</span></div>
+          {booked.map(b => (
+            <div key={b.id} className="li">
+              <span className="ico"><TeIcon name={b.kind === 'hotel' ? 'pin' : 'plane'} /></span>
+              <div className="grow">
+                <div className="b"><span className="mono">{b.booking_no}</span> · {b.vendor}</div>
+                <div className="small muted">
+                  {b.full_name} <span className="mono">{b.emp_code}</span> · {b.trip_name}
+                  {' · '}<span className="mono">{b.reference}</span> · {rs(b.amount)}
+                  {b.booked_at ? ` · ${day(b.booked_at)}` : ''}
+                </div>
+                {cancelling === b.id ? (
+                  <div className="form">
+                    <div className="flag crit">
+                      <TeIcon name="alert" size="sm" />
+                      <span>The booking is cancelled and the expense recorded against the trip is reversed. Cancelling here does not tell the airline or the hotel.</span>
+                    </div>
+                    <label className="fld sm"><span>Why</span>
+                      <input value={why} onChange={e => setWhy(e.target.value)} placeholder="Trip postponed" />
+                    </label>
+                    <div className="row tight">
+                      <button type="button" className="btn" onClick={() => { setCancelling(null); setWhy('') }}>Never mind</button>
+                      <button type="button" className="btn dan" disabled={!why.trim() || busy === b.id} onClick={() => cancelBooking(b)}>
+                        {busy === b.id ? 'Cancelling…' : 'Cancel the booking'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              {cancelling !== b.id ? (
+                <button type="button" className="btn sm dan" onClick={() => { setCancelling(b.id); setWhy(''); setError('') }}>Cancel</button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="card pad0">
         <div className="day"><span>Vehicles to check</span><span>{vehicles.length}</span></div>
         {!vehicles.length ? (
@@ -195,7 +257,10 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
                     </div>
                   )}
                   {v.rc_file_url ? (
-                    <p className="small muted">An RC photo is attached. Open it from the claim or the employee record to compare.</p>
+                    // This used to say "open it from the claim or the employee
+                    // record". There was nowhere to open it, and comparing the
+                    // RC is the entire job on this row.
+                    <TeFileLink path={v.rc_file_url} name="Open the RC photo" kind="RC" small />
                   ) : (
                     <p className="small muted">No RC photo was attached.</p>
                   )}
