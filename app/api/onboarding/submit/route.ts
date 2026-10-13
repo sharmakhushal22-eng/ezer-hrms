@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     // Tasks & Approvals; the employee code follows the fourth approval. A resubmission after a
     // return resets every team to pending.
     try {
-      await openApprovals(supa as any, cand.id)
+      await openApprovals(supa as any, cand.id, { reset: true })
       const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
       const mail = user && pass ? { t: nodemailer.createTransport({ service: 'gmail', auth: { user, pass } }), from: `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>` } : null
       await notifyTeams(supa as any, cand.id, mail)

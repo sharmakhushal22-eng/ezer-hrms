@@ -29,12 +29,15 @@ export function teamsFor(roles: string[], isSuperAdmin = false): Team[] {
   return TEAMS.filter(t => TEAM_ROLES[t].some(r => up.has(r)))
 }
 
-/** One PENDING row per team (idempotent). A re-submission after a return resets every team to PENDING. */
-export async function openApprovals(sb: SupabaseClient, onboardingId: string): Promise<void> {
-  await sb.from('onboarding_approvals').upsert(
-    TEAMS.map(team => ({ onboarding_id: onboardingId, team, status: 'PENDING', acted_by: null, acted_by_name: null, remark: null, acted_at: null })),
-    { onConflict: 'onboarding_id,team' },
-  )
+/**
+ * One PENDING row per team. `reset` (a submission, including a re-submission after a return)
+ * puts every team back to PENDING; without it, rows that already exist are left alone — a
+ * decision must never undo another team's approval, which an unconditional upsert did.
+ */
+export async function openApprovals(sb: SupabaseClient, onboardingId: string, o: { reset?: boolean } = {}): Promise<void> {
+  const rows = TEAMS.map(team => ({ onboarding_id: onboardingId, team, status: 'PENDING', acted_by: null, acted_by_name: null, remark: null, acted_at: null }))
+  if (o.reset) { await sb.from('onboarding_approvals').upsert(rows, { onConflict: 'onboarding_id,team' }); return }
+  await sb.from('onboarding_approvals').upsert(rows, { onConflict: 'onboarding_id,team', ignoreDuplicates: true })
 }
 
 export async function approvalsOf(sb: SupabaseClient, onboardingId: string) {
@@ -80,7 +83,7 @@ export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<{
   if (d.action === 'return' && !String(d.remark || '').trim()) return { ok: false, error: 'Say what the candidate should fix.', status: 400 }
 
   const now = new Date().toISOString()
-  await openApprovals(sb, d.onboardingId).catch(() => null)   // rows exist for a legacy submission too
+  await openApprovals(sb, d.onboardingId).catch(() => null)   // rows exist for a legacy submission too; never resets a decision
   const { error } = await sb.from('onboarding_approvals').update({
     status: d.action === 'approve' ? 'APPROVED' : 'RETURNED', acted_by: d.actorId, acted_by_name: d.actorName, remark: d.remark || null, acted_at: now,
   }).eq('onboarding_id', d.onboardingId).eq('team', d.team)
@@ -120,7 +123,8 @@ HR Team`
 
   // The fourth approval: generate the code and create the employee.
   await sb.from('onboarding_candidates').update({ status: 'APPROVED' }).eq('id', d.onboardingId)
-  const r = await createEmployeeFromOnboarding(sb, { onboardingId: d.onboardingId, by: d.actorName, notes: 'Approved by IT, Admin, Payroll and the HR Manager', actorType: 'SYSTEM' })
+  // `by` is the employee id (hr_reviewed_by / actor_id are uuid columns); the name goes in the notes.
+  const r = await createEmployeeFromOnboarding(sb, { onboardingId: d.onboardingId, by: d.actorId, notes: `Approved by IT, Admin, Payroll and the HR Manager (last: ${d.actorName || 'unknown'})`, actorType: 'SYSTEM' })
   // Tell HR either way; the HR Manager(s) of the company hear the outcome.
   const hr = await roleHolders(sb, oc.company_id, ['HR_MANAGER', 'HR_HEAD'])
   const who = `${oc.full_name}${oc.designation ? ` (${oc.designation})` : ''}`
