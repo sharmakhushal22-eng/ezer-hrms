@@ -76,14 +76,7 @@
   }
   /* Named areas rather than relying on source order, so the hero's two halves
      are explicit now that each is composed from several small components. */
-  /* The left column's vertical rhythm is ONE number. It used to be four
-     different margins on four children — tools 14px, clock 20px, brief 18px,
-     meta 20px — so nothing lined up with anything and the tightest gap was
-     the one between the controls and the time. */
-  .ezt .hero-main {
-    min-width:0; --hero-gap:24px;
-    display:flex; flex-direction:column; align-items:flex-start; gap:var(--hero-gap);
-  }
+  .ezt .hero-main { min-width:0; }
   .ezt .hero-side { min-width:0; }
   .ezt .hero-bg { position:absolute; inset:0; z-index:-1; border-radius:inherit; overflow:hidden; pointer-events:none; }
   .ezt .hero-bg::before, .ezt .hero-bg::after { content:""; position:absolute; z-index:-1; border-radius:50%; filter:blur(52px); opacity:.55; pointer-events:none; }
@@ -100,20 +93,13 @@
   .ezt .hero.evening { --hero-b:#1E3A8A; --hero-c:#6366F1; }
   .ezt .hero.afternoon { --hero-c:#22D3EE; }
 
-  /* .hero-top is gone: with the tools moved above it, it wrapped a single
-     child. The clock keeps the gap that row used to provide. */
+  .ezt .hero-top { display:flex; align-items:center; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
   .ezt .clock { font-variant-numeric:tabular-nums; font-size:13px; color:var(--on-hero-soft); display:flex; align-items:baseline; gap:10px; }
   .ezt .clock b { color:var(--on-hero); font-size:28px; font-weight:600; letter-spacing:-.02em; line-height:1; }
   .ezt .clock b i { font-style:normal; animation: blink 1s steps(2) infinite; --animation-reduced:none; }
   .ezt .clock .ampm { font-size:14px; font-weight:600; margin-left:5px; }
   @keyframes blink { to { opacity:.25; } }
-  /* Top-LEFT of the hero, above the clock. These used to sit on the clock's own
-     line with margin-left:auto, which pushed them to the left column's right
-     edge — visually the middle of the panel, beside nothing. */
-  .ezt .hero-tools {
-    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-    justify-content:flex-start;
-  }
+  .ezt .hero-tools { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
   .ezt .pillbtn { display:inline-flex; align-items:center; gap:7px; height:32px; padding:0 11px; border-radius:10px; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.10); color:var(--on-hero-soft); font-size:12.5px; font-weight:600; backdrop-filter:blur(8px); transition:background .2s,color .2s; }
   .ezt .pillbtn:hover { background:rgba(255,255,255,.2); color:var(--on-hero); }
   .ezt .pillbtn kbd { font-family:inherit; font-size:11px; padding:1px 6px; border-radius:6px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); }
@@ -147,9 +133,9 @@
   .ezt .greet h1 .name { font-weight:600; }
   .ezt .greet .sub { margin-top:7px; font-size:13.5px; color:var(--on-hero-soft); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .ezt .chip { display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:99px; font-size:11.5px; font-weight:600; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); color:var(--on-hero); }
-  .ezt .brief { margin:0; font-size:15.5px; color:var(--on-hero-soft); max-width:48ch; line-height:1.55; }
+  .ezt .brief { margin:18px 0 0; font-size:15.5px; color:var(--on-hero-soft); max-width:48ch; line-height:1.55; }
   .ezt .brief em { color:var(--on-hero); font-style:italic; font-weight:500; }
-  .ezt .hero-meta { display:flex; gap:22px; flex-wrap:wrap; }
+  .ezt .hero-meta { display:flex; gap:22px; flex-wrap:wrap; margin-top:20px; }
   .ezt .hero-meta div { font-size:12.5px; color:var(--on-hero-soft); }
   .ezt .hero-meta b { display:block; color:var(--on-hero); font-size:14px; font-weight:600; }
 
@@ -181,7 +167,6 @@
   @keyframes ripple { 0% { opacity:.9; scale:.85; } 100% { opacity:0; scale:1.5; } }
   .ezt .shift { text-align:center; font-size:12px; color:var(--on-hero-soft); }
   .ezt .shift b { color:var(--on-hero); font-weight:600; }
-  .ezt .hero-tools .streak { height:32px; }
   .ezt .streak { display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 11px 0 8px; border-radius:99px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); font-size:12px; font-weight:600; color:var(--on-hero); }
   .ezt .streak .fl { width:18px; height:18px; display:grid; place-items:center; color:var(--sun); }
   /* At zero the chip states a fact rather than celebrating one, so it steps

@@ -1,5 +1,18 @@
 // lib/today/punch.ts — the punch session, as arithmetic.
 //
+// THREE OF THESE ARE IN USE TODAY: punchState and dayFromToday (the hero's
+// avatar dot, and reading the payload), and streakText (the chip under the
+// dial). The rest — the dial geometry, the grading, the capsule collision —
+// belongs to the analog punch watch, which was built and then reverted because
+// the design was not liked.
+//
+// It is kept rather than deleted on purpose. It is pure, it is covered by 42
+// tests, and the collision rule in particular took three attempts to get right
+// (the package's fired when the punches were furthest apart; a radial fix then
+// landed on the digital readout). Deleting it would mean deriving all of that
+// again if the watch ever comes back. Unused exports in a library module cost
+// nothing at runtime — the bundler drops them.
+//
 // Everything here is pure: the state machine, the shift geometry the dial draws
 // with, and the grading that turns two timestamps into "12m late" or "+1h OT".
 // No fetch, no React, no imports — so it is unit-tested, and so the panel that

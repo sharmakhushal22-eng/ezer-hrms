@@ -6,17 +6,17 @@
 // now the composition and nothing else, so each piece can be changed on its
 // own:
 //
-//   HeroTools      top-right — streak, format picker, theme switch
+//   HeroTools      format picker and theme switch, beside the clock
 //   HeroClock      the wall clock and date
 //   HeroGreeting   avatar, greeting, designation
 //   HeroBrief      the one-line brief
 //   HeroMeta       shift / week / next holiday
 //   children       the right side, today PunchPanel
 //
-// WHERE THE TOOLS SIT. Top-LEFT, above the clock, as the first row of the left
-// column. They used to be on the clock's own line with margin-left:auto, which
-// pushed them to that column's right edge — the middle of the panel, next to
-// nothing in particular.
+// WHERE THE TOOLS SIT. On the clock's own row, pushed right within the left
+// column. They were briefly moved to a row above the clock, along with the
+// streak chip; that design was not kept, so both are back where they were and
+// the streak is under the punch dial again.
 import type { ReactNode } from 'react';
 import type { Prefs, TodayPayload } from '@/lib/today/types';
 import { useNow } from './hooks';
@@ -51,8 +51,12 @@ export default function HeroPanel({ data, prefs, onPrefs, children, onSearch }: 
       <div className="hero-bg"><div className="grain" /><div className="sky"><div className="arc" /><div className="orb" style={orb} /></div></div>
 
       <div className="hero-main">
-        <HeroTools data={data} prefs={prefs} onPrefs={onPrefs} now={now} onSearch={onSearch} />
-        <HeroClock now={now} prefs={prefs} />
+        {/* The clock and the controls share one row, as they did before the
+            controls were briefly given a row of their own above it. */}
+        <div className="hero-top">
+          <HeroClock now={now} prefs={prefs} />
+          <HeroTools prefs={prefs} onPrefs={onPrefs} now={now} onSearch={onSearch} />
+        </div>
         <HeroGreeting data={data} now={now} />
         <HeroBrief data={data} />
         <HeroMeta data={data} prefs={prefs} />
