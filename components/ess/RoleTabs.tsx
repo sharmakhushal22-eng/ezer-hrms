@@ -20,6 +20,7 @@ import { C as TK, Z } from '@/lib/ui'
 import MrfForm, { mrfToForm } from './MrfForm'
 import InterviewFeedbackForm, { type Feedback as InterviewFeedback } from '@/components/recruitment/InterviewFeedbackForm'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+import OnboardingApprovals from './OnboardingApprovals'
 
 const C = {
   // Was a hex palette, and that was the bug: a literal cannot follow the
@@ -844,6 +845,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
       <MrfApprovals employeeId={employeeId} notify={notify} />
       <OfferApprovals employeeId={employeeId} notify={notify} />
       <InterviewInvites employeeId={employeeId} notify={notify} />
+      <OnboardingApprovals employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },
         { label: 'In your scope', value: items.length - mine },

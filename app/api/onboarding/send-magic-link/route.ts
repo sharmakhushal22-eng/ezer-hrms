@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
+import { importCollectedDocs } from '@/lib/onboarding/import-docs'
+import { seedFormData } from '@/lib/onboarding/seed-form'
 
 export const runtime = 'nodejs' // nodemailer needs Node.js runtime, not Edge
 
@@ -55,6 +57,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insertErr?.message || 'Failed to create record' }, { status: 500 })
     }
 
+    // What recruitment already knows goes into the form: the documents collected before the
+    // offer (view / replace / remove on the portal), and the details from the application.
+    let carried = 0
+    try {
+      carried = await importCollectedDocs(supa as any, candidate.id, candidate_id || null)
+      const seed = await seedFormData(supa as any, candidate_id || null, { full_name, email: email || null, mobile })
+      if (seed) await supa.from('onboarding_candidates').update({ form_data: seed }).eq('id', candidate.id)
+    } catch (e) { console.error('prefill failed', e) }
+
     // Generate onboarding link URL
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || 'http://localhost:3000'
     const magicLink = `${baseUrl}/onboarding/${candidate.magic_link_token}`
@@ -65,7 +76,7 @@ export async function POST(req: NextRequest) {
       action:        'MAGIC_LINK_SENT',
       actor_type:    'SYSTEM',
       details:       { email, mobile, link_sent: true },
-      ip_address:    req.headers.get('x-forwarded-for') || req.ip || null,
+      ip_address:    req.headers.get('x-forwarded-for') || null,
     })
 
     // Actually email the link to the candidate (Gmail SMTP via nodemailer).
@@ -119,6 +130,7 @@ HR Team`
       onboarding_id: candidate.id,
       emailed,
       email_error: emailError,
+      documents_carried: carried,
     })
 
   } catch (err: any) {

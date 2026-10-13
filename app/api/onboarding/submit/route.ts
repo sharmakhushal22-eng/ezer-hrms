@@ -2,6 +2,10 @@
 // Final submission — validates, generates employee ID, moves to HR review
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import nodemailer from 'nodemailer'
+import { openApprovals, notifyTeams } from '@/lib/onboarding/approvals'
+
+export const runtime = 'nodejs'
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -76,6 +80,16 @@ export async function POST(req: NextRequest) {
       }))
     )
 
+    // The four-team sign-off: IT, Admin, Payroll and the HR Manager each approve from ESS →
+    // Tasks & Approvals; the employee code follows the fourth approval. A resubmission after a
+    // return resets every team to pending.
+    try {
+      await openApprovals(supa as any, cand.id)
+      const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
+      const mail = user && pass ? { t: nodemailer.createTransport({ service: 'gmail', auth: { user, pass } }), from: `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>` } : null
+      await notifyTeams(supa as any, cand.id, mail)
+    } catch (e) { console.error('onboarding approvals could not be opened', e) }
+
     // HR notification
     await supa.from('onboarding_notifications').insert({
       onboarding_id:  cand.id,
@@ -98,7 +112,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success:        true,
-      message:        'Form submitted successfully. HR will review and generate your Employee ID.',
+      message:        'Form submitted successfully. IT, Admin, Payroll and HR will review it; your Employee ID follows their approval.',
       onboarding_id:  cand.id,
     })
 

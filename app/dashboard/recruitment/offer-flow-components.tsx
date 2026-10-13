@@ -458,7 +458,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
             </div>
             <div style={{ padding:'0 22px 20px' }}>
               <div className="rx-paper" style={{ padding:'28px 32px', animation:'none' }}>
-                <pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.65, color:'#1f2937' }}>{template}</pre>
+                <pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.65, color:TK.ink }}>{template}</pre>
               </div>
               <div className="rx-hint" style={{ marginTop:8 }}>This is what goes to the HR Head with the mail. Edit the fields above and click Regenerate to refresh it.</div>
             </div>

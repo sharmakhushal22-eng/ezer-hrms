@@ -18,6 +18,7 @@ type RiskLevel = 'LOW'|'MEDIUM'|'HIGH'
 type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
 
 interface Candidate {
+  approvals?: { team: string; status: string }[]
   id: string; full_name: string; designation: string; department: string
   email: string; mobile: string; date_of_joining: string
   status: Stage; current_step: number; form_data: any
@@ -43,6 +44,7 @@ const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
   APPROVED:         { label:'Approved',          bg:TK.positiveTint, color:TK.positive },
   EMPLOYEE_CREATED: { label:'Employee created',  bg: TK.sunken, color: TK.positive },
 }
+const TEAM_SHORT: Record<string,string> = { IT:'IT', ADMIN:'Admin', PAYROLL:'Payroll', HR_MANAGER:'HR Mgr' }
 const STEP_LABELS = ['','Welcome','OTP','Personal','Contact','Emergency','Documents','Statutory','Declaration']
 const DOCS_REQ = ['AADHAAR_FRONT','AADHAAR_BACK','PAN','PHOTO','DEGREE','BANK_PROOF']
 
@@ -177,17 +179,18 @@ export default function OnboardingDashboard() {
       )
       return parts.flatMap(p => (p.data as any[]) || [])
     }
-    const [allDocs, allForms, allAssets] = await Promise.all([
+    const [allDocs, allForms, allAssets, allApprovals] = await Promise.all([
       fetchAll('onboarding_documents',       'onboarding_id,doc_code,ai_status'),
       fetchAll('onboarding_statutory_forms', 'onboarding_id,form_type'),
       fetchAll('onboarding_asset_requests',  'onboarding_id,asset_type,status'),
+      fetchAll('onboarding_approvals',       'onboarding_id,team,status'),
     ])
     const groupBy = (rows: any[]) => {
       const m = new Map<string, any[]>()
       rows.forEach(r => { const a = m.get(r.onboarding_id); a ? a.push(r) : m.set(r.onboarding_id, [r]) })
       return m
     }
-    const docsBy = groupBy(allDocs), formsBy = groupBy(allForms), assetsBy = groupBy(allAssets)
+    const docsBy = groupBy(allDocs), formsBy = groupBy(allForms), assetsBy = groupBy(allAssets), approvalsBy = groupBy(allApprovals)
 
     const enriched: Candidate[] = (cands || []).map((c) => {
       const docs = docsBy.get(c.id) || []
@@ -219,6 +222,7 @@ export default function OnboardingDashboard() {
         id_card_issued:  idCard?.status  === 'ISSUED',
         ai_risk:         risk,
         ai_risk_reason:  riskReason,
+        approvals:       ['IT','ADMIN','PAYROLL','HR_MANAGER'].map(team => ({ team, status: (approvalsBy.get(c.id) || []).find((a: any) => a.team === team)?.status || 'PENDING' })),
       } as Candidate
     })
 
@@ -482,7 +486,12 @@ export default function OnboardingDashboard() {
     const actions: {priority:'HIGH'|'MEDIUM'|'LOW'; label:string; candidate:string; action:string; cid:string}[] = []
     const days = daysLeft(c.date_of_joining)
 
-    if (c.status==='SUBMITTED') actions.push({priority:'HIGH',label:'Review & generate employee code',candidate:c.full_name,action:'generate',cid:c.id})
+    if (c.status==='SUBMITTED' || c.status==='APPROVED') {
+      const waiting = (c.approvals||[]).filter(a=>a.status!=='APPROVED').map(a=>TEAM_SHORT[a.team]||a.team)
+      actions.push(waiting.length
+        ? {priority:'HIGH',label:`Awaiting approval: ${waiting.join(', ')} (ESS → Tasks & Approvals)`,candidate:c.full_name,action:'approvals',cid:c.id}
+        : {priority:'HIGH',label:'All four teams approved — generate employee code',candidate:c.full_name,action:'generate',cid:c.id})
+    }
     if (c.status==='INVITED' && days!==null && days<=5) actions.push({priority:'HIGH',label:'Link not opened — follow up candidate',candidate:c.full_name,action:'followup',cid:c.id})
     if (c.docs_ai_flagged && c.docs_ai_flagged>0) actions.push({priority:'MEDIUM',label:`${c.docs_ai_flagged} document(s) AI flagged — review`,candidate:c.full_name,action:'docs',cid:c.id})
     if (c.status==='APPROVED' && !c.laptop_issued) actions.push({priority:'MEDIUM',label:'Laptop not issued — contact IT',candidate:c.full_name,action:'laptop',cid:c.id})
@@ -720,6 +729,15 @@ export default function OnboardingDashboard() {
                           {c.policy_ack?'Policy✓':'Policy'}
                         </span>
                       </div>
+                      {(c.status==='SUBMITTED'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
+                        <div style={{display:'flex',gap:3,marginTop:3}} title="Team approvals — IT, Admin, Payroll, HR Manager (from ESS → Tasks & Approvals)">
+                          {(c.approvals||[]).map(a=>(
+                            <span key={a.team} style={{fontSize:9,padding:'1px 5px',borderRadius:99,fontWeight:600,background:a.status==='APPROVED'?TK.positiveTint:a.status==='RETURNED'?TK.criticalTint:TK.warningTint,color:a.status==='APPROVED'?TK.positive:a.status==='RETURNED'?TK.critical:TK.warning}}>
+                              {TEAM_SHORT[a.team]}{a.status==='APPROVED'?'✓':a.status==='RETURNED'?'↩':'…'}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       </>}
                     </td>
                     <td style={{padding:'10px 12px'}}>

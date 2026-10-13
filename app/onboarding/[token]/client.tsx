@@ -8,7 +8,7 @@ import { C as TK } from '@/lib/ui'
 
 // ── Types ────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
-interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: any; ai_confidence: number; ai_flags: string[]; file_name: string }
+interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: any; ai_confidence: number; ai_flags: string[]; file_name: string; hr_notes?: string | null }
 
 // ── EZER Theme ───────────────────────────────────────────────────
 const P = TK.brand
@@ -91,13 +91,28 @@ function StepBar({ current }: { current: Step }) {
 // ── Document upload box ───────────────────────────────────────────
 function DocUpload({
   docCode, docName, required, token,
-  status, onSuccess,
+  status, onSuccess, onRemoved,
 }: {
   docCode: string; docName: string; required: boolean; token: string
   status: DocStatus | null
   onSuccess: (code: string, data: any) => void
+  onRemoved: (code: string) => void
 }) {
   const [uploading, setUploading] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const fileUrl = (mode: 'view' | 'download') => `/api/onboarding/document?token=${encodeURIComponent(token)}&doc_code=${encodeURIComponent(docCode)}&mode=${mode}`
+  const remove = async () => {
+    if (!status || removing) return
+    if (!confirm(`Remove ${docName} from your form?`)) return
+    setRemoving(true)
+    try {
+      const r = await fetch('/api/onboarding/document', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, doc_code: docCode }) })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Could not remove')
+      onRemoved(docCode)
+    } catch (e: any) { alert(e.message) }
+    setRemoving(false)
+  }
   const [progress, setProgress] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -157,6 +172,9 @@ function DocUpload({
           {status && (
             <div style={{ fontSize: 11, color: TK.muted, marginTop: 4, lineHeight: 1.6 }}>
               {status.file_name}
+              {status.hr_notes && /carried over/i.test(status.hr_notes) && (
+                <span style={{ color: TK.brandDeep, marginLeft: 8 }}>Already with us — from the documents you sent before the offer. Replace it if you have a better copy.</span>
+              )}
               {aiStatus === 'VERIFIED' && (
                 <span style={{ color: TK.positive, marginLeft: 8 }}>
                   AI verified ({Math.round((status.ai_confidence || 0) * 100)}% confidence)
@@ -177,11 +195,18 @@ function DocUpload({
           )}
           {uploading && <div style={{ fontSize: 11, color: P, marginTop: 4 }}>⏳ {progress}</div>}
         </div>
-        <div style={{ marginLeft: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ marginLeft: 12, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
           <button onClick={() => inputRef.current?.click()} disabled={uploading}
             style={{ padding: '6px 14px', borderRadius: 7, border: `1px solid ${P}`, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: 12, background: status ? TK.brandTint : P, color: status ? P: TK.surface, fontFamily: 'inherit', opacity: uploading ? .6 : 1 }}>
-            {status ? 'Re-upload' : 'Upload'}
+            {status ? 'Replace' : 'Upload'}
           </button>
+          {status && (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <a href={fileUrl('view')} target="_blank" rel="noreferrer" title="Preview" style={{ flex: 1, textAlign: 'center', padding: '5px 8px', borderRadius: 7, border: `1px solid ${TK.brandEdge}`, fontSize: 11, color: TK.brandDeep, textDecoration: 'none', background: TK.surface }}>View</a>
+              <a href={fileUrl('download')} title="Download" style={{ flex: 1, textAlign: 'center', padding: '5px 8px', borderRadius: 7, border: `1px solid ${TK.brandEdge}`, fontSize: 11, color: TK.brandDeep, textDecoration: 'none', background: TK.surface }}>Download</a>
+              <button onClick={remove} disabled={removing} title="Remove from the form" style={{ flex: 1, padding: '5px 8px', borderRadius: 7, border: `1px solid ${TK.criticalTint}`, fontSize: 11, color: TK.critical, background: TK.surface, cursor: 'pointer', fontFamily: 'inherit', opacity: removing ? .6 : 1 }}>{removing ? '…' : 'Remove'}</button>
+            </div>
+          )}
         </div>
       </div>
       <input ref={inputRef} type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: 'none' }} onChange={handleFile} />
@@ -200,6 +225,17 @@ const DOC_LIST = (esic: boolean, isFresher: boolean, isForeign = false) => [
   { code: 'EXP_LETTER', name: 'Experience/Relieving Letter', required: !isFresher },
   { code: 'BANK_PROOF', name: 'Cancelled Cheque / Bank Passbook', required: true },
   { code: 'UAN_CARD', name: 'UAN Card (if existing PF)', required: false },
+  // Optional — these arrive filled in when they were collected before the offer.
+  { code: 'MARKSHEET_10', name: '10th Mark Sheet', required: false },
+  { code: 'MARKSHEET_12', name: '12th Mark Sheet', required: false },
+  { code: 'MASTERS', name: 'Post-graduation / Masters Certificate', required: false },
+  { code: 'OTHER_CERT', name: 'Other Certificate', required: false },
+  { code: 'APPOINTMENT_LETTER', name: 'Previous Appointment Letter', required: false },
+  { code: 'APPRAISAL_LETTER', name: 'Previous Appraisal Letter', required: false },
+  { code: 'SALARY_SLIP_1', name: 'Salary Slip — latest month', required: false },
+  { code: 'SALARY_SLIP_2', name: 'Salary Slip — 2nd last month', required: false },
+  { code: 'SALARY_SLIP_3', name: 'Salary Slip — 3rd last month', required: false },
+  { code: 'FORM_16', name: 'Form 16 (previous employer)', required: false },
   ...(isForeign ? [
     { code: 'PASSPORT', name: 'Passport (front page)', required: true },
     { code: 'VISA', name: 'Visa copy', required: true },
@@ -207,14 +243,29 @@ const DOC_LIST = (esic: boolean, isFresher: boolean, isForeign = false) => [
   ] : []),
 ]
 const REQUIRED_DOC_CODES = (esic: boolean) => ['AADHAAR_FRONT', 'AADHAAR_BACK', 'PAN', 'PHOTO', 'DEGREE', 'BANK_PROOF', ...(esic ? ['FAMILY_PHOTO'] : [])]
-function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, onUploaded }: {
-  docs: Record<string, DocStatus>; token: string; esicApplicable: boolean; isFresher: boolean; isForeign?: boolean; onUploaded: (code: string, data: any) => void
+function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, onUploaded, onRemoved }: {
+  docs: Record<string, DocStatus>; token: string; esicApplicable: boolean; isFresher: boolean; isForeign?: boolean; onUploaded: (code: string, data: any) => void; onRemoved: (code: string) => void
 }) {
+  const list = DOC_LIST(esicApplicable, isFresher, isForeign)
+  const carried = Object.values(docs).filter(d => d.hr_notes && /carried over/i.test(d.hr_notes)).length
   return (
     <>
-      {DOC_LIST(esicApplicable, isFresher, isForeign).map(doc => (
-        <DocUpload key={doc.code} docCode={doc.code} docName={doc.name} required={doc.required} token={token} status={docs[doc.code] || null} onSuccess={onUploaded} />
+      {carried > 0 && (
+        <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: TK.muted }}>
+          {carried} document{carried === 1 ? '' : 's'} you sent before the offer {carried === 1 ? 'is' : 'are'} already here. Check each one — view, download, replace or remove it.
+        </div>
+      )}
+      {list.filter(d => d.required || docs[d.code]).map(doc => (
+        <DocUpload key={doc.code} docCode={doc.code} docName={doc.name} required={doc.required} token={token} status={docs[doc.code] || null} onSuccess={onUploaded} onRemoved={onRemoved} />
       ))}
+      <details style={{ marginTop: 6 }}>
+        <summary style={{ fontSize: 12, color: TK.brandDeep, cursor: 'pointer', fontWeight: 600 }}>More documents (optional)</summary>
+        <div style={{ marginTop: 8 }}>
+          {list.filter(d => !d.required && !docs[d.code]).map(doc => (
+            <DocUpload key={doc.code} docCode={doc.code} docName={doc.name} required={false} token={token} status={null} onSuccess={onUploaded} onRemoved={onRemoved} />
+          ))}
+        </div>
+      </details>
     </>
   )
 }
@@ -789,6 +840,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     nationality: (saved.step_3?.nationality) || 'Indian',
     religion: (saved.step_3?.religion) || '',
     country: (saved.step_3?.country) || 'India',
+    birth_place: (saved.step_3?.birth_place) || '',
   })
 
   // Contact step
@@ -853,6 +905,10 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     bank_branch: (saved.step_7?.bank_branch) || '',
     account_type: (saved.step_7?.account_type) || 'Savings',
     acc_holder: (saved.step_7?.acc_holder) || c.full_name || '',
+    // Other government IDs (shown on the employee record)
+    passport_no: (saved.step_7?.passport_no) || '',
+    voter_id: (saved.step_7?.voter_id) || '',
+    driving_licence: (saved.step_7?.driving_licence) || '',
     // Foreign employee fields
     fe_passport_number: (saved.step_7?.fe_passport_number) || '',
     fe_passport_country: (saved.step_7?.fe_passport_country) || '',
@@ -879,8 +935,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   // Documents can be skipped on Step 2; if skipped they become mandatory (non-skippable) before Policies.
   const [docsDeferred, setDocsDeferred] = useState(false)
   const docsComplete = REQUIRED_DOC_CODES(esicApplicable).every(d => docs[d])
+  const onDocRemoved = (code: string) => { setDocs(d => { const n = { ...d }; delete n[code]; return n }); showToast(`${code.replace(/_/g, ' ')} removed`) }
   const onDocUploaded = (code: string, data: any) => {
-    setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } }))
+    setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: data.file_name || 'uploaded' } }))
     if (code === 'PAN' && data.ai_extracted?.pan_number) {
       setStatutory(s => ({ ...s, pan_number: data.ai_extracted.pan_number, acc_holder: data.ai_extracted.name || s.acc_holder }))
     }
@@ -1181,6 +1238,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                   <option value="">Select</option>{['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Parsi', 'Other'].map(r => <option key={r}>{r}</option>)}
                 </select>
               </Fld>
+              <Fld label="Place of Birth">
+                <input style={S.inp()} value={personal.birth_place} onChange={e => setPersonal(p => ({ ...p, birth_place: e.target.value }))} placeholder="City / town" />
+              </Fld>
               <div style={{ gridColumn: 'span 2' }}>
                 <Fld label="Country (Citizenship) *" hint="Type to search. Select a country other than India for foreign-employee onboarding.">
                   <input list="ezer-countries" style={S.inp(!personal.country)} value={personal.country} onChange={e => setPersonal(p => ({ ...p, country: e.target.value }))} placeholder="India" />
@@ -1279,6 +1339,14 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                 </Fld>
               </div>
             )}
+
+            {/* Other government IDs — on the employee record; optional */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Other Government IDs (optional)</div>
+            <div style={S.g3}>
+              {!isForeign && <Fld label="Passport Number"><input style={S.inp()} value={statutory.passport_no} onChange={e => setStatutory(s => ({ ...s, passport_no: e.target.value.toUpperCase() }))} maxLength={12} /></Fld>}
+              <Fld label="Voter ID (EPIC)"><input style={S.inp()} value={statutory.voter_id} onChange={e => setStatutory(s => ({ ...s, voter_id: e.target.value.toUpperCase() }))} maxLength={12} /></Fld>
+              <Fld label="Driving Licence"><input style={S.inp()} value={statutory.driving_licence} onChange={e => setStatutory(s => ({ ...s, driving_licence: e.target.value.toUpperCase() }))} maxLength={20} /></Fld>
+            </div>
 
             {/* Bank Details */}
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Bank Account (for Salary)</div>
@@ -1437,7 +1505,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                       <Fld label="Last CTC (Annual ₹)"><input type="number" style={S.inp()} value={emp.ctc} onChange={e => upEmp(i, { ctc: e.target.value })} /></Fld>
                       <Fld label="Reason for Leaving"><input style={S.inp()} value={emp.reason} onChange={e => upEmp(i, { reason: e.target.value })} /></Fld>
                     </div>
-                    <DocUpload docCode={`EXP_${i + 1}`} docName={`Experience / Relieving Letter — Employer ${i + 1}`} required={false} token={token} status={docs[`EXP_${i + 1}`] || null}
+                    <DocUpload docCode={`EXP_${i + 1}`} docName={`Experience / Relieving Letter — Employer ${i + 1}`} required={false} token={token} status={docs[`EXP_${i + 1}`] || null} onRemoved={onDocRemoved}
                       onSuccess={(code, data) => { setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } })); showToast('Experience letter uploaded ✓') }} />
                   </div>
                 ))}
@@ -1461,7 +1529,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                   <Fld label="School / University / Board"><input style={S.inp()} value={ed.institute} onChange={e => upEdu(i, { institute: e.target.value })} /></Fld>
                   <Fld label="Year of Passing"><input style={S.inp()} value={ed.year} onChange={e => upEdu(i, { year: e.target.value })} maxLength={4} /></Fld>
                 </div>
-                <DocUpload docCode={`EDU_${i + 1}`} docName={`Certificate / Marksheet — ${ed.qualification || `Qualification ${i + 1}`}`} required={false} token={token} status={docs[`EDU_${i + 1}`] || null}
+                <DocUpload docCode={`EDU_${i + 1}`} docName={`Certificate / Marksheet — ${ed.qualification || `Qualification ${i + 1}`}`} required={false} token={token} status={docs[`EDU_${i + 1}`] || null} onRemoved={onDocRemoved}
                   onSuccess={(code, data) => { setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } })); showToast('Certificate uploaded ✓') }} />
               </div>
             ))}
@@ -1484,10 +1552,10 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
           <div style={S.card}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Document Upload & AI Verification</div>
             <div style={{ fontSize: 12, color: TK.muted, marginBottom: 14 }}>
-              Documents are automatically verified using AI (Gemini 2.5 Flash). Accepted: JPG, PNG, PDF. Max 5MB each.
+              Documents are automatically verified using AI (Gemini 2.5 Flash). Accepted: JPG, PNG, PDF. Max 5MB each. Anything you sent before the offer is already here — view, download, replace or remove it.
             </div>
 
-            <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} />
+            <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} onRemoved={onDocRemoved} />
 
             <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
               <button onClick={prevStep} style={S.btnO}>Back</button>
@@ -1721,7 +1789,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Upload Pending Documents</div>
               <div style={{ fontSize: 12, color: TK.warning, background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '8px 12px', marginBottom: 12 }}>You skipped document upload earlier. Please upload all required documents before acknowledging the company policies — this step cannot be skipped.
               </div>
-              <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} />
+              <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} onRemoved={onDocRemoved} />
               <button onClick={prevStep} style={{ ...S.btnO, marginTop: 8 }}>Back</button>
             </div>
           ) : (

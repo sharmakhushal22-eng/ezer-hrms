@@ -15,6 +15,7 @@ import type { ChainRow, PendingItem } from './types'
 import { Ic, type IconKey } from './icons'
 import { CountUp, fmtDateTime, riseStyle, useToast } from './ui'
 import { MrfApprovals, InterviewInvites, OfferApprovals } from '@/components/ess/RoleTabs'
+import OnboardingApprovals from '@/components/ess/OnboardingApprovals'
 
 type Filter = 'MINE' | 'ALL' | 'LEAVE' | 'TRAVEL' | 'RESIGNATION'
 
@@ -74,6 +75,8 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
       <MrfApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       <OfferApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       <InterviewInvites employeeId={employeeId} notify={(m) => toast(m)} />
+      {/* The four-team onboarding sign-off (IT / Admin / Payroll / HR Manager). */}
+      <OnboardingApprovals employeeId={employeeId} notify={(m) => toast(m)} />
 
       <div className="hx-kpis">
         {kpis.map(k => (

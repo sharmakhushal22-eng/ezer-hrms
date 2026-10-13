@@ -66,6 +66,8 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   }
 
   const bankAcc = st.bank_account ? String(st.bank_account) : ''
+  const edu: any[] = Array.isArray(em.education) ? em.education : []
+  const highest = [...edu].reverse().find(e => e && (e.institute || e.year))
 
   const row: any = {
     // identity / org
@@ -90,6 +92,19 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     spouse_name:     orNull(insr.spouse_name),
     spouse_dob:      orNull(insr.spouse_dob),
     aadhar_last4:    orNull(st.aadhaar_last4 || f.aadhaar_last4),
+    birth_place:     orNull(p.birth_place),
+    // other government IDs (optional on the form)
+    passport_no:     orNull(st.passport_no || st.fe_passport_number),
+    voter_id:        orNull(st.voter_id),
+    driving_licence: orNull(st.driving_licence),
+    // existing PF member: the UAN carried forward, and the ESIC IP number if they had one
+    pf_existing_member: st.has_uan === true ? true : null,
+    previous_uan:    st.has_uan ? orNull(st.uan_number) : null,
+    esic_number:     orNull(st.esic_details?.prev_ip),
+    esic_dispensary: orNull(st.esic_details?.dispensary),
+    // highest qualification: the last education row the candidate filled in
+    highest_qualification: highest?.qualification || null,
+    institution_name: highest?.institute || null,
     // employment (doj→company_doj + group_doj)
     designation:     oc.designation || null,
     employment_type: oc.employment_type || 'Employee',
