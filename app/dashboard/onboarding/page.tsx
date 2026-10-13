@@ -733,7 +733,7 @@ export default function OnboardingDashboard() {
                         <div style={{display:'flex',gap:3,marginTop:3}} title="Team approvals — IT, Admin, Payroll, HR Manager (from ESS → Tasks & Approvals)">
                           {(c.approvals||[]).map(a=>(
                             <span key={a.team} style={{fontSize:9,padding:'1px 5px',borderRadius:99,fontWeight:600,background:a.status==='APPROVED'?TK.positiveTint:a.status==='RETURNED'?TK.criticalTint:TK.warningTint,color:a.status==='APPROVED'?TK.positive:a.status==='RETURNED'?TK.critical:TK.warning}}>
-                              {TEAM_SHORT[a.team]}{a.status==='APPROVED'?'✓':a.status==='RETURNED'?'↩':'…'}
+                              {TEAM_SHORT[a.team]} {a.status==='APPROVED'?'✓':a.status==='RETURNED'?'↩':'○'}
                             </span>
                           ))}
                         </div>
