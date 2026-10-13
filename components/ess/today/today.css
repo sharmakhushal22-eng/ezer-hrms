@@ -139,6 +139,29 @@
   .ezt .hero-meta div { font-size:12.5px; color:var(--on-hero-soft); }
   .ezt .hero-meta b { display:block; color:var(--on-hero); font-size:14px; font-weight:600; }
 
+  /* ── NEXT ON YOU — the band under the meta row, which was empty ────── */
+  /* Prefixed hn-* rather than short names: app/globals.css imports Tailwind,
+     whose bare utilities would win over anything called `due` or `more`. */
+  .ezt .heronext { display:flex; align-items:center; gap:10px; margin-top:20px; flex-wrap:wrap; }
+  .ezt .hn-l { font-size:10px; font-weight:800; letter-spacing:.11em; text-transform:uppercase; color:var(--on-hero-soft); }
+  .ezt .hn-go {
+    display:inline-flex; align-items:center; gap:10px; max-width:100%;
+    padding:8px 12px 8px 14px; border-radius:12px; cursor:pointer; font:inherit; text-align:left;
+    background:rgba(255,255,255,.11); border:1px solid rgba(255,255,255,.2); color:var(--on-hero);
+    transition:background .2s ease, transform .14s cubic-bezier(.2,.8,.3,1);
+  }
+  .ezt .hn-go:hover { background:rgba(255,255,255,.2); }
+  .ezt .hn-go:active { transform:scale(.985); }
+  .ezt .hn-t { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:34ch; }
+  .ezt .hn-due { font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:99px; background:rgba(255,255,255,.14); color:var(--on-hero-soft); white-space:nowrap; }
+  .ezt .hn-due.soon { background:rgba(252,211,77,.22); color:#FDE68A; }
+  .ezt .hn-cta { font-size:11.5px; font-weight:700; color:var(--on-hero); opacity:.85; white-space:nowrap; }
+  .ezt .hn-more { font-size:11px; color:var(--on-hero-soft); }
+
+  @media (max-width:640px) {
+    .ezt .hn-t { max-width:20ch; }
+  }
+
   /* ── PUNCH DIAL — the memorable element ─────────────────────────────── */
   .ezt .dialwrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
   .ezt .dial { position:relative; width:224px; height:224px; display:grid; place-items:center; }

@@ -10,6 +10,7 @@
 //   HeroClock      the wall clock and date
 //   HeroGreeting   avatar, greeting, designation
 //   HeroBrief      the one-line brief
+//   HeroNext       the first pending item, filling the band under the meta
 //   HeroMeta       shift / week / next holiday
 //   children       the right side, today PunchPanel
 //
@@ -24,6 +25,7 @@ import HeroTools from './HeroTools';
 import HeroClock from './HeroClock';
 import HeroGreeting from './HeroGreeting';
 import { HeroBrief, HeroMeta } from './HeroBrief';
+import HeroNext from './HeroNext';
 
 type Props = {
   data: TodayPayload;
@@ -31,9 +33,12 @@ type Props = {
   onPrefs: (p: Partial<Prefs>) => void;
   children: ReactNode;
   onSearch?: () => void;
+  /** The route navigator Today already owns; PendingList takes the same one.
+   *  Optional so the hero still renders without it. */
+  nav?: (route: string) => void;
 };
 
-export default function HeroPanel({ data, prefs, onPrefs, children, onSearch }: Props) {
+export default function HeroPanel({ data, prefs, onPrefs, children, onSearch, nav }: Props) {
   // One timer for the whole hero. The clock and the greeting read it, and the
   // sun/moon position is computed from it.
   const now = useNow(15000);
@@ -60,6 +65,9 @@ export default function HeroPanel({ data, prefs, onPrefs, children, onSearch }: 
         <HeroGreeting data={data} now={now} />
         <HeroBrief data={data} />
         <HeroMeta data={data} prefs={prefs} />
+        {/* Fills the band under the meta row, which was empty. Renders nothing
+            when nothing is pending. */}
+        {nav ? <HeroNext data={data} prefs={prefs} nav={nav} now={now} /> : null}
       </div>
 
       <div className="hero-side">{children}</div>

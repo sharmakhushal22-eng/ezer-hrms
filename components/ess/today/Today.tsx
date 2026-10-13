@@ -111,7 +111,7 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
   return (
     <div className="ezt">
       <div className="page">
-        <HeroPanel data={data} prefs={prefs} onPrefs={(p: Partial<Prefs>) => update(p)} onSearch={onSearch}>
+        <HeroPanel data={data} prefs={prefs} onPrefs={(p: Partial<Prefs>) => update(p)} onSearch={onSearch} nav={nav}>
           <PunchDial data={data} prefs={prefs} onToast={show} confettiRef={confettiRef}
             onPunched={(kind, at) => { setLiveIn(kind === 'in' ? at : null);
               setData(d => d && ({ ...d, today: kind === 'in' ? { punch_in: at.toISOString(), punch_out: null, work_mode: 'office' } : { ...(d.today ?? { punch_in: null, work_mode: null }), punch_out: at.toISOString() } })); }} />
