@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
 import { runJoiningFollowups } from '@/lib/recruitment/joining-followup-run'
+import { runPrepareMails, runWelcomeMails, runLinkReminders } from '@/lib/onboarding/joining-day-run'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -94,7 +95,7 @@ async function run(req: NextRequest) {
     }
   }
 
-  // ── Onboarding reminders (3-day tasks + 10-day stay-in-touch) ──────────────
+  // ── Onboarding reminders (10-day stay-in-touch while joining is far off) ───────
   let onboardingEmails = 0
   const { data: obCands } = await supabase
     .from('candidates')
@@ -108,29 +109,9 @@ async function run(req: NextRequest) {
     const daysLeft = Math.ceil((new Date(c.onboarding_date as string).getTime() - Date.now()) / DAY)
     const role = c.designation || ''
     try {
-      // 3 days before joining → ask HR to complete the onboarding setup (once).
-      if (daysLeft >= 0 && daysLeft <= 3 && !c.onboarding_tasks_emailed) {
-        const body = `Hi,
-
-${c.full_name}${role ? ` (${role})` : ''} is joining on ${new Date(c.onboarding_date as string).toLocaleDateString('en-IN')} — that's ${daysLeft} day${daysLeft === 1 ? '' : 's'} away.
-
-Please complete the onboarding setup before the joining date:
-  • Laptop / workstation
-  • Official email + ERP / system access
-  • SIM / phone (if applicable)
-  • ID card & access card
-  • Seat / desk allotment
-  • Joining kit & welcome pack
-
-Kindly ensure everything is ready so the candidate has a smooth first day.
-
-— EZER HRMS`
-        await transporter.sendMail({ from, to: c.hr_email, subject: `Onboarding setup — ${c.full_name} joins in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, text: body, html: body.replace(/\n/g, '<br>') })
-        await supabase.from('candidates').update({ onboarding_tasks_emailed: true }).eq('id', c.id)
-        onboardingEmails++
-      }
-      // Joining is >30 days away → nudge HR every 10 days to stay in touch.
-      else if (daysLeft > 30) {
+      // The pre-joining setup mail now goes to the teams two days before joining —
+      // runPrepareMails below. Only the long-range stay-in-touch nudge is left here.
+      if (daysLeft > 30) {
         const last = c.last_touch_reminder_at ? new Date(c.last_touch_reminder_at).getTime() : 0
         if (Date.now() - last >= 10 * DAY) {
           const body = `Hi,
@@ -154,5 +135,13 @@ Please reach out and keep the candidate engaged so they stay committed until the
   const joining = await runJoiningFollowups(supabase, transporter, from)
   if (joining.error) console.error('joining-followup skipped:', joining.error)
 
-  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails, joining })
+  // ── Joining day: the teams prepare (2 days before), the candidate is welcomed (the day
+  //    before), the HR Manager is reminded to send the link (the day) ──
+  const ctx = { sb: supabase, mail: transporter, from, now: Date.now() }
+  const prepare = await runPrepareMails(ctx)
+  const welcome = await runWelcomeMails(ctx)
+  const linkReminder = await runLinkReminders(ctx)
+  for (const [k, v] of Object.entries({ prepare, welcome, linkReminder })) if (v.error) console.error(`${k} skipped:`, v.error)
+
+  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails, joining, prepare, welcome, linkReminder })
 }
