@@ -6,17 +6,22 @@
 // sentence can be reworded without touching the row of figures under it.
 import type { Prefs, TodayPayload } from '@/lib/today/types';
 import { fmtHHMM, two } from '@/lib/today/format';
+import { leaveClause, pendingClause, teamClause } from '@/lib/today/brief';
 
 export function HeroBrief({ data }: { data: TodayPayload }) {
-  const pend = data.pending.length;
-  const leaveDays = data.leave?.total ?? 0;
   const nextBday = data.celebrations.find(c => c.kind === 'birthday');
+  // Each clause is built in lib/today/brief.ts, where the wording is tested.
+  // The leave one can come back null — see leaveClause: this screen greeted
+  // somebody with "and -13.5 days of leave in the bank", which it will no
+  // longer do.
+  const leave = leaveClause(data.leave?.total);
+  const team = teamClause(data.team.in, data.team.total);
   return (
     <p className="brief serif">
-      {pend > 0 ? <>You have <em>{pend} {pend === 1 ? 'thing' : 'things'}</em> waiting on you</> : <>Nothing is waiting on you</>}
+      {pendingClause(data.pending.length)}
       {nextBday && <>, {nextBday.name.split(' ')[0]}&apos;s birthday is coming up</>}
-      , and <em>{leaveDays} days</em> of leave in the bank.
-      {data.team.total > 0 && <> {data.team.in} of your team {data.team.in === 1 ? 'is' : 'are'} in office today.</>}
+      {leave ? <>, and <em>{leave}</em></> : null}.
+      {team ? <> {team}</> : null}
     </p>
   );
 }
