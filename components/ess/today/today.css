@@ -162,6 +162,11 @@
   .ezt .punch.in { background:radial-gradient(circle at 35% 28%, #6EE7B7 0%, #059669 60%, #047857 100%); color:#fff; box-shadow:0 22px 44px -16px rgba(5,150,105,.7), inset 0 2px 0 rgba(255,255,255,.35); }
   .ezt .punch.in small { color:rgba(255,255,255,.85); }
   .ezt .punch .timer { font-variant-numeric:tabular-nums; font-size:23px; font-weight:700; }
+  /* The day is closed. Inert rather than greyed-out-looking: it is a finished
+     record, not a control that failed. */
+  .ezt .punch.done { background:radial-gradient(circle at 35% 28%, #F8FAFC 0%, #E2E8F0 60%, #CBD5E1 100%); color:#334155; cursor:default; box-shadow:0 14px 30px -18px rgba(15,23,42,.45), inset 0 2px 0 rgba(255,255,255,.8); }
+  .ezt .punch.done small { color:#64748B; }
+  .ezt .punch.done:hover { transform:none; }
   .ezt .pulse { position:absolute; inset:30px; border-radius:50%; border:2px solid #34D399; opacity:0; pointer-events:none; }
   .ezt .pulse.go { animation: ripple 1.1s ease-out 1; --animation-reduced:none; }
   @keyframes ripple { 0% { opacity:.9; scale:.85; } 100% { opacity:0; scale:1.5; } }
