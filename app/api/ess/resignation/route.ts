@@ -3,7 +3,9 @@
 // fn_resignation_submit / fn_resignation_advance / fn_resignation_act.
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { essCaller, notify, audit, forbidden } from '@/lib/ess/session'
+import { essCaller, audit, forbidden } from '@/lib/ess/session'
+import { employeeScope } from '@/lib/config/store'
+import { notifyFromTemplate } from '@/lib/config/notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +60,10 @@ export async function POST(req: NextRequest) {
   const { data: res } = await sb.from('employee_resignation').select('status, current_stage, current_approver_id').eq('id', id).maybeSingle()
   if (res?.current_approver_id) {
     const { data: meRow } = await sb.from('employees').select('full_name, emp_code').eq('id', me).maybeSingle()
-    await notify(res.current_approver_id, 'Resignation — acknowledgement needed', `${meRow?.full_name || 'An employee'}${meRow?.emp_code ? ' · ' + meRow.emp_code : ''} has submitted a resignation. It is waiting on you (${res.current_stage}).`, '/ess?tab=approvals')
+    // Words: Configuration → Employee lifecycle → Notifications → "Resignation — acknowledgement needed".
+    await notifyFromTemplate(res.current_approver_id, 'notify.resignation.submitted',
+      { employee_name: meRow?.full_name || 'An employee', emp_code: meRow?.emp_code || '', stage: res.current_stage },
+      { scope: await employeeScope(me), link: '/ess?tab=approvals' })
   }
   await audit(c.caller, 'RESIGNATION_SUBMITTED', me, { resignation_id: id, reason_code: body.reason_code })
   return NextResponse.json({ ok: true, id, status: res?.status, stage: res?.current_stage })

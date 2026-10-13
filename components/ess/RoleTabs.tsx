@@ -108,8 +108,9 @@ function Kpis({ items }: { items: { label: string; value: string | number; note?
 }
 
 interface PendingItem {
-  kind: 'LEAVE' | 'TRAVEL' | 'RESIGNATION'; id: string; employee_id: string; who: string; what: string; meta: string; stage: string
+  kind: 'LEAVE' | 'LEAVE_CANCEL' | 'REGULARISATION' | 'TRAVEL' | 'RESIGNATION'; id: string; employee_id: string; who: string; what: string; meta: string; stage: string
   raised_at: string | null; surfaced_via: string; mine: boolean; actions: string[]; tone?: 'w' | 'd'; link?: string
+  facts?: string[]; alert?: string | null
 }
 
 /** One pending item with its actions. Resignation actions that need input (a date,
@@ -151,6 +152,12 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
         <span style={pill(item.mine ? 'warn' : 'mut')}>{item.mine ? item.stage : `${item.stage} · ${item.surfaced_via}`}</span>
       </div>
       {item.meta && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6 }}>{item.meta}</div>}
+      {!!item.facts?.length && (
+        <ul style={{ margin: '7px 0 0', paddingLeft: 16, fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>
+          {item.facts.map((f, i) => <li key={i}>{f}</li>)}
+        </ul>
+      )}
+      {item.alert && <div style={{ ...S.note('w'), marginTop: 8 }}>{item.alert}</div>}
       <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
         {item.actions.map((a, i) => (
           <button key={a} disabled={busy} onClick={() => fire(a)}

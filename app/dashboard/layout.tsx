@@ -35,7 +35,7 @@ import {
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
   IconReceipt, IconDot,
   IconLoans, IconCompliance, IconLetters, IconMobile, IconAdmin, IconPolicies,
-  IconSliders, IconBuilding, IconReports, IconDatabase, IconAi, IconSupport,
+  IconSliders, IconBuilding, IconReports, IconDatabase, IconAi, IconSupport, IconTemplates,
   IconChevron, IconLogout, type IconProps,
 } from '@/lib/ui/icons';
 
@@ -84,7 +84,7 @@ const ICON: Record<string, (p: IconProps) => React.ReactElement> = {
   payroll: IconPayroll, finance: IconFinance, 'flexi-claims': IconCard, 'travel-claims': IconTravel,
   expenses: IconReceipt, loans: IconLoans,
   compliance: IconCompliance, letters: IconLetters, policies: IconPolicies, reports: IconReports,
-  ess: IconMobile, admin: IconAdmin, 'flexi-policy': IconSliders, 'company-profile': IconBuilding, 'db-export': IconDatabase,
+  ess: IconMobile, admin: IconAdmin, configuration: IconTemplates, 'flexi-policy': IconSliders, 'company-profile': IconBuilding, 'db-export': IconDatabase,
   ai: IconAi, support: IconSupport,
 }
 

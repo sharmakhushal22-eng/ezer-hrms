@@ -17,6 +17,10 @@ export async function api(path: string, employeeId: string, init?: RequestInit) 
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init?.headers || {}) },
   })
   const body = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
+  if (!res.ok) {
+    // The parsed body rides along: a refusal can carry more than a message
+    // (the leave route's 409 offers to split the request with LWP).
+    throw Object.assign(new Error(body?.error || `HTTP ${res.status}`), { status: res.status, body })
+  }
   return body
 }

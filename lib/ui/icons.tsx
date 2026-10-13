@@ -117,6 +117,10 @@ export const IconAdmin = (p: IconProps) => (
 export const IconPolicies = (p: IconProps) => (
   <Svg {...p}><path d="M5 3h9a1.5 1.5 0 0 1 1.5 1.5V17H6.5A1.5 1.5 0 0 1 5 15.5Z" /><path d="M5 3a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 1 5 14" /><path d="M8 7h5M8 10h5" /></Svg>
 );
+// A page with a pencil — the letters and emails edited in Configuration.
+export const IconTemplates = (p: IconProps) => (
+  <Svg {...p}><path d="M11 17H5.5A1.5 1.5 0 0 1 4 15.5v-11A1.5 1.5 0 0 1 5.5 3h7A1.5 1.5 0 0 1 14 4.5V8" /><path d="M7 7h4M7 10h3" /><path d="m14.6 10.4 1.9 1.9-4.2 4.2-2.4.5.5-2.4Z" /></Svg>
+);
 export const IconSliders = (p: IconProps) => (
   <Svg {...p}><path d="M3 6h5M12 6h5M3 14h9M16 14h1" /><circle cx="10" cy="6" r="2" /><circle cx="14" cy="14" r="2" /></Svg>
 );

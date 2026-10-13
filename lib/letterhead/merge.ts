@@ -11,6 +11,7 @@
 // ================================================================
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { ResolvedLetterhead, ResolvedSignatory } from './types'
+import { toWinAnsi } from '@/lib/letters/winAnsi'
 
 const MM_TO_PT = 2.834645669
 
@@ -26,7 +27,16 @@ export interface MergeLetterInput {
 
 /** Merge one letter's content onto its branch's resolved letterhead. Returns finished PDF bytes. */
 export async function mergeLetterOntoLetterhead(input: MergeLetterInput): Promise<Uint8Array> {
-  const { letterhead, letterheadPdfBytes, signatory, signatureImageBytes, signatureMimeType, letterTypeLabel, bodyText } = input
+  const { letterhead, letterheadPdfBytes, signatureImageBytes, signatureMimeType } = input
+  // Helvetica can only print WinAnsi; ₹, →, emoji etc. would make pdf-lib throw and the
+  // letter fail. Text typed in Configuration (and signatory names) is made printable here.
+  const letterTypeLabel = toWinAnsi(input.letterTypeLabel)
+  const bodyText = toWinAnsi(input.bodyText)
+  const signatory = input.signatory && {
+    ...input.signatory,
+    signatory_name: input.signatory.signatory_name != null ? toWinAnsi(input.signatory.signatory_name) : input.signatory.signatory_name,
+    signatory_designation: input.signatory.signatory_designation != null ? toWinAnsi(input.signatory.signatory_designation) : input.signatory.signatory_designation,
+  }
 
   if (!letterhead.letterhead_configured || !letterhead.file_url) {
     throw new Error(`No letterhead configured for branch "${letterhead.location_name}" — configure one at Branch, Company, or Group level first.`)

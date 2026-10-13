@@ -60,6 +60,7 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   // Setup
   ess:                  lazy(() => import('@/app/dashboard/ess/page')),
   admin:                lazy(() => import('@/app/dashboard/admin/page')),
+  configuration:        lazy(() => import('@/app/dashboard/configuration/page')),
   'flexi-policy':       lazy(() => import('@/app/dashboard/flexi-policy/page')),
   'company-profile':    lazy(() => import('@/app/dashboard/company-profile/page')),
   'db-export':          lazy(() => import('@/app/dashboard/db-export/page')),

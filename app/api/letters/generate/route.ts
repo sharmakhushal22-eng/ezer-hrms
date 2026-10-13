@@ -15,7 +15,9 @@ import { requireModule } from '@/lib/api-auth'
 import { grantForRequest } from '@/lib/rms/server'
 import { companyFilter } from '@/lib/rms/resolve'
 import { resolveMergeFieldsForEmployee } from '@/lib/letters/mergeFields'
-import { renderTemplate } from '@/lib/letters/renderTemplate'
+import { renderText, stripMarkup } from '@/lib/config/render'
+import { resolveTemplate } from '@/lib/config/store'
+import { hrLetterKey } from '@/lib/config/registry'
 import { mergeLetterOntoLetterhead } from '@/lib/letterhead/merge'
 import type { ResolvedLetterhead, ResolvedSignatory } from '@/lib/letterhead/types'
 
@@ -59,6 +61,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Letter template not found' }, { status: 404 })
   }
 
+  // The letter's words for THIS company: its own Configuration version, else the Global
+  // one, else the letter's original content — so a letter nobody has edited in
+  // Configuration generates exactly as before.
+  const tpl = await resolveTemplate(hrLetterKey(template_id), company_id)
+  const letterTitle = (tpl?.subject || template.name || '').trim() || template.name
+  const letterBody = tpl?.body ?? template.content ?? ''
+
   const results: EmployeeResult[] = []
 
   for (const code of employee_codes) {
@@ -81,11 +90,14 @@ export async function POST(req: NextRequest) {
         continue
       }
 
-      const { text: bodyText, unknownTokens } = renderTemplate(template.content, resolved.fields)
+      const { text: rendered, unknown: unknownTokens } = renderText(letterBody, resolved.fields)
       if (unknownTokens.length > 0) {
         results.push({ employee_code: code, employee_name: emp.full_name, status: 'SKIPPED_UNKNOWN_TOKENS', unknown_tokens: unknownTokens })
         continue
       }
+      // The letterhead merge draws plain Helvetica — bold markers are dropped, not printed.
+      const bodyText = stripMarkup(rendered)
+      const titleText = stripMarkup(renderText(letterTitle, resolved.fields).text) || template.name
 
       // Resolve THIS employee's branch letterhead + signatory (Branch > Company > Group)
       const [lhRes, sigRes] = await Promise.all([
@@ -115,7 +127,7 @@ export async function POST(req: NextRequest) {
         signatory,
         signatureImageBytes,
         signatureMimeType: signatureImageBytes ? 'image/png' : undefined,
-        letterTypeLabel: template.name,
+        letterTypeLabel: titleText,
         bodyText,
       })
 

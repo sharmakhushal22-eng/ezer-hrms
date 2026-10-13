@@ -56,6 +56,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { group: 'Setup', items: [
     { key: 'ess',               label: 'ESS & Role Management',   href: '/dashboard/ess',             module: 'ESS & Roles' },
     { key: 'admin',             label: 'Admin Setup',             href: '/dashboard/admin',           module: 'Admin Setup' },
+    { key: 'configuration',     label: 'Configuration',           href: '/dashboard/configuration',   module: 'Configuration' },
     { key: 'flexi-policy',      label: 'Flexi Policy',            href: '/dashboard/flexi-policy',    module: 'Flexi Claims' },
     { key: 'company-profile',   label: 'Company Profile',         href: '/dashboard/company-profile', module: 'Company Profile' },
     { key: 'db-export',         label: 'Database Export',         href: '/dashboard/db-export',       module: 'Database Export' },

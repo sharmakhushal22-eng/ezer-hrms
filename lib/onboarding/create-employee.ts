@@ -13,6 +13,8 @@
 import { onboardingToEmployee } from './to-employee'
 import { buildEmpCode, isValidEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import { sendAckEmail } from './ack-email'
+import { renderEmail, onboardingScope } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
 
 export interface CreateResult {
   ok: boolean; employee_code?: string; employee_id?: string | null; error?: string; status?: number
@@ -70,12 +72,21 @@ export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId:
   }
 
   await supa.from('onboarding_statutory_enrollment').update({ enrolled_at: new Date().toISOString(), enrolled_by: o.by || null }).eq('onboarding_id', o.onboardingId)
-  await supa.from('onboarding_notifications').insert({
-    onboarding_id: o.onboardingId, recipient_type: 'CANDIDATE', channel: 'EMAIL',
-    subject: `Welcome aboard! Your Employee ID: ${finalCode}`,
-    body: `Dear ${cand.full_name},\n\nYour joining process is complete. Your Employee ID is ${finalCode}.\n\nYou can now login to EZER ESS portal. Login credentials will follow in a separate email.\n\nWelcome to the team!`,
-    status: 'SENT', sent_at: new Date().toISOString(),
-  })
+  // "Welcome — your Employee ID" (Configuration → Onboarding). Sent for real, and the log
+  // records what happened rather than an unconditional SENT.
+  try {
+    const scope = await onboardingScope(o.onboardingId)
+    const { data: co } = scope.companyId ? await supa.from('companies').select('company_name').eq('id', scope.companyId).maybeSingle() : { data: null }
+    const welcome = await renderEmail('onboarding.employee_id', scope, { candidate_name: cand.full_name, employee_code: finalCode, company_name: co?.company_name || '' })
+    const welcomeSent = cand.email
+      ? await sendMail({ to: cand.email, subject: welcome.subject, text: welcome.text, html: welcome.html })
+      : { sent: false, skipped: 'candidate has no email' }
+    await supa.from('onboarding_notifications').insert({
+      onboarding_id: o.onboardingId, recipient_type: 'CANDIDATE', channel: 'EMAIL',
+      subject: welcome.subject, body: welcome.text,
+      status: welcomeSent.sent ? 'SENT' : 'FAILED', sent_at: welcomeSent.sent ? new Date().toISOString() : null,
+    })
+  } catch (e) { console.error('employee-id welcome mail failed', e) }
   await supa.from('onboarding_audit_log').insert({
     onboarding_id: o.onboardingId, action: 'EMPLOYEE_CODE_GENERATED', actor_type: o.actorType || 'HR', actor_id: o.by || null,
     details: { employee_code: finalCode, employment_type: employmentType, company_id: cand.company_id, employee_synced: true, sync_error: null },

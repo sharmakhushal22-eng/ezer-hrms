@@ -15,14 +15,18 @@
 // twice.
 //
 // GET  → the whole Attendance screen in one round trip (was four reads).
-// POST → file a miss-punch regularisation, validated server-side.
+// POST → file a regularisation, validated server-side, routed to an approver.
+// PATCH → withdraw a pending one.
 //
 // Shaped after app/api/ess/leave/route.ts: one GET for the screen, the server
 // annotates and the client renders, diagnostics so an empty grid can say why,
 // identity from the session and never from the request.
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { essRoute, forbidden, audit, fmtDate } from '@/lib/ess/session'
+import { essRoute, forbidden, audit } from '@/lib/ess/session'
+import { fileRegularisation, withdrawRegularisation } from '@/lib/leave/workflow'
+import { approverRole } from '@/lib/leave/policy'
+import { contacts } from '@/lib/leave/notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +57,6 @@ interface LeaveRow {
   half_day: boolean | null
   leave_types: { short_name: string | null; name: string | null } | null
 }
-interface RegRow { attendance_date: string; status: string | null }
 interface PunchRow {
   punch_time: string
   punch_type: string
@@ -81,7 +84,6 @@ const rows = <T>(data: unknown): T[] => (Array.isArray(data) ? (data as T[]) : [
 const istToday = (): string => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)
 
 const isDay = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
-const isTime = (s: unknown): s is string => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s)
 
 /** Every date from `from` to `to`, inclusive, as ISO days. */
 function eachDay(from: string, to: string): string[] {
@@ -177,8 +179,8 @@ export async function GET(req: NextRequest) {
       .select('from_date, to_date, half_day, leave_types(short_name, name)')
       .eq('employee_id', me).eq('status', 'APPROVED').lte('from_date', to).gte('to_date', from),
     sb.from('attendance_regularisation')
-      .select('id, attendance_date, recorded_in, recorded_out, requested_in, requested_out, reason, status, reviewed_at, review_remark, created_at')
-      .eq('employee_id', me).order('created_at', { ascending: false }).limit(20),
+      .select('*')
+      .eq('employee_id', me).order('created_at', { ascending: false }).limit(30),
     shiftFor(me, today),
     wantDay
       ? sb.from('attendance_punches')
@@ -237,6 +239,22 @@ export async function GET(req: NextRequest) {
     }
   })
 
+  // Each correction says who it is waiting on, or who decided it — by name.
+  const regRows = (regR.data ?? []) as Record<string, any>[]
+  const { data: mgr } = await sb.from('employees')
+    .select('l1_manager_id, l2_manager_id, hr_manager_id, hr_head_id').eq('id', me).maybeSingle()
+  const people = await contacts(regRows.map(x => x.current_approver_id).filter(Boolean))
+  const regularisations = regRows.map((x): Record<string, any> => {
+    const c = x.status === 'PENDING' && x.current_approver_id ? people.get(x.current_approver_id) : null
+    return {
+      ...x,
+      waiting_on: c ? { id: c.id, name: c.name, role: approverRole(mgr, c.id) } : null,
+      decided_by: x.status === 'APPROVED' || x.status === 'REJECTED' ? (x.reviewed_by || null) : null,
+    }
+  })
+  const pendingByDate = new Map<string, string | null>()
+  for (const x of regularisations) if (x.status === 'PENDING') pendingByDate.set(x.attendance_date, x.waiting_on?.name ?? null)
+
   const count = (mk: Mark) => days.filter(d => d.mark === mk).length
   const summary = {
     present: count('PRESENT') + count('LATE'),
@@ -260,7 +278,9 @@ export async function GET(req: NextRequest) {
     // re-reading the config. Derived from the resolver, not from a constant.
     weekly_off_weekdays: [...new Set([...offs].map(isoWeekday))].sort(),
     holidays,
-    regularisations: regR.data ?? [],
+    regularisations,
+    // Days with a correction waiting, and on whom — for the calendar's day panel.
+    pending_corrections: Object.fromEntries(pendingByDate),
     summary,
     // So an empty grid can say WHY, instead of implying the employee simply
     // never came in.
@@ -276,18 +296,18 @@ export async function GET(req: NextRequest) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// POST — file a miss-punch regularisation
+// POST — file a regularisation (one day, a list, or a range)
 //
-// The second of the app's two direct writes (leave was the first). It upserts
-// on (employee_id, attendance_date), exactly as lib/supabase-attendance.ts
-// does, so re-filing a day that is still pending updates it rather than
-// failing on a duplicate.
+// This used to save PENDING rows that reached nobody: there was no approver
+// column, no queue and no notification, and the comment here said so. Since
+// migration 138 every request is stamped to the reporting manager (HR when
+// there is none, never the employee), appears in their Tasks & Approvals, is
+// emailed to them, and on approval writes the corrected times into
+// attendance_records. The logic lives in lib/leave/workflow.ts so the mobile
+// app, the web portal and HR's screen all file and decide the same way.
 //
-// There is no approver flow for regularisation anywhere in this product — no
-// current_approver_id, no stamping trigger, no queue; HR reviews these in the
-// dashboard's regularisation report. That is why, unlike leave, this notifies
-// nobody: a notification pointing at a screen that does not exist is worse
-// than none.
+// Past days only: today is still being worked. Weekly offs, holidays and days
+// on approved leave are skipped and named in `skipped`.
 // ═══════════════════════════════════════════════════════════════════════════
 export async function POST(req: NextRequest) {
   const r = await essRoute(req)
@@ -304,96 +324,36 @@ export async function POST(req: NextRequest) {
 
   const me = ctx.caller.employeeId
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
-  const bad = (msg: string, status = 400) => NextResponse.json({ error: msg }, { status })
+  const out = await fileRegularisation(me, body)
+  if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })
 
-  const requestedIn = body.requested_in
-  const requestedOut = body.requested_out
-  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : ''
-
-  if (!isTime(requestedIn) || !isTime(requestedOut)) return bad('Give both times as HH:mm.')
-  if (requestedOut <= requestedIn) return bad('The out time has to be after the in time.')
-  if (!reason) return bad('Say why the punch is being corrected. Whoever reviews it reads this.')
-
-  // One day, a list of days, or a range — one row per day either way, because
-  // HR approves days individually.
-  let dates: string[] = []
-  if (Array.isArray(body.dates)) dates = body.dates.filter(isDay)
-  else if (isDay(body.date)) dates = [body.date]
-  else if (isDay(body.from) && isDay(body.to)) dates = eachDay(body.from, body.to)
-  else if (isDay(body.from)) dates = [body.from]
-  if (!dates.length) return bad('Pick the day to correct.')
-  if (dates.length > 31) return bad('Regularise one month at a time.')
-
-  const today = istToday()
-  const first = dates[0]
-  const last = dates[dates.length - 1]
-
-  const [recR, holR, offR, existingR] = await Promise.all([
-    sb.from('attendance_records').select('attendance_date, work_in, work_out')
-      .eq('employee_id', me).in('attendance_date', dates),
-    sb.rpc('resolve_holidays', { p_employee_id: me }),
-    sb.rpc('resolve_weekly_offs', { p_employee_id: me, p_from: first, p_to: last }),
-    sb.from('attendance_regularisation').select('attendance_date, status')
-      .eq('employee_id', me).in('attendance_date', dates),
-  ])
-
-  const recBy = new Map<string, AttRow>(rows<AttRow>(recR.data).map(x => [x.attendance_date, x]))
-  const offSet = new Set<string>(rows<OffRow>(offR.data).map(w => w.off_date))
-  const holBy = new Map<string, HolidayRow>(
-    rows<HolidayRow>(holR.data).filter(h => !h.is_optional).map(h => [h.holiday_date, h]),
-  )
-  const decided = new Map<string, string>(
-    rows<RegRow>(existingR.data).map(x => [x.attendance_date, String(x.status ?? '')]),
-  )
-
-  const skipped: { date: string; why: string }[] = []
-  const toFile: Record<string, unknown>[] = []
-
-  for (const date of dates) {
-    if (date > today) { skipped.push({ date, why: 'that day has not happened yet' }); continue }
-    if (offSet.has(date)) { skipped.push({ date, why: 'it was a weekly off' }); continue }
-    const holiday = holBy.get(date)
-    if (holiday) { skipped.push({ date, why: `it was ${holiday.description ?? 'a holiday'}` }); continue }
-    // An approved correction is a decided fact; re-filing would quietly
-    // overwrite it through the upsert.
-    if (decided.get(date) === 'APPROVED') { skipped.push({ date, why: 'it has already been regularised' }); continue }
-
-    const rec = recBy.get(date)
-    toFile.push({
-      employee_id: me,                       // the session's, never the body's
-      attendance_date: date,
-      recorded_in: rec?.work_in ?? null,
-      recorded_out: rec?.work_out ?? null,
-      requested_in: requestedIn,
-      requested_out: requestedOut,
-      reason,
-      status: 'PENDING',
-    })
-  }
-
-  if (!toFile.length) {
-    const only = skipped.length === 1 ? skipped[0] : null
-    return bad(only
-      ? `${fmtDate(only.date)}: ${only.why}.`
-      : 'None of those days can be regularised.')
-  }
-
-  const { error } = await sb.from('attendance_regularisation')
-    .upsert(toFile, { onConflict: 'employee_id,attendance_date' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  await audit(ctx.caller, 'ATTENDANCE_REGULARISED', me, {
-    dates: toFile.map(x => x.attendance_date),
-    skipped,
-  })
-
+  await audit(ctx.caller, 'ATTENDANCE_REGULARISED', me, { dates: out.dates, skipped: out.skipped, group: out.group })
   return NextResponse.json({
     ok: true,
-    filed: toFile.length,
-    dates: toFile.map(x => x.attendance_date),
+    filed: out.filed,
+    dates: out.dates,
     // Days left out, named, so the client can say so rather than silently
     // filing fewer than the employee picked.
-    skipped,
+    skipped: out.skipped,
     status: 'PENDING',
+    group: out.group,
+    waiting_on: out.waiting_on,
+    unrouted: !out.waiting_on,
   })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PATCH — withdraw a pending correction: { id } is one day or a whole group
+// ═══════════════════════════════════════════════════════════════════════════
+export async function PATCH(req: NextRequest) {
+  const r = await essRoute(req)
+  if (r.error) return r.error
+  const { ctx } = r
+  if (ctx.caller.viewAs) return forbidden('Attendance cannot be changed while viewing as somebody else.')
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>
+  const id = typeof body.id === 'string' ? body.id : ''
+  const out = await withdrawRegularisation(ctx.caller.employeeId, id)
+  if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })
+  await audit(ctx.caller, 'ATTENDANCE_REGULARISATION_WITHDRAWN', ctx.caller.employeeId, { id })
+  return NextResponse.json({ ok: true, status: 'CANCELLED' })
 }

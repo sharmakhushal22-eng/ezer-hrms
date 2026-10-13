@@ -4,22 +4,24 @@
 // break-up PDF (the CTC break-up acknowledgement, password-protected with the candidate's mobile):
 //   - to the hiring manager(s) — the MRF's assigned_recruiter_ids, who sent the link
 //   - to the candidate, confirming what they accepted
+// Words: Configuration → Recruitment → "Salary offer accepted — hiring manager / candidate",
+// for the offer's company and the MRF's branch.
 // Called by app/api/salary-view/respond. Best-effort: returns how many mails were sent.
 
-import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { ctcAcknowledgementPdf } from '@/lib/recruitment/approval-pack'
 import { confidentialAudience } from '@/lib/recruitment/confidential-flow'
+import { renderEmail } from '@/lib/config/store'
+import { mailConfigured, sendMail } from '@/lib/mail/send'
 
 const inr = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
 const empEmail = (e: any) => e?.office_email || e?.personal_email || null
 
 /** The two acceptance mails. Returns how many were sent; never throws past the caller's catch. */
 export async function mailAcceptance(neg: any): Promise<number> {
-  const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
-  if (!user || !pass) return 0
+  if (!mailConfigured()) return 0
 
-  const { data: cand } = await sb.from('candidates').select('full_name, email, mobile, phone, designation, mrf_id').eq('id', neg.candidate_id).maybeSingle()
+  const { data: cand } = await sb.from('candidates').select('full_name, email, mobile, phone, designation, mrf_id, company_id').eq('id', neg.candidate_id).maybeSingle()
   const mrfId = cand?.mrf_id || null
   const { data: mrf } = mrfId
     ? await sb.from('manpower_requisitions').select('*').eq('id', mrfId).maybeSingle()
@@ -41,33 +43,25 @@ export async function mailAcceptance(neg: any): Promise<number> {
   const who = cand?.full_name || neg.candidate_name || 'The candidate'
   // The title on the salary link is what the candidate accepted; the MRF's is the fallback.
   const role = neg.position_title || mrf?.designation || mrf?.position || cand?.designation || ''
-  const ref = mrf?.mrf_number ? ` (${mrf.mrf_number})` : ''
   const on = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
   const pkg = neg.is_stipend ? `${inr(neg.stipend_monthly)} a month` : `${inr(neg.offered_ctc)} a year`
-  const pdfNote = pdf ? `\n\nThe salary break-up is attached as a PDF. It is password-protected — the password is the candidate's registered mobile number.` : ''
+  const scope = { companyId: neg.company_id || cand?.company_id || mrf?.company_id || null, locationId: mrf?.location_id || null }
+  const vars = {
+    candidate_name: who, role, mrf_number: mrf?.mrf_number || '', accepted_on: on, package: pkg,
+    proposed_doj: neg.proposed_doj ? new Date(neg.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+    candidate_note: neg.response_note || '', pdf_attached: pdf ? 'yes' : '',
+    sender_name: process.env.GMAIL_FROM_NAME || 'EZER HR Team',
+  }
 
-  const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-  const from = `"${process.env.GMAIL_FROM_NAME || 'EZER HR Team'}" <${user}>`
-  const jobs: Promise<any>[] = []
-  let sentCount = 0
-
+  const jobs: Promise<boolean>[] = []
   const hmTo = (hms || []).map(empEmail).filter(Boolean) as string[]
   if (hmTo.length) {
-    jobs.push(t.sendMail({
-      from, to: hmTo.join(','), attachments,
-      subject: `Offer accepted — ${who}${role ? ` (${role})` : ''}`,
-      text: `Hi,\n\n${who} has accepted the salary offer${role ? ` for ${role}` : ''}${ref} on ${on}.\n\nOffered: ${pkg}${neg.proposed_doj ? `\nProposed joining: ${new Date(neg.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}${neg.response_note ? `\nCandidate's note: ${neg.response_note}` : ''}${pdfNote}\n\nNext step: raise the offer approval request to the HR Head from Recruitment → Offer Approval.\n\n— EZER HRMS`,
-    }).then(() => { sentCount++ }).catch(() => null))
+    jobs.push(renderEmail('offer.accepted.hiring_manager', scope, vars).then(m =>
+      sendMail({ to: hmTo, subject: m.subject, text: m.text, html: m.html, attachments, fromName: 'EZER HR Team' })).then(r => r.sent, () => false))
   }
-
   if (cand?.email) {
-    jobs.push(t.sendMail({
-      from, to: cand.email, attachments,
-      subject: `You have accepted the offer${role ? ` — ${role}` : ''}`,
-      text: `Dear ${who},\n\nThank you — we have recorded your acceptance of the salary offer${role ? ` for the ${role} role` : ''} on ${on}.\n\nOffered: ${pkg}${pdf ? `\n\nYour salary break-up is attached as a PDF. It is password-protected — the password is your registered mobile number (digits only).` : ''}\n\nOur team will be in touch with the next steps and your offer letter.\n\nRegards,\n${process.env.GMAIL_FROM_NAME || 'EZER HR Team'}`,
-    }).then(() => { sentCount++ }).catch(() => null))
+    jobs.push(renderEmail('offer.accepted.candidate', scope, vars).then(m =>
+      sendMail({ to: cand.email, subject: m.subject, text: m.text, html: m.html, attachments, fromName: 'EZER HR Team' })).then(r => r.sent, () => false))
   }
-
-  await Promise.all(jobs)
-  return sentCount
+  return (await Promise.all(jobs)).filter(Boolean).length
 }

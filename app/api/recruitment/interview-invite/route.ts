@@ -16,9 +16,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 // Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
 import { requireModule } from '@/lib/api-auth'
-import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { notify as essNotify } from '@/lib/ess/session'
+import { renderResolvedEmail, resolveTemplate, mrfScope } from '@/lib/config/store'
+import { notifyFromTemplate } from '@/lib/config/notify'
+import { sendMail, mailConfigured } from '@/lib/mail/send'
 import { applyInterviewDecision, distinctRounds, isDecision, roundOrdinal, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
 import { CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/confidential'
 import { mrfOfCandidate } from '@/lib/recruitment/confidential-flow'
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
 
   // candidate + interviewers + scheduler, in as few round-trips as possible
   const [{ data: cand }, { data: emps }, { data: sched }] = await Promise.all([
-    sb.from('candidates').select('full_name, email, designation').eq('id', candidate_id).maybeSingle(),
+    sb.from('candidates').select('full_name, email, designation, company_id, mrf_id').eq('id', candidate_id).maybeSingle(),
     sb.from('employees').select('id, emp_code, full_name, office_email, personal_email').in('id', ids),
     scheduled_by ? sb.from('employees').select('full_name').eq('id', scheduled_by).maybeSingle() : Promise.resolve({ data: null } as any),
   ])
@@ -109,48 +110,52 @@ export async function POST(req: NextRequest) {
 
   // In-app ESS task for everyone (surfaces in Tasks & Approvals + bell). The wording tells
   // the main interviewer feedback is theirs; panelists are asked only to acknowledge.
+  // Words: Configuration → Recruitment → Notifications ("Interview to conduct — main
+  // interviewer / panelist"), for the candidate's company and the MRF's branch.
+  const companyId = company_id || (cand as any)?.company_id || null
+  const scope = await mrfScope(mrf_id || (cand as any)?.mrf_id, companyId)
   const when = scheduled_at ? new Date(scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'a time to be confirmed'
-  const joinBits = `${meet_link ? ` Join: ${meet_link}` : ''}${meet_passcode ? ` · Passcode: ${meet_passcode}` : ''}`
-  await Promise.all(ids.map(id => {
-    const isMain = id === mainId
-    return essNotify(
-      id,
-      `Interview to conduct — ${cand?.full_name || 'a candidate'} (${round})`,
-      isMain
-        ? `You are the main interviewer for the ${round} round on ${when}.${joinBits} Acknowledge it in Tasks & Approvals, then give your feedback after the interview.`
-        : `You've been added as a panelist for the ${round} round on ${when}.${joinBits} Main interviewer: ${mainEmp?.full_name || '—'}. Acknowledge it in Tasks & Approvals.`,
-      '/ess?tab=approvals',
-      'INTERVIEW',
-    ).catch(() => null)
-  }))
+  const nVars = { candidate_name: cand?.full_name || 'a candidate', round, interview_time: when, meet_link: meet_link || '', meet_passcode: meet_passcode || '', main_interviewer: mainEmp?.full_name || '—' }
+  await Promise.all(ids.map(id => notifyFromTemplate(id, id === mainId ? 'notify.interview.main' : 'notify.interview.panel', nVars, { scope, link: '/ess?tab=approvals', category: 'INTERVIEW' })))
 
-  // Email — best effort.
+  // Email — best effort. The words come from Configuration (Interview invite — candidate /
+  // main interviewer / panelist) for the candidate's company / branch; each template is looked up
+  // once and filled per recipient.
   let emailed = 0, emailSkipped: string | null = null
-  const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
-  if (user && pass) {
-    const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-    const from = `"${process.env.GMAIL_FROM_NAME || 'EZER HR Team'}" <${user}>`
-    const linkLine = (meet_link ? `\nJoin link: ${meet_link}` : '') + (meet_passcode ? `\nPasscode: ${meet_passcode}` : '')
-    const role = cand?.designation ? ` for the ${cand.designation} role` : ''
+  if (mailConfigured()) {
+    const [tCand, tMain, tPanel, { data: co }] = await Promise.all([
+      resolveTemplate('interview.candidate', scope),
+      resolveTemplate('interview.interviewer_main', scope),
+      resolveTemplate('interview.interviewer_panel', scope),
+      companyId ? sb.from('companies').select('company_name').eq('id', companyId).maybeSingle() : Promise.resolve({ data: null } as any),
+    ])
     const panelNames = panelIds.map(id => (empById.get(id) as any)?.full_name).filter(Boolean)
+    const common = {
+      candidate_name: cand?.full_name || 'Candidate',
+      round, interview_time: when,
+      meet_link: meet_link || '', meet_passcode: meet_passcode || '',
+      scheduler_name: schedName,
+      company_name: (co as any)?.company_name || '',
+    }
     const tasks: Promise<any>[] = []
-    if (cand?.email) {
-      tasks.push(t.sendMail({
-        from, to: cand.email, subject: `Interview scheduled — ${round}`,
-        text: `Dear ${cand.full_name || 'Candidate'},\n\nYour ${round} interview${role} is scheduled for ${when}.${linkLine}\n\nPlease join on time. All the best.\n\n${schedName}`,
-      }).then(() => { emailed++ }).catch(() => null))
+    const send = (to: string, mail: { subject: string; text: string; html: string }) =>
+      sendMail({ to, subject: mail.subject, text: mail.text, html: mail.html, fromName: 'EZER HR Team' })
+        .then(r => { if (r.sent) emailed++ })
+    if (cand?.email && tCand) {
+      tasks.push(send(cand.email, renderResolvedEmail(tCand, { ...common, job_title: cand?.designation || '' })))
     }
     for (const id of ids) {
       const e: any = empById.get(id); const to = empEmail(e)
       if (!to) continue
       const isMain = id === mainId
-      const who = isMain
-        ? `You are the MAIN interviewer${panelNames.length ? ` (panel: ${panelNames.join(', ')})` : ''}. Please acknowledge in ESS → Tasks & Approvals and record your feedback after the interview.`
-        : `You've been added as a PANELIST. Main interviewer: ${mainEmp?.full_name || '—'}. Please acknowledge in ESS → Tasks & Approvals.`
-      tasks.push(t.sendMail({
-        from, to, subject: `Interview to conduct — ${cand?.full_name || 'Candidate'} (${round})`,
-        text: `Hi ${e.full_name || ''},\n\n${cand?.full_name || 'A candidate'} — ${round} round, scheduled for ${when}.${linkLine}\n\n${who}\n\n${schedName}`,
-      }).then(() => { emailed++ }).catch(() => null))
+      const tpl = isMain ? tMain : tPanel
+      if (!tpl) continue
+      tasks.push(send(to, renderResolvedEmail(tpl, {
+        ...common,
+        interviewer_name: e.full_name || '',
+        panel_names: panelNames.join(', '),
+        main_interviewer_name: mainEmp?.full_name || '—',
+      })))
     }
     await Promise.all(tasks)
   } else {

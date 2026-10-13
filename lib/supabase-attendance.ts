@@ -15,6 +15,8 @@ export interface AttendanceRecord {
   punch_count: number
   source: string | null
   shift_id: string | null
+  /** Set when an approved correction wrote this record (migration 138 flow). */
+  regularized_at?: string | null
 }
 export interface DayPunch { punch_time: string; punch_type: 'IN' | 'OUT'; source: string | null; geofence_status: string | null }
 export interface HolidayInfo { holiday_date: string; description: string; holiday_type: string; is_optional: boolean }
@@ -22,8 +24,12 @@ export interface LeaveDay { short_name: string; name: string; half_day: boolean 
 export interface RegularisationRequest {
   id: string; attendance_date: string; recorded_in: string | null; recorded_out: string | null
   requested_in: string; requested_out: string; reason: string
-  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
   reviewed_by: string | null; reviewed_at: string | null; review_remark: string | null; created_at: string
+  request_group?: string | null
+  /** From GET /api/ess/attendance: who a pending one is with, by name. */
+  waiting_on?: { id: string; name: string; role: string } | null
+  decided_by?: string | null
 }
 export interface MonthlyData {
   records: AttendanceRecord[]
@@ -39,7 +45,7 @@ export async function loadMonthlyAttendance(empId: string, year: number, month: 
   const monthTo = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`
   const [recR, holR, woR, lvR] = await Promise.all([
     supabase.from('attendance_records')
-      .select('attendance_date, work_in, work_out, total_minutes, late_minutes, overtime_minutes, status, lop_applicable, punch_count, source, shift_id')
+      .select('attendance_date, work_in, work_out, total_minutes, late_minutes, overtime_minutes, status, lop_applicable, punch_count, source, shift_id, regularized_at')
       .eq('employee_id', empId).gte('attendance_date', monthFrom).lte('attendance_date', monthTo),
     supabase.rpc('resolve_holidays', { p_employee_id: empId }),
     supabase.rpc('resolve_weekly_offs', { p_employee_id: empId, p_from: monthFrom, p_to: monthTo }),
@@ -66,59 +72,11 @@ export async function loadDayPunches(empId: string, date: string): Promise<DayPu
   return (data || []) as DayPunch[]
 }
 
-export async function loadRegularisationRequests(empId: string): Promise<RegularisationRequest[]> {
-  const { data } = await supabase.from('attendance_regularisation')
-    .select('*').eq('employee_id', empId).order('created_at', { ascending: false }).limit(10)
-  return (data || []) as RegularisationRequest[]
-}
-
-export async function submitRegularisation(
-  empId: string, date: string, recordedIn: string | null, recordedOut: string | null,
-  requestedIn: string, requestedOut: string, reason: string
-): Promise<{ error: string | null }> {
-  const { error } = await supabase.from('attendance_regularisation').upsert({
-    employee_id: empId, attendance_date: date, recorded_in: recordedIn, recorded_out: recordedOut,
-    requested_in: requestedIn, requested_out: requestedOut, reason, status: 'PENDING',
-  }, { onConflict: 'employee_id,attendance_date' })
-  return { error: error?.message || null }
-}
-
-/**
- * One request per day, submitted together.
- *
- * Regularising a week of missed punches one day at a time is seven forms with
- * the same times and the same reason typed seven times. This takes the range
- * once. Each day is still its own row, because HR approves days individually
- * and the table is keyed on (employee_id, attendance_date) — a bulk submission
- * is a convenience at entry, not a different kind of record.
- *
- * Upsert, so re-submitting a day that was already pending updates it rather
- * than failing the whole batch on one duplicate.
- */
-export async function submitRegularisationBulk(
-  empId: string,
-  days: { date: string; recordedIn: string | null; recordedOut: string | null }[],
-  requestedIn: string, requestedOut: string, reason: string
-): Promise<{ inserted: number; error: string | null }> {
-  if (!days.length) return { inserted: 0, error: 'No eligible days in that range.' }
-
-  const rows = days.map(d => ({
-    employee_id: empId,
-    attendance_date: d.date,
-    recorded_in: d.recordedIn,
-    recorded_out: d.recordedOut,
-    requested_in: requestedIn,
-    requested_out: requestedOut,
-    reason,
-    status: 'PENDING',
-  }))
-
-  const { error } = await supabase
-    .from('attendance_regularisation')
-    .upsert(rows, { onConflict: 'employee_id,attendance_date' })
-
-  return { inserted: error ? 0 : rows.length, error: error?.message || null }
-}
+// Regularisation requests are read and filed through /api/ess/attendance
+// (GET returns them with the approver's name; POST files and routes; PATCH
+// withdraws). The browser no longer writes attendance_regularisation: since
+// migration 138 it is read-only to anon, so an employee cannot approve their
+// own correction with a direct REST call.
 
 // ── Day status resolution (priority: HOLIDAY > WEEKLY_OFF > ON_LEAVE > record.status) ──
 export interface DayInfo { status: string; rec: AttendanceRecord | null; holiday: HolidayInfo | null; leave: LeaveDay | null }

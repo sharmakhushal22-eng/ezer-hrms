@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { canSeeScreen } from '@/lib/rms/resolve'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
+// send-magic-link / resend-link are guarded server-side now, so the session goes along.
+import { authHeaders } from '@/lib/auth-headers'
 import ActivationWizard from '@/components/onboarding/ActivationWizard'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -290,7 +292,7 @@ export default function OnboardingDashboard() {
     setSaving(true)
     try {
       const res = await fetch('/api/onboarding/send-magic-link', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', headers: await authHeaders(),
         body: JSON.stringify({ ...newForm, offered_ctc: newForm.offered_ctc ? parseFloat(newForm.offered_ctc) : null }),
       })
       const data = await res.json()
@@ -322,7 +324,7 @@ export default function OnboardingDashboard() {
     let success = false
     try {
       const res = await fetch('/api/onboarding/send-magic-link', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', headers: await authHeaders(),
         body: JSON.stringify({
           candidate_id:    c.recruitment_id || null,
           company_id:      companyId,
@@ -393,7 +395,7 @@ export default function OnboardingDashboard() {
     setResendingId(c.id)
     try {
       const res = await fetch('/api/onboarding/resend-link', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', headers: await authHeaders(),
         body: JSON.stringify({ onboarding_id: c.id }),
       })
       const data = await res.json()

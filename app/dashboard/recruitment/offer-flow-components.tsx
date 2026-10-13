@@ -19,6 +19,10 @@ import { overCeiling, annualCeiling, compOf } from '@/lib/recruitment/compensati
 // Which letter an engagement gets — employment, internship, NATS / NAPS apprenticeship,
 // contract — and the words that go with it (stipend / fees instead of CTC, and so on).
 import { letterKindOf, specOf, isFeesKind, type LetterSpec } from '@/lib/recruitment/engagement'
+// The offer email's words come from Configuration (one template per engagement), filled here
+// so the mail refreshes on every offer-file edit. See lib/config/offer-mail.ts.
+import { offerMailVars } from '@/lib/config/offer-mail'
+import { renderText } from '@/lib/config/render'
 
 // ── STYLES ───────────────────────────────────────────────────────
 // Bound to the design system. This file owns the name S, so the tokens are
@@ -148,7 +152,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   useEffect(() => {
     const cid = candidate?.company_id || mrf?.company_id
     if (!cid) { setHrHeads([]); return }
-    fetch(`/api/recruitment/offer-approval?company_ids=${cid}`).then(r => r.json()).then(j => setHrHeads(j.heads?.[cid] || [])).catch(() => setHrHeads([]))
+    authHeaders().then(h => fetch(`/api/recruitment/offer-approval?company_ids=${cid}`, { headers: h })).then(r => r.json()).then(j => setHrHeads(j.heads?.[cid] || [])).catch(() => setHrHeads([]))
   }, [candidate?.company_id, mrf?.company_id])
 
   // Everything the recruiter already captured is prefilled: the negotiation's previous-employer
@@ -316,7 +320,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     let notified = 0, notifyWarning = '', emailedTo = ''
     if (!error && created?.id) {
       try {
-        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'submitted', request_id: created.id }) })
+        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ action:'submitted', request_id: created.id }) })
         const j = await r.json().catch(() => ({}))
         notified = Number(j.notified || 0); notifyWarning = j.warning || j.emailSkipped || (!r.ok ? (j.error || 'notification failed') : '')
         if (Number(j.emailed) > 0) emailedTo = `${j.emailed} recipient(s)`
@@ -611,7 +615,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     let notified = 0
     if (!error) {
       try {
-        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'decided', request_id: selected.id }) })
+        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ action:'decided', request_id: selected.id }) })
         const j = await r.json().catch(() => ({})); notified = Number(j.notified || 0)
       } catch { /* the decision is saved regardless */ }
     }
@@ -1625,7 +1629,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         // keep the open one in sync — this is what flips the button from locked to live
         setSelected((sel: any) => sel ? (rows.find((r: any) => r.id === sel.id) || null) : sel)
         const ids = Array.from(new Set(rows.map((r: any) => r.company_id).filter(Boolean))) as string[]
-        if (ids.length) fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`).then(r => r.json()).then(j => setHrHeads(j.heads || {})).catch(() => null)
+        if (ids.length) authHeaders().then(h => fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`, { headers: h })).then(r => r.json()).then(j => setHrHeads(j.heads || {})).catch(() => null)
       })
   }, [allowedMrfIds, tick])
 
@@ -1641,72 +1645,41 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
     return `₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}${r.hike_pct ? ` · Hike ${Number(r.hike_pct).toFixed(1)}%` : ''}`
   }
 
-  // The e-mail that carries the letter. Built from the row, then rebuilt whenever an edit in
-  // the offer file changes something it quotes, so the mail never disagrees with the letter.
-  // Its words follow the engagement: an intern is offered an internship and a stipend, an
-  // apprentice a place under NATS / NAPS, a contractor an engagement and fees — never "the
-  // position of … at an annual CTC".
-  function mailText(r: any, f: { name?: string | null; designation?: string | null; doj?: string | null } = {}) {
-    const company = r.companies?.company_name || 'our organization'
-    const role = f.designation || r.candidates?.designation || r.manpower_requisitions?.designation || 'the role'
-    const name = f.name || r.candidates?.full_name || 'Candidate'
-    const doj = f.doj !== undefined ? f.doj : r.proposed_doj
-    const kind = kindOf(r), spec = specOf(kind), months = monthsOfRow(r)
-    const n = r.ctc_negotiations
-    const monthly = n?.is_stipend && Number(n.stipend_monthly) > 0 ? Number(n.stipend_monthly) : (kind !== 'EMPLOYMENT' && r.offered_ctc ? Math.round(Number(r.offered_ctc) / 12) : 0)
-    const when = doj ? new Date(doj).toLocaleDateString('en-IN') : '—'
-    const periodLine = months ? `\n• Period: ${months} month${months === 1 ? '' : 's'}` : ''
-    const open: Record<string, string> = {
-      EMPLOYMENT: `Congratulations! We are delighted to offer you the position of ${role} at ${company}.`,
-      INTERNSHIP: `Congratulations! We are delighted to offer you an internship as ${role} at ${company}.`,
-      NATS: `Congratulations! We are pleased to offer you a place as an apprentice in ${role} at ${company} under the National Apprenticeship Training Scheme (NATS), governed by the Apprentices Act, 1961.`,
-      NAPS: `Congratulations! We are pleased to offer you an apprenticeship as ${role} at ${company} under the National Apprenticeship Promotion Scheme (NAPS), governed by the Apprentices Act, 1961.`,
-      CONTRACT: `We are pleased to engage you as an independent contractor to provide services as ${role} to ${company} for a fixed term.`,
-      CONSULTANT: `We are pleased to engage you as a consultant to provide services as ${role} to ${company}.`,
-    }
-    const pay = kind === 'EMPLOYMENT' ? `• Annual CTC: ₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}`
-      : `• Monthly ${spec.payNoun}: ₹${monthly ? fmt(monthly) : '—'}${n?.tds_applicable && Number(n?.tds_pct) > 0 ? ` (TDS ${Number(n.tds_pct)}%)` : ''}`
-    const startLabel = kind === 'EMPLOYMENT' ? 'Proposed Date of Joining' : kind === 'INTERNSHIP' ? 'Internship starts on' : kind === 'NATS' || kind === 'NAPS' ? 'Training commences on' : 'Engagement commences on'
-    const annexA = spec.annexA.toLowerCase()
-    const extra = kind === 'NATS' || kind === 'NAPS'
-      ? `\n\nThe Government of India's share of the stipend under the scheme is paid directly to your Aadhaar-seeded bank account by DBT; please complete your registration and e-KYC on the ${kind === 'NATS' ? 'NATS portal (nats.education.gov.in)' : 'apprenticeship portal (apprenticeshipindia.gov.in)'} before you join. This is apprenticeship training under the Apprentices Act, 1961 and not an offer of employment.`
-      : kind === 'INTERNSHIP' ? `\n\nThis is an internship for learning and training; it is not an offer of employment.`
-      : kind === 'CONTRACT' || kind === 'CONSULTANT' ? `\n\nThis is a contract for services, not employment. Fees are paid against your monthly invoice, with TDS under section 194J.` : ''
-    const docName = spec.kind === 'EMPLOYMENT' ? 'offer letter' : spec.title.toLowerCase()
-    const close = kind === 'EMPLOYMENT' ? 'We look forward to welcoming you to the team.' : kind === 'CONTRACT' || kind === 'CONSULTANT' ? 'We look forward to working with you.' : 'We look forward to having you with us.'
-    return {
-      subject: `${spec.mailSubject} — ${role} | ${company}`,
-      body: `Dear ${name},
-
-${open[kind]}
-
-Your ${docName} is attached to this email as a PDF. Please read it, including the ${annexA} in Annexure A and the terms in Annexure B.
-
-Key details:
-${pay}
-• ${startLabel}: ${when}${periodLine}
-
-This offer is valid for 7 days and is subject to verification and document submission. To accept, please sign the acceptance in Annexure B and send us a copy, or simply reply to this email confirming your acceptance.${extra}
-
-${close}
-
-Warm regards,
-${company} — Human Resources`,
-    }
+  // The e-mail that carries the letter. Its words are the engagement's Configuration template
+  // ("Offer email — Employment / Internship / NATS / NAPS / Contract / Consultant"), resolved for
+  // the offer's branch and company and fetched once when the offer file opens; it is re-filled
+  // whenever an edit in the offer file changes something it quotes, so the mail never disagrees
+  // with the letter. HR can still adjust the text before sending.
+  const [mailTpl, setMailTpl] = useState<{ forId: string; subject: string; body: string; source: string; version: number } | null>(null)
+  const [mailTplError, setMailTplError] = useState('')
+  const lastFacts = useRef<{ name?: string | null; designation?: string | null; doj?: string | null }>({})
+  function mailText(r: any, f: { name?: string | null; designation?: string | null; doj?: string | null } = {}, tpl = mailTpl) {
+    if (!tpl || tpl.forId !== r.id) return { subject: '', body: '' }
+    const v = offerMailVars(r, f)
+    return { subject: renderText(tpl.subject, v).text.replace(/\s*\n\s*/g, ' '), body: renderText(tpl.body, v).text }
   }
 
-  function prepareOffer(r: any) {
+  async function prepareOffer(r: any) {
     setSelected(r)
     setToEmail(r.candidates?.email || '')
-    const m = mailText(r)
-    setSubject(m.subject); setBody(m.body)
+    setSubject(''); setBody(''); setMailTplError(''); lastFacts.current = {}
+    try {
+      const res = await fetch(`/api/recruitment/send-offer-email?request_id=${r.id}`, { cache: 'no-store', headers: await authHeaders() })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setMailTplError(d.error || `HTTP ${res.status}`); return }
+      const tpl = { forId: r.id, subject: d.subject || '', body: d.body || '', source: d.template?.source || 'DEFAULT', version: d.template?.version || 0 }
+      setMailTpl(tpl)
+      const m = mailText(r, lastFacts.current, tpl)
+      setSubject(m.subject); setBody(m.body)
+    } catch { setMailTplError('network error') }
   }
 
   function factsChanged(f: { email: string | null; name: string | null; designation: string | null; doj: string | null }) {
     if (!selected) return
     if (f.email) setToEmail(f.email)
+    lastFacts.current = f
     const m = mailText(selected, f)
-    setSubject(m.subject); setBody(m.body)
+    if (m.body) { setSubject(m.subject); setBody(m.body) }
   }
 
   async function sendOffer() {

@@ -34,8 +34,8 @@
 // These are a CHECK on the offer file, never a figure printed as the offer — the offered
 // stipend is what the negotiation agreed.
 
-import type { Compensation } from './compensation'
-import { compOf } from './compensation'
+import type { Compensation } from './compensation.ts'
+import { compOf } from './compensation.ts'
 
 export type LetterKind = 'EMPLOYMENT' | 'INTERNSHIP' | 'NATS' | 'NAPS' | 'CONTRACT' | 'CONSULTANT'
 

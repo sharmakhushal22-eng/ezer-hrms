@@ -101,6 +101,7 @@ export const SCREEN_MODULES: ScreenModule[] = [
   {
     moduleKey: 'attendance', module: 'Attendance', label: 'Attendance',
     screens: [
+      { key: 'requests', label: 'Leave & Attendance Requests' },
       { key: 'shifts', label: 'Shifts' },
       { key: 'assign', label: 'Assign' },
       { key: 'records', label: 'Attendance Records' },
