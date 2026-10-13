@@ -74,6 +74,10 @@
     box-shadow:var(--shadow-hero);
     display:grid; grid-template-columns: 1fr auto; gap:28px; align-items:center;
   }
+  /* Named areas rather than relying on source order, so the hero's two halves
+     are explicit now that each is composed from several small components. */
+  .ezt .hero-main { min-width:0; }
+  .ezt .hero-side { min-width:0; }
   .ezt .hero-bg { position:absolute; inset:0; z-index:-1; border-radius:inherit; overflow:hidden; pointer-events:none; }
   .ezt .hero-bg::before, .ezt .hero-bg::after { content:""; position:absolute; z-index:-1; border-radius:50%; filter:blur(52px); opacity:.55; pointer-events:none; }
   .ezt .hero-bg::before { width:560px; height:560px; right:-180px; top:-280px; background:radial-gradient(circle, #60A5FA 0%, transparent 62%); animation: drift 14s ease-in-out infinite alternate; --animation-reduced:none; }
@@ -93,6 +97,7 @@
   .ezt .clock { font-variant-numeric:tabular-nums; font-size:13px; color:var(--on-hero-soft); display:flex; align-items:baseline; gap:10px; }
   .ezt .clock b { color:var(--on-hero); font-size:28px; font-weight:600; letter-spacing:-.02em; line-height:1; }
   .ezt .clock b i { font-style:normal; animation: blink 1s steps(2) infinite; --animation-reduced:none; }
+  .ezt .clock .ampm { font-size:14px; font-weight:600; margin-left:5px; }
   @keyframes blink { to { opacity:.25; } }
   .ezt .hero-tools { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
   .ezt .pillbtn { display:inline-flex; align-items:center; gap:7px; height:32px; padding:0 11px; border-radius:10px; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.10); color:var(--on-hero-soft); font-size:12.5px; font-weight:600; backdrop-filter:blur(8px); transition:background .2s,color .2s; }
@@ -133,6 +138,29 @@
   .ezt .hero-meta { display:flex; gap:22px; flex-wrap:wrap; margin-top:20px; }
   .ezt .hero-meta div { font-size:12.5px; color:var(--on-hero-soft); }
   .ezt .hero-meta b { display:block; color:var(--on-hero); font-size:14px; font-weight:600; }
+
+  /* ── NEXT ON YOU — the band under the meta row, which was empty ────── */
+  /* Prefixed hn-* rather than short names: app/globals.css imports Tailwind,
+     whose bare utilities would win over anything called `due` or `more`. */
+  .ezt .heronext { display:flex; align-items:center; gap:10px; margin-top:20px; flex-wrap:wrap; }
+  .ezt .hn-l { font-size:10px; font-weight:800; letter-spacing:.11em; text-transform:uppercase; color:var(--on-hero-soft); }
+  .ezt .hn-go {
+    display:inline-flex; align-items:center; gap:10px; max-width:100%;
+    padding:8px 12px 8px 14px; border-radius:12px; cursor:pointer; font:inherit; text-align:left;
+    background:rgba(255,255,255,.11); border:1px solid rgba(255,255,255,.2); color:var(--on-hero);
+    transition:background .2s ease, transform .14s cubic-bezier(.2,.8,.3,1);
+  }
+  .ezt .hn-go:hover { background:rgba(255,255,255,.2); }
+  .ezt .hn-go:active { transform:scale(.985); }
+  .ezt .hn-t { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:34ch; }
+  .ezt .hn-due { font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:99px; background:rgba(255,255,255,.14); color:var(--on-hero-soft); white-space:nowrap; }
+  .ezt .hn-due.soon { background:rgba(252,211,77,.22); color:#FDE68A; }
+  .ezt .hn-cta { font-size:11.5px; font-weight:700; color:var(--on-hero); opacity:.85; white-space:nowrap; }
+  .ezt .hn-more { font-size:11px; color:var(--on-hero-soft); }
+
+  @media (max-width:640px) {
+    .ezt .hn-t { max-width:20ch; }
+  }
 
   /* ── PUNCH DIAL — the memorable element ─────────────────────────────── */
   .ezt .dialwrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
@@ -192,11 +220,17 @@
   .ezt .shift b { color:var(--on-hero); font-weight:600; }
   .ezt .streak { display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 11px 0 8px; border-radius:99px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); font-size:12px; font-weight:600; color:var(--on-hero); }
   .ezt .streak .fl { width:18px; height:18px; display:grid; place-items:center; color:var(--sun); }
+  /* At zero the chip states a fact rather than celebrating one, so it steps
+     back: no lit flame, quieter text. */
+  .ezt .streak.is-none { color:var(--on-hero-soft); }
+  .ezt .streak.is-none .fl { color:var(--on-hero-soft); opacity:.65; }
+  .ezt .streak.is-none .fl svg { animation:none; }
   .ezt .streak .fl svg { animation: flick 1.4s ease-in-out infinite alternate; --animation-reduced:none; transform-origin:50% 100%; }
   @keyframes flick { from { scale:1; } to { scale:1.12 .96; } }
 
   /* ── STATS ───────────────────────────────────────────────────────────── */
-  .ezt .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:-30px 18px 0; position:relative; z-index:2; perspective:900px; }
+  /* Three tiles since Net salary came out of this row. */
+  .ezt .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:-30px 18px 0; position:relative; z-index:2; perspective:900px; }
   .ezt .tile {
     background:var(--glass); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
     border:1px solid var(--ez-line); border-radius:18px; padding:15px 16px 13px;

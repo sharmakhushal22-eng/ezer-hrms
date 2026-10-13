@@ -35,7 +35,17 @@ export async function POST(req: NextRequest) {
   const r = await essRoute(req)
   if (r.error) return r.error
   const { ctx } = r
-  if (ctx.caller.viewAs) return forbidden('Approvals cannot be actioned while viewing as somebody else.')
+  // See app/api/ess/mrf/route.ts for why these are two messages, not one. An
+  // approval especially must not be mis-explained: the approver's identity IS
+  // the decision, so "sign in again" and "you are viewing a colleague" need
+  // telling apart.
+  if (ctx.caller.viewAs) {
+    return forbidden(ctx.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active, so this decision has nobody to attribute it to. '
+        + 'Sign in again with your own ESS account to approve or reject.'
+      : 'An approval is recorded under your own name, so it cannot be actioned while you '
+        + 'are viewing somebody else\'s portal. Open your own portal to decide.')
+  }
   const me = ctx.caller.employeeId
   const body = await req.json().catch(() => ({}))
   const kind = String(body.kind || '')

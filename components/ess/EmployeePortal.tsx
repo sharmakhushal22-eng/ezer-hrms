@@ -48,7 +48,7 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 import {
   C, F, W, R, E, S, Z, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
-  IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch,
+  IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch, IconReceipt,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 
@@ -82,6 +82,10 @@ const FlexiClaims          = dynamic(() => import('@/components/ess/FlexiClaims'
 const InvestmentDeclaration= dynamic(() => import('@/components/ess/InvestmentDeclaration'), { ssr: false, loading: SectionLoading })
 const InvestmentProofs     = dynamic(() => import('@/components/ess/InvestmentProofs'), { ssr: false, loading: SectionLoading })
 const TravelClaims         = dynamic(() => import('@/components/ess/TravelClaims'), { ssr: false, loading: SectionLoading })
+// Travel & Expenses v2 is NOT imported here. It is a page of its own
+// (app/ess/travel), so the portal does not carry ~135 screens of module in its
+// bundle for the employees who never open it. It still sits beside the old
+// Travel Claims screen in the Payroll tabs until that one is retired.
 const Performance          = dynamic(() => import('@/components/ess/Performance'), { ssr: false, loading: SectionLoading })
 const Profile360           = dynamic(() => import('@/components/profile/Profile360'), { ssr: false, loading: SectionLoading })
 const MyTeam               = dynamic(() => import('@/components/ess/team/MyTeam'), { ssr: false, loading: SectionLoading })
@@ -3088,7 +3092,11 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
 // A tab that isn't built shows its feature grid — what is coming — instead of an empty
 // screen or a fake one.
 type Ready = 'ready' | 'partial' | 'soon'
-interface NavItem { k: string; label: string; phase?: number; needs?: string }
+/** `href` makes the tab leave the portal for a page of its own, instead of
+ *  rendering inside it. Travel & Expenses is the only one: it is roughly 135
+ *  screens with its own rail, and a module that size inside the portal's chrome
+ *  is a tab within a tab. See app/ess/travel/page.tsx. */
+interface NavItem { k: string; label: string; phase?: number; needs?: string; href?: string }
 interface Feature { icon: string; name: string; note: string }
 interface NavSection {
   k: string; label: string; short: string; icon: string
@@ -3112,6 +3120,9 @@ const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => R
   // is a different thing that still uses IconBell.
   inbox: IconMail,
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
+  // The same glyph the dashboard rail gives this module, so the employee side
+  // and the back office are recognisably the same thing.
+  expenses: IconReceipt,
   social: IconEmployees, rnr: IconAi, funzone: IconAi,
 }
 function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
@@ -3154,6 +3165,9 @@ const SECTIONS: NavSection[] = [
       { k:'nps',         label:'Corporate NPS' },
       { k:'loans',       label:'Loans' },
       { k:'claims',      label:'Travel Claims' },
+      // 'expenses' (Travel & Expenses) moved OUT of Payroll to a section of its
+      // own above HRIS — see below. The legacy 'claims' tab above is a different
+      // thing and stays here.
       { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
     ]},
 
@@ -3171,6 +3185,17 @@ const SECTIONS: NavSection[] = [
   { k:'inbox', label:'Inbox', short:'Inbox', icon:'', status:'ready',
     desc:'Messages from colleagues and departments, and every notification in full',
     items:[{ k:'inbox', label:'Inbox' }] },
+
+  // Travel & Expenses, in the rail in its own right rather than under Payroll.
+  // It is a module of roughly 135 screens with its own navigation, and people
+  // open it to record a trip or send a claim — not to look at their salary.
+  //
+  // The section key and its single item key are BOTH 'expenses', deliberately:
+  // AWAY, go(), the ?tab=claims&ref= deep link and the render case below are all
+  // keyed on that, so moving the tab changes where it sits and nothing else.
+  { k:'expenses', label:'Travel & Expenses', short:'T&E', icon:'', status:'ready',
+    desc:'Trips, legs, bills and claims — travel from planning to payout',
+    items:[{ k:'expenses', label:'Travel & Expenses', href:'/ess/travel' }] },
 
   { k:'hris', label:'HRIS', short:'HRIS', icon:'', status:'partial',
     desc:'Directory, requests, approvals and the exit process',
@@ -3230,7 +3255,19 @@ const SECTIONS: NavSection[] = [
 ]
 
 const VIEWS = SECTIONS.flatMap(s => s.items.map(i => ({ ...i, section: s.k })))
+/** The tabs that are pages of their own. go() sends the browser there rather than
+ *  switching `view`, so every route in — a sub-tab pill, the feature search, the
+ *  sidebar, a ?tab= deep link — lands on the page and none of them can render the
+ *  module inside the portal by accident. */
+const AWAY: Record<string, string> = Object.fromEntries(
+  VIEWS.filter(v => v.href).map(v => [v.k, v.href as string]),
+)
 const viewMeta = (k: string) => VIEWS.find(v => v.k === k) || VIEWS[0]
+/** The address a whole section leads to, when the section IS a page of its own.
+ *  Only a section with a single item can be one: a section with sub-tabs has to
+ *  land on one of them, and which one depends on where the person already is. */
+const awayOf = (s: NavSection): string | undefined =>
+  s.items.length === 1 ? AWAY[s.items[0].k] : undefined
 /** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
 const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 
@@ -3242,22 +3279,50 @@ const BADGE: Record<Ready, [string, string, string]> = {
 }
 
 // ── Sidebar / sub-tab / feature-grid bits (outside the parent — no focus loss) ──
-function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
+function SectionButton({ s, active, href, onClick }: { s: NavSection; active: boolean; href?: string; onClick: () => void }) {
   // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
   const [hover, setHover] = useState(false)
   const bg = active ? C.railActiveBg : hover ? C.railHover : 'transparent'
-  return (
-    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        // The rail follows the theme now — white in day, #171B21 in night —
-        // so its text comes from the rail family, which is defined for both.
-        // It must NOT use the onDark family: those are fixed near-white and
-        // would be invisible on a white rail in day mode. That was the
-        // original complaint. The earlier onDark fix was right for a rail
-        // that stayed dark; this replaces the premise, not the reasoning.
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}` }}>
+  // The rail follows the theme now — white in day, #171B21 in night — so its
+  // text comes from the rail family, which is defined for both. It must NOT use
+  // the onDark family: those are fixed near-white and would be invisible on a
+  // white rail in day mode. That was the original complaint. The earlier onDark
+  // fix was right for a rail that stayed dark; this replaces the premise, not
+  // the reasoning.
+  const style: React.CSSProperties = {
+    width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px',
+    color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600,
+    fontFamily:'inherit', background:bg, border:'none',
+    borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}`,
+    textDecoration:'none', boxSizing:'border-box',
+  }
+  const inner = (
+    <>
       <EssIcon k={s.k} size={16} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
+    </>
+  )
+
+  // A section that is a page of its own is a real link, not a scripted popup.
+  // That buys the browser's own behaviour for free: ctrl/cmd-click, middle
+  // click, "Open in new tab", and the address shown on hover. No onClick —
+  // the anchor's default opens the tab, and calling go() as well would open
+  // two.
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer"
+        title={`${s.label} — opens in a new tab`}
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+        style={style}>
+        {inner}
+      </a>
+    )
+  }
+
+  return (
+    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={style}>
+      {inner}
     </button>
   )
 }
@@ -3589,6 +3654,21 @@ function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: 
   )
 }
 
+/**
+ * A tab whose module is a page of its own. go() redirects before `view` can reach
+ * it, so this should never be seen; it exists so that if some future path does set
+ * the view directly, the person is sent on rather than shown an empty panel.
+ */
+function GoneToItsOwnPage({ href, label }: { href: string; label: string }) {
+  useEffect(() => { window.location.replace(href) }, [href])
+  return (
+    <div style={{ padding: 28, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+      Opening {label}…{' '}
+      <a href={href} style={{ color: C.brand, fontWeight: 600 }}>Continue</a>
+    </div>
+  )
+}
+
 /** What a tab will hold once it's built. Shown instead of the module, never alongside. */
 function FeatureGrid({ features }: { features: Feature[] }) {
   return (
@@ -3717,6 +3797,22 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
   // and a refresh stays on this one. The sync is skipped when this portal is not at /ess.
   const sync = !!urlSync && atEss()
   const go = (k: string) => {
+    // A tab that is a page of its own leaves the portal instead of becoming a
+    // view, and it opens in a tab of its own so the portal stays where it was.
+    //
+    // The fallback is not defensive padding. window.open is only permitted
+    // during the click that asked for it, and go() is ALSO called from the
+    // ?tab= deep-link effect below — no gesture there, so the browser returns
+    // null and this tab is the right place to land: the intent of a deep link
+    // is to arrive at the module, not to spawn a second window. A popup
+    // blocker gets the same treatment.
+    const away = AWAY[k]
+    if (away) {
+      setBellOpen(false); setMoreOpen(false)
+      const opened = window.open(away, '_blank', 'noopener,noreferrer')
+      if (!opened) window.location.href = away
+      return
+    }
     setAdminKey(null); setBellOpen(false); setMoreOpen(false)
     startTransition(() => setView(k))
     if (sync) pushUrl(essPath({ kind: 'view', view: k, query: '' }))
@@ -3750,7 +3846,18 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
   }
   useEffect(() => {
     if (typeof window === 'undefined') return
+    // Travel & Expenses v2 notifications are written by the database as
+    // "/ess?tab=claims&ref=<claim id>" (migration 147). Only they carry ref with
+    // tab=claims; that pair opens the T&E page, which reads the claim id itself.
+    // The module is a page of its own (app/ess/travel), so the pair is forwarded
+    // whole — TeHome's claimFromLink() looks for exactly these two params.
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('tab') === 'claims' && params.get('ref') && !params.get('module')) {
+      window.location.replace(`${AWAY.expenses}?tab=claims&ref=${encodeURIComponent(params.get('ref')!)}`); return
+    }
     const loc = parseEssPath(window.location.pathname, window.location.search, ESS_KEYS)
+    // A screen that is a page of its own (/ess/expenses → app/ess/travel) is never a view.
+    if (loc.kind === 'view' && AWAY[loc.view]) { window.location.replace(AWAY[loc.view]); return }
     if (!urlSync) {
       // Embedded portal: honour a deep link, never touch the address bar.
       if (loc.kind === 'module') setAdminKey(loc.module); else if (loc.view !== 'home') go(loc.view)
@@ -3791,7 +3898,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
   // Approvals is shown to everyone now — it carries the MRF / hiring block for
   // RMs and HODs, and an empty state for everyone else. Raise MRF is a raiser-only
   // section, so it drops out of the sub-tabs for anyone who cannot raise one.
-  const canRaiseMrf = essMenu.super_admin || essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals || essMenu.approval_types.length > 0
+  // Matches the server exactly — POST /api/ess/mrf action:'create' allows
+  // is_rm || is_hod || canApprovals and nothing else. This used to also admit
+  // super_admin and anyone holding an approval_type, so those logins were shown
+  // the tab, filled the whole form, and were refused at submit with "You do not
+  // have rights to raise an MRF". Offering a form the API will refuse is the bug;
+  // widening the server instead would hand out the right to raise, which is not
+  // a UI decision.
+  const canRaiseMrf = essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals
   const sectionItems = section.items.filter(i => i.k !== 'raise-mrf' || canRaiseMrf)
 
   // Everything the feature search may offer — only what this person can open.
@@ -3856,6 +3970,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
       case 'proofs':        return <InvestmentProofs employeeId={emp.id} />
       case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
       case 'claims':        return <TravelClaims employeeId={emp.id} />
+      // Travel & Expenses is a page of its own (app/ess/travel). go() redirects
+      // before `view` can ever become 'expenses', so this is only the belt to
+      // that braces — and it is why the module is no longer imported here at all.
+      case 'expenses':      return <GoneToItsOwnPage href={AWAY.expenses} label="Travel and Expenses" />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
@@ -3879,6 +3997,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
       case 'exit':          return <HrisShell employeeId={emp.id} tab={view} go={go}
                                               canApprove={essMenu.can.approvals}
                                               canRaiseMrf={canRaiseMrf}
+                                              adminMode={adminMode}
                                               notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
@@ -3922,7 +4041,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
             <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
           </div>
           {sections.map(s => (
-            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
+            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} href={awayOf(s)} onClick={() => goSection(s)} />
           ))}
           {/* A silent empty sidebar is indistinguishable from "you hold nothing", so
               say when the answer could not be fetched rather than implying it. */}
