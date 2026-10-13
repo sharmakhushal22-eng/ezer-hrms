@@ -10,7 +10,7 @@ import EmployeePortal from '@/components/ess/EmployeePortal'
 import { loadAccessScope, AccessScope, ScopeEmployee } from '@/lib/ess-scope'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C as TK, Z } from '@/lib/ui'
 
 type Session = { employee_id: string; name?: string; email?: string }
 
@@ -68,7 +68,7 @@ export default function PortalPage() {
       <EmployeePortal employeeId={session.employee_id} onExit={onExit} urlSync />
 
       {pickerOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }} onClick={() => setPickerOpen(false)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }} onClick={() => setPickerOpen(false)}>
           <div style={{ background: TK.surface, borderRadius: 14, padding: 18, maxWidth: 480, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 15, fontWeight: 700, color: TK.ink, marginBottom: 8 }}>Open a team member&apos;s portal</div>
             <input autoFocus placeholder="Search name or code…" value={q} onChange={e => setQ(e.target.value)} style={{ padding: '9px 12px', border: `1px solid ${TK.line}`, borderRadius: 10, fontSize: 13, background: TK.sunken, outline: 'none', marginBottom: 10, fontFamily: 'inherit' }} />
