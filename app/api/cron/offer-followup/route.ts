@@ -2,9 +2,13 @@
 // Runs on a schedule (Vercel Cron). For every candidate whose offer was sent
 // >48h ago and is still not accepted, emails the candidate (reply-to-accept)
 // and HR (please-follow-up), then marks the reminder as sent so it fires once.
+// Then the onboarding nudges to HR, and the hiring manager's "connect with your
+// candidate" reminder every 4 days (every 2 once joining is within 6 days) —
+// lib/recruitment/joining-followup-run.ts.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
+import { runJoiningFollowups } from '@/lib/recruitment/joining-followup-run'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -146,5 +150,9 @@ Please reach out and keep the candidate engaged so they stay committed until the
     }
   }
 
-  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails })
+  // ── Hiring manager: "connect with your candidate" until they join ───────────
+  const joining = await runJoiningFollowups(supabase, transporter, from)
+  if (joining.error) console.error('joining-followup skipped:', joining.error)
+
+  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails, joining })
 }
