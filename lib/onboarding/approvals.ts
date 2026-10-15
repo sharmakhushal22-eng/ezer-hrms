@@ -13,6 +13,7 @@ import type { Transporter } from 'nodemailer'
 import { notify } from '@/lib/ess/session'
 import { roleHolders, type Person } from '@/lib/recruitment/offer-approval-notify'
 import { createEmployeeFromOnboarding } from './create-employee'
+import { correctionsMail, type Corrections } from './corrections'
 
 export type Team = 'IT' | 'ADMIN' | 'PAYROLL' | 'HR_MANAGER'
 export const TEAMS: Team[] = ['IT', 'ADMIN', 'PAYROLL', 'HR_MANAGER']
@@ -72,7 +73,13 @@ The employee code is generated automatically once IT, Admin, Payroll and the HR 
   return n
 }
 
-export interface Decision { onboardingId: string; team: Team; action: 'approve' | 'return'; actorId: string | null; actorName: string | null; remark: string | null; mail?: { t: Transporter; from: string } | null; baseUrl?: string | null }
+export interface Decision {
+  onboardingId: string; team: Team; action: 'approve' | 'return'; actorId: string | null; actorName: string | null; remark: string | null
+  /** The HR Manager's itemised return (lib/onboarding/review.ts): the mail lists every rejected document and flagged detail. */
+  corrections?: Corrections | null
+  mail?: { t: Transporter; from: string } | null; baseUrl?: string | null
+}
+export const RETURN_LINK_HOURS = 48
 
 /** A team's decision. Returns what happened, including the employee code when this was the last approval. */
 export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<{ ok: boolean; error?: string; status?: number; all_approved?: boolean; employee_code?: string | null; create_error?: string | null }> {
@@ -95,24 +102,13 @@ export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<{
 
   if (d.action === 'return') {
     // Back to the candidate: the link reopens for 48 hours and they are told what to fix.
-    const expires = new Date(Date.now() + 48 * 3600_000).toISOString()
+    const expires = new Date(Date.now() + RETURN_LINK_HOURS * 3600_000).toISOString()
     await sb.from('onboarding_candidates').update({ status: 'IN_PROGRESS', hr_notes: `${TEAM_LABEL[d.team]} returned the form: ${d.remark}`, token_expires_at: expires }).eq('id', d.onboardingId)
     if (d.mail && oc.email) {
       const link = `${d.baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://app.ezerhrms.com'}/onboarding/${oc.magic_link_token}`
-      const text = `Dear ${oc.full_name},
-
-Thank you for submitting your onboarding form. The ${TEAM_LABEL[d.team]} team has asked for a small correction before it can be approved:
-
-"${d.remark}"
-
-Please open your onboarding link, make the change and submit again:
-${link}
-
-The link is valid for 48 hours.
-
-Warm regards,
-HR Team`
-      try { await d.mail.t.sendMail({ from: d.mail.from, to: oc.email, subject: `A correction is needed on your onboarding form`, text, html: text.replace(/\n/g, '<br>') }) } catch (e) { console.error('return mail failed', e) }
+      const c: Corrections = d.corrections || { documents: [], details: [], note: d.remark }
+      const m = correctionsMail({ name: oc.full_name, link, validityHours: RETURN_LINK_HOURS, byTeam: `The ${TEAM_LABEL[d.team]} team` }, c)
+      try { await d.mail.t.sendMail({ from: d.mail.from, to: oc.email, subject: m.subject, text: m.text, html: m.html }) } catch (e) { console.error('return mail failed', e) }
     }
     return { ok: true, all_approved: false }
   }

@@ -8,7 +8,10 @@ import { C as TK } from '@/lib/ui'
 
 // ── Types ────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
-interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: any; ai_confidence: number; ai_flags: string[]; file_name: string; hr_notes?: string | null }
+interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: any; ai_confidence: number; ai_flags: string[]; file_name: string; hr_notes?: string | null; hr_verified?: boolean | null }
+/** HR rejected this file (the review on the onboarding card); a new upload clears it. */
+const isRejected = (d?: DocStatus | null) => !!d && d.hr_verified === false
+const rejectReason = (d?: DocStatus | null) => (d?.hr_notes || '').replace(/^Rejected:\s*/i, '')
 
 // ── EZER Theme ───────────────────────────────────────────────────
 const P = TK.brand
@@ -154,12 +157,13 @@ function DocUpload({
   const aiStatus = status?.ai_status
   // The file is saved whenever a record exists. MISMATCH is the only real warning;
   // FAILED just means AI auto-check was skipped (no AI key) — the upload still succeeded.
-  const isMismatch = aiStatus === 'MISMATCH'
-  const isOk = !!status && !isMismatch
+  const rejected = isRejected(status)
+  const isMismatch = aiStatus === 'MISMATCH' && !rejected
+  const isOk = !!status && !isMismatch && !rejected
   const isPending = !status
 
-  const borderColor = isMismatch ? TK.warningTint : isOk ? TK.positiveTint : TK.brandEdge
-  const bgColor = isMismatch ? TK.warningTint : isOk ? TK.positiveTint : TK.sunken
+  const borderColor = rejected ? TK.critical : isMismatch ? TK.warningTint : isOk ? TK.positiveTint : TK.brandEdge
+  const bgColor = rejected ? TK.criticalTint : isMismatch ? TK.warningTint : isOk ? TK.positiveTint : TK.sunken
   const icon = isMismatch ? '' : isOk ? '' : isPending ? '' : ''
 
   return (
@@ -172,6 +176,12 @@ function DocUpload({
           {status && (
             <div style={{ fontSize: 11, color: TK.muted, marginTop: 4, lineHeight: 1.6 }}>
               {status.file_name}
+              {rejected && (
+                <div style={{ color: TK.critical, fontWeight: 600, marginTop: 2 }}>HR rejected this file{rejectReason(status) ? `: ${rejectReason(status)}` : ''}. Please upload a new copy.</div>
+              )}
+              {!rejected && status.hr_verified === true && (
+                <span style={{ color: TK.positive, marginLeft: 8 }}>Accepted by HR ✓</span>
+              )}
               {status.hr_notes && /carried over/i.test(status.hr_notes) && (
                 <span style={{ color: TK.brandDeep, marginLeft: 8 }}>Already with us — from the documents you sent before the offer. Replace it if you have a better copy.</span>
               )}
@@ -248,8 +258,15 @@ function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, o
 }) {
   const list = DOC_LIST(esicApplicable, isFresher, isForeign)
   const carried = Object.values(docs).filter(d => d.hr_notes && /carried over/i.test(d.hr_notes)).length
+  const rejected = list.filter(d => isRejected(docs[d.code]))
   return (
     <>
+      {rejected.length > 0 && (
+        <div style={{ background: TK.criticalTint, border: `1px solid ${TK.critical}`, borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: TK.critical }}>
+          <b>HR has rejected {rejected.length} document{rejected.length === 1 ? '' : 's'}</b> — upload a new copy of each before you submit again:
+          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{rejected.map(d => <li key={d.code}>{d.name}{rejectReason(docs[d.code]) ? ` — ${rejectReason(docs[d.code])}` : ''}</li>)}</ul>
+        </div>
+      )}
       {carried > 0 && (
         <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: TK.muted }}>
           {carried} document{carried === 1 ? '' : 's'} you sent before the offer {carried === 1 ? 'is' : 'are'} already here. Check each one — view, download, replace or remove it.
@@ -1149,6 +1166,18 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
 
       {/* Save indicator */}
       {saving && <div style={{ background: TK.brandTint, textAlign: 'center', padding: '4px 0', fontSize: 11, color: P }}>Auto-saving...</div>}
+
+      {/* HR returned the form: what to fix, from the review on the onboarding card */}
+      {c.hr_review?.outcome === 'RETURNED' && (
+        <div style={{ maxWidth: 700, margin: '14px auto 0', padding: '0 20px' }}>
+          <div style={{ background: TK.criticalTint, border: `1px solid ${TK.critical}`, borderRadius: 10, padding: '10px 14px', fontSize: 12.5, color: TK.ink, lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 700, color: TK.critical, marginBottom: 4 }}>HR has asked for corrections before your form can be approved</div>
+            {(c.hr_review.documents || []).length > 0 && <div><b>Documents to upload again (step 6):</b><ul style={{ margin: '2px 0 4px', paddingLeft: 18 }}>{c.hr_review.documents.map((d: any) => <li key={d.doc_code}>{d.label}{d.reason ? ` — ${d.reason}` : ''}</li>)}</ul></div>}
+            {(c.hr_review.details || []).length > 0 && <div><b>Details to correct:</b><ul style={{ margin: '2px 0 4px', paddingLeft: 18 }}>{c.hr_review.details.map((d: any, i: number) => <li key={i}>{d.field}{d.section ? ` (${d.section})` : ''}{d.reason ? ` — ${d.reason}` : ''}</li>)}</ul></div>}
+            {c.hr_review.note && <div><b>Note from HR:</b> {c.hr_review.note}</div>}
+          </div>
+        </div>
+      )}
 
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '16px 20px' }}>
         {/* Global country list — shared by the Personal + KYC foreign-block selectors */}

@@ -14,7 +14,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden } from '@/lib/ess/session'
-import { teamsFor, approvalsOf, decideApproval, TEAMS, type Team } from '@/lib/onboarding/approvals'
+import { teamsFor, decideApproval, TEAMS, type Team } from '@/lib/onboarding/approvals'
+import { reviewPayload } from '@/lib/onboarding/review'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -34,20 +35,9 @@ export async function GET(req: NextRequest) {
 
   const open = req.nextUrl.searchParams.get('open')
   if (open) {
-    const { data: oc } = await sb.from('onboarding_candidates')
-      .select('id, full_name, email, mobile, designation, department, employment_type, date_of_joining, offered_ctc, status, submitted_at, form_data, company_id, hr_notes')
-      .eq('id', open).eq('company_id', ctx.companyId).maybeSingle()
-    if (!oc) return NextResponse.json({ error: 'Not found in your company' }, { status: 404 })
-    const { data: docs } = await sb.from('onboarding_documents').select('doc_code, file_name, storage_path, mime_type, ai_status, hr_notes, uploaded_at').eq('onboarding_id', open)
-    const documents = await Promise.all((docs || []).map(async (d: any) => {
-      const { data: s } = d.storage_path ? await sb.storage.from('onboarding-docs').createSignedUrl(d.storage_path, 600) : { data: null as any }
-      return { doc_code: d.doc_code, file_name: d.file_name, mime_type: d.mime_type, ai_status: d.ai_status, note: d.hr_notes, uploaded_at: d.uploaded_at, url: s?.signedUrl || null }
-    }))
-    // Payroll sees the full account number; everyone else the last four.
-    const fd = oc.form_data || {}
-    const st = { ...(fd.step_7 || {}) }
-    if (!teams.includes('PAYROLL') && st.bank_account) st.bank_account = `XXXX ${String(st.bank_account).slice(-4)}`
-    return NextResponse.json({ teams, item: { ...oc, form_data: { ...fd, step_7: st } }, approvals: await approvalsOf(sb, open), documents })
+    const payload = await reviewPayload(sb, open, { companyId: ctx.companyId, maskBank: !teams.includes('PAYROLL') })
+    if (!payload) return NextResponse.json({ error: 'Not found in your company' }, { status: 404 })
+    return NextResponse.json({ teams, ...payload })
   }
 
   const { data: rows } = await sb.from('onboarding_candidates')

@@ -10,6 +10,7 @@ import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/reso
 // send-magic-link / resend-link are guarded server-side now, so the session goes along.
 import { authHeaders } from '@/lib/auth-headers'
 import ActivationWizard from '@/components/onboarding/ActivationWizard'
+import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK, R, E, IconChevron } from '@/lib/ui'
@@ -21,6 +22,8 @@ type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
 
 interface Candidate {
   approvals?: { team: string; status: string }[]
+  /** The HR Manager's last review (Review form on the card): ACCEPTED / RETURNED / RESUBMITTED with the rejected documents and flagged details. */
+  hr_review?: { outcome: string; by_name?: string | null; at?: string; documents?: { doc_code: string; label: string; reason: string }[]; details?: { field: string; reason: string }[]; note?: string | null } | null
   id: string; full_name: string; designation: string; department: string
   email: string; mobile: string; date_of_joining: string
   status: Stage; current_step: number; form_data: any
@@ -42,7 +45,7 @@ const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
   INVITED:          { label:'Link sent',        bg:TK.warningTint, color:TK.warning },
   IN_PROGRESS:      { label:'In progress',      bg: TK.brandTint, color: TK.brand },
   SUBMITTED:        { label:'Submitted',         bg:TK.brandTint, color:P        },
-  HR_REVIEW:        { label:'HR review',         bg:TK.infoTint, color:TK.info },
+  HR_REVIEW:        { label:'HR accepted',       bg:TK.infoTint, color:TK.info },
   APPROVED:         { label:'Approved',          bg:TK.positiveTint, color:TK.positive },
   EMPLOYEE_CREATED: { label:'Employee created',  bg: TK.sunken, color: TK.positive },
 }
@@ -123,6 +126,7 @@ export default function OnboardingDashboard() {
   const [editEmail,    setEditEmail]  = useState('')
   const [editMobile,   setEditMobile] = useState('')
   const [resendingId,  setResendingId] = useState('')
+  const [reviewing,    setReviewing]  = useState<{ id: string; readOnly: boolean } | null>(null)
   const [selIds,       setSelIds]     = useState<Set<string>>(new Set())
   // New link form
   const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
@@ -400,7 +404,7 @@ export default function OnboardingDashboard() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed')
-      showToast(data.emailed ? `Onboarding link re-sent to ${c.email} ✉️` : `Link refreshed — email NOT sent (${data.email_error || 'no email'}). Copy it instead.`, data.emailed ? 'ok' : 'err')
+      showToast(data.emailed ? (data.corrections ? `Link re-sent to ${c.email} with the list of corrections ✉️` : `Onboarding link re-sent to ${c.email} ✉️`) : `Link refreshed — email NOT sent (${data.email_error || 'no email'}). Copy it instead.`, data.emailed ? 'ok' : 'err')
     } catch(e:any) { showToast('Resend failed: '+e.message, 'err') }
     setResendingId('')
   }
@@ -424,11 +428,17 @@ export default function OnboardingDashboard() {
     if (!codeModal || !genCode.trim()) { showToast('Code required','err'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/onboarding/generate-code', {
+      const post = (force: boolean) => fetch('/api/onboarding/generate-code', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ onboarding_id: codeModal.id, employee_code: genCode.trim() }),
+        body: JSON.stringify({ onboarding_id: codeModal.id, employee_code: genCode.trim(), force }),
       })
-      const data = await res.json()
+      let res = await post(false)
+      let data = await res.json()
+      // The other teams have not all approved yet (ESS → Tasks & Approvals). HR may still go ahead.
+      if (res.status === 409 && Array.isArray(data.pending) && data.pending.length) {
+        if (!window.confirm(`Still waiting on ${data.pending.join(', ')} approval${data.pending.length > 1 ? 's' : ''}.\n\nGenerate the employee code anyway?`)) { setSaving(false); return }
+        res = await post(true); data = await res.json()
+      }
       if (!res.ok) throw new Error(data.error||'Failed')
       const code = data.employee_code || genCode
       // Surface the master-sync result — earlier this was hidden, so a failed
@@ -488,11 +498,18 @@ export default function OnboardingDashboard() {
     const actions: {priority:'HIGH'|'MEDIUM'|'LOW'; label:string; candidate:string; action:string; cid:string}[] = []
     const days = daysLeft(c.date_of_joining)
 
-    if (c.status==='SUBMITTED' || c.status==='APPROVED') {
+    if (c.status==='SUBMITTED') {
+      actions.push({priority:'HIGH',label:'Form submitted — review the documents and details (Review form)',candidate:c.full_name,action:'review',cid:c.id})
+    }
+    if (c.status==='HR_REVIEW' || c.status==='APPROVED') {
       const waiting = (c.approvals||[]).filter(a=>a.status!=='APPROVED').map(a=>TEAM_SHORT[a.team]||a.team)
       actions.push(waiting.length
-        ? {priority:'HIGH',label:`Awaiting approval: ${waiting.join(', ')} (ESS → Tasks & Approvals)`,candidate:c.full_name,action:'approvals',cid:c.id}
+        ? {priority:'HIGH',label:`Accepted by HR — awaiting ${waiting.join(', ')} (ESS → Tasks & Approvals), then generate the code`,candidate:c.full_name,action:'approvals',cid:c.id}
         : {priority:'HIGH',label:'All four teams approved — generate employee code',candidate:c.full_name,action:'generate',cid:c.id})
+    }
+    if (c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED') {
+      const n = (c.hr_review.documents||[]).length, m = (c.hr_review.details||[]).length
+      actions.push({priority:'MEDIUM',label:`Returned to candidate — ${n} document${n===1?'':'s'} rejected, ${m} detail${m===1?'':'s'} flagged; resend the link if they have not acted`,candidate:c.full_name,action:'returned',cid:c.id})
     }
     if (c.status==='INVITED' && days!==null && days<=5) actions.push({priority:'HIGH',label:'Link not opened — follow up candidate',candidate:c.full_name,action:'followup',cid:c.id})
     if (c.docs_ai_flagged && c.docs_ai_flagged>0) actions.push({priority:'MEDIUM',label:`${c.docs_ai_flagged} document(s) AI flagged — review`,candidate:c.full_name,action:'docs',cid:c.id})
@@ -694,7 +711,12 @@ export default function OnboardingDashboard() {
                       <div style={{fontSize:10,color:TK.muted,marginTop:1}}>{c.designation || '—'}</div>
                       {c.employee_code && <div style={{fontSize:10,color:TK.positive,marginTop:1,fontWeight:600}}>{c.employee_code}</div>}
                     </td>
-                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><Badge {...sm} label={sm.label}/></td>
+                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
+                      <Badge {...sm} label={sm.label}/>
+                      {c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED' && (
+                        <div title={[...(c.hr_review.documents||[]).map(d=>`${d.label}: ${d.reason}`), ...(c.hr_review.details||[]).map(d=>`${d.field}: ${d.reason}`)].join('\n')} style={{fontSize:9,fontWeight:700,color:TK.critical,marginTop:3}}>↩ Returned · {(c.hr_review.documents||[]).length} doc{(c.hr_review.documents||[]).length===1?'':'s'} rejected</div>
+                      )}
+                    </td>
                     <td style={{padding:'10px 12px',minWidth:100}}>
                       {notInvited ? <span style={{fontSize:11,color:TK.faint}}>—</span> : <>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:TK.muted,marginBottom:2}}>
@@ -757,9 +779,17 @@ export default function OnboardingDashboard() {
                           <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.brandDeep}}>Edit</button>
                         )}
                         {c.status==='SUBMITTED' && (
-                          <button onClick={()=>{openCodeModal(c)}} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
-                            <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Code
+                          <button onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                            <i className="ti ti-checklist" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Review form
                           </button>
+                        )}
+                        {(c.status==='HR_REVIEW'||c.status==='APPROVED') && (
+                          <button onClick={()=>{openCodeModal(c)}} title={(c.approvals||[]).some(a=>a.status!=='APPROVED') ? `Waiting on ${(c.approvals||[]).filter(a=>a.status!=='APPROVED').map(a=>TEAM_SHORT[a.team]).join(', ')} — you can still generate` : 'All four teams approved'} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                            <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Generate code
+                          </button>
+                        )}
+                        {(c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
+                          <button onClick={()=>setReviewing({ id: c.id, readOnly: true })} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>View form</button>
                         )}
                         {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
                           <button onClick={async()=>{
@@ -772,7 +802,7 @@ export default function OnboardingDashboard() {
                         )}
                         {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
                           <button onClick={()=>resendLink(c)} disabled={resendingId===c.id} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:resendingId===c.id?.6:1}}>
-                            <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>{resendingId===c.id?'Sending…':'Resend'}
+                            <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>{resendingId===c.id?'Sending…':'Resend link'}
                           </button>
                         )}
                         {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
@@ -1207,6 +1237,13 @@ export default function OnboardingDashboard() {
           onGenerate={generateCode}
           onClose={() => setCodeModal(null)}
         />
+      )}
+
+      {/* ── HR MANAGER REVIEW (Review form / View form on the card) ── */}
+      {reviewing && (
+        <ReviewDrawer onboardingId={reviewing.id} readOnly={reviewing.readOnly}
+          onClose={()=>setReviewing(null)}
+          onDone={(m,t)=>{ showToast(m, t); load() }} />
       )}
 
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}

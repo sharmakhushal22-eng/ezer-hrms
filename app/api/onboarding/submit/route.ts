@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
 import { openApprovals, notifyTeams } from '@/lib/onboarding/approvals'
+import { docLabel } from '@/lib/onboarding/corrections'
 import { renderEmail, onboardingScope, isUuid } from '@/lib/config/store'
 import { sendMail } from '@/lib/mail/send'
 
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     const { data: cand, error } = await supa
       .from('onboarding_candidates')
-      .select('id, company_id, full_name, email, designation, status, form_data, hr_spoc_id, created_by')
+      .select('id, company_id, full_name, email, designation, status, form_data, hr_spoc_id, created_by, hr_review')
       .eq('magic_link_token', token)
       .single()
 
@@ -48,8 +49,15 @@ export async function POST(req: NextRequest) {
     // Check mandatory documents
     const { data: docs } = await supa
       .from('onboarding_documents')
-      .select('doc_code, ai_status')
+      .select('doc_code, ai_status, hr_verified')
       .eq('onboarding_id', cand.id)
+
+    // A document HR rejected stays rejected until a new file replaces it (the upload clears
+    // hr_verified) — the form cannot come back with the same file.
+    const stillRejected = (docs || []).filter(d => d.hr_verified === false).map(d => docLabel(d.doc_code))
+    if (stillRejected.length) {
+      return NextResponse.json({ error: `Please upload a new copy of the rejected document${stillRejected.length > 1 ? 's' : ''} first: ${stillRejected.join(', ')}.`, rejected_docs: stillRejected }, { status: 400 })
+    }
 
     const mandatoryDocs = ['AADHAAR_FRONT', 'PAN', 'PHOTO']
     const uploadedCodes = (docs || []).map(d => d.doc_code)
@@ -68,6 +76,9 @@ export async function POST(req: NextRequest) {
       form_data:    fullData,
       submitted_at: new Date().toISOString(),
       current_step: 8,
+      hr_notes:     null,
+      // A return that stood is answered by this submission; the review history stays on the row.
+      hr_review:    cand.hr_review?.outcome === 'RETURNED' ? { ...cand.hr_review, outcome: 'RESUBMITTED', resubmitted_at: new Date().toISOString() } : cand.hr_review ?? null,
     }).eq('id', cand.id)
 
     // Create statutory enrollment record (PF/ESI)
