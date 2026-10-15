@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
       // Words: Configuration → Recruitment → "Offer revision — HR Head" (notification) and
       // "Offer revision requested — HR Head" (email), for the offer's company / branch.
       const scope = await mrfScope(cand.mrf_id || request.mrf_id, companyId)
-      const link = `/ess-portal?module=recruitment&tab=hrhead&offer=${request.id}`
+      const link = `/ess/recruitment/hrhead?offer=${request.id}`
       await Promise.all(heads.map(h => notifyFromTemplate(h.id, 'notify.offer.revision', { requested_by: by, candidate_name: cand.full_name, note }, { scope, link })))
       const to = heads.map(h => h.email).filter(Boolean) as string[]
       let emailed = 0

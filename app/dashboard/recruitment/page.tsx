@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
+import { moduleTabFromPath, pushUrl } from '@/lib/ess/routes'
 // Confidential hiring: who may raise / see it, and the hiding applied where data is loaded.
 import { canSeeConfidential, canRaiseConfidential, hideConfidential, isConfidentialMrf, selfApprovedChain } from '@/lib/recruitment/confidential'
 import { MODULE_TABS } from '@/lib/rms/nav'
@@ -270,12 +271,31 @@ export default function RecruitmentPage() {
   const { grant, loading: grantLoading } = useGrant()
   // The HR Head tab is for the HR Head alone (and super admin / legacy dashboard login).
   const isHrHead = grant.legacy || grant.isSuperAdmin || (grant.roles || []).some((r: any) => r.role_code === 'HR_HEAD')
-  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
-  // Deep-link from ESS Tasks & Approvals: /ess-portal?module=recruitment&mrfSub=approvals&mrf=<id>
+  type Tab = 'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'
+  const TAB_KEYS: Tab[] = ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus']
+  const [tab, setTabState] = useState<Tab>('dashboard')
+  // THE TAB IS PART OF THE ADDRESS. Inside ESS it is the path (/ess/recruitment/mrf); at
+  // /dashboard/recruitment it is ?tab=mrf. A click pushes a history entry (Back returns to
+  // the previous tab); a programmatic move (deep link, visibility fallback) replaces it. The
+  // module's deep-link params (?offer=, ?mrf=, ?mrfSub=) are dropped once you move on.
+  const tabFromAddress = (): Tab | null => {
+    if (typeof window === 'undefined') return null
+    const fromPath = moduleTabFromPath(window.location.pathname, 'recruitment')
+    const t = fromPath ?? new URLSearchParams(window.location.search).get('tab')
+    return t && (TAB_KEYS as string[]).includes(t) ? t as Tab : null
+  }
+  const setTab = (t: Tab, opts: { replace?: boolean } = {}) => {
+    setTabState(t)
+    if (typeof window === 'undefined') return
+    const inEss = moduleTabFromPath(window.location.pathname, 'recruitment') !== null || /^\/ess\/recruitment\/?$/.test(window.location.pathname)
+    const keepQuery = opts.replace ? window.location.search : ''
+    pushUrl(inEss ? `/ess/recruitment/${t}${keepQuery}` : `${window.location.pathname}?${new URLSearchParams({ ...(opts.replace ? Object.fromEntries(new URLSearchParams(window.location.search)) : {}), tab: t }).toString()}`, opts.replace ? 'replace' : 'push')
+  }
+  // Deep-link from ESS Tasks & Approvals: …/recruitment/mrf?mrfSub=approvals&mrf=<id>
   // opens the MRF tab on its Approvals sub-tab with that requisition ready to review.
   const [mrfDeep, setMrfDeep] = useState<{ sub?:string; id?:string }>({})
-  // …&tab=hrhead&offer=<request id> — the offer-approval notifications land here. The tab is
-  // remembered until the grant has loaded, because the visibility fallback below would
+  // …/recruitment/hrhead?offer=<request id> — the offer-approval notifications land here. The
+  // tab is remembered until the grant has loaded, because the visibility fallback below would
   // otherwise bounce a role-gated tab (HR Head) back to Dashboard before roles are known.
   const wantedTab = useRef<string|null>(null)
   const [offerDeep, setOfferDeep] = useState<string|null>(null)
@@ -283,10 +303,15 @@ export default function RecruitmentPage() {
     if (typeof window === 'undefined') return
     const p = new URLSearchParams(window.location.search)
     const sub = p.get('mrfSub'); const id = p.get('mrf')
-    if (sub || id) { setTab('mrf'); setMrfDeep({ sub: sub || undefined, id: id || undefined }) }
-    const t = p.get('tab')
-    if (t && ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus'].includes(t)) { setTab(t as typeof tab); wantedTab.current = t }
+    if (sub || id) { setTab('mrf', { replace: true }); setMrfDeep({ sub: sub || undefined, id: id || undefined }) }
+    const t = tabFromAddress()
+    if (t) { setTab(t, { replace: true }); wantedTab.current = t }
     const o = p.get('offer'); if (o) setOfferDeep(o)
+    // Back / Forward between this module's tabs: follow the address.
+    const onPop = () => { const back = tabFromAddress(); if (back) setTabState(back) }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [companies, setCompanies] = useState<Company[]>([])
   const [locations, setLocations] = useState<Location[]>([])
@@ -352,8 +377,8 @@ export default function RecruitmentPage() {
   // If the current tab is not one this role may see, fall back to the first it can.
   useEffect(() => {
     if (grantLoading) return   // roles not known yet — deciding visibility now would be wrong
-    if (wantedTab.current && visibleTabs.some(t => t.k === wantedTab.current)) { setTab(wantedTab.current as typeof tab); wantedTab.current = null; return }
-    if (visibleTabs.length && !visibleTabs.some(t => t.k === tab)) setTab(visibleTabs[0].k as typeof tab)
+    if (wantedTab.current && visibleTabs.some(t => t.k === wantedTab.current)) { setTab(wantedTab.current as typeof tab, { replace: true }); wantedTab.current = null; return }
+    if (visibleTabs.length && !visibleTabs.some(t => t.k === tab)) setTab(visibleTabs[0].k as typeof tab, { replace: true })
   }, [visibleTabs, tab, grantLoading])
   // Scoped-HM MRF id set for the Send Offers tab (null = oversight, no filter). Memoised so
   // the child's fetch effect does not refire on every render.

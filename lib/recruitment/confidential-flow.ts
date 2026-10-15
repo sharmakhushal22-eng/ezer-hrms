@@ -87,6 +87,6 @@ export async function autoApproveConfidentialOffer(sb: SupabaseClient, neg: any)
   const scope = { companyId, locationId: mrf.location_id || null }
   await Promise.all(audience.map(p => notifyFromTemplate(p.id, 'notify.offer.confidential_ready', {
     candidate_name: cand.full_name, role, mrf_number: mrf.mrf_number || '', package: pkg,
-  }, { scope, link: '/ess-portal?module=recruitment&tab=sendoffer' })))
+  }, { scope, link: '/ess/recruitment/sendoffer' })))
   return { requestId, notified: audience.length }
 }

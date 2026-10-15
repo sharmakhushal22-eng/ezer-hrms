@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
       head_names: headNames.join(', '),
       proposed_doj: r.proposed_doj ? new Date(r.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
     }
-    await Promise.all(managers.map(m => notifyFromTemplate(m.id, 'notify.offer.awaiting_head', nVars, { scope, link: '/ess-portal?module=recruitment&tab=sendoffer' })))
+    await Promise.all(managers.map(m => notifyFromTemplate(m.id, 'notify.offer.awaiting_head', nVars, { scope, link: '/ess/recruitment/sendoffer' })))
     await Promise.all(heads.map(h => notifyFromTemplate(h.id, 'notify.offer.approval_head', nVars, { scope, link: `/offer-approve/${r.id}` })))
 
     // Email — to the HR Head(s), CC the employees picked on the form. Body carries only the

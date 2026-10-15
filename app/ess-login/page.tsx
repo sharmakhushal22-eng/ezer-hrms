@@ -2,7 +2,7 @@
 // app/ess-login/page.tsx — Employee Self-Service login.
 // Identifier = email OR employee code. Steps: identifier → login / set-password,
 // plus a forced change-password step when HR issued a temp password (= emp_code).
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -50,6 +50,11 @@ const fieldStyle: React.CSSProperties = { width: '100%', padding: '12px 14px', b
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: TK.brandDeep, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 7 }
 
 export default function ESSLoginPage() {
+  // Already signed in (Back from the portal, a bookmark): straight to the portal, replacing
+  // this entry — the login form is not a screen a signed-in person should see.
+  useEffect(() => {
+    try { const raw = localStorage.getItem('ezer_ess_session'); if (raw && JSON.parse(raw)?.employee_id) window.location.replace('/ess') } catch { /* no session */ }
+  }, [])
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')            // identifier (email or emp_code)
   const [password, setPassword] = useState('')      // current password (temp or real)
@@ -63,7 +68,7 @@ export default function ESSLoginPage() {
 
   const finish = (data: { employee_id: string; name: string; token?: string | null }) => {
     localStorage.setItem('ezer_ess_session', JSON.stringify({ employee_id: data.employee_id, name: data.name, email: idValue().toLowerCase(), token: data.token || null }))
-    window.location.href = '/ess-portal'
+    window.location.replace('/ess')   // replace: Back must never return to the login form
   }
 
   const onContinue = async (e: React.FormEvent) => {

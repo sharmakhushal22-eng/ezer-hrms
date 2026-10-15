@@ -351,7 +351,7 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1} opening(s)</div>
                 <div style={{ fontSize: 11.5, color: C.amber }}>Needs your approval · raised by {m.raised_by_name || '—'}{m.raised_by_role ? ` (${m.raised_by_role})` : ''} · {m.urgency || 'Normal'}</div>
               </div>
-              <a href={`/ess-portal?module=recruitment&mrfSub=approvals&mrf=${m.id}`} style={{ ...S.btn, background: C.green, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>Open MRF to review &amp; approve →</a>
+              <a href={`/ess/recruitment/mrf?mrfSub=approvals&mrf=${m.id}`} style={{ ...S.btn, background: C.green, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>Open MRF to review &amp; approve →</a>
             </div>
           </div>
         ))}
@@ -583,7 +583,7 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
   if (!d.isHrHead && d.isHrManager && !focusId) {
     const awaiting = d.awaiting || [], ready = d.ready || []
     if (awaiting.length === 0 && ready.length === 0) return null
-    const goSend = () => { window.location.href = '/ess-portal?module=recruitment&tab=sendoffer' }
+    const goSend = () => { window.location.href = '/ess/recruitment/sendoffer' }
     return (
       <div style={S.card}>
         <div style={S.section}>Offer letters · HR Manager{awaiting.length ? ` · ${awaiting.length} yet to be approved` : ''}{ready.length ? ` · ${ready.length} ready to send` : ''}</div>
@@ -731,7 +731,7 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
                 <button onClick={() => decide('reject')} disabled={busy || !reason.trim()} style={{ ...S.btn, background: C.red, marginLeft: 'auto', opacity: busy || !reason.trim() ? .6 : 1 }}>{busy ? 'Rejecting…' : 'Confirm reject'}</button>
               </>) : (<>
                 <button onClick={() => setMode('reject')} disabled={busy} style={S.btnD}>Reject</button>
-                <a href={`/ess-portal?module=recruitment&tab=hrhead&offer=${open.id}`} style={{ ...S.btnO, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Open in Recruitment</a>
+                <a href={`/ess/recruitment/hrhead?offer=${open.id}`} style={{ ...S.btnO, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Open in Recruitment</a>
                 <button onClick={() => decide('approve')} disabled={busy} style={{ ...S.btn, background: C.green, marginLeft: 'auto', opacity: busy ? .6 : 1 }}>{busy ? 'Approving…' : 'Approve offer'}</button>
               </>)}
             </div>

@@ -55,7 +55,7 @@ export async function notifyDecided(sb: SupabaseClient, requestId: string): Prom
   const scope = await mrfScope(r.mrf_id, companyId)
   const vars = { candidate_name: who, role, ctc_lakh: lakh(r.offered_ctc), mrf_number: (mrf as any)?.mrf_number || '', comment: r.hr_head_comments || '' }
   await Promise.all([...targets].map(id => notifyFromTemplate(id, approved ? 'notify.offer.approved' : 'notify.offer.rejected', vars, {
-    scope, link: approved ? '/ess-portal?module=recruitment&tab=sendoffer' : '/ess-portal?module=recruitment&tab=offerapproval',
+    scope, link: approved ? '/ess/recruitment/sendoffer' : '/ess/recruitment/offerapproval',
   })))
   return { notified: targets.size, outcome: approved ? 'APPROVED' : 'REJECTED' }
 }

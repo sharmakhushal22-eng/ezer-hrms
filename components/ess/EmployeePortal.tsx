@@ -38,6 +38,8 @@ import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
 import { useEssMenu, PendingOnYou, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, MODULE_TABS, type NavEntry } from '@/lib/rms/nav'
+// The address bar as the portal's "where am I": /ess/leave, /ess/recruitment/mrf … (lib/ess/routes.ts)
+import { parseEssPath, essHref, essPath, pushUrl, atEss, type EssLocation, type EssKeys } from '@/lib/ess/routes'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
 import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/components/employees/EmployeeProfileView'
@@ -3602,7 +3604,21 @@ function NotificationBell({ unread, open, onToggle }: { unread: number; open: bo
   )
 }
 
-export default function EmployeePortal({ employeeId, adminMode, onExit }: { employeeId: string; adminMode?: boolean; onExit?: () => void }) {
+/** Every employee screen the portal can show — the SECTIONS items plus the views reached only
+ *  by a link or a button (declaration, directory…). Used to read /ess/<view> from the address. */
+const VIEW_KEYS: Set<string> = new Set([
+  ...SECTIONS.flatMap(s => s.items.map(i => i.k)),
+  'home', 'profile', 'leave', 'inbox', 'vpf', 'nps', 'loans', 'flexi', 'declaration', 'proofs', 'flexiclaims', 'claims', 'attendance',
+  'documents', 'letters', 'team', 'orgchart', 'directory', 'requests', 'approvals', 'raise-mrf', 'exit', 'company', 'reports',
+  'performance', 'social', 'rnr', 'funzone', 'payslip', 'statutory',
+])
+const ESS_KEYS: EssKeys = { views: VIEW_KEYS, modules: new Set(Object.keys(NAV_ENTRY_BY_KEY)) }
+
+export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync }: { employeeId: string; adminMode?: boolean; onExit?: () => void
+  /** This portal owns the address bar: it reads /ess/… on load and on Back/Forward, and pushes a
+   *  history entry on every move. Off for a portal shown inside another screen (admin "login as",
+   *  a manager viewing a team member). */
+  urlSync?: boolean }) {
   const [emp, setEmp] = useState<EmployeeDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('home')
@@ -3679,28 +3695,54 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   //
   // setBellOpen/setMoreOpen stay urgent deliberately: a menu that waits for a
   // heavy section to finish rendering before it closes feels broken.
+  // Every move writes the address (a history entry), so Back returns to the previous screen
+  // and a refresh stays on this one. The sync is skipped when this portal is not at /ess.
+  const sync = !!urlSync && atEss()
   const go = (k: string) => {
     setAdminKey(null); setBellOpen(false); setMoreOpen(false)
     startTransition(() => setView(k))
+    if (sync) pushUrl(essPath({ kind: 'view', view: k, query: '' }))
   }
-  const goAdmin = (k: string) => { setAdminKey(k); setBellOpen(false); setMoreOpen(false); window.scrollTo({ top: 0 }) }
+  const goAdmin = (k: string) => {
+    // Re-picking the open module keeps its tab (and its address); nothing to push.
+    if (sync && k !== adminKey) pushUrl(essPath({ kind: 'module', module: k, tab: null, query: '' }))
+    setAdminKey(k); setBellOpen(false); setMoreOpen(false); window.scrollTo({ top: 0 })
+  }
   // Open a tab inside a module (feature search → "Recruitment › MRF"). Modules read their tab
-  // from the URL when they mount, so the URL is set first and the module remounted.
+  // from the address when they mount, so the address is set first and the module remounted.
   const [adminNonce, setAdminNonce] = useState(0)
   const goModuleTab = (mod: string, tab: string) => {
-    if (typeof window !== 'undefined') window.history.replaceState(null, '', `${window.location.pathname}?module=${encodeURIComponent(mod)}&tab=${encodeURIComponent(tab)}`)
+    if (sync) pushUrl(essPath({ kind: 'module', module: mod, tab, query: '' }))
+    else if (typeof window !== 'undefined') window.history.replaceState(null, '', `${window.location.pathname}?module=${encodeURIComponent(mod)}&tab=${encodeURIComponent(tab)}`)
     setAdminNonce(n => n + 1); goAdmin(mod)
   }
-  // Deep-link: /ess-portal?module=recruitment opens that admin module on load (the module
-  // reads its own further params, e.g. &mrfSub=approvals&mrf=<id> — the MRF approval link).
+  // Land on what the address says — on load, and on Back / Forward (popstate). A legacy
+  // link (/ess?tab=approvals, /ess-portal?module=recruitment&tab=mrf) is read the same way
+  // and rewritten to its canonical path, keeping the module's own params (?offer=, ?mrf=).
+  // adminKeyRef mirrors adminKey for the popstate handler, which is registered once.
+  const adminKeyRef = useRef<string | null>(null)
+  useEffect(() => { adminKeyRef.current = adminKey }, [adminKey])
+  const applyLocation = (loc: EssLocation) => {
+    setBellOpen(false); setMoreOpen(false)
+    if (loc.kind === 'module') {
+      // A different module than the one showing remounts the host so it reads the new path.
+      if (adminKeyRef.current !== loc.module) setAdminNonce(n => n + 1)
+      setAdminKey(loc.module)
+    } else { setAdminKey(null); startTransition(() => setView(loc.view)) }
+  }
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    const mod = params.get('module')
-    if (mod) setAdminKey(mod)
-    // Notification links are "/ess?tab=<view>" (approvals, funzone, …) — open that view.
-    const tab = params.get('tab')
-    if (tab && !mod) go(tab)
+    const loc = parseEssPath(window.location.pathname, window.location.search, ESS_KEYS)
+    if (!urlSync) {
+      // Embedded portal: honour a deep link, never touch the address bar.
+      if (loc.kind === 'module') setAdminKey(loc.module); else if (loc.view !== 'home') go(loc.view)
+      return
+    }
+    applyLocation(loc)
+    if (atEss()) pushUrl(essHref(loc), 'replace')
+    const onPop = () => applyLocation(parseEssPath(window.location.pathname, window.location.search, ESS_KEYS))
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Clicking a section lands on its first item — the section itself is never a
