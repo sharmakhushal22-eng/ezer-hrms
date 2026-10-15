@@ -10,6 +10,7 @@
 // same state and belong under different headings.
 import type { TeClaim, TeExpense, TeTrip, TripDisplayStatus, TripScope, Uuid } from './types.ts'
 import type { Tone } from './format.ts'
+import { onTrip } from './co-traveller.ts'
 
 export type TripGroupId = 'now' | 'next' | 'claim' | 'done'
 
@@ -122,10 +123,23 @@ export function groupTrips<T extends Pick<TeTrip, 'display' | 'start'>>(
     .filter(g => g.trips.length > 0)
 }
 
-/** My own trips of a kind, newest first. `scope` null means every kind. */
+/**
+ * The trips on my list, newest first. `scope` null means every kind.
+ *
+ * MINE, AND THE ONES I WAS TAKEN ON. This used to read `t.emp === me`, which
+ * quietly undid the whole point of adding colleagues to a trip: they were
+ * stored, counted in `pax` and told "each claims their own expenses", and the
+ * trip never appeared on their own screen. The server now sends them the trip
+ * (migration 155); filtering it back out here would leave that invisible.
+ *
+ * They are not separated into another group. A trip you are travelling on is a
+ * trip you are travelling on, and it belongs under "Coming up" with the rest;
+ * what differs is what you may do to it, which the row says and the trip screen
+ * explains.
+ */
 export function myTrips(trips: TeTrip[], me: Uuid, scope: TripScope | null): TeTrip[] {
   return trips
-    .filter(t => t.emp === me && (!scope || t.scope === scope))
+    .filter(t => onTrip(t, me) && (!scope || t.scope === scope))
     .sort((a, b) => (b.start ?? '').localeCompare(a.start ?? ''))
 }
 

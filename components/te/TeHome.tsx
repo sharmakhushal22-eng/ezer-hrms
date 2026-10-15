@@ -397,6 +397,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'trip' ? (
             <TeTripDetail
               tripId={view.id}
+              me={snap.me}
               today={snap.today}
               onBack={() => setView({ name: 'trips' })}
               onChanged={message => { setToast(message); reload() }}

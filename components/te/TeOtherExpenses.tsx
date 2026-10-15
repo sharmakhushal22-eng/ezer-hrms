@@ -17,6 +17,7 @@ import type { ClaimPreview, Snapshot, TeExpense, TeFlag, TeTrip } from '@/lib/te
 import TeIcon from './TeIcon'
 import { errorText, flagClass, plural, rs } from '@/lib/te/format'
 import { linesWaitingInTrips } from '@/lib/te/trips-list'
+import { isCoTraveller } from '@/lib/te/co-traveller'
 
 export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted, onBack, onOpenTrip }: {
   snap: Snapshot
@@ -102,7 +103,12 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
             {lines.length === 0 ? (
               <div className="empty">
                 <b>Nothing waiting</b>
-                {trip ? 'Close the trip’s legs and add any other bills, and they appear here.' : 'Add a bill and it appears here.'}
+                {/* The advice to close the legs is the owner's: a co-traveller
+                    has none on this trip, and telling them to close somebody
+                    else's would send them looking for a button they cannot see. */}
+                {!trip ? 'Add a bill and it appears here.'
+                  : isCoTraveller(trip, snap.me) ? 'Add what you paid for on this trip and it appears here.'
+                  : 'Close the trip’s legs and add any other bills, and they appear here.'}
               </div>
             ) : null}
             {lines.map(x => {

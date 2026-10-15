@@ -13,6 +13,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
+import { coCanBill, coTravellerNote, myClaims, withText } from '@/lib/te/co-traveller'
 import { day, errorText, plural, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
@@ -39,8 +40,12 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onClaim }: {
+export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onClaim }: {
   tripId: Uuid
+  /** The viewer. A trip can now be opened by somebody who did not plan it, so
+   *  "whose claim is this" and "whose trip is this" are no longer the same
+   *  question and the screen has to be told which one it is looking at. */
+  me: Uuid
   today: string
   onBack: () => void
   onChanged: (message: string) => void
@@ -103,6 +108,23 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
   // explicit that the owner is excluded. This is the employee's own screen, so
   // the guard for cancelling, editing and answering is `can.own`.
   const mine = detail.can.own
+  // Taken along on somebody else's trip. `can.own` is already false for them,
+  // so every owner-only action below hides itself; what is missing is the part
+  // the server cannot supply — saying why the screen looks like that, and
+  // leaving open the one thing that IS theirs: their own bills.
+  const note = coTravellerNote(t, me, detail.employee.name)
+  // "With Asha Rao and 2 others" — who else is on it, whoever is reading.
+  const withWho = withText(t, me)
+  const canBill = coCanBill(t, me)
+  // detail.expenses is every line on the trip, the planner's included, so it
+  // has to be narrowed to mine before anything is counted or added up.
+  const myLines = canBill ? detail.expenses.filter(x => x.emp === me && x.status === 'UNCLAIMED') : []
+  // MY claims on this trip, not everybody's. te_trip_detail returns every
+  // claim against the trip, and now that two people can each claim one, "a
+  // claim exists" stopped meaning "my claim exists". Reading it unscoped would
+  // have hidden my own claim button because a colleague had already claimed,
+  // and shown me what they were paid.
+  const claims = myClaims(detail.claims, me)
   // Legs still owing something before the trip can be claimed.
   const openLegs = legs.filter(l => l.status !== 'SUBMITTED' && l.status !== 'SKIPPED' && l.status !== 'CANCELLED')
   // The next thing to deal with: a leg in progress, one waiting for its report,
@@ -145,7 +167,11 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
               {t.start ? (t.start === t.end ? day(t.start) : `${day(t.start)} to ${day(t.end)}`) : 'No dates yet'}
               {t.purpose ? ` · ${t.purpose}` : ''}{t.project ? ` · ${t.project}` : ''}
             </p>
-            {t.pax > 1 ? <p className="small muted">{t.pax} people travel. Each claims their own expenses.</p> : null}
+            {t.pax > 1 ? (
+              <p className="small muted">
+                {t.pax} people travel. Each claims their own expenses.{withWho ? ` ${withWho}.` : ''}
+              </p>
+            ) : null}
           </div>
           <div className="row tight">
             <span className={`chip plain sc sc-${t.scope}`}><TeIcon name={t.scope} size="sm" />{SCOPE_WORD[t.scope]}</span>
@@ -155,6 +181,17 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           </div>
         </div>
       </div>
+
+      {/* ── you did not plan this one; you are on it ── */}
+      {note ? (
+        <div className="flag info">
+          <TeIcon name="people" />
+          <div className="tx">
+            <b>You are travelling on this trip</b>
+            <p>{note}</p>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
@@ -319,12 +356,34 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
       ) : null}
 
       {/* ── back, every leg closed: the claim is what is left ── (65) */}
-      {mine && !openLegs.length && (st === 'COMPLETED' || isDraftPostFacto) && !detail.claims.some(c => c.status !== 'CANCELLED' && c.status !== 'REJECTED') ? (
+      {mine && !openLegs.length && (st === 'COMPLETED' || isDraftPostFacto) && !claims.some(c => c.status !== 'CANCELLED' && c.status !== 'REJECTED') ? (
         <div className="card">
           <div className="ch"><h3>Claim for this trip</h3><span className="chip plain t-brand">Every leg is closed</span></div>
           <p className="small muted">Check what each line is worth, add any other bills, and send it.</p>
           <button type="button" className="btn pri wide" onClick={() => onClaim(detail)}>
             Review and submit the claim<TeIcon name="go" size="sm" />
+          </button>
+        </div>
+      ) : null}
+
+      {/* ── a co-traveller's own bills ── the one thing on this trip that is
+          theirs. Not gated on the planner's journeys the way the owner's card
+          above is: those legs are the planner's to close, and a cab fare
+          should not wait on somebody else's GPS report. The server agrees —
+          te_claim_submit now counts only the claimant's own open journeys. */}
+      {canBill ? (
+        <div className="card">
+          <div className="ch">
+            <h3>Your bills on this trip</h3>
+            {myLines.length ? <span className="chip plain t-brand">{plural(myLines.length, 'line')} saved</span> : null}
+          </div>
+          <p className="small muted">
+            {myLines.length
+              ? `What you spent on this trip, ${rs(myLines.reduce((a, x) => a + (Number(x.claimed) || 0), 0))} so far. It goes in a claim of your own, not ${detail.employee.name}’s.`
+              : `Your own cab, meals and anything else you paid for on this trip. They go in a claim of your own, not ${detail.employee.name}’s.`}
+          </p>
+          <button type="button" className="btn pri wide" onClick={() => onClaim(detail)}>
+            {myLines.length ? 'Add a bill, or send your claim' : 'Add your first bill'}<TeIcon name="go" size="sm" />
           </button>
         </div>
       ) : null}
@@ -384,7 +443,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
         </div>
       ) : null}
 
-      {detail.claims.length ? detail.claims.map(c => (
+      {claims.length ? claims.map(c => (
         <div key={c.id} className="card">
           <div className="ch"><h3>Claim <span className="mono muted">{c.no}</span></h3><span className="chip plain">{c.status.replace(/_/g, ' ').toLowerCase()}</span></div>
           <dl className="kv">
