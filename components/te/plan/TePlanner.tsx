@@ -309,7 +309,7 @@ function summary(preview: TripPreview | null, pax: number, planning: boolean) {
   const total = preview?.estimateTotal ?? 0
   return (
     <>
-      <b>{plural(legs.length, 'leg')}</b>
+      <b>{plural(legs.length, 'journey')}</b>
       {` · ${km} km`}
       {flights ? ` + ${plural(flights, 'flight')}` : ''}
       {planning && total ? <> · <b>{rs(total)}</b> est.</> : null}

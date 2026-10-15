@@ -13,15 +13,33 @@ import { te, TeApiError } from '@/lib/te/client'
 import type { ExpenseInput, ExpensePreview, Snapshot, TeExpense, TeUploadedFile, Uuid } from '@/lib/te/types'
 import TeSheet from './TeSheet'
 import TeIcon from './TeIcon'
-import { errorText, flagClass, rs } from '@/lib/te/format'
+import { errorText, flagClass, plural, rs } from '@/lib/te/format'
 
 const PAY_MODES = ['UPI', 'Personal card', 'Cash']
+// The engine's own ladders (AIR and RAIL in te-engine.js). The order is the
+// entitlement order, so offering anything else would fail a check the employee
+// cannot see the rule for.
+const AIR_CLASSES = ['Economy', 'Premium Economy', 'Business']
+const RAIL_CLASSES = ['SL', '3A', '2A', '1A']
 
+/**
+ * A saved line back into the form.
+ *
+ * EVERY FIELD THE FORM CAN SET HAS TO COME BACK. This dropped checkIn,
+ * checkOut, pnr, cls and shared, which the database stores perfectly well
+ * (te_expenses.check_in, te_expense_save writes it, te_expense_json returns
+ * it). The effect was only visible on reopening a saved line: the dates were
+ * blank, so A1 fired "Missing: check-in and check-out" on a line that had
+ * them, and the hotel could not be re-saved without typing them again. The
+ * same would have lost a ticket's PNR.
+ */
 function fromLine(x: TeExpense): ExpenseInput {
   return {
     id: x.id, tripId: x.tripId, cat: x.cat, date: x.date, merchant: x.merchant, billNo: x.billNo, gstin: x.gstin,
     bill: x.bill, claimed: x.claimed, payMode: x.payMode || 'UPI', desc: x.desc, reason: x.reason,
     wantException: x.wantException, client: x.client, attendees: x.attendees ?? undefined,
+    checkIn: x.checkIn ?? undefined, checkOut: x.checkOut ?? undefined,
+    pnr: x.pnr, cls: x.cls, shared: x.shared,
   }
 }
 
@@ -62,6 +80,14 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
   // `files` is sent only when a new bill was attached: leaving it out keeps the bill a saved line already has.
   const input = useMemo<ExpenseInput>(() => (file ? { ...f, files: [file] } : f), [f, file])
   const ready = !!f.cat && !!f.date && Number(f.bill) > 0
+  // Nights between check-in and check-out, for the hint under check-out. The
+  // engine counts the same way when it works out the limit, so the number
+  // shown here is the number the money is measured against.
+  const nights = useMemo(() => {
+    if (!f.checkIn || !f.checkOut) return 0
+    const n = Math.round((new Date(f.checkOut).getTime() - new Date(f.checkIn).getTime()) / 864e5)
+    return n > 0 ? n : 0
+  }, [f.checkIn, f.checkOut])
 
   // The live check. State is set only when the answer arrives, and a late answer to an older question is dropped.
   useEffect(() => {
@@ -170,6 +196,39 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
           {f.cat === 'client' ? <>
             <label className="fld"><span>Client company</span><input type="text" value={f.client ?? ''} onChange={e => set('client', e.target.value)} /></label>
             <label className="fld"><span>Number of people</span><input type="number" min={1} value={f.attendees ?? ''} onChange={e => set('attendees', e.target.value)} /></label>
+          </> : null}
+          {/* A HOTEL BILL CANNOT BE SAVED WITHOUT THESE. The engine's A1 check
+              is `cat === 'hotel' && (!checkIn || !checkOut)` and it blocks, so
+              with no fields here the category was impossible to use: the form
+              said "Missing: check-in and check-out" and offered nowhere to put
+              them. The dates are not decoration either — the limit is per
+              NIGHT (limit × nights × pax when the room is shared) and C6 uses
+              them to spot two overlapping stays. */}
+          {f.cat === 'hotel' ? <>
+            <label className="fld"><span>Check in</span>
+              <input type="date" value={f.checkIn ?? ''} onChange={e => set('checkIn', e.target.value)} />
+            </label>
+            <label className="fld"><span>Check out</span>
+              <input type="date" value={f.checkOut ?? ''} min={f.checkIn || undefined} onChange={e => set('checkOut', e.target.value)} />
+              <small>{nights > 0 ? `${plural(nights, 'night')}. The limit is per night.` : 'The limit is counted per night.'}</small>
+            </label>
+            <label className="check small">
+              <input type="checkbox" checked={!!f.shared} onChange={e => set('shared', e.target.checked)} />
+              <span>A shared room. More than one of you stayed in it, so the limit covers all of you rather than one person.</span>
+            </label>
+          </> : null}
+          {/* Same story for a ticket: A1 wants a PNR and there was no field. */}
+          {f.cat === 'air' || f.cat === 'train' ? <>
+            <label className="fld"><span>PNR</span>
+              <input type="text" autoCapitalize="characters" value={f.pnr ?? ''} onChange={e => set('pnr', e.target.value.toUpperCase())} />
+            </label>
+            <label className="fld"><span>Class</span>
+              <select value={f.cls ?? ''} onChange={e => set('cls', e.target.value)}>
+                <option value="">Not stated</option>
+                {(f.cat === 'air' ? AIR_CLASSES : RAIL_CLASSES).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <small>Checked against what your grade allows.</small>
+            </label>
           </> : null}
           <label className="fld"><span>Paid by</span>
             <select value={f.payMode ?? 'UPI'} onChange={e => set('payMode', e.target.value)}>{PAY_MODES.map(m => <option key={m} value={m}>{m}</option>)}</select>
