@@ -18,6 +18,8 @@ import { TODAY_RPC } from '@/lib/today/schema';
 import { essRoute } from '@/lib/ess/session';
 import { buildPending } from '@/lib/ess/pending';
 import { ledgerFor } from '@/lib/leave/ledger';
+import { punchState } from '@/lib/attendance/punch';
+import { rmsServiceClient as sb } from '@/lib/rms/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +67,44 @@ export async function GET(req: NextRequest) {
     // keep the RPC's figure rather than blank the tile
   }
 
+  // Punch state, from the punches themselves (lib/attendance/punch.ts). The RPC
+  // finds today's record with `current_date`, which is UTC: from midnight to
+  // 05:30 IST it reported yesterday, and the dial offered Punch In again.
+  // open / last_in say whether the employee is at work right now — the record
+  // alone cannot, once somebody has punched out and back in.
+  try {
+    const st = await punchState(me.id);
+    payload.today = {
+      punch_in: st.first_in, punch_out: st.open ? null : st.last_out,
+      open: st.open, last_in: st.last_in, work_mode: null,
+    };
+  } catch {
+    // keep the RPC's answer
+  }
+
+  // The week strip hardcoded Saturday and Sunday as off. These companies work
+  // Saturdays; the configured weekly offs and the published holiday calendar
+  // decide it instead, as they do on the Attendance tab.
+  try {
+    const week = (payload.week as { date: string; is_off: boolean }[] | undefined) || [];
+    if (week.length) {
+      const day = (d: string) => String(d).slice(0, 10);
+      const [offR, holR] = await Promise.all([
+        sb.rpc('resolve_weekly_offs', { p_employee_id: me.id, p_from: day(week[0].date), p_to: day(week[week.length - 1].date) }),
+        sb.rpc('resolve_holidays', { p_employee_id: me.id }),
+      ]);
+      if (!offR.error && !holR.error) {
+        const off = new Set<string>([
+          ...((offR.data || []) as { off_date: string }[]).map(r => String(r.off_date)),
+          ...((holR.data || []) as { holiday_date: string }[]).map(r => String(r.holiday_date)),
+        ]);
+        payload.week = week.map(d => ({ ...d, is_off: off.has(day(d.date)) }));
+      }
+    }
+  } catch {
+    // keep the RPC's answer
+  }
+
   // Approvals, from the app's own builder. A failure here must not blank the
   // whole tab: the rest of Today is unrelated, so it degrades to action items.
   try {
@@ -87,5 +127,8 @@ export async function GET(req: NextRequest) {
     // action items alone; the card still renders
   }
 
-  return NextResponse.json(payload, { headers: { 'Cache-Control': 'private, max-age=30' } });
+  // Never cached. This was private, max-age=30: punch, open another tab, come
+  // back within half a minute and the browser served the pre-punch payload —
+  // so Punch In was offered, and pressed, again.
+  return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
 }

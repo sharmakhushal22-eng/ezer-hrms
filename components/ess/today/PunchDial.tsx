@@ -7,6 +7,13 @@ import { authHeaders } from '@/lib/auth-headers';
 // Two buttons, not one toggle: a toggle makes the second tap of a nervous thumb a punch-out
 // three seconds after the punch-in. Each action is its own button and only the one that
 // applies is live; the other is dimmed with a line saying why.
+//
+// WHICH ONE IS LIVE IS THE SERVER'S ANSWER, NOT THIS COMPONENT'S MEMORY. The dial used to
+// copy data.today into its own state once, on mount. Anything that brought it back with
+// stale data — a cached /api/ess/today, the UTC "today" in the RPC — offered Punch In again
+// after a punch. It now reads data.today (owned by Today, refreshed whenever the tab comes
+// back into view) and the server refuses a second IN outright; a refusal hands back the
+// real state, which replaces the stale one.
 import { useEffect, useRef, useState } from 'react';
 import type { Prefs, TodayPayload } from '@/lib/today/types';
 import { fmtClock, two } from '@/lib/today/format';
@@ -18,17 +25,26 @@ type Props = {
   data: TodayPayload; prefs: Prefs;
   onToast: (m: string) => void;
   onPunched: (kind: 'in' | 'out', at: Date) => void;
+  /** The server's punch state after any punch attempt — success or refusal. */
+  onState: (state: PunchStateLite) => void;
   /** Full-viewport confetti canvas, owned by Today so it sits OUTSIDE the
    *  container-query wrapper — a fixed element inside that wrapper anchors to
    *  the wrapper rather than to the screen. */
   confettiRef: React.RefObject<HTMLCanvasElement | null>;
 };
-export default function PunchDial({ data, prefs, onToast, onPunched, confettiRef }: Props) {
+/** The subset of lib/attendance/punch.ts PunchState this screen uses. */
+export interface PunchStateLite { open: boolean; first_in: string | null; last_in: string | null; last_out: string | null }
+
+export default function PunchDial({ data, prefs, onToast, onPunched, onState, confettiRef }: Props) {
   const reduce = useReducedMotion();
   const mounted = useMounted(350);
   const now = useNow(15000);
-  const [inAt, setInAt] = useState<Date | null>(data.today?.punch_in && !data.today.punch_out ? new Date(data.today.punch_in) : null);
-  const [outAt, setOutAt] = useState<Date | null>(data.today?.punch_out ? new Date(data.today.punch_out) : null);
+  // Derived from data.today every render. `open` is authoritative when present; an
+  // older payload without it falls back to "an IN and no OUT".
+  const t0 = data.today;
+  const isOpen = t0?.open ?? !!(t0?.punch_in && !t0?.punch_out);
+  const inAt = isOpen && t0?.punch_in ? new Date(t0.punch_in) : null;
+  const outAt = !isOpen && t0?.punch_out ? new Date(t0.punch_out) : null;
   const [elapsed, setElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pulseKey, setPulseKey] = useState(0);
@@ -42,11 +58,14 @@ export default function PunchDial({ data, prefs, onToast, onPunched, confettiRef
   const ang = p * Math.PI * 2;
 
   // running timer while punched in
+  const inMs = inAt ? inAt.getTime() : null;
   useEffect(() => {
-    if (!inAt) return;
-    const tick = () => setElapsed(Date.now() - inAt.getTime());
-    tick(); const id = setInterval(tick, 1000); return () => clearInterval(id);
-  }, [inAt]);
+    if (inMs == null) return;
+    const tick = () => setElapsed(Date.now() - inMs);
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, 1000);
+    return () => { clearTimeout(first); clearInterval(id); };
+  }, [inMs]);
 
   async function punch(kind: 'in' | 'out') {
     if (busy) return;
@@ -55,12 +74,15 @@ export default function PunchDial({ data, prefs, onToast, onPunched, confettiRef
     if (kind === 'out' && !inAt) { onToast('Punch in first'); return; }
     setBusy(true);
     try {
-      const res = await fetch('/api/ess/punch', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ kind }) });
+      const res = await fetch('/api/ess/punch', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ kind }), cache: 'no-store' });
       const j = await res.json();
+      // A refusal (already in / nothing to close) carries the real state: adopt it,
+      // so the right button is live without a reload.
+      if (j.state) onState(j.state as PunchStateLite);
       if (!res.ok) throw new Error(j.error || 'Punch failed');
       const at = new Date(j.at);
-      if (kind === 'in') { setInAt(at); setOutAt(null); setPulseKey(k => k + 1); confetti(); onToast(`Punched in at ${fmtClock(at, prefs.time_format)}`); }
-      else { const ms = at.getTime() - inAt!.getTime(); setOutAt(at); setInAt(null); onToast(`Punched out · ${Math.floor(ms / 3.6e6)}h ${two(Math.floor(ms / 6e4) % 60)}m logged`); }
+      if (kind === 'in') { setPulseKey(k => k + 1); confetti(); onToast(`Punched in at ${fmtClock(at, prefs.time_format)}`); }
+      else { const ms = at.getTime() - inAt!.getTime(); onToast(`Punched out · ${Math.floor(ms / 3.6e6)}h ${two(Math.floor(ms / 6e4) % 60)}m logged`); }
       onPunched(kind, at);
     } catch (err) { onToast((err as Error).message); } finally { setBusy(false); }
   }
