@@ -43,6 +43,12 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
     () => snap.cfg.cats.filter(c => c.on && c.id !== 'mileage' && (tripId ? true : !c.needsTrip)),
     [snap, tripId],
   )
+  // Which trip this bill belongs to, for the heading. A trip not in the
+  // snapshot still gets a form; it just loses the name.
+  const tripName = useMemo(
+    () => (tripId ? snap.trips.find(t => t.id === tripId)?.name ?? 'This trip' : ''),
+    [snap, tripId],
+  )
   const [f, setF] = useState<ExpenseInput>(() => (
     line ? fromLine(line) : { cat: '', date: snap.today, bill: '', claimed: '', payMode: 'UPI', ...(tripId ? { tripId } : {}) }
   ))
@@ -115,8 +121,13 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
   return (
     <TeSheet
       title={line ? 'Change this expense' : 'Add an expense'}
-      crumb="Other expense › Add a bill"
-      lead="No travel. It is saved under Other expenses until you submit your claim."
+      // The same form serves a bill on a trip and a bill with no travel, and
+      // it used to say "No travel" either way — which read as a contradiction
+      // on the trip screen, where the hotel and meal categories only exist.
+      crumb={tripName ? `${tripName} › Add a bill` : 'Other expense › Add a bill'}
+      lead={tripName
+        ? `Saved against ${tripName} and claimed with that trip, not with your monthly expenses.`
+        : 'No travel. It is saved under Other expenses until you submit your claim.'}
       onClose={onClose}
       footer={<>
         {line ? <button type="button" className="btn dan" disabled={!!busy} onClick={discard}>Remove</button> : null}

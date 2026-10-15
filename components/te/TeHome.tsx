@@ -405,6 +405,7 @@ export default function TeHome({ initialClaimId, onExit }: {
               onOpenClaim={id => setView({ name: 'claim', id })}
               onOpenLeg={leg => setView({ name: 'leg', tripId: view.id, leg })}
               onAddLeg={detail => setSheet({ name: 'addLeg', detail })}
+              onAddBill={tripId => setSheet({ name: 'expense', tripId })}
               onClaim={detail => setView({ name: 'tripClaim', trip: detail.trip })}
             />
           ) : null}

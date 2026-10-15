@@ -104,16 +104,24 @@ export function coTravellerNote(trip: TripWho, me: Uuid, plannerName: string): s
 }
 
 /**
- * Whether it is worth offering a co-traveller the "add my bills" door.
+ * Whether to offer the "add a bill" door on a trip, to whoever is looking.
  *
- * te_expense_save takes a bill in any trip state, so this is only about not
- * offering something pointless: a trip that was called off or refused is not
- * going to be spent on. CLAIMED and CLOSED stay open because a bill that turns
- * up late is exactly what a supplementary claim is for.
+ * ANYONE ON THE TRIP, AND WHILE THEY ARE ON IT. This used to ask only about
+ * co-travellers, which left the hole it was written beside: the owner's one
+ * route to a trip's bills was a card that appears when the trip is COMPLETED
+ * and every journey is closed. So during the trip — in the hotel, paying for
+ * dinner, which is exactly when a bill exists — there was no way to add one.
+ * Hotel and Meals are `needsTrip` categories and appear nowhere else, so those
+ * two were unreachable in the whole product.
+ *
+ * te_expense_save takes a bill whatever state the trip is in, so this is only
+ * about not offering something pointless: a trip that was called off or
+ * refused is not going to be spent on. CLAIMED and CLOSED stay open, because a
+ * bill that turns up late is exactly what a supplementary claim is for.
  */
 const SPENT_NOTHING = ['CANCELLED', 'REJECTED']
-export function coCanBill(trip: TripWho & { status: string }, me: Uuid): boolean {
-  return isCoTraveller(trip, me) && !SPENT_NOTHING.includes(trip.status)
+export function canBillTrip(trip: TripWho & { status: string }, me: Uuid): boolean {
+  return onTrip(trip, me) && !SPENT_NOTHING.includes(trip.status)
 }
 
 /**

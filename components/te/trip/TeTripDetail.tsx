@@ -13,7 +13,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
-import { coCanBill, coTravellerNote, myClaims, withText } from '@/lib/te/co-traveller'
+import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
 import { day, errorText, plural, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
@@ -40,7 +40,7 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onClaim }: {
+export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
   tripId: Uuid
   /** The viewer. A trip can now be opened by somebody who did not plan it, so
    *  "whose claim is this" and "whose trip is this" are no longer the same
@@ -58,6 +58,10 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
   onOpenLeg: (leg: TeLeg) => void
   /** Add a leg the plan did not have. Only while the trip is under way. */
   onAddLeg: (detail: TripDetail) => void
+  /** Open the bill form against this trip. Straight to the form rather than
+   *  via the claim screen: a hotel or a meal is a trip-only category, and this
+   *  is the only place in the product either can be entered. */
+  onAddBill: (tripId: Uuid) => void
   /** The claim for this trip: its lines, what they are worth, and submit. */
   onClaim: (detail: TripDetail) => void
 }) {
@@ -113,11 +117,12 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
   // the server cannot supply — saying why the screen looks like that, and
   // leaving open the one thing that IS theirs: their own bills.
   const note = coTravellerNote(t, me, detail.employee.name)
+  const riding = isCoTraveller(t, me)
   // "With Asha Rao and 2 others" — who else is on it, whoever is reading.
   const withWho = withText(t, me)
-  const canBill = coCanBill(t, me)
-  // detail.expenses is every line on the trip, the planner's included, so it
-  // has to be narrowed to mine before anything is counted or added up.
+  const canBill = canBillTrip(t, me)
+  // detail.expenses is every line on the trip, everyone's, so it has to be
+  // narrowed to mine before anything is counted or added up.
   const myLines = canBill ? detail.expenses.filter(x => x.emp === me && x.status === 'UNCLAIMED') : []
   // MY claims on this trip, not everybody's. te_trip_detail returns every
   // claim against the trip, and now that two people can each claim one, "a
@@ -366,25 +371,42 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
         </div>
       ) : null}
 
-      {/* ── a co-traveller's own bills ── the one thing on this trip that is
-          theirs. Not gated on the planner's journeys the way the owner's card
-          above is: those legs are the planner's to close, and a cab fare
-          should not wait on somebody else's GPS report. The server agrees —
-          te_claim_submit now counts only the claimant's own open journeys. */}
+      {/* ── what you spent on this trip ──
+          THE ONLY DOOR TO A HOTEL OR A FOOD BILL. Both categories are
+          `needsTrip`, so the Other-expenses form filters them out, and until
+          this card existed the only way into a trip's bills was the claim card
+          above — which appears once the trip is COMPLETED and every journey is
+          closed. That is the one moment you are NOT spending. A hotel bill
+          exists on the night, not a week later, and the two categories that
+          need a trip could not be reached anywhere in the product.
+
+          So it is shown to anyone on the trip, for as long as the trip could
+          still be spent on. It is not gated on the journeys: for the owner a
+          dinner does not wait on a GPS report, and for a co-traveller those
+          journeys are the planner's to close anyway. The server agrees —
+          te_expense_save takes a bill in any state, and te_claim_submit counts
+          only the claimant's own open journeys. */}
       {canBill ? (
         <div className="card">
           <div className="ch">
-            <h3>Your bills on this trip</h3>
-            {myLines.length ? <span className="chip plain t-brand">{plural(myLines.length, 'line')} saved</span> : null}
+            <h3>What you spent on this trip</h3>
+            {myLines.length ? <span className="chip plain t-brand">{plural(myLines.length, 'bill')} saved</span> : null}
           </div>
           <p className="small muted">
             {myLines.length
-              ? `What you spent on this trip, ${rs(myLines.reduce((a, x) => a + (Number(x.claimed) || 0), 0))} so far. It goes in a claim of your own, not ${detail.employee.name}’s.`
-              : `Your own cab, meals and anything else you paid for on this trip. They go in a claim of your own, not ${detail.employee.name}’s.`}
+              ? `${rs(myLines.reduce((a, x) => a + (Number(x.claimed) || 0), 0))} saved so far${riding ? `, in a claim of your own rather than ${detail.employee.name}’s` : ''}. Add the rest as you go.`
+              : `The hotel, food, cabs and anything else you paid for${riding ? `. They go in a claim of your own, not ${detail.employee.name}’s` : '. Add them as you go rather than from memory afterwards'}.`}
           </p>
-          <button type="button" className="btn pri wide" onClick={() => onClaim(detail)}>
-            {myLines.length ? 'Add a bill, or send your claim' : 'Add your first bill'}<TeIcon name="go" size="sm" />
-          </button>
+          <div className="row tight">
+            <button type="button" className="btn pri grow" onClick={() => onAddBill(t.id)}>
+              <TeIcon name="plus" size="sm" />Add a bill
+            </button>
+            {myLines.length ? (
+              <button type="button" className="btn" onClick={() => onClaim(detail)}>
+                See all {myLines.length}<TeIcon name="go" size="sm" />
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

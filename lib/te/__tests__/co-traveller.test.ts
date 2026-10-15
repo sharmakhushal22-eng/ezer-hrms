@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  coCanBill, coTravellerNote, isCoTraveller, isShared, myClaims, onTrip, otherNames, tripRole, withText,
+  canBillTrip, coTravellerNote, isCoTraveller, isShared, myClaims, onTrip, otherNames, tripRole, withText,
 } from '../co-traveller.ts'
 import type { TeTripPerson, Uuid } from '../types.ts'
 
@@ -91,16 +91,28 @@ test('coTravellerNote: a missing planner name still reads as a sentence', () => 
   assert.ok(note && note.startsWith('A colleague planned this trip'))
 })
 
-test('coCanBill: yes on a live trip, no on one called off', () => {
-  assert.equal(coCanBill({ ...taken, status: 'APPROVED' }, ME), true)
-  assert.equal(coCanBill({ ...taken, status: 'PENDING_APPROVAL' }, ME), true)
+test('canBillTrip: yes on a live trip, no on one called off', () => {
+  assert.equal(canBillTrip({ ...taken, status: 'APPROVED' }, ME), true)
+  assert.equal(canBillTrip({ ...taken, status: 'PENDING_APPROVAL' }, ME), true)
   // A bill that turns up after the claim went is what a supplementary claim is for.
-  assert.equal(coCanBill({ ...taken, status: 'CLAIMED' }, ME), true)
-  assert.equal(coCanBill({ ...taken, status: 'CLOSED' }, ME), true)
-  assert.equal(coCanBill({ ...taken, status: 'CANCELLED' }, ME), false)
-  assert.equal(coCanBill({ ...taken, status: 'REJECTED' }, ME), false)
-  // The owner has their own route to a claim; this door is not for them.
-  assert.equal(coCanBill({ ...own, status: 'APPROVED' }, ME), false)
+  assert.equal(canBillTrip({ ...taken, status: 'CLAIMED' }, ME), true)
+  assert.equal(canBillTrip({ ...taken, status: 'CLOSED' }, ME), true)
+  assert.equal(canBillTrip({ ...taken, status: 'CANCELLED' }, ME), false)
+  assert.equal(canBillTrip({ ...taken, status: 'REJECTED' }, ME), false)
+})
+
+test('canBillTrip: the OWNER can bill their own trip while they are on it', () => {
+  // The bug this replaced: the owner's only door to a trip's bills opened when
+  // the trip was COMPLETED with every journey closed, so there was no way to
+  // record a hotel or a dinner while actually travelling — and those two
+  // categories need a trip, so they appeared nowhere at all.
+  assert.equal(canBillTrip({ ...own, status: 'APPROVED' }, ME), true)
+  assert.equal(canBillTrip({ ...own, status: 'ONGOING' }, ME), true)
+  assert.equal(canBillTrip({ ...own, status: 'CANCELLED' }, ME), false)
+})
+
+test('canBillTrip: somebody with nothing to do with the trip cannot', () => {
+  assert.equal(canBillTrip({ ...theirs, status: 'APPROVED' }, ME), false)
 })
 
 test('myClaims: a colleague’s claim on the same trip is not mine', () => {
