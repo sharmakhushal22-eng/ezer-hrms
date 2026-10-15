@@ -17,7 +17,7 @@ const RULES: { k: string; label: string; unit: string; note: string }[] = [
   { k: 'minAccuracy', label: 'Ignore a fix worse than', unit: 'metres', note: 'A fix guessed from wifi can be a kilometre out and makes a journey look like it teleported.' },
   { k: 'gapMin', label: 'Call it a gap after', unit: 'minutes of silence', note: 'A phone browser stops reading location when the screen locks, so a short threshold flags ordinary pocketed phones.' },
   { k: 'maxSpeed', label: 'Call it an impossible jump above', unit: 'km/h', note: 'Two fixes further apart than this speed allows cannot both be right.' },
-  { k: 'startRadius', label: 'Started away from the place if beyond', unit: 'metres', note: 'How far from where the leg should begin counts as somewhere else.' },
+  { k: 'startRadius', label: 'Started away from the place if beyond', unit: 'metres', note: 'How far from where the journey should begin counts as somewhere else.' },
   { k: 'endRadius', label: 'Ended away from the place if beyond', unit: 'metres', note: 'The same, at the other end.' },
   { k: 'localMaxKm', label: 'A local trip reaches at most', unit: 'km', note: 'Beyond this the trip has to be planned as domestic.' },
   { k: 'preApproveKm', label: 'A local trip needs no approval up to', unit: 'km', note: 'Short local travel goes ahead without anybody signing it off.' },
@@ -26,7 +26,7 @@ const RULES: { k: string; label: string; unit: string; note: string }[] = [
 
 const TOGGLES: { k: string; label: string; note: string }[] = [
   { k: 'manualAllowed', label: 'Allow local legs without GPS', note: 'Off means a local trip is only ever paid on a recorded journey.' },
-  { k: 'gpsRequired', label: 'Require GPS on a leg', note: 'Off lets a leg be filed with no recording at all.' },
+  { k: 'gpsRequired', label: 'Require GPS on a journey', note: 'Off lets a journey be filed with no recording at all.' },
   { k: 'intlTrack', label: 'Track continuously abroad', note: 'Off uses check-ins at each end instead, which uses less data roaming.' },
 ]
 

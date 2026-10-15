@@ -88,7 +88,7 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
           <h1>{trip ? `Claim for ${trip.name}` : 'Other expenses'}</h1>
           <p>
             {trip
-              ? 'Every bill and every leg of this trip, in one claim. Check what each line is worth, then send it.'
+              ? 'Every bill and every journey of this trip, in one claim. Check what each line is worth, then send it.'
               : 'Client meals, courier, parking, printing and other work spends with no travel. Saved lines wait here until you submit them together as one claim.'}
           </p>
         </div>

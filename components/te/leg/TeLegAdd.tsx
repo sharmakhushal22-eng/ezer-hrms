@@ -43,7 +43,7 @@ export default function TeLegAdd({ snap, detail, onClose, onAdded }: {
     setBusy(true); setError('')
     try {
       const r = await te.legAdd(trip.id, { from, to, mode, vehicleId: vehicleId || null, why: why.trim() })
-      onAdded(r.leg_id, `Leg ${r.leg_no} added. Start it when you set off.`)
+      onAdded(r.leg_id, `Journey ${r.leg_no} added. Start it when you set off.`)
     } catch (e) {
       setError(errorText(e)); setBusy(false)
     }
@@ -54,7 +54,7 @@ export default function TeLegAdd({ snap, detail, onClose, onAdded }: {
     return (
       <TePlacePicker
         snap={snap}
-        target={{ kind: 'point', index: 0, title: side === 'from' ? 'Where the leg starts' : 'Where the leg goes' } as PickTarget}
+        target={{ kind: 'point', index: 0, title: side === 'from' ? 'Where the journey starts' : 'Where the journey goes' } as PickTarget}
         onCancel={() => setPicking(null)}
         onChosen={id => { setPicking(null); if (side === 'from') setFrom(id); else setTo(id); setError('') }}
       />
@@ -64,14 +64,14 @@ export default function TeLegAdd({ snap, detail, onClose, onAdded }: {
   return (
     <TeSheet
       wide
-      title="Add a leg"
+      title="Add a journey"
       lead="A journey on this trip that was not in the plan."
       onClose={onClose}
       footer={
         <>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="button" className="btn pri" disabled={!ready || busy} onClick={add}>
-            {busy ? 'Adding…' : 'Add the leg'}
+            {busy ? 'Adding…' : 'Add the journey'}
           </button>
         </>
       }

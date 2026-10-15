@@ -52,8 +52,8 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
   return (
     <>
       <div className="sec">
-        <h4>Legs</h4>
-        <p className="small muted">Each leg is tracked and paid on its own: GPS on the road, check-ins at airports and abroad.</p>
+        <h4>Journeys</h4>
+        <p className="small muted">Each journey is tracked and paid on its own: GPS on the road, check-ins at airports and abroad.</p>
         {legs.length ? (
           <>
             <TeTripMap

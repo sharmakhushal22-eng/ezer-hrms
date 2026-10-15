@@ -109,7 +109,7 @@ export default function TeStartNow({ snap, onClose, onStarted }: {
       if (!first) { onStarted(saved.trip_id, '', `${saved.trip_no} created, but it has no legs to start.`); return }
       const fix = await currentFix()
       await te.legStart(first.id, fix)
-      onStarted(saved.trip_id, first.id, `${saved.trip_no} started. Keep the leg screen open while you travel.`)
+      onStarted(saved.trip_id, first.id, `${saved.trip_no} started. Keep the journey screen open while you travel.`)
     } catch (e) {
       setError(errorText(e)); setBusy('')
     }
@@ -150,7 +150,7 @@ export default function TeStartNow({ snap, onClose, onStarted }: {
     <TeSheet
       wide
       title="Start a local trip"
-      lead="Your phone records each leg from now until you are back."
+      lead="Your phone records each journey from now until you are back."
       crumb={<span className="fpath"><span className="fstep">Step 3 of 3</span>Local trip<span className="muted"> › </span>Start now</span>}
       onClose={onClose}
       footer={footer}

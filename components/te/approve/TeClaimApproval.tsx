@@ -391,12 +391,12 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
       {/* The legs behind the claim, each with its evidence a tap away. */}
       {detail.legs?.length ? (
         <div className="card pad0">
-          <div className="day"><span>Legs on this trip</span><span>{detail.legs.length}</span></div>
+          <div className="day"><span>Journeys on this trip</span><span>{detail.legs.length}</span></div>
           {detail.legs.map(l => (
             <button key={l.id} type="button" className="li click" onClick={() => setEvidence(l.id)}>
               <span className="ico"><TeIcon name="route" /></span>
               <div className="grow">
-                <div className="b">Leg {l.n}</div>
+                <div className="b">Journey {l.n}</div>
                 <div className="small muted">
                   {l.mode} · {l.payKm ?? l.plannedKm} km{l.gps === 'checkin' ? ' · check-ins' : ''}
                   {l.stats?.gaps ? ` · ${l.stats.gaps} gap${l.stats.gaps === 1 ? '' : 's'}` : ''}

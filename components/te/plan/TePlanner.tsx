@@ -183,7 +183,7 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
       : 'Record a trip you already did'
   const lead = editingThis
     ? (draft.answerNeeded ? 'Change what your approver asked about, then send it again.' : 'Change the plan.')
-    : planning ? 'Three short steps. Every leg, stop and bill stays inside this trip.'
+    : planning ? 'Three short steps. Every journey, stop and bill stays inside this trip.'
       : 'For a trip that was not tracked. The legs are added without GPS and your approver sees why.'
 
   // The send button says what will actually happen, which the server has already

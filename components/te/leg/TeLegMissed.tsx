@@ -62,10 +62,10 @@ export default function TeLegMissed({ snap, leg, placeName, onBack, onDone }: {
     try {
       if (choice === 'skip') {
         await te.legSkip(leg.id, fullReason(reason, note))
-        onDone(`Leg ${leg.n} skipped.`)
+        onDone(`Journey ${leg.n} skipped.`)
       } else {
         await te.legNoGps(leg.id, reason, note.trim() || undefined)
-        onDone(`Leg ${leg.n} added without GPS. Add its fare next.`)
+        onDone(`Journey ${leg.n} added without GPS. Add its fare next.`)
       }
     } catch (e) {
       setError(errorText(e)); setBusy(false)
@@ -76,11 +76,11 @@ export default function TeLegMissed({ snap, leg, placeName, onBack, onDone }: {
     <div className="page">
       <div className="row">
         <button type="button" className="btn sm" onClick={onBack}><TeIcon name="back" size="sm" />Trip</button>
-        <span className="mono muted">Leg {leg.n}</span>
+        <span className="mono muted">Journey {leg.n}</span>
       </div>
 
       <div className="card">
-        <div className="eyebrow">Leg {leg.n}</div>
+        <div className="eyebrow">Journey {leg.n}</div>
         <h1 className="tname">{placeName(leg.from)} → {placeName(leg.to)}</h1>
         <p className="muted">Not recorded. {leg.plannedKm ? `${leg.plannedKm} km were planned.` : ''}</p>
       </div>

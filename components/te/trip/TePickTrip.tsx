@@ -41,7 +41,7 @@ export default function TePickTrip({ scope, me, trips, journeys, today, placeNam
                   <div className="b">{t.name}</div>
                   <div className="small muted">{routeText(t, placeName)}</div>
                   <div className="small muted">
-                    {tripDates(t)} · {plural(legs.length, 'leg')}
+                    {tripDates(t)} · {plural(legs.length, 'journey')}
                     {next ? ` · next: leg ${next.n}, ${day(next.date)}` : ''}
                   </div>
                 </div>
@@ -60,7 +60,7 @@ export default function TePickTrip({ scope, me, trips, journeys, today, placeNam
             <div className="li"><span className="muted small">No approved {KIND_NAME[scope].toLowerCase()} right now.</span></div>
           )}
         </div>
-        <p className="small muted">A leg can start on its date. Before that, open the trip to see its legs and bookings.</p>
+        <p className="small muted">A journey can start on its date. Before that, open the trip to see its journeys and bookings.</p>
       </div>
     </div>
   )

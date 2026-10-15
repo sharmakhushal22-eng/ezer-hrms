@@ -188,7 +188,7 @@ export default function TeHome({ initialClaimId, onExit }: {
    *  which is in the snapshot it was listed from. */
   const openLeg = (tripId: string, legId: string) => {
     const leg = snap.journeys.find(j => j.id === legId)
-    if (!leg) { setToast('That leg is no longer there. Open the trip to see what changed.'); return }
+    if (!leg) { setToast('That journey is no longer there. Open the trip to see what changed.'); return }
     setSheet(null)
     setView({ name: 'leg', tripId, leg })
   }

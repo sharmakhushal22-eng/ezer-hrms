@@ -176,13 +176,13 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
     <div className="page">
       <div className="row">
         <button type="button" className="btn sm" onClick={onBack}><TeIcon name="back" size="sm" />Trip</button>
-        <span className="mono muted">Leg {leg.n}</span>
+        <span className="mono muted">Journey {leg.n}</span>
       </div>
 
       <div className={running ? 'card live' : 'card'}>
         <div className="row sp top">
           <div>
-            <div className="eyebrow">Leg {leg.n}</div>
+            <div className="eyebrow">Journey {leg.n}</div>
             <h1 className="tname">{placeName(leg.from)} → {placeName(leg.to)}</h1>
             <p className="muted">{snap.cfg.modes.find(m => m.id === leg.mode)?.name ?? leg.mode}</p>
           </div>
@@ -280,10 +280,10 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
                 const r = await te.legEnd(leg.id, fix)
                 writeQueue(leg.id, [], store())
                 onEnded(r.stats)
-                return `Leg ${leg.n} ended. ${r.gps_km} km recorded.`
+                return `Journey ${leg.n} ended. ${r.gps_km} km recorded.`
               })}
             >
-              {busy === 'end' ? 'Ending…' : 'End this leg'}
+              {busy === 'end' ? 'Ending…' : 'End this journey'}
             </button>
           </div>
         )
@@ -296,7 +296,7 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
           disabled={busy === 'continue'}
           onClick={() => run('continue', async () => { await te.legContinue(leg.id); return 'On the way again.' })}
         >
-          <TeIcon name="play" size="sm" />{busy === 'continue' ? 'Starting…' : 'Continue the leg'}
+          <TeIcon name="play" size="sm" />{busy === 'continue' ? 'Starting…' : 'Continue the journey'}
         </button>
       ) : null}
 
@@ -319,7 +319,7 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
               // against where the leg was supposed to begin.
               const fix = await here()
               await te.legStart(leg.id, fix)
-              return leg.gps === 'checkin' ? 'Checked in.' : `Leg ${leg.n} started. Keep this screen open.`
+              return leg.gps === 'checkin' ? 'Checked in.' : `Journey ${leg.n} started. Keep this screen open.`
             })}
           >
             <TeIcon name="play" size="sm" />

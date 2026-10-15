@@ -92,7 +92,7 @@ export default function TeTripApproval({ tripId, onBack, onDecided }: {
             </p>
             <p className="small muted">
               {t.start ? (t.start === t.end ? day(t.start) : `${day(t.start)} to ${day(t.end)}`) : 'No dates'}
-              {` · ${plural(legs.length, 'leg')}`}{t.purpose ? ` · ${t.purpose}` : ''}
+              {` · ${plural(legs.length, 'journey')}`}{t.purpose ? ` · ${t.purpose}` : ''}
             </p>
           </div>
           <div className="row tight">
@@ -167,7 +167,7 @@ export default function TeTripApproval({ tripId, onBack, onDecided }: {
               {action === 'approve'
                 ? t.advance
                   ? `Approves the trip and releases the ${rs(t.advance)} advance.`
-                  : 'Approves the trip. They can start its first leg on the day.'
+                  : 'Approves the trip. They can start its first journey on the day.'
                 : action === 'sendback' ? 'Goes back for them to change and send again.'
                   : 'The trip is refused. Any advance asked for is cancelled with it.'}
             </span>

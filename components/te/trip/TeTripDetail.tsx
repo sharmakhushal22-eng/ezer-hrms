@@ -217,7 +217,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
       {st === 'MISSED' && mine ? (
         <div className="card">
           <div className="ch"><h3>Not travelled on {day(t.start)}</h3><span className="chip t-warn">Missed</span></div>
-          <p className="small muted">No leg was started on the day, so there is no GPS record.</p>
+          <p className="small muted">No journey was started on the day, so there is no GPS record.</p>
           <label className="fld">
             <span>Why was GPS not used?</span>
             <select value={missedReason} onChange={e => setMissedReason(e.target.value)}>
@@ -235,7 +235,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
             disabled={!missedReason || busy === 'missed'}
             onClick={() => act('missed', async () => {
               await te.tripRecordMissed(t.id, missedReason, missedNote.trim() || undefined)
-              return 'Recorded. Add each leg without GPS, then claim.'
+              return 'Recorded. Add each journey without GPS, then claim.'
             })}
           >
             {busy === 'missed' ? 'Recording…' : 'Record the legs without GPS'}
@@ -260,7 +260,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
               <div className="row tight">
                 <span className="ico-b sm"><TeIcon name={MODE_ICON[nextLeg.mode] ?? 'route'} size="sm" /></span>
                 <div className="grow">
-                  <b>Leg {nextLeg.n}: {pname(nextLeg.from)} → {pname(nextLeg.to)}</b>
+                  <b>Journey {nextLeg.n}: {pname(nextLeg.from)} → {pname(nextLeg.to)}</b>
                   <div className="small muted">
                     {nextLeg.mode} · {nextLeg.plannedKm} km · {nextLeg.gps === 'checkin' ? 'check-ins' : 'GPS'}
                   </div>
@@ -311,7 +311,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
             {openLegs.map(l => (
               <button key={l.id} type="button" className="act flat" onClick={() => onOpenLeg(l)}>
                 <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
-                <span><b>Leg {l.n}: {pname(l.from)} → {pname(l.to)}</b><small>{LEG_STATE[l.status] ?? l.status}</small></span>
+                <span><b>Journey {l.n}: {pname(l.from)} → {pname(l.to)}</b><small>{LEG_STATE[l.status] ?? l.status}</small></span>
               </button>
             ))}
           </div>

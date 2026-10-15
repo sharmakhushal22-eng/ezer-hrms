@@ -103,7 +103,7 @@ function TripRow({ trip, snap, placeName, onOpen }: {
         <div className="b">{trip.name || trip.to}</div>
         <div className="small muted">{routeText(trip, placeName)}</div>
         <div className="small muted">
-          {tripDates(trip)} · {plural(legs.length, 'leg')}{km ? ` · ${km} km by road` : ''}
+          {tripDates(trip)} · {plural(legs.length, 'journey')}{km ? ` · ${km} km by road` : ''}
         </div>
         <div className="row tight">
           <span className={`chip plain sc sc-${trip.scope}`}><TeIcon name={trip.scope} size="sm" />{SCOPE_WORD[trip.scope]}</span>
