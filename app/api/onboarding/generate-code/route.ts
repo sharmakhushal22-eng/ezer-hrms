@@ -8,6 +8,8 @@ import { createClient } from '@supabase/supabase-js'
 import { onboardingToEmployee } from '@/lib/onboarding/to-employee'
 import { buildEmpCode, isValidEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import { sendAckEmail } from '@/lib/onboarding/ack-email'
+import { renderEmail, onboardingScope } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
 
 export const runtime = 'nodejs' // nodemailer needs the Node.js runtime
 
@@ -132,11 +134,18 @@ export async function POST(req: NextRequest) {
       enrolled_at: new Date().toISOString(), enrolled_by: approved_by || null,
     }).eq('onboarding_id', onboarding_id)
 
+    // "Welcome — your Employee ID" (Configuration → Onboarding). This used to be logged here
+    // as SENT without being emailed; it is now sent, and the log records what really happened.
+    const scope = await onboardingScope(onboarding_id)
+    const { data: co } = scope.companyId ? await supa.from('companies').select('company_name').eq('id', scope.companyId).maybeSingle() : { data: null }
+    const welcome = await renderEmail('onboarding.employee_id', scope, { candidate_name: cand.full_name, employee_code: finalCode, company_name: co?.company_name || '' })
+    const welcomeSent = cand.email
+      ? await sendMail({ to: cand.email, subject: welcome.subject, text: welcome.text, html: welcome.html })
+      : { sent: false, skipped: 'candidate has no email' }
     await supa.from('onboarding_notifications').insert({
       onboarding_id, recipient_type: 'CANDIDATE', channel: 'EMAIL',
-      subject: `Welcome aboard! Your Employee ID: ${finalCode}`,
-      body: `Dear ${cand.full_name},\n\nYour joining process is complete. Your Employee ID is ${finalCode}.\n\nYou can now login to EZER ESS portal. Login credentials will follow in a separate email.\n\nWelcome to the team!`,
-      status: 'SENT', sent_at: new Date().toISOString(),
+      subject: welcome.subject, body: welcome.text,
+      status: welcomeSent.sent ? 'SENT' : 'FAILED', sent_at: welcomeSent.sent ? new Date().toISOString() : null,
     })
 
     await supa.from('onboarding_audit_log').insert({

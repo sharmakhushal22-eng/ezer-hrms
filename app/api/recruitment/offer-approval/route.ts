@@ -11,10 +11,12 @@
 // routes the notifications, which need the service role and the ESS role tables.
 
 import { NextRequest, NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { notify } from '@/lib/ess/session'
+import { requireModule } from '@/lib/api-auth'
 import { mrfPdf, interviewSummaryPdf, ctcAcknowledgementPdf } from '@/lib/recruitment/approval-pack'
+import { renderEmail, mrfScope, type Scope } from '@/lib/config/store'
+import { notifyFromTemplate } from '@/lib/config/notify'
+import { sendMail } from '@/lib/mail/send'
 
 export const runtime = 'nodejs'
 
@@ -23,16 +25,18 @@ const roleHolders = (companyId: string | null, roleCodes: string[]) => roleHolde
 const inr = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
 
 /**
- * The HR Head's approval mail. Only lines that HAVE a value are written — a blank buyout,
- * hike or remark simply does not appear.
+ * The HR Head's approval mail (or the HR Manager's heads-up). Only lines that HAVE a value
+ * are written — a blank buyout, hike or remark simply does not appear. The words come from
+ * Configuration → Recruitment → "Offer approval request — HR Head" / "Offer awaiting HR Head —
+ * HR Manager"; the facts table ({{details}}) is drawn here.
  */
-function approvalMail(r: any, who: string, role: string, mrfNo: string | null, raisedBy: string | null, appUrl: string, attachments: string[] = [], audience: 'head' | 'manager' = 'head', headNames: string[] = []) {
+async function approvalMail(r: any, who: string, role: string, mrfNo: string | null, raisedBy: string | null, appUrl: string, attachments: string[] = [], audience: 'head' | 'manager' = 'head', headNames: string[] = [], scope: Scope = {}) {
   const reviewUrl = audience === 'head' ? `${appUrl}/offer-approve/${r.id}` : `${appUrl}/ess-portal?module=recruitment&tab=sendoffer`
   const ctc = Number(r.offered_ctc || 0)
   const varPct = Number(r.offered_variable_pct || 0)
   const varAmt = ctc > 0 && varPct > 0 ? Math.round(ctc * varPct / 100) : 0
-  const lines: string[] = []
-  const add = (label: string, value: any) => { const v = value == null ? '' : String(value).trim(); if (v) lines.push(`${label.padEnd(22)} ${v}`) }
+  const lines: [string, string][] = []
+  const add = (label: string, value: any) => { const v = value == null ? '' : String(value).trim(); if (v) lines.push([label, v]) }
   add('Candidate', `${who}${role ? ` — ${role}` : ''}`)
   add('MRF', mrfNo)
   add('Raised by', raisedBy)
@@ -51,25 +55,21 @@ function approvalMail(r: any, who: string, role: string, mrfNo: string | null, r
   if (Number(r.notice_period_days) > 0) add('Notice period', `${r.notice_period_days} days`)
   add('Hiring manager remark', r.hiring_manager_remark)
   add('Recruiter comments', r.recruiter_comments)
-  const tail = `${who}${role ? ` (${role})` : ''}${ctc > 0 ? ` · ${lakh(ctc)}` : ''}`
-  const subject = audience === 'head' ? `Offer approval required — ${tail}` : `Offer awaiting HR Head approval — ${tail}`
-  const attachNote = attachments.length
-    ? `\n\nAttached: ${attachments.join('; ')}.\nThe CTC break-up acknowledgement is password-protected — the password is the candidate's registered mobile number.`
-    : ''
-  // The HR Manager gets the same facts and attachments, but a different ask: nothing to decide,
-  // the offer letter simply cannot go out until the HR Head has approved.
-  const dear = audience === 'head' ? 'Dear HR Head,' : 'Dear HR Manager,'
-  const intro = audience === 'head'
-    ? 'An offer is waiting for your review and approval.'
-    : `This candidate's offer has been submitted to the HR Head${headNames.length ? ` (${headNames.join(', ')})` : ''} and is yet to be approved. It already appears under Recruitment → Send Offers; the Send Offer button unlocks the moment the HR Head approves it.`
-  const cta = audience === 'head' ? 'Review and approve' : 'Open Send Offers'
-  const text = `${dear}\n\n${intro}\n\n${lines.join('\n')}${attachNote}\n\n${cta}: ${reviewUrl}\n\n— EZER HRMS`
-  const html = `<p>${dear}</p><p>${intro}</p><table style="border-collapse:collapse;font-family:Segoe UI,Arial,sans-serif;font-size:13px">${lines.map(l => { const i = l.indexOf('  '); const k = l.slice(0, i).trim(); const v = l.slice(i).trim(); return `<tr><td style="padding:4px 14px 4px 0;color:#6B7280">${k}</td><td style="padding:4px 0;font-weight:600">${v}</td></tr>` }).join('')}</table>${attachments.length ? `<p style="font-size:12px;color:#374151"><b>Attached:</b> ${attachments.join('; ')}.<br/>The CTC break-up acknowledgement is password-protected — the password is the candidate's registered mobile number.</p>` : ''}<p><a href="${reviewUrl}" style="display:inline-block;padding:9px 16px;border-radius:7px;background:#2563EB;color:#fff;text-decoration:none;font-weight:600">${audience === 'head' ? 'Review &amp; approve' : 'Open Send Offers'}</a></p><p style="color:#6B7280;font-size:12px">— EZER HRMS</p>`
-  return { subject, text, html }
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const details = {
+    text: lines.map(([k, v]) => `${k.padEnd(22)} ${v}`).join('\n'),
+    html: `<table style="border-collapse:collapse;font-family:Segoe UI,Arial,sans-serif;font-size:13px">${lines.map(([k, v]) => `<tr><td style="padding:4px 14px 4px 0;color:#6B7280">${esc(k)}</td><td style="padding:4px 0;font-weight:600">${esc(v)}</td></tr>`).join('')}</table>`,
+  }
+  return renderEmail(audience === 'head' ? 'offer.approval.head' : 'offer.approval.manager', scope, {
+    candidate_name: who, role, ctc_lakh: ctc > 0 ? lakh(ctc) : '',
+    attachments: attachments.join('; '), review_url: reviewUrl, head_names: headNames.join(', '),
+  }, { details })
 }
 
 // GET ?company_ids=a,b  -> { heads: { [company_id]: [{ id, name, code }] } }  (who approves, per company)
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
   const ids = (req.nextUrl.searchParams.get('company_ids') || '').split(',').map(s => s.trim()).filter(Boolean)
   const heads: Record<string, { id: string; name: string; code: string | null }[]> = {}
   await Promise.all(ids.map(async id => { heads[id] = (await roleHolders(id, ['HR_HEAD'])).map(({ id, name, code }) => ({ id, name, code })) }))
@@ -77,6 +77,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
   const body = await req.json().catch(() => null) as any
   const requestId = String(body?.request_id || '')
   if (!requestId) return NextResponse.json({ error: 'request_id is required' }, { status: 400 })
@@ -91,7 +93,6 @@ export async function POST(req: NextRequest) {
   const companyId = r.company_id || cand?.company_id || (mrf as any)?.company_id || null
   const who = cand?.full_name || 'a candidate'
   const role = (mrf as any)?.designation || (mrf as any)?.position || cand?.designation || ''
-  const ref = (mrf as any)?.mrf_number ? ` · ${(mrf as any).mrf_number}` : ''
 
   // ── Recruiter → HR Head: "review and approve" ──
   if (body.action === 'submitted') {
@@ -101,20 +102,16 @@ export async function POST(req: NextRequest) {
     // on their Send Offers screen, with the Send Offer button locked until the HR Head approves.
     const managers = (await roleHolders(companyId, ['HR_MANAGER'])).filter(m => !heads.some(h => h.id === m.id))
     const headNames = heads.map(h => h.name).filter(Boolean)
-    await Promise.all(managers.map(m => notify(
-      m.id,
-      `Offer yet to be approved — ${who}${role ? ` (${role})` : ''}`,
-      `${who}'s offer of ${lakh(r.offered_ctc)}${ref} has been submitted to the HR Head${headNames.length ? ` (${headNames.join(', ')})` : ''} and is yet to be approved. The candidate is on your Send Offers screen; the Send Offer button unlocks once the HR Head approves.`,
-      '/ess/recruitment/sendoffer',
-      'APPROVAL',
-    ).catch(() => null)))
-    await Promise.all(heads.map(h => notify(
-      h.id,
-      `Offer approval — ${who}${role ? ` (${role})` : ''}`,
-      `An offer of ${lakh(r.offered_ctc)} for ${who}${role ? `, ${role}` : ''}${ref} is waiting for your review and approval${r.proposed_doj ? ` (proposed DOJ ${new Date(r.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Open it from Tasks & Approvals to review and approve.`,
-      `/offer-approve/${r.id}`,
-      'APPROVAL',
-    ).catch(() => null)))
+    // In-app words: Configuration → Recruitment → Notifications ("Offer yet to be approved —
+    // HR Manager", "Offer approval — HR Head"), for the offer's company / branch.
+    const scope = await mrfScope(r.mrf_id, companyId)
+    const nVars = {
+      candidate_name: who, role, ctc_lakh: lakh(r.offered_ctc), mrf_number: (mrf as any)?.mrf_number || '',
+      head_names: headNames.join(', '),
+      proposed_doj: r.proposed_doj ? new Date(r.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+    }
+    await Promise.all(managers.map(m => notifyFromTemplate(m.id, 'notify.offer.awaiting_head', nVars, { scope, link: '/ess/recruitment/sendoffer' })))
+    await Promise.all(heads.map(h => notifyFromTemplate(h.id, 'notify.offer.approval_head', nVars, { scope, link: `/offer-approve/${r.id}` })))
 
     // Email — to the HR Head(s), CC the employees picked on the form. Body carries only the
     // lines with a value; attached: the MRF, the interview summary for it, and the CTC break-up
@@ -139,25 +136,25 @@ export async function POST(req: NextRequest) {
       if (c) { built.push({ filename: c.name, content: c.content, contentType: 'application/pdf' }); attachNames.push(`CTC break-up acknowledgement${c.accepted ? ' (accepted by the candidate)' : ''}`) }
     } catch (e: any) { emailSkipped = `attachments: ${e?.message || 'failed'}` }
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || 'https://app.ezerhrms.com'
-    const mail = approvalMail(r, who, role, (mrf as any)?.mrf_number || null, (mrf as any)?.raised_by_name || null, appUrl, attachNames)
-    const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
-    if (user && pass && to.length) {
-      try {
-        const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-        await t.sendMail({ from: `"${process.env.GMAIL_FROM_NAME || 'EZER HR Team'}" <${user}>`, to: to.join(','), cc: cc.length ? cc.join(',') : undefined, subject: mail.subject, text: mail.text, html: mail.html, attachments: built })
+    const mrfNo = (mrf as any)?.mrf_number || null, raisedBy = (mrf as any)?.raised_by_name || null
+    const mail = await approvalMail(r, who, role, mrfNo, raisedBy, appUrl, attachNames, 'head', [], scope)
+    const m2 = managers.length ? await approvalMail(r, who, role, mrfNo, raisedBy, appUrl, attachNames, 'manager', headNames, scope) : null
+    if (to.length) {
+      const sent = await sendMail({ to, cc, subject: mail.subject, text: mail.text, html: mail.html, attachments: built, fromName: 'EZER HR Team' })
+      if (sent.sent) {
         emailed = to.length + cc.length
         const mgrTo = managers.map(m => m.email).filter(Boolean) as string[]
-        if (mgrTo.length) {
-          const m2 = approvalMail(r, who, role, (mrf as any)?.mrf_number || null, (mrf as any)?.raised_by_name || null, appUrl, attachNames, 'manager', headNames)
-          await t.sendMail({ from: `"${process.env.GMAIL_FROM_NAME || 'EZER HR Team'}" <${user}>`, to: mgrTo.join(','), subject: m2.subject, text: m2.text, html: m2.html, attachments: built })
-          emailed += mgrTo.length
+        if (mgrTo.length && m2) {
+          const s2 = await sendMail({ to: mgrTo, subject: m2.subject, text: m2.text, html: m2.html, attachments: built, fromName: 'EZER HR Team' })
+          if (s2.sent) emailed += mgrTo.length
+          else emailSkipped = s2.error || s2.skipped || 'email failed'
         }
-      } catch (e: any) { emailSkipped = e?.message || 'email failed' }
-    } else if (!to.length) emailSkipped = 'HR Head has no email on record'
-    else emailSkipped = emailSkipped || 'Email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)'
+      } else emailSkipped = sent.skipped ? (emailSkipped || 'Email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)') : (sent.error || 'email failed')
+    } else emailSkipped = 'HR Head has no email on record'
     return NextResponse.json({ ok: true, notified: heads.length + managers.length, to: heads.map(h => `${h.name} (${h.code})`), managers: managers.map(m => `${m.name} (${m.code})`), cc: (ccEmps || []).map((e: any) => `${e.full_name} (${e.emp_code})`), emailed, emailSkipped,
       attachments: built.map(x => ({ name: x.filename, bytes: x.content.length })),
-      ...(process.env.NODE_ENV !== 'production' ? { preview: mail.text, managerPreview: managers.length ? approvalMail(r, who, role, (mrf as any)?.mrf_number || null, null, appUrl, attachNames, 'manager', headNames).text : null, debugAttachments: built.map(x => ({ name: x.filename, base64: x.content.toString('base64') })) } : {}) })
+      template: mail.template,
+      ...(process.env.NODE_ENV !== 'production' ? { preview: mail.text, managerPreview: m2 ? m2.text : null, debugAttachments: built.map(x => ({ name: x.filename, base64: x.content.toString('base64') })) } : {}) })
   }
 
   // ── HR Head → recruiter(s) + HR managers: the decision (shared with the ESS route) ──

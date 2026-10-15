@@ -1,8 +1,11 @@
 // app/api/onboarding/send-magic-link/route.ts
-// Creates or updates onboarding candidate record, sends onboarding link
+// Creates or updates onboarding candidate record, sends onboarding link.
+// The email's words come from Configuration → 'Onboarding invitation' for the company.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import nodemailer from 'nodemailer'
+import { requireModule } from '@/lib/api-auth'
+import { renderEmail } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
 
 export const runtime = 'nodejs' // nodemailer needs Node.js runtime, not Edge
 
@@ -15,6 +18,10 @@ const supa = createClient(
 const makeOtp = () => String(Math.floor(100000 + Math.random() * 900000))
 
 export async function POST(req: NextRequest) {
+  // Signed in and able to open Onboarding — the same people who see the Send link button.
+  const gate = await requireModule(req, 'Onboarding')
+  if (gate.error) return gate.error
+
   try {
     const body = await req.json()
     const {
@@ -68,37 +75,28 @@ export async function POST(req: NextRequest) {
       ip_address:    req.headers.get('x-forwarded-for') || req.ip || null,
     })
 
-    // Actually email the link to the candidate (Gmail SMTP via nodemailer).
-    const user = process.env.GMAIL_USER
-    const pass = process.env.GMAIL_APP_PASSWORD
+    // Email the link to the candidate (Gmail SMTP, lib/mail/send.ts).
+    const { data: co } = await supa.from('companies').select('company_name').eq('id', company_id).maybeSingle()
+    const mail = await renderEmail('onboarding.invite', company_id, {
+      candidate_name:      full_name,
+      onboarding_link:     magicLink,
+      link_validity_hours: '24',
+      company_name:        co?.company_name || '',
+      designation:         designation || '',
+      joining_date:        date_of_joining ? new Date(date_of_joining).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : '',
+    })
+    const subject = mail.subject
     let emailed = false
     let emailError: string | null = null
-    const subject = `Welcome aboard! Complete your onboarding — ${full_name}`
-    const text =
-`Dear ${full_name},
-
-Welcome! Please complete your joining formalities by opening the secure link below:
-
-${magicLink}
-
-This link is valid for 24 hours. You'll verify your mobile via OTP, then fill in your details and upload documents.
-
-Warm regards,
-HR Team`
-    if (email && user && pass) {
-      try {
-        const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-        const from = `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`
-        await transporter.sendMail({ from, to: email, subject, text, html: text.replace(/\n/g, '<br>') })
-        emailed = true
-      } catch (e: any) {
-        emailError = e?.message || 'send failed'
-        console.error('send-magic-link email failed:', e)
-      }
-    } else if (!email) {
+    if (!email) {
       emailError = 'candidate has no email on file'
     } else {
-      emailError = 'email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)'
+      const sent = await sendMail({ to: email, subject, text: mail.text, html: mail.html, fromName: 'HR Team' })
+      emailed = sent.sent
+      if (!sent.sent) {
+        emailError = sent.skipped ? 'email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)' : (sent.error || 'send failed')
+        if (sent.error) console.error('send-magic-link email failed:', sent.error)
+      }
     }
 
     // Notification record

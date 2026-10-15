@@ -43,6 +43,10 @@ export const MODULES = [
   'HR Letters',
   'Policies',
   'Admin Setup',
+  // Letter & email templates (Configuration tab). Super Admin always holds it; grant it
+  // to anyone else in Roles → Module Access — they then edit their own company's
+  // templates only (lib/config/access.ts).
+  'Configuration',
   'Company Profile',
   'Reports',
   'Database Export',
@@ -94,6 +98,7 @@ export const ROUTE_MODULE: Record<string, Module> = {
   '/dashboard/letters':            'HR Letters',
   '/dashboard/policies':           'Policies',
   '/dashboard/admin':              'Admin Setup',
+  '/dashboard/configuration':      'Configuration',
   '/dashboard/company-profile':    'Company Profile',
   '/dashboard/reports':            'Reports',
   '/dashboard/db-export':          'Database Export',

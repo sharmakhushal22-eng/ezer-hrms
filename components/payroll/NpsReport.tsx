@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
+import { authHeaders } from '@/lib/auth-headers'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -519,7 +520,7 @@ export default function NpsReport({ fy }: { fy: string }) {
     if (mailing) return
     setMailing(true); setErr(''); setMsg('')
     try {
-      const r = await fetch('/api/nps/pran-reminder', { method: 'POST' })
+      const r = await fetch('/api/nps/pran-reminder', { method: 'POST', headers: await authHeaders() })
       const d = await r.json()
       if (!r.ok) { setErr(d.error || 'Could not send the reminders.'); setMailing(false); return }
       const failed = (d.results || []).filter((x: any) => !x.sent)

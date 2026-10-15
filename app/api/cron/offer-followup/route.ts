@@ -2,9 +2,16 @@
 // Runs on a schedule (Vercel Cron). For every candidate whose offer was sent
 // >48h ago and is still not accepted, emails the candidate (reply-to-accept)
 // and HR (please-follow-up), then marks the reminder as sent so it fires once.
+//
+// The words of all four mails come from Configuration (Recruitment → "Offer follow-up —
+// candidate / HR", Onboarding → "Onboarding setup reminder" / "Stay in touch reminder"),
+// for each candidate's company and the branch of their MRF.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import nodemailer from 'nodemailer'
+import { renderEmail, mrfScope } from '@/lib/config/store'
+import { mailConfigured, sendMail, type MailResult } from '@/lib/mail/send'
+import { daysLabel } from '@/lib/config/workflow-templates'
+import { runLeaveDaily } from '@/lib/leave/daily'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -14,28 +21,12 @@ const supabase = createClient(
   (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
 )
 
-function candidateBody(name: string, role: string) {
-  return `Dear ${name},
-
-We recently sent you an offer of employment${role ? ` for the position of ${role}` : ''}, and we haven't yet received your confirmation.
-
-If you'd like to accept the offer, simply REPLY to this email confirming your acceptance. If you have any questions before deciding, reply here and our HR team will be glad to help.
-
-We hope to welcome you on board soon.
-
-Warm regards,
-HR Team`
-}
-
-function hrBody(name: string, role: string, candEmail: string) {
-  return `Hi,
-
-This is an automated reminder: ${name}${role ? ` (${role})` : ''} was sent an offer more than 48 hours ago and has NOT confirmed acceptance yet.
-
-Please reach out to the candidate to get their response.
-Candidate email: ${candEmail || '—'}
-
-— EZER HRMS`
+/** Send one templated mail. A provider failure throws, so the candidate is not marked
+ *  as reminded and the next run tries again — as before. */
+async function send(key: string, c: { company_id?: string | null; mrf_id?: string | null }, to: string, vars: Record<string, string>) {
+  const m = await renderEmail(key, await mrfScope(c.mrf_id, c.company_id), vars)
+  const r: MailResult = await sendMail({ to, subject: m.subject, text: m.text, html: m.html })
+  if (!r.sent) throw new Error(r.error || r.skipped || 'email not sent')
 }
 
 export async function POST(req: NextRequest) {
@@ -53,14 +44,17 @@ async function run(req: NextRequest) {
     if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const user = process.env.GMAIL_USER
-  const pass = process.env.GMAIL_APP_PASSWORD
-  if (!user || !pass) return NextResponse.json({ error: 'email not configured' }, { status: 502 })
+  // The daily leave & attendance job (balances + approver reminders) rides on
+  // this cron instead of adding one of its own. It never fails this run.
+  let leaveDaily: unknown = null
+  try { leaveDaily = await runLeaveDaily() } catch (e) { console.error('leave-daily failed:', e) }
+
+  if (!mailConfigured()) return NextResponse.json({ error: 'email not configured' }, { status: 502 })
 
   const cutoff = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
   const { data: due, error } = await supabase
     .from('candidates')
-    .select('id, full_name, email, hr_email, designation')
+    .select('id, full_name, email, hr_email, designation, company_id, mrf_id')
     .eq('stage', 'Offer Sent')
     .eq('offer_accepted', false)
     .eq('offer_reminder_sent', false)
@@ -68,21 +62,12 @@ async function run(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const from = `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`
-  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-
   let processed = 0
   for (const c of due || []) {
     const role = c.designation || ''
     try {
-      if (c.email) {
-        const body = candidateBody(c.full_name, role)
-        await transporter.sendMail({ from, to: c.email, subject: `Action needed — confirm your offer${role ? ` (${role})` : ''}`, text: body, html: body.replace(/\n/g, '<br>') })
-      }
-      if (c.hr_email) {
-        const body = hrBody(c.full_name, role, c.email)
-        await transporter.sendMail({ from, to: c.hr_email, subject: `Follow up: ${c.full_name} hasn't accepted the offer`, text: body, html: body.replace(/\n/g, '<br>') })
-      }
+      if (c.email) await send('offer.followup.candidate', c, c.email, { candidate_name: c.full_name, role })
+      if (c.hr_email) await send('offer.followup.hr', c, c.hr_email, { candidate_name: c.full_name, role, candidate_email: c.email || '—' })
       await supabase.from('candidates').update({ offer_reminder_sent: true }).eq('id', c.id)
       processed++
     } catch (e) {
@@ -94,7 +79,7 @@ async function run(req: NextRequest) {
   let onboardingEmails = 0
   const { data: obCands } = await supabase
     .from('candidates')
-    .select('id, full_name, email, hr_email, designation, onboarding_date, onboarding_tasks_emailed, last_touch_reminder_at')
+    .select('id, full_name, email, hr_email, designation, company_id, mrf_id, onboarding_date, onboarding_tasks_emailed, last_touch_reminder_at')
     .eq('blacklisted', false)
     .not('onboarding_date', 'is', null)
 
@@ -103,25 +88,11 @@ async function run(req: NextRequest) {
     if (!c.hr_email) continue
     const daysLeft = Math.ceil((new Date(c.onboarding_date as string).getTime() - Date.now()) / DAY)
     const role = c.designation || ''
+    const joining = new Date(c.onboarding_date as string).toLocaleDateString('en-IN')
     try {
       // 3 days before joining → ask HR to complete the onboarding setup (once).
       if (daysLeft >= 0 && daysLeft <= 3 && !c.onboarding_tasks_emailed) {
-        const body = `Hi,
-
-${c.full_name}${role ? ` (${role})` : ''} is joining on ${new Date(c.onboarding_date as string).toLocaleDateString('en-IN')} — that's ${daysLeft} day${daysLeft === 1 ? '' : 's'} away.
-
-Please complete the onboarding setup before the joining date:
-  • Laptop / workstation
-  • Official email + ERP / system access
-  • SIM / phone (if applicable)
-  • ID card & access card
-  • Seat / desk allotment
-  • Joining kit & welcome pack
-
-Kindly ensure everything is ready so the candidate has a smooth first day.
-
-— EZER HRMS`
-        await transporter.sendMail({ from, to: c.hr_email, subject: `Onboarding setup — ${c.full_name} joins in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, text: body, html: body.replace(/\n/g, '<br>') })
+        await send('onboarding.setup_reminder', c, c.hr_email, { candidate_name: c.full_name, role, joining_date: joining, days_left: daysLabel(daysLeft) })
         await supabase.from('candidates').update({ onboarding_tasks_emailed: true }).eq('id', c.id)
         onboardingEmails++
       }
@@ -129,14 +100,7 @@ Kindly ensure everything is ready so the candidate has a smooth first day.
       else if (daysLeft > 30) {
         const last = c.last_touch_reminder_at ? new Date(c.last_touch_reminder_at).getTime() : 0
         if (Date.now() - last >= 10 * DAY) {
-          const body = `Hi,
-
-${c.full_name}${role ? ` (${role})` : ''} is joining on ${new Date(c.onboarding_date as string).toLocaleDateString('en-IN')} — still ${daysLeft} days away.
-
-Please reach out and keep the candidate engaged so they stay committed until their joining date. A quick check-in call or message helps reduce last-minute drop-offs.
-
-— EZER HRMS`
-          await transporter.sendMail({ from, to: c.hr_email, subject: `Stay in touch — ${c.full_name} (joining ${new Date(c.onboarding_date as string).toLocaleDateString('en-IN')})`, text: body, html: body.replace(/\n/g, '<br>') })
+          await send('onboarding.stay_in_touch', c, c.hr_email, { candidate_name: c.full_name, role, joining_date: joining, days_left: `${daysLeft} days` })
           await supabase.from('candidates').update({ last_touch_reminder_at: new Date().toISOString() }).eq('id', c.id)
           onboardingEmails++
         }
@@ -146,5 +110,5 @@ Please reach out and keep the candidate engaged so they stay committed until the
     }
   }
 
-  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails })
+  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails, leaveDaily })
 }

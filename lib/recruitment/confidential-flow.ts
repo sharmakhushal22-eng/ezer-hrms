@@ -8,7 +8,7 @@
 //     nobody left to approve it but themselves)
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { notify } from '@/lib/ess/session'
+import { notifyFromTemplate } from '@/lib/config/notify'
 import { roleHolders, lakh, type Person } from './offer-approval-notify'
 import { CONFIDENTIAL_VIEWER_CODES } from './confidential'
 
@@ -83,12 +83,10 @@ export async function autoApproveConfidentialOffer(sb: SupabaseClient, neg: any)
 
   // Only the HR Head and HR Manager(s) of the company hear about it.
   const audience = await confidentialAudience(sb, companyId)
-  await Promise.all(audience.map(p => notify(
-    p.id,
-    `Confidential offer ready to send — ${cand.full_name}`,
-    `${cand.full_name}${role ? ` (${role})` : ''}${mrf.mrf_number ? ` · ${mrf.mrf_number}` : ''} accepted the salary break-up of ${pkg}. The offer is self-approved (confidential hiring) and is on Send Offers — verify the offer file, generate the letter and send it.`,
-    '/ess/recruitment/sendoffer',
-    'APPROVAL',
-  ).catch(() => null)))
+  // Words: Configuration → Recruitment → Notifications → "Confidential offer ready to send".
+  const scope = { companyId, locationId: mrf.location_id || null }
+  await Promise.all(audience.map(p => notifyFromTemplate(p.id, 'notify.offer.confidential_ready', {
+    candidate_name: cand.full_name, role, mrf_number: mrf.mrf_number || '', package: pkg,
+  }, { scope, link: '/ess/recruitment/sendoffer' })))
   return { requestId, notified: audience.length }
 }

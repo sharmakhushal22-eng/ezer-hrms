@@ -1,8 +1,16 @@
 // app/api/transfer/generate-letter/route.ts
 // POST → marks the transfer letter generated + sets letter_url (a viewable HTML letter).
 // GET ?id=<transfer_id> → renders the transfer letter as HTML (opened from ESS / email).
+//
+// The words come from Configuration → Employee lifecycle → "Transfer letter", for the company /
+// branch the employee moves to; the letterhead, date, reference and the list of what changes
+// ({{transfer_details}}) are drawn here. GET stays open: the employee opens the link from the
+// email, where no sign-in header can be sent — the transfer id in it is the key.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireTransferEditor } from '@/lib/employees/transfer-auth'
+import { resolveTemplate } from '@/lib/config/store'
+import { renderLetterParagraphs, paragraphsToHtml } from '@/lib/config/render'
 
 export const runtime = 'nodejs'
 
@@ -29,13 +37,12 @@ async function buildLetterHtml(transferId: string): Promise<string | null> {
   const isInter = tr.transfer_type === 'INTER_COMPANY'
   const ref = `TRF/${tr.from_emp_code || tr.employee_id.slice(0, 6)}/${new Date().getFullYear()}`
   const benefitLabel: Record<string, string> = { NONE: 'As per current terms', RELOCATION: 'Relocation assistance', ONE_TIME_BONUS: 'One-time transfer bonus', AS_PER_NEW_POLICY: 'As per new company policy' }
-  const rows: string[] = [
-    `<li><b>New Location:</b> ${esc(toBr?.location_name || '—')}</li>`,
-  ]
-  if (mgr?.full_name) rows.push(`<li><b>New Reporting Manager:</b> ${esc(mgr.full_name)}</li>`)
-  if (tr.new_designation) rows.push(`<li><b>New Designation:</b> ${esc(tr.new_designation)}</li>`)
-  if (dept?.dept_name) rows.push(`<li><b>New Department:</b> ${esc(dept.dept_name)}</li>`)
-  rows.push(`<li><b>Transfer Benefit:</b> ${esc(benefitLabel[tr.benefit_type] || tr.benefit_type)}</li>`)
+  const details: [string, string][] = [['New Location', toBr?.location_name || '—']]
+  if (mgr?.full_name) details.push(['New Reporting Manager', mgr.full_name])
+  if (tr.new_designation) details.push(['New Designation', tr.new_designation])
+  if (dept?.dept_name) details.push(['New Department', dept.dept_name])
+  details.push(['Transfer Benefit', benefitLabel[tr.benefit_type] || tr.benefit_type])
+  const rows = details.map(([k, v]) => `<li><b>${esc(k)}:</b> ${esc(v)}</li>`)
 
   const coName = (toCo?.company_name || fromCo?.company_name || '')
   const s = coName.toLowerCase()
@@ -43,6 +50,19 @@ async function buildLetterHtml(transferId: string): Promise<string | null> {
   const LH = /retail|\bsrs\b/.test(s) ? { name: 'Sharma Retail Solutions', badge: 'SRS', eyebrow: 'A Sharma Group Company', bg: 'linear-gradient(118deg,#0F766E,#0E7490 55%,#1D4ED8)', accent: '#0E7490', addr: 'Tower B, DLF Cyber City, Gurugram, Haryana — 122 002', cin: 'U52100DL2018PTC330456', gstin: '07AAKSR1234B1ZP' }
     : /trading|\bstc\b|nariman/.test(s) ? { name: 'Sharma Trading Corporation', badge: 'STC', eyebrow: 'A Sharma Group Company · Mumbai', bg: '#6B0F1A', accent: '#B8860B', addr: 'Office 301, Nariman Point, Mumbai, Maharashtra — 400 021', cin: 'U51909MH2005PTC291234', gstin: '27AAHST3456D1ZS' }
     : { name: 'Sharma Sons Manufacturing', badge: 'SSM', eyebrow: 'A Sharma Group Company · Since 2010', bg: '#1B2A4A', accent: '#E85D04', addr: 'Plot 12, Sector 5, Dwarka, New Delhi — 110 075', cin: 'U29100HR2010PTC040123', gstin: '06AAHSS2345C1ZR' }
+  const tpl = await resolveTemplate('transfer.letter', { companyId: tr.to_company_id || tr.from_company_id || null, locationId: tr.to_branch_id || null })
+  const { paragraphs } = renderLetterParagraphs(tpl!.body, {
+    employee_name: emp?.full_name || 'Employee',
+    emp_code: emp?.emp_code || '',
+    from_posting: fromBr?.location_name || fromCo?.company_name || 'current posting',
+    to_posting: toBr?.location_name || toCo?.company_name || 'new posting',
+    effective_date: fmt(tr.effective_date),
+    new_company: isInter ? (toCo?.company_name || '—') : '',
+    group_doj: isInter ? fmt(tr.group_doj_preserved) : '',
+    old_company_last_day: isInter && tr.last_working_date_old ? fmt(tr.last_working_date_old) : '',
+    company_name: LH.name,
+  }, ['transfer_details'])
+  const title = tpl!.subject || 'TRANSFER LETTER'
   return `<!doctype html><html><head><meta charset="utf-8"><title>Transfer Letter — ${esc(LH.name)}</title>
 <style>body{font-family:'DM Sans','Segoe UI',sans-serif;color:#1E1B4B;max-width:760px;margin:0 auto 32px;padding:0;line-height:1.7}
 .wrap{padding:0 40px}
@@ -61,24 +81,17 @@ ul{background:#F7F7FB;border-radius:8px;padding:14px 28px}li{margin:4px 0;font-s
 <div class="lh-head"><div class="lh-l"><div class="lh-badge">${esc(LH.badge)}</div><div><div class="lh-ey">${esc(LH.eyebrow)}</div><div class="lh-nm">${esc(LH.name)}</div></div></div><div class="lh-r">${esc(LH.addr)}<br>CIN: ${esc(LH.cin)} · GSTIN: ${esc(LH.gstin)}</div></div>
 <div class="lh-accent"></div>
 <div class="wrap">
-<h1>TRANSFER LETTER</h1>
+<h1>${esc(title)}</h1>
 <div class="meta"><span>Date: ${fmt(new Date().toISOString().slice(0, 10))}</span><span>Ref: ${esc(ref)}</span></div>
-<p>Dear <b>${esc(emp?.full_name || 'Employee')}</b> (${esc(emp?.emp_code || '')}),</p>
-<p>This is to inform you that you are being transferred from
-<b>${esc(fromBr?.location_name || fromCo?.company_name || 'current posting')}</b> to
-<b>${esc(toBr?.location_name || toCo?.company_name || 'new posting')}</b>
-with effect from <b>${fmt(tr.effective_date)}</b>.</p>
-<p>Details of your transfer:</p>
-<ul>${rows.join('')}</ul>
-${isInter ? `<div class="note">New Company: <b>${esc(toCo?.company_name || '—')}</b>. Your Group Date of Joining (<b>${fmt(tr.group_doj_preserved)}</b>) remains unchanged for all seniority and gratuity purposes.${tr.last_working_date_old ? ` Your last working day in the current company is <b>${fmt(tr.last_working_date_old)}</b>.` : ''}</div>` : ''}
-<p>Please acknowledge your acceptance through the EZER ESS portal or by replying to this email.</p>
-<div class="sig">For <b>${esc(LH.name)}</b>,<br><br><b>Human Resources</b></div>
+${paragraphsToHtml(paragraphs, { transfer_details: `<ul>${rows.join('')}</ul>` })}
 </div>
 <div class="lh-foot">Registered Office: ${esc(LH.addr)}, India · CIN: ${esc(LH.cin)} · GSTIN: ${esc(LH.gstin)} · ${esc(LH.eyebrow)}<br>This correspondence is confidential and intended solely for the named addressee.</div>
 </body></html>`
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await requireTransferEditor(req)
+  if (denied) return denied
   try {
     const { transfer_id } = await req.json()
     if (!transfer_id) return NextResponse.json({ error: 'transfer_id required' }, { status: 400 })

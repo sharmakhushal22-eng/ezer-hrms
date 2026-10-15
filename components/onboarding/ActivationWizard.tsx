@@ -11,6 +11,7 @@ import {
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { authHeaders } from '@/lib/auth-headers'
 
 // ── EZER palette ───────────────────────────────────────────────────
 const T = {
@@ -413,7 +414,7 @@ export default function ActivationWizard({ candidate, genCode, setGenCode, codeT
     setSending(true); setEmailMsg('')
     try {
       const res = await fetch('/api/onboarding/activation-approval', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({ onboarding_id: candidate.id, roles: ['l1', 'payroll'] }),
       })
       const data = await res.json()

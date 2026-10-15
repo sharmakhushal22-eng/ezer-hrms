@@ -10,10 +10,11 @@
 //   GET  ?candidate_id=…  -> the recorded acceptance with short-lived links to its two files
 
 import { NextRequest, NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import { requireModule } from '@/lib/api-auth'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { notify } from '@/lib/ess/session'
+import { renderEmail, mrfScope } from '@/lib/config/store'
+import { notifyFromTemplate } from '@/lib/config/notify'
+import { sendMail } from '@/lib/mail/send'
 import { roleHolders } from '@/lib/recruitment/offer-approval-notify'
 import { addToBlacklist } from '@/lib/recruitment/blacklist'
 import { actorName } from '@/lib/recruitment/actor'
@@ -144,19 +145,20 @@ export async function POST(req: NextRequest) {
       // Tell the HR Head(s) — bell + mail.
       const companyId = request.company_id || cand.company_id || null
       const heads = await roleHolders(sb as any, companyId, ['HR_HEAD'])
-      await Promise.all(heads.map(h => notify(h.id, `Offer revision — ${cand.full_name}`,
-        `${by} has sent ${cand.full_name}'s offer back for revision: "${note}". Edit the offer and approve it from Recruitment → HR Head.`,
-        `/ess/recruitment/hrhead?offer=${request.id}`, 'APPROVAL').catch(() => null)))
-      const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
+      // Words: Configuration → Recruitment → "Offer revision — HR Head" (notification) and
+      // "Offer revision requested — HR Head" (email), for the offer's company / branch.
+      const scope = await mrfScope(cand.mrf_id || request.mrf_id, companyId)
+      const link = `/ess/recruitment/hrhead?offer=${request.id}`
+      await Promise.all(heads.map(h => notifyFromTemplate(h.id, 'notify.offer.revision', { requested_by: by, candidate_name: cand.full_name, note }, { scope, link })))
       const to = heads.map(h => h.email).filter(Boolean) as string[]
       let emailed = 0
-      if (user && pass && to.length) {
+      if (to.length) {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.ezerhrms.com'
-        await nodemailer.createTransport({ service: 'gmail', auth: { user, pass } }).sendMail({
-          from: `"${process.env.GMAIL_FROM_NAME || 'EZER HR Team'}" <${user}>`, to: to.join(','),
-          subject: `Offer revision requested — ${cand.full_name}`,
-          text: `Dear HR Head,\n\n${by} has sent the offer for ${cand.full_name}${cand.designation ? ` (${cand.designation})` : ''} back for revision.\n\nReason: ${note}\n\nPlease edit the offer and approve it: ${appUrl}/ess-portal?module=recruitment&tab=hrhead&offer=${request.id}\n\n— EZER HRMS`,
-        }).then(() => { emailed = to.length }).catch(() => null)
+        const mail = await renderEmail('offer.revision.head', scope, {
+          requested_by: by, candidate_name: cand.full_name, role: cand.designation || '', note, review_url: `${appUrl}${link}`,
+        })
+        const sent = await sendMail({ to, subject: mail.subject, text: mail.text, html: mail.html, fromName: 'EZER HR Team' })
+        if (sent.sent) emailed = to.length
       }
       return NextResponse.json({ ok: true, notified: heads.length, emailed })
     }

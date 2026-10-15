@@ -7,25 +7,18 @@
 // after email-OTP verification) proves the caller owns the registered email.
 
 import { NextRequest, NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { COLLECT_DOCS, submittedEmail } from '@/lib/recruitment/collect-docs'
+import { COLLECT_DOCS } from '@/lib/recruitment/collect-docs'
+import { renderEmail, mrfScope, type RenderedEmail } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
 import { verifyAccess } from '@/lib/recruitment/collect-auth'
 
 // Best-effort internal email (Gmail SMTP). Never blocks the candidate's flow.
-async function mail(to: string[], cc: string[], subject: string, body: string) {
-  const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
+async function mail(to: string[], cc: string[], m: RenderedEmail) {
   const toList = Array.from(new Set(to.filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e))))
   const ccList = Array.from(new Set(cc.filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && !toList.includes(e))))
-  if (!user || !pass || !toList.length) return
-  try {
-    const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-    await t.sendMail({
-      from: `"${process.env.GMAIL_FROM_NAME || 'EZER HRMS'}" <${user}>`,
-      to: toList.join(','), cc: ccList.length ? ccList.join(',') : undefined,
-      subject, text: body, html: body.replace(/\n/g, '<br>'),
-    })
-  } catch { /* best effort */ }
+  if (!toList.length) return
+  await sendMail({ to: toList, cc: ccList, subject: m.subject, text: m.text, html: m.html, fromName: 'EZER HRMS' })
 }
 
 async function linkFor(token: string) {
@@ -117,13 +110,17 @@ export async function POST(req: NextRequest) {
       link.mrf_id ? sb.from('manpower_requisitions').select('designation, position').eq('id', link.mrf_id).maybeSingle() : Promise.resolve({ data: null } as any),
       link.company_id ? sb.from('companies').select('company_name').eq('id', link.company_id).maybeSingle() : Promise.resolve({ data: null } as any),
     ])
-    const { subject, body: mailBody } = submittedEmail({
-      candidateName: cand?.full_name || 'Candidate',
-      jobTitle: (mrf as any)?.designation || (mrf as any)?.position || '',
-      companyName: (comp as any)?.company_name || '',
-      uploaded: (docs || []).length, resubmission,
+    // Words: Configuration → "Documents submitted — recruiter", for the link's company / branch.
+    const n = (docs || []).length
+    const m = await renderEmail('doc_collection.submitted', await mrfScope(link.mrf_id, link.company_id), {
+      candidate_name: cand?.full_name || 'Candidate',
+      job_title: (mrf as any)?.designation || (mrf as any)?.position || '',
+      company_name: (comp as any)?.company_name || '',
+      submission_label: resubmission ? 'Re-submitted' : 'Documents submitted',
+      submitted_verb: resubmission ? 're-submitted' : 'submitted',
+      uploaded_summary: `${n} document${n === 1 ? '' : 's'} ${n === 1 ? 'has' : 'have'} been received`,
     })
-    await mail([link.created_by].filter(Boolean) as string[], Array.isArray(link.cc_emails) ? link.cc_emails : [], subject, mailBody)
+    await mail([link.created_by].filter(Boolean) as string[], Array.isArray(link.cc_emails) ? link.cc_emails : [], m)
 
     return NextResponse.json({ ok: true, submitted: true })
   }

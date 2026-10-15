@@ -21,9 +21,15 @@
 //         in the CHECK constraint since 030 with no way to reach it).
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { essRoute, forbidden, notify, audit, fmtDate } from '@/lib/ess/session'
-import { leaveYearOf, leaveFyLabel, leaveFyStartYear, leavePolicyFy } from '@/lib/ess/leave-year'
-import { balanceFor, normaliseMode, type LeaveApplicationLike } from '@/lib/leave/accrual'
+import { essRoute, forbidden, audit, fmtDate } from '@/lib/ess/session'
+import { employeeScope } from '@/lib/config/store'
+import { notifyFromTemplate } from '@/lib/config/notify'
+import { daysLabel } from '@/lib/config/workflow-templates'
+import { leaveYearOf, leaveFyLabel } from '@/lib/ess/leave-year'
+import { ledgerFor, syncBalancesQuietly } from '@/lib/leave/ledger'
+import { checkRequest, splitWithLwp, approverRole, type TypeBalance } from '@/lib/leave/policy'
+import { contacts, deliver, later, portalUrl, fmtRange } from '@/lib/leave/notify'
+import { requestLeaveCancel } from '@/lib/leave/workflow'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,9 +61,22 @@ function eachDay(from: Date, to: Date): string[] {
   return out
 }
 
-/** Available = (opening + accrued) − used − encashed. Same arithmetic as the card. */
-const availOf = (b: any) =>
-  (Number(b?.opening || 0) + Number(b?.accrued || 0)) - Number(b?.used || 0) - Number(b?.encashed || 0)
+/** The Leave Without Pay type, if the catalogue has one: unpaid and never
+ *  balance-blocked. It is what the excess of an over-balance request becomes. */
+async function lwpType(): Promise<{ id: string; name: string; short_name: string } | null> {
+  const { data } = await sb.from('leave_types').select('id, name, short_name, is_paid, allow_without_balance, application_mode')
+    .eq('is_active', true).eq('allow_without_balance', true).eq('is_paid', false).order('sort_order')
+  const t = (data || []).find((x: any) => String(x.application_mode || 'EMPLOYEE').toUpperCase() === 'EMPLOYEE')
+  return t ? { id: t.id, name: t.name, short_name: t.short_name } : null
+}
+
+/** "7.5 days of EL; 5.5 after this request" — for the approver's email. */
+function balanceLine(b: TypeBalance | undefined, days: number): string {
+  if (!b || b.available == null) return ''
+  if (b.policy === 'PER_OCCURRENCE') return `${b.name}: up to ${b.quota} days per occurrence`
+  const after = Math.round((b.available - days) * 10) / 10
+  return `${b.available} day(s) of ${b.short_name || b.name} left; ${after} after this request`
+}
 
 /** A date that cannot be claimed as leave, and why. */
 type NonWorking = { date: string; kind: 'WEEKLY_OFF' | 'HOLIDAY'; label: string }
@@ -128,78 +147,32 @@ export async function GET(req: NextRequest) {
   const winFrom = iso(new Date())
   const winTo = iso(new Date(Date.now() + 366 * 86400000))
 
-  const [{ data: emp }, { data: balances }, { data: types }, { data: apps }, { data: hols }, { data: offRows }, { data: fyApps }] = await Promise.all([
+  const [{ data: emp }, { data: types }, { data: apps }, { data: hols }, { data: offRows }, ledger, lwp] = await Promise.all([
     sb.from('employees')
-      // date_of_leaving and company_id are for the balance: the first weights a
-      // leaving month pro-rata, the second resolves the quota through
-      // leave_policy rather than assuming the catalogue value.
-      .select('gender, company_doj, group_doj, date_of_leaving, company_id, confirmation_status, l1_manager_id, hr_manager_id')
+      .select('gender, company_doj, group_doj, date_of_leaving, company_id, confirmation_status, l1_manager_id, l2_manager_id, hr_manager_id, hr_head_id')
       .eq('id', me).maybeSingle(),
-    sb.from('leave_balances').select('*, leave_types(short_name, name)').eq('employee_id', me).eq('year', year),
     sb.from('leave_types').select('*').eq('is_active', true).neq('application_mode', 'HR_MARK').order('sort_order'),
     sb.from('leave_applications')
       .select('*, leave_types(short_name, name)')
       .eq('employee_id', me).order('applied_at', { ascending: false }).limit(10),
     sb.rpc('resolve_holidays', { p_employee_id: me }),
     sb.rpc('resolve_weekly_offs', { p_employee_id: me, p_from: winFrom, p_to: winTo }),
-    // `used` comes from HERE, not from `apps` above. That one is the recent
-    // strip the tab renders and is capped at 10 rows — deriving consumption
-    // from it would silently undercount anybody who has applied more than ten
-    // times, which is a wrong balance that looks entirely plausible.
-    //
-    // APPROVED only, and bounded to the financial year, so the query returns
-    // what it means rather than everything the employee has ever filed.
-    sb.from('leave_applications')
-      .select('leave_type_id, status, from_date, days')
-      .eq('employee_id', me)
-      .eq('status', 'APPROVED')
-      .gte('from_date', `${leaveFyStartYear(year)}-04-01`)
-      .lte('from_date', `${leaveFyStartYear(year) + 1}-03-31`),
+    // Balances: one computation (lib/leave/ledger.ts) shared with Home, Today,
+    // the approver's card, the HR Requests screen and the stored table. It
+    // derives `used` from every APPROVED request in the FY — not from `apps`
+    // above, which is the recent strip capped at 10 rows.
+    ledgerFor(me),
+    lwpType(),
   ])
+  // Keep leave_balances in step with what this screen shows. After the
+  // response: the employee is not made to wait on a write they did not ask for.
+  later(() => syncBalancesQuietly([me]))
 
   const weeklyOffs = ((offRows || []) as { off_date: string }[]).map(r => String(r.off_date)).sort()
   // The weekdays those dates land on, so the client can shade a month outside
   // the window without a second call. Derived from the resolver, never assumed:
   // a branch configured Fri+Sat, or an NTH rule, shows up here correctly.
   const weeklyOffWeekdays = [...new Set(weeklyOffs.map((d: string) => new Date(d + 'T00:00:00Z').getUTCDay()))].sort()
-
-  const balByType = new Map<string, any>()
-  for (const b of balances || []) balByType.set(b.leave_type_id, b)
-
-  // ── QUOTA: resolved, not assumed ──────────────────────────────────────────
-  //
-  // resolve_leave_quota prefers a branch policy, then the company default, then
-  // the leave_types catalogue. Reading t.annual_quota directly would skip the
-  // first two — and this database HAS company policy rows, so the catalogue is
-  // not the answer for EL.
-  //
-  // Needs emp.company_id, so it cannot join the Promise.all above. branch is
-  // null deliberately: there is no branches table here (employees carry
-  // location_id), and every live leave_policy row has branch_id NULL, so null
-  // is what resolves to the company default rather than a guess.
-  //
-  // It does NOT return `accrual` — confirmed against the live function, whose
-  // columns stop at annual_quota/max_carry_forward/source. So the mode still
-  // comes from the catalogue below. A per-branch accrual override would be
-  // silently ignored today; extending the RPC is a follow-up, and nothing is
-  // configured that way yet because 130 set every quota-bearing type MONTHLY.
-  const quotaByType = new Map<string, { annual_quota: number; max_carry_forward: number }>()
-  if (emp?.company_id) {
-    const { data: quotas } = await sb.rpc('resolve_leave_quota', {
-      p_company_id: emp.company_id,
-      p_branch_id: null,
-      p_fy: leavePolicyFy(year),
-    })
-    for (const q of (quotas || []) as Record<string, string>[]) {
-      quotaByType.set(String(q.leave_type_id), {
-        annual_quota: Number(q.annual_quota) || 0,
-        max_carry_forward: Number(q.max_carry_forward) || 0,
-      })
-    }
-  }
-
-  const fyStartYear = leaveFyStartYear(year)
-  const approved = (fyApps || []) as LeaveApplicationLike[]
 
   // How far back this employee may apply, set by HR per company (migration
   // 132). Resolved through the function rather than read from the table, so
@@ -259,47 +232,67 @@ export async function GET(req: NextRequest) {
       const eligibleOn = new Date(new Date(doj + 'T00:00:00Z').getTime() + Number(t.min_tenure_days || 0) * 86400000)
       if (eligibleOn > today) reasons.push(`Available from ${fmtDate(iso(eligibleOn))}`)
     }
-    const bal = balByType.get(t.id)
+    // From the shared ledger (lib/leave/policy.ts explains the four policies).
+    const b = ledger?.byType.get(t.id)
+    // A type with no quota and nothing loaded cannot be taken at all. Saying so
+    // here beats a form that accepts the dates and then refuses them.
+    if (b && b.policy === 'ACCRUAL' && b.quota <= 0 && b.opening <= 0 && (b.available ?? 0) <= 0) {
+      reasons.push('No entitlement set up yet — ask HR')
+    }
     return {
       id: t.id, short_name: t.short_name, name: t.name,
       application_mode: t.application_mode,
       allow_half_day: !!t.allow_half_day,          // ← the client no longer hardcodes this
       allow_without_balance: !!t.allow_without_balance,
       approval_by: t.approval_by,
-      // COMPUTED, not read. leave_balances holds 0 rows for all 398 employees,
-      // so `bal ? availOf(bal) : null` reported null for every type for
-      // everybody — an empty Leave tab that looked like a loading state.
-      //
-      // The engine accrues monthly from the quota, weights the joining and
-      // leaving months pro-rata, and derives `used` from APPROVED applications
-      // in this FY. The stored row now supplies only what cannot be computed:
-      // `opening` (carried in from last FY) and `encashed`. Both default to 0,
-      // which is correct for a first year.
-      available: balanceFor({
-        // Parenthesised deliberately: `a ?? b || c` is ambiguous enough that
-        // TypeScript refuses it (TS5076). The meaning is the resolved policy
-        // quota when there is one, otherwise the catalogue value, otherwise 0.
-        annualQuota: quotaByType.get(t.id)?.annual_quota ?? (Number(t.annual_quota) || 0),
-        fyStartYear,
-        doj,
-        lwd: emp?.date_of_leaving ?? null,
-        opening: Number(bal?.opening || 0),
-        encashed: Number(bal?.encashed || 0),
-        applications: approved,
-        leaveTypeId: t.id,
-        mode: normaliseMode(t.accrual),
-      }).available,
+      // Earned and not taken. null for types that are not balance-tracked (LWP,
+      // Sabbatical, Comp Off). Per-occurrence types (Maternity, Paternity) give
+      // the entitlement for one occurrence.
+      available: b ? b.available : null,
+      // What a NEW request may use: available minus what is already pending.
+      bookable: b ? b.bookable : null,
+      pending: b ? b.pending : 0,
+      policy: b ? b.policy : null,
       eligible: reasons.length === 0,
       reason: reasons[0] || null,
     }
   })
 
+  // Who each request is waiting on, by name — the employee used to see only
+  // "PENDING" (or "stage L1") and had to guess who to chase.
+  const waitIds = (apps || []).flatMap((a: any) => [
+    a.status === 'PENDING' ? a.current_approver_id : null,
+    a.cancel_status === 'REQUESTED' ? a.cancel_approver_id : null,
+  ]).filter(Boolean) as string[]
+  const people = await contacts(waitIds)
+  const who = (id: string | null) => {
+    const c = id ? people.get(id) : null
+    return c ? { id: c.id, name: c.name, role: approverRole(emp, c.id) } : null
+  }
+  const applications = (apps || []).map((a: any) => ({
+    ...a,
+    waiting_on: a.status === 'PENDING' ? who(a.current_approver_id) : null,
+    cancel_waiting_on: a.cancel_status === 'REQUESTED' ? who(a.cancel_approver_id) : null,
+  }))
+
+  // The balance cards: headline types (EL, CL, SL …), in the stored-row shape
+  // the web hero and the mobile app already read, filled from the ledger.
+  const balances = (ledger?.headline || []).map(b => ({
+    leave_type_id: b.leave_type_id, year: ledger?.year,
+    opening: b.opening, accrued: b.accrued, used: b.used, encashed: b.encashed,
+    pending: b.pending, available: b.available, bookable: b.bookable,
+    leave_types: { short_name: b.short_name, name: b.name },
+  }))
+
   return NextResponse.json({
     year,
-    fyLabel: leaveFyLabel(year),
-    balances: balances || [],
+    fyLabel: ledger?.fyLabel || leaveFyLabel(year),
+    balances,
+    balance_total: ledger?.headlineTotal ?? 0,
     types: annotated,
-    applications: apps || [],
+    applications,
+    // The type an over-balance request's extra days can go to.
+    lwp_type: lwp,
     holidays: hols || [],
     // The employee's own configured weekly offs, for the calendar. The tab used
     // to hardcode Sunday, which was right only because the single live rule is a
@@ -313,7 +306,7 @@ export async function GET(req: NextRequest) {
     // Surfaced so the tab can say WHY a card is empty instead of implying the
     // employee simply has nothing — the two are indistinguishable today.
     diagnostics: {
-      noBalances: !(balances || []).length,
+      noBalances: !balances.length,
       noHolidays: !(hols || []).length,
       noApprover: !emp?.l1_manager_id && !emp?.hr_manager_id,
       // True when no weekly-off rule matches this employee at all. Distinct
@@ -370,7 +363,7 @@ export async function POST(req: NextRequest) {
 
   // ── 4. The employee, and the eligibility rules that were never enforced ──
   const { data: emp } = await sb.from('employees')
-    .select('full_name, gender, company_doj, group_doj, company_id, confirmation_status, l1_manager_id, hr_manager_id')
+    .select('full_name, emp_code, gender, company_doj, group_doj, company_id, confirmation_status, l1_manager_id, l2_manager_id, hr_manager_id, hr_head_id')
     .eq('id', me).maybeSingle()
   if (!emp) return bad('Employee record not found.', 404)
 
@@ -486,62 +479,140 @@ export async function POST(req: NextRequest) {
   const days = halfDay ? 0.5 : wd
   if (days <= 0) return bad('That range contains only weekly-offs and holidays.')
 
-  // ── 8. Balance ──────────────────────────────────────────────────────────
-  // DELIBERATELY CONDITIONAL. leave_balances is empty for all 398 employees
-  // (nobody has run the HR upload), so enforcing this unconditionally would
-  // stop everyone from applying — turning the one part of Leave that works
-  // into a total outage. It binds as soon as a balance row exists.
-  if (!type.allow_without_balance) {
-    const year = leaveYearOf(from)
-    const { data: bal } = await sb.from('leave_balances')
-      .select('opening, accrued, used, encashed')
-      .eq('employee_id', me).eq('leave_type_id', typeId).eq('year', year).maybeSingle()
-    if (bal) {
-      const have = availOf(bal)
-      if (days > have) return bad(`You have ${have} day(s) of ${type.short_name} left; this request is ${days}.`, 409)
+  // ── 8. Balance — enforced ───────────────────────────────────────────────
+  //
+  // This used to bind only when a leave_balances row existed, and none ever
+  // did, so an 11-day Casual Leave request on a 3.5-day balance went straight
+  // through. The balance now comes from the same ledger the Leave tab shows,
+  // and what is already PENDING counts against it (two 3-day requests on a
+  // 4-day balance must not both reach an approver).
+  //
+  // The usual HRMS behaviour for an over-balance request is to refuse it and
+  // offer the rest as Leave Without Pay. That is what happens here: the refusal
+  // carries `can_split`, and the form offers "apply X days as CL and Y as LWP",
+  // which re-posts with split_with_lwp — two requests, same dates, same reason.
+  //
+  // A request in a FUTURE financial year is checked against that year, as of
+  // its own start date: next April's leave is paid out of next April's accrual.
+  const sameFy = leaveYearOf(from) === leaveYearOf()
+  const ledger = await ledgerFor(me, sameFy ? undefined : from)
+  const bal = ledger?.byType.get(typeId)
+  const workingDays = eachDay(from, to).filter(d => !nonWorking.has(d))
+  let split: ReturnType<typeof splitWithLwp> | null = null
+  if (bal) {
+    const check = checkRequest(bal, days)
+    if (!check.ok) {
+      const lwp = await lwpType()
+      // A split is offered for full-day ranges on accrual types, when there is
+      // an LWP type to put the rest on. Per-occurrence and zero-quota types say
+      // what is wrong instead: the remedy there is HR, not unpaid leave.
+      const canSplit = !!lwp && !halfDay && bal.policy === 'ACCRUAL' && !(bal.quota <= 0 && bal.opening <= 0)
+      if (body.split_with_lwp === true && canSplit) {
+        split = splitWithLwp(workingDays, check.bookable)
+      } else {
+        const paid = Math.floor(check.bookable)
+        return NextResponse.json({
+          error: check.reason,
+          bookable: check.bookable, available: check.available, pending: check.pending,
+          can_split: canSplit,
+          split_preview: canSplit ? { paid_days: Math.min(paid, workingDays.length), lwp_days: workingDays.length - Math.min(paid, workingDays.length), lwp_type: lwp?.name } : null,
+        }, { status: 409 })
+      }
     }
   }
 
   // ── 9. Insert. employee_id is the SESSION's, never the body's ───────────
-  const payload: Record<string, unknown> = {
-    employee_id: me,                      // ← the whole point of this route
-    leave_type_id: typeId,
-    from_date: iso(from), to_date: iso(to),
-    days, half_day: halfDay, reason: reason || null,
-    status: 'PENDING',
-  }
-  if (halfSession) payload.half_session = halfSession
+  const lwp = split ? await lwpType() : null
+  const parts: { typeId: string; typeName: string; shortName: string; from: string; to: string; days: number }[] = split
+    ? [
+        ...(split.paid ? [{ typeId, typeName: type.name, shortName: type.short_name, ...split.paid }] : []),
+        ...(split.lwp && lwp ? [{ typeId: lwp.id, typeName: lwp.name, shortName: lwp.short_name, ...split.lwp }] : []),
+      ]
+    : [{ typeId, typeName: type.name, shortName: type.short_name, from: iso(from), to: iso(to), days }]
 
-  let ins = await sb.from('leave_applications').insert(payload).select('id, current_approver_id').maybeSingle()
-  // Kept from the old data layer: half_session exists live but in no migration,
-  // so a database that matches the repo would reject it. Migration 121 captures
-  // the drift; this fallback covers anything not yet migrated.
-  if (ins.error && /half_session/i.test(ins.error.message || '')) {
-    delete payload.half_session
-    ins = await sb.from('leave_applications').insert(payload).select('id, current_approver_id').maybeSingle()
-  }
-  if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 500 })
+  const inserted: { id: string; approver: string | null; part: (typeof parts)[number] }[] = []
+  for (const part of parts) {
+    const payload: Record<string, unknown> = {
+      employee_id: me,                      // ← the whole point of this route
+      leave_type_id: part.typeId,
+      from_date: part.from, to_date: part.to,
+      days: part.days, half_day: halfDay, reason: reason || null,
+      status: 'PENDING',
+    }
+    if (halfSession) payload.half_session = halfSession
 
-  // ── 10. Tell the approver the trigger picked ────────────────────────────
-  const approver = ins.data?.current_approver_id || null
-  if (approver) {
-    await notify(approver, 'Leave request awaiting you',
-      `${emp.full_name} has applied for ${days} day(s) of ${type.name} from ${fmtDate(iso(from))}.`,
-      '/ess?tab=approvals')
+    let ins = await sb.from('leave_applications').insert(payload).select('id, current_approver_id').maybeSingle()
+    // Kept from the old data layer: half_session exists live but in no migration,
+    // so a database that matches the repo would reject it. Migration 121 captures
+    // the drift; this fallback covers anything not yet migrated.
+    if (ins.error && /half_session/i.test(ins.error.message || '')) {
+      delete payload.half_session
+      ins = await sb.from('leave_applications').insert(payload).select('id, current_approver_id').maybeSingle()
+    }
+    if (ins.error) {
+      // Half of a split filed and the other half refused would leave the
+      // employee with a request they did not ask for. Take the first one back.
+      if (inserted.length) await sb.from('leave_applications').delete().in('id', inserted.map(x => x.id))
+      return NextResponse.json({ error: ins.error.message }, { status: 500 })
+    }
+    inserted.push({ id: ins.data?.id, approver: ins.data?.current_approver_id || null, part })
   }
-  await audit(ctx.caller, 'LEAVE_APPLIED', me, { leave_id: ins.data?.id, type: type.short_name, days, unrouted: !approver })
 
+  // ── 10. Tell the approver — and the employee who it went to ─────────────
+  const scope = await employeeScope(me)
+  const approverIds = inserted.map(x => x.approver).filter(Boolean) as string[]
+  const people = await contacts(approverIds)
+  for (const x of inserted) {
+    if (!x.approver) continue
+    const approverName = people.get(x.approver)?.name || ''
+    const role = approverRole(emp, x.approver)
+    // Words: Configuration → Leave & attendance, for the applicant's company / branch.
+    await deliver({
+      to: x.approver, scope,
+      bell: { key: 'notify.leave.awaiting', link: '/ess?tab=approvals', vars: {
+        employee_name: emp.full_name, days: x.part.days, leave_type: x.part.typeName, from_date: fmtDate(x.part.from),
+      } },
+      mail: { key: 'leave.request.approver', vars: {
+        approver_name: approverName, employee_name: emp.full_name, emp_code: emp.emp_code || '',
+        days_label: daysLabel(x.part.days), leave_type: x.part.typeName, dates: fmtRange(x.part.from, x.part.to),
+        reason: reason || '', balance_line: x.part.typeId === typeId ? balanceLine(bal, x.part.days) : '',
+        portal_url: portalUrl('approvals'),
+      } },
+    })
+    await deliver({
+      to: me, scope,
+      bell: { key: 'notify.leave.submitted', link: '/ess?tab=leave', vars: {
+        days_label: daysLabel(x.part.days), leave_type: x.part.typeName, from_date: fmtDate(x.part.from),
+        approver_name: approverName, approver_role: role,
+      } },
+    })
+  }
+  const first = inserted[0]
+  await audit(ctx.caller, 'LEAVE_APPLIED', me, {
+    leave_id: first?.id, type: type.short_name, days, unrouted: !first?.approver,
+    split: split ? inserted.map(x => ({ id: x.id, type: x.part.shortName, days: x.part.days })) : undefined,
+  })
+
+  const approverId = first?.approver || null
   return NextResponse.json({
-    ok: true, id: ins.data?.id, days, excluded: offs,
+    ok: true, id: first?.id, days, excluded: offs,
     // An application with no approver reaches nobody's queue and produces no
     // notification for anyone — which is how the live PENDING request stayed
     // invisible. The employee is told rather than left waiting on silence.
-    unrouted: !approver,
+    unrouted: !approverId,
+    // Named, so the confirmation can say "sent to Shreya Reddy (HR manager)".
+    waiting_on: approverId ? { id: approverId, name: people.get(approverId)?.name || '', role: approverRole(emp, approverId) } : null,
+    split: split ? inserted.map(x => ({ id: x.id, leave_type: x.part.shortName, from_date: x.part.from, to_date: x.part.to, days: x.part.days })) : null,
   })
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PATCH — cancel your own pending request
+// PATCH — withdraw your own pending request, or ask to cancel an approved one
+//
+//   { id }                              PENDING  → CANCELLED, straight away
+//   { id, action: 'cancel', reason }    APPROVED → cancellation request, which
+//                                       the approver confirms (days come back
+//                                       only then). Future-dated leave only.
 // ═══════════════════════════════════════════════════════════════════════════
 export async function PATCH(req: NextRequest) {
   const r = await essRoute(req)
@@ -554,21 +625,30 @@ export async function PATCH(req: NextRequest) {
   const id = String(body.id || '')
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
 
+  if (body.action === 'cancel') {
+    const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : ''
+    const out = await requestLeaveCancel(id, me, reason)
+    if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })
+    await audit(ctx.caller, 'LEAVE_CANCEL_REQUESTED', me, { leave_id: id, reason: reason || null })
+    return NextResponse.json(out)
+  }
+
   const { data: app } = await sb.from('leave_applications')
     .select('id, employee_id, status, from_date, to_date, days, current_approver_id')
     .eq('id', id).maybeSingle()
   if (!app) return NextResponse.json({ error: 'Leave request not found' }, { status: 404 })
   if (app.employee_id !== me) return forbidden('That is not your leave request.')
+  if (app.status === 'APPROVED') return NextResponse.json({ error: 'This leave is already approved — request a cancellation instead.' }, { status: 409 })
   if (app.status !== 'PENDING') return NextResponse.json({ error: `Already ${String(app.status).toLowerCase()}.` }, { status: 409 })
 
   const { error } = await sb.from('leave_applications')
-    .update({ status: 'CANCELLED', resolved_at: new Date().toISOString() }).eq('id', id)
+    .update({ status: 'CANCELLED', resolved_at: new Date().toISOString() }).eq('id', id).eq('status', 'PENDING')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // The approver is told, so a request does not simply vanish from their queue.
   if (app.current_approver_id) {
-    await notify(app.current_approver_id, 'Leave request withdrawn',
-      `A leave request for ${fmtDate(app.from_date)} was cancelled by the employee.`, '/ess?tab=approvals')
+    await notifyFromTemplate(app.current_approver_id, 'notify.leave.withdrawn',
+      { from_date: fmtDate(app.from_date) }, { scope: await employeeScope(me), link: '/ess?tab=approvals' })
   }
   await audit(ctx.caller, 'LEAVE_CANCELLED', me, { leave_id: id })
   return NextResponse.json({ ok: true, status: 'CANCELLED' })

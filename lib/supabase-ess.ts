@@ -352,6 +352,8 @@ export const PERM_MODULES = [
   'Employees', 'Attendance', 'Leave', 'Payroll', 'Compliance', 'HR Letters',
   'Recruitment', 'Onboarding', 'Approvals', 'Reports', 'Admin Setup',
   'Company Profile', 'Holidays',
+  // Letter & email templates. VIEW reads, EDIT edits — own company only (lib/config/access.ts).
+  'Configuration',
 ] as const
 
 // The 9 approval workflows. `live` = a request of this type is actually created

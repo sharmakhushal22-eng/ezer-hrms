@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
 
   if (isPending) {
     const to = (emp as any).office_email || (emp as any).personal_email
-    try { if (to) await sendPranCreationEmail({ to, employeeName: emp.full_name, deadline: deadline! }) } catch { /* email best-effort */ }
+    try { if (to) await sendPranCreationEmail({ to, employeeName: emp.full_name, deadline: deadline!, employeeId: employee_id }) } catch { /* email best-effort */ }
     await supabase.from('nps_audit_log').insert({
       declaration_id: created.id, employee_id, employee_code: (emp as any).emp_code,
       action: 'PRAN_EMAIL_SENT', new_value: { deadline }, source: src,

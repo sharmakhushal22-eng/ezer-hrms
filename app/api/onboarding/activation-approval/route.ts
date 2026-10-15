@@ -1,11 +1,14 @@
 // app/api/onboarding/activation-approval/route.ts
 // Sends HR-activation approval-request emails to the selected approvers
-// (L1 / Payroll / IT / Admin) via the existing Gmail/nodemailer setup.
+// (L1 / Payroll / IT / Admin). Words: Configuration → Onboarding → "Activation approval
+// request", for the joiner's company / branch.
 // Recipients are resolved from the chosen employees' office_email.
 // Non-fatal: a missing key or address skips that recipient, never blocks the wizard.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import nodemailer from 'nodemailer'
+import { requireModule } from '@/lib/api-auth'
+import { resolveTemplate, renderResolvedEmail } from '@/lib/config/store'
+import { mailConfigured, sendMail } from '@/lib/mail/send'
 
 export const runtime = 'nodejs'
 
@@ -24,21 +27,21 @@ async function emailFor(empId: string | null | undefined): Promise<string | null
 }
 
 export async function POST(req: NextRequest) {
+  // Mails a joiner's CTC to Payroll — only someone who can edit onboarding may trigger it.
+  const gate = await requireModule(req, 'Onboarding', 'EDIT')
+  if (gate.error) return gate.error
   try {
     const { onboarding_id, roles } = await req.json() as { onboarding_id: string; roles: Role[] }
     if (!onboarding_id) return NextResponse.json({ error: 'onboarding_id required' }, { status: 400 })
 
     const { data: c } = await supa.from('onboarding_candidates')
-      .select('full_name, designation, date_of_joining, annual_ctc, basic_pct, l1_manager_id, hod_id, company_id')
+      .select('full_name, designation, date_of_joining, annual_ctc, basic_pct, l1_manager_id, hod_id, company_id, location_id')
       .eq('id', onboarding_id).maybeSingle()
     if (!c) return NextResponse.json({ error: 'Candidate not found' }, { status: 404 })
 
-    const user = process.env.GMAIL_USER
-    const pass = process.env.GMAIL_APP_PASSWORD
-    if (!user || !pass) {
+    if (!mailConfigured()) {
       return NextResponse.json({ ok: false, skipped: true, reason: 'Gmail not configured (GMAIL_USER / GMAIL_APP_PASSWORD)' })
     }
-    const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
 
     // Resolve a recipient per requested role.
     const targets: { role: Role; to: string }[] = []
@@ -54,22 +57,16 @@ export async function POST(req: NextRequest) {
 
     const doj = c.date_of_joining || 'TBD'
     const ctcLine = c.annual_ctc ? `CTC: ₹${Number(c.annual_ctc).toLocaleString('en-IN')} · Basic ${c.basic_pct || 50}%` : ''
+    const tpl = (await resolveTemplate('onboarding.activation_approval', { companyId: c.company_id, locationId: c.location_id }))!
     const sent: string[] = []
     for (const t of targets) {
-      const subject = `Action needed: approve activation for ${c.full_name}`
-      const body =
-        `Hi,\n\nPlease review and approve the joining activation for:\n\n` +
-        `Candidate: ${c.full_name}\nDesignation: ${c.designation || '—'}\nDate of joining: ${doj}\n` +
-        (t.role === 'payroll' && ctcLine ? `${ctcLine}\n` : '') +
-        `\nApproval role: ${ROLE_LABEL[t.role]}\n\n` +
-        `Open EZER HRMS → Onboarding → ${c.full_name} → Activation to record your approval.\n\n— EZER HRMS`
-      try {
-        await transporter.sendMail({
-          from: `"${process.env.GMAIL_FROM_NAME || 'EZER HR'}" <${user}>`,
-          to: t.to, subject, text: body, html: body.replace(/\n/g, '<br>'),
-        })
-        sent.push(`${t.role}:${t.to}`)
-      } catch (e) { /* skip this recipient, keep going */ }
+      const mail = renderResolvedEmail(tpl, {
+        candidate_name: c.full_name, designation: c.designation || '—', joining_date: doj,
+        ctc_line: t.role === 'payroll' ? ctcLine : '', approval_role: ROLE_LABEL[t.role],
+      })
+      // A failed recipient is skipped; the others still go.
+      const r = await sendMail({ to: t.to, subject: mail.subject, text: mail.text, html: mail.html, fromName: 'EZER HR' })
+      if (r.sent) sent.push(`${t.role}:${t.to}`)
     }
 
     try {

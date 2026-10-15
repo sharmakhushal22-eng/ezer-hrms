@@ -6,8 +6,9 @@
 // candidate record, which the page shows masked.
 
 import { NextRequest, NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
+import { renderEmail, candidateScope } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
 import { genOtp, hashOtp, signAccess, OTP_TTL_MIN, OTP_MAX_ATTEMPTS } from '@/lib/recruitment/collect-auth'
 import { negotiationByToken, registeredEmail, accessExpiryMs, maskEmail } from '../_shared'
 
@@ -30,22 +31,14 @@ export async function POST(req: NextRequest) {
       .update({ otp_hash: hashOtp(token, otp), otp_expires_at: expires, otp_attempts: 0 }).eq('id', neg.id)
     if (error) return NextResponse.json({ error: /otp_hash|otp_expires_at|otp_attempts/.test(error.message) ? 'OTP login is not set up yet (migration 132). Please contact HR.' : error.message }, { status: 500 })
 
-    const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
-    let sent = false, debugOtp: string | undefined
-    if (user && pass) {
-      try {
-        const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-        const company = neg.company_name || process.env.GMAIL_FROM_NAME || 'HR Team'
-        await t.sendMail({
-          from: `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`,
-          to: email,
-          subject: `Your salary offer verification code: ${otp}`,
-          text: `Dear ${neg.candidate_name || 'Candidate'},\n\nYour one-time code to open your salary offer from ${company} is ${otp}. It is valid for ${OTP_TTL_MIN} minutes.\n\nIf you did not request this, please ignore this email.`,
-          html: `<p>Dear ${neg.candidate_name || 'Candidate'},</p><p>Your one-time code to open your salary offer from <b>${company}</b> is:</p><p style="font-size:26px;font-weight:800;letter-spacing:4px;color:#7C3AED">${otp}</p><p>Valid for ${OTP_TTL_MIN} minutes. If you did not request this, please ignore this email.</p>`,
-        })
-        sent = true
-      } catch { /* fall through */ }
-    }
+    // Words: Configuration → "Salary offer — verification code", for the offer's company / branch.
+    const mail = await renderEmail('salary_view.otp', await candidateScope(neg.candidate_id, neg.company_id), {
+      candidate_name: neg.candidate_name || 'Candidate',
+      company_name: neg.company_name || process.env.GMAIL_FROM_NAME || 'HR Team',
+      otp, validity_minutes: OTP_TTL_MIN,
+    })
+    const sent = (await sendMail({ to: email, subject: mail.subject, text: mail.text, html: mail.html })).sent
+    let debugOtp: string | undefined
     if (!sent && process.env.NODE_ENV !== 'production') debugOtp = otp   // local/dev only: makes the flow testable without SMTP
     return NextResponse.json({ ok: true, sent, sentTo: maskEmail(email), ttlMin: OTP_TTL_MIN, ...(debugOtp ? { debugOtp } : {}) })
   }

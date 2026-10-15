@@ -31,7 +31,7 @@ export interface ServiceRequestRow {
 
 /** One item from GET /api/ess/approvals — buildPending()'s shape, unchanged. */
 export interface PendingItem {
-  kind: 'LEAVE' | 'TRAVEL' | 'RESIGNATION'
+  kind: 'LEAVE' | 'LEAVE_CANCEL' | 'REGULARISATION' | 'TRAVEL' | 'RESIGNATION'
   id: string
   employee_id: string
   who: string
@@ -46,6 +46,10 @@ export interface PendingItem {
   actions: string[]
   tone?: 'w' | 'd'
   link?: string
+  /** Context lines for the approver: balance before/after, who else is off. */
+  facts?: string[]
+  /** Something that should stop a blind click. */
+  alert?: string | null
 }
 
 /** A stage entry, as both /api/ess/approvals?resignation_id= and
