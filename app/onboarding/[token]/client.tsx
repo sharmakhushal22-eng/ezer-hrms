@@ -420,11 +420,9 @@ function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, 
       )}
       {activeTab === 'form2' && (
         <StatutoryFormCard code="EPF FORM 2" title="PF & Pension Nomination" rows={[
-          ['Nominee name', statutory.nominee_name],
-          ['Relationship', statutory.nominee_relation],
-          ['Nominee date of birth', statutory.nominee_dob],
-          ['Share of accumulation', statutory.nominee_share ? `${statutory.nominee_share}%` : '—'],
-          ['Nominee address', statutory.nominee_address],
+          ...(statutory.pf_nominees.length > 1
+            ? [['Nominees', statutory.pf_nominees.map((n: Nominee, i: number) => `${i + 1}. ${n.name || '—'} (${n.relation || '—'}, DOB ${n.dob || '—'}) — ${n.share || '0'}%`).join(' · ')] as [string, any]]
+            : [['Nominee name', statutory.nominee_name], ['Relationship', statutory.nominee_relation], ['Nominee date of birth', statutory.nominee_dob], ['Share of accumulation', statutory.nominee_share ? `${statutory.nominee_share}%` : '—'], ['Nominee address', statutory.nominee_address]] as [string, any][]),
           ['Family members (Part B)', epsFamStr],
           ['Fallback nominee (EPS)', epsFallbackStr],
         ]} />
@@ -438,10 +436,9 @@ function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, 
           ['Date of appointment', doj],
           ['Date of superannuation (DOB + 60)', superannuation],
           ['Permanent address', permAddr],
-          ['Nominee name', statutory.grat_nominee_name || statutory.nominee_name],
-          ['Relationship', statutory.grat_nominee_relation || statutory.nominee_relation],
-          ['Nominee age', statutory.nominee_dob ? `${ageFromDob(statutory.nominee_dob)} yrs` : '—'],
-          ['Proportion', '100%'],
+          ...(statutory.grat_nominees.filter((n: Nominee) => n.name).length > 1
+            ? [['Nominees', statutory.grat_nominees.filter((n: Nominee) => n.name).map((n: Nominee, i: number) => `${i + 1}. ${n.name} (${n.relation || '—'}${n.dob ? `, ${ageFromDob(n.dob)} yrs` : ''}) — ${n.share || '0'}%`).join(' · ')] as [string, any]]
+            : [['Nominee name', statutory.grat_nominee_name || statutory.nominee_name], ['Relationship', statutory.grat_nominee_relation || statutory.nominee_relation], ['Nominee age', (statutory.grat_nominees[0]?.dob || statutory.nominee_dob) ? `${ageFromDob(statutory.grat_nominees[0]?.dob || statutory.nominee_dob)} yrs` : '—'], ['Proportion', '100%']] as [string, any][]),
         ]} />
       )}
       {activeTab === 'esic1' && esicApplicable && (
@@ -762,6 +759,51 @@ function CrossDocCheck({ docs, onResolve, onMismatchChange }: {
 }
 
 // ── EPS Family Member row (Form 2 Part B) ─────────────────────────
+type Nominee = { name: string; relation: string; dob: string; share: string; address: string }
+const EMPTY_NOMINEE: Nominee = { name: '', relation: '', dob: '', share: '', address: '' }
+const shareTotal = (rows: Nominee[]) => rows.reduce((a, r) => a + (parseFloat(r.share) || 0), 0)
+/** The first PF / gratuity nominee also fills the flat fields older code reads. */
+function withLegacyNominees<T extends { pf_nominees: Nominee[]; grat_nominees: Nominee[] }>(st: T): T {
+  const pf = st.pf_nominees[0] || EMPTY_NOMINEE, gr = st.grat_nominees[0] || EMPTY_NOMINEE
+  return { ...st, nominee_name: pf.name, nominee_relation: pf.relation, nominee_dob: pf.dob, nominee_share: pf.share, nominee_address: pf.address, grat_nominee_name: gr.name, grat_nominee_relation: gr.relation, grat_nominee_dob: gr.dob, grat_nominee_share: gr.share }
+}
+
+function NomineeRow({ row, index, kind, canRemove, onChange, onRemove }: {
+  row: Nominee; index: number; kind: 'pf' | 'grat'; canRemove: boolean
+  onChange: (patch: Partial<Nominee>) => void; onRemove: () => void
+}) {
+  const req = kind === 'pf'
+  return (
+    <div style={{ border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: TK.brandTint }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: P }}>Nominee {index + 1}{row.name ? ` — ${row.name}` : ''}</div>
+        {canRemove && (
+          <button onClick={onRemove} style={{ ...S.btnO, padding: '3px 10px', fontSize: 11, border: `1px solid ${TK.criticalTint}`, color: TK.critical }}>Remove</button>
+        )}
+      </div>
+      <div style={S.g3}>
+        <Fld label={req ? 'Nominee Name *' : 'Nominee Name'}><input style={S.inp(req && !row.name)} value={row.name || ''} onChange={e => onChange({ name: e.target.value })} /></Fld>
+        <Fld label={req ? 'Relation *' : 'Relation'}>
+          <select style={S.sel} value={row.relation || ''} onChange={e => onChange({ relation: e.target.value })}>
+            <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Other</option>
+          </select>
+        </Fld>
+        <Fld label={req ? 'Date of Birth *' : 'Date of Birth'}><input type="date" style={S.inp(req && !row.dob)} value={row.dob || ''} onChange={e => onChange({ dob: e.target.value })} /></Fld>
+        <Fld label="Share %"><input type="number" min={0} max={100} style={S.inp()} value={row.share || ''} onChange={e => onChange({ share: e.target.value })} /></Fld>
+        <div style={{ gridColumn: 'span 2' }}><Fld label={req ? 'Nominee Address *' : 'Nominee Address'}><input style={S.inp(req && !row.address)} value={row.address || ''} onChange={e => onChange({ address: e.target.value })} /></Fld></div>
+      </div>
+    </div>
+  )
+}
+
+const ADDR_PARTS = ['line1', 'village', 'po', 'thana', 'sub_division', 'district', 'city', 'state', 'pin']
+/** Current address = permanent address, field for field. */
+function copyPermToCurr<T extends Record<string, any>>(c: T): T {
+  const n: any = { ...c }
+  for (const k of ADDR_PARTS) n[`curr_${k}`] = c[`perm_${k}`] ?? ''
+  return n
+}
+
 function EpsFamilyRow({ row, index, canRemove, onChange, onRemove }: {
   row: any; index: number; canRemove: boolean
   onChange: (patch: any) => void; onRemove: () => void
@@ -876,10 +918,20 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     perm_pin: (saved.step_4?.perm_pin) || '',
     same_address: (saved.step_4?.same_address) !== undefined ? saved.step_4.same_address : false,
     curr_line1: (saved.step_4?.curr_line1) || '',
+    curr_village: (saved.step_4?.curr_village) || '',
+    curr_po: (saved.step_4?.curr_po) || '',
+    curr_thana: (saved.step_4?.curr_thana) || '',
+    curr_sub_division: (saved.step_4?.curr_sub_division) || '',
+    curr_district: (saved.step_4?.curr_district) || '',
     curr_city: (saved.step_4?.curr_city) || '',
     curr_state: (saved.step_4?.curr_state) || '',
     curr_pin: (saved.step_4?.curr_pin) || '',
   })
+  // "Current address same as permanent": the current fields stay on screen and are filled from
+  // the permanent ones (and follow them while the box is ticked). Editing a current field by
+  // hand unticks the box.
+  const setPerm = (key: string, value: string) => setContact(c => { const n: any = { ...c, [key]: value }; return n.same_address ? copyPermToCurr(n) : n })
+  const setCurr = (key: string, value: string) => setContact(c => ({ ...c, [key]: value, same_address: false }))
 
   // Emergency + prev employment
   const [emergency, setEmergency] = useState({
@@ -905,13 +957,21 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     uan_number: (saved.step_7?.uan_number) || '',
     prev_pf_id: (saved.step_7?.prev_pf_id) || '',
     pf_transfer: (saved.step_7?.pf_transfer) !== undefined ? saved.step_7.pf_transfer : false,
-    // PF Nominee
+    // PF nominees (EPF Form 2) and gratuity nominees (Form F): one or more each. The flat
+    // nominee_* / grat_nominee_* fields that older forms saved are kept filled from the first
+    // entry (withLegacyNominees), so the employee record and the form previews keep working.
+    pf_nominees: (saved.step_7?.pf_nominees?.length ? saved.step_7.pf_nominees : [{
+      name: (saved.step_7?.nominee_name) || '', relation: (saved.step_7?.nominee_relation) || '', dob: (saved.step_7?.nominee_dob) || '',
+      share: (saved.step_7?.nominee_share) || '100', address: (saved.step_7?.nominee_address) || '',
+    }]) as Nominee[],
+    grat_nominees: (saved.step_7?.grat_nominees?.length ? saved.step_7.grat_nominees : [{
+      name: (saved.step_7?.grat_nominee_name) || '', relation: (saved.step_7?.grat_nominee_relation) || '', dob: (saved.step_7?.grat_nominee_dob) || '', share: (saved.step_7?.grat_nominee_share) || '100', address: '',
+    }]) as Nominee[],
     nominee_name: (saved.step_7?.nominee_name) || '',
     nominee_relation: (saved.step_7?.nominee_relation) || '',
     nominee_dob: (saved.step_7?.nominee_dob) || '',
     nominee_share: (saved.step_7?.nominee_share) || '100',
     nominee_address: (saved.step_7?.nominee_address) || '',
-    // Gratuity nominee
     grat_nominee_name: (saved.step_7?.grat_nominee_name) || '',
     grat_nominee_relation: (saved.step_7?.grat_nominee_relation) || '',
     // Bank
@@ -1089,7 +1149,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
       step_4: contact,
       step_5: { ...emergency, prev_employers: prevEmployers, education },
       step_7: {
-        ...statutory,
+        ...withLegacyNominees(statutory),
         gross_monthly: grossMonthly,
         esic_applicable: esicApplicable,
         esic_details: esic,
@@ -1306,41 +1366,42 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
 
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '12px 0 10px' }}>Permanent Address</div>
             <div style={S.g3}>
-              <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1 *"><input style={S.inp(!contact.perm_line1)} value={contact.perm_line1} onChange={e => setContact(c => ({ ...c, perm_line1: e.target.value }))} /></Fld></div>
-              <Fld label="Village / Area" hint="For Gratuity Form III"><input style={S.inp()} value={contact.perm_village} onChange={e => setContact(c => ({ ...c, perm_village: e.target.value }))} /></Fld>
-              <Fld label="Post Office"><input style={S.inp()} value={contact.perm_po} onChange={e => setContact(c => ({ ...c, perm_po: e.target.value }))} /></Fld>
-              <Fld label="Thana / Police Station"><input style={S.inp()} value={contact.perm_thana} onChange={e => setContact(c => ({ ...c, perm_thana: e.target.value }))} /></Fld>
-              <Fld label="Sub-Division"><input style={S.inp()} value={contact.perm_sub_division} onChange={e => setContact(c => ({ ...c, perm_sub_division: e.target.value }))} /></Fld>
-              <Fld label="District"><input style={S.inp()} value={contact.perm_district} onChange={e => setContact(c => ({ ...c, perm_district: e.target.value }))} /></Fld>
-              <Fld label="City *"><input style={S.inp(!contact.perm_city)} value={contact.perm_city} onChange={e => setContact(c => ({ ...c, perm_city: e.target.value }))} /></Fld>
+              <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1 *"><input style={S.inp(!contact.perm_line1)} value={contact.perm_line1} onChange={e => setPerm('perm_line1', e.target.value)} /></Fld></div>
+              <Fld label="Village / Area" hint="For Gratuity Form III"><input style={S.inp()} value={contact.perm_village} onChange={e => setPerm('perm_village', e.target.value)} /></Fld>
+              <Fld label="Post Office"><input style={S.inp()} value={contact.perm_po} onChange={e => setPerm('perm_po', e.target.value)} /></Fld>
+              <Fld label="Thana / Police Station"><input style={S.inp()} value={contact.perm_thana} onChange={e => setPerm('perm_thana', e.target.value)} /></Fld>
+              <Fld label="Sub-Division"><input style={S.inp()} value={contact.perm_sub_division} onChange={e => setPerm('perm_sub_division', e.target.value)} /></Fld>
+              <Fld label="District"><input style={S.inp()} value={contact.perm_district} onChange={e => setPerm('perm_district', e.target.value)} /></Fld>
+              <Fld label="City *"><input style={S.inp(!contact.perm_city)} value={contact.perm_city} onChange={e => setPerm('perm_city', e.target.value)} /></Fld>
               <Fld label="State *">
-                <select style={S.sel} value={contact.perm_state} onChange={e => setContact(c => ({ ...c, perm_state: e.target.value }))}>
+                <select style={S.sel} value={contact.perm_state} onChange={e => setPerm('perm_state', e.target.value)}>
                   <option value="">Select State</option>{STATES.map(s => <option key={s}>{s}</option>)}
                 </select>
               </Fld>
-              <Fld label="PIN Code *"><input style={S.inp(!contact.perm_pin)} value={contact.perm_pin} onChange={e => setContact(c => ({ ...c, perm_pin: e.target.value }))} maxLength={6} /></Fld>
+              <Fld label="PIN Code *"><input style={S.inp(!contact.perm_pin)} value={contact.perm_pin} onChange={e => setPerm('perm_pin', e.target.value)} maxLength={6} /></Fld>
             </div>
 
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, margin: '12px 0 10px', userSelect: 'none' }}>
-              <input type="checkbox" checked={contact.same_address} onChange={e => setContact(c => ({ ...c, same_address: e.target.checked }))} style={{ width: 16, height: 16 }} />
+              <input type="checkbox" checked={contact.same_address} onChange={e => setContact(c => e.target.checked ? { ...copyPermToCurr(c), same_address: true } : { ...c, same_address: false })} style={{ width: 16, height: 16 }} />
               Current address same as permanent address
             </label>
 
-            {!contact.same_address && (
-              <>
-                <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 10 }}>Current / Local Address</div>
-                <div style={S.g3}>
-                  <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1"><input style={S.inp()} value={contact.curr_line1} onChange={e => setContact(c => ({ ...c, curr_line1: e.target.value }))} /></Fld></div>
-                  <Fld label="City"><input style={S.inp()} value={contact.curr_city} onChange={e => setContact(c => ({ ...c, curr_city: e.target.value }))} /></Fld>
-                  <Fld label="State">
-                    <select style={S.sel} value={contact.curr_state} onChange={e => setContact(c => ({ ...c, curr_state: e.target.value }))}>
-                      <option value="">Select State</option>{STATES.map(s => <option key={s}>{s}</option>)}
-                    </select>
-                  </Fld>
-                  <Fld label="PIN Code"><input style={S.inp()} value={contact.curr_pin} onChange={e => setContact(c => ({ ...c, curr_pin: e.target.value }))} maxLength={6} /></Fld>
-                </div>
-              </>
-            )}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 10 }}>Current / Local Address{contact.same_address && <span style={{ fontWeight: 400, color: TK.muted }}> · filled from the permanent address — edit any field if it differs</span>}</div>
+            <div style={S.g3}>
+              <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1"><input style={S.inp()} value={contact.curr_line1} onChange={e => setCurr('curr_line1', e.target.value)} /></Fld></div>
+              <Fld label="Village / Area"><input style={S.inp()} value={contact.curr_village} onChange={e => setCurr('curr_village', e.target.value)} /></Fld>
+              <Fld label="Post Office"><input style={S.inp()} value={contact.curr_po} onChange={e => setCurr('curr_po', e.target.value)} /></Fld>
+              <Fld label="Thana / Police Station"><input style={S.inp()} value={contact.curr_thana} onChange={e => setCurr('curr_thana', e.target.value)} /></Fld>
+              <Fld label="Sub-Division"><input style={S.inp()} value={contact.curr_sub_division} onChange={e => setCurr('curr_sub_division', e.target.value)} /></Fld>
+              <Fld label="District"><input style={S.inp()} value={contact.curr_district} onChange={e => setCurr('curr_district', e.target.value)} /></Fld>
+              <Fld label="City"><input style={S.inp()} value={contact.curr_city} onChange={e => setCurr('curr_city', e.target.value)} /></Fld>
+              <Fld label="State">
+                <select style={S.sel} value={contact.curr_state} onChange={e => setCurr('curr_state', e.target.value)}>
+                  <option value="">Select State</option>{STATES.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </Fld>
+              <Fld label="PIN Code"><input style={S.inp()} value={contact.curr_pin} onChange={e => setCurr('curr_pin', e.target.value)} maxLength={6} /></Fld>
+            </div>
 
             {/* PAN — auto-filled from AI */}
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '18px 0 10px' }}>PAN</div>
@@ -1629,30 +1690,23 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Nominees</div>
             <div style={{ fontSize: 12, color: TK.muted, marginBottom: 12 }}>PF nominee share should total 100%.</div>
 
-            {/* PF Nominee (Form 11/Form 2) */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>PF Nominee (EPF Form 2)</div>
-            <div style={S.g3}>
-              <Fld label="Nominee Name *"><input style={S.inp(!statutory.nominee_name)} value={statutory.nominee_name} onChange={e => setStatutory(s => ({ ...s, nominee_name: e.target.value }))} /></Fld>
-              <Fld label="Relation *">
-                <select style={S.sel} value={statutory.nominee_relation} onChange={e => setStatutory(s => ({ ...s, nominee_relation: e.target.value }))}>
-                  <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Other</option>
-                </select>
-              </Fld>
-              <Fld label="Date of Birth *"><input type="date" style={S.inp(!statutory.nominee_dob)} value={statutory.nominee_dob} onChange={e => setStatutory(s => ({ ...s, nominee_dob: e.target.value }))} /></Fld>
-              <Fld label="Share %"><input type="number" style={S.inp()} value={statutory.nominee_share} onChange={e => setStatutory(s => ({ ...s, nominee_share: e.target.value }))} /></Fld>
-              <div style={{ gridColumn: 'span 2' }}><Fld label="Nominee Address *"><input style={S.inp(!statutory.nominee_address)} value={statutory.nominee_address} onChange={e => setStatutory(s => ({ ...s, nominee_address: e.target.value }))} /></Fld></div>
-            </div>
+            {/* PF nominees (EPF Form 2) — one or more, shares totalling 100% */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>PF Nominees (EPF Form 2) · share total {shareTotal(statutory.pf_nominees)}%</div>
+            {statutory.pf_nominees.map((row, i) => (
+              <NomineeRow key={i} row={row} index={i} kind="pf" canRemove={statutory.pf_nominees.length > 1}
+                onChange={patch => setStatutory(s => ({ ...s, pf_nominees: s.pf_nominees.map((r, idx) => idx === i ? { ...r, ...patch } : r) }))}
+                onRemove={() => setStatutory(s => ({ ...s, pf_nominees: s.pf_nominees.filter((_, idx) => idx !== i) }))} />
+            ))}
+            <button onClick={() => setStatutory(s => ({ ...s, pf_nominees: [...s.pf_nominees, { ...EMPTY_NOMINEE, share: String(Math.max(0, 100 - shareTotal(s.pf_nominees))) }] }))} style={{ ...S.btnO, marginBottom: 4 }}>+ Add PF nominee</button>
 
-            {/* Gratuity nominee */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Gratuity Nominee (Form F)</div>
-            <div style={S.g2}>
-              <Fld label="Nominee Name"><input style={S.inp()} value={statutory.grat_nominee_name} onChange={e => setStatutory(s => ({ ...s, grat_nominee_name: e.target.value }))} /></Fld>
-              <Fld label="Relation">
-                <select style={S.sel} value={statutory.grat_nominee_relation} onChange={e => setStatutory(s => ({ ...s, grat_nominee_relation: e.target.value }))}>
-                  <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Other</option>
-                </select>
-              </Fld>
-            </div>
+            {/* Gratuity nominees (Form F) — one or more */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '16px 0 10px' }}>Gratuity Nominees (Form F) · share total {shareTotal(statutory.grat_nominees)}%</div>
+            {statutory.grat_nominees.map((row, i) => (
+              <NomineeRow key={i} row={row} index={i} kind="grat" canRemove={statutory.grat_nominees.length > 1}
+                onChange={patch => setStatutory(s => ({ ...s, grat_nominees: s.grat_nominees.map((r, idx) => idx === i ? { ...r, ...patch } : r) }))}
+                onRemove={() => setStatutory(s => ({ ...s, grat_nominees: s.grat_nominees.filter((_, idx) => idx !== i) }))} />
+            ))}
+            <button onClick={() => setStatutory(s => ({ ...s, grat_nominees: [...s.grat_nominees, { ...EMPTY_NOMINEE, share: String(Math.max(0, 100 - shareTotal(s.grat_nominees))) }] }))} style={{ ...S.btnO, marginBottom: 4 }}>+ Add gratuity nominee</button>
 
             {/* EPS Family Members (Form 2 Part B) */}
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '16px 0 4px' }}>EPS Family Members (Form 2 Part B)</div>
@@ -1680,10 +1734,14 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
               <button onClick={prevStep} style={S.btnO}>Back</button>
               <button onClick={async () => {
-                if (!statutory.nominee_name || !statutory.nominee_dob || !statutory.nominee_address) {
-                  showToast('Please fill all required PF nominee fields', 'err'); return
-                }
-                await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
+                const bad = statutory.pf_nominees.findIndex(n => !n.name?.trim() || !n.dob || !n.address?.trim() || !n.relation)
+                if (bad >= 0) { showToast(`PF nominee ${bad + 1}: name, relation, date of birth and address are required`, 'err'); return }
+                if (statutory.pf_nominees.length > 1 && Math.round(shareTotal(statutory.pf_nominees)) !== 100) { showToast(`PF nominee shares add up to ${shareTotal(statutory.pf_nominees)}% — they must total 100%`, 'err'); return }
+                const gr = statutory.grat_nominees.filter(n => n.name?.trim())
+                if (gr.length > 1 && Math.round(shareTotal(gr)) !== 100) { showToast(`Gratuity nominee shares add up to ${shareTotal(gr)}% — they must total 100%`, 'err'); return }
+                const st = withLegacyNominees({ ...statutory, grat_nominees: gr.length ? gr : statutory.grat_nominees })
+                setStatutory(st)
+                await saveStep(7, { ...st, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
                 nextStep()
               }} style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
             </div>
