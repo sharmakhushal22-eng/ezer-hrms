@@ -396,7 +396,27 @@ export interface TeClaim {
 }
 
 export interface TeAdvance { id: Uuid; no: string; tripId: Uuid; emp: Uuid; requested: number; approved: number | null; outstanding: number; status: string; display: string; due: IsoDate | null; paidOn: IsoDate | null; ref: string }
-export interface TeBooking { id: Uuid; no: string; tripId: Uuid; tripNo?: string; legId: Uuid | null; pointIdx: number | null; kind: string; vendor: string; pnr: string; amount: number; paidBy?: string; status: string; at: IsoTime; ticket?: string | null }
+/** A ticket or a stay on a trip.
+ *
+ *  `status` is 'REQUESTED' | 'BOOKED' | 'CANCELLED'. REQUESTED is the employee
+ *  asking the Travel Desk to book something they found; nothing has been
+ *  bought, so it has no `pnr` and carries no expense on the trip.
+ *
+ *  `ticket` is the booking page either way — an e-ticket once the desk books,
+ *  the platform link (MakeMyTrip or another) on a request. It is an EXTERNAL
+ *  URL on a request, not a path in the private bucket: open it, do not sign it.
+ *
+ *  `tripId`/`tripNo` come from the snapshot's copy and are absent on the one
+ *  the trip detail returns, which already knows its own trip. */
+export interface TeBooking {
+  id: Uuid; no: string; tripId?: Uuid; tripNo?: string
+  legId: Uuid | null; pointIdx: number | null; kind: string
+  vendor: string; pnr: string | null; amount: number
+  paidBy?: string; status: string; at: IsoTime; ticket?: string | null
+  requestedAt?: IsoTime | null
+  /** What the employee typed about a stay they want booked. */
+  details?: { address?: string; room?: string; platform?: string; check_in?: string; check_out?: string; note?: string }
+}
 export interface TePeriod { m: string; status: 'OPEN' | 'CLOSED' | 'LOCKED' | string; label: string }
 export interface TeTimelineEntry { at: IsoTime; who: Uuid | null; name: string | null; role: string | null; action: string; text: string; internal: boolean }
 export interface TeMessage { who: Uuid | null; name: string | null; text: string; at: IsoTime }
@@ -536,6 +556,11 @@ export interface TeClaimDetail {
   employee: TeEmployee
   trip: TeTrip | null
   lines: TeExpense[]
+  /** The stays and tickets of the claim's trip. Added by migration 153:
+   *  te_claim_detail carried the trip, the lines and the legs but never the
+   *  bookings, so a requested stay and its link were invisible to the person
+   *  approving the money. Empty on a claim with no trip. */
+  bookings: TeBooking[]
   legs: TeLeg[]
   decisions: TeLineDecision[]
   advance: { id: Uuid; no: string; approved: number | null; outstanding: number; status: string; due: IsoDate | null } | null

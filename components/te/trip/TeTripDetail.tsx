@@ -15,6 +15,8 @@ import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/t
 import { tripChip } from '@/lib/te/trips-list'
 import { day, errorText, plural, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
+import TeFileLink from '../TeFileLink'
+import TeStayRequest from './TeStayRequest'
 import TeTripMap from '../plan/TeTripMap'
 import type { MapPlace } from '@/lib/te/trip-map'
 
@@ -63,6 +65,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
   const [confirming, setConfirming] = useState<'cancel' | 'delete' | null>(null)
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick(n => n + 1), [])
+  const [asking, setAsking] = useState(false)
 
   useEffect(() => {
     let current = true
@@ -85,6 +88,10 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
 
   const t = detail.trip
   const st = t.display
+  // Asking only makes sense on your own trip, and only while there is still a
+  // trip to book for. The SQL refuses the rest (te_booking_request); this is
+  // about not offering a button that is going to be turned down.
+  const canAskStay = !!detail.can?.own && !['CANCELLED', 'REJECTED', 'CLAIMED', 'CLOSED'].includes(t.status)
   const legs = [...detail.legs].sort((a, b) => a.n - b.n)
   const chip = tripChip(t)
   const pname = (id: string) => detail.places[id]?.s ?? ''
@@ -389,17 +396,51 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
         </div>
       )) : null}
 
-      {detail.bookings.length ? (
+      {/* Stays and tickets. A REQUESTED one is the employee asking the desk to
+          book something they found: nothing is bought, so it is not "booked by
+          the company" and does not claim to be. */}
+      {detail.bookings.length || canAskStay ? (
         <div className="card">
-          <div className="ch"><h3>Booked by the company</h3></div>
-          <div className="stack sm">
-            {detail.bookings.map(b => (
-              <div key={b.id} className="flag ok">
-                <TeIcon name="check" />
-                <div className="tx"><b>{b.vendor}</b><p>{b.kind === 'hotel' ? 'Booking' : 'PNR'} {b.pnr} · {rs(b.amount)}</p></div>
-              </div>
-            ))}
+          <div className="ch">
+            <h3>Stays and tickets</h3>
+            {canAskStay && !asking ? (
+              <button type="button" className="btn sm" onClick={() => setAsking(true)}>Ask for a stay</button>
+            ) : null}
           </div>
+          <div className="stack sm">
+            {detail.bookings.map(b => {
+              const asked = b.status === 'REQUESTED'
+              const off = b.status === 'CANCELLED'
+              const d = b.details ?? {}
+              return (
+                <div key={b.id} className={off ? 'flag' : asked ? 'flag info' : 'flag ok'}>
+                  <TeIcon name={off ? 'close' : asked ? 'clock' : 'check'} />
+                  <div className="tx">
+                    <b>{b.vendor}</b>
+                    <p>
+                      {asked ? 'Asked the Travel Desk' : off ? 'Cancelled' : `${b.kind === 'hotel' ? 'Booking' : 'PNR'} ${b.pnr ?? ''}`}
+                      {' · '}{rs(b.amount)}{asked ? ' expected' : ''}
+                      {d.check_in ? ` · ${day(d.check_in)}${d.check_out ? ` to ${day(d.check_out)}` : ''}` : ''}
+                    </p>
+                    {d.address || d.room || d.note ? (
+                      <p className="small muted">{[d.address, d.room, d.note].filter(Boolean).join(' · ')}</p>
+                    ) : null}
+                    {b.ticket ? (
+                      <TeFileLink path={b.ticket} name={asked ? `Open on ${d.platform || 'the booking site'}` : 'Open the ticket'} small />
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {asking ? (
+            <TeStayRequest
+              detail={detail}
+              placeName={pname}
+              onCancel={() => setAsking(false)}
+              onDone={message => { setAsking(false); onChanged(message); reload() }}
+            />
+          ) : null}
         </div>
       ) : null}
 

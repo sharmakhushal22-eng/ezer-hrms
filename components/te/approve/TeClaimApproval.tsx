@@ -25,7 +25,7 @@ import {
 import {
   flagOffers, flagResolvedText, flagTone, openFlags, whyFlagNotReady, type FlagVerdict,
 } from '@/lib/te/flag-review'
-import { claimChip, errorText, rs, when } from '@/lib/te/format'
+import { claimChip, day, errorText, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeLegEvidence from './TeLegEvidence'
@@ -341,6 +341,46 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
                   <span className={`chip ${flagTone(fl.status, fl.block)}`}>
                     {fl.status === 'open' ? (fl.block ? 'blocking' : 'open') : fl.status}
                   </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {/* Stays and tickets on this trip, with the page they were booked from.
+          This is what the request flow is for: the employee finds a hotel and
+          asks the desk, and the person approving the money can open the page
+          and see what they are agreeing to. A REQUESTED row is not a cost yet
+          — nothing has been bought — so it is marked as asked for, not booked.
+          Before migration 153 te_claim_detail returned no bookings at all. */}
+      {detail.bookings?.length ? (
+        <div className="card pad0">
+          <div className="day"><span>Stays and tickets</span><span>{detail.bookings.length}</span></div>
+          {detail.bookings.map(b => {
+            const asked = b.status === 'REQUESTED'
+            const off = b.status === 'CANCELLED'
+            const d = b.details ?? {}
+            return (
+              <div key={b.id} className="li">
+                <span className="ico"><TeIcon name={b.kind === 'hotel' ? 'pin' : 'plane'} /></span>
+                <div className="grow">
+                  <div className="b">{b.vendor}</div>
+                  <div className="small muted">
+                    {[
+                      asked ? 'Asked for by the employee' : off ? 'Cancelled' : b.pnr ? `${b.kind === 'hotel' ? 'Booking' : 'PNR'} ${b.pnr}` : 'Booked',
+                      d.check_in ? `${day(d.check_in)}${d.check_out ? ` to ${day(d.check_out)}` : ''}` : '',
+                      d.address, d.room, d.note,
+                    ].filter(Boolean).join(' · ')}
+                  </div>
+                  {b.ticket ? (
+                    <TeFileLink path={b.ticket} name={asked ? `Open on ${d.platform || 'the booking site'}` : 'Open the ticket'} claimId={c.id} small />
+                  ) : null}
+                </div>
+                <div className="amt">
+                  <b>{rs(b.amount)}</b>
+                  <span className="small muted">{asked ? 'expected' : b.paidBy === 'company' ? 'company paid' : ''}</span>
+                  <div><span className={off ? 'chip plain' : asked ? 'chip t-warn' : 'chip t-pos'}>{b.status.toLowerCase()}</span></div>
                 </div>
               </div>
             )
