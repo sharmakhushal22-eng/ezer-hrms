@@ -371,7 +371,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                 <TeLegLive
                   snap={snap} leg={leg} placeName={placeName}
                   onBack={backToTrip}
-                  onEnded={() => { setToast('Leg ended. Add what it cost.'); reload(); backToTrip() }}
+                  onEnded={() => { setToast('Journey ended. Add what it cost.'); reload(); backToTrip() }}
                   onChanged={message => { setToast(message); reload() }}
                 />
               )

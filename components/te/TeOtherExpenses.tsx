@@ -108,7 +108,7 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
                     else's would send them looking for a button they cannot see. */}
                 {!trip ? 'Add a bill and it appears here.'
                   : isCoTraveller(trip, snap.me) ? 'Add what you paid for on this trip and it appears here.'
-                  : 'Close the trip’s legs and add any other bills, and they appear here.'}
+                  : 'Close the trip’s journeys and add any other bills, and they appear here.'}
               </div>
             ) : null}
             {lines.map(x => {

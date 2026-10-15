@@ -96,26 +96,26 @@ export function continueItems(scope: TripScope, f: EntryFacts): ContinueItem[] {
     const row = (x: Omit<ContinueItem, 'tripId' | 'trip'>) => out.push({ tripId: t.id, trip: t.name, ...x })
 
     if (live) {
-      row({ tone: 'live', title: `On the way: leg ${live.n}`, sub: legTitle(live, f.placeName), btn: 'Open the leg', action: 'legOpen', id: live.id })
+      row({ tone: 'live', title: `On the way: journey ${live.n}`, sub: legTitle(live, f.placeName), btn: 'Open the journey', action: 'legOpen', id: live.id })
     } else if (report) {
-      row({ tone: 'warn', title: `Leg ${report.n} ended. Save its report`, sub: legTitle(report, f.placeName), btn: 'Save report', action: 'legOpen', id: report.id })
+      row({ tone: 'warn', title: `Journey ${report.n} ended. Save its report`, sub: legTitle(report, f.placeName), btn: 'Save report', action: 'legOpen', id: report.id })
     } else if (now && (t.display === 'APPROVED' || t.display === 'ONGOING')) {
       row({
         tone: 'go',
-        title: `Ready today: leg ${now.n} of ${legs.length}`,
+        title: `Ready today: journey ${now.n} of ${legs.length}`,
         sub: `${legTitle(now, f.placeName)} · ${f.modeName(now.mode)}`,
-        btn: now.gps === 'checkin' ? 'Check in' : 'Start leg',
+        btn: now.gps === 'checkin' ? 'Check in' : 'Start journey',
         action: 'legStart',
         id: now.id,
       })
     } else if (t.display === 'COMPLETED') {
-      row({ tone: 'warn', title: 'Back. Send the claim', sub: `${plural(legs.length, 'leg')} closed`, btn: 'Open trip', action: 'openTrip', id: t.id })
+      row({ tone: 'warn', title: 'Back. Send the claim', sub: `${plural(legs.length, 'journey')} closed`, btn: 'Open trip', action: 'openTrip', id: t.id })
     } else if (t.display === 'MISSED') {
-      row({ tone: 'warn', title: `Not travelled on ${day(t.start)}`, sub: 'Add the legs without GPS, or remove it', btn: 'Open trip', action: 'openTrip', id: t.id })
+      row({ tone: 'warn', title: `Not travelled on ${day(t.start)}`, sub: 'Add the journeys without GPS, or remove it', btn: 'Open trip', action: 'openTrip', id: t.id })
     } else if (t.display === 'SENT_BACK') {
       row({ tone: 'warn', title: 'Your approver asked a question', sub: 'Answer and send it again', btn: 'Open trip', action: 'openTrip', id: t.id })
     } else if (t.display === 'DRAFT' && t.origin === 'POST_FACTO') {
-      row({ tone: '', title: 'Recorded after travel: add the fares', sub: plural(legs.length, 'leg'), btn: 'Open trip', action: 'openTrip', id: t.id })
+      row({ tone: '', title: 'Recorded after travel: add the fares', sub: plural(legs.length, 'journey'), btn: 'Open trip', action: 'openTrip', id: t.id })
     }
   }
   return out
@@ -140,18 +140,18 @@ export interface WayDef {
  *  drawn as the primary. Wording is the prototype's FLOW_WAYS, unchanged. */
 export const FLOW_WAYS: Record<FlowKind, WayDef[]> = {
   local: [
-    { id: 'start', title: 'Start now', icon: 'play', text: 'Leaving now. Your phone records each leg, with stops, until you are back.', chips: ['GPS on every leg', 'No approval up to 75 km'] },
+    { id: 'start', title: 'Start now', icon: 'play', text: 'Leaving now. Your phone records each journey, with stops, until you are back.', chips: ['GPS on every journey', 'No approval up to 75 km'] },
     { id: 'plan', title: 'Plan a trip', icon: 'cal', text: 'For later today or another day. Add stops and the people going with you.', chips: ['Approval above 75 km'] },
-    { id: 'past', title: 'I already travelled', icon: 'history', text: 'The trip was not tracked and you want the reimbursement. Within 7 days.', chips: ['Legs without GPS', 'Reason needed'] },
+    { id: 'past', title: 'I already travelled', icon: 'history', text: 'The trip was not tracked and you want the reimbursement. Within 7 days.', chips: ['Journeys without GPS', 'Reason needed'] },
   ],
   domestic: [
     { id: 'plan', title: 'Plan a trip', icon: 'cal', text: 'Flights, trains, cabs and hotel. It goes for approval, the Travel Desk books.', chips: ['Approval before you leave', 'Advance if needed'] },
-    { id: 'approved', title: 'Start an approved trip', icon: 'play', text: 'Your trip is approved. Start its first leg or check in at the airport.', chips: ['GPS and check-ins'] },
+    { id: 'approved', title: 'Start an approved trip', icon: 'play', text: 'Your trip is approved. Start its first journey or check in at the airport.', chips: ['GPS and check-ins'] },
     { id: 'past', title: 'I already travelled', icon: 'history', text: 'You travelled without approval and want the reimbursement.', chips: ['HOD approves', 'Reason needed'] },
   ],
   international: [
     { id: 'plan', title: 'Plan a trip', icon: 'cal', text: 'Any country. Flights, cabs abroad and hotel. RM and HOD approve.', chips: ['Approval before you leave', 'Advance if needed'] },
-    { id: 'approved', title: 'Start an approved trip', icon: 'play', text: 'Your trip is approved. Start its first leg or check in at the airport.', chips: ['Check-ins abroad'] },
+    { id: 'approved', title: 'Start an approved trip', icon: 'play', text: 'Your trip is approved. Start its first journey or check in at the airport.', chips: ['Check-ins abroad'] },
     { id: 'past', title: 'I already travelled', icon: 'history', text: 'You travelled without approval and want the reimbursement.', chips: ['HOD approves', 'Reason needed'] },
   ],
   other: [

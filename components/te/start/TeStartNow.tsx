@@ -106,7 +106,7 @@ export default function TeStartNow({ snap, onClose, onStarted }: {
       // to find leg 1 — which is also the server's own idea of which is first.
       const detail = await te.trip(saved.trip_id)
       const first = [...detail.legs].sort((a, b) => a.n - b.n)[0]
-      if (!first) { onStarted(saved.trip_id, '', `${saved.trip_no} created, but it has no legs to start.`); return }
+      if (!first) { onStarted(saved.trip_id, '', `${saved.trip_no} created, but it has no journeys to start.`); return }
       const fix = await currentFix()
       await te.legStart(first.id, fix)
       onStarted(saved.trip_id, first.id, `${saved.trip_no} started. Keep the journey screen open while you travel.`)

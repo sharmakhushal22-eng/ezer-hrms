@@ -37,7 +37,7 @@ export default function TeTrips({ snap, onOpen, onNew }: {
       <div className="ph">
         <div>
           <h1>Trips</h1>
-          <p>Every trip, local or abroad, holds its route, its legs with GPS and stops, and every bill you spent on it.</p>
+          <p>Every trip, local or abroad, holds its route, its journeys with GPS and stops, and every bill you spent on it.</p>
         </div>
       </div>
 

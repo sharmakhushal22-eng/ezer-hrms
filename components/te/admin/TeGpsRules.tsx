@@ -25,7 +25,7 @@ const RULES: { k: string; label: string; unit: string; note: string }[] = [
 ]
 
 const TOGGLES: { k: string; label: string; note: string }[] = [
-  { k: 'manualAllowed', label: 'Allow local legs without GPS', note: 'Off means a local trip is only ever paid on a recorded journey.' },
+  { k: 'manualAllowed', label: 'Allow local journeys without GPS', note: 'Off means a local trip is only ever paid on a recorded journey.' },
   { k: 'gpsRequired', label: 'Require GPS on a journey', note: 'Off lets a journey be filed with no recording at all.' },
   { k: 'intlTrack', label: 'Track continuously abroad', note: 'Off uses check-ins at each end instead, which uses less data roaming.' },
 ]

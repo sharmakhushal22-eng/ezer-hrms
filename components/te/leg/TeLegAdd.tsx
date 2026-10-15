@@ -112,7 +112,7 @@ export default function TeLegAdd({ snap, detail, onClose, onAdded }: {
           })}
         </div>
         {from && to && from === to ? (
-          <div className="ferr"><TeIcon name="alert" size="sm" />A leg has to go from one place to a different one.</div>
+          <div className="ferr"><TeIcon name="alert" size="sm" />A journey has to go from one place to a different one.</div>
         ) : null}
       </div>
 

@@ -275,7 +275,7 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
               return 'Recorded. Add each journey without GPS, then claim.'
             })}
           >
-            {busy === 'missed' ? 'Recording…' : 'Record the legs without GPS'}
+            {busy === 'missed' ? 'Recording…' : 'Record the journeys without GPS'}
           </button>
         </div>
       ) : null}
@@ -286,7 +286,7 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
           <div className="ch">
             <h3>
               {legs.some(l => l.status === 'ACTIVE' || l.status === 'PAUSED') ? 'On the road'
-                : st === 'ONGOING' ? 'Next leg'
+                : st === 'ONGOING' ? 'Next journey'
                   : t.start && t.start > today ? `Starts ${day(t.start)}`
                     : 'Ready to go'}
             </h3>
@@ -310,12 +310,12 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
               >
                 <TeIcon name="play" size="sm" />
                 {nextLeg.status === 'PLANNED' && nextLeg.date <= today
-                  ? (nextLeg.gps === 'checkin' ? 'Check in and go' : 'Start this leg')
-                  : nextLeg.status === 'ENDED' ? 'Save the leg report' : 'Open the leg'}
+                  ? (nextLeg.gps === 'checkin' ? 'Check in and go' : 'Start this journey')
+                  : nextLeg.status === 'ENDED' ? 'Save the journey report' : 'Open the journey'}
               </button>
             </>
           ) : null}
-          {t.start && t.start > today ? <p className="small muted">The first leg can start on {day(t.start)}.</p> : null}
+          {t.start && t.start > today ? <p className="small muted">The first journey can start on {day(t.start)}.</p> : null}
 
           {/* Once a leg has been travelled the plan is history, not a draft. */}
           {!started && mine ? (
@@ -331,7 +331,7 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
       {isDraftPostFacto && mine ? (
         <div className="card">
           <div className="ch"><h3>Recorded after travel</h3><span className="chip t-info">Draft</span></div>
-          <p className="small muted">Open each leg to add its fare, add your other bills, and submit. A draft that is not needed can be deleted.</p>
+          <p className="small muted">Open each journey to add its fare, add your other bills, and submit. A draft that is not needed can be deleted.</p>
           <div className="row tight">
             <button type="button" className="btn sm grow" onClick={() => onEdit(detail)}>Edit the trip</button>
             <button type="button" className="btn dan sm grow" onClick={() => setConfirming('delete')}>Delete draft</button>
@@ -342,8 +342,8 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
       {/* ── back, with legs still owing a report ── */}
       {st === 'COMPLETED' && openLegs.length && mine ? (
         <div className="card">
-          <div className="ch"><h3>Close every leg</h3><span className="chip plain t-warn">{plural(openLegs.length, 'leg')} open</span></div>
-          <p className="small muted">The claim goes once each leg has its report, was added without GPS, or was skipped.</p>
+          <div className="ch"><h3>Close every journey</h3><span className="chip plain t-warn">{plural(openLegs.length, 'journey')} open</span></div>
+          <p className="small muted">The claim goes once each journey has its report, was added without GPS, or was skipped.</p>
           <div className="stack sm">
             {openLegs.map(l => (
               <button key={l.id} type="button" className="act flat" onClick={() => onOpenLeg(l)}>
@@ -358,7 +358,7 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
       {/* ── back, every leg closed: the claim is what is left ── (65) */}
       {mine && !openLegs.length && (st === 'COMPLETED' || isDraftPostFacto) && !claims.some(c => c.status !== 'CANCELLED' && c.status !== 'REJECTED') ? (
         <div className="card">
-          <div className="ch"><h3>Claim for this trip</h3><span className="chip plain t-brand">Every leg is closed</span></div>
+          <div className="ch"><h3>Claim for this trip</h3><span className="chip plain t-brand">Every journey is closed</span></div>
           <p className="small muted">Check what each line is worth, add any other bills, and send it.</p>
           <button type="button" className="btn pri wide" onClick={() => onClaim(detail)}>
             Review and submit the claim<TeIcon name="go" size="sm" />
@@ -393,10 +393,10 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
         <div className="ch">
           <h3>Route</h3>
           <span className="row tight">
-            <span className="muted small">{plural(legs.length, 'leg')}</span>
+            <span className="muted small">{plural(legs.length, 'journey')}</span>
             {mine && (st === 'ONGOING' || st === 'COMPLETED') ? (
               <button type="button" className="btn sm" onClick={() => onAddLeg(detail)}>
-                <TeIcon name="plus" size="sm" />Add a leg
+                <TeIcon name="plus" size="sm" />Add a journey
               </button>
             ) : null}
           </span>
@@ -534,8 +534,8 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
           <div className="ch"><h3>{confirming === 'delete' ? 'Delete this draft?' : 'Cancel this trip?'}</h3></div>
           <p className="small muted">
             {confirming === 'delete'
-              ? 'The draft and its legs are removed. Nothing has been claimed against it, so nothing else changes.'
-              : 'The plan is cancelled and its legs are dropped. Any advance asked for is cancelled with it. This cannot be undone.'}
+              ? 'The draft and its journeys are removed. Nothing has been claimed against it, so nothing else changes.'
+              : 'The plan is cancelled and its journeys are dropped. Any advance asked for is cancelled with it. This cannot be undone.'}
           </p>
           <div className="row tight">
             <button type="button" className="btn grow" onClick={() => setConfirming(null)}>Keep it</button>

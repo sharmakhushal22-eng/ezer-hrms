@@ -33,7 +33,7 @@ import TePlacePicker, { type PickTarget } from './TePlacePicker'
 const STEPS: { title: string; sub: string }[] = [
   { title: 'Trip', sub: 'Name, reason, people' },
   { title: 'Route', sub: 'Places, stops, travel' },
-  { title: 'Review', sub: 'Legs, money, approval' },
+  { title: 'Review', sub: 'Journeys, money, approval' },
 ]
 
 /** The day before today that was a working day. Used to date a local trip that
@@ -184,7 +184,7 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
   const lead = editingThis
     ? (draft.answerNeeded ? 'Change what your approver asked about, then send it again.' : 'Change the plan.')
     : planning ? 'Three short steps. Every journey, stop and bill stays inside this trip.'
-      : 'For a trip that was not tracked. The legs are added without GPS and your approver sees why.'
+      : 'For a trip that was not tracked. The journeys are added without GPS and your approver sees why.'
 
   // The send button says what will actually happen, which the server has already
   // decided: a short local trip needs no approval before you leave.
@@ -303,7 +303,7 @@ const KIND_LABEL: Record<TripScope, string> = {
  *  is the server's — this only words them. */
 function summary(preview: TripPreview | null, pax: number, planning: boolean) {
   const legs = preview?.legs ?? []
-  if (!legs.length) return <span className="muted">Add the places to see the legs</span>
+  if (!legs.length) return <span className="muted">Add the places to see the journeys</span>
   const km = Math.round(legs.filter(l => l.mode !== 'flight').reduce((a, l) => a + l.km, 0) * 10) / 10
   const flights = legs.filter(l => l.mode === 'flight').length
   const total = preview?.estimateTotal ?? 0

@@ -123,7 +123,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
         <div className="day"><span>To book</span><span>{bookings.length}</span></div>
         {toBook === null ? <div className="empty"><b>Loading…</b></div> : null}
         {toBook !== null && !bookings.length ? (
-          <div className="empty"><b>Nothing to book</b>Approved trips with legs marked &ldquo;Travel Desk books&rdquo; appear here.</div>
+          <div className="empty"><b>Nothing to book</b>Approved trips with journeys marked &ldquo;Travel Desk books&rdquo; appear here.</div>
         ) : null}
         {bookings.map(b => {
           const open = booking && keyOf(booking) === keyOf(b)

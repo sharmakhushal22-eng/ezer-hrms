@@ -67,9 +67,9 @@ export default function TeTripLog() {
         <div className="row">
           <button type="button" className="btn sm" onClick={() => setOpenTrip(null)}><TeIcon name="back" size="sm" />Trip log</button>
         </div>
-        <div className="ph"><div><h1>{openTrip.name}</h1><p>Every leg, and what the phone recorded for it.</p></div></div>
+        <div className="ph"><div><h1>{openTrip.name}</h1><p>Every journey, and what the phone recorded for it.</p></div></div>
         <div className="card pad0">
-          <div className="day"><span>Legs</span><span>{openTrip.legs.length}</span></div>
+          <div className="day"><span>Journeys</span><span>{openTrip.legs.length}</span></div>
           {openTrip.legs.map(l => (
             <button key={l.id} type="button" className="li click" onClick={() => setOpenLeg(l.id)}>
               <span className="ln">{l.n}</span>
@@ -97,7 +97,7 @@ export default function TeTripLog() {
       <div className="ph">
         <div>
           <h1>Trip log</h1>
-          <p>Every trip in the company, and the GPS behind any leg of it.</p>
+          <p>Every trip in the company, and the GPS behind any journey of it.</p>
         </div>
       </div>
 
@@ -128,7 +128,7 @@ export default function TeTripLog() {
               <div className="small muted">
                 {t.employee_name} <span className="mono">{t.emp_code}</span>
                 {t.start_date ? ` · ${day(t.start_date)}` : ''}
-                {` · ${t.leg_count} leg${t.leg_count === 1 ? '' : 's'}`}
+                {` · ${t.leg_count} journey${t.leg_count === 1 ? '' : 's'}`}
                 {t.open_leg_count ? ` · ${t.open_leg_count} still open` : ''}
                 {t.origin === 'POST_FACTO' ? ' · recorded after travel' : ''}
               </div>

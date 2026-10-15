@@ -133,7 +133,7 @@ export default function TeTripApproval({ tripId, onBack, onDecided }: {
       </div>
 
       <div className="card pad0">
-        <div className="day"><span>Legs</span><span>{legs.length}</span></div>
+        <div className="day"><span>Journeys</span><span>{legs.length}</span></div>
         {legs.map(l => (
           <div key={l.id} className="li">
             <span className="ln">{l.n}</span>

@@ -85,7 +85,7 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
             </div>
           </>
         ) : (
-          <div className="empty"><b>Choose the places</b>The legs appear here, with how each one is tracked.</div>
+          <div className="empty"><b>Choose the places</b>The journeys appear here, with how each one is tracked.</div>
         )}
       </div>
 

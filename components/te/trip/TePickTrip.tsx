@@ -42,14 +42,14 @@ export default function TePickTrip({ scope, me, trips, journeys, today, placeNam
                   <div className="small muted">{routeText(t, placeName)}</div>
                   <div className="small muted">
                     {tripDates(t)} · {plural(legs.length, 'journey')}
-                    {next ? ` · next: leg ${next.n}, ${day(next.date)}` : ''}
+                    {next ? ` · next: journey ${next.n}, ${day(next.date)}` : ''}
                   </div>
                 </div>
                 <div className="row tight">
                   {canStart && next ? (
                     <button type="button" className="btn pri sm" onClick={() => onStartLeg(next.id, next)}>
                       <TeIcon name="play" size="sm" />
-                      {next.gps === 'checkin' ? 'Check in' : `Start leg ${next.n}`}
+                      {next.gps === 'checkin' ? 'Check in' : `Start journey ${next.n}`}
                     </button>
                   ) : null}
                   <button type="button" className="btn sm" onClick={() => onOpenTrip(t.id)}>Open</button>

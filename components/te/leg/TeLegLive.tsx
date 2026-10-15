@@ -208,7 +208,7 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
           <TeIcon name="alert" />
           <div className="tx">
             <b>Location is switched off for this site</b>
-            <p>Nothing is being recorded. Turn location on for this site and reload, or end the leg and add it without GPS — your approver sees the reason either way.</p>
+            <p>Nothing is being recorded. Turn location on for this site and reload, or end the journey and add it without GPS — your approver sees the reason either way.</p>
           </div>
         </div>
       ) : null}
@@ -306,8 +306,8 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
           <div className="ch"><h3>{leg.gps === 'checkin' ? 'Check in to start' : 'Ready to start'}</h3></div>
           <p className="small muted">
             {leg.gps === 'checkin'
-              ? 'Your position is recorded at both ends of this leg rather than along the way.'
-              : 'Your position is recorded along the way until you end the leg. Keep this screen open while you travel.'}
+              ? 'Your position is recorded at both ends of this journey rather than along the way.'
+              : 'Your position is recorded along the way until you end the journey. Keep this screen open while you travel.'}
           </p>
           {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
           <button
@@ -323,7 +323,7 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
             })}
           >
             <TeIcon name="play" size="sm" />
-            {busy === 'start' ? 'Reading your location…' : leg.gps === 'checkin' ? 'Check in and go' : 'Start this leg'}
+            {busy === 'start' ? 'Reading your location…' : leg.gps === 'checkin' ? 'Check in and go' : 'Start this journey'}
           </button>
         </div>
       ) : null}

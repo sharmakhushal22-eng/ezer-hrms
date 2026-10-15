@@ -50,9 +50,9 @@ describe('continueItems', () => {
     const t = trip({ id: 't1' })
     const js = [leg({ id: 'j1', tripId: 't1', n: 1 }), leg({ id: 'j2', tripId: 't1', n: 2, date: '2026-11-17' })]
     const [row] = continueItems('local', facts([t], js))
-    assert.equal(row.title, 'Ready today: leg 1 of 2')
+    assert.equal(row.title, 'Ready today: journey 1 of 2')
     assert.equal(row.sub, 'EZER office → Manesar plant · Own vehicle')
-    assert.equal(row.btn, 'Start leg')
+    assert.equal(row.btn, 'Start journey')
     assert.equal(row.action, 'legStart')
     assert.equal(row.id, 'j1')
     assert.equal(row.tone, 'go')
@@ -81,7 +81,7 @@ describe('continueItems', () => {
     ]
     const [row] = continueItems('local', facts([trip({ id: 't1', display: 'ONGOING' })], js))
     assert.equal(row.tone, 'live')
-    assert.equal(row.title, 'On the way: leg 1')
+    assert.equal(row.title, 'On the way: journey 1')
     assert.equal(row.action, 'legOpen')
   })
 
@@ -97,13 +97,13 @@ describe('continueItems', () => {
   it('asks for the report of an ended leg before anything else', () => {
     const js = [leg({ id: 'j1', tripId: 't1', n: 1, status: 'ENDED' })]
     const [row] = continueItems('local', facts([trip({ id: 't1', display: 'ONGOING' })], js))
-    assert.equal(row.title, 'Leg 1 ended. Save its report')
+    assert.equal(row.title, 'Journey 1 ended. Save its report')
     assert.equal(row.btn, 'Save report')
   })
 
   const byDisplay: [TripDisplayStatus, string, string][] = [
-    ['COMPLETED', 'Back. Send the claim', '2 legs closed'],
-    ['MISSED', 'Not travelled on 16 Nov', 'Add the legs without GPS, or remove it'],
+    ['COMPLETED', 'Back. Send the claim', '2 journeys closed'],
+    ['MISSED', 'Not travelled on 16 Nov', 'Add the journeys without GPS, or remove it'],
     ['SENT_BACK', 'Your approver asked a question', 'Answer and send it again'],
   ]
   for (const [display, title, sub] of byDisplay) {
@@ -121,7 +121,7 @@ describe('continueItems', () => {
     const t = trip({ id: 't1', display: 'DRAFT', origin: 'POST_FACTO' })
     const [row] = continueItems('local', facts([t], [leg({ id: 'j1', tripId: 't1', n: 1 })]))
     assert.equal(row.title, 'Recorded after travel: add the fares')
-    assert.equal(row.sub, '1 leg')
+    assert.equal(row.sub, '1 journey')
   })
 
   it('says nothing about a plain draft, or a trip waiting for approval', () => {
