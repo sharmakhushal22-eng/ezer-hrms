@@ -62,7 +62,7 @@ export const ZINDEX_BASELINE: Record<string, number> = {
   'components/ess/RoleTabs.tsx': 2,
   'components/ess/social/social.css': 1,
   'components/ess/team/team.css': 2,
-  'components/ess/today/today.css': 7,
+  'components/ess/today/today.css': 6,
   'components/funzone/fzStyles.ts': 1,
   'components/letters/LetterheadConfig.tsx': 2,
   'components/onboarding/ActivationWizard.tsx': 1,

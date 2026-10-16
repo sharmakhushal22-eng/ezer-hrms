@@ -62,19 +62,19 @@
    sticky; inside the portal there is already a sticky bar above it, and a
    second band pinned under the first ate a chunk of a screen that is mostly
    list. */
-.hx-head{z-index:20;
-  background:linear-gradient(180deg,var(--ez-head-from),var(--ez-head-to));
-  border-bottom:1px solid var(--ez-head-edge);box-shadow:var(--ez-head-elev)}
-.hx-head-in{max-width:var(--col);margin:0 auto;padding:16px 22px 0}
+/* The tinted band is gone: every other ESS screen opens on a plain heading over the canvas
+   (components/ess/portal.css .ess-head), so this one does too. The tabs keep a hairline. */
+.hx-head{z-index:20;background:transparent;border-bottom:1px solid var(--ez-line)}
+.hx-head-in{max-width:var(--col);margin:0 auto;padding:24px 28px 0}
 .hx-head-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.hx-mark{width:38px;height:38px;border-radius:11px;flex-shrink:0;display:grid;place-items:center;
-  background:linear-gradient(145deg,var(--ez-brand),var(--ez-brand-deep));color:#fff;
-  box-shadow:var(--ez-shadow-brand)}
+.hx-mark{width:44px;height:44px;border-radius:13px;flex-shrink:0;display:grid;place-items:center;
+  background:linear-gradient(145deg,var(--ez-brand-tint),var(--ez-surface));color:var(--ez-brand);
+  border:1px solid var(--ez-brand-edge)}
 .hx-mark svg{width:20px;height:20px;display:block}
 .hx-title{display:flex;flex-direction:column;gap:2px;min-width:0}
-.hx-title h1{margin:0;font-size:23px;font-weight:700;letter-spacing:-.02em;line-height:1;color:var(--ez-head-muted);
+.hx-title h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2;color:var(--ez-ink);
   display:flex;align-items:center;gap:10px}
-.hx-title .desc{font-size:12.5px;color:var(--ez-head-faint)}
+.hx-title .desc{font-size:13.5px;color:var(--ez-muted)}
 .hx-badge{font-size:10.5px;font-weight:700;padding:4px 11px;border-radius:999px;letter-spacing:.01em;
   background:var(--ez-warning-tint);color:var(--ez-warning);
   border:1px solid color-mix(in srgb,var(--ez-warning) 32%,transparent);white-space:nowrap}
@@ -100,8 +100,8 @@
   display:flex;align-items:center;gap:8px;padding:11px 16px 13px;border-radius:10px 10px 0 0;
   font-size:13.5px;font-weight:600;color:var(--ez-head-faint);white-space:nowrap;
   transition:color .2s var(--ease)}
-.hx-tab:hover{color:var(--ez-head-muted)}
-.hx-tab[aria-selected="true"]{color:var(--ez-head-brand)}
+.hx-tab:hover{color:var(--ez-ink)}
+.hx-tab[aria-selected="true"]{color:var(--ez-brand)}
 .hx-tab .ct{font-size:10.5px;font-weight:700;line-height:1;padding:3px 7px;border-radius:999px;
   background:color-mix(in srgb,var(--ez-brand) 15%,transparent);color:var(--ez-head-brand);
   font-variant-numeric:tabular-nums}

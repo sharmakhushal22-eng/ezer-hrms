@@ -2,22 +2,92 @@
    Colours come from lib/ui/theme.css (--ez-*). Only the additions below are new;
    move them into theme.css if you prefer a single token file. */
 .ezt {
-  --hero-a:#0B1D4D; --hero-b:#1D4ED8; --hero-c:#38BDF8; --on-hero:#FFFFFF; --on-hero-soft:rgba(255,255,255,.72);
+  --hero-a:#0B1D4D; --hero-b:#1D4ED8; --hero-c:#38BDF8; --on-hero:var(--ez-ink); --on-hero-soft:var(--ez-muted);
   --gold:#D4A017; --gold-soft:#FBEBB5; --sun:#FCD34D;
-  --shadow-card: 0 1px 2px rgba(17,24,39,.04), 0 10px 30px -14px rgba(29,78,216,.22);
-  --shadow-hero: 0 30px 70px -28px rgba(11,29,77,.6);
-  --glass: rgba(255,255,255,.78);
+  --shadow-card: 0 1px 2px rgba(16,24,40,.04), 0 6px 20px -12px rgba(16,24,40,.14);
+  --glass: var(--ez-surface);
+
+  /* THE HERO, LIGHT. It was a 400px deep-navy slab in both themes — the heaviest object
+     on a light page and the first thing every employee saw. In light it is now a bright
+     surface with a soft blue light in one corner and ink text; dark keeps the original
+     navy (the blocks below). Every colour the hero uses is one of these variables, so the
+     two themes differ only here and the rules further down are written once. */
+  --hero-bg:
+    radial-gradient(760px 300px at 100% -20%, rgba(96,165,250,.30) 0%, transparent 62%),
+    radial-gradient(520px 260px at -8% 120%, rgba(56,189,248,.14) 0%, transparent 60%),
+    linear-gradient(135deg, #FFFFFF 0%, #F6F9FF 55%, #ECF3FF 100%);
+  --hero-edge: rgba(37,99,235,.14);
+  --shadow-hero: 0 1px 2px rgba(16,24,40,.04), 0 18px 40px -26px rgba(29,78,216,.45);
+  /* The travelling sun/moon sat on top of the greeting; on the light hero it read as a smudge. */
+  --blob-op: .22; --grain-op: 0; --arc: rgba(37,99,235,.13); --sky-op: 0;
+  --chip-bg: var(--ez-surface); --chip-edge: var(--ez-line); --chip-fg: var(--ez-ink-soft);
+  --pill-bg: rgba(255,255,255,.85); --pill-edge: var(--ez-line); --pill-fg: var(--ez-muted); --pill-hover: var(--ez-surface); --pill-hover-fg: var(--ez-ink);
+  --meta-bg: rgba(255,255,255,.75); --meta-edge: rgba(37,99,235,.12);
+  --av-bg: linear-gradient(145deg,#3B82F6,#1D4ED8); --av-fg:#FFFFFF;
+  --av-ring: 0 0 0 4px #FFFFFF, 0 10px 24px -10px rgba(29,78,216,.6); --av-dot-edge:#FFFFFF;
+  --ring-track: rgba(37,99,235,.10); --ring-a:#2563EB; --ring-b:#38BDF8; --ring-tick: rgba(37,99,235,.30); --ring-cap:#2563EB; --ring-glow: rgba(37,99,235,.35);
+  --halo: radial-gradient(circle, rgba(37,99,235,.10), transparent 70%);
+  --face-bg: radial-gradient(circle at 35% 28%, #FFFFFF 0%, #F3F7FF 60%, #E4EEFF 100%);
+  --face-shadow: 0 14px 30px -16px rgba(29,78,216,.5), inset 0 -2px 0 rgba(29,78,216,.10), inset 0 2px 0 #FFFFFF, 0 0 0 1px rgba(37,99,235,.10);
+  --pb-bg: var(--ez-surface); --pb-edge: var(--ez-line); --pb-fg: var(--ez-ink); --pb-ic: var(--ez-sunken);
+  --pb-shadow: 0 1px 2px rgba(16,24,40,.05);
+  --pin-bg: linear-gradient(135deg,#3B82F6 0%,#1D4ED8 100%); --pin-fg:#FFFFFF; --pin-edge: rgba(29,78,216,.6);
+  --pin-ic-bg: rgba(255,255,255,.2); --pin-ic-fg:#FFFFFF; --pin-sub: rgba(255,255,255,.9);
+  --pin-shadow: 0 12px 24px -12px rgba(29,78,216,.75), inset 0 1px 0 rgba(255,255,255,.25);
+  --streak-bg: var(--ez-warning-tint); --streak-edge: rgba(180,83,9,.18); --streak-fg: var(--ez-warning);
 }
 :root[data-ez-theme="dark"] .ezt,
-:root[data-theme="dark"] .ezt { --hero-a:#070F2B; --hero-b:#1E3A8A; --hero-c:#0EA5E9; --gold:#F2C14E; --gold-soft:#3A2E0F;
-  --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7); --shadow-hero: 0 30px 70px -28px rgba(0,0,0,.85); --glass: rgba(23,27,33,.82); }
+:root[data-theme="dark"] .ezt {
+  --hero-a:#070F2B; --hero-b:#1E3A8A; --hero-c:#0EA5E9; --gold:#F2C14E; --gold-soft:#3A2E0F;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7); --shadow-hero: 0 30px 70px -28px rgba(0,0,0,.85); --glass: rgba(23,27,33,.82);
+  /* the original navy hero, unchanged in dark */
+  --on-hero:#FFFFFF; --on-hero-soft:rgba(255,255,255,.72);
+  --hero-bg: linear-gradient(118deg, var(--hero-a) 0%, var(--hero-b) 60%, var(--hero-c) 140%);
+  --hero-edge: transparent; --blob-op: .55; --grain-op: .12; --arc: rgba(255,255,255,.13); --sky-op: 1;
+  --chip-bg: rgba(255,255,255,.14); --chip-edge: rgba(255,255,255,.18); --chip-fg:#FFFFFF;
+  --pill-bg: rgba(255,255,255,.10); --pill-edge: rgba(255,255,255,.22); --pill-fg: rgba(255,255,255,.72); --pill-hover: rgba(255,255,255,.2); --pill-hover-fg:#FFFFFF;
+  --meta-bg: rgba(255,255,255,.06); --meta-edge: rgba(255,255,255,.12);
+  --av-bg: linear-gradient(145deg,#FFFFFF,#BFDBFE); --av-fg: var(--hero-a);
+  --av-ring: 0 0 0 4px rgba(255,255,255,.18), 0 12px 28px -10px rgba(0,0,0,.55); --av-dot-edge: var(--hero-b);
+  --ring-track: rgba(255,255,255,.13); --ring-a:#FFFFFF; --ring-b:#7DD3FC; --ring-tick: rgba(255,255,255,.35); --ring-cap:#FFFFFF; --ring-glow: rgba(125,211,252,.7);
+  --halo: radial-gradient(circle, rgba(255,255,255,.22), transparent 70%);
+  --face-bg: radial-gradient(circle at 35% 28%, rgba(255,255,255,.98) 0%, #DBEAFE 55%, #BFDBFE 100%);
+  --face-shadow: 0 22px 44px -16px rgba(0,0,0,.65), inset 0 -3px 0 rgba(29,78,216,.18), inset 0 2px 0 rgba(255,255,255,.9);
+  --pb-bg: rgba(255,255,255,.1); --pb-edge: rgba(255,255,255,.22); --pb-fg:#FFFFFF; --pb-ic: rgba(255,255,255,.16);
+  --pb-shadow: 0 10px 24px -14px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.18);
+  --pin-bg: linear-gradient(135deg,#FFFFFF 0%,#DBEAFE 100%); --pin-fg: var(--hero-a); --pin-edge: rgba(255,255,255,.9);
+  --pin-ic-bg:#2563EB; --pin-ic-fg:#FFFFFF; --pin-sub:#1E3A8A;
+  --pin-shadow: 0 16px 34px -16px rgba(0,0,0,.7), inset 0 -2px 0 rgba(29,78,216,.18);
+  --streak-bg: rgba(255,255,255,.12); --streak-edge: rgba(255,255,255,.2); --streak-fg:#FFFFFF;
+}
 /* Both attributes are excluded on purpose. The drop wrote data-theme; this app's
    toggle (lib/ui/ThemeToggle.tsx) writes data-ez-theme. Guarding only the
    former meant that on a dark OS, choosing Light turned the whole app light
    and left this tab dark. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-ez-theme="light"]) .ezt { --hero-a:#070F2B; --hero-b:#1E3A8A; --hero-c:#0EA5E9; --gold:#F2C14E; --gold-soft:#3A2E0F;
-    --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7); --shadow-hero: 0 30px 70px -28px rgba(0,0,0,.85); --glass: rgba(23,27,33,.82); }
+  :root:not([data-theme="light"]):not([data-ez-theme="light"]) .ezt {
+  --hero-a:#070F2B; --hero-b:#1E3A8A; --hero-c:#0EA5E9; --gold:#F2C14E; --gold-soft:#3A2E0F;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7); --shadow-hero: 0 30px 70px -28px rgba(0,0,0,.85); --glass: rgba(23,27,33,.82);
+  /* the original navy hero, unchanged in dark */
+  --on-hero:#FFFFFF; --on-hero-soft:rgba(255,255,255,.72);
+  --hero-bg: linear-gradient(118deg, var(--hero-a) 0%, var(--hero-b) 60%, var(--hero-c) 140%);
+  --hero-edge: transparent; --blob-op: .55; --grain-op: .12; --arc: rgba(255,255,255,.13); --sky-op: 1;
+  --chip-bg: rgba(255,255,255,.14); --chip-edge: rgba(255,255,255,.18); --chip-fg:#FFFFFF;
+  --pill-bg: rgba(255,255,255,.10); --pill-edge: rgba(255,255,255,.22); --pill-fg: rgba(255,255,255,.72); --pill-hover: rgba(255,255,255,.2); --pill-hover-fg:#FFFFFF;
+  --meta-bg: rgba(255,255,255,.06); --meta-edge: rgba(255,255,255,.12);
+  --av-bg: linear-gradient(145deg,#FFFFFF,#BFDBFE); --av-fg: var(--hero-a);
+  --av-ring: 0 0 0 4px rgba(255,255,255,.18), 0 12px 28px -10px rgba(0,0,0,.55); --av-dot-edge: var(--hero-b);
+  --ring-track: rgba(255,255,255,.13); --ring-a:#FFFFFF; --ring-b:#7DD3FC; --ring-tick: rgba(255,255,255,.35); --ring-cap:#FFFFFF; --ring-glow: rgba(125,211,252,.7);
+  --halo: radial-gradient(circle, rgba(255,255,255,.22), transparent 70%);
+  --face-bg: radial-gradient(circle at 35% 28%, rgba(255,255,255,.98) 0%, #DBEAFE 55%, #BFDBFE 100%);
+  --face-shadow: 0 22px 44px -16px rgba(0,0,0,.65), inset 0 -3px 0 rgba(29,78,216,.18), inset 0 2px 0 rgba(255,255,255,.9);
+  --pb-bg: rgba(255,255,255,.1); --pb-edge: rgba(255,255,255,.22); --pb-fg:#FFFFFF; --pb-ic: rgba(255,255,255,.16);
+  --pb-shadow: 0 10px 24px -14px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.18);
+  --pin-bg: linear-gradient(135deg,#FFFFFF 0%,#DBEAFE 100%); --pin-fg: var(--hero-a); --pin-edge: rgba(255,255,255,.9);
+  --pin-ic-bg:#2563EB; --pin-ic-fg:#FFFFFF; --pin-sub:#1E3A8A;
+  --pin-shadow: 0 16px 34px -16px rgba(0,0,0,.7), inset 0 -2px 0 rgba(29,78,216,.18);
+  --streak-bg: rgba(255,255,255,.12); --streak-edge: rgba(255,255,255,.2); --streak-fg:#FFFFFF;
+  }
 }
 .ezt .serif { font-family: var(--ezt-serif, "Fraunces", Georgia, serif); font-variation-settings:"SOFT" 50; }
   /* reduced-motion switch — per animation, never a global 0.01ms */
@@ -28,7 +98,7 @@
 
   .ezt * { box-sizing:border-box; }
   .ezt {
-    padding:22px 18px 80px;
+    padding:0 0 48px;
     font-family:var(--ezt-sans,"DM Sans"),"Segoe UI",system-ui,sans-serif;
     background:var(--ez-canvas); color:var(--ez-ink);
     -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.45;
@@ -69,35 +139,35 @@
   /* ── HERO — the day panel ────────────────────────────────────────────── */
   .ezt .hero {
     position:relative; isolation:isolate;
-    border-radius:24px; padding:24px 28px 56px; color:var(--on-hero);
-    background: linear-gradient(118deg, var(--hero-a) 0%, var(--hero-b) 60%, var(--hero-c) 140%);
+    border-radius:20px; padding:22px 26px; color:var(--on-hero);
+    background: var(--hero-bg); border:1px solid var(--hero-edge);
     box-shadow:var(--shadow-hero);
-    display:grid; grid-template-columns: 1fr auto; gap:28px; align-items:center;
+    display:grid; grid-template-columns: 1fr auto; gap:24px; align-items:center;
   }
   .ezt .hero-bg { position:absolute; inset:0; z-index:-1; border-radius:inherit; overflow:hidden; pointer-events:none; }
-  .ezt .hero-bg::before, .ezt .hero-bg::after { content:""; position:absolute; z-index:-1; border-radius:50%; filter:blur(52px); opacity:.55; pointer-events:none; }
+  .ezt .hero-bg::before, .ezt .hero-bg::after { content:""; position:absolute; z-index:-1; border-radius:50%; filter:blur(52px); opacity:var(--blob-op); pointer-events:none; }
   .ezt .hero-bg::before { width:560px; height:560px; right:-180px; top:-280px; background:radial-gradient(circle, #60A5FA 0%, transparent 62%); animation: drift 14s ease-in-out infinite alternate; --animation-reduced:none; }
   .ezt .hero-bg::after { width:460px; height:460px; left:-160px; bottom:-280px; background:radial-gradient(circle, #22D3EE 0%, transparent 62%); animation: drift 18s ease-in-out infinite alternate-reverse; --animation-reduced:none; }
   @keyframes drift { from { translate:0 0; } to { translate:-70px 40px; } }
-  .ezt .hero .grain { position:absolute; inset:0; opacity:.12; mix-blend-mode:overlay; pointer-events:none;
+  .ezt .hero .grain { position:absolute; inset:0; opacity:var(--grain-op); mix-blend-mode:overlay; pointer-events:none;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
   /* the day arc: a sun/moon that travels with the clock */
-  .ezt .sky { position:absolute; inset:0; pointer-events:none; }
-  .ezt .sky .arc { position:absolute; left:34%; right:-6%; top:12%; height:170%; border:1px dashed rgba(255,255,255,.13); border-radius:50%; }
+  .ezt .sky { position:absolute; inset:0; pointer-events:none; opacity:var(--sky-op, 1); }
+  .ezt .sky .arc { position:absolute; left:34%; right:-6%; top:12%; height:170%; border:1px dashed var(--arc); border-radius:50%; }
   .ezt .sky .orb { position:absolute; width:22px; height:22px; border-radius:50%; background:var(--sun); opacity:.9; box-shadow:0 0 0 8px rgba(252,211,77,.12), 0 0 46px 12px rgba(252,211,77,.35); transition: left 1.2s cubic-bezier(.2,.8,.2,1), top 1.2s cubic-bezier(.2,.8,.2,1); translate:-50% -50%; }
   .ezt .hero.evening .sky .orb { background:#E5E7EB; box-shadow:0 0 0 10px rgba(255,255,255,.12), 0 0 50px 14px rgba(191,219,254,.4); }
   .ezt .hero.evening { --hero-b:#1E3A8A; --hero-c:#6366F1; }
   .ezt .hero.afternoon { --hero-c:#22D3EE; }
 
-  .ezt .hero-top { display:flex; align-items:center; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+  .ezt .hero-top { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
   .ezt .clock { font-variant-numeric:tabular-nums; font-size:13px; color:var(--on-hero-soft); display:flex; align-items:baseline; gap:10px; }
-  .ezt .clock b { color:var(--on-hero); font-size:28px; font-weight:600; letter-spacing:-.02em; line-height:1; }
+  .ezt .clock b { color:var(--on-hero); font-size:24px; font-weight:600; letter-spacing:-.02em; line-height:1; }
   .ezt .clock b i { font-style:normal; animation: blink 1s steps(2) infinite; --animation-reduced:none; }
   @keyframes blink { to { opacity:.25; } }
   .ezt .hero-tools { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-  .ezt .pillbtn { display:inline-flex; align-items:center; gap:7px; height:32px; padding:0 11px; border-radius:10px; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.10); color:var(--on-hero-soft); font-size:12.5px; font-weight:600; backdrop-filter:blur(8px); transition:background .2s,color .2s; }
-  .ezt .pillbtn:hover { background:rgba(255,255,255,.2); color:var(--on-hero); }
-  .ezt .pillbtn kbd { font-family:inherit; font-size:11px; padding:1px 6px; border-radius:6px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); }
+  .ezt .pillbtn { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 10px; border-radius:10px; border:1px solid var(--pill-edge); background:var(--pill-bg); color:var(--pill-fg); font-size:12.5px; font-weight:600; backdrop-filter:blur(8px); transition:background .2s,color .2s; }
+  .ezt .pillbtn:hover { background:var(--pill-hover); color:var(--pill-hover-fg); }
+  .ezt .pillbtn kbd { font-family:inherit; font-size:11px; padding:1px 6px; border-radius:6px; background:var(--chip-bg); border:1px solid var(--chip-edge); }
   .ezt .pillbtn svg { width:14px; height:14px; }
 
   .ezt .fmtwrap { position:relative; }
@@ -115,48 +185,49 @@
   .ezt .seg button.on { background:var(--ez-brand-tint); border-color:var(--ez-brand); color:var(--ez-brand); }
   .ezt .seg button small { font-weight:500; color:var(--ez-muted); font-variant-numeric:tabular-nums; }
   .ezt .seg button.on small { color:var(--ez-brand); }
-  .ezt .greet { display:flex; align-items:center; gap:18px; min-width:0; }
+  .ezt .greet { display:flex; align-items:center; gap:14px; min-width:0; }
   /* A flex or grid child defaults to min-width:auto, which is its CONTENT width —
      so the 36px greeting set the hero's floor and pushed it wider than the space
      it had, clipping the brief line and scrolling the page sideways. */
   .ezt .greet > div, .ezt .hero > * { min-width:0; }
-  .ezt .av { width:68px; height:68px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; font-size:22px; color:var(--hero-a);
-    background:linear-gradient(145deg,#FFFFFF,#BFDBFE); box-shadow:0 0 0 4px rgba(255,255,255,.18), 0 12px 28px -10px rgba(0,0,0,.55); position:relative; }
-  .ezt .av .on { position:absolute; right:2px; bottom:2px; width:14px; height:14px; border-radius:50%; background:var(--ez-line-strong); border:3px solid var(--hero-b); transition:background .4s; }
+  .ezt .av { width:56px; height:56px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; font-size:19px; color:var(--av-fg);
+    background:var(--av-bg); box-shadow:var(--av-ring); position:relative; }
+  .ezt .av .on { position:absolute; right:2px; bottom:2px; width:14px; height:14px; border-radius:50%; background:var(--ez-line-strong); border:3px solid var(--av-dot-edge); transition:background .4s; }
   .ezt .av .on.live { background:#34D399; box-shadow:0 0 0 0 rgba(52,211,153,.6); animation: ping 1.8s ease-out 2; --animation-reduced:none; }
-  .ezt .greet h1 { margin:0; font-size:36px; line-height:1.05; font-weight:500; letter-spacing:-.012em; }
+  .ezt .greet h1 { margin:0; font-size:30px; line-height:1.05; font-weight:500; letter-spacing:-.012em; }
   .ezt .greet h1 .name { font-weight:600; }
-  .ezt .greet .sub { margin-top:7px; font-size:13.5px; color:var(--on-hero-soft); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .ezt .chip { display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:99px; font-size:11.5px; font-weight:600; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); color:var(--on-hero); }
-  .ezt .brief { margin:18px 0 0; font-size:15.5px; color:var(--on-hero-soft); max-width:48ch; line-height:1.55; }
+  .ezt .greet .sub { margin-top:6px; font-size:13.5px; color:var(--on-hero-soft); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .ezt .chip { display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:99px; font-size:11.5px; font-weight:600; background:var(--chip-bg); border:1px solid var(--chip-edge); color:var(--chip-fg); }
+  .ezt .brief { margin:14px 0 0; font-size:15px; color:var(--on-hero-soft); max-width:60ch; line-height:1.55; }
   .ezt .brief em { color:var(--on-hero); font-style:italic; font-weight:500; }
-  .ezt .hero-meta { display:flex; gap:22px; flex-wrap:wrap; margin-top:20px; }
-  .ezt .hero-meta div { font-size:12.5px; color:var(--on-hero-soft); }
-  .ezt .hero-meta b { display:block; color:var(--on-hero); font-size:14px; font-weight:600; }
+  .ezt .hero-meta { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+  /* Shift / this week / next holiday as small tiles rather than loose text. */
+  .ezt .hero-meta div { font-size:11.5px; font-weight:500; color:var(--on-hero-soft); background:var(--meta-bg); border:1px solid var(--meta-edge); border-radius:12px; padding:7px 12px; backdrop-filter:blur(6px); }
+  .ezt .hero-meta b { display:block; color:var(--on-hero); font-size:13.5px; font-weight:650; margin-top:1px; }
 
   /* ── PUNCH DIAL — the memorable element ─────────────────────────────── */
   .ezt .dialwrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
-  .ezt .dial { position:relative; width:224px; height:224px; display:grid; place-items:center; }
+  .ezt .dial { position:relative; width:180px; height:180px; display:grid; place-items:center; }
   .ezt .dial svg { position:absolute; inset:0; width:100%; height:100%; rotate:-90deg; overflow:visible; }
-  .ezt .dial .track { fill:none; stroke:rgba(255,255,255,.13); stroke-width:11; }
-  .ezt .dial .prog { fill:none; stroke:url(#ringGrad); stroke-width:11; stroke-linecap:round; stroke-dasharray:1 1; stroke-dashoffset:1; transition: stroke-dashoffset 1.5s cubic-bezier(.2,.8,.2,1); filter:drop-shadow(0 0 6px rgba(125,211,252,.7)); }
-  .ezt .dial .tick { stroke:rgba(255,255,255,.35); stroke-width:2; }
-  .ezt .dial .cap { fill:#fff; filter:drop-shadow(0 0 8px #fff); transition: cx 1.5s cubic-bezier(.2,.8,.2,1), cy 1.5s cubic-bezier(.2,.8,.2,1); }
-  .ezt .halo { position:absolute; inset:22px; border-radius:50%; background:radial-gradient(circle, rgba(255,255,255,.22), transparent 70%); pointer-events:none; }
+  .ezt .dial .track { fill:none; stroke:var(--ring-track); stroke-width:11; }
+  .ezt .dial .prog { fill:none; stroke:url(#ringGrad); stroke-width:11; stroke-linecap:round; stroke-dasharray:1 1; stroke-dashoffset:1; transition: stroke-dashoffset 1.5s cubic-bezier(.2,.8,.2,1); filter:drop-shadow(0 0 6px var(--ring-glow)); }
+  .ezt .dial .tick { stroke:var(--ring-tick); stroke-width:2; }
+  .ezt .dial .cap { fill:var(--ring-cap); filter:drop-shadow(0 0 6px var(--ring-glow)); transition: cx 1.5s cubic-bezier(.2,.8,.2,1), cy 1.5s cubic-bezier(.2,.8,.2,1); }
+  .ezt .halo { position:absolute; inset:18px; border-radius:50%; background:var(--halo); pointer-events:none; }
   /* The face: the day's state inside the ring. A display, not a button. */
   .ezt .face {
-    width:158px; height:158px; border-radius:50%; position:relative; z-index:1;
-    background:radial-gradient(circle at 35% 28%, rgba(255,255,255,.98) 0%, #DBEAFE 55%, #BFDBFE 100%);
+    width:128px; height:128px; border-radius:50%; position:relative; z-index:1;
+    background:var(--face-bg);
     color:var(--hero-a); display:grid; place-items:center; align-content:center; gap:3px; line-height:1.15; text-align:center;
-    box-shadow: 0 22px 44px -16px rgba(0,0,0,.65), inset 0 -3px 0 rgba(29,78,216,.18), inset 0 2px 0 rgba(255,255,255,.9);
+    box-shadow: var(--face-shadow);
     transition: background .45s, box-shadow .45s;
   }
-  .ezt .face .eyebrow { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#1E3A8A; opacity:.75; }
+  .ezt .face .eyebrow { display:inline-flex; align-items:center; gap:6px; font-size:9.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#1E3A8A; opacity:.75; }
   .ezt .face .dot { width:7px; height:7px; border-radius:50%; background:#34D399; box-shadow:0 0 0 0 rgba(52,211,153,.6); animation: beat 1.6s ease-out infinite; --animation-reduced:none; }
   @keyframes beat { 0% { box-shadow:0 0 0 0 rgba(52,211,153,.6); } 100% { box-shadow:0 0 0 9px rgba(52,211,153,0); } }
-  .ezt .face .timer { font-variant-numeric:tabular-nums; font-size:24px; font-weight:700; letter-spacing:-.01em; }
-  .ezt .face .big { font-variant-numeric:tabular-nums; font-size:22px; font-weight:700; letter-spacing:-.01em; }
-  .ezt .face small { display:block; font-size:11px; font-weight:600; color:#1E3A8A; opacity:.78; }
+  .ezt .face .timer { font-variant-numeric:tabular-nums; font-size:20px; font-weight:700; letter-spacing:-.01em; }
+  .ezt .face .big { font-variant-numeric:tabular-nums; font-size:19px; font-weight:700; letter-spacing:-.01em; }
+  .ezt .face small { display:block; font-size:10.5px; font-weight:600; color:#1E3A8A; opacity:.78; }
   .ezt .face.in { background:radial-gradient(circle at 35% 28%, #6EE7B7 0%, #059669 60%, #047857 100%); color:#fff; box-shadow:0 22px 44px -16px rgba(5,150,105,.7), inset 0 2px 0 rgba(255,255,255,.35); }
   .ezt .face.in .eyebrow, .ezt .face.in small { color:rgba(255,255,255,.88); opacity:1; }
   .ezt .face.in .dot { background:#fff; box-shadow:0 0 0 0 rgba(255,255,255,.7); }
@@ -164,47 +235,49 @@
 
   /* Two buttons under the dial: PUNCH IN and PUNCH OUT. Glass capsules on the hero; the
      live one is solid, the other dimmed with the reason in its small line. */
-  .ezt .punchbar { display:flex; gap:10px; width:100%; max-width:330px; }
+  .ezt .punchbar { display:flex; gap:10px; width:100%; max-width:310px; }
   .ezt .pbtn {
     flex:1 1 0; min-width:0; display:flex; align-items:center; gap:10px; padding:10px 12px 10px 10px;
-    border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.1); color:var(--on-hero);
+    border:1px solid var(--pb-edge); background:var(--pb-bg); color:var(--pb-fg);
     text-align:left; cursor:pointer; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-    box-shadow: 0 10px 24px -14px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.18);
+    box-shadow: var(--pb-shadow);
     transition: transform .18s cubic-bezier(.2,.8,.2,1), background .3s, box-shadow .3s, opacity .3s, border-color .3s;
   }
-  .ezt .pbtn .ic { width:34px; height:34px; border-radius:11px; flex:none; display:grid; place-items:center; background:rgba(255,255,255,.16); }
+  .ezt .pbtn .ic { width:32px; height:32px; border-radius:10px; flex:none; display:grid; place-items:center; background:var(--pb-ic); }
   .ezt .pbtn .lbl { display:grid; gap:1px; min-width:0; }
   .ezt .pbtn .lbl b { font-size:13.5px; font-weight:700; letter-spacing:.01em; line-height:1.15; }
   .ezt .pbtn .lbl small { font-size:10.5px; font-weight:600; opacity:.78; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ezt .pbtn:not(:disabled):hover { transform:translateY(-2px); }
   .ezt .pbtn:not(:disabled):active { transform:scale(.97); }
-  .ezt .pbtn.in:not(:disabled) { background:linear-gradient(135deg, #FFFFFF 0%, #DBEAFE 100%); color:var(--hero-a); border-color:rgba(255,255,255,.9); box-shadow:0 16px 34px -16px rgba(0,0,0,.7), inset 0 -2px 0 rgba(29,78,216,.18); }
-  .ezt .pbtn.in:not(:disabled) .ic { background:#2563EB; color:#fff; }
-  .ezt .pbtn.in:not(:disabled) .lbl small { color:#1E3A8A; }
+  .ezt .pbtn.in:not(:disabled) { background:var(--pin-bg); color:var(--pin-fg); border-color:var(--pin-edge); box-shadow:var(--pin-shadow); }
+  .ezt .pbtn.in:not(:disabled) .ic { background:var(--pin-ic-bg); color:var(--pin-ic-fg); }
+  .ezt .pbtn.in:not(:disabled) .lbl small { color:var(--pin-sub); opacity:1; }
   .ezt .pbtn.out:not(:disabled) { background:linear-gradient(135deg, #FB7185 0%, #E11D48 100%); color:#fff; border-color:rgba(255,255,255,.35); box-shadow:0 16px 34px -16px rgba(225,29,72,.8), inset 0 1px 0 rgba(255,255,255,.3); }
   .ezt .pbtn.out:not(:disabled) .ic { background:rgba(255,255,255,.22); color:#fff; }
   .ezt .pbtn:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
-  .ezt .pbtn:focus-visible { outline:2px solid #fff; outline-offset:3px; }
+  .ezt .pbtn:focus-visible { outline:2px solid var(--ez-brand); outline-offset:3px; }
   .ezt .pulse { position:absolute; inset:30px; border-radius:50%; border:2px solid #34D399; opacity:0; pointer-events:none; }
   .ezt .pulse.go { animation: ripple 1.1s ease-out 1; --animation-reduced:none; }
   @keyframes ripple { 0% { opacity:.9; scale:.85; } 100% { opacity:0; scale:1.5; } }
   .ezt .shift { text-align:center; font-size:12px; color:var(--on-hero-soft); }
   .ezt .shift b { color:var(--on-hero); font-weight:600; }
-  .ezt .streak { display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 11px 0 8px; border-radius:99px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); font-size:12px; font-weight:600; color:var(--on-hero); }
+  .ezt .streak { display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 11px 0 8px; border-radius:99px; background:var(--streak-bg); border:1px solid var(--streak-edge); font-size:12px; font-weight:600; color:var(--streak-fg); }
   .ezt .streak .fl { width:18px; height:18px; display:grid; place-items:center; color:var(--sun); }
   .ezt .streak .fl svg { animation: flick 1.4s ease-in-out infinite alternate; --animation-reduced:none; transform-origin:50% 100%; }
   @keyframes flick { from { scale:1; } to { scale:1.12 .96; } }
 
   /* ── STATS ───────────────────────────────────────────────────────────── */
-  .ezt .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:-30px 18px 0; position:relative; z-index:2; perspective:900px; }
+  .ezt .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:16px 0 0; position:relative; perspective:900px; }
   .ezt .tile {
     background:var(--glass); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-    border:1px solid var(--ez-line); border-radius:18px; padding:15px 16px 13px;
+    border:1px solid var(--ez-line); border-radius:16px; padding:15px 16px 14px;
     box-shadow:var(--shadow-card); display:flex; gap:12px; align-items:center; min-width:0;
     transform-style:preserve-3d; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s;
   }
   .ezt .tile:hover { box-shadow: 0 2px 4px rgba(17,24,39,.05), 0 24px 48px -20px rgba(29,78,216,.35); }
-  .ezt .tile .k { font-size:12px; font-weight:600; color:var(--ez-faint); }
+  .ezt .tile .k { font-size:12px; font-weight:600; color:var(--ez-muted); }
+  /* The leave split can run to four types; two lines, then it stops. */
+  .ezt .tile:first-child .s { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .ezt .tile .v { font-size:25px; font-weight:700; letter-spacing:-.02em; margin-top:2px; font-variant-numeric:tabular-nums; line-height:1.1; }
   .ezt .tile .v span { font-size:13px; font-weight:600; color:var(--ez-muted); margin-left:4px; }
   .ezt .tile > div:not(.ring) { flex:1; min-width:0; }
@@ -236,9 +309,9 @@
   .ezt .paybar .net { background:var(--ez-positive); } .paybar .tax { background:var(--ez-warning); } .paybar .pf { background:var(--ez-brand); }
 
   /* ── LAYOUT ──────────────────────────────────────────────────────────── */
-  .ezt .cols { display:grid; grid-template-columns: 1.35fr 1fr; gap:14px; margin-top:22px; }
-  .ezt .card { background:var(--ez-surface); border:1px solid var(--ez-line); border-radius:18px; padding:16px 18px; box-shadow:var(--shadow-card); min-width:0; margin-bottom:14px; }
-  .ezt .card h2 { margin:0 0 12px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .ezt .cols { display:grid; grid-template-columns: 1.35fr 1fr; gap:16px; margin-top:16px; }
+  .ezt .card { background:var(--ez-surface); border:1px solid var(--ez-line); border-radius:16px; padding:16px 18px; box-shadow:var(--shadow-card); min-width:0; margin-bottom:16px; }
+  .ezt .card h2 { margin:0 0 12px; font-size:15px; font-weight:650; display:flex; align-items:center; gap:8px; }
   .ezt .card h2 .count { font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; background:var(--ez-critical-tint); color:var(--ez-critical); }
   .ezt .more { margin-left:auto; font-size:12.5px; font-weight:600; color:var(--ez-brand); background:none; border:0; padding:0; }
   .ezt .more:hover { text-decoration:underline; }
@@ -382,12 +455,18 @@
   /* .ezt sizes ITSELF here, so this one stays on the viewport — an element
      cannot be restyled by a query against its own container. */
   @media (max-width: 520px) {
-    .ezt { padding:14px 12px 70px; }
+    .ezt { padding:0 0 70px; }
   }
   @container ezt (max-width: 520px) {
-    .ezt .hero { padding:18px 16px 40px; }
+    .ezt .hero { padding:18px 16px 20px; gap:16px; }
+    /* On a phone, Punch in should be on the first screen. The one-line brief repeats what
+       the stat tiles below say, so it gives way, and the dial is a size smaller. */
+    .ezt .brief { display:none; }
+    .ezt .dial { width:150px; height:150px; }
+    .ezt .face { width:108px; height:108px; }
+    .ezt .hero-meta div { padding:6px 10px; }
     .ezt .greet { gap:12px; }
-    .ezt .greet h1 { font-size:24px; }
+    .ezt .greet h1 { font-size:23px; }
     .ezt .hero-meta { gap:14px; }
     .ezt .av { width:54px; height:54px; font-size:18px; }
     .ezt .hero-tools .cmd { display:none; }

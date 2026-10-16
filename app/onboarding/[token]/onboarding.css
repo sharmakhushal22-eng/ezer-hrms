@@ -1,0 +1,198 @@
+/* app/onboarding/[token]/onboarding.css — the candidate joining portal ("the onboarding link").
+   Scoped under .ezo. Colours come from lib/ui/theme.css (--ez-*), so light and dark both
+   work. Only what inline styles cannot express lives here: hover / focus states, the
+   responsive grid collapse, the two-column shell and print rules. Nothing animates beyond
+   one short entrance per step, so the page stays cheap to render on low-end phones. */
+
+.ezo {
+  --ezo-rail-w: 316px;
+  --ezo-ring: 0 0 0 4px color-mix(in srgb, var(--ez-brand) 16%, transparent);
+  min-height: 100vh; color: var(--ez-ink);
+  font-family: "DM Sans", "Segoe UI", system-ui, sans-serif; font-size: 14px;
+  background:
+    radial-gradient(900px 420px at 100% -10%, color-mix(in srgb, var(--ez-brand) 9%, transparent) 0%, transparent 70%),
+    radial-gradient(700px 380px at -10% 110%, color-mix(in srgb, var(--ez-info) 7%, transparent) 0%, transparent 70%),
+    var(--ez-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+.ezo *, .ezo *::before, .ezo *::after { box-sizing: border-box; }
+
+/* ── Shell: journey rail + content ─────────────────────────────────────── */
+.ezo-shell { display: flex; min-height: 100vh; }
+.ezo-rail {
+  width: var(--ezo-rail-w); flex: none; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px; padding: 22px 20px 18px;
+  background: color-mix(in srgb, var(--ez-surface) 82%, transparent);
+  border-right: 1px solid var(--ez-line); backdrop-filter: blur(10px);
+  scrollbar-width: thin;
+}
+.ezo-main { flex: 1; min-width: 0; padding: 40px 48px 64px; }
+.ezo-col { max-width: 800px; margin: 0 auto; }
+
+.ezo-co { display: flex; align-items: center; gap: 12px; }
+.ezo-mono {
+  width: 42px; height: 42px; border-radius: 12px; flex: none; display: grid; place-items: center;
+  font-weight: 700; font-size: 14px; letter-spacing: .02em; color: var(--ez-on-accent);
+  background: linear-gradient(140deg, var(--ez-brand), var(--ez-brand-deep));
+  box-shadow: 0 8px 18px -10px var(--ez-brand);
+}
+.ezo-co b { display: block; font-size: 14px; line-height: 1.25; }
+.ezo-co span { font-size: 12px; color: var(--ez-muted); }
+
+.ezo-me {
+  border: 1px solid var(--ez-line); border-radius: 16px; padding: 12px; background: var(--ez-surface);
+  display: grid; gap: 10px;
+}
+.ezo-me-top { display: flex; gap: 12px; align-items: center; }
+.ezo-av {
+  width: 46px; height: 46px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font-weight: 700; font-size: 16px; color: var(--ez-brand-deep);
+  background: linear-gradient(145deg, var(--ez-brand-tint), var(--ez-brand-edge));
+  border: 2px solid var(--ez-surface); box-shadow: 0 0 0 1px var(--ez-brand-edge);
+}
+.ezo-me-name { font-weight: 700; font-size: 14.5px; line-height: 1.25; }
+.ezo-me-role { font-size: 12.5px; color: var(--ez-muted); margin-top: 1px; }
+.ezo-facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ezo-chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 99px;
+  font-size: 11.5px; font-weight: 600; background: var(--ez-sunken); color: var(--ez-ink-soft); border: 1px solid var(--ez-line);
+  white-space: nowrap;
+}
+.ezo-chip.is-brand { background: var(--ez-brand-tint); color: var(--ez-brand); border-color: var(--ez-brand-edge); }
+.ezo-chip.is-ok { background: var(--ez-positive-tint); color: var(--ez-positive); border-color: var(--ez-positive-edge, var(--ez-line)); }
+
+.ezo-progress { display: flex; align-items: center; gap: 12px; }
+.ezo-ring { width: 52px; height: 52px; flex: none; position: relative; }
+.ezo-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ezo-ring .t { fill: none; stroke: var(--ez-sunken); stroke-width: 6; }
+.ezo-ring .f { fill: none; stroke: var(--ez-brand); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset .6s cubic-bezier(.2,.8,.2,1); }
+.ezo-ring i { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 700; }
+.ezo-progress b { display: block; font-size: 13.5px; }
+.ezo-progress span { font-size: 12px; color: var(--ez-muted); }
+
+/* The step list, grouped into four phases */
+.ezo-steps { display: grid; gap: 8px; }
+.ezo-phase-label { font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--ez-faint); margin: 0 0 3px 4px; }
+.ezo-step {
+  position: relative; display: flex; align-items: center; gap: 10px; padding: 4px 8px; border-radius: 9px;
+  font-size: 12.5px; color: var(--ez-muted);
+}
+.ezo-step + .ezo-step::before {
+  content: ""; position: absolute; left: 18px; top: -5px; height: 8px; width: 2px; border-radius: 2px; background: var(--ez-line);
+}
+.ezo-step.is-done + .ezo-step::before { background: var(--ez-positive); }
+.ezo-dot {
+  width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font-size: 10.5px; font-weight: 700; background: var(--ez-surface); border: 2px solid var(--ez-line-strong); color: var(--ez-faint);
+}
+.ezo-step.is-done { color: var(--ez-ink-soft); }
+.ezo-step.is-done .ezo-dot { background: var(--ez-positive); border-color: var(--ez-positive); color: var(--ez-on-accent); }
+.ezo-step.is-now { background: var(--ez-brand-tint); color: var(--ez-brand-deep); font-weight: 650; }
+.ezo-step.is-now .ezo-dot { background: var(--ez-brand); border-color: var(--ez-brand); color: var(--ez-on-accent); box-shadow: var(--ezo-ring); }
+.ezo-step.is-skip { opacity: .45; text-decoration: line-through; }
+
+.ezo-rail-foot { margin-top: auto; display: grid; gap: 8px; font-size: 12px; color: var(--ez-muted); }
+.ezo-rail-foot div { display: flex; align-items: center; gap: 8px; }
+.ezo-rail-foot svg { color: var(--ez-faint); flex: none; }
+
+/* ── Mobile top bar (rail hidden) ───────────────────────────────────────── */
+.ezo-top { display: none; }
+
+/* ── Step header ────────────────────────────────────────────────────────── */
+.ezo-head { margin: 0 0 22px; animation: ezoIn .35s cubic-bezier(.2,.8,.2,1) both; }
+.ezo-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ez-brand); }
+.ezo-eyebrow span { color: var(--ez-faint); font-weight: 600; letter-spacing: .04em; }
+.ezo-head h1 { margin: 8px 0 6px; font-size: 28px; line-height: 1.15; letter-spacing: -.02em; font-weight: 700; text-wrap: balance; }
+.ezo-head p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ez-muted); max-width: 62ch; }
+.ezo-body { animation: ezoIn .35s cubic-bezier(.2,.8,.2,1) .05s both; }
+@keyframes ezoIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ezo-head, .ezo-body, .ezo-pop { animation: none !important; } }
+
+/* ── Section heading inside a card ──────────────────────────────────────── */
+.ezo-sec { display: flex; align-items: center; gap: 10px; margin: 22px 0 14px; font-size: 13px; font-weight: 700; color: var(--ez-ink); }
+.ezo-sec::after { content: ""; flex: 1; height: 1px; background: var(--ez-line); }
+.ezo-sec:first-child { margin-top: 0; }
+.ezo-sec-ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--ez-brand-tint); color: var(--ez-brand); flex: none; }
+
+/* ── Inputs: hover + focus (inline styles cannot) ───────────────────────── */
+.ezo input:not([type=checkbox]):not([type=radio]), .ezo select, .ezo textarea {
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.ezo input:not([type=checkbox]):not([type=radio]):hover, .ezo select:hover { border-color: var(--ez-faint) !important; }
+.ezo input:not([type=checkbox]):not([type=radio]):focus, .ezo select:focus, .ezo textarea:focus {
+  border-color: var(--ez-brand) !important; box-shadow: var(--ezo-ring); background: var(--ez-surface) !important;
+}
+.ezo input[readonly] { cursor: default; }
+.ezo input[type=checkbox] { accent-color: var(--ez-brand); width: 18px; height: 18px; cursor: pointer; }
+.ezo ::placeholder { color: var(--ez-faint); opacity: 1; }
+
+/* A clickable option row (checkbox + label) */
+.ezo-check {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 12px; cursor: pointer; user-select: none;
+  border: 1px solid var(--ez-line); background: var(--ez-surface); font-size: 13.5px; line-height: 1.5; transition: border-color .15s, background .15s;
+}
+.ezo-check:hover { border-color: var(--ez-brand-edge); background: var(--ez-brand-tint); }
+
+/* ── Grids collapse on phones ───────────────────────────────────────────── */
+.ezo-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+.ezo-g3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 14px; }
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.ezo-btn { transition: transform .15s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease, color .2s ease; }
+.ezo-btn:not(:disabled):hover { transform: translateY(-1px); }
+.ezo-btn:not(:disabled):active { transform: translateY(0) scale(.99); }
+.ezo-btn.is-ghost:not(:disabled):hover { border-color: var(--ez-faint) !important; color: var(--ez-ink) !important; }
+.ezo-actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+
+/* ── Document tiles ────────────────────────────────────────────────────── */
+.ezo-docs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ezo-doc { transition: border-color .15s ease, box-shadow .2s ease, transform .15s ease; }
+.ezo-doc:hover { border-color: var(--ez-brand-edge) !important; box-shadow: 0 8px 22px -16px var(--ez-brand); }
+.ezo-doc.is-drag { border-color: var(--ez-brand) !important; background: var(--ez-brand-tint) !important; }
+
+/* ── Tabs (statutory forms) ─────────────────────────────────────────────── */
+.ezo-seg { display: inline-flex; gap: 2px; padding: 4px; border-radius: 12px; background: var(--ez-sunken); border: 1px solid var(--ez-line); max-width: 100%; overflow-x: auto; }
+.ezo-seg button { border: 0; background: transparent; color: var(--ez-muted); height: 34px; padding: 0 16px; border-radius: 9px !important; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ezo-seg button[data-on="1"] { background: var(--ez-surface); color: var(--ez-ink); box-shadow: 0 1px 3px rgba(16,24,40,.12); }
+
+/* ── Policy rows ───────────────────────────────────────────────────────── */
+.ezo-pol-head { transition: background .15s; }
+.ezo-pol-head:hover { background: var(--ez-sunken); }
+
+/* ── OTP / Aadhaar entry ───────────────────────────────────────────────── */
+.ezo-code { font-variant-numeric: tabular-nums; }
+
+/* ── Success ───────────────────────────────────────────────────────────── */
+.ezo-pop { animation: ezoPop .5s cubic-bezier(.2,.9,.3,1.3) both; }
+@keyframes ezoPop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+
+/* ── Toast ─────────────────────────────────────────────────────────────── */
+.ezo-toast { animation: ezoIn .25s ease both; }
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 1080px) {
+  .ezo { --ezo-rail-w: 280px; }
+  .ezo-main { padding: 32px 28px 56px; }
+}
+@media (max-width: 900px) {
+  .ezo-rail { display: none; }
+  .ezo-shell { flex-direction: column; }
+  .ezo-top {
+    display: block; position: sticky; top: 0; z-index: var(--ez-z-band); padding: 12px 16px 10px;
+    background: color-mix(in srgb, var(--ez-surface) 92%, transparent); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--ez-line);
+  }
+  .ezo-main { padding: 22px 16px 48px; }
+  .ezo-head h1 { font-size: 23px; }
+}
+@media (max-width: 640px) {
+  .ezo-g2, .ezo-g3, .ezo-docs { grid-template-columns: 1fr; }
+  .ezo-g2 > *, .ezo-g3 > * { grid-column: auto !important; }
+  .ezo-actions { flex-wrap: nowrap; }
+  .ezo-actions > button { height: auto !important; min-height: 48px; padding-block: 10px !important; line-height: 1.25; }
+}
+
+@media print {
+  .ezo { background: #fff; }
+  .ezo-noprint { display: none !important; }
+}

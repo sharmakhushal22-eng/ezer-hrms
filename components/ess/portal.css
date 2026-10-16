@@ -1,0 +1,164 @@
+/* components/ess/portal.css — the ESS shell: sidebar, top bar, page heading, sub-tabs,
+   phone tab bar. Imported by components/ess/EmployeePortal.tsx.
+
+   Everything is scoped under .ess so the admin dashboard (/dashboard) is untouched.
+   Colours come from lib/ui/theme.css (--ez-*), so light and dark both work without a
+   second set of rules. Inline styles cannot express :hover, ::before or a scrollbar,
+   which is the only reason these live in a stylesheet. */
+
+.ess { --ess-rail-w: 252px; --ess-pad: 28px; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.ess-rail {
+  width: var(--ess-rail-w); flex-shrink: 0;
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column;
+  background: var(--ez-rail); border-right: 1px solid var(--ez-rail-line);
+}
+.ess-brand { display: flex; align-items: center; gap: 10px; padding: 18px 20px 14px; }
+.ess-brand-tag {
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; line-height: 1;
+  color: var(--ez-brand); background: var(--ez-brand-tint); border: 1px solid var(--ez-brand-edge);
+  padding: 4px 7px; border-radius: 6px;
+}
+.ess-rail-scroll { flex: 1; overflow-y: auto; padding: 2px 12px 12px; scrollbar-width: thin; }
+.ess-rail-scroll::-webkit-scrollbar { width: 6px; }
+.ess-rail-scroll::-webkit-scrollbar-thumb { background: var(--ez-line-strong); border-radius: 99px; }
+.ess-group + .ess-group { margin-top: 16px; }
+.ess-group-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--ez-rail-faint); padding: 0 10px 6px;
+}
+.ess-item {
+  position: relative; width: 100%; height: 38px; margin: 1px 0; padding: 0 10px;
+  display: flex; align-items: center; gap: 11px; text-align: left;
+  border: 0; border-radius: 10px; background: transparent; cursor: pointer;
+  color: var(--ez-rail-item); font-family: inherit; font-size: 13.5px; font-weight: 500;
+  transition: background .15s ease, color .15s ease;
+}
+.ess-item svg { flex: none; color: var(--ez-rail-faint); transition: color .15s ease; }
+.ess-item:hover { background: var(--ez-rail-hover); color: var(--ez-rail-text); }
+.ess-item:hover svg { color: var(--ez-rail-text); }
+.ess-item[data-on="1"] { background: var(--ez-rail-active-bg); color: var(--ez-rail-active-text); font-weight: 600; }
+.ess-item[data-on="1"] svg { color: var(--ez-rail-active-text); }
+/* The active marker sits on the rail's edge, outside the pill. */
+.ess-item[data-on="1"]::before {
+  content: ""; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--ez-brand);
+}
+.ess-item-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ess-soon {
+  flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 99px; background: var(--ez-sunken); color: var(--ez-faint);
+}
+
+/* The signed-in person, pinned to the bottom of the rail. */
+.ess-me {
+  margin: 8px 12px 14px; padding: 10px; display: flex; align-items: center; gap: 10px;
+  border-radius: 12px; border: 1px solid var(--ez-rail-line); background: var(--ez-sunken);
+}
+.ess-me-name { font-size: 13px; font-weight: 700; color: var(--ez-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ess-me-sub { font-size: 11px; color: var(--ez-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
+/* ── Square icon buttons (sign out, etc.) ───────────────────────────────── */
+.ess-icon-btn {
+  width: 34px; height: 34px; flex: none; display: grid; place-items: center;
+  border: 1px solid var(--ez-line); border-radius: 10px; background: var(--ez-surface);
+  color: var(--ez-muted); cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+}
+.ess-icon-btn:hover { color: var(--ez-critical); border-color: var(--ez-critical-edge, var(--ez-line-strong)); background: var(--ez-critical-tint); }
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.ess-crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--ez-faint); white-space: nowrap; }
+.ess-crumbs b { color: var(--ez-ink); font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
+.ess-crumbs svg { flex: none; color: var(--ez-line-strong); }
+.ess-manage {
+  display: flex; align-items: center; gap: 8px; padding: 6px 20px 7px;
+  border-top: 1px solid var(--ez-line); background: var(--ez-surface);
+}
+.ess-manage-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--ez-faint); padding-right: 6px; border-right: 1px solid var(--ez-line); margin-right: 2px; white-space: nowrap;
+}
+
+/* ── Page heading — replaces the tinted header band on ESS's own screens ── */
+.ess-head { display: flex; align-items: center; gap: 14px; margin: 2px 0 18px; }
+.ess-head-ic {
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 13px;
+  color: var(--ez-brand); background: linear-gradient(145deg, var(--ez-brand-tint), var(--ez-surface));
+  border: 1px solid var(--ez-brand-edge);
+}
+.ess-head h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 700; letter-spacing: -.02em; color: var(--ez-ink); }
+.ess-head p { margin: 3px 0 0; font-size: 13.5px; color: var(--ez-muted); }
+.ess-head-chip {
+  margin-left: auto; flex: none; font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 99px;
+  background: var(--ez-warning-tint); color: var(--ez-warning);
+}
+
+/* Admin modules opened inside ESS bring the shared tinted band (lib/ui .ez-page-head).
+   Inside ESS it reads as a plain heading, so a module looks like the rest of the portal.
+   The band re-points --ez-muted & co. at its own darker inks; `inherit` restores them. */
+.ess-main .ez-page-head {
+  background: transparent; border: 0; box-shadow: none; padding: 2px 2px 4px;
+  --ez-muted: inherit; --ez-faint: inherit; --ez-brand: inherit;
+}
+
+/* ── Sub-tabs — a segmented control ────────────────────────────────────── */
+.ess-seg {
+  display: flex; gap: 2px; padding: 4px; margin-bottom: 18px;
+  width: max-content; max-width: 100%; overflow-x: auto; scrollbar-width: none;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line); border-radius: 12px;
+}
+.ess-seg::-webkit-scrollbar { display: none; }
+.ess-seg button {
+  flex: none; height: 32px; padding: 0 14px; border: 0; border-radius: 9px !important;
+  background: transparent; color: var(--ez-muted); cursor: pointer; white-space: nowrap;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.ess-seg button:hover { color: var(--ez-ink); }
+.ess-seg button[data-on="1"] {
+  background: var(--ez-surface); color: var(--ez-ink);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .1);
+}
+.ess-seg .ess-seg-soon { margin-left: 6px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ez-faint); }
+
+/* ── Phone tab bar ───────────────────────────────────────────────────────── */
+.ess-tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; display: flex;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  background: var(--ez-surface); border-top: 1px solid var(--ez-line);
+  box-shadow: 0 -6px 20px -12px rgba(16, 24, 40, .18);
+}
+.ess-tabbar button {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 4px 0; border: 0; border-radius: 12px !important; background: transparent; cursor: pointer;
+  color: var(--ez-faint); font-family: inherit; font-size: 10.5px; font-weight: 600;
+}
+.ess-tabbar .ess-tab-ic { width: 46px; height: 28px; border-radius: 99px; display: grid; place-items: center; transition: background .2s ease; }
+.ess-tabbar button[data-on="1"] { color: var(--ez-brand); }
+.ess-tabbar button[data-on="1"] .ess-tab-ic { background: var(--ez-brand-tint); }
+
+/* The eye-comfort dock (app/layout.tsx) sits bottom-right. On a phone ESS puts its
+   tab bar there, so the dock moves up above it instead of covering "More". */
+body:has(.ess-tabbar) [data-ez-dock] { bottom: 82px !important; }
+
+/* ── "More" sheet on phones ─────────────────────────────────────────────── */
+.ess-sheet-tile {
+  padding: 12px 10px; border-radius: 12px; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 9px; font-family: inherit; font-size: 13px; font-weight: 500;
+  border: 1px solid var(--ez-line); background: var(--ez-surface); color: var(--ez-ink);
+}
+.ess-sheet-tile svg { color: var(--ez-faint); flex: none; }
+.ess-sheet-tile[data-on="1"] { border-color: var(--ez-brand-edge); background: var(--ez-brand-tint); color: var(--ez-brand-deep, var(--ez-brand)); font-weight: 600; }
+.ess-sheet-tile[data-on="1"] svg { color: var(--ez-brand); }
+
+/* ── The soft hero surface shared by the Attendance and Profile banners ── */
+.ess-soft-hero {
+  position: relative; overflow: hidden; border-radius: 16px;
+  background:
+    radial-gradient(520px 200px at 100% 0%, var(--ez-brand-edge) 0%, transparent 70%),
+    linear-gradient(135deg, var(--ez-surface) 0%, var(--ez-brand-tint) 100%);
+  border: 1px solid var(--ez-brand-edge);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 10px 28px -20px rgba(29, 78, 216, .45);
+}

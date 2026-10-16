@@ -324,7 +324,7 @@ export default function LeaveSection({ emp, notify }: {
     if (isNonWorking(key)) {
       const h = holByDate.get(key)
       const when = fromIso(key).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
-      setTypeNote(`${when} is ${h ? h.description : 'a weekly off'} — leave cannot start or end on it.`)
+      setTypeNote(`${when} is ${h ? h.description : 'a weekly off'}. Leave cannot start or end on it.`)
       return
     }
     setTypeNote('')
@@ -385,7 +385,7 @@ export default function LeaveSection({ emp, notify }: {
   }
 
   const chooseType = (t: LeaveType) => {
-    if (!t.eligible) { setTypeNote(`${t.name} — ${t.reason || 'not available to you'}.`); return }
+    if (!t.eligible) { setTypeNote(`${t.name}: ${t.reason || 'not available to you'}.`); return }
     setTypeNote('')
     // Unchanged: switching type clears any half-day flag, so a stale half-day
     // can never survive onto a type that forbids it.
@@ -518,7 +518,7 @@ export default function LeaveSection({ emp, notify }: {
           <div>
             <p className="ezlv-hero-label" id="ezlv-bal-h">Leave balance · {data.fyLabel}</p>
             <p className="ezlv-hero-total">
-              <b>{data.balances.length ? heroTotal : '—'}</b>
+              <b>{data.balances.length ? heroTotal : '-'}</b>
               <span>{data.balances.length ? 'days available' : 'nothing loaded yet'}</span>
             </p>
           </div>
@@ -685,7 +685,7 @@ export default function LeaveSection({ emp, notify }: {
                           style={{ '--lv-d': `${sel && !hover ? sweep(key) : 0}ms` } as React.CSSProperties}
                           tabIndex={key === focusDay ? 0 : -1}
                           aria-pressed={sel}
-                          aria-label={`${fromIso(key).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}${h ? ` — ${h.description}` : ''}${past ? ' — already passed' : ''}`}
+                          aria-label={`${fromIso(key).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}${h ? `, ${h.description}` : ''}${past ? ', already passed' : ''}`}
                           onFocus={() => setFocusDay(key)}
                           onMouseEnter={() => { if (!past && form.from_date) setHover(key) }}
                           onClick={() => pickDay(key)}
@@ -720,7 +720,7 @@ export default function LeaveSection({ emp, notify }: {
                 <div className="ezlv-summary-top">
                   <span className="ezlv-summary-range">{rangeLabel(form.from_date, form.to_date)}</span>
                   <span className="ezlv-summary-days">
-                    {estimate ? `${estimate.working} day${estimate.working === 1 ? '' : 's'}` : '—'}
+                    {estimate ? `${estimate.working} day${estimate.working === 1 ? '' : 's'}` : '-'}
                   </span>
                 </div>
                 {estimate && (
@@ -994,15 +994,27 @@ const CSS = `
   --lv-info-tint: var(--ez-info-tint, #F0F9FF);
   --lv-font: var(--ez-font, "DM Sans", "Segoe UI", system-ui, sans-serif);
 
-  /* The hero is the one saturated object in the section. Two fixed gradients
-     rather than tokens, because brand-on-brand inverts in the dark theme and a
-     bright panel in a dark portal reads as a bug. */
-  --lv-hero: linear-gradient(135deg, #0E2470 0%, #1D4ED8 46%, #4189FB 100%);
-  --lv-hero-ink: #FFFFFF;
-  --lv-hero-sub: rgba(255, 255, 255, .84);
-  --lv-hero-fill: rgba(255, 255, 255, .17);
-  --lv-hero-edge: rgba(255, 255, 255, .26);
-  --lv-hero-shadow: 0 2px 4px rgba(10, 24, 66, .34), 0 18px 40px -14px rgba(23, 62, 175, .62);
+  /* The hero, LIGHT: the portal's soft hero surface (white into the brand tint,
+     ink text), the same one Home, Attendance and Profile open with. It was a
+     saturated blue slab — one of four different loud banners across the
+     portal. Dark keeps its own fixed navy below, because brand-on-brand
+     inverts there and a bright panel in a dark portal reads as a bug. */
+  --lv-hero:
+    radial-gradient(520px 200px at 100% 0%, var(--ez-brand-edge) 0%, transparent 70%),
+    linear-gradient(135deg, var(--ez-surface) 0%, var(--ez-brand-tint) 100%);
+  --lv-hero-ink: var(--ez-ink);
+  --lv-hero-sub: var(--ez-muted);
+  --lv-hero-fill: var(--ez-surface);
+  --lv-hero-edge: var(--ez-brand-edge);
+  --lv-hero-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 10px 28px -20px rgba(29, 78, 216, .45);
+  --lv-hero-hover: var(--ez-brand-tint);
+  --lv-hero-chip: var(--ez-brand-tint);
+  --lv-hero-chip-ink: var(--ez-brand);
+  --lv-hero-track: var(--ez-sunken);
+  --lv-hero-bar: var(--ez-brand);
+  --lv-hero-ok: var(--ez-positive);
+  --lv-hero-warn: var(--ez-warning);
+  --lv-hero-bad: var(--ez-critical);
 
   font-family: var(--lv-font);
   font-size: 13px;
@@ -1019,6 +1031,14 @@ const CSS = `
     --lv-hero-fill: rgba(255, 255, 255, .085);
     --lv-hero-edge: rgba(255, 255, 255, .15);
     --lv-hero-shadow: 0 2px 4px rgba(0, 0, 0, .55), 0 18px 40px -14px rgba(0, 0, 0, .75);
+    --lv-hero-hover: rgba(255, 255, 255, .22);
+    --lv-hero-chip: rgba(255, 255, 255, .2);
+    --lv-hero-chip-ink: var(--lv-hero-ink);
+    --lv-hero-track: rgba(255, 255, 255, .18);
+    --lv-hero-bar: rgba(255, 255, 255, .95);
+    --lv-hero-ok: rgba(110, 231, 183, 1);
+    --lv-hero-warn: rgba(252, 211, 77, 1);
+    --lv-hero-bad: rgba(252, 165, 165, 1);
   }
 }
 :root[data-ez-theme="dark"] .ezlv {
@@ -1028,6 +1048,14 @@ const CSS = `
   --lv-hero-fill: rgba(255, 255, 255, .085);
   --lv-hero-edge: rgba(255, 255, 255, .15);
   --lv-hero-shadow: 0 2px 4px rgba(0, 0, 0, .55), 0 18px 40px -14px rgba(0, 0, 0, .75);
+  --lv-hero-hover: rgba(255, 255, 255, .22);
+  --lv-hero-chip: rgba(255, 255, 255, .2);
+  --lv-hero-chip-ink: var(--lv-hero-ink);
+  --lv-hero-track: rgba(255, 255, 255, .18);
+  --lv-hero-bar: rgba(255, 255, 255, .95);
+  --lv-hero-ok: rgba(110, 231, 183, 1);
+  --lv-hero-warn: rgba(252, 211, 77, 1);
+  --lv-hero-bad: rgba(252, 165, 165, 1);
 }
 
 .ezlv *,
@@ -1108,7 +1136,7 @@ const CSS = `
   cursor: pointer;
   transition: background .15s ease;
 }
-.ezlv-hero-jump:hover { background: rgba(255, 255, 255, .22); }
+.ezlv-hero-jump:hover { background: var(--lv-hero-hover); }
 
 .ezlv-tiles {
   display: grid;
@@ -1155,25 +1183,25 @@ const CSS = `
   letter-spacing: .04em;
   padding: 2px 6px;
   border-radius: var(--lv-pill);
-  background: rgba(255, 255, 255, .2);
-  color: var(--lv-hero-ink);
+  background: var(--lv-hero-chip);
+  color: var(--lv-hero-chip-ink);
 }
 .ezlv-meter {
   height: 4px;
   border-radius: var(--lv-pill);
-  background: rgba(255, 255, 255, .18);
+  background: var(--lv-hero-track);
   overflow: hidden;
 }
 .ezlv-meter > i {
   display: block;
   height: 100%;
   border-radius: var(--lv-pill);
-  background: #fff;
+  background: var(--lv-hero-bar);
   transition: width .35s cubic-bezier(.4, 0, .2, 1);
 }
-.ezlv-meter > i.is-ok { background: #6EE7B7; }
-.ezlv-meter > i.is-warn { background: #FCD34D; }
-.ezlv-meter > i.is-bad { background: #FCA5A5; }
+.ezlv-meter > i.is-ok { background: var(--lv-hero-ok); }
+.ezlv-meter > i.is-warn { background: var(--lv-hero-warn); }
+.ezlv-meter > i.is-bad { background: var(--lv-hero-bad); }
 
 .ezlv-hero-empty {
   margin-top: 14px;

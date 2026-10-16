@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Prefs, TodayPayload } from '@/lib/today/types';
 import { fmtDate, fmtHHMM, greeting, two } from '@/lib/today/format';
-import { Auto, Clock, Moon, Search, Sun } from './icons';
+import { Clock, Search } from './icons';
 import { useNow } from './hooks';
 
 type Props = { data: TodayPayload; prefs: Prefs; onPrefs: (p: Partial<Prefs>) => void; children: ReactNode; onSearch?: () => void };
@@ -41,7 +41,10 @@ export default function HeroPanel({ data, prefs, onPrefs, children, onSearch }: 
                 bound. Pass onSearch to bring it back. */}
             {onSearch && <button className="pillbtn cmd" title="Search anything" onClick={onSearch}><Search /> Search <kbd>⌘K</kbd></button>}
             <FormatPicker prefs={prefs} onPrefs={onPrefs} now={now} />
-            <ThemeButton prefs={prefs} onPrefs={onPrefs} />
+            {/* The Light/Dark button that sat here is gone: the portal's top bar has the
+                theme switch, on every screen, and two switches for one setting was one
+                too many. The top-bar switch now saves to the same preference (see
+                lib/today/prefs-client.ts), so nothing a person chose is lost. */}
           </div>
         </div>
 
@@ -113,17 +116,5 @@ function FormatPicker({ prefs, onPrefs, now }: { prefs: Prefs; onPrefs: (p: Part
         </div>
       </div>
     </div>
-  );
-}
-
-/* ── theme switch: auto → light → dark ───────────────────────────────────── */
-function ThemeButton({ prefs, onPrefs }: { prefs: Prefs; onPrefs: (p: Partial<Prefs>) => void }) {
-  const order: Prefs['theme'][] = ['auto', 'light', 'dark'];
-  const next = order[(order.indexOf(prefs.theme) + 1) % 3];
-  const Icon = prefs.theme === 'dark' ? Moon : prefs.theme === 'light' ? Sun : Auto;
-  return (
-    <button className="pillbtn" title={`Theme: ${prefs.theme}`} onClick={() => onPrefs({ theme: next })}>
-      <Icon /> <span>{prefs.theme[0].toUpperCase() + prefs.theme.slice(1)}</span>
-    </button>
   );
 }

@@ -50,8 +50,12 @@ import {
   C, F, W, R, E, S, Z, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch,
+  IconOrgChart, IconBuilding, IconPerformance, IconLogout, IconChevron, IconChevronDown,
+  IconUser, IconHeart, IconAward, IconGame, IconMore, IconCheck, IconAlert,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
+// The shell's sidebar, top bar, headings and sub-tabs (hover states and the like).
+import './portal.css'
 
 // ── Sections load on demand ────────────────────────────────────────
 //
@@ -107,14 +111,14 @@ const T = {
   btnO:  { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat } as React.CSSProperties,
   section: { ...eyebrow, marginBottom:S.md, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
-const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
-const fmtDT = (s?: string|null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : '—'
+const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
+const fmtDT = (s?: string|null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : '-'
 const initials = (n: string) => n.split(' ').filter(Boolean).slice(0,2).map(x => x[0]).join('').toUpperCase()
 const QUOTES = [
   'Small steps every day lead to big results.',
   'Your work today builds tomorrow.',
   'Progress, not perfection.',
-  'Great things take time — keep going.',
+  'Great things take time. Keep going.',
   'Be the energy you want to attract.',
 ]
 
@@ -135,7 +139,7 @@ function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void })
   if (!transfers.length) return null
   return (<>{transfers.map(tr => (
     <div key={tr.id} style={{ background: C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10, padding:'12px 16px', marginBottom:10 }}>
-      <div style={{ fontSize:13, fontWeight:600, color: C.warning }}>Transfer Letter — action required</div>
+      <div style={{ fontSize:13, fontWeight:600, color: C.warning }}>Transfer Letter: action required</div>
       <div style={{ fontSize:11, color: C.warning, marginTop:3 }}>You are being transferred, effective {tr.effective_date}.</div>
       <div style={{ display:'flex', gap:8, marginTop:10 }}>
         {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:C.surface, border: `1px solid ${C.warningTint}`, borderRadius:7, fontSize:11, color: C.warning, textDecoration:'none' }}>View Letter</a>}
@@ -450,7 +454,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <div style={{ width:52, height:52, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
         <div>
           <div style={{ fontSize:17, fontWeight:700 }}>{greet}, {emp.first_name || emp.full_name.split(' ')[0]}! {emoji}</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{emp.designation || '—'} · {emp.emp_code}</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{emp.designation || '-'} · {emp.emp_code}</div>
           <div style={{ fontSize:12, color:C.brand, marginTop:4, fontStyle:'italic' }}>“{quote}”</div>
         </div>
       </div>
@@ -465,9 +469,9 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
       {editOpen && <EditProfileModal emp={emp} onClose={() => setEditOpen(false)} onSaved={reload} notify={notify} />}
 
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
-        <Stat label="Leave Balance" value="—" color={C.faint} />
-        <Stat label="Net Salary" value={salaryVisible ? '—' : 'Hidden'} color={C.faint} />
-        <Stat label="Attendance %" value="—" color={C.faint} />
+        <Stat label="Leave Balance" value="-" color={C.faint} />
+        <Stat label="Net Salary" value={salaryVisible ? '-' : 'Hidden'} color={C.faint} />
+        <Stat label="Attendance %" value="-" color={C.faint} />
         <Stat label="Pending Actions" value={String(pending)} color={pending ? C.warning : C.positive} />
       </div>
 
@@ -495,7 +499,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <div style={T.card}>
           <div style={T.section}>Birthday & Anniversary</div>
           {bdaySoon !== null
-            ? <div style={{ fontSize:13 }}>Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s)`} — wishing you ahead!</div>
+            ? <div style={{ fontSize:13 }}>Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s).`} Wishing you ahead!</div>
             : <div style={{ fontSize:12, color:C.faint }}>No upcoming birthdays in the next 30 days.</div>}
           {emp.group_doj && <div style={{ fontSize:12, color:C.muted, marginTop:6 }}>Joined {fmt(emp.group_doj)} · {tenureYrs} yr{tenureYrs===1?'':'s'} with us 🎊</div>}
         </div>
@@ -505,7 +509,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
           <div style={T.section}>My Journey</div>
           <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.9 }}>
             <div>Joined: <b>{fmt(emp.group_doj)}</b></div>
-            <div>Designation: <b>{emp.designation || '—'}</b></div>
+            <div>Designation: <b>{emp.designation || '-'}</b></div>
             <div>Tenure: <b>{tenureYrs} year{tenureYrs===1?'':'s'}</b></div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' }}>
               {[1,3,5].map(y => <span key={y} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, fontWeight:600, background: tenureYrs>=y?C.positiveTint:C.sunken, color: tenureYrs>=y?C.positive:C.faint }}>{tenureYrs>=y?'':''} {y}-yr</span>)}
@@ -516,8 +520,8 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         {/* Kudos */}
         <div style={T.card}>
           <div style={T.section}>Recognition & Kudos</div>
-          {kudos.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No kudos yet — appreciation from peers will show here.</div>}
-          {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom: `1px solid ${C.brandEdge}` }}>{k.badge ? `🏆 ${k.badge} — ` : ''}{k.message || 'Kudos!'}<span style={{ color:C.faint, fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
+          {kudos.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No kudos yet. Appreciation from peers will show here.</div>}
+          {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom: `1px solid ${C.brandEdge}` }}>{k.badge ? `🏆 ${k.badge}: ` : ''}{k.message || 'Kudos!'}<span style={{ color:C.faint, fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
         </div>
 
         {/* Announcements */}
@@ -561,9 +565,9 @@ const P = {
 
 /** Years and months since a date, in words. */
 function tenureOf(doj?: string | null): string {
-  if (!doj) return '—'
+  if (!doj) return '-'
   const from = new Date(doj), now = new Date()
-  if (isNaN(from.getTime()) || from > now) return '—'
+  if (isNaN(from.getTime()) || from > now) return '-'
   let months = (now.getFullYear() - from.getFullYear()) * 12 + (now.getMonth() - from.getMonth())
   if (now.getDate() < from.getDate()) months--
   const y = Math.floor(months / 12), m = months % 12
@@ -664,9 +668,9 @@ function Field({ label, value, icon, copyable, sensitive, notify }: {
 }) {
   const [hover, setHover] = useState(false)
   const [shown, setShown] = useState(false)
-  const has = !!value && value !== '—'
+  const has = !!value && value !== '-'
   const masked = sensitive && !shown && has
-  const display = !has ? '—' : masked ? '•'.repeat(Math.min(String(value).length, 12)) : String(value)
+  const display = !has ? '-' : masked ? '•'.repeat(Math.min(String(value).length, 12)) : String(value)
 
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -749,15 +753,15 @@ function ProfileHero({ emp, notify }: {
 
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 26, fontWeight: 700, color: C.onAccent, lineHeight: 1.15,
-                        letterSpacing: '-.02em' }}>{emp.full_name || '—'}</div>
+                        letterSpacing: '-.02em' }}>{emp.full_name || '-'}</div>
           <div style={{ fontSize: 13, color: C.onAccentSoft, marginTop: 3 }}>
             {emp.designation || 'Designation not set'}
             {emp.dept_name ? ` · ${emp.dept_name}` : ''}
           </div>
 
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 13 }}>
-            <Chip icon="🆔">{emp.emp_code || '—'}</Chip>
-            <Chip icon="🏢">{emp.company_name || '—'}</Chip>
+            <Chip icon="🆔">{emp.emp_code || '-'}</Chip>
+            <Chip icon="🏢">{emp.company_name || '-'}</Chip>
             {(emp.location_name || emp.city) && (
               <Chip icon="📍">{[emp.location_name, emp.city].filter(Boolean).join(', ')}</Chip>
             )}
@@ -860,7 +864,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
       if (!bank.ifsc.trim() || !bank.account_number.trim() || !bank.holder_name.trim()) { notify('Fill IFSC, account number and holder name', 'error'); return }
       if (bank.account_number !== bank.confirm) { notify('Account numbers do not match', 'error'); return }
       setBusy(true)
-      const detailStr = `Bank: ${bank.bank_name || '—'} · A/C ${bank.account_number} · IFSC ${bank.ifsc} · Branch ${bank.branch || '—'} · Holder ${bank.holder_name} · ${bank.account_type}`
+      const detailStr = `Bank: ${bank.bank_name || '-'} · A/C ${bank.account_number} · IFSC ${bank.ifsc} · Branch ${bank.branch || '-'} · Holder ${bank.holder_name} · ${bank.account_type}`
       const { error } = await createServiceRequest(emp.id, 'PROFILE_UPDATE', { field, detail: detailStr, bank }, { assigned_to: 'HR' })
       setBusy(false)
       if (error) { notify('Failed: ' + error.message, 'error'); return }
@@ -945,7 +949,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
           </div>
           <EmployeeProfileSections emp={emp} profileTab={recordTab} showManagerChain={false} />
           <div style={{ padding: '12px 20px', fontSize: 11.5, color: C.muted, background: C.sunken }}>
-            Something wrong here? Use <b>Request a change</b> — HR approves edits to your record.
+            Something wrong here? Use <b>Request a change</b>. HR approves edits to your record.
           </div>
         </div>
       )}
@@ -955,7 +959,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
                       padding: '18px 18px', maxWidth: 720 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Request a change</div>
           <div style={{ fontSize: 12, color: P.muted, marginTop: 4, marginBottom: 15, lineHeight: 1.6 }}>
-            You cannot edit these directly — payroll and statutory filings depend on them, so every
+            You cannot edit these directly: payroll and statutory filings depend on them, so every
             change goes to HR for approval. You will see it under Raise a Request.
           </div>
 
@@ -1030,7 +1034,7 @@ function Documents({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t
         {rows.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No requests yet.</div>}
         {rows.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
-            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.letter_type}</div><div style={{ fontSize:11, color:C.faint }}>{r.purpose || '—'} · {fmt(r.requested_at)}</div></div>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.letter_type}</div><div style={{ fontSize:11, color:C.faint }}>{r.purpose || '-'} · {fmt(r.requested_at)}</div></div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               <StatusPill status={r.status} />
               {r.letter_url && <a href={r.letter_url} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>Download</a>}
@@ -1074,7 +1078,7 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
         <div style={T.section}>Raise a Request</div>
         <label style={T.label}>Type</label>
         <select style={{ ...T.input, marginBottom:10 }} value={type} onChange={e => setType(e.target.value)}>{REQ_TYPES.map(r => <option key={r.k} value={r.k}>{r.label}</option>)}</select>
-        {def.confidential && <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:C.critical }}>This is confidential and routes only to the Internal Committee — not regular HR.</div>}
+        {def.confidential && <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:C.critical }}>This is confidential and routes only to the Internal Committee, not regular HR.</div>}
         <label style={T.label}>Details</label>
         <textarea style={{ ...T.input, minHeight:90, marginBottom:10, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="Describe your request…" />
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
@@ -1084,7 +1088,7 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
         {rows.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No requests yet.</div>}
         {rows.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
-            <div><div style={{ fontSize:13, fontWeight:600 }}>{REQ_TYPES.find(x => x.k === r.request_type)?.label || r.request_type}{r.is_confidential && ' 🔒'}</div><div style={{ fontSize:11, color:C.faint }}>{r.request_data?.detail?.slice(0,60) || '—'} · {fmt(r.submitted_at)}</div></div>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{REQ_TYPES.find(x => x.k === r.request_type)?.label || r.request_type}{r.is_confidential && ' 🔒'}</div><div style={{ fontSize:11, color:C.faint }}>{r.request_data?.detail?.slice(0,60) || '-'} · {fmt(r.submitted_at)}</div></div>
             <StatusPill status={r.status} />
           </div>
         ))}
@@ -1100,7 +1104,7 @@ function DirDetailRow({ label, value }: { label: string; value: React.ReactNode 
   return (
     <div style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
       <span style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }}>{label}</span>
-      <span style={{ fontSize:13, color:C.ink, textAlign:'right', wordBreak:'break-word' }}>{value || '—'}</span>
+      <span style={{ fontSize:13, color:C.ink, textAlign:'right', wordBreak:'break-word' }}>{value || '-'}</span>
     </div>
   )
 }
@@ -1112,7 +1116,7 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
           <div style={{ width:48, height:48, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, flexShrink:0 }}>{initials(e.full_name)}</div>
           <div style={{ minWidth:0, flex:1 }}>
             <div style={{ fontSize:16, fontWeight:700 }}>{e.full_name}</div>
-            <div style={{ fontSize:12, color:C.faint }}>{e.designation || '—'}</div>
+            <div style={{ fontSize:12, color:C.faint }}>{e.designation || '-'}</div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, lineHeight:1, cursor:'pointer', color:C.faint }}>×</button>
         </div>
@@ -1207,7 +1211,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
         </div>
       </div>
 
-      {err && <div style={{ ...T.card, color: C.critical, background: C.criticalTint, border: `1px solid ${C.criticalTint}` }}>Could not load the directory — {err}</div>}
+      {err && <div style={{ ...T.card, color: C.critical, background: C.criticalTint, border: `1px solid ${C.criticalTint}` }}>Could not load the directory: {err}</div>}
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill,minmax(280px,1fr))', gap: 10 }}>
@@ -1234,7 +1238,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
                   <div style={{ width: 44, height: 44, borderRadius: '50%', background: t.bg, color: t.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>{initials(e.full_name)}</div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
-                    <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '—'}</div>
+                    <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '-'}</div>
                     <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>{e.emp_code}</div>
                   </div>
                 </div>
@@ -1384,7 +1388,7 @@ const STATUS_LABEL: Record<string,string> = new Proxy({} as Record<string,string
   get: (_t, k: string) => k === 'LWP' ? 'LWP' : (metaOf(k)?.code ?? ''),
 })
 
-const fmtT = (iso: string|null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '—'
+const fmtT = (iso: string|null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '-'
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
@@ -1480,42 +1484,25 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
 
   const nav: React.CSSProperties = {
     width: 32, height: 32, borderRadius: 10, cursor: 'pointer',
-    border: '1px solid rgba(255,255,255,0.28)', background: 'rgba(255,255,255,0.14)',
-    color: C.onAccent, fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
+    border: `1px solid ${C.line}`, background: C.surface,
+    color: C.ink, fontSize: 15, fontFamily: 'inherit', lineHeight: 1, boxShadow: E.flat,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     transition: 'background .15s ease, transform .12s ease',
   }
 
   return (
-    // AN ACCENT PLANE — it must have contrast against the page in BOTH themes.
-    //
-    // Two wrong answers preceded this one, both from reading token NAMES
-    // instead of their values:
-    //
-    //   1. C.ink / C.inkSoft / C.brand. Those are TEXT tokens. In dark C.ink is
-    //      #F3F4F6, so a band meant as "dark navy → brand" inverted to
-    //      near-white and became the brightest thing on screen.
-    //   2. C.dark / darkMid / darkAccent. These exist for a plane that is dark
-    //      RELATIVE TO A WHITE PAGE. In dark mode --ez-dark is #0B0E12 against
-    //      a #0F1216 canvas — darker than the background — so the band
-    //      disappeared instead.
-    //
-    // The brand ramp is the one pair that carries contrast either way: it is a
-    // saturated blue in light and in dark, and C.onAccent is defined precisely
-    // as the ink that stays legible on a saturated fill in both themes.
-    <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 11, position: 'relative',
-                  background: `linear-gradient(135deg,${C.brandDeep} 0%,${C.brand} 55%,${C.info} 100%)`,
-                  boxShadow: '0 8px 26px rgba(30,27,75,0.26)' }}>
-      <div style={{ position: 'absolute', top: -80, right: -50, width: 220, height: 220,
-                    borderRadius: '50%', background: 'rgba(167,139,250,0.15)', pointerEvents: 'none' }} />
-
+    // The soft hero surface (portal.css .ess-soft-hero) shared with Home, Leave and
+    // Profile — white into the brand tint, ink text. It replaces a saturated blue slab:
+    // every screen opened with a different loud banner, and in light mode they were the
+    // heaviest thing on the page. Built from tokens, so dark mode follows on its own.
+    <div className="ess-soft-hero" style={{ marginBottom: 12 }}>
       <div style={{ position: 'relative', padding: isMobile ? '16px 16px' : '18px 20px',
                     display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 190 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
             <button onClick={onPrev} className="ezer-nav" style={nav} title="Previous month">‹</button>
-            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: C.onAccent, letterSpacing: '-.01em' }}>
-              {MONTH_NAMES[month - 1]} <span style={{ opacity: .55, fontWeight: 500 }}>{year}</span>
+            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: C.ink, letterSpacing: '-.01em' }}>
+              {MONTH_NAMES[month - 1]} <span style={{ color: C.faint, fontWeight: 500 }}>{year}</span>
             </div>
             <button onClick={onNext} className="ezer-nav" style={nav} title="Next month">›</button>
             {!isThisMonth && (
@@ -1525,7 +1512,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
               </button>
             )}
           </div>
-          <div style={{ fontSize: 12, color: C.onAccentSoft }}>
+          <div style={{ fontSize: 12.5, color: C.muted }}>
             {working > 0
               ? `${working} working day${working === 1 ? '' : 's'} · ${summary.present} present, ${summary.absent} absent`
               : 'No working days recorded yet'}
@@ -1539,7 +1526,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
 
         <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
           <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="7" />
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.line} strokeWidth="7" />
             {pct != null && (
               <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tone} strokeWidth="7" strokeLinecap="round"
                       strokeDasharray={`${(circ * pct) / 100} ${circ}`}
@@ -1548,11 +1535,11 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
             )}
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center', color: C.onAccent }}>
+                        alignItems: 'center', justifyContent: 'center', color: C.ink }}>
             <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, lineHeight: 1 }}>
-              {pct == null ? '—' : `${pct}%`}
+              {pct == null ? '-' : `${pct}%`}
             </span>
-            <span style={{ fontSize: 9, opacity: .65, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
+            <span style={{ fontSize: 9, color: C.muted, fontWeight: 600, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
           </div>
         </div>
       </div>
@@ -1568,7 +1555,7 @@ function StatTile({ label, value, bg, fg, bar, wide }: {
   return (
     <div className="ezer-tile" style={{ background: empty ? C.sunken : bg, borderRadius: 10, padding: '10px 13px',
                   border: `1px solid ${empty ? C.line : bg}`, position: 'relative',
-                  overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
+                  overflow: 'hidden', minWidth: 0, flex: wide ? '1 1 96px' : '1 1 74px' }}>
       {/* `faint`, not `line`. C.line is a HAIRLINE token — #E5E7EB light,
           #262C35 dark — and it was being used as a text colour, so on the dark
           canvas the zero tiles (Half day, Late, Overtime, Loss of pay) were
@@ -1598,8 +1585,11 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
     { label:'Loss of pay', value:String(summary.lopDays), k:'LWP' },
   ]
   return (
-    <div style={{ display:'flex', flexWrap: isMobile ? 'nowrap' : 'wrap', gap:8, marginBottom:11,
-                  overflowX: isMobile ? 'auto' : 'visible', paddingBottom: isMobile ? 4 : 0 }}>
+    // Phone: a 3 x 2 grid. It was one sideways-scrolling row whose last two tiles sat cut off
+    // at the screen edge with nothing saying the row scrolled.
+    <div style={isMobile
+      ? { display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8, marginBottom:12 }
+      : { display:'flex', flexWrap:'wrap', gap:8, marginBottom:12 }}>
       {tiles.map(t => {
         const [bg, fg] = STATUS_STYLE[t.k]
         return <StatTile key={t.label} label={t.label} value={t.value}
@@ -1690,7 +1680,7 @@ function ShimmerKeyframes() {
     .ezer-day-panel{animation:ezerPanelIn .3s cubic-bezier(.22,1,.36,1) both}
 
     /* Month navigation. Inline styles cannot express :hover or :active. */
-    .ezer-nav:hover{background:rgba(255,255,255,.2)!important}
+    .ezer-nav:hover{background:var(--ez-brand-tint)!important;border-color:var(--ez-brand-edge)!important}
     .ezer-nav:active{transform:scale(.9)}
 
     /* Stat tiles rise very slightly, enough to say they are a group of objects. */
@@ -2045,7 +2035,7 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
           <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
             <span style={{ fontWeight:600, minWidth:52 }}>{fmtT(p.punch_time)}</span>
             <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: p.punch_type==='IN' ? C.positiveTint : C.criticalTint, color: p.punch_type==='IN' ? C.positive : C.critical }}>{p.punch_type}</span>
-            <span style={{ color:C.muted }}>{p.source || '—'}</span>
+            <span style={{ color:C.muted }}>{p.source || '-'}</span>
             {p.geofence_status && <span style={{ marginLeft:'auto', fontSize:10, color:C.faint }}>{p.geofence_status}</span>}
           </div>
         ))}
@@ -2101,7 +2091,7 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel, expect
 
   const submit = async () => {
     if (!dateVal) { setMsg({ text:'Select the attendance date', ok:false }); return }
-    if (dateVal >= todayStr) { setMsg({ text:'Regularisation is allowed only for past dates — not the current day or future.', ok:false }); return }
+    if (dateVal >= todayStr) { setMsg({ text:'Regularisation is allowed only for past dates, not the current day or future.', ok:false }); return }
     if (!actualIn || !actualOut) { setMsg({ text:'Enter both actual IN and OUT times', ok:false }); return }
     if (actualIn >= actualOut) { setMsg({ text:'Actual IN must be before Actual OUT', ok:false }); return }
     if (!reason.trim()) { setMsg({ text:'Reason is required', ok:false }); return }
@@ -2381,18 +2371,18 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Voluntary PF (VPF)</div>
-        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages — set your own percentage.</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages. Set your own percentage.</div>
       </div>
 
       {!e.has_ctc && (
         <div style={{ ...card, background: V.amberBg, border: `1px solid ${C.warningTint}` }}>
-          <span style={{ fontSize: 12, color: C.warning }}>Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master) — then VPF will calculate correctly.</span>
+          <span style={{ fontSize: 12, color: C.warning }}>Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master). Then VPF will calculate correctly.</span>
         </div>
       )}
 
       {current && (
         <div style={{ ...card, background: C.sunken, border: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: V.teal }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo) — modify below</span>
+          <span style={{ fontSize: 12, color: V.teal }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo). Modify below</span>
           <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: C.surface, color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop VPF</button>
         </div>
       )}
@@ -2443,7 +2433,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
           <span style={{ fontSize: 12, fontWeight: 500, color: V.navy }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>
         </div>
         <div style={{ height: 8, background: C.line, borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — no 80C benefit on ${inr(total80c - e.c80_limit)}` : ''}</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` (no 80C benefit on ${inr(total80c - e.c80_limit)})` : ''}</div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
@@ -2499,13 +2489,13 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     const res = await fetch('/api/ess/nps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, has_existing_pran: hasPran, pran_number: hasPran ? pranClean : null, pran_holder_name: pranName, tier_type: tier, acknowledged: true }) })
     const d = await res.json().catch(() => ({}))
     setSaving(false)
-    if (res.ok) { notify(d.pending_pran ? 'PRAN form emailed — submit within 3 days' : 'NPS enrolment submitted ✓'); setAck(false); load() }
+    if (res.ok) { notify(d.pending_pran ? 'PRAN form emailed. Submit within 3 days' : 'NPS enrolment submitted ✓'); setAck(false); load() }
     else notify('Failed: ' + (d.error || ''), 'error')
   }
   const doSubmitPran = async () => {
     const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, action: 'SUBMIT_PRAN', pran_number: submitPran }) })
     const d = await res.json().catch(() => ({}))
-    if (res.ok) { notify('PRAN submitted — NPS active ✓'); setSubmitPran(''); load() } else notify('Failed: ' + (d.error || ''), 'error')
+    if (res.ok) { notify('PRAN submitted. NPS active ✓'); setSubmitPran(''); load() } else notify('Failed: ' + (d.error || ''), 'error')
   }
   const stop = async () => {
     const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, action: 'STOP', stopped_reason: 'Employee requested' }) })
@@ -2516,7 +2506,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Corporate NPS enrolment</div>
-        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I) — extra tax benefit under Section 80CCD(2).</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I). Extra tax benefit under Section 80CCD(2).</div>
       </div>
 
       {!e.has_ctc && (
@@ -2529,7 +2519,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <div style={{ ...card, background: current.status === 'PENDING_PRAN' ? V.blueBg: C.sunken, border: `1px solid ${current.status === 'PENDING_PRAN' ? '#B5D4F4' : '#C5E8DB'}` }}>
           {current.status === 'PENDING_PRAN' ? (
             <div>
-              <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending — generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '—'}.</div>
+              <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending: generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '-'}.</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`} style={{ ...input, letterSpacing: 2 }} />
                 <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: V.purple, color: C.onAccent, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
@@ -2591,7 +2581,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 
       <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
         <span style={{ color: V.amber }}></span>
-        <div style={{ fontSize: 12, color: C.warning, lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product — locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
+        <div style={{ fontSize: 12, color: C.warning, lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product, locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
       </div>
 
       <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
@@ -2665,7 +2655,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
   if (loading) return <div style={{ ...card }}><div style={{ color:V.muted, fontSize:13 }}>Loading agreement…</div></div>
   if (!agr) return (
     <div style={card}>
-      <div style={{ fontSize:13, color:V.red, marginBottom:8 }}>No agreement found yet — please check back shortly.</div>
+      <div style={{ fontSize:13, color:V.red, marginBottom:8 }}>No agreement found yet. Please check back shortly.</div>
       <button onClick={onClose} style={{ padding:'7px 13px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:12 }}>Close</button>
     </div>
   )
@@ -2675,7 +2665,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
   return (
     <div style={{ ...card, borderColor:V.purple }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-        <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement — {agr.agreement_number}</div>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement: {agr.agreement_number}</div>
         <div style={{ display:'flex', gap:8 }}>
           <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, textDecoration:'none', fontSize:11 }}>View / print</a>
           <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
@@ -2690,7 +2680,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
             {schedule.map((s, i) => (
               <tr key={i} style={{ borderTop:`1px solid ${V.border}` }}>
                 <td style={{ ...td, textAlign:'left' }}>{s.installment_number}</td>
-                <td style={td}>{s.due_date || s.month || '—'}</td>
+                <td style={td}>{s.due_date || s.month || '-'}</td>
                 <td style={td}>{loanInr(s.emi_amount)}</td>
                 <td style={td}>{loanInr(s.principal_component)}</td>
                 <td style={td}>{loanInr(s.interest_component)}</td>
@@ -2797,7 +2787,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 
       {!hasCtc && (
         <div style={{ ...card, background:V.amberBg, border: `1px solid ${C.warningTint}` }}>
-          <span style={{ fontSize:12, color: C.warning }}>CTC not configured — eligibility shows ₹0; ask HR to set CTC.</span>
+          <span style={{ fontSize:12, color: C.warning }}>CTC not configured: eligibility shows ₹0; ask HR to set CTC.</span>
         </div>
       )}
 
@@ -2852,7 +2842,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
             <div key={p.id} style={row}>
               <div style={{ minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:V.navy }}>{t?.name || 'Loan'} · {loanInr(p.requested_amount)}</div>
-                <div style={{ fontSize:11, color:V.muted, marginTop:2 }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '—'}</div>
+                <div style={{ fontSize:11, color:V.muted, marginTop:2 }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '-'}</div>
               </div>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 <LoanStatusBadge status={p.status} />
@@ -2894,12 +2884,20 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 }
 
 // Placeholder for Phase 3/4 modules
-function Placeholder({ title, phase, needs }: { title: string; phase: number; needs: string }) {
+/** A screen that isn't switched on yet. Written for the employee reading it: the old copy
+ *  ("Coming in Phase 3. This module needs the Payslip generation module's data") was a
+ *  note to the build team. phase / needs stay in the signature — and in SECTIONS — as the
+ *  record of what each one waits on. */
+function Placeholder({ title }: { title: string; phase: number; needs: string }) {
   return (
-    <div style={{ ...T.card, textAlign:'center', padding:40 }}>
-      <div style={{ fontSize:38, marginBottom:8 }}></div>
-      <div style={{ fontSize:16, fontWeight:600 }}>{title}</div>
-      <div style={{ fontSize:13, color:C.muted, marginTop:6, lineHeight:1.7 }}>Coming in Phase {phase}. This module needs the <b>{needs}</b> module's data, which isn't built yet.</div>
+    <div style={{ ...T.card, textAlign:'center', padding:'48px 24px' }}>
+      <div style={{ width:56, height:56, borderRadius:16, margin:'0 auto 14px', display:'grid', placeItems:'center', background:C.brandTint, color:C.brand, border:`1px solid ${C.brandEdge}` }}>
+        <IconCalendar size={26} strokeWidth={1.7} />
+      </div>
+      <div style={{ fontSize:17, fontWeight:700 }}>{title} is coming soon</div>
+      <div style={{ fontSize:13.5, color:C.muted, marginTop:6, lineHeight:1.6, maxWidth:420, marginInline:'auto' }}>
+        We’re getting this ready for you. It will appear here as soon as your HR team switches it on.
+      </div>
     </div>
   )
 }
@@ -2968,7 +2966,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
   const amt = (r: any) => {
     const max = regime === 'old' ? r.old_regime_max : r.new_regime_max
     const avail = regime === 'old' ? r.comp.old_available : r.comp.new_available
-    if (max == null || avail === false) return { text: '—', muted: true }
+    if (max == null || avail === false) return { text: '-', muted: true }
     if (r.is_formula || max === -1) return { text: '8.33% of Basic', muted: false }
     return { text: inr(num(max)) + '/yr', muted: false }
   }
@@ -3003,7 +3001,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
         </div>
         {rows.map((r, i) => {
           const a = amt(r)
-          const perq = num(r.perquisite_monthly) > 0 ? `${inr(num(r.perquisite_monthly))}/mo perq` : (r.comp.is_children_linked && r.children_count ? `${r.children_count} child` : '—')
+          const perq = num(r.perquisite_monthly) > 0 ? `${inr(num(r.perquisite_monthly))}/mo perq` : (r.comp.is_children_linked && r.children_count ? `${r.children_count} child` : '-')
           return (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '9px 14px', borderBottom: `1px solid ${V.border}`, fontSize: 13, background: a.muted ? '#FAFAFE' : '#fff' }}>
               <span style={{ color: V.navy }}>{r.comp.name}</span>
@@ -3013,7 +3011,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
           )
         })}
       </div>
-      <div style={{ fontSize: 11, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window — raise via HR / Payroll.</div>
+      <div style={{ fontSize: 11, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window. Raise via HR / Payroll.</div>
     </div>
   )
 }
@@ -3089,12 +3087,15 @@ interface NavSection {
  * rather than label a control.
  */
 const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => React.ReactElement> = {
-  home: IconHome, profile: IconEmployees, team: IconEmployees, payroll: IconPayroll,
+  home: IconHome, profile: IconUser, team: IconEmployees, payroll: IconPayroll,
   // An envelope, not a bell: this is the Inbox, and the bell in the header
   // is a different thing that still uses IconBell.
   inbox: IconMail,
-  attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
-  social: IconEmployees, rnr: IconAi, funzone: IconAi,
+  attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconPerformance,
+  // Every section has its own glyph now — Org Chart, Company and Reports had none and
+  // sat out of line in the rail, and Social / RNR / Fun Zone shared two between them.
+  orgchart: IconOrgChart, company: IconBuilding, reports: IconReports,
+  social: IconHeart, rnr: IconAward, funzone: IconGame,
 }
 function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
   const I = ESS_ICON[k]
@@ -3103,7 +3104,7 @@ function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number
 
 const SECTIONS: NavSection[] = [
   { k:'home', label:'Home', short:'Home', icon:'', status:'ready',
-    desc:'The landing dashboard — everything at a glance',
+    desc:'The landing dashboard: everything at a glance',
     items:[{ k:'home', label:'Home' }] },
 
   { k:'profile', label:'Profile', short:'Profile', icon:'', status:'ready',
@@ -3115,15 +3116,15 @@ const SECTIONS: NavSection[] = [
     ]},
 
   { k:'team', label:'Team', short:'Team', icon:'', status:'ready',
-    desc:'Who is above you, who is beside you, who reports to you — read from the same reporting lines HR maintains',
+    desc:'Your manager, your peers and the people who report to you',
     items:[{ k:'team', label:'Team' }]},
 
   { k:'orgchart', label:'Org Chart', short:'Org', icon:'', status:'ready',
-    desc:'The whole company as one tree — the same chart HR sees, read from the same reporting lines',
+    desc:'See how the whole company fits together',
     items:[{ k:'orgchart', label:'Org Chart' }]},
 
   { k:'payroll', label:'Payroll', short:'Payroll', icon:'', status:'partial',
-    desc:'Salary, benefits, declarations and claims — all in one place',
+    desc:'Salary, benefits, tax declarations and claims',
     items:[
       { k:'payslip',     label:'Salary Slip',            phase:3, needs:'Payslip generation' },
       { k:'flexi',       label:'Flexi Benefits' },
@@ -3140,21 +3141,23 @@ const SECTIONS: NavSection[] = [
     ]},
 
   { k:'attendance', label:'Attendance', short:'Attend', icon:'', status:'ready',
-    desc:'Your own attendance, self-service',
+    desc:'Your punches, working hours and monthly calendar',
     items:[{ k:'attendance', label:'Attendance' }] },
 
   { k:'leave', label:'Leave', short:'Leave', icon:'', status:'ready',
-    desc:'Apply, track and plan leave',
+    desc:'Apply for leave, track your requests and plan around holidays',
     items:[{ k:'leave', label:'Leave' }] },
 
   // Below Leave, as asked. One section rather than a sub-tab of HRIS: it is
   // opened many times a day, and burying it a level down would make it the
   // one thing people go back to the bell for.
   { k:'inbox', label:'Inbox', short:'Inbox', icon:'', status:'ready',
-    desc:'Messages from colleagues and departments, and every notification in full',
+    desc:'Messages from colleagues and teams, and every notification in full',
     items:[{ k:'inbox', label:'Inbox' }] },
 
-  { k:'hris', label:'HRIS', short:'HRIS', icon:'', status:'partial',
+  // Shown as "HR Services": "HRIS" is a term HR uses, not one an employee looks for.
+  // The key stays 'hris' — routes, deep links and the HRIS shell all read it.
+  { k:'hris', label:'HR Services', short:'HR', icon:'', status:'partial',
     desc:'Directory, requests, approvals and the exit process',
     items:[
       { k:'directory',   label:'Team Directory' },
@@ -3169,7 +3172,7 @@ const SECTIONS: NavSection[] = [
 
   // ── Role-wise tabs (071) — shown only when /api/ess/menu says so ──
   { k:'company', label:'Company', short:'Company', icon:'', status:'ready',
-    desc:'Headcount, why people are leaving, regime election — company-wide',
+    desc:'Headcount, attrition and tax-regime trends across the company',
     items:[{ k:'company', label:'Company' }] },
 
   { k:'reports', label:'Reports', short:'Reports', icon:'', status:'ready',
@@ -3180,7 +3183,7 @@ const SECTIONS: NavSection[] = [
   // data — everyone gets My KRAs, managers additionally get My Team, HODs get
   // Department. One section, three audiences.
   { k:'performance', label:'Performance', short:'PMS', icon:'', status:'ready',
-    desc:'Your KRAs, and the reviews you owe',
+    desc:'Your goals (KRAs) and the reviews you owe',
     items:[{ k:'performance', label:'Performance' }] },
 
   // Social (118). Wall of Fame used to be a top-level section here and is now
@@ -3192,22 +3195,23 @@ const SECTIONS: NavSection[] = [
   // preview shows. Listing them here as well would put two tab rows on one
   // screen, which is what the Inbox and HRIS shells already avoid.
   { k:'social', label:'Social', short:'Social', icon:'', status:'ready',
-    desc:'Birthdays, work anniversaries, new joiners and the Wall of Fame — everyone across your group, in one place',
+    desc:'Birthdays, work anniversaries, new joiners and the Wall of Fame',
     items:[{ k:'social', label:'Social' }]},
 
   { k:'rnr', label:'RNR', short:'RNR', icon:'', status:'soon',
-    desc:'Structured Reward & Recognition, points-based',
+    desc:'Reward and recognise great work with points you can redeem',
     items:[{ k:'rnr', label:'RNR' }],
+    // icon = an ESS_ICON key; FeatureGrid draws it.
     features:[
-      { icon:'', name:'Nominate',    note:'Pick a category, write why' },
-      { icon:'', name:'Approval',    note:'Manager / HR reviews' },
-      { icon:'', name:'Points',      note:'Credited on approval' },
-      { icon:'', name:'Redeem',      note:'Vouchers, leave, merch' },
-      { icon:'', name:'Leaderboard', note:'Top recognized employees' },
+      { icon:'social',      name:'Nominate',    note:'Pick a category, write why' },
+      { icon:'hris',        name:'Approval',    note:'Manager / HR reviews' },
+      { icon:'rnr',         name:'Points',      note:'Credited on approval' },
+      { icon:'payroll',     name:'Redeem',      note:'Vouchers, leave, merch' },
+      { icon:'performance', name:'Leaderboard', note:'Top recognized employees' },
     ]},
 
   { k:'funzone', label:'Fun Zone', short:'Fun', icon:'', status:'ready',
-    desc:'Take a break — play a quick game with your team',
+    desc:'Take a break: play a quick game with your team',
     items:[{ k:'funzone', label:'Fun Zone' }] },
 ]
 
@@ -3216,30 +3220,41 @@ const viewMeta = (k: string) => VIEWS.find(v => v.k === k) || VIEWS[0]
 /** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
 const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 
-const DOT: Record<Ready, string> = { ready:C.positive, partial:C.warning, soon:C.critical }
-const BADGE: Record<Ready, [string, string, string]> = {
-  ready:   ['Available',        C.positiveTint, C.positive],
-  partial: ['Partly available', C.warningTint, C.warning],
-  soon:    ['Coming soon',      C.criticalTint, C.critical],
+/**
+ * How the rail is grouped. The sections themselves (and who sees which) still come from
+ * SECTIONS and /api/ess/menu; this only decides the order and the small group labels, so a
+ * section nobody grants simply drops out of its group. A section missing from every group
+ * is appended to the last one rather than disappearing.
+ *
+ * The green / amber / red readiness dots that used to sit on every item are gone: they were
+ * a build-progress marker, and to an employee a red dot reads as "something is wrong".
+ * A section that is not live yet carries a quiet "Soon" tag instead.
+ */
+const NAV_GROUPS: { label: string | null; keys: string[] }[] = [
+  { label: null,              keys: ['home', 'inbox'] },
+  { label: 'Time & pay',      keys: ['attendance', 'leave', 'payroll'] },
+  { label: 'You & your team', keys: ['profile', 'team', 'orgchart', 'performance'] },
+  { label: 'Workplace',       keys: ['hris', 'company', 'reports'] },
+  { label: 'Community',       keys: ['social', 'rnr', 'funzone'] },
+]
+function groupSections(list: NavSection[]): { label: string | null; items: NavSection[] }[] {
+  const placed = new Set(NAV_GROUPS.flatMap(g => g.keys))
+  const groups = NAV_GROUPS.map(g => ({ label: g.label, items: g.keys.map(k => list.find(s => s.k === k)).filter((s): s is NavSection => !!s) }))
+  const rest = list.filter(s => !placed.has(s.k))
+  if (rest.length) groups[groups.length - 1].items.push(...rest)
+  return groups.filter(g => g.items.length > 0)
 }
 
 // ── Sidebar / sub-tab / feature-grid bits (outside the parent — no focus loss) ──
 function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
-  // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
-  const [hover, setHover] = useState(false)
-  const bg = active ? C.railActiveBg : hover ? C.railHover : 'transparent'
+  // Hover and the active marker live in portal.css (.ess-item) — an inline style can't
+  // express :hover or ::before. The rail follows the theme, so every colour there comes
+  // from the rail token family, which is defined for both light and dark.
   return (
-    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        // The rail follows the theme now — white in day, #171B21 in night —
-        // so its text comes from the rail family, which is defined for both.
-        // It must NOT use the onDark family: those are fixed near-white and
-        // would be invisible on a white rail in day mode. That was the
-        // original complaint. The earlier onDark fix was right for a rail
-        // that stayed dark; this replaces the premise, not the reasoning.
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}` }}>
-      <EssIcon k={s.k} size={16} />
-      <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
-      <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
+    <button onClick={onClick} className="ess-item" data-on={active ? '1' : '0'} aria-current={active ? 'page' : undefined}>
+      <EssIcon k={s.k} size={18} />
+      <span className="ess-item-label">{s.label}</span>
+      {s.status === 'soon' && <span className="ess-soon">Soon</span>}
     </button>
   )
 }
@@ -3351,14 +3366,14 @@ function ManageMenu({ group, items, open, activeKey, alignRight, onToggle, onClo
     <div style={{ position:'relative', flexShrink:0 }}>
       <button data-ez-menu={group} onClick={onToggle}
         aria-expanded={open} aria-haspopup="true"
-        style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 11px', borderRadius:R.md,
-                 border:`1px solid ${open || holdsActive ? C.brand : 'transparent'}`,
+        style={{ display:'flex', alignItems:'center', gap:5, height:32, padding:'0 10px', borderRadius:R.md,
+                 border:`1px solid ${open || holdsActive ? C.brandEdge : 'transparent'}`,
                  background: open || holdsActive ? C.brandTint : 'transparent',
                  color: open || holdsActive ? C.brandDeep : C.inkSoft,
                  fontFamily:'inherit', fontSize:12.5, fontWeight: holdsActive ? 700 : 600,
                  cursor:'pointer', whiteSpace:'nowrap' }}>
         {group}
-        <span aria-hidden style={{ fontSize:9, opacity:.75, transform: open ? 'rotate(180deg)' : 'none', transition:'transform .12s' }}>▼</span>
+        <span aria-hidden style={{ display:'flex', opacity:.7, transform: open ? 'rotate(180deg)' : 'none', transition:'transform .12s' }}><IconChevronDown size={14} strokeWidth={2} /></span>
       </button>
       {open && (
         <div ref={pop} role="menu"
@@ -3459,7 +3474,9 @@ function Highlight({ text, q }: { text: string; q: string }) {
   return <>{text.slice(0, i)}<mark style={{ background:C.brandTint, color:C.brandDeep, borderRadius:4, padding:'0 2px' }}>{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>
 }
 
-function FeatureSearch({ entries }: { entries: SearchEntry[] }) {
+/** compact: the top-bar version (every screen, desktop). Without it: the full-width field
+ *  shown at the top of Home on a phone, where the top bar has no room for one. */
+function FeatureSearch({ entries, compact }: { entries: SearchEntry[]; compact?: boolean }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
@@ -3495,24 +3512,27 @@ function FeatureSearch({ entries }: { entries: SearchEntry[] }) {
   const showList = open && query.length > 0
 
   return (
-    <div ref={boxRef} style={{ position:'relative', marginTop:14, maxWidth:680 }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10, height:48, padding:'0 14px', borderRadius:R.lg, background:C.surface,
-        border:`1.5px solid ${open ? C.brand : C.line}`, boxShadow: open ? `0 0 0 4px ${C.brandTint}` : E.raised, transition:'border-color .15s, box-shadow .15s' }}>
-        <span style={{ color: open ? C.brand : C.muted, display:'flex', flexShrink:0 }}><IconSearch size={19} strokeWidth={2} /></span>
+    <div ref={boxRef} style={compact
+      ? { position:'relative', flex:'0 1 320px', minWidth:180 }
+      : { position:'relative', marginBottom:16 }}>
+      <div style={{ display:'flex', alignItems:'center', gap: compact ? 8 : 10, height: compact ? 38 : 46, padding: compact ? '0 10px 0 12px' : '0 14px', borderRadius:R.lg,
+        background: compact && !open ? C.sunken : C.surface,
+        border:`1px solid ${open ? C.brand : C.line}`, boxShadow: open ? `0 0 0 4px ${C.brandTint}` : compact ? 'none' : E.raised, transition:'border-color .15s, box-shadow .15s, background .15s' }}>
+        <span style={{ color: open ? C.brand : C.faint, display:'flex', flexShrink:0 }}><IconSearch size={compact ? 16 : 19} strokeWidth={2} /></span>
         <input ref={inputRef} value={q} onChange={e => { setQ(e.target.value); setOpen(true) }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown}
-          placeholder="Search a feature — Tasks & Approvals, MRF, Leave, Payslip…" aria-label="Search features"
+          placeholder={compact ? 'Search features…' : 'Search a feature (Leave, Payslip, Approvals…)'} aria-label="Search features"
           role="combobox" aria-expanded={showList} aria-controls="ess-feature-results" aria-autocomplete="list"
-          style={{ flex:1, minWidth:0, border:'none', outline:'none', background:'transparent', color:C.ink, fontSize:14.5, fontFamily:'inherit', height:'100%' }} />
+          style={{ flex:1, minWidth:0, border:'none', outline:'none', background:'transparent', color:C.ink, fontSize: compact ? 13 : 14.5, fontFamily:'inherit', height:'100%' }} />
         {q ? <button type="button" aria-label="Clear search" onClick={() => { setQ(''); inputRef.current?.focus() }}
                style={{ border:'none', background:C.sunken, color:C.muted, borderRadius:99, width:22, height:22, cursor:'pointer', fontSize:13, lineHeight:1, flexShrink:0 }}>×</button>
            : <kbd style={{ fontSize:11, fontFamily:'inherit', fontWeight:700, color:C.muted, background:C.sunken, border:`1px solid ${C.line}`, borderRadius:6, padding:'2px 7px', flexShrink:0 }}>/</kbd>}
       </div>
 
       {showList && (
-        <div id="ess-feature-results" role="listbox" style={{ position:'absolute', top:'calc(100% + 8px)', left:0, right:0, zIndex:Z.navMenu, background:C.surface,
+        <div id="ess-feature-results" role="listbox" style={{ position:'absolute', top:'calc(100% + 8px)', ...(compact ? { right:0, width:420, maxWidth:'calc(100vw - 32px)' } : { left:0, right:0 }), zIndex:Z.navMenu, background:C.surface,
           border:`1px solid ${C.line}`, borderRadius:R.lg, boxShadow:E.floating, padding:6, animation:'ezFadeUp .16s both' }}>
           {results.length === 0 ? (
-            <div style={{ padding:'14px 12px', fontSize:13, color:C.muted }}>No feature matches “{q.trim()}” — or it isn’t part of your access.</div>
+            <div style={{ padding:'14px 12px', fontSize:13, color:C.muted }}>No feature matches “{q.trim()}”, or it isn’t part of your access.</div>
           ) : results.map((e, i) => (
             <button key={e.id} type="button" role="option" aria-selected={i === active} onMouseEnter={() => setActive(i)} onClick={() => pick(e)}
               style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'9px 10px', border:'none', borderRadius:R.md, cursor:'pointer', textAlign:'left', fontFamily:'inherit',
@@ -3536,34 +3556,38 @@ function FeatureSearch({ entries }: { entries: SearchEntry[] }) {
   )
 }
 
-function TabHeader({ s, search }: { s: NavSection; search?: React.ReactNode }) {
-  const [label, bg, fg] = BADGE[s.status]
-  // Same header band as the 32 dashboard routes. This sat directly on the
-  // canvas, so ESS read as a different product from the admin side.
+/**
+ * The page heading on ESS's own screens: an icon tile, the title and one line of context.
+ *
+ * It used to be the shared tinted band with an "Available" / "Partly available" pill on
+ * every screen. The band was a second box above the screen's own content, and the pill was
+ * a build-status marker that told an employee nothing they could act on. Only a section
+ * that is genuinely not live yet still says so.
+ */
+function TabHeader({ s }: { s: NavSection }) {
   return (
-    <div className="ez-page-head">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:4 }}>
-        <div style={{ fontSize:F.page, fontWeight:W.bold, letterSpacing:'-.02em',
-                      display:'flex', alignItems:'center', gap:9 }}>
-          <EssIcon k={s.k} size={20} strokeWidth={1.8} />{s.label}
-        </div>
-        <span style={{ fontSize:11, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
+    <div className="ess-head">
+      <span className="ess-head-ic" aria-hidden><EssIcon k={s.k} size={22} strokeWidth={1.7} /></span>
+      <div style={{ minWidth:0 }}>
+        <h1>{s.label}</h1>
+        {s.desc && <p>{s.desc}</p>}
       </div>
-      <div style={{ fontSize:13, color:C.muted }}>{s.desc}</div>
-      {search}
+      {s.status === 'soon' && <span className="ess-head-chip">Coming soon</span>}
     </div>
   )
 }
 
+/** A segmented control rather than a row of filled pills — the selected tab is the raised
+ *  white one, so the brand blue is kept for actions. Scrolls sideways on a phone. */
 function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: string) => void }) {
   if (items.length < 2) return null
   return (
-    <div style={{ display:'flex', gap:7, flexWrap:'wrap', marginBottom:14 }}>
+    <div className="ess-seg" role="tablist">
       {items.map(i => {
         const on = i.k === view
         return (
-          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.onAccent : C.inkSoft, whiteSpace:'nowrap' }}>
-            {i.label}{i.phase ? <span style={{ marginLeft:5, fontSize:9, opacity:.7 }}>soon</span> : null}
+          <button key={i.k} role="tab" aria-selected={on} data-on={on ? '1' : '0'} onClick={() => go(i.k)}>
+            {i.label}{i.phase ? <span className="ess-seg-soon">Soon</span> : null}
           </button>
         )
       })}
@@ -3577,15 +3601,19 @@ function FeatureGrid({ features }: { features: Feature[] }) {
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12 }}>
         {features.map(f => (
-          <div key={f.name} style={{ background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, padding:16 }}>
-            <div style={{ fontSize:22, marginBottom:6 }}>{f.icon}</div>
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:3 }}>{f.name}</div>
-            <div style={{ fontSize:11, color:C.muted }}>{f.note}</div>
+          <div key={f.name} style={{ background:C.surface, border: `1px solid ${C.line}`, borderRadius:R.lg, padding:16, boxShadow:E.flat }}>
+            {/* f.icon names an ESS_ICON key. It was an emoji until the emoji were stripped
+                and left empty strings, which is why these tiles showed a blank square. */}
+            <div style={{ width:38, height:38, borderRadius:11, display:'grid', placeItems:'center', marginBottom:10, background:C.brandTint, color:C.brand }}>
+              {ESS_ICON[f.icon] ? <EssIcon k={f.icon} size={19} strokeWidth={1.8} /> : <IconAward size={19} strokeWidth={1.8} />}
+            </div>
+            <div style={{ fontWeight:700, fontSize:13.5, marginBottom:3 }}>{f.name}</div>
+            <div style={{ fontSize:12, color:C.muted }}>{f.note}</div>
           </div>
         ))}
       </div>
-      <div style={{ background: C.brandTint, borderRadius:10, padding:'12px 16px', marginTop:20, fontSize:12, color:C.brandDeep }}>
-        This tab isn’t live yet. Everything above is what it will hold — nothing here is clickable so far.
+      <div style={{ background: C.brandTint, border:`1px solid ${C.brandEdge}`, borderRadius:R.md, padding:'12px 16px', marginTop:20, fontSize:12.5, color:C.brandDeep }}>
+        This is on its way. Above is what it will let you do. It isn’t switched on yet.
       </div>
     </div>
   )
@@ -3614,11 +3642,17 @@ const VIEW_KEYS: Set<string> = new Set([
 ])
 const ESS_KEYS: EssKeys = { views: VIEW_KEYS, modules: new Set(Object.keys(NAV_ENTRY_BY_KEY)) }
 
-export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync }: { employeeId: string; adminMode?: boolean; onExit?: () => void
+export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync, headerExtra, exitLabel }: { employeeId: string; adminMode?: boolean; onExit?: () => void
   /** This portal owns the address bar: it reads /ess/… on load and on Back/Forward, and pushes a
    *  history entry on every move. Off for a portal shown inside another screen (admin "login as",
    *  a manager viewing a team member). */
-  urlSync?: boolean }) {
+  urlSync?: boolean
+  /** Extra control for the top bar — PortalPage puts "View a team member" here, in place of
+   *  the full-width banner that used to sit above the whole portal. */
+  headerExtra?: React.ReactNode
+  /** What onExit is called. PortalPage's onExit signs the employee out, so it passes
+   *  "Sign out"; the default stays "Close" for the embedded uses. */
+  exitLabel?: string }) {
   const [emp, setEmp] = useState<EmployeeDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('home')
@@ -3873,15 +3907,29 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
       // lib/today/schema.ts — now say 'tab:social'.
       case 'social':        return <Social employeeId={emp.id} />
       case 'funzone':       return <FunZone employeeId={emp.id} />
-      default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
+      default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '-'} />
     }
   }
 
   if (loading) return <div style={{ padding:40, textAlign:'center', color:C.brand, fontFamily:'"DM Sans",sans-serif' }}>Loading portal…</div>
   if (!emp) return <div style={{ padding:40, textAlign:'center', color:C.critical, fontFamily:'"DM Sans",sans-serif' }}>Employee not found.</div>
 
+  // The rail, grouped (see NAV_GROUPS). The phone "More" sheet uses the same groups.
+  const navGroups = groupSections(sections)
+  const avatar = (size: number) => (
+    <div style={{ width:size, height:size, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: Math.round(size * .38), fontWeight:700, flexShrink:0, border:`1px solid ${C.brandEdge}` }}>
+      {emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}
+    </div>
+  )
+  const exitText = exitLabel || (adminMode ? 'Exit Admin' : 'Close')
+  // Where you are, for the top bar: "Payroll › Salary Slip", or "Manage › Recruitment".
+  const crumbs: string[] = adminKey
+    ? ['Manage', NAV_ENTRY_BY_KEY[adminKey]?.label || adminKey]
+    : section.k === 'home' ? ['Home']
+    : sectionItems.length > 1 ? [section.label, meta.label] : [section.label]
+
   return (
-    <div style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+    <div className="ess" style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
       <LogoStyles />
       {/* The shared stylesheet. It was imported here but never rendered, so
           ESS was running without the header band, the tab and press classes,
@@ -3889,73 +3937,99 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
           sharpness rules — the whole design system the dashboard uses. That
           one missing element is most of why the two halves looked unrelated. */}
       <UIKeyframes />
-      {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
+      {/* Desktop sidebar. Only the employee's own tabs live here — what they administer
+          is the "Manage" row under the top bar. Grouped with small labels (NAV_GROUPS),
+          and the signed-in person is pinned to the bottom with Sign out. */}
       {!isMobile && (
-        <div style={{ width:220, background: C.rail, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0, borderRight:`1px solid ${C.railLine}` }}>
-          {/* Only the employee's own tabs live here now. What they administer moved to
-              the menu band at the top of the page — the two are different kinds of
-              thing, and thirteen personal entries plus up to twenty-five modules in
-              one vertical rail was a scrolling problem rather than a menu. */}
+        <aside className="ess-rail" aria-label="Employee portal">
           {/* The mark carries the wordmark, so "EZER" is not repeated as text.
               "ESS" stays, because which of the two products you are in is the
               one thing the logo does not tell you. */}
-          <div style={{ padding:'0 18px 16px', borderBottom:`1px solid ${C.railLine}`, marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
-            <Logo height={24} />
-            <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
+          <div className="ess-brand">
+            <Logo height={26} />
+            <span className="ess-brand-tag">ESS</span>
           </div>
-          {sections.map(s => (
-            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
-          ))}
-          {/* A silent empty sidebar is indistinguishable from "you hold nothing", so
-              say when the answer could not be fetched rather than implying it. */}
-          {essMenuError && (
-            <div style={{ margin:'10px 12px', padding:'8px 10px', borderRadius:8, background:'rgba(220,38,38,0.18)',
-                          color:'#FCA5A5', fontSize:10.5, lineHeight:1.5 }}>
-              Could not load your access: {essMenuError}
-            </div>
-          )}
-          {/* Admin button removed from the ESS sidebar for all employees — admins use
-              /dashboard directly. */}
-        </div>
-      )}
-
-      <div style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 70 : 0 }}>
-        {/* Top bar */}
-        <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:Z.nav }}>
-          {/* The tab's own name and badge live in TabHeader below, so this bar carries
-              only what that header can't: the sub-tab you're on, and who you are. */}
-          <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flexShrink:0 }}>
-            {adminKey ? NAV_ENTRY_BY_KEY[adminKey]?.label : isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
-          </div>
-          {/* The modules this person administers, as menus. Desktop only: on a phone
-              the bottom bar and the "More" sheet already carry navigation, and a row
-              of dropdowns at 360px is worse than the sheet. */}
-          {!isMobile && <ManageBand groups={adminGroups} activeKey={adminKey} onPick={goAdmin} />}
-          {adminKey && (
-            <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap', flexShrink:0 }}>← My portal</button>
-          )}
-          {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
-          {/* Employee identity — always visible at the top */}
-          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9, flexShrink:0 }}>
-            {/* Light / dark / system. Three states rather than two, because
-                "follow my system" is a real preference and a two-way switch
-                silently overrides it. The dashboard has had this control all
-                along; ESS never rendered it, so an employee who never opens
-                the dashboard had no way to choose. On mobile it collapses to
-                one cycling button — three segments plus the bell, avatar and
-                name do not fit a phone header. */}
-            <ThemeToggle compact={isMobile} />
-            <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
-            <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
-            {!isMobile && (
-              <div style={{ lineHeight:1.2, textAlign:'right' }}>
-                <div style={{ fontSize:13, fontWeight:700, whiteSpace:'nowrap', maxWidth:220, overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
-                <div style={{ fontSize:11, color:C.muted, fontFamily:'monospace' }}>{emp.emp_code}</div>
+          <nav className="ess-rail-scroll">
+            {navGroups.map((g, gi) => (
+              <div key={g.label ?? gi} className="ess-group">
+                {g.label && <div className="ess-group-label">{g.label}</div>}
+                {g.items.map(s => (
+                  <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
+                ))}
+              </div>
+            ))}
+            {/* A silent empty sidebar is indistinguishable from "you hold nothing", so
+                say when the answer could not be fetched rather than implying it. */}
+            {essMenuError && (
+              <div style={{ margin:'12px 4px', padding:'8px 10px', borderRadius:8, background:C.criticalTint,
+                            color:C.critical, fontSize:11, lineHeight:1.5 }}>
+                Could not load your access: {essMenuError}
               </div>
             )}
+            {/* Admin button removed from the ESS sidebar for all employees — admins use
+                /dashboard directly. */}
+          </nav>
+          <div className="ess-me">
+            {avatar(36)}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div className="ess-me-name">{emp.full_name}</div>
+              <div className="ess-me-sub">{[emp.emp_code, emp.designation].filter(Boolean).join(' · ')}</div>
+            </div>
+            {onExit && (
+              <button type="button" className="ess-icon-btn" onClick={onExit} title={exitText} aria-label={exitText}>
+                <IconLogout size={17} />
+              </button>
+            )}
           </div>
-          {onExit && <button onClick={onExit} style={{ ...T.btnO, whiteSpace:'nowrap' }}>{adminMode ? 'Exit Admin' : 'Close'}</button>}
-        </div>
+        </aside>
+      )}
+
+      <div className="ess-main" style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 76 : 0 }}>
+        {/* Top bar. Row 1 is the same for everyone: where you are, search, and your
+            controls. Row 2 ("Manage") appears only for someone who administers modules —
+            those menus used to share row 1 and pushed it onto two lines. */}
+        <header style={{ position:'sticky', top:0, zIndex:Z.nav, background:C.surface, borderBottom:`1px solid ${C.line}` }}>
+          <div style={{ height: isMobile ? 56 : 64, padding: isMobile ? '0 12px' : '0 24px', display:'flex', alignItems:'center', gap: isMobile ? 8 : 12 }}>
+            {isMobile ? (
+              <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0, flexShrink:1 }}>
+                <Logo height={22} />
+              </div>
+            ) : (
+              <div className="ess-crumbs">
+                {crumbs.map((c, i) => (
+                  <span key={i} style={{ display:'contents' }}>
+                    {i > 0 && <IconChevron size={14} strokeWidth={2} />}
+                    {i === crumbs.length - 1 ? <b>{c}</b> : <span>{c}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+            {adminMode && <span style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:700, whiteSpace:'nowrap', flexShrink:0 }}>Viewing {emp.first_name || emp.full_name}</span>}
+            <div style={{ flex:1 }} />
+            {!isMobile && <FeatureSearch entries={searchEntries} compact />}
+            {adminKey && (
+              <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap', flexShrink:0 }}>← My portal</button>
+            )}
+            {!isMobile && headerExtra}
+            <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 6 : 8, flexShrink:0 }}>
+              {/* Light / dark / system. On mobile it collapses to one cycling button. */}
+              <ThemeToggle compact={isMobile} />
+              <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
+              {/* On a phone there is no rail, so the person is here; Sign out is in More. */}
+              {isMobile && avatar(32)}
+            </div>
+            {/* Embedded portals (admin "login as") have no rail card to hold the exit. */}
+            {onExit && !isMobile && adminMode && <button onClick={onExit} style={{ ...T.btnO, whiteSpace:'nowrap' }}>{exitText}</button>}
+          </div>
+          {/* The modules this person administers, as menus. Desktop only: on a phone the
+              "More" sheet lists them. Renders nothing for someone who administers nothing. */}
+          {!isMobile && adminGroups.length > 0 && (
+            <div className="ess-manage">
+              <span className="ess-manage-label">Manage</span>
+              <ManageBand groups={adminGroups} activeKey={adminKey} onPick={goAdmin} />
+            </div>
+          )}
+        </header>
 
         {adminKey ? (
           // The dashboard page renders exactly as it does at /dashboard/<module> —
@@ -3972,8 +4046,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
               // Fun Zone is the same case since the September 2026 redesign. It
               // opens with its own hero — the title, the blurb, Surprise me and
               // the filter chips — so the band above it was a second header
-              // saying the same thing in plainer words: "Fun Zone", "Available",
-              // "Take a break — play a quick game with your team".
+              // saying the same thing in plainer words.
               //
               // SubTabs is no loss either: it returns null below two items, and
               // Fun Zone has exactly one.
@@ -3981,26 +4054,22 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
             ) : (
             // The inbox is a full-bleed tab: three panes that fill the viewport
             // and scroll independently. .ib brings its own width and padding, so
-            // only the header band is padded here — and it now spans the window
-            // like every other section's does.
-            <div style={{ paddingTop: isMobile ? 14 : 18 }}>
-              <div style={{ padding: isMobile ? '0 12px' : '0 22px' }}>
+            // only the heading is padded here.
+            <div style={{ paddingTop: isMobile ? 16 : 22 }}>
+              <div style={{ padding: isMobile ? '0 14px' : '0 28px' }}>
                 <TabHeader s={section} />
               </div>
               {renderView()}
             </div>
             )
           ) : (
-            // Full width, padded. This carried maxWidth:1100 — but it was only
-            // one of FOUR different caps: Today and Social also set 1100 in their
-            // own stylesheets, HRIS used --col:1160px and the Inbox 1480px. Four
-            // numbers meant the portal visibly changed shape from tab to tab on
-            // anything wider than about 1150px. All four are gone; Fun Zone was
-            // the only section that genuinely never had one.
-            // Line length is still protected where it matters, inside the
-            // sections that render prose (Wall of Fame's 70ch, and so on).
-            <div style={{ padding: isMobile ? '14px 12px' : '18px 22px' }}>
-              <TabHeader s={section} search={section.k === 'home' ? <FeatureSearch entries={searchEntries} /> : undefined} />
+            // Full width, padded. One padding for every ESS screen, so the portal keeps
+            // its shape from tab to tab. Home has no heading — its hero is the heading —
+            // and on a phone it opens with the feature search the top bar has no room for.
+            <div className="ez-page-enter" key={section.k} style={{ padding: isMobile ? '16px 14px' : '24px 28px 40px' }}>
+              {section.k === 'home'
+                ? (isMobile ? <FeatureSearch entries={searchEntries} /> : null)
+                : <TabHeader s={section} />}
               <SubTabs items={sectionItems} view={view} go={go} />
               {renderView()}
             </div>
@@ -4012,56 +4081,69 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
       {bellOpen && (
         // No full-screen catcher: it used to swallow the next click, so
         // dismissing this panel and pressing anything else took two clicks.
-        // The panel was absolutely positioned inside that catcher, which
-        // covered the viewport — so `fixed` with the same offsets puts it in
-        // exactly the same place, now that the catcher is gone.
-        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:Z.navMenu, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 60 : 70, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:Z.navMenu, background:C.surface, border: `1px solid ${C.line}`, borderRadius:14, boxShadow:E.floating, padding:'12px 14px' }}>
           <Notifications emp={emp} onChange={refreshUnread} />
         </div>
       )}
 
-      {/* Mobile bottom bar — eleven tabs don't fit a thumb bar, so the four an employee
-          opens daily sit here and the rest are one tap away under More. */}
+      {/* Phone tab bar — the four an employee opens daily, the rest one tap away under More. */}
       {isMobile && (
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop: `1px solid ${C.brandEdge}`, display:'flex', zIndex:Z.nav }}>
-          {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
-            <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? C.brand : C.faint, fontWeight: on ? 600 : 500 }}>
-              <EssIcon k={s.k} size={16} />{s.short}
+        <nav className="ess-tabbar" style={{ zIndex:Z.nav }} aria-label="Main">
+          {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = !adminKey && section.k === k && !moreOpen; return (
+            <button key={k} data-on={on ? '1' : '0'} onClick={() => { setMoreOpen(false); goSection(s) }}>
+              <span className="ess-tab-ic"><EssIcon k={s.k} size={19} strokeWidth={on ? 2 : 1.7} /></span>{s.short}
             </button>
           )})}
-          <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? C.brand : C.faint, fontWeight: moreOpen ? 600 : 500 }}>
-            <div style={{ fontSize:17, lineHeight:1.3 }}>⋯</div>More
+          <button data-on={moreOpen ? '1' : '0'} onClick={() => setMoreOpen(o => !o)}>
+            <span className="ess-tab-ic"><IconMore size={19} strokeWidth={2} /></span>More
           </button>
-        </div>
+        </nav>
       )}
 
-      {/* Mobile "More" sheet — every tab, including the four in the bar, so nothing
-          is reachable from only one place. */}
+      {/* Phone "More" sheet — every tab, grouped like the rail, so nothing is reachable
+          from only one place. Also the team-member picker and Sign out, which the phone
+          top bar has no room for. */}
       {isMobile && moreOpen && (
-        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:Z.overlay, display:'flex', alignItems:'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
-            <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-              {sections.map(s => (
-                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${section.k === s.k ? C.brand : C.brandTint}`, background: section.k === s.k ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:C.ink }}>
-                  <span style={{ display:'flex' }}><EssIcon k={s.k} size={16} /></span>
-                  <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
-                  <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
+        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.45)', zIndex:Z.overlay, display:'flex', alignItems:'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'20px 20px 0 0', padding:'10px 16px 28px', maxHeight:'80vh', overflowY:'auto', boxShadow:E.overlay }}>
+            <div style={{ width:40, height:4, borderRadius:99, background:C.lineStrong, margin:'0 auto 14px' }} />
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'4px 2px 14px', borderBottom:`1px solid ${C.line}`, marginBottom:6 }}>
+              {avatar(40)}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:14, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
+                <div style={{ fontSize:12, color:C.muted }}>{[emp.emp_code, emp.designation].filter(Boolean).join(' · ')}</div>
+              </div>
+              {onExit && (
+                <button type="button" onClick={onExit} style={{ ...T.btnO, display:'flex', alignItems:'center', gap:6, color:C.critical }}>
+                  <IconLogout size={15} />{exitText}
                 </button>
-              ))}
+              )}
             </div>
+            {headerExtra && <div style={{ padding:'8px 0 2px' }}>{headerExtra}</div>}
+            {navGroups.map((g, gi) => (
+              <div key={g.label ?? gi} style={{ marginTop:12 }}>
+                {g.label && <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'.09em', textTransform:'uppercase', color:C.faint, marginBottom:7 }}>{g.label}</div>}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  {g.items.map(s => (
+                    <button key={s.k} className="ess-sheet-tile" data-on={!adminKey && section.k === s.k ? '1' : '0'} onClick={() => goSection(s)}>
+                      <EssIcon k={s.k} size={17} />
+                      <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
+                      {s.status === 'soon' && <span className="ess-soon">Soon</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
             {adminGroups.length > 0 && (
               <>
-                <div style={{ fontSize:13, fontWeight:700, margin:'16px 0 10px' }}>What you manage</div>
+                <div style={{ fontSize:13, fontWeight:700, margin:'20px 0 4px' }}>Manage</div>
                 {adminGroups.map(g => (
-                  <div key={g.group} style={{ marginBottom:10 }}>
-                    <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.faint, marginBottom:6 }}>{g.group}</div>
+                  <div key={g.group} style={{ marginTop:10 }}>
+                    <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'.09em', textTransform:'uppercase', color:C.faint, marginBottom:7 }}>{g.group}</div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                       {g.items.map(i => (
-                        <button key={i.key} onClick={() => goAdmin(i.key)}
-                          style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${adminKey === i.key ? C.brand : C.brandTint}`,
-                                   background: adminKey === i.key ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit',
-                                   fontSize:12, textAlign:'left', color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                        <button key={i.key} className="ess-sheet-tile" data-on={adminKey === i.key ? '1' : '0'} onClick={() => goAdmin(i.key)}
+                          style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>
                           {i.label}
                         </button>
                       ))}
@@ -4074,7 +4156,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
         </div>
       )}
 
-      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:Z.toast, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
+      {toast && <div role="status" style={{ position:'fixed', bottom: isMobile ? 88 : 24, right:24, zIndex:Z.toast, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:12, padding:'12px 18px', fontSize:13, fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:8 }}>{toast.type==='success' ? <IconCheck size={16} strokeWidth={2.2} /> : <IconAlert size={16} strokeWidth={2} />}{toast.msg}</div>}
     </div>
   )
 }

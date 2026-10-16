@@ -76,11 +76,27 @@ export function usePrefs(initial?: Prefs) {
   // The nav toggle changed it — follow, so Today's button shows the same mode.
   // lastApplied is set first so the effect above sees the theme as already
   // applied and does not drive applyTheme() a second time.
+  //
+  // It is also SAVED now. Home's own theme button was removed in favour of the top bar's
+  // switch, and until this the nav switch only changed the screen: the saved preference
+  // stayed as it was, so the next Home load (update(j.prefs)) put the old theme straight
+  // back. Only a real change is sent — when the theme already matches what this hook holds
+  // (its own applyTheme() echoing back, or the saved prefs arriving), latest.current agrees
+  // and nothing is written.
   useEffect(() => onThemeChange((c) => {
     const t = toTodayTheme(c);
     lastApplied.current = t;
     settled.current = true;
     setPrefs(p => (p.theme === t ? p : { ...p, theme: t }));
+    if (latest.current.theme !== t) {
+      const next = { ...latest.current, theme: t };
+      latest.current = next;
+      void (async () => {
+        try {
+          await fetch('/api/ess/preferences', { method: 'PUT', headers: await authHeaders(), body: JSON.stringify(next) });
+        } catch {/* best-effort, like update() below */}
+      })();
+    }
   }), []);
   // Saved prefs arrive one of two ways, and both mark us settled:
   //   * server-rendered — passed in as `initial`, so settled from the start;
