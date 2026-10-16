@@ -191,3 +191,96 @@ export default function TeGoogleMap({ pin, onPin, height = 260, zoom = 15, label
     />
   )
 }
+
+/**
+ * The trip's route on real tiles: a lettered marker at every point, a line
+ * along every journey, and the view fitted to the whole thing.
+ *
+ * This is the same information TeTripMap draws as a schematic, on a map that
+ * has streets. The schematic stays and is still what renders without a key —
+ * it is a genuinely good fallback, correct in shape, proportion and scale.
+ *
+ * A FLIGHT IS DRAWN DIFFERENTLY from a drive, as it is on the schematic: a
+ * dashed line, because no road was taken and a solid line between two cities
+ * would claim one was. Google is never asked for directions here — that is
+ * the server's job, billed to the server key, and drawing a straight line
+ * between two known points needs no request at all.
+ */
+export function TeGoogleRoute({ points, legs, height = 220, label }: {
+  /** Point coordinates in order. Anything unplaced is dropped by the caller. */
+  points: { lat: number; lng: number; s?: string }[]
+  /** One per journey, in order, so a flight can be dashed. */
+  legs?: { from: { lat: number; lng: number }; to: { lat: number; lng: number }; mode: string }[]
+  height?: number
+  label?: string
+}) {
+  const { ready, failed } = useGoogleMaps()
+  const box = useRef<HTMLDivElement | null>(null)
+  // WHY A SIGNATURE AND NOT THE ARRAYS. The caller builds `points` and `legs`
+  // fresh on every render, so a dependency array holding them never matches
+  // itself and the effect re-runs forever — each run building ANOTHER
+  // google.maps.Map over the same div, which renders as an empty grey panel.
+  // The route only actually changes when the coordinates do, and this is that.
+  const sig = JSON.stringify([points.map(p => [p.lat, p.lng]), (legs ?? []).map(l => l.mode)])
+  const data = useRef({ points, legs })
+  // Written in an effect, not during render — this repo refuses a ref write in
+  // the render body, and rightly: it is the kind of thing that works until a
+  // re-render order changes. Declared BEFORE the drawing effect below so it
+  // has already run by the time that one reads it.
+  useEffect(() => { data.current = { points, legs } })
+
+  useEffect(() => {
+    const { points, legs } = data.current
+    const G = ready ? gmaps() : null
+    if (!G || !box.current || !points.length) return
+    const M = G as unknown as {
+      Map: new (el: HTMLElement, o: unknown) => unknown
+      Marker: new (o: unknown) => unknown
+      Polyline: new (o: unknown) => unknown
+      LatLngBounds: new () => { extend: (p: unknown) => void }
+      SymbolPath: { CIRCLE: unknown }
+    }
+    const m = new M.Map(box.current, {
+      mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
+      clickableIcons: false, zoom: 5, center: points[0],
+    })
+
+    // The Maps API paints the label itself and cannot read a CSS custom
+    // property, so the token is resolved to its current value here. That keeps
+    // the letter following the theme instead of being a hex literal frozen at
+    // whatever the palette looked like the day this was written.
+    const onAccent = getComputedStyle(document.documentElement)
+      .getPropertyValue('--ez-on-accent').trim() || 'white'
+
+    const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    points.forEach((p, i) => {
+      new M.Marker({
+        position: p, map: m,
+        label: { text: LETTERS[i] ?? String(i + 1), color: onAccent, fontWeight: '700', fontSize: '12px' },
+        title: p.s || undefined,
+      })
+    })
+
+    for (const l of legs ?? []) {
+      const flight = l.mode === 'flight'
+      new M.Polyline({
+        path: [l.from, l.to], map: m, geodesic: flight,
+        strokeOpacity: flight ? 0 : 0.85, strokeWeight: flight ? 2 : 4,
+        // A flight has no road, so it is dashed rather than drawn as one.
+        ...(flight ? { icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3 }, offset: '0', repeat: '12px' }] } : {}),
+      })
+    }
+
+    // Fit to everything, but do not zoom to street level on a single point.
+    if (points.length > 1) {
+      const b = new M.LatLngBounds()
+      for (const p of points) b.extend(p)
+      ;(m as { fitBounds: (b: unknown, pad: number) => void }).fitBounds(b, 36)
+    } else {
+      ;(m as { setZoom: (z: number) => void }).setZoom(13)
+    }
+  }, [ready, sig])
+
+  if (!hasMapKey() || failed || !points.length) return null
+  return <div ref={box} className="gmap" style={{ height }} role="img" aria-label={label || 'Map of the route'} />
+}

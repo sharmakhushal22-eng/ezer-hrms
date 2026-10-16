@@ -8,6 +8,7 @@
 // Every colour is a token in an SVG attribute, not a hex literal, so the panel
 // follows the theme the way the rest of the module does.
 import { tripMapGeometry, type MapLeg, type MapPlace } from '@/lib/te/trip-map'
+import { hasMapKey, TeGoogleRoute } from './TeGoogleMap'
 
 export default function TeTripMap({ legs, points, places, height, label }: {
   legs: MapLeg[]
@@ -20,6 +21,27 @@ export default function TeTripMap({ legs, points, places, height, label }: {
   const g = tripMapGeometry({ legs, points, places, height })
   // No place has a location yet — an empty grey panel would say nothing.
   if (!g) return null
+
+  // REAL TILES WHERE THERE IS A KEY FOR THEM. The schematic below is not a
+  // worse version of this — it is correct in shape, proportion and scale, and
+  // it is what renders without a key. But a map with streets on it is what
+  // somebody actually needs to recognise a route, so it wins when available.
+  // Only points that have a position are mapped; the rest never had one to
+  // draw, which is the same rule tripMapGeometry applies above.
+  if (hasMapKey()) {
+    const at = (id: string) => {
+      const p = places.get(id)
+      return p && (p.lat || p.lng) ? { lat: p.lat, lng: p.lng, s: p.s } : null
+    }
+    const pts: { lat: number; lng: number; s: string }[] = []
+    for (const id of points) { const p = at(id); if (p) pts.push(p) }
+    const lines: { from: { lat: number; lng: number }; to: { lat: number; lng: number }; mode: string }[] = []
+    for (const l of legs) {
+      const a = at(l.from); const b = at(l.to)
+      if (a && b) lines.push({ from: { lat: a.lat, lng: a.lng }, to: { lat: b.lat, lng: b.lng }, mode: l.mode })
+    }
+    if (pts.length) return <TeGoogleRoute points={pts} legs={lines} height={height} label={label} />
+  }
 
   return (
     <svg className="jmap" viewBox={`0 0 ${g.width} ${g.height}`} role="img" aria-label={label || 'Map of the trip'}>
