@@ -60,13 +60,16 @@ export async function applyReview(sb: SupabaseClient, r: ReviewInput): Promise<{
   const details = (r.details || []).filter(d => d.field && d.field.trim()).map(d => ({ section: d.section || null, field: d.field.trim(), reason: String(d.reason || '').trim() }))
   if (r.outcome === 'ACCEPTED' && (rejected.length || details.length)) return { ok: false, error: 'A form with rejected documents or flagged details cannot be accepted — return it to the candidate instead.', status: 400 }
   if (r.outcome === 'RETURNED' && !rejected.length && !details.length && !String(r.note || '').trim()) return { ok: false, error: 'Reject at least one document, flag a detail, or say what the candidate should fix.', status: 400 }
-  if (rejected.some(d => !String(d.reason || '').trim())) return { ok: false, error: `Give a reason for every rejected document (${rejected.filter(d => !String(d.reason || '').trim()).map(d => docLabel(d.doc_code)).join(', ')}).`, status: 400 }
+  // The review sheet sends one remark for everything it marked; a per-document reason is optional.
+  const note = String(r.note || '').trim()
+  if (rejected.some(d => !String(d.reason || '').trim()) && !note) return { ok: false, error: 'Write a remark for the candidate — it goes with every rejected document.', status: 400 }
 
   const now = new Date().toISOString()
-  // Each document's verdict. Accepted keeps a carried-over note; rejected carries the reason.
+  // Each document's verdict. Accepted keeps a carried-over note; rejected carries the reason
+  // (or the remark), which the portal shows on the document.
   for (const d of r.documents) {
     const patch: any = { hr_verified: d.ok, hr_reviewed_at: now }
-    if (!d.ok) patch.hr_notes = `Rejected: ${String(d.reason || '').trim()}`
+    if (!d.ok) patch.hr_notes = `Rejected: ${String(d.reason || '').trim() || note}`
     await sb.from('onboarding_documents').update(patch).eq('onboarding_id', r.onboardingId).eq('doc_code', d.doc_code)
   }
   const corrections: Corrections = { documents: rejected.map(d => ({ doc_code: d.doc_code, label: docLabel(d.doc_code), reason: String(d.reason || '').trim() })), details, note: r.note || null }

@@ -622,6 +622,11 @@ export default function OnboardingDashboard() {
                   <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:TK.muted}}>
                     <span>Step {c.current_step||1}/8 · {pct}% complete</span>
                     {c.status==='SUBMITTED' && (
+                      <button onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontFamily:'inherit'}}>
+                        Review form
+                      </button>
+                    )}
+                    {(c.status==='HR_REVIEW'||c.status==='APPROVED') && (
                       <button onClick={()=>{openCodeModal(c)}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontFamily:'inherit'}}>
                         Generate code
                       </button>
