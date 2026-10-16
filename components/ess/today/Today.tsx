@@ -50,20 +50,29 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
   const confettiRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (initial) return;
     // The ESS token is what names the employee to these routes; a bare fetch
     // gets 401 "unauthenticated" and the tab shows nothing. The drop omitted it.
-    (async () => {
+    //
+    // no-store, and again whenever the tab comes back into view: a punch made on
+    // the phone, or in another tab, shows here without a reload — and a stale
+    // payload can never put Punch In back on screen after a punch.
+    let alive = true;
+    const load = async (first: boolean) => {
       try {
-        const r = await fetch('/api/ess/today', { headers: await authHeaders() });
+        const r = await fetch('/api/ess/today', { headers: await authHeaders(), cache: 'no-store' });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || 'Could not load');
+        if (!alive) return;
         setData(j);
-        if (j.prefs) update(j.prefs);
+        if (first && j.prefs) update(j.prefs);
       } catch (e) {
-        setErr((e as Error).message);
+        if (alive && first) setErr((e as Error).message);
       }
-    })();
+    };
+    if (!initial) void load(true);
+    const onVisible = () => { if (document.visibilityState === 'visible') void load(false); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { alive = false; document.removeEventListener('visibilitychange', onVisible); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { if (data?.today?.punch_in && !data.today.punch_out) setLiveIn(new Date(data.today.punch_in)); }, [data]);
@@ -114,7 +123,15 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
         <HeroPanel data={data} prefs={prefs} onPrefs={(p: Partial<Prefs>) => update(p)} onSearch={onSearch} nav={nav}>
           <PunchDial data={data} prefs={prefs} onToast={show} confettiRef={confettiRef}
             onPunched={(kind, at) => { setLiveIn(kind === 'in' ? at : null);
-              setData(d => d && ({ ...d, today: kind === 'in' ? { punch_in: at.toISOString(), punch_out: null, work_mode: 'office' } : { ...(d.today ?? { punch_in: null, work_mode: null }), punch_out: at.toISOString() } })); }} />
+              // First IN of the day stays the day's start; a second IN after an OUT
+              // reopens the day without moving it.
+              setData(d => d && ({ ...d, today: kind === 'in'
+                ? { punch_in: d.today?.punch_in ?? at.toISOString(), punch_out: null, open: true, last_in: at.toISOString(), work_mode: 'office' }
+                : { ...(d.today ?? { punch_in: null, work_mode: null }), punch_out: at.toISOString(), open: false } })); }}
+            onState={st => {
+              setLiveIn(st.open && st.first_in ? new Date(st.first_in) : null);
+              setData(d => d && ({ ...d, today: { punch_in: st.first_in, punch_out: st.open ? null : st.last_out, open: st.open, last_in: st.last_in, work_mode: d.today?.work_mode ?? null } }));
+            }} />
         </HeroPanel>
 
         <StatTiles data={data} />

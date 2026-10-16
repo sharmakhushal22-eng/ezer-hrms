@@ -246,7 +246,7 @@ export async function decideLeaveCancel(id: string, actor: Actor, approve: boole
 
 const isDay = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
 const isTime = (s: unknown): s is string => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(s)
-const hhmm = (t: string) => t.slice(0, 5)
+const hhmm = (t: unknown) => String(t ?? '').slice(0, 5)
 
 function eachDay(from: string, to: string): string[] {
   const out: string[] = []
@@ -254,23 +254,47 @@ function eachDay(from: string, to: string): string[] {
   return out
 }
 
-export interface FileInput { dates?: unknown; date?: unknown; from?: unknown; to?: unknown; requested_in?: unknown; requested_out?: unknown; reason?: unknown }
+export interface FileInput {
+  dates?: unknown; date?: unknown; from?: unknown; to?: unknown
+  requested_in?: unknown; requested_out?: unknown; reason?: unknown
+  /** Days picked one by one, each with its own times: [{ date, requested_in, requested_out }].
+   *  The attendance list sends this — a missed punch-out on Monday and a whole
+   *  absent Thursday need different corrections. The common times above are
+   *  then optional. */
+  days?: unknown
+}
 
 export type FileOutcome =
   | { ok: true; filed: number; dates: string[]; skipped: { date: string; why: string }[]; group: string; waiting_on: Waiting | null }
   | { ok: false; status: number; error: string }
 
-/** File a correction for one day, a list of days or a range — one row per day, one group per submission. */
+/** File a correction for one day, a list of days (any days — they need not be
+ *  consecutive) or a range: one row per day, one group per submission. */
 export async function fileRegularisation(me: string, body: FileInput): Promise<FileOutcome> {
   const bad = (error: string, status = 400) => ({ ok: false as const, status, error })
-  const requestedIn = body.requested_in, requestedOut = body.requested_out
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : ''
-  if (!isTime(requestedIn) || !isTime(requestedOut)) return bad('Give both times as HH:mm.')
-  if (hhmm(requestedOut) <= hhmm(requestedIn)) return bad('The out time has to be after the in time.')
   if (!reason) return bad('Say why the punch is being corrected. Whoever reviews it reads this.')
 
+  // Per-day times, when the days were picked one by one.
+  const perDay = new Map<string, { in: string; out: string }>()
+  if (Array.isArray(body.days)) {
+    for (const d of body.days as Record<string, unknown>[]) {
+      if (!d || !isDay(d.date)) continue
+      if (!isTime(d.requested_in) || !isTime(d.requested_out)) return bad(`${fmtDay(String(d.date))}: give both times as HH:mm.`)
+      if (hhmm(d.requested_out) <= hhmm(d.requested_in)) return bad(`${fmtDay(d.date)}: the out time has to be after the in time.`)
+      perDay.set(d.date, { in: hhmm(d.requested_in), out: hhmm(d.requested_out) })
+    }
+  }
+  const requestedIn = body.requested_in, requestedOut = body.requested_out
+  if (!perDay.size) {
+    if (!isTime(requestedIn) || !isTime(requestedOut)) return bad('Give both times as HH:mm.')
+    if (hhmm(requestedOut) <= hhmm(requestedIn)) return bad('The out time has to be after the in time.')
+  }
+  const timesFor = (date: string) => perDay.get(date) ?? { in: hhmm(String(requestedIn)), out: hhmm(String(requestedOut)) }
+
   let dates: string[] = []
-  if (Array.isArray(body.dates)) dates = body.dates.filter(isDay)
+  if (perDay.size) dates = [...perDay.keys()]
+  else if (Array.isArray(body.dates)) dates = body.dates.filter(isDay)
   else if (isDay(body.date)) dates = [body.date]
   else if (isDay(body.from) && isDay(body.to)) dates = body.from <= body.to ? eachDay(body.from, body.to) : []
   else if (isDay(body.from)) dates = [body.from]
@@ -310,10 +334,11 @@ export async function fileRegularisation(me: string, body: FileInput): Promise<F
     if (onLeave.has(date)) { skipped.push({ date, why: 'you were on approved leave' }); continue }
     if (decided.get(date) === 'APPROVED') { skipped.push({ date, why: 'it has already been regularised' }); continue }
     const rec = recBy.get(date)
+    const t = timesFor(date)
     rows.push({
       employee_id: me, attendance_date: date,
       recorded_in: rec?.work_in ?? null, recorded_out: rec?.work_out ?? null,
-      requested_in: hhmm(requestedIn), requested_out: hhmm(requestedOut), reason,
+      requested_in: t.in, requested_out: t.out, reason,
       status: 'PENDING', request_group: group,
       reviewed_by: null, reviewed_by_id: null, reviewed_at: null, review_remark: null,
     })
@@ -344,7 +369,9 @@ export async function fileRegularisation(me: string, body: FileInput): Promise<F
     } },
     mail: { key: 'attendance.correction.approver', vars: {
       approver_name: who?.name || '', employee_name: emp?.full_name || 'An employee', emp_code: emp?.emp_code || '',
-      dates: datesLabel, day_count: filedDates.length, times: `${hhmm(requestedIn)} – ${hhmm(requestedOut)}`,
+      dates: datesLabel, day_count: filedDates.length,
+      times: new Set(rows.map(r => `${r.requested_in}–${r.requested_out}`)).size === 1
+        ? `${rows[0].requested_in} – ${rows[0].requested_out}` : 'different times for each day (see Tasks & Approvals)',
       reason, portal_url: portalUrl('approvals'),
     } },
   })

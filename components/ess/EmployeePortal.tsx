@@ -18,11 +18,12 @@ import {
 } from '@/lib/supabase-ess'
 import {
   loadMonthlyAttendance, loadDayPunches,
-  resolveDay, computeSummary,
+  resolveDay,
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
 import * as HR from '@/lib/employees/hr-actions'
 import { api as essApi } from '@/lib/ess/api'
+import AttendanceLog, { KIND_META } from '@/components/ess/attendance/AttendanceLog'
 import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import dynamic from 'next/dynamic'
@@ -153,58 +154,76 @@ function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void })
 // ════════════════════════════════════════════════════════════════
 // ── Punch In / Out (ESS attendance) ─────────────────────────────
 const istToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
+/**
+ * Home's punch card.
+ *
+ * It used to ask an unauthenticated route for "any punch today" and, once there
+ * was one, offered Punch Out for the rest of the day — every press another OUT.
+ * It now reads and writes through /api/ess/punch, where the rule lives
+ * (lib/attendance/punch.ts): punches alternate, so it offers Punch In when
+ * nothing is open and Punch Out when something is. A refused punch returns the
+ * true state and the card adopts it. It re-reads whenever the tab is shown
+ * again, so a punch made on Today or on the phone is reflected here.
+ */
+type PunchStateLite = { open: boolean; first_in: string | null; last_in: string | null; last_out: string | null }
 function PunchButton({ employeeId }: { employeeId: string }) {
-  const [punchedToday, setPunchedToday] = useState<boolean | null>(null) // null = loading
+  const [st, setSt] = useState<PunchStateLite | null>(null) // null = loading
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [day, setDay] = useState(istToday())
 
+  const headers = async (): Promise<Record<string, string>> => {
+    const t = await authToken()
+    return { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) }
+  }
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(`/api/attendance/punch?employee_id=${employeeId}&date=${istToday()}`)
+      const r = await fetch('/api/ess/punch', { headers: await headers(), cache: 'no-store' })
       const d = await r.json()
-      setPunchedToday((d.punches?.length || 0) > 0)
-    } catch { setPunchedToday(false) }
-  }, [employeeId])
-  useEffect(() => { refresh() }, [refresh])
+      if (r.ok && d.state) setSt(d.state)
+      else setSt({ open: false, first_in: null, last_in: null, last_out: null })
+    } catch { setSt({ open: false, first_in: null, last_in: null, last_out: null }) }
+  }, [employeeId])                                            // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh() }, [refresh])
 
-  // Reset at IST midnight: when the calendar day rolls over, re-check → new day = "Punch In".
+  // Reset at IST midnight, and re-read whenever the tab is shown again.
   useEffect(() => {
-    const t = setInterval(() => { const d = istToday(); if (d !== day) { setDay(d); refresh() } }, 30000)
-    return () => clearInterval(t)
+    const t = setInterval(() => { const d = istToday(); if (d !== day) { setDay(d); void refresh() } }, 30000)
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible) }
   }, [day, refresh])
 
+  const tm = (ts: string | null) => ts ? new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+  const open = !!st?.open
   const punch = async () => {
-    if (busy || punchedToday === null) return
-    const type = punchedToday ? 'OUT' : 'IN'
-    setBusy(true); setMsg('')
+    if (busy || !st) return
+    const kind = open ? 'out' : 'in'
+    setBusy(true); setMsg(null)
     try {
-      const r = await fetch('/api/attendance/punch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: employeeId, punch_type: type }) })
+      const r = await fetch('/api/ess/punch', { method: 'POST', headers: await headers(), body: JSON.stringify({ kind }), cache: 'no-store' })
       const d = await r.json()
-      if (!r.ok) { setMsg(d.error || 'Punch failed'); setBusy(false); return }
-      setPunchedToday(true) // after the first IN → "Punch Out"; stays till midnight
-      setMsg(`✓ Punched ${type} at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`)
-    } catch { setMsg('Punch failed — try again') }
-    setBusy(false)
+      if (d.state) setSt(d.state)
+      if (!r.ok) { setMsg({ text: d.error || 'Punch failed', ok: false }); return }
+      setMsg({ text: `✓ Punched ${kind === 'in' ? 'in' : 'out'} at ${tm(d.at)}`, ok: true })
+    } catch { setMsg({ text: 'Punch failed — try again', ok: false }) }
+    finally { setBusy(false) }
   }
 
-  const isOut = punchedToday === true
+  const loading = st === null
   return (
-    // The accent tracks the button it frames. Left green, it would be the
-    // only green element on a card whose primary action is now brand blue.
-    <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? C.critical : C.brand}` }}>
+    // The accent tracks the button it frames.
+    <div style={{ ...T.card, borderLeft: `3px solid ${open ? C.critical : C.brand}` }}>
       <div style={T.section}>Attendance</div>
-      {/* Punch In is the primary action of this page, so it takes the primary
-          colour the rest of the product uses. It was C.positive, the only green
-          primary button in the app. C.onAccent already flips per theme
-          (#FFFFFF light, #0D1117 dark), so the label stays legible on the
-          lighter dark-mode brand fill. */}
-      <button onClick={punch} disabled={busy || punchedToday === null}
-        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: C.onAccent, background: isOut ? C.critical : C.brand, opacity: (busy || punchedToday === null) ? .6 : 1 }}>
-        {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? 'Punch Out' : 'Punch In')}
+      <button onClick={punch} disabled={busy || loading}
+        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || loading) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: C.onAccent, background: open ? C.critical : C.brand, opacity: (busy || loading) ? .6 : 1 }}>
+        {loading ? 'Loading…' : busy ? '…' : (open ? 'Punch Out' : 'Punch In')}
       </button>
-      {msg && <div style={{ fontSize: 12, color: msg.startsWith('') ? C.positive : C.critical, marginTop: 8, textAlign: 'center' }}>{msg}</div>}
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 6, textAlign: 'center' }}>{isOut ? 'Punched in today · resets to “Punch In” at 12 AM.' : 'Tap to punch in for the day.'}</div>
+      {msg && <div style={{ fontSize: 12, color: msg.ok ? C.positive : C.critical, marginTop: 8, textAlign: 'center' }}>{msg.text}</div>}
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 6, textAlign: 'center' }}>
+        {loading ? '' : open ? `In since ${tm(st.last_in)}${st.first_in && st.first_in !== st.last_in ? ` · day started ${tm(st.first_in)}` : ''}`
+          : st.last_out ? `Punched out at ${tm(st.last_out)} · tap to punch in again` : 'Tap to punch in for the day.'}
+      </div>
     </div>
   )
 }
@@ -1338,21 +1357,36 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
 // Higher-contrast pairs than the originals, which sat around olive on pale
 // green and were hard to read at calendar-cell size. Each is [background, ink]
 // and every pair clears WCAG AA at 11px.
+/**
+ * The calendar's status vocabulary. The words, codes and accent colours come
+ * from KIND_META (components/ess/attendance/AttendanceLog.tsx), so the calendar
+ * and the attendance list describe a day identically. Only the CELL FILL is the
+ * calendar's own: a month of present days stays calm (sunken), and only the
+ * exceptions are tinted.
+ *
+ * Half day and missed punch used to share one amber dot and could not be told
+ * apart, and a missed IN read the same as a missed OUT. Each now has its own
+ * code — ½, MI, MO — printed in the cell.
+ */
+const KEY_ALIAS: Record<string, keyof typeof KIND_META> = { ON_LEAVE: 'LEAVE', FUTURE: 'UPCOMING', MISS_PUNCH: 'MISS_OUT' }
+const metaOf = (status: string) => KIND_META[(KEY_ALIAS[status] || status) as keyof typeof KIND_META] || null
 const STATUS_STYLE: Record<string,[string,string]> = {
-  PRESENT:[C.sunken,C.positive], ABSENT:[C.criticalTint,C.critical], HALF_DAY:[C.warningTint,C.warning],
-  MISS_PUNCH:[C.warningTint,C.critical], LWP:[C.criticalTint,C.critical], WEEKLY_OFF:[C.sunken,C.faint],
-  HOLIDAY:[C.brandTint,C.info], ON_LEAVE:[C.brandTint,C.brandDeep], FUTURE:['transparent',C.lineStrong], TODAY:[C.canvas,C.brand],
+  PRESENT:[C.sunken,C.positive], LATE:[C.sunken,C.warning], IN_PROGRESS:[C.infoTint,C.info],
+  HALF_DAY:[C.warningTint,C.warning], MISS_IN:[C.warningTint,C.critical], MISS_OUT:[C.warningTint,C.critical],
+  MISS_PUNCH:[C.warningTint,C.critical], ABSENT:[C.criticalTint,C.critical], LWP:[C.criticalTint,C.critical],
+  WEEKLY_OFF:[C.sunken,C.faint], HOLIDAY:[C.infoTint,C.info], ON_LEAVE:[C.brandTint,C.brandDeep], HALF_LEAVE:[C.brandTint,C.brandDeep],
+  FUTURE:['transparent',C.lineStrong], TODAY:[C.canvas,C.brand],
 }
-/** Accent bar colour per status — the saturated version of the ink. */
-const STATUS_BAR: Record<string,string> = {
-  PRESENT: C.positive, ABSENT:C.critical, HALF_DAY:C.warning, MISS_PUNCH: C.warning,
-  LWP:C.critical, WEEKLY_OFF:C.lineStrong, HOLIDAY:C.info, ON_LEAVE: C.brand,
-}
-const STATUS_FULL: Record<string,string> = {
-  PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half day', MISS_PUNCH:'Missing punch',
-  LWP:'Loss of pay', WEEKLY_OFF:'Weekly off', HOLIDAY:'Holiday', ON_LEAVE:'On leave', FUTURE:'—',
-}
-const STATUS_LABEL: Record<string,string> = { PRESENT:'P', ABSENT:'A', HALF_DAY:'½', MISS_PUNCH:'!', LWP:'LWP', WEEKLY_OFF:'W', HOLIDAY:'H', ON_LEAVE:'L', FUTURE:'', ABSENT_FULL:'Absent' }
+/** Accent colour per status — the saturated version of the ink. */
+const STATUS_BAR: Record<string,string> = new Proxy({} as Record<string,string>, {
+  get: (_t, k: string) => k === 'LWP' ? C.critical : (metaOf(k)?.bar ?? C.line),
+})
+const STATUS_FULL: Record<string,string> = new Proxy({} as Record<string,string>, {
+  get: (_t, k: string) => k === 'LWP' ? 'Loss of pay' : k === 'FUTURE' ? '—' : (metaOf(k)?.label ?? k),
+})
+const STATUS_LABEL: Record<string,string> = new Proxy({} as Record<string,string>, {
+  get: (_t, k: string) => k === 'LWP' ? 'LWP' : (metaOf(k)?.code ?? ''),
+})
 
 const fmtT = (iso: string|null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '—'
 
@@ -1362,8 +1396,11 @@ const pad2 = (n: number) => String(n).padStart(2,'0')
 
 function StatusBadge({ status }: { status: string }) {
   const [bg,c] = STATUS_STYLE[status] || [C.brandTint,C.brandDeep]
-  const lbl = ({ PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half Day', MISS_PUNCH:'Miss Punch', LWP:'LWP', WEEKLY_OFF:'Weekly Off', HOLIDAY:'Holiday', ON_LEAVE:'On Leave', FUTURE:'—' } as Record<string,string>)[status] || status
-  return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{lbl}</span>
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>
+      <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_BAR[status] }} />{STATUS_FULL[status]}
+    </span>
+  )
 }
 
 // 1) Summary chips ──────────────────────────────────────────────
@@ -1398,12 +1435,12 @@ function monthStats(year: number, month: number, md: MonthlyData | null, todaySt
     if (rec?.overtime_minutes) ot += rec.overtime_minutes
 
     switch (status) {
-      case 'PRESENT':    present++; break
+      case 'PRESENT': case 'LATE': case 'IN_PROGRESS': present++; break
       case 'HALF_DAY':   halfDay++; break
-      case 'MISS_PUNCH': miss++; present++; break   // they were here; the punch is what is missing
+      case 'MISS_IN': case 'MISS_OUT': miss++; present++; break   // they were here; the punch is what is missing
       case 'LWP':        lop++; break
       case 'ABSENT':     absent++; break
-      case 'ON_LEAVE':   leave++; break
+      case 'ON_LEAVE': case 'HALF_LEAVE': leave++; break
       default: break                                 // weekly off, holiday — not working days
     }
   }
@@ -1559,7 +1596,8 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
     { label:'Present',   value:String(summary.present),   k:'PRESENT' },
     { label:'Absent',    value:String(summary.absent),    k:'ABSENT' },
     { label:'Half day',  value:String(summary.halfDay),   k:'HALF_DAY' },
-    { label:'Late',      value:String(summary.lateCount), k:'MISS_PUNCH' },
+    { label:'Missed punch', value:String(summary.missPunch), k:'MISS_OUT', wide:true },
+    { label:'Late',      value:String(summary.lateCount), k:'LATE' },
     { label:'Overtime',  value:summary.totalOTHours,      k:'ON_LEAVE', wide:true },
     { label:'Loss of pay', value:String(summary.lopDays), k:'LWP' },
   ]
@@ -1577,17 +1615,23 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
 
 /** What the colours mean. Without this the calendar is a puzzle on first visit. */
 function CalendarLegend() {
-  const items = ['PRESENT','ABSENT','HALF_DAY','MISS_PUNCH','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
+  const items = ['PRESENT','LATE','HALF_DAY','MISS_IN','MISS_OUT','ABSENT','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 13px', marginTop:11, paddingTop:9,
                   borderTop: `1px solid ${C.brandEdge}` }}>
       {items.map(k => (
-        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5,
-                               fontSize:10, color:C.faint }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_BAR[k] }} />
+        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:4,
+                               fontSize:10, color:C.muted }}>
+          <span style={{ minWidth:18, textAlign:'center', fontSize:9, fontWeight:800, color:STATUS_BAR[k] }}>{STATUS_LABEL[k] || '•'}</span>
           {STATUS_FULL[k]}
         </span>
       ))}
+      <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:C.muted }}>
+        <span style={{ width:6, height:6, borderRadius:'50%', background:C.warning }} />Correction pending
+      </span>
+      <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:C.muted }}>
+        <span style={{ fontSize:10, fontWeight:800, color:C.positive }}>✓</span>Regularised
+      </span>
     </div>
   )
 }
@@ -1689,6 +1733,7 @@ function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }
     ['Present',   String(summary.present),   STATUS_BAR.PRESENT],
     ['Absent',    String(summary.absent),    STATUS_BAR.ABSENT],
     ['Half day',  String(summary.halfDay),   STATUS_BAR.HALF_DAY],
+    ['Missed punch', String(summary.missPunch), STATUS_BAR.MISS_OUT],
     ['On leave',  String(summary.onLeave),   STATUS_BAR.ON_LEAVE],
   ]
   return (
@@ -1806,19 +1851,30 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
   const maxW = isMobile ? '100%' : 7 * 60 + gap * 6   // a month, not a banner
   const daysInMonth = new Date(year, month, 0).getDate()
   const lead = new Date(year, month-1, 1).getDay()
+  // The weekdays that are off for this employee, from their configured weekly
+  // offs. The header used to tint Sunday AND Saturday; these companies work
+  // Saturdays.
+  const offDows = new Set([...monthData.weekoffSet].map(d => new Date(d + 'T00:00:00').getDay()))
 
   const cells: React.ReactNode[] = []
   for (let i = 0; i < lead; i++) cells.push(<div key={'b'+i} />)
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
-    const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
+    const { status, rec, leave, day } = resolveDay(dateStr, monthData, todayStr)
     const [bg, ink] = STATUS_STYLE[status] || [C.surface, C.ink]
     const dot = STATUS_BAR[status]
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
     const isFuture = status === 'FUTURE'
-    const hasTimes = !isMobile && !isFuture && rec && (rec.work_in || rec.work_out)
+    // Present days show when they began; every other day shows its code, so a
+    // half day (½), a missed punch-in (MI) and a missed punch-out (MO) are
+    // readable without opening the day.
+    const calm = status === 'PRESENT' || status === 'IN_PROGRESS'
+    const hasTimes = !isMobile && !isFuture && calm && rec && rec.work_in
+    const code = status === 'ON_LEAVE' || status === 'HALF_LEAVE' ? (leave?.short_name || STATUS_LABEL[status]) : STATUS_LABEL[status]
+    const pendingFix = day?.correction?.status === 'PENDING'
+    const fixed = !!day?.regularised || day?.correction?.status === 'APPROVED'
     // Wave across the grid rather than a uniform fade. Capped so the last cell
     // of a 31-day month is not still arriving half a second later.
     const delay = Math.min((lead + d - 1) * 9, 260)
@@ -1828,7 +1884,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
         className="ezer-cell"
         onClick={() => !isFuture && onDayClick(dateStr)}
         disabled={isFuture}
-        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}`}
+        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.work_out ? ` · out ${fmtT(rec.work_out)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}${pendingFix ? ' · correction pending' : fixed ? ' · regularised' : ''}`}
         style={{
           height: cell, position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
           // Tokens, not literals. The selected gradient and the today ring were
@@ -1860,25 +1916,29 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           {d}
         </span>
 
-        {/* the status, as a dot — small, and never the only signal */}
-        {!isFuture && dot && (
-          <span style={{ width: 5, height: 5, borderRadius: '50%', marginTop: 1,
-                         // onAccent, not white: in dark the selected fill is a
-                         // LIGHT blue, and a white dot on it disappears.
-                         background: isSel ? C.onAccent : dot }} />
-        )}
-
-        {hasTimes && (
-          <span style={{ fontSize: 8, lineHeight: 1, opacity: .75, marginTop: 1,
-                         fontVariantNumeric: 'tabular-nums' }}>
+        {/* The status: a dot for an ordinary present day, the code otherwise.
+            onAccent, not white, on the selected cell: in dark its fill is a
+            LIGHT blue, and white disappears on it. */}
+        {!isFuture && (hasTimes ? (
+          <span style={{ fontSize: 8, lineHeight: 1, opacity: .75, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
             {fmtT(rec!.work_in)}
           </span>
-        )}
-
-        {!isFuture && status === 'ON_LEAVE' && leave?.short_name && (
-          <span style={{ fontSize: 8, fontWeight: 700, lineHeight: 1, marginTop: 1 }}>
-            {leave.short_name}
+        ) : calm ? (
+          <span style={{ width: 5, height: 5, borderRadius: '50%', marginTop: 2, background: isSel ? C.onAccent : dot }} />
+        ) : code ? (
+          <span style={{ fontSize: isMobile ? 8 : 9, fontWeight: 800, lineHeight: 1, marginTop: 1, letterSpacing: '.02em',
+                         color: isSel ? C.onAccent : dot }}>
+            {code}
           </span>
+        ) : null)}
+
+        {/* Correction state, top-left: amber = waiting on the approver, ✓ = done. */}
+        {pendingFix && (
+          <span style={{ position: 'absolute', top: 3, left: 4, width: 5, height: 5, borderRadius: '50%', background: C.warning }} />
+        )}
+        {!pendingFix && fixed && (
+          <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 8, fontWeight: 800, lineHeight: 1,
+                         color: isSel ? C.onAccent : C.positive }}>✓</span>
         )}
 
         {isToday && !isSel && (
@@ -1900,7 +1960,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           // the third place in this file where a border token was used as ink.
           <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:700,
                                 letterSpacing:'.05em', padding:'3px 0',
-                                color: n % 6 === 0 ? C.brand : C.muted }}>
+                                color: offDows.has(n) ? C.brand : C.muted }}>
             {w[0]}{isMobile ? '' : w[1]}
           </div>
         ))}
@@ -1937,7 +1997,13 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
     return () => { active = false }
   }, [emp.id, date])
 
-  const { status, rec, holiday, leave } = dayInfo
+  const { status, rec, holiday, leave, day } = dayInfo
+  correction = correction ?? (day?.correction ? {
+    id: day.correction.id, attendance_date: date, recorded_in: rec?.work_in ?? null, recorded_out: rec?.work_out ?? null,
+    requested_in: day.correction.requested_in || '', requested_out: day.correction.requested_out || '', reason: '',
+    status: day.correction.status, reviewed_by: day.correction.decided_by, reviewed_at: null,
+    review_remark: day.correction.review_remark, created_at: '', waiting_on: day.correction.waiting_on, decided_by: day.correction.decided_by,
+  } : null)
   const worked = rec?.total_minutes != null ? `${Math.floor(rec.total_minutes/60)}h ${rec.total_minutes%60}m` : '—'
   const heading = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'short', year:'numeric' })
 
@@ -1950,7 +2016,20 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
 
       {holiday && <div style={{ fontSize:13, color: C.brand, background: C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>🎌 {holiday.description}{holiday.is_optional ? ' (Optional)' : ''}</div>}
       {status === 'WEEKLY_OFF' && <div style={{ fontSize:13, color:C.faint, background:C.sunken, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>Weekly Off</div>}
-      {leave && <div style={{ fontSize:13, color:C.brandDeep, background:C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>On Leave — {leave.name}{leave.half_day ? ' (Half day)' : ''}</div>}
+      {leave && <div style={{ fontSize:13, color:C.brandDeep, background:C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>On Leave — {leave.name}{leave.half_day ? ` (Half day${leave.half_session ? `, ${leave.half_session} half` : ''})` : ''}</div>}
+      {(status === 'MISS_IN' || status === 'MISS_OUT') && (
+        <div style={{ fontSize:12.5, color:C.critical, background:C.warningTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>
+          {status === 'MISS_IN' ? 'No punch-in was recorded' : 'No punch-out was recorded'} for this day. Raise a regularisation with the right time.
+        </div>
+      )}
+      {status === 'HALF_DAY' && (
+        <div style={{ fontSize:12.5, color:C.warning, background:C.warningTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>
+          Marked half day — the first punch came after the shift's last allowed punch-in time.
+        </div>
+      )}
+      {day?.expected_in && !['HOLIDAY','WEEKLY_OFF','ON_LEAVE'].includes(status) && (
+        <div style={{ fontSize:11.5, color:C.muted, marginBottom:8 }}>Shift {day.shift_code || ''} · expected {day.expected_in}–{day.expected_out}</div>
+      )}
 
       {rec && (
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:8, marginBottom:10 }}>
@@ -1991,7 +2070,7 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
         </div>
       )}
       {/* Past days only, and not while one is pending or already approved. */}
-      {date < todayStr && ['MISS_PUNCH', 'ABSENT', 'HALF_DAY'].includes(status) && !rec?.regularized_at
+      {date < todayStr && ['MISS_IN', 'MISS_OUT', 'ABSENT', 'HALF_DAY', 'LATE', 'HALF_LEAVE'].includes(status) && !rec?.regularized_at
         && correction?.status !== 'PENDING' && correction?.status !== 'APPROVED' && (
         <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:C.warning }}>
           {correction?.status === 'REJECTED' ? 'Raise again' : 'Raise regularisation'}
@@ -2002,214 +2081,19 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
 }
 
 // 4) Regularisation form ─────────────────────────────────────────
-/**
- * Regularise a range of days in one submission.
- *
- * The single-day form is right when one punch was missed. It is the wrong shape
- * for "I was on site all last week and the biometric never picked me up" —
- * that was seven identical forms.
- *
- * The preview is the important half. A date range will always contain days that
- * must not be regularised: weekly offs, holidays, approved leave, and days
- * already recorded properly. Submitting those would put work on HR that should
- * never have reached them, and could overwrite a correct record with a guess.
- * So the range is filtered against the same rules resolveDay() uses, and every
- * skipped day says why before anything is sent.
- */
-function BulkRegularisationForm({ emp, onDone, onCancel }: {
-  emp: EmployeeDetail; onDone: () => void; onCancel: () => void
-}) {
-  const localYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-  const todayStr = localYMD(new Date())
-  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return localYMD(d) })()
-  const weekAgo   = (() => { const d = new Date(); d.setDate(d.getDate()-7); return localYMD(d) })()
-
-  const [from, setFrom] = useState(weekAgo)
-  const [to, setTo] = useState(yesterday)
-  const [actualIn, setActualIn] = useState('09:00')
-  const [actualOut, setActualOut] = useState('18:00')
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [scanning, setScanning] = useState(false)
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
-  const [preview, setPreview] = useState<{
-    eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[]
-    skipped: { date: string; why: string }[]
-  } | null>(null)
-
-  const MAX_DAYS = 62   // two months: enough for a real backlog, not a whole year
-
-  // Walk the range, pulling each month's attendance once, and decide day by day.
-  const scan = useCallback(async () => {
-    setPreview(null); setMsg(null)
-    if (!from || !to) return
-    if (from > to) { setMsg({ text: 'The start date is after the end date.', ok: false }); return }
-    if (to >= todayStr) { setMsg({ text: 'Regularisation is for past days only — the end date must be before today.', ok: false }); return }
-
-    const days: string[] = []
-    for (const d = new Date(from + 'T00:00:00'); localYMD(d) <= to; d.setDate(d.getDate() + 1)) {
-      days.push(localYMD(d))
-      if (days.length > MAX_DAYS) break
-    }
-    if (days.length > MAX_DAYS) {
-      setMsg({ text: `That range is longer than ${MAX_DAYS} days. Split it into smaller periods.`, ok: false }); return
-    }
-
-    setScanning(true)
-    const months = Array.from(new Set(days.map(d => d.slice(0, 7))))
-    const data = new Map<string, MonthlyData>()
-    for (const ym of months) {
-      const [y, mo] = ym.split('-').map(Number)
-      data.set(ym, await loadMonthlyAttendance(emp.id, y, mo))
-    }
-
-    const eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[] = []
-    const skipped: { date: string; why: string }[] = []
-
-    for (const date of days) {
-      const md = data.get(date.slice(0, 7))
-      if (!md) { skipped.push({ date, why: 'could not load that month' }); continue }
-      const info = resolveDay(date, md, todayStr)
-
-      if (info.status === 'HOLIDAY')      { skipped.push({ date, why: info.holiday?.description ? `holiday — ${info.holiday.description}` : 'holiday' }); continue }
-      if (info.status === 'WEEKLY_OFF')   { skipped.push({ date, why: 'weekly off' }); continue }
-      if (info.status === 'ON_LEAVE')     { skipped.push({ date, why: 'on approved leave' }); continue }
-      if (info.status === 'PRESENT' && info.rec?.work_in && info.rec?.work_out) {
-        skipped.push({ date, why: 'already recorded in full' }); continue
-      }
-      eligible.push({
-        date,
-        recordedIn: info.rec?.work_in || null,
-        recordedOut: info.rec?.work_out || null,
-        why: info.status === 'MISS_PUNCH' ? 'missing a punch'
-           : info.status === 'ABSENT' ? 'marked absent'
-           : info.status.toLowerCase().replace(/_/g, ' '),
-      })
-    }
-
-    setScanning(false)
-    setPreview({ eligible, skipped })
-  }, [from, to, emp.id, todayStr])
-
-  useEffect(() => { scan() }, [scan])
-
-  const submit = async () => {
-    if (!preview || preview.eligible.length === 0) { setMsg({ text: 'Nothing in that range needs regularising.', ok: false }); return }
-    if (!actualIn || !actualOut) { setMsg({ text: 'Enter both actual IN and OUT times', ok: false }); return }
-    if (actualIn >= actualOut) { setMsg({ text: 'Actual IN must be before Actual OUT', ok: false }); return }
-    if (!reason.trim()) { setMsg({ text: 'Reason is required', ok: false }); return }
-
-    setBusy(true); setMsg(null)
-    try {
-      const res = await essApi('/api/ess/attendance', emp.id, { method: 'POST', body: JSON.stringify({
-        dates: preview.eligible.map(d => d.date), requested_in: actualIn, requested_out: actualOut, reason: reason.trim(),
-      }) })
-      const to = res.waiting_on
-      setMsg({ text: `✓ ${res.filed} day${res.filed === 1 ? '' : 's'} sent${to ? ` to ${to.name} (${to.role})` : ' — no approver is set for you, so HR will see it'} for approval`, ok: true })
-      onDone()
-    } catch (e: any) {
-      setMsg({ text: e.message || 'Could not submit', ok: false })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const short = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-
-  return (
-    <div style={T.card}>
-      <div style={T.section}>Regularise a date range</div>
-      <div style={{ fontSize: 12, color: C.muted, marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
-        For a stretch of days with the same story — biometric down, on site, working from home.
-        Weekly offs, holidays, leave and days already recorded are left out automatically.
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-        <div><label style={T.label}>From *</label>
-          <input type="date" max={yesterday} style={T.input} value={from} onChange={e => setFrom(e.target.value)} /></div>
-        <div><label style={T.label}>To *</label>
-          <input type="date" max={yesterday} style={T.input} value={to} onChange={e => setTo(e.target.value)} /></div>
-        <div><label style={T.label}>Actual IN *</label>
-          <input type="time" style={T.input} value={actualIn} onChange={e => setActualIn(e.target.value)} /></div>
-        <div><label style={T.label}>Actual OUT *</label>
-          <input type="time" style={T.input} value={actualOut} onChange={e => setActualOut(e.target.value)} /></div>
-        <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason * <span style={{ fontWeight: 400, color: C.faint }}>(applies to every day)</span></label>
-          <input style={T.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Biometric device was down all week" /></div>
-      </div>
-
-      {scanning && <div style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>Checking those dates…</div>}
-
-      {preview && !scanning && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 9 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 99,
-                           background: preview.eligible.length ? C.positiveTint : C.criticalTint,
-                           color: preview.eligible.length ? C.positive : C.critical }}>
-              {preview.eligible.length} day{preview.eligible.length === 1 ? '' : 's'} will be sent
-            </span>
-            {preview.skipped.length > 0 && (
-              <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99,
-                             background: C.brandTint, color: C.brandDeep }}>
-                {preview.skipped.length} skipped
-              </span>
-            )}
-          </div>
-
-          {preview.eligible.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 9 }}>
-              {preview.eligible.map(d => (
-                <span key={d.date} title={d.why}
-                      style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
-                               background: C.positiveTint, color: C.positive,
-                               border: `1px solid ${C.positiveTint}`, fontWeight: 600 }}>
-                  {short(d.date)} <span style={{ fontWeight: 400, opacity: .8 }}>· {d.why}</span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          {preview.skipped.length > 0 && (
-            <details>
-              <summary style={{ fontSize: 12, color: C.muted, cursor: 'pointer', marginBottom: 6 }}>
-                Why {preview.skipped.length} day{preview.skipped.length === 1 ? ' was' : 's were'} left out
-              </summary>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {preview.skipped.map(d => (
-                  <span key={d.date} style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
-                                              background: C.sunken, color: C.faint,
-                                              border: `1px solid ${C.line}` }}>
-                    {short(d.date)} · {d.why}
-                  </span>
-                ))}
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-
-      {msg && <div style={{ fontSize: 12, marginBottom: 10, color: msg.ok ? C.positive : C.critical }}>{msg.text}</div>}
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={onCancel} style={{ ...T.btnO, flex: 1 }}>Cancel</button>
-        <button onClick={submit} disabled={busy || scanning || !preview?.eligible.length}
-                style={{ ...T.btnP, flex: 2, opacity: busy || scanning || !preview?.eligible.length ? .5 : 1 }}>
-          {busy ? 'Sending…'
-            : preview?.eligible.length
-              ? `Send ${preview.eligible.length} day${preview.eligible.length === 1 ? '' : 's'} for approval`
-              : 'Nothing to send'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
+// One day, from the calendar's day panel. Several days — any days — are picked
+// in the attendance list (components/ess/attendance/AttendanceLog.tsx), which
+// replaced the "Date range" form: that one could only take a continuous run.
+function RegularisationForm({ emp, date, rec, editable, onDone, onCancel, expected }: {
   emp: EmployeeDetail; date: string; rec: MonthlyData['records'][number] | null; editable?: boolean
   onDone: () => void; onCancel: () => void
+  /** The shift's times that day, used where a punch is missing. */
+  expected?: { in: string | null; out: string | null }
 }) {
   const [dateVal, setDateVal] = useState(date)
-  const [actualIn, setActualIn] = useState('09:00')   // default shift start 9 AM
-  const [actualOut, setActualOut] = useState('18:00') // default shift end 6 PM
+  // What was recorded is kept; only the missing side is filled, from the shift.
+  const [actualIn, setActualIn] = useState(() => (rec?.work_in ? fmtT(rec.work_in) : null) || expected?.in || '09:00')
+  const [actualOut, setActualOut] = useState(() => (rec?.work_out ? fmtT(rec.work_out) : null) || expected?.out || '18:00')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
@@ -2270,38 +2154,73 @@ function RegularisationList({ requests, onWithdraw, busyId }: {
 }) {
   const STY: Record<string,[string,string]> = { PENDING:[C.warningTint,C.warning], APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical], CANCELLED:[C.sunken,C.faint] }
   const LABEL: Record<string,string> = { PENDING:'PENDING', APPROVED:'APPROVED', REJECTED:'DECLINED', CANCELLED:'WITHDRAWN' }
+  const hm = (t: string | null | undefined) => (t ? String(t).slice(0, 5) : '—')
+  const short = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short' })
+
+  // One card per SUBMISSION, not per day: a week picked in the attendance list
+  // is one request to the approver and is approved as one, so it reads as one
+  // here too. A group whose days ended differently is split by status.
+  const groups = useMemo(() => {
+    const m = new Map<string, RegularisationRequest[]>()
+    for (const r of requests) {
+      const k = `${r.request_group || r.id}:${r.status}`
+      m.set(k, [...(m.get(k) || []), r])
+    }
+    return [...m.values()].map(rs => rs.sort((a, b) => a.attendance_date.localeCompare(b.attendance_date)))
+      .sort((a, b) => String(b[0].created_at).localeCompare(String(a[0].created_at)))
+  }, [requests])
+
   return (
     <div style={T.card}>
       <div style={T.section}>My Regularisation Requests</div>
-      {requests.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No regularisation requests yet.</div>}
-      {requests.map(r => { const [bg,c] = STY[r.status] || [C.brandTint,C.brandDeep]; return (
-        <div key={r.id} style={{ padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
-            <div style={{ fontSize:13, fontWeight:600 }}>{fmt(r.attendance_date)}</div>
-            <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{LABEL[r.status] || r.status}</span>
-          </div>
-          <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>
-          <div style={{ fontSize:11, color:C.inkSoft, marginTop:1 }}>Requested: {r.requested_in} → {r.requested_out}</div>
-          {r.reason && <div style={{ fontSize:12, color:C.inkSoft, marginTop:3 }}>{r.reason}</div>}
-          {r.status === 'PENDING' && (
-            <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:3 }}>
-              {r.waiting_on ? <>Waiting on <b>{r.waiting_on.name}</b> · {r.waiting_on.role}</> : 'No approver is set for you — HR has been shown this request.'}
+      {groups.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No regularisation requests yet.</div>}
+      {groups.map(rs => {
+        const r = rs[0]
+        const [bg,c] = STY[r.status] || [C.brandTint,C.brandDeep]
+        const sameTimes = new Set(rs.map(x => `${hm(x.requested_in)}-${hm(x.requested_out)}`)).size === 1
+        const withdrawId = r.request_group || r.id
+        return (
+          <div key={`${withdrawId}:${r.status}`} style={{ padding:'10px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+              <div style={{ fontSize:13, fontWeight:600 }}>
+                {rs.length === 1 ? fmt(r.attendance_date) : `${rs.length} days · ${short(rs[0].attendance_date)} – ${short(rs[rs.length - 1].attendance_date)}`}
+              </div>
+              <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{LABEL[r.status] || r.status}</span>
             </div>
-          )}
-          {(r.status === 'APPROVED' || r.status === 'REJECTED') && (
-            <div style={{ fontSize:11.5, color: r.status === 'APPROVED' ? C.positive : C.critical, marginTop:3 }}>
-              {r.status === 'APPROVED' ? 'Approved — your attendance shows the corrected times' : 'Declined'}{r.decided_by ? ` by ${r.decided_by}` : ''}{r.reviewed_at ? ` on ${fmt(r.reviewed_at)}` : ''}{r.review_remark ? `: “${r.review_remark}”` : ''}
-            </div>
-          )}
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:3 }}>
-            <span style={{ fontSize:10, color:C.faint }}>Submitted {fmtDT(r.created_at)}</span>
-            {r.status === 'PENDING' && (
-              <button onClick={() => onWithdraw(r.id)} disabled={busyId === r.id}
-                style={{ ...T.btnO, marginLeft:'auto', padding:'3px 10px', fontSize:11 }}>{busyId === r.id ? 'Withdrawing…' : 'Withdraw'}</button>
+            {rs.length > 1 && (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginTop:5 }}>
+                {rs.map(x => (
+                  <span key={x.id} style={{ fontSize:10.5, padding:'2px 8px', borderRadius:99, background:C.sunken, color:C.inkSoft, border:`1px solid ${C.line}` }}>
+                    {short(x.attendance_date)}{sameTimes ? '' : ` · ${hm(x.requested_in)}–${hm(x.requested_out)}`}
+                  </span>
+                ))}
+              </div>
             )}
+            {rs.length === 1 && <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>}
+            {sameTimes && <div style={{ fontSize:11, color:C.inkSoft, marginTop:3 }}>Requested: {hm(r.requested_in)} → {hm(r.requested_out)}</div>}
+            {r.reason && <div style={{ fontSize:12, color:C.inkSoft, marginTop:3 }}>{r.reason}</div>}
+            {r.status === 'PENDING' && (
+              <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:3 }}>
+                {r.waiting_on ? <>Waiting on <b>{r.waiting_on.name}</b> · {r.waiting_on.role}</> : 'No approver is set for you — HR has been shown this request.'}
+              </div>
+            )}
+            {(r.status === 'APPROVED' || r.status === 'REJECTED') && (
+              <div style={{ fontSize:11.5, color: r.status === 'APPROVED' ? C.positive : C.critical, marginTop:3 }}>
+                {r.status === 'APPROVED' ? 'Approved — your attendance shows the corrected times' : 'Declined'}{r.decided_by ? ` by ${r.decided_by}` : ''}{r.reviewed_at ? ` on ${fmt(r.reviewed_at)}` : ''}{r.review_remark ? `: “${r.review_remark}”` : ''}
+              </div>
+            )}
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:3 }}>
+              <span style={{ fontSize:10, color:C.faint }}>Submitted {fmtDT(r.created_at)}</span>
+              {r.status === 'PENDING' && (
+                <button onClick={() => onWithdraw(withdrawId)} disabled={busyId === withdrawId}
+                  style={{ ...T.btnO, marginLeft:'auto', padding:'3px 10px', fontSize:11, height:28 }}>
+                  {busyId === withdrawId ? 'Withdrawing…' : rs.length > 1 ? `Withdraw all ${rs.length}` : 'Withdraw'}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )})}
+        )
+      })}
     </div>
   )
 }
@@ -2315,8 +2234,6 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const [regs, setRegs] = useState<RegularisationRequest[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [raiseDate, setRaiseDate] = useState<string | null>(null)
-  const [manualRaise, setManualRaise] = useState(false)
-  const [bulkRaise, setBulkRaise] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [loading, setLoading] = useState(true)
   // Local date, not UTC: before 05:30 IST the UTC date is still yesterday.
@@ -2405,23 +2322,13 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
       </div>
 
       {/* (E) regularisation form */}
-      {raiseDate && <RegularisationForm emp={emp} date={raiseDate} rec={raiseRec} onDone={() => { loadRegs(); loadMonth(); setRaiseDate(null) }} onCancel={() => setRaiseDate(null)} />}
+      {raiseDate && <RegularisationForm emp={emp} date={raiseDate} rec={raiseRec}
+        expected={{ in: monthData?.dayMap.get(raiseDate)?.expected_in ?? null, out: monthData?.dayMap.get(raiseDate)?.expected_out ?? null }}
+        onDone={() => { loadRegs(); loadMonth(); setRaiseDate(null) }} onCancel={() => setRaiseDate(null)} />}
 
-      {/* (F) raise regularisation + list */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: ((manualRaise || bulkRaise) && !raiseDate) ? 0 : undefined }}>
-        <div>
-          <div style={{ fontSize:13, fontWeight:600 }}>Attendance Regularisation</div>
-          <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → your reporting manager approves it → your attendance is updated. Use a range when several days share the same reason.</div>
-        </div>
-        {!manualRaise && !bulkRaise && !raiseDate && (
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-            <button onClick={() => setManualRaise(true)} style={T.btnO}>+ Single day</button>
-            <button onClick={() => setBulkRaise(true)} style={T.btnP}>Date range</button>
-          </div>
-        )}
-      </div>
-      {manualRaise && !raiseDate && <RegularisationForm emp={emp} date={todayStr} rec={null} editable onDone={() => { loadRegs(); loadMonth(); setManualRaise(false) }} onCancel={() => setManualRaise(false)} />}
-      {bulkRaise && !raiseDate && <BulkRegularisationForm emp={emp} onDone={() => { loadRegs(); loadMonth(); setBulkRaise(false) }} onCancel={() => setBulkRaise(false)} />}
+      {/* (F) the day-by-day list — pick any days and regularise them together */}
+      <AttendanceLog empId={emp.id} isMobile={isMobile} onFiled={() => { loadRegs(); loadMonth() }} />
+
       <RegularisationList requests={regs} onWithdraw={withdraw} busyId={withdrawing} />
     </div>
   )
