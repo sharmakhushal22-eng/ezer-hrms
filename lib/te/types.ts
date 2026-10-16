@@ -160,6 +160,9 @@ export interface TeChainRow { step_no: number; stage: ClaimStage; level_id: Uuid
 export interface TeTripPoint { place: Uuid; pt: string; what: string; arrive: IsoDate | ''; leave: IsoDate | ''; ret?: true }
 export interface TeTripSegment { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }
 export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; found?: boolean }
+/** One hotel the employee would accept. Stored whole on the trip; the link is
+ *  rendered as a link out and never fetched. */
+export interface TeStayOption { name: string; location: string; url: string; price?: number }
 export interface TeEstimate { travel: number; desk: number; hotel: number; meals: number; conv: number }
 
 export interface TeTrip {
@@ -192,6 +195,12 @@ export interface TeTrip {
   selfEstimate: number
   plannedKm: number
   stayBy: 'self' | 'desk'
+  /** Did the employee ask for a stay when planning, and for food. null on a
+   *  trip planned before the planner asked, which is not the same as a no. */
+  stayWanted: boolean | null
+  foodWanted: boolean | null
+  /** The hotels they said they would accept, in the order they named them. */
+  stayOptions: TeStayOption[]
   advance: number
   pfReason: string
   pfNote: string
@@ -648,6 +657,9 @@ export interface TripDraft {
   /** Co-travellers by employee code. */
   people?: { id: string; name?: string }[]
   stayBy?: 'self' | 'desk'
+  stayWanted?: boolean | null
+  foodWanted?: boolean | null
+  stayOptions?: TeStayOption[]
   advance?: number
   pfReason?: string
   pfNote?: string

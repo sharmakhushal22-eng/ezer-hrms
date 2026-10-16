@@ -226,8 +226,10 @@
 .te .meter .t{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}
 .te .meter .bar{height:8px;border-radius:99px;background:var(--ez-brand-tint);overflow:hidden}
 .te .meter .bar i{display:block;height:100%;border-radius:99px;background:var(--ez-brand)}
-.te .meter.over .bar i{background:var(--ez-warning)}
-.te .meter.over .bar{background:var(--ez-warning-tint)}
+.te .meter.close .bar i{background:var(--ez-warning)}
+.te .meter.close .bar{background:var(--ez-warning-tint)}
+.te .meter.over .bar i{background:var(--ez-critical)}
+.te .meter.over .bar{background:var(--ez-critical-tint)}
 .te .trk{display:flex;gap:0;align-items:flex-start;overflow-x:auto;padding-bottom:2px}
 .te .trk .st{flex:1 1 0;min-width:86px;display:flex;flex-direction:column;gap:6px;position:relative;font-size:12px;color:var(--ez-muted)}
 .te .trk .st:before{content:"";height:3px;border-radius:3px;background:var(--ez-line);margin-right:4px}

@@ -17,7 +17,8 @@
 // what a line is called, which step owns an error. `syncDraft` repairs the shape
 // after every edit, which is the one job the screen cannot hand to the server —
 // the server never sees a half-edited route.
-import type { IsoDate, TeMode, TripDraft, TripIssue, TripOrigin, TripPattern, TripScope, Uuid } from './types.ts'
+import type { IsoDate, TeMode, TeStayOption, TripDraft, TripIssue, TripOrigin, TripPattern, TripScope, Uuid } from './types.ts'
+import { emptyStayOption, usableStayOptions, type StayOption } from './trip-stay.ts'
 
 /** One place on the route. */
 export interface DraftPoint {
@@ -73,6 +74,12 @@ export interface PlannerDraft {
   segs: DraftSeg[]
   retSame: boolean
   stayBy: 'self' | 'desk'
+  /** "Do you need a stay?" — undefined until the planner is answered, so an
+   *  untouched draft can be told from a deliberate no. */
+  stayWanted?: boolean
+  foodWanted?: boolean
+  /** Always three rows while planning, however many are filled in. */
+  stayOptions: StayOption[]
   advance: number | ''
   pfReason: string
   pfNote: string
@@ -161,6 +168,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
     ],
     segs: [newSeg(mode, veh), newSeg(mode, veh)],
     retSame: true, stayBy: 'self', advance: '', pfReason: '', pfNote: '',
+    stayOptions: [emptyStayOption(), emptyStayOption(), emptyStayOption()],
   }, c)
 }
 
@@ -181,6 +189,7 @@ export function fromTrip(trip: {
   points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; ret?: true }[]
   segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
   pax: number; people: { id: string; name?: string }[]; stayBy: 'self' | 'desk'; advance: number
+  stayWanted?: boolean | null; foodWanted?: boolean | null; stayOptions?: TeStayOption[]
   pfReason: string; pfNote: string; status: string
 }, c: DraftContext): PlannerDraft {
   const sentBack = trip.status === 'SENT_BACK'
@@ -218,6 +227,12 @@ export function fromTrip(trip: {
     // is read back off the route: the same place means it still does.
     retSame: isReturnSameAsStart(trip.points ?? []),
     stayBy: trip.stayBy ?? 'self',
+    stayWanted: trip.stayWanted ?? undefined,
+    foodWanted: trip.foodWanted ?? undefined,
+    // Always three rows on screen, however many were saved.
+    stayOptions: [0, 1, 2].map(i => trip.stayOptions?.[i]
+      ? { ...trip.stayOptions[i], price: trip.stayOptions[i].price ?? '' }
+      : emptyStayOption()),
     advance: trip.advance || '',
     pfReason: trip.pfReason ?? '',
     pfNote: trip.pfNote ?? '',
@@ -443,9 +458,13 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
     segs: d.segs.map(s => ({ mode: s.mode, bookedBy: s.bookedBy, vehicleId: s.vehicleId || null, xfer: { ...s.xfer } })),
     pax: Number(d.pax) || 1,
     people,
-    // A local trip is one day out of the office: nobody books a hotel for it and
-    // there is nothing to advance against.
-    stayBy: d.scope === 'local' ? 'self' : d.stayBy,
+    // A local trip used to be defined as one day out of the office with nowhere
+    // to sleep, so it was forced to book its own (non-existent) stay. It can ask
+    // for one now, and if it does the desk can book it like any other.
+    stayBy: d.scope === 'local' && !d.stayWanted ? 'self' : d.stayBy,
+    ...(d.stayWanted === undefined ? {} : { stayWanted: d.stayWanted }),
+    ...(d.foodWanted === undefined ? {} : { foodWanted: d.foodWanted }),
+    stayOptions: d.stayWanted ? usableStayOptions(d.stayOptions) : [],
     advance: d.scope === 'local' ? 0 : Number(d.advance) || 0,
     pfReason: d.pfReason || '',
     pfNote: d.pfNote || '',

@@ -14,6 +14,7 @@ import { te } from '@/lib/te/client'
 import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
+import { foodBalance, foodBalanceText, foodBudget, foodSpent } from '@/lib/te/trip-stay'
 import { day, errorText, plural, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
@@ -124,6 +125,11 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
   // detail.expenses is every line on the trip, everyone's, so it has to be
   // narrowed to mine before anything is counted or added up.
   const myLines = canBill ? detail.expenses.filter(x => x.emp === me && x.status === 'UNCLAIMED') : []
+  // The food budget and what is left of it. Only when food was actually asked
+  // for: a trip where nobody expects to eat on expenses should not grow a bar.
+  const food = canBill && t.foodWanted
+    ? foodBalance(foodBudget(t), foodSpent(detail.expenses, t.id, me))
+    : null
   // MY claims on this trip, not everybody's. te_trip_detail returns every
   // claim against the trip, and now that two people can each claim one, "a
   // claim exists" stopped meaning "my claim exists". Reading it unscoped would
@@ -406,6 +412,59 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
                 See all {myLines.length}<TeIcon name="go" size="sm" />
               </button>
             ) : null}
+          </div>
+
+          {/* ── the food budget, coming down as the bills arrive ──
+              The planner could not ask for a food plan, because nobody knows
+              in advance where they will eat. What it did instead was show the
+              budget the company had already set. This is the other half of
+              that promise: every food bill saved against the trip comes off
+              it, so the number means something while you are still travelling.
+              The budget is the trip's own meals estimate — the per-day food
+              limit for the grade and city, summed over the days — and not a
+              second figure kept anywhere. */}
+          {food ? (
+            <div className={food.tone === 'ok' ? 'meter' : `meter ${food.tone}`}>
+              <div className="t">
+                <span>Food budget</span>
+                <span className="num">{rs(food.spent)} of {rs(food.budget)}</span>
+              </div>
+              <div className="bar"><i style={{ width: `${food.pct}%` }} /></div>
+              <small className="muted">{foodBalanceText(food, rs)}</small>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* ── the hotels asked for while planning ──
+          Named before the trip and still worth showing: the desk books one of
+          them, and until it does this is the only record of what was asked
+          for. The links go out to wherever they were found; TeFileLink tells
+          an http address apart from a file in the private bucket. */}
+      {(t.stayOptions ?? []).length ? (
+        <div className="card">
+          <div className="ch">
+            <h3>Hotels you asked for</h3>
+            <span className="chip plain">{plural(t.stayOptions.length, 'option')}</span>
+          </div>
+          <p className="small muted">
+            {t.stayBy === 'desk'
+              ? 'The Travel Desk picks one of these and books it.'
+              : 'You book one of these yourself and claim it back.'}
+          </p>
+          <div className="stack sm">
+            {t.stayOptions.map((o, i) => (
+              <div key={i} className="row tight">
+                <span className="ico-b sm"><TeIcon name="home" size="sm" /></span>
+                <div className="grow">
+                  <b className="small">{i + 1}. {o.name}</b>
+                  <div className="small muted">
+                    {[o.location, o.price ? `about ${rs(o.price)} a night` : ''].filter(Boolean).join(' · ') || 'No other details given'}
+                  </div>
+                </div>
+                {o.url ? <TeFileLink path={o.url} name="Open" small /> : null}
+              </div>
+            ))}
           </div>
         </div>
       ) : null}

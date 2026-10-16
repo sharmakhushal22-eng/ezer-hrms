@@ -10,8 +10,10 @@ import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
 import { blockingOn, errorFor, type PlannerDraft } from '@/lib/te/trip-draft'
 import { day, rs } from '@/lib/te/format'
 import type { MapPlace } from '@/lib/te/trip-map'
+import { nightsBetween } from '@/lib/te/trip-stay'
 import TeIcon from '../TeIcon'
 import TeTripMap from './TeTripMap'
+import TePlanStay from './TePlanStay'
 
 const MODE_ICON: Record<string, string> = {
   own: 'car', company: 'car', cab: 'car', auto: 'car', rental: 'car',
@@ -115,27 +117,45 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
           </>
         ) : null}
 
-        {planning && !local ? (
+        {/* ── the stay and the food budget ──
+            Asked on every kind of trip, local included. A local trip used to
+            be defined as one day out with nowhere to sleep; a late finish near
+            the client says otherwise, and the refusal has been lifted. */}
+        {planning ? (
+          <TePlanStay
+            draft={draft}
+            foodBudget={preview?.estimate.meals ?? 0}
+            nights={nightsBetween(preview?.start ?? null, preview?.end ?? null)}
+            edit={edit}
+          />
+        ) : null}
+
+        {planning ? (
           <>
             <div className="form">
-              <label className="fld">
-                <span>Hotel booked by</span>
-                <select value={draft.stayBy} onChange={e => edit({ stayBy: e.target.value === 'desk' ? 'desk' : 'self' })}>
-                  <option value="self">Me, I claim it later</option>
-                  <option value="desk">Travel Desk, company pays</option>
-                </select>
-              </label>
-              <label className="fld">
-                <span>Advance needed (₹)</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={500}
-                  value={draft.advance}
-                  onChange={e => edit({ advance: e.target.value === '' ? '' : Number(e.target.value) })}
-                />
-                <small>Leave empty if you do not need one.</small>
-              </label>
+              {/* Who books it only matters once there is something to book. */}
+              {draft.stayWanted ? (
+                <label className="fld">
+                  <span>Hotel booked by</span>
+                  <select value={draft.stayBy} onChange={e => edit({ stayBy: e.target.value === 'desk' ? 'desk' : 'self' })}>
+                    <option value="self">Me, I claim it later</option>
+                    <option value="desk">Travel Desk, company pays</option>
+                  </select>
+                </label>
+              ) : null}
+              {!local ? (
+                <label className="fld">
+                  <span>Advance needed (₹)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={500}
+                    value={draft.advance}
+                    onChange={e => edit({ advance: e.target.value === '' ? '' : Number(e.target.value) })}
+                  />
+                  <small>Leave empty if you do not need one.</small>
+                </label>
+              ) : null}
             </div>
             {err('adv') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('adv')}</div> : null}
           </>
