@@ -87,7 +87,7 @@ export async function autoApproveConfidentialOffer(sb: SupabaseClient, neg: any)
     p.id,
     `Confidential offer ready to send — ${cand.full_name}`,
     `${cand.full_name}${role ? ` (${role})` : ''}${mrf.mrf_number ? ` · ${mrf.mrf_number}` : ''} accepted the salary break-up of ${pkg}. The offer is self-approved (confidential hiring) and is on Send Offers — verify the offer file, generate the letter and send it.`,
-    '/ess-portal?module=recruitment&tab=sendoffer',
+    '/ess/recruitment/sendoffer',
     'APPROVAL',
   ).catch(() => null)))
   return { requestId, notified: audience.length }

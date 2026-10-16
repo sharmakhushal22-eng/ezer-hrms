@@ -296,7 +296,7 @@ function NoAccess({ module, grant }: { module: Module; grant: Grant }) {
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
           <Link href="/dashboard" style={{ padding: '8px 16px', borderRadius: 7, background: '#7C3AED', color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Dashboard home</Link>
-          <Link href="/ess-portal" style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #DDD6FE', background: '#fff', color: '#6D28D9', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>My ESS portal</Link>
+          <Link href="/ess" style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #DDD6FE', background: '#fff', color: '#6D28D9', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>My ESS portal</Link>
         </div>
       </div>
     </div>
@@ -322,7 +322,7 @@ function SidebarFooter({ grant, open }: { grant: Grant; open: boolean }) {
           </div>
         )}
       </div>
-      <Link href="/ess-portal" className="ez-nav" style={{ textDecoration: 'none', width: '100%' }}>
+      <Link href="/ess" className="ez-nav" style={{ textDecoration: 'none', width: '100%' }}>
         <div style={{ height: 30, borderRadius: R.md, display: 'flex', alignItems: 'center', gap: 8, padding: open ? '0 10px' : 0, justifyContent: open ? 'flex-start' : 'center' }}>
           <span style={{ fontSize: 13, width: 20, textAlign: 'center', flexShrink: 0, color: C.railMuted }}>↩</span>
           {open && <span style={{ fontSize: 11, color: C.railMuted, whiteSpace: 'nowrap' }}>Back to my ESS</span>}
@@ -346,7 +346,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // token is not thrown out because of that; they stay, unenforced.
     if (!grant.resolved) return;
     if (!grant.employeeId && !grant.legacy) { window.location.href = '/'; return; }
-    if (!hasAdminAccess(grant)) { window.location.href = '/ess-portal'; }
+    if (!hasAdminAccess(grant)) { window.location.replace('/ess'); }
   }, [loading, grant]);
 
   // Which sections are folded open. Empty means "everything open", which is

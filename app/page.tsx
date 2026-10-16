@@ -83,7 +83,7 @@ export default function LoginPage() {
           employee_id: emp.id, name: emp.full_name, email: addr, token: null,
         }))
       } catch { /* private mode — the portal will ask them to sign in again */ }
-      window.location.href = '/ess-portal'
+      window.location.replace('/ess')
       return
     }
     window.location.href = '/dashboard'
