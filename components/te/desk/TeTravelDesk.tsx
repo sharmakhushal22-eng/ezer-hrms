@@ -16,12 +16,13 @@
 // employee called an SUV and the RC shows as a hatchback is paid as a
 // hatchback from here on. The screen says what the rate becomes.
 import { useCallback, useEffect, useState } from 'react'
-import { te, type DeskBooked, type DeskToBook, type DeskVehicle } from '@/lib/te/client'
+import { te, type DeskBooked, type DeskStay, type DeskToBook, type DeskVehicle } from '@/lib/te/client'
 import { ratePerKm } from '@/lib/te/vehicle'
 import { errorText, day, rs } from '@/lib/te/format'
 import type { TeVehicleType } from '@/lib/te/types'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
+import TeStayChoice from './TeStayChoice'
 
 export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   /** cfg.vehicles — the types a vehicle can be, and what each pays. */
@@ -34,6 +35,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [why, setWhy] = useState('')
   const [vehicles, setVehicles] = useState<DeskVehicle[]>([])
+  const [stays, setStays] = useState<DeskStay[]>([])
   const [error, setError] = useState('')
   const [booking, setBooking] = useState<DeskToBook | null>(null)
   const [form, setForm] = useState({ vendor: '', reference: '', amount: '' })
@@ -45,7 +47,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   useEffect(() => {
     let current = true
     te.desk.list()
-      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setError('') } })
+      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setError('') } })
       .catch(e => { if (current) { setToBook([]); setError(errorText(e)) } })
     return () => { current = false }
   }, [tick])
@@ -113,11 +115,15 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
       <div className="ph">
         <div>
           <h1>Travel Desk</h1>
-          <p>Tickets and hotels the company books, and the vehicles waiting to be checked.</p>
+          <p>Hotels to choose between, tickets and stays the company books, and the vehicles waiting to be checked.</p>
         </div>
       </div>
 
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
+
+      {/* Choosing comes before booking, because it is what produces something
+          to book. A trip sitting here has somebody waiting on an answer. */}
+      <TeStayChoice stays={stays} onDone={message => { onToast(message); reload() }} />
 
       <div className="card pad0">
         <div className="day"><span>To book</span><span>{bookings.length}</span></div>

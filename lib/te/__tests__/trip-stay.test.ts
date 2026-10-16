@@ -3,8 +3,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   badUrl, emptyStayOption, foodBalance, foodBalanceText, foodBudget, foodSpent,
-  nightsBetween, platformOf, stayOptionFilled, stayOptionsNote, usableStayOptions,
-  STAY_OPTIONS_WANTED,
+  nightsBetween, platformOf, rejectReady, stayDecisionText, stayOptionFilled, stayOptionsNote,
+  stayWaiting, usableStayOptions, STAY_OPTIONS_WANTED,
 } from '../trip-stay.ts'
 import type { TeExpense, Uuid } from '../types.ts'
 
@@ -126,4 +126,47 @@ test('nightsBetween', () => {
   assert.equal(nightsBetween('2026-10-20', '2026-10-20'), 0)
   assert.equal(nightsBetween('2026-10-22', '2026-10-20'), 0, 'backwards is not negative nights')
   assert.equal(nightsBetween(null, '2026-10-22'), 0)
+})
+
+// ── what the desk decided ───────────────────────────────────────────────────
+
+test('stayWaiting: only NONE is still waiting, and a missing decision counts as waiting', () => {
+  assert.equal(stayWaiting({ status: 'NONE' }), true)
+  assert.equal(stayWaiting(null), true, 'a trip saved before the column existed is waiting')
+  assert.equal(stayWaiting(undefined), true)
+  assert.equal(stayWaiting({ status: 'CHOSEN' }), false)
+  assert.equal(stayWaiting({ status: 'REJECTED' }), false)
+})
+
+test('stayDecisionText says nothing while nobody has decided', () => {
+  assert.equal(stayDecisionText(null), null)
+  assert.equal(stayDecisionText({ status: 'NONE', chosen: null, name: '', remark: '' }), null)
+})
+
+test('stayDecisionText: chosen names the hotel and who picked it', () => {
+  const d = stayDecisionText({ status: 'CHOSEN', chosen: 1, name: 'Lemon Tree', remark: 'Closest to the client.', byName: 'Asha Rao' })
+  assert.equal(d?.tone, 'ok')
+  assert.match(d!.text, /picked Lemon Tree/)
+  assert.match(d!.text, /Asha Rao/)
+  assert.match(d!.text, /Closest to the client\./)
+})
+
+test('stayDecisionText: a refusal leads with the reason', () => {
+  const d = stayDecisionText({ status: 'REJECTED', chosen: null, name: '', remark: 'All three are over the limit.', byName: 'Asha Rao' })
+  assert.equal(d?.tone, 'bad')
+  assert.match(d!.text, /turned these down/)
+  assert.match(d!.text, /All three are over the limit\./)
+})
+
+test('stayDecisionText: a refusal with no reason still reads as a sentence', () => {
+  // The SQL will not allow this, but a row written before that rule, or by
+  // hand, must not render as a dangling fragment.
+  const d = stayDecisionText({ status: 'REJECTED', chosen: null, name: '', remark: '' })
+  assert.match(d!.text, /No reason was given\./)
+})
+
+test('rejectReady: a refusal needs a reason', () => {
+  assert.equal(rejectReady(''), false)
+  assert.equal(rejectReady('   '), false)
+  assert.equal(rejectReady('Too far from the office'), true)
 })

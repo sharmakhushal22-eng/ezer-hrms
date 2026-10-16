@@ -181,3 +181,46 @@ export function nightsBetween(start: IsoDate | null, end: IsoDate | null): numbe
   const n = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 864e5)
   return n > 0 ? n : 0
 }
+
+// ── what the desk decided ───────────────────────────────────────────────────
+
+/** The shape te_trip_json returns under `stay`. */
+export interface StayDecision {
+  status: 'NONE' | 'CHOSEN' | 'REJECTED'
+  chosen: number | null
+  name: string
+  remark: string
+  byName?: string | null
+  at?: string | null
+}
+
+/** Still waiting on the desk. The desk's work list is exactly this. */
+export function stayWaiting(stay: Pick<StayDecision, 'status'> | null | undefined): boolean {
+  return (stay?.status ?? 'NONE') === 'NONE'
+}
+
+/**
+ * The decision in the traveller's words, for the trip screen.
+ *
+ * Null while nobody has decided: a line saying "no decision yet" on a trip
+ * nobody has looked at is noise, and the card it sits in already says the
+ * hotels were asked for.
+ */
+export function stayDecisionText(stay: StayDecision | null | undefined): { text: string; tone: 'ok' | 'bad' } | null {
+  if (!stay || stay.status === 'NONE') return null
+  const who = stay.byName ? ` — ${stay.byName}` : ''
+  if (stay.status === 'CHOSEN') {
+    return { tone: 'ok', text: `The Travel Desk picked ${stay.name || 'one of these'}${who}.${stay.remark ? ` “${stay.remark}”` : ''}` }
+  }
+  return { tone: 'bad', text: `The Travel Desk turned these down${who}. ${stay.remark || 'No reason was given.'}` }
+}
+
+/**
+ * Whether a refusal can be sent. A reason is required, because the employee
+ * is being asked to go and find other hotels and "no" alone tells them
+ * nothing about what to look for instead. The SQL refuses it too; this is
+ * only so the button can say why it is not ready.
+ */
+export function rejectReady(remark: string): boolean {
+  return remark.trim().length > 0
+}

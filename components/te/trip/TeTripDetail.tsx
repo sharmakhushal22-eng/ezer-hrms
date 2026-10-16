@@ -14,7 +14,7 @@ import { te } from '@/lib/te/client'
 import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
-import { foodBalance, foodBalanceText, foodBudget, foodSpent } from '@/lib/te/trip-stay'
+import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
 import { day, errorText, plural, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
@@ -122,6 +122,8 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
   // "With Asha Rao and 2 others" — who else is on it, whoever is reading.
   const withWho = withText(t, me)
   const canBill = canBillTrip(t, me)
+  // What the Travel Desk answered about the hotels, if it has yet.
+  const decided = stayDecisionText(t.stay)
   // detail.expenses is every line on the trip, everyone's, so it has to be
   // narrowed to mine before anything is counted or added up.
   const myLines = canBill ? detail.expenses.filter(x => x.emp === me && x.status === 'UNCLAIMED') : []
@@ -447,17 +449,29 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
             <h3>Hotels you asked for</h3>
             <span className="chip plain">{plural(t.stayOptions.length, 'option')}</span>
           </div>
-          <p className="small muted">
-            {t.stayBy === 'desk'
-              ? 'The Travel Desk picks one of these and books it.'
-              : 'You book one of these yourself and claim it back.'}
-          </p>
+          {/* What the desk said, once it has said anything. Until then the
+              line below explains what is going to happen to these. */}
+          {decided ? (
+            <div className={decided.tone === 'ok' ? 'flag ok' : 'flag warn'}>
+              <TeIcon name={decided.tone === 'ok' ? 'check' : 'alert'} />
+              <div className="tx"><p>{decided.text}</p></div>
+            </div>
+          ) : (
+            <p className="small muted">
+              {t.stayBy === 'desk'
+                ? 'The Travel Desk picks one of these and books it.'
+                : 'You book one of these yourself and claim it back.'}
+            </p>
+          )}
           <div className="stack sm">
             {t.stayOptions.map((o, i) => (
-              <div key={i} className="row tight">
+              <div key={i} className={t.stay?.status === 'CHOSEN' && t.stay.chosen === i ? 'row tight picked' : 'row tight'}>
                 <span className="ico-b sm"><TeIcon name="home" size="sm" /></span>
                 <div className="grow">
-                  <b className="small">{i + 1}. {o.name}</b>
+                  <b className="small">
+                    {i + 1}. {o.name}
+                    {t.stay?.status === 'CHOSEN' && t.stay.chosen === i ? <span className="chip t-pos">Chosen</span> : null}
+                  </b>
                   <div className="small muted">
                     {[o.location, o.price ? `about ${rs(o.price)} a night` : ''].filter(Boolean).join(' · ') || 'No other details given'}
                   </div>

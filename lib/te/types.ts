@@ -163,6 +163,20 @@ export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; fou
 /** One hotel the employee would accept. Stored whole on the trip; the link is
  *  rendered as a link out and never fetched. */
 export interface TeStayOption { name: string; location: string; url: string; price?: number }
+/** What the Travel Desk decided about those hotels. 'NONE' means nobody has
+ *  looked yet, which is what the desk's own work list is built from. */
+export interface TeStayDecision {
+  status: 'NONE' | 'CHOSEN' | 'REJECTED'
+  /** Index into stayOptions, for CHOSEN. Null otherwise. */
+  chosen: number | null
+  /** The hotel picked, as text at the time it was picked — the index alone
+   *  would go stale if the employee reordered the options afterwards. */
+  name: string
+  remark: string
+  by: Uuid | null
+  byName: string | null
+  at: IsoTime | null
+}
 export interface TeEstimate { travel: number; desk: number; hotel: number; meals: number; conv: number }
 
 export interface TeTrip {
@@ -201,6 +215,8 @@ export interface TeTrip {
   foodWanted: boolean | null
   /** The hotels they said they would accept, in the order they named them. */
   stayOptions: TeStayOption[]
+  /** The desk's answer to those hotels. */
+  stay: TeStayDecision
   advance: number
   pfReason: string
   pfNote: string
