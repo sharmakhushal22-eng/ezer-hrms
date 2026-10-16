@@ -266,6 +266,10 @@
 .te .row.picked{background:var(--ez-positive-tint);border-radius:var(--te-r-sm);padding:6px 8px;margin:-6px -8px}
 /* the two "open this in a real map" buttons under the schematic panel */
 .te .maplinks{display:flex;flex-direction:column;gap:5px;margin-top:9px}
+/* a real Google map, where there is a key for one. The height comes from the
+   component so a caller can ask for a taller one; the rest is the frame the
+   schematic panels already use, so the two look like the same thing. */
+.te .gmap{width:100%;border-radius:var(--te-r-sm);overflow:hidden;border:1px solid var(--ez-line);background:var(--ez-sunken)}
 .te .pickrow input{width:16px;height:16px;accent-color:var(--ez-brand);flex:0 0 auto}
 .te .li[aria-current="true"]{background:var(--ez-brand-tint);box-shadow:inset 3px 0 0 var(--ez-brand)}
 .te .li .ico{width:36px;height:36px;border-radius:10px;background:var(--ez-sunken);display:grid;place-items:center;color:var(--ez-ink-soft);flex:none}
