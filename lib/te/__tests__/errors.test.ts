@@ -61,7 +61,7 @@ describe('a refusal from the service layer (TeError)', () => {
       const m = mapTeError(e)
       assert.equal(m.status, 409)
       assert.equal(m.body.code, 'TE_GPS')
-      assert.equal(m.body.error, 'Your location is needed to end the leg.')
+      assert.equal(m.body.error, 'Your location is needed to end the journey.')
       return true
     })
     assert.equal(called, false)

@@ -120,7 +120,7 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
   return (
     <div className="ezt">
       <div className="page">
-        <HeroPanel data={data} prefs={prefs} onPrefs={(p: Partial<Prefs>) => update(p)} onSearch={onSearch} nav={nav}>
+        <HeroPanel data={data} prefs={prefs} onPrefs={(p: Partial<Prefs>) => update(p)} onSearch={onSearch}>
           <PunchDial data={data} prefs={prefs} onToast={show} confettiRef={confettiRef}
             onPunched={(kind, at) => { setLiveIn(kind === 'in' ? at : null);
               // First IN of the day stays the day's start; a second IN after an OUT

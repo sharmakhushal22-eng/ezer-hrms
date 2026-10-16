@@ -176,13 +176,13 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
     <div className="page">
       <div className="row">
         <button type="button" className="btn sm" onClick={onBack}><TeIcon name="back" size="sm" />Trip</button>
-        <span className="mono muted">Leg {leg.n}</span>
+        <span className="mono muted">Journey {leg.n}</span>
       </div>
 
       <div className={running ? 'card live' : 'card'}>
         <div className="row sp top">
           <div>
-            <div className="eyebrow">Leg {leg.n}</div>
+            <div className="eyebrow">Journey {leg.n}</div>
             <h1 className="tname">{placeName(leg.from)} → {placeName(leg.to)}</h1>
             <p className="muted">{snap.cfg.modes.find(m => m.id === leg.mode)?.name ?? leg.mode}</p>
           </div>
@@ -208,7 +208,7 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
           <TeIcon name="alert" />
           <div className="tx">
             <b>Location is switched off for this site</b>
-            <p>Nothing is being recorded. Turn location on for this site and reload, or end the leg and add it without GPS — your approver sees the reason either way.</p>
+            <p>Nothing is being recorded. Turn location on for this site and reload, or end the journey and add it without GPS — your approver sees the reason either way.</p>
           </div>
         </div>
       ) : null}
@@ -280,10 +280,10 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
                 const r = await te.legEnd(leg.id, fix)
                 writeQueue(leg.id, [], store())
                 onEnded(r.stats)
-                return `Leg ${leg.n} ended. ${r.gps_km} km recorded.`
+                return `Journey ${leg.n} ended. ${r.gps_km} km recorded.`
               })}
             >
-              {busy === 'end' ? 'Ending…' : 'End this leg'}
+              {busy === 'end' ? 'Ending…' : 'End this journey'}
             </button>
           </div>
         )
@@ -296,7 +296,7 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
           disabled={busy === 'continue'}
           onClick={() => run('continue', async () => { await te.legContinue(leg.id); return 'On the way again.' })}
         >
-          <TeIcon name="play" size="sm" />{busy === 'continue' ? 'Starting…' : 'Continue the leg'}
+          <TeIcon name="play" size="sm" />{busy === 'continue' ? 'Starting…' : 'Continue the journey'}
         </button>
       ) : null}
 
@@ -306,8 +306,8 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
           <div className="ch"><h3>{leg.gps === 'checkin' ? 'Check in to start' : 'Ready to start'}</h3></div>
           <p className="small muted">
             {leg.gps === 'checkin'
-              ? 'Your position is recorded at both ends of this leg rather than along the way.'
-              : 'Your position is recorded along the way until you end the leg. Keep this screen open while you travel.'}
+              ? 'Your position is recorded at both ends of this journey rather than along the way.'
+              : 'Your position is recorded along the way until you end the journey. Keep this screen open while you travel.'}
           </p>
           {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
           <button
@@ -319,11 +319,11 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
               // against where the leg was supposed to begin.
               const fix = await here()
               await te.legStart(leg.id, fix)
-              return leg.gps === 'checkin' ? 'Checked in.' : `Leg ${leg.n} started. Keep this screen open.`
+              return leg.gps === 'checkin' ? 'Checked in.' : `Journey ${leg.n} started. Keep this screen open.`
             })}
           >
             <TeIcon name="play" size="sm" />
-            {busy === 'start' ? 'Reading your location…' : leg.gps === 'checkin' ? 'Check in and go' : 'Start this leg'}
+            {busy === 'start' ? 'Reading your location…' : leg.gps === 'checkin' ? 'Check in and go' : 'Start this journey'}
           </button>
         </div>
       ) : null}

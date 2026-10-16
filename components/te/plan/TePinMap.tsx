@@ -12,6 +12,7 @@
 // everything rests on: tapping where the pin is drawn gives back that pin.
 import { useRef } from 'react'
 import { nudgePin, pinToPixel, pixelToPin, zoomPin, type PinView } from '@/lib/te/trip-map'
+import TeGoogleMap, { hasMapKey, useMyLocation } from './TeGoogleMap'
 import TeIcon from '../TeIcon'
 
 const W = 640
@@ -25,6 +26,12 @@ export default function TePinMap({ pin, view, onPin, onView }: {
 }) {
   const ref = useRef<SVGSVGElement | null>(null)
   const at = pin ? pinToPixel(pin, view, W, H) : null
+  // Real tiles when a browser key is configured; the grid below is what there
+  // is without one. Both set the same pin through the same callback, so
+  // everything downstream — the address, the distance, the claim — is
+  // identical either way.
+  const real = hasMapKey()
+  const me = useMyLocation(onPin)
 
   /** A tap anywhere on the panel moves the pin there. */
   function tap(e: React.MouseEvent<SVGSVGElement>) {
@@ -46,7 +53,26 @@ export default function TePinMap({ pin, view, onPin, onView }: {
 
   return (
     <div>
-      <div className="pinmap" title="Tap to move the pin">
+      {real ? (
+        <>
+          <TeGoogleMap pin={pin} onPin={onPin} label="Drag the pin, or tap where the place is." />
+          <div className="row sp small">
+            <span className="muted grow">Drag the pin, or tap the map.</span>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={me.state === 'asking'}
+              onClick={me.ask}
+            >
+              <TeIcon name="target" size="sm" />
+              {me.state === 'asking' ? 'Reading…' : 'Use my location'}
+            </button>
+          </div>
+          {me.message ? <p className="small muted">{me.message}</p> : null}
+        </>
+      ) : null}
+
+      <div className="pinmap" hidden={real} title="Tap to move the pin">
         <svg ref={ref} className="jmap" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Place the pin on the map" onClick={tap}>
           <rect width={W} height={H} fill="var(--ez-sunken)" />
           <path d={grid} stroke="var(--ez-line)" strokeWidth="1" fill="none" opacity=".6" />
@@ -63,7 +89,7 @@ export default function TePinMap({ pin, view, onPin, onView }: {
         </svg>
       </div>
 
-      <div className="row sp small">
+      <div className="row sp small" hidden={real}>
         <span className="muted grow">Tap the map or use the arrows to move the pin.</span>
         <span className="row tight">
           <span className="nudge" role="group" aria-label="Move the pin">

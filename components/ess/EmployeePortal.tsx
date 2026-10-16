@@ -3828,14 +3828,17 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
   }
   useEffect(() => {
     if (typeof window === 'undefined') return
-    // Travel & Expenses v2 notifications are written by the database as
-    // "/ess?tab=claims&ref=<claim id>" (migration 147). Only they carry ref with
-    // tab=claims; that pair opens the T&E page, which reads the claim id itself.
-    // The module is a page of its own (app/ess/travel), so the pair is forwarded
-    // whole — TeHome's claimFromLink() looks for exactly these two params.
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('tab') === 'claims' && params.get('ref') && !params.get('module')) {
-      window.location.replace(`${AWAY.expenses}?tab=claims&ref=${encodeURIComponent(params.get('ref')!)}`); return
+    // Travel & Expenses v2 notifications are written by the DATABASE as
+    // "/ess?tab=claims&ref=<claim id>" (migration 147), and the module is its
+    // own page now. So that one pair is forwarded whole and we leave before
+    // any routing runs — TeHome's claimFromLink() reads both params off the
+    // address it lands on. Every other legacy ?tab= link is parseEssPath's
+    // job, which rewrites it to its canonical path.
+    const q = new URLSearchParams(window.location.search)
+    const ref = q.get('ref')
+    if (q.get('tab') === 'claims' && ref && !q.get('module')) {
+      window.location.replace(`${AWAY.expenses}?tab=claims&ref=${encodeURIComponent(ref)}`)
+      return
     }
     const loc = parseEssPath(window.location.pathname, window.location.search, ESS_KEYS)
     // A screen that is a page of its own (/ess/expenses → app/ess/travel) is never a view.

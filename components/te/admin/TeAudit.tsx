@@ -52,7 +52,7 @@ export default function TeAudit() {
               <option value="">Everything</option>
               <option value="claim">Claims</option>
               <option value="trip">Trips</option>
-              <option value="leg">Legs</option>
+              <option value="leg">Journeys</option>
               <option value="expense">Expense lines</option>
               <option value="advance">Advances</option>
               <option value="vehicle">Vehicles</option>

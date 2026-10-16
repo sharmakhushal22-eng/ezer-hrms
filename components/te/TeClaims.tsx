@@ -196,7 +196,7 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged, onFixLine }
                 <button key={l.id} type="button" className="li click" onClick={() => setEvidence(l.id)}>
                   <span className="ico"><TeIcon name="route" /></span>
                   <span className="grow">
-                    <span className="b">Leg {l.n}</span>
+                    <span className="b">Journey {l.n}</span>
                     <span className="small muted">
                       {[
                         l.mode,

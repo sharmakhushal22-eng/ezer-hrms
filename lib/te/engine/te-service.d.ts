@@ -90,6 +90,7 @@ export interface StayRequestInput {
 }
 /** Asks the Travel Desk for a stay. Writes no expense — nothing is bought yet. */
 export function bookingRequest(ctx: TeCtx, input: StayRequestInput): Promise<{ booking_id: Uuid; booking_no: string; status: 'REQUESTED' }>
+export function stayDecide(ctx: TeCtx, input: { trip_id: Uuid; action: 'choose' | 'reject'; choice?: number; remark?: string }): Promise<{ trip_id: Uuid; status: 'CHOSEN' | 'REJECTED'; chosen: number | null; name: string }>
 export function bookingCancel(ctx: TeCtx, bookingId: Uuid, reason: string): Promise<{ booking_id: Uuid; status: 'CANCELLED' }>
 
 // ── legs ────────────────────────────────────────────────────────────────────
