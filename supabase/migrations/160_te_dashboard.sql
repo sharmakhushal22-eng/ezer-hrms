@@ -83,13 +83,19 @@ begin
   v_fin := te_finance_members(v_company);
 
   -- ── mine: my own trips and claims, and where they have reached ──────────
+  -- A FINANCE STEP NAMES NOBODY. team_code = 'finance' steps have a null
+  -- approver_id because they belong to the team rather than to a person, so
+  -- te_emp_name() on one returns nothing and the screen would say the claim is
+  -- "with nobody" at exactly the moment Finance is holding it. Same idiom as
+  -- te_claim_json in migration 148.
   select jsonb_build_object(
     'trips', (select coalesce(jsonb_agg(jsonb_build_object(
                 'id', t.id, 'no', t.trip_no, 'name', t.name, 'scope', t.scope,
                 'status', t.status, 'display', te_trip_status(t.id),
                 'start', t.start_date, 'end', t.end_date, 'to', coalesce(t.to_label, ''),
                 'estimate', t.estimate_total,
-                'withWhom', (select te_emp_name(s.approver_id) from te_approval_steps s
+                'withWhom', (select case when s.team_code is not null then 'Finance team' else te_emp_name(s.approver_id) end
+                               from te_approval_steps s
                               where s.entity_type = 'trip' and s.entity_id = t.id and s.status = 'pending'
                               order by s.step_no limit 1))
                 order by t.created_at desc), '[]'::jsonb)
@@ -99,7 +105,8 @@ begin
                 'id', c.id, 'no', c.claim_no, 'status', c.status, 'stage', c.stage,
                 'claimed', c.claimed_total, 'approved', c.approved_total, 'net', c.net_amount,
                 'submitted', c.submitted_at,
-                'withWhom', (select te_emp_name(s.approver_id) from te_approval_steps s
+                'withWhom', (select case when s.team_code is not null then 'Finance team' else te_emp_name(s.approver_id) end
+                               from te_approval_steps s
                               where s.entity_type = 'claim' and s.entity_id = c.id and s.status = 'pending'
                               order by s.step_no limit 1))
                 order by c.created_at desc), '[]'::jsonb)
@@ -178,7 +185,8 @@ begin
                   'status', t.status, 'display', te_trip_status(t.id),
                   'start', t.start_date, 'end', t.end_date, 'to', coalesce(t.to_label, ''),
                   'estimate', t.estimate_total,
-                  'withWhom', (select te_emp_name(s.approver_id) from te_approval_steps s
+                  'withWhom', (select case when s.team_code is not null then 'Finance team' else te_emp_name(s.approver_id) end
+                               from te_approval_steps s
                                 where s.entity_type = 'trip' and s.entity_id = t.id and s.status = 'pending'
                                 order by s.step_no limit 1))
                   order by t.start_date desc nulls last), '[]'::jsonb)
@@ -194,7 +202,8 @@ begin
                   'status', c.status, 'stage', c.stage,
                   'claimed', c.claimed_total, 'approved', c.approved_total,
                   'submitted', c.submitted_at,
-                  'withWhom', (select te_emp_name(s.approver_id) from te_approval_steps s
+                  'withWhom', (select case when s.team_code is not null then 'Finance team' else te_emp_name(s.approver_id) end
+                               from te_approval_steps s
                                 where s.entity_type = 'claim' and s.entity_id = c.id and s.status = 'pending'
                                 order by s.step_no limit 1))
                   order by c.submitted_at desc nulls last), '[]'::jsonb)
