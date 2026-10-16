@@ -1220,6 +1220,24 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             </div>
           </div>
 
+          {/* The download is the one action left on this screen, so it is a card of its own,
+              right under the confirmation: the acknowledgement as a PDF on the company's
+              letterhead (app/api/onboarding/ack-pdf). It used to be a small outline button
+              at the bottom that only printed the web page. */}
+          <div className="ezo-dl ezo-noprint">
+            <span className="ezo-dl-ic"><IconLetters size={26} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="ezo-dl-t">Your joining acknowledgement</div>
+              <div className="ezo-dl-d">A signed PDF on {co?.company_name || 'the company'}’s letterhead · reference {ackNo}. Keep it for your records.</div>
+            </div>
+            <div className="ezo-dl-acts">
+              <a className="ezo-btn ezo-dl-main" href={`/api/onboarding/ack-pdf?token=${encodeURIComponent(token)}`} download>
+                <IconDownload size={18} strokeWidth={2.2} />Download PDF
+              </a>
+              <a className="ezo-btn ezo-dl-view" href={`/api/onboarding/ack-pdf?token=${encodeURIComponent(token)}&inline=1`} target="_blank" rel="noreferrer">Open</a>
+            </div>
+          </div>
+
           <div style={S.card}>
             <Sec icon={<IconClock size={15} />}>What happens next</Sec>
             <div style={{ display: 'grid', gap: 0 }}>
@@ -1235,7 +1253,6 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, margin: '8px 0 12px', flexWrap: 'wrap' }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: TK.ink }}>Acknowledgement copies</div>
-            <button className="ezo-btn ezo-noprint" onClick={() => window.print()} style={{ ...S.btnO, height: 40, display: 'inline-flex', alignItems: 'center', gap: 7 }}><IconDownload size={15} />Download / Print</button>
           </div>
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 18 }}>
             <AckCopy copyFor="HR MANAGER COPY" ackNo={ackNo} generatedAt={generatedAt} employeeName={personal.full_name || c.full_name} designation={c.designation} department={c.department} doj={doj} forms={ackForms} docsCount={Object.keys(docs).length} />

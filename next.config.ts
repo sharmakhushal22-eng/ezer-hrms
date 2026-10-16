@@ -37,6 +37,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['pdfkit', 'fontkit'],
   outputFileTracingIncludes: {
     '/api/recruitment/offer-approval': ['./node_modules/pdfkit/js/data/**'],
+    // The joining acknowledgement downloaded from the onboarding link's last screen.
+    '/api/onboarding/ack-pdf': ['./node_modules/pdfkit/js/data/**'],
   },
 
   // The ESS portal is one page with many addresses (/ess/leave, /ess/recruitment/mrf …),

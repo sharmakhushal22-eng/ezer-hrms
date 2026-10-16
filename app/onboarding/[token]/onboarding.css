@@ -196,3 +196,37 @@
   .ezo { background: #fff; }
   .ezo-noprint { display: none !important; }
 }
+
+/* "More documents (optional)" — a disclosure row, not a bare link */
+.ezo-more summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--ez-line-strong);
+  font-size: 13.5px; font-weight: 650; color: var(--ez-brand-deep); background: var(--ez-surface);
+}
+.ezo-more summary::-webkit-details-marker { display: none; }
+.ezo-more summary::before { content: "+"; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: var(--ez-brand-tint); color: var(--ez-brand); font-weight: 800; }
+.ezo-more[open] summary::before { content: "–"; }
+.ezo-more summary span { color: var(--ez-faint); font-weight: 500; }
+.ezo-more summary:hover { border-color: var(--ez-brand-edge); background: var(--ez-brand-tint); }
+
+/* Download card on the success screen — the one action left, so it is the loudest thing */
+.ezo-dl {
+  display: flex; align-items: center; gap: 18px; margin: 0 0 16px; padding: 20px 22px; border-radius: 18px;
+  background: linear-gradient(120deg, var(--ez-brand-deep) 0%, var(--ez-brand) 60%, color-mix(in srgb, var(--ez-brand) 70%, var(--ez-info)) 100%);
+  color: var(--ez-on-accent); box-shadow: 0 18px 40px -22px var(--ez-brand); flex-wrap: wrap;
+}
+.ezo-dl-ic { width: 54px; height: 54px; border-radius: 15px; flex: none; display: grid; place-items: center; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); }
+.ezo-dl-t { font-size: 17px; font-weight: 700; }
+.ezo-dl-d { font-size: 13px; opacity: .9; margin-top: 3px; line-height: 1.5; }
+.ezo-dl-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.ezo-dl-main {
+  display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 22px; border-radius: 12px;
+  background: var(--ez-surface); color: var(--ez-brand-deep); font-weight: 700; font-size: 15px; text-decoration: none;
+  box-shadow: 0 10px 22px -12px rgba(0,0,0,.45);
+}
+.ezo-dl-view {
+  display: inline-flex; align-items: center; height: 48px; padding: 0 18px; border-radius: 12px; text-decoration: none;
+  border: 1px solid rgba(255,255,255,.45); color: var(--ez-on-accent); font-weight: 650; font-size: 14px;
+}
+.ezo-dl-view:hover { background: rgba(255,255,255,.12); }
+@media (max-width: 640px) { .ezo-dl-acts, .ezo-dl-main { width: 100%; justify-content: center; } .ezo-dl-view { flex: 1; justify-content: center; } }
