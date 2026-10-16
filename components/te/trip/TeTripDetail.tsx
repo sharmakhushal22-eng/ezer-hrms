@@ -20,6 +20,7 @@ import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeStayRequest from './TeStayRequest'
 import TeTripMap from '../plan/TeTripMap'
+import TeMapLinks from '../plan/TeMapLinks'
 import type { MapPlace } from '@/lib/te/trip-map'
 
 const SCOPE_WORD: Record<TripScope, string> = { local: 'Local', domestic: 'Domestic', international: 'International' }
@@ -501,6 +502,13 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
           points={(t.points || []).map(p => p.place).filter(Boolean)}
           places={places}
           label={`Map of ${t.name}`}
+        />
+        {/* The panel above is a schematic; this hands the real route to the
+            map app the person already has. No API key is involved. */}
+        <TeMapLinks
+          points={(t.points || []).map(p => detail.places[p.place]).filter(Boolean)}
+          scope={t.scope}
+          label={t.name}
         />
         <div className="tw-legs">
           {legs.map(l => (

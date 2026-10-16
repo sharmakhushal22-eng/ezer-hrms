@@ -13,6 +13,7 @@ import type { MapPlace } from '@/lib/te/trip-map'
 import { nightsBetween } from '@/lib/te/trip-stay'
 import TeIcon from '../TeIcon'
 import TeTripMap from './TeTripMap'
+import TeMapLinks from './TeMapLinks'
 import TePlanStay from './TePlanStay'
 
 const MODE_ICON: Record<string, string> = {
@@ -63,6 +64,11 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
               points={draft.points.map(p => p.place).filter(Boolean)}
               places={places}
               label={`Map of ${draft.name || 'the trip'}`}
+            />
+            <TeMapLinks
+              points={draft.points.map(p => places.get(p.place))}
+              scope={draft.scope}
+              label={draft.name || 'the trip'}
             />
             <div className="tw-legs">
               {legs.map(l => (
