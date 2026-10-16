@@ -110,8 +110,9 @@ export default function TeDashboard() {
             </label>
           </div>
           <p className="small muted">
-            The window applies to when you decided something and to when your team asked for it.
-            What is still waiting on you is shown whatever the dates say — it is true now, not in April.
+            The dates apply to two things: when you decided something, and when your team asked for it.
+            Your own trips and claims are always listed whatever the dates say, and so is what is still
+            waiting on you — those are true now, not in a month you have scrolled to.
           </p>
         </div>
       ) : null}
