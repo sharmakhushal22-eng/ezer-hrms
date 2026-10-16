@@ -165,6 +165,53 @@ export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; fou
 export interface TeStayOption { name: string; location: string; url: string; price?: number }
 /** What the Travel Desk decided about those hotels. 'NONE' means nobody has
  *  looked yet, which is what the desk's own work list is built from. */
+/** GET /api/te/dashboard — the Reports and Dashboard tab, in one read. */
+export interface TeDashboardRow {
+  kind: 'trip' | 'claim'
+  id: Uuid
+  status: string
+  role: string
+  stage: string
+  actedAt: IsoTime | null
+  comment: string
+  who: string
+  whoId: Uuid
+  no: string
+  what: string
+  /** Destination label. '' when the trip never had one. */
+  where: string
+  amount: number
+}
+export interface TeDashboardMineTrip {
+  id: Uuid; no: string; name: string; scope: TripScope
+  status: TripStatus; display: TripDisplayStatus
+  start: IsoDate | null; end: IsoDate | null; to: string; estimate: number
+  /** Who it is sitting with right now, or null when nobody. */
+  withWhom: string | null
+}
+export interface TeDashboardMineClaim {
+  id: Uuid; no: string; status: ClaimStatus; stage: ClaimStage
+  claimed: number; approved: number | null; net: number | null
+  submitted: IsoTime | null; withWhom: string | null
+}
+/** A team member's request, as a manager sees it: what was asked and how far
+ *  it got, never what they were finally paid. */
+export interface TeTeamTrip extends Omit<TeDashboardMineTrip, 'name'> { name: string; who: string; whoId: Uuid }
+export interface TeTeamClaim {
+  id: Uuid; no: string; who: string; whoId: Uuid
+  status: ClaimStatus; stage: ClaimStage
+  claimed: number; approved: number | null
+  submitted: IsoTime | null; withWhom: string | null
+}
+export interface TeDashboard {
+  from: IsoDate
+  to: IsoDate
+  me: Uuid
+  mine: { trips: TeDashboardMineTrip[]; claims: TeDashboardMineClaim[] }
+  score: { cameToMe: number; approved: number; rejected: number; sentBack: number; waiting: number }
+  acted: TeDashboardRow[]
+  team: { people: number; trips: TeTeamTrip[]; claims: TeTeamClaim[] }
+}
 export interface TeStayDecision {
   status: 'NONE' | 'CHOSEN' | 'REJECTED'
   /** Index into stayOptions, for CHOSEN. Null otherwise. */

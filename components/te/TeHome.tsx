@@ -41,6 +41,7 @@ import TeStartNow from './start/TeStartNow'
 import TeLegAdd from './leg/TeLegAdd'
 import TeAdvances from './claim/TeAdvances'
 import TeApprovals from './approve/TeApprovals'
+import TeDashboard from './report/TeDashboard'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type WayId } from '@/lib/te/entry-flow'
@@ -49,6 +50,8 @@ import './te.css'
 type View =
   | { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'trips' }
   | { name: 'claim'; id: string } | { name: 'trip'; id: string } | { name: 'advances' } | { name: 'approvals' }
+  /** Tab 1 of the three: everybody's reports and dashboard. */
+  | { name: 'dashboard' }
   /** The claim for one trip: its lines, what they are worth, and submit. */
   | { name: 'tripClaim'; trip: TeTrip }
   /** A leg, opened from its trip. Which screen it gets is the leg's own
@@ -69,7 +72,7 @@ type Sheet =
   | { name: 'addLeg'; detail: TeTripDetailT }
 
 /** The views the rail can land on. A claim is opened from a list, never from the rail. */
-type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits' | 'approvals'
+type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits' | 'approvals' | 'dashboard'
 const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'home', label: 'Home', icon: 'home' },
   { k: 'trips', label: 'Trips', icon: 'local' },
@@ -77,6 +80,9 @@ const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'claims', label: 'My claims', icon: 'claims' },
   { k: 'advances', label: 'Advances', icon: 'advances' },
   { k: 'limits', label: 'My limits and rates', icon: 'limits' },
+  // Last in the rail and offered to everyone: it is the place you go to look
+  // at what has already happened, not the place you go to do something.
+  { k: 'dashboard', label: 'Reports and dashboard', icon: 'history' },
 ]
 /** Nothing is left: every rail entry has a screen. Kept because the next
  *  thing added to the module will want it again. */
@@ -212,6 +218,7 @@ export default function TeHome({ initialClaimId, onExit }: {
             : name === 'trips' ? { name: 'trips' }
               : name === 'advances' ? { name: 'advances' }
                 : name === 'approvals' ? { name: 'approvals' }
+                  : name === 'dashboard' ? { name: 'dashboard' }
               : { name: 'home' },
     )
   }
@@ -348,6 +355,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}
           {view.name === 'advances' ? <TeAdvances snap={snap} onOpenTrip={id => setView({ name: 'trip', id })} /> : null}
           {view.name === 'approvals' ? <TeApprovals onToast={message => { setToast(message); reload() }} /> : null}
+          {view.name === 'dashboard' ? <TeDashboard /> : null}
           {view.name === 'tripClaim' ? (
             <TeOtherExpenses
               snap={snap}

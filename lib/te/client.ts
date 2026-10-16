@@ -22,7 +22,7 @@ import type {
   Uuid, Snapshot, TeQueueRow, TeTripDetail, TeClaimDetail, PlaceInput, VehicleInput, TripDraft, TripPreview, TripIssue,
   TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput, LegPreview, TeLegStats, TeFlag,
   ExpenseInput, ExpensePreview, ClaimInput, ClaimPreview, ClaimStatus, ClaimStage, RiskBand, DecideInput, PayoutRoute,
-  TeConfig, TeMasters, TeWorkflowLevel, TeChainRow, TeHealthRow, TeUploadedFile, RcChecked, TeStayOption,
+  TeConfig, TeMasters, TeWorkflowLevel, TeChainRow, TeHealthRow, TeUploadedFile, RcChecked, TeStayOption, TeDashboard,
 } from './types'
 
 export class TeApiError extends Error {
@@ -257,6 +257,9 @@ export const te = {
   },
 
   // ── the Travel Desk (dashboard Travel Claims permission, edit) ─────────────
+  /** The Reports and Dashboard tab. Every employee may call it; what comes
+   *  back is scoped to them and the people who report to them. */
+  dashboard: (q?: { from?: string; to?: string }) => get<TeDashboard>('dashboard', q),
   desk: {
     list: (q?: { company_id?: string }) => get<{ company_id: Uuid; to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[]; stays: DeskStay[] }>('desk', q),
     /** Pick one of the hotels the employee suggested, or turn them all down. */

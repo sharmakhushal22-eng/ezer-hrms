@@ -5,25 +5,28 @@
 // opens: a desk whose call comes back 403 is simply not offered.
 //   Dashboard      what is waiting, the desk's counts, the setup check
 //   Approvals      trips and claims waiting on this person
-//   Verification   claims a manager passed, now Finance's to check
-//   Advances       money out with employees
-//   Payouts        verified claims, and the batches they go out in
-//   Corrections    money owed either way after a claim was paid
-//   Months         which months accept claims
 //   Travel Desk    tickets and hotels to book, vehicles to check
+//   Finance desk   verification, advances, payouts, corrections, months
 //   Setup          rates, limits, GPS rules, checks, categories, who approves
 //   Reports        the claim register, the flag report, the trip GPS log
 //   Audit          who did what, and when
+//
+// THE THREE TABS. Of the module's three authority-wise tabs, two are here and
+// one is not. Travel Desk and Finance desk are staff screens and live on this
+// page. Reports and dashboard — tab 1 — belongs to literally every employee,
+// so it lives in the rail at /ess/travel where everybody already is, not in a
+// console most of the company cannot open.
+//
+// FINANCE WAS FIVE TABS AND IS NOW ONE. Verification, Advances, Payouts,
+// Corrections and Months were a third of the tab row and read as five
+// unrelated jobs. They are one desk with five rooms; the rooms are a segmented
+// control inside TeFinanceDesk now.
 import { useEffect, useState } from 'react'
 import { te, type FinanceSummary } from '@/lib/te/client'
 import type { TeConfig, TeHealthRow, TeQueueRow } from '@/lib/te/types'
 import TeApprovals from './approve/TeApprovals'
 import TeClaimApproval from './approve/TeClaimApproval'
-import TeVerification from './finance/TeVerification'
-import TeAdvanceDesk from './finance/TeAdvanceDesk'
-import TePayouts from './finance/TePayouts'
-import TeAdjustments from './finance/TeAdjustments'
-import TePeriods from './finance/TePeriods'
+import TeFinanceDesk from './finance/TeFinanceDesk'
 import TeTravelDesk from './desk/TeTravelDesk'
 import TeModesVehicles from './admin/TeModesVehicles'
 import TePolicy from './admin/TePolicy'
@@ -39,7 +42,7 @@ import { errorText, plural, rs, when } from '@/lib/te/format'
 import './te.css'
 
 type Desk =
-  | 'home' | 'approvals' | 'verify' | 'advances' | 'payouts' | 'corrections' | 'periods' | 'deskwork'
+  | 'home' | 'approvals' | 'deskwork' | 'finance'
   | 'rates' | 'policy' | 'gps' | 'checks' | 'categories' | 'workflow'
   | 'reports' | 'triplog' | 'audit'
 
@@ -48,12 +51,10 @@ type Desk =
 const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; needsDesk?: boolean; needsAdmin?: boolean }[] = [
   { k: 'home', label: 'Dashboard', icon: 'home' },
   { k: 'approvals', label: 'Approvals', icon: 'check' },
-  { k: 'verify', label: 'Verification', icon: 'verify', needsFinance: true },
-  { k: 'advances', label: 'Advances', icon: 'advances', needsFinance: true },
-  { k: 'payouts', label: 'Payouts', icon: 'claims', needsFinance: true },
-  { k: 'corrections', label: 'Corrections', icon: 'swap', needsFinance: true },
-  { k: 'periods', label: 'Months', icon: 'cal', needsFinance: true },
+  // Tab 2 and tab 3, in the order a request travels: the Travel Desk books it,
+  // Finance pays for it.
   { k: 'deskwork', label: 'Travel Desk', icon: 'plane', needsDesk: true },
+  { k: 'finance', label: 'Finance desk', icon: 'claims', needsFinance: true },
   { k: 'rates', label: 'Modes and rates', icon: 'car', needsAdmin: true },
   { k: 'policy', label: 'Policy limits', icon: 'limits', needsAdmin: true },
   { k: 'gps', label: 'GPS rules', icon: 'target', needsAdmin: true },
@@ -112,11 +113,7 @@ export default function TeStaffHome() {
 
   const body = () => {
     if (desk === 'approvals') return <TeApprovals onToast={setToast} />
-    if (desk === 'verify') return <TeVerification onToast={setToast} />
-    if (desk === 'advances') return <TeAdvanceDesk onToast={setToast} />
-    if (desk === 'payouts') return <TePayouts onToast={setToast} />
-    if (desk === 'corrections') return <TeAdjustments onToast={setToast} />
-    if (desk === 'periods') return <TePeriods onToast={setToast} />
+    if (desk === 'finance') return <TeFinanceDesk onToast={setToast} />
     if (desk === 'deskwork') return <TeTravelDesk vehicleTypes={cfg?.vehicles ?? []} fuelPrice={cfg?.fuelPrice ?? {}} onToast={setToast} />
     if (desk === 'workflow') return <TeWorkflow onToast={setToast} />
     if (desk === 'reports') return <TeReports onToast={setToast} />
