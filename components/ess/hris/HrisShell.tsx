@@ -46,6 +46,10 @@ interface Props {
   canApprove: boolean
   /** Same gate the portal's sub-tab row used: RM, HOD or any approver. */
   canRaiseMrf: boolean
+  /** True when an admin is looking at somebody else's portal. Raise MRF is the
+   *  one tab this changes: POST /api/ess/mrf refuses a viewAs caller, so the
+   *  form must say so on arrival instead of after it has been filled in. */
+  adminMode?: boolean
   notify: (m: string, t?: 'success' | 'error') => void
 }
 
@@ -53,7 +57,7 @@ export function HrisShell(p: Props) {
   return <ToastHost><Shell {...p} /></ToastHost>
 }
 
-function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, notify }: Props) {
+function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, adminMode, notify }: Props) {
   const tabs = useMemo(
     () => TABS.filter(t => (t.k !== 'approvals' || canApprove) && (t.k !== 'raise-mrf' || canRaiseMrf)),
     [canApprove, canRaiseMrf],
@@ -169,7 +173,7 @@ function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, notify }: Props) 
               is a separate piece of work from keeping it reachable. */}
           {canRaiseMrf && (
             <Pane k="raise-mrf" tab={tab} seen={seen}>
-              <RaiseMrfSection employeeId={employeeId} go={go} notify={notify} />
+              <RaiseMrfSection employeeId={employeeId} go={go} notify={notify} adminMode={adminMode} />
             </Pane>
           )}
           <Pane k="exit" tab={tab} seen={seen}>

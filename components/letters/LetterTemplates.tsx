@@ -14,6 +14,9 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+// Both /api/letters/preview and /api/letters/generate are session-guarded, so
+// the browser must hand its own session over on each call.
+import { authHeaders } from '@/lib/auth-headers'
 import { MERGE_FIELDS, sampleMergeFields } from '@/lib/letters/mergeFields'
 import { renderTemplate, extractTokens } from '@/lib/letters/renderTemplate'
 import { getGeneratedLetterDownloadUrl, publishLetterToEss } from '@/lib/letters/actions'
@@ -238,8 +241,10 @@ export default function LetterTemplates() {
     if (!selectedTpl) return
     setPreviewing(true)
     const { text } = renderTemplate(content, sampleMergeFields())
+    // Awaited: an un-awaited authHeaders() is silently ignored by fetch and the
+    // guarded route answers 401 with nothing failing at build time.
     const res = await fetch('/api/letters/preview', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
       body: JSON.stringify({ letter_name: selectedTpl.name, body_text: text }),
     })
     if (res.ok) {
@@ -257,8 +262,11 @@ export default function LetterTemplates() {
     if (!genCompanyId || !genTemplateId || codes.length === 0) return
     setGenerating(true)
     setGenResults(null)
+    // This route has carried requireModule('HR Letters','EDIT') while this
+    // caller sent no session at all, so Generate answered 401 for everyone.
+    // Awaited, because an un-awaited authHeaders() promise is silently ignored.
     const res = await fetch('/api/letters/generate', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
       body: JSON.stringify({ template_id: genTemplateId, company_id: genCompanyId, employee_codes: codes }),
     })
     const data = await res.json()

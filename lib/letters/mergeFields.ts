@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase'
 export interface MergeField {
   token: string          // used in template content as {{token}}
   label: string          // shown in the "Insert field" picker
-  group: 'Employee' | 'Employment' | 'Company' | 'System' | 'Appraisal'
+  group: 'Employee' | 'Employment' | 'Company' | 'System' | 'Appraisal' | 'Offer'
 }
 
 export const MERGE_FIELDS: MergeField[] = [
@@ -58,6 +58,32 @@ export const MERGE_FIELDS: MergeField[] = [
   { token: 'appr_fixed_a',             label: 'Fixed CTC — annual',    group: 'Appraisal' },
   { token: 'appr_variable_a',          label: 'Variable — annual',     group: 'Appraisal' },
   { token: 'appr_final_ctc_a',         label: 'Final CTC — annual',    group: 'Appraisal' },
+
+  // Offer. These resolve from an offer_approval_requests row — the figures the
+  // HR Head actually approved — NOT from an employee, because the person a
+  // candidate's offer letter addresses has no employees row yet. That is also
+  // why the offer letter cannot flow through /api/letters/generate, which looks
+  // employees up by emp_code; see resolveMergeFieldsForOffer below.
+  //
+  // Every token here must be lowercase-with-underscores: renderTemplate matches
+  // /\{\{([a-z_]+)\}\}/g, so {{offerCTC}} would never be substituted and would
+  // print literally on a candidate's offer letter.
+  { token: 'candidate_name',      label: 'Candidate Name',          group: 'Offer' },
+  { token: 'offer_designation',   label: 'Offered Designation',     group: 'Offer' },
+  { token: 'offer_company',       label: 'Offering Company',        group: 'Offer' },
+  { token: 'offer_date',          label: 'Date on offer',           group: 'Offer' },
+  { token: 'offer_doj',           label: 'Proposed Date of Joining', group: 'Offer' },
+  { token: 'offer_ctc_annual',    label: 'Annual CTC',              group: 'Offer' },
+  { token: 'offer_fixed_annual',  label: 'Fixed CTC — annual',      group: 'Offer' },
+  { token: 'offer_variable_annual', label: 'Variable — annual',     group: 'Offer' },
+  { token: 'offer_variable_pct',  label: 'Variable %',              group: 'Offer' },
+  { token: 'offer_gross_monthly', label: 'Gross — monthly',         group: 'Offer' },
+  { token: 'offer_inhand_monthly', label: 'Est. net take-home — monthly', group: 'Offer' },
+  { token: 'offer_joining_bonus', label: 'Joining Bonus',           group: 'Offer' },
+  { token: 'offer_retention_bonus', label: 'Retention Bonus',       group: 'Offer' },
+  { token: 'offer_esop_value',    label: 'ESOP Grant Value',        group: 'Offer' },
+  { token: 'offer_esop_vesting',  label: 'ESOP Vesting',            group: 'Offer' },
+  { token: 'offer_notice_days',   label: 'Notice Period (days)',    group: 'Offer' },
 ]
 
 export type ResolvedFields = Record<string, string>
@@ -203,6 +229,103 @@ export async function resolveMergeFieldsForEmployee(employeeId: string): Promise
     locationId: emp.location_id ?? null,
     employeeName: emp.full_name ?? 'Employee',
     employeeEmail: (emp as any).office_email ?? emp.personal_email ?? null,
+  }
+}
+
+/**
+ * Resolve every Offer token for one offer_approval_requests row.
+ *
+ * Keyed on the approval request rather than an employee on purpose: the offer
+ * letter addresses a CANDIDATE, who has no employees row, so
+ * resolveMergeFieldsForEmployee cannot serve it and /api/letters/generate
+ * (which looks employees up by emp_code) cannot carry it either.
+ *
+ * The figures come from the request itself — what the HR Head approved — so a
+ * template can never quote a number from somewhere else. Missing data renders
+ * as "[Not available]" rather than throwing, matching the employee resolver:
+ * one absent optional figure must not fail the whole letter.
+ */
+export async function resolveMergeFieldsForOffer(offerRequestId: string): Promise<{
+  fields: ResolvedFields
+  companyId: string | null
+  candidateName: string
+  candidateEmail: string | null
+} | null> {
+  const { data: r, error } = await supabase
+    .from('offer_approval_requests')
+    .select(`
+      id, company_id, candidate_id, proposed_doj,
+      offered_ctc, offered_fixed, offered_variable, offered_variable_pct,
+      monthly_gross, monthly_inhand, joining_bonus, retention_bonus,
+      esop_value, esop_vesting, notice_period_days,
+      candidates(full_name, email, designation),
+      companies(company_name),
+      manpower_requisitions(designation)
+    `)
+    .eq('id', offerRequestId)
+    .maybeSingle()
+
+  if (error || !r) return null
+
+  const cand: any = (r as any).candidates
+  const comp: any = (r as any).companies
+  const mrf: any = (r as any).manpower_requisitions
+  // Same precedence the Offer Letter screen's send payload uses, so the
+  // template and the screen can never describe different roles.
+  const designation = cand?.designation || mrf?.designation || FALLBACK
+
+  // A money token renders as [Not available] when absent rather than "0":
+  // printing "₹ 0" as a joining bonus states a term that was never offered.
+  const money = (n: any) => (n == null || Number(n) === 0 ? FALLBACK : inr(Number(n)))
+
+  const fields: ResolvedFields = {
+    letter_date:            formatDate(new Date().toISOString()),
+    candidate_name:         cand?.full_name ?? FALLBACK,
+    offer_designation:      designation,
+    offer_company:          comp?.company_name ?? FALLBACK,
+    offer_date:             formatDate(new Date().toISOString()),
+    offer_doj:              formatDate((r as any).proposed_doj),
+    offer_ctc_annual:       money((r as any).offered_ctc),
+    offer_fixed_annual:     money((r as any).offered_fixed),
+    offer_variable_annual:  money((r as any).offered_variable),
+    offer_variable_pct:     (r as any).offered_variable_pct != null ? `${(r as any).offered_variable_pct}%` : FALLBACK,
+    offer_gross_monthly:    money((r as any).monthly_gross),
+    offer_inhand_monthly:   money((r as any).monthly_inhand),
+    offer_joining_bonus:    money((r as any).joining_bonus),
+    offer_retention_bonus:  money((r as any).retention_bonus),
+    offer_esop_value:       money((r as any).esop_value),
+    offer_esop_vesting:     (r as any).esop_vesting ?? FALLBACK,
+    offer_notice_days:      (r as any).notice_period_days != null ? String((r as any).notice_period_days) : FALLBACK,
+  }
+
+  return {
+    fields,
+    companyId: (r as any).company_id ?? null,
+    candidateName: cand?.full_name ?? 'Candidate',
+    candidateEmail: cand?.email ?? null,
+  }
+}
+
+/** Sample Offer tokens for the designer's "Preview sample" — no real candidate is read. */
+export function sampleOfferMergeFields(): ResolvedFields {
+  return {
+    letter_date: formatDate(new Date().toISOString()),
+    candidate_name: 'Ananya Iyer',
+    offer_designation: 'Assistant Manager — Supply Chain',
+    offer_company: 'Sharma Retail Solutions Pvt Ltd',
+    offer_date: formatDate(new Date().toISOString()),
+    offer_doj: formatDate('2026-11-17'),
+    offer_ctc_annual: inr(1450000),
+    offer_fixed_annual: inr(1305000),
+    offer_variable_annual: inr(145000),
+    offer_variable_pct: '10%',
+    offer_gross_monthly: inr(108750),
+    offer_inhand_monthly: inr(91200),
+    offer_joining_bonus: inr(50000),
+    offer_retention_bonus: inr(75000),
+    offer_esop_value: FALLBACK,
+    offer_esop_vesting: FALLBACK,
+    offer_notice_days: '30',
   }
 }
 

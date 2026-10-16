@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/regime-default",
       "schedule": "30 3 5 * *"
+    },
+    {
+      "path": "/api/cron/te-daily",
+      "schedule": "30 20 * * *"
     }
   ]
 }
