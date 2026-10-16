@@ -1,7 +1,19 @@
 'use client'
-// components/te/desk/TeTravelDesk.tsx — the Travel Desk. Screens a1, a1b.
+// components/te/desk/TeTravelDesk.tsx — tab 2 of three: the Travel Desk.
+// Screens a1, a1b.
 //
-// Two jobs that share a desk but not much else.
+// FOUR JOBS THAT SHARE A DESK BUT NOT MUCH ELSE, as four rooms behind a
+// segmented control rather than four cards stacked down one long page. The
+// same shape the Finance desk took, and for the same reason: a desk is one
+// job with several rooms, and one room at a time is what somebody does.
+//
+// THE COUNTS ARE ON THE TABS, which is the part that earns the restructure.
+// Stacked, you learned there were nine vehicles waiting by scrolling past
+// three other sections. The desk now says where the work is before you move.
+//
+// IT OPENS ON THE ROOM THAT HAS WORK. A desk person arriving at an empty
+// "Hotels to choose" and leaving again, not knowing six tickets needed
+// booking, is the failure this avoids. See firstWithWork below.
 //
 // BOOKINGS TO RECORD. When a trip is planned, each leg says who books it. The
 // ones marked "Travel Desk" land here after approval. Recording one creates
@@ -24,12 +36,16 @@ import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeStayChoice from './TeStayChoice'
 
+type Room = 'stays' | 'book' | 'booked' | 'vehicles'
+
 export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   /** cfg.vehicles — the types a vehicle can be, and what each pays. */
   vehicleTypes: TeVehicleType[]
   fuelPrice: Record<string, number>
   onToast: (message: string) => void
 }) {
+  /** null until somebody picks one: see firstWithWork in the body. */
+  const [room, setRoom] = useState<Room | null>(null)
   const [toBook, setToBook] = useState<DeskToBook[] | null>(null)
   const [booked, setBooked] = useState<DeskBooked[]>([])
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -110,6 +126,33 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
 
   const bookings = toBook ?? []
 
+  // In the order work flows: a hotel is chosen, then it and the tickets are
+  // booked, then what was booked can be undone. Vehicles are their own thing
+  // and sit last.
+  const rooms: { k: Room; label: string; icon: string; n: number }[] = [
+    { k: 'stays', label: 'Hotels to choose', icon: 'home', n: stays.length },
+    { k: 'book', label: 'To book', icon: 'plane', n: bookings.length },
+    { k: 'booked', label: 'Booked', icon: 'check', n: booked.length },
+    { k: 'vehicles', label: 'Vehicles', icon: 'car', n: vehicles.length },
+  ]
+  // Where the work is. Only used until somebody chooses for themselves —
+  // after that `room` is set and this is ignored, so the tab does not jump
+  // out from under a person who has just emptied the room they were in.
+  const firstWithWork = rooms.find(r => r.n)?.k ?? 'stays'
+  const here = room ?? firstWithWork
+
+  /** Leaving a room abandons whatever was half-typed in it. Coming back to a
+   *  booking form still open over a different trip, or to a cancellation
+   *  reason typed for a booking you have since scrolled away from, is how a
+   *  reason ends up filed against the wrong row. */
+  const goRoom = (k: Room) => {
+    setRoom(k)
+    setBooking(null)
+    setCancelling(null)
+    setWhy('')
+    setError('')
+  }
+
   return (
     <div className="page">
       <div className="ph">
@@ -121,10 +164,20 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
 
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
+      <div className="seg scopes" role="group" aria-label="Travel Desk">
+        {rooms.map(r => (
+          <button key={r.k} type="button" aria-pressed={here === r.k} onClick={() => goRoom(r.k)}>
+            <TeIcon name={r.icon} size="sm" />{r.label}
+            {r.n ? <span className="ct">{r.n}</span> : null}
+          </button>
+        ))}
+      </div>
+
       {/* Choosing comes before booking, because it is what produces something
           to book. A trip sitting here has somebody waiting on an answer. */}
-      <TeStayChoice stays={stays} onDone={message => { onToast(message); reload() }} />
+      {here === 'stays' ? <TeStayChoice stays={stays} onDone={message => { onToast(message); reload() }} /> : null}
 
+      {here === 'book' ? (
       <div className="card pad0">
         <div className="day"><span>To book</span><span>{bookings.length}</span></div>
         {toBook === null ? <div className="empty"><b>Loading…</b></div> : null}
@@ -176,10 +229,12 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
           )
         })}
       </div>
+      ) : null}
 
       {/* What the desk has already booked. A trip can change after a ticket is
           bought, and an uncancelled booking stays on it as company-paid. */}
-      {booked.length ? (
+      {here === 'booked' ? (
+        booked.length ? (
         <div className="card pad0">
           <div className="day"><span>Booked</span><span>{booked.length}</span></div>
           {booked.map(b => (
@@ -216,8 +271,12 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
             </div>
           ))}
         </div>
+        ) : (
+          <div className="empty"><b>Nothing is booked</b>Tickets and rooms the desk has recorded appear here, so one can be cancelled when a trip changes.</div>
+        )
       ) : null}
 
+      {here === 'vehicles' ? (
       <div className="card pad0">
         <div className="day"><span>Vehicles to check</span><span>{vehicles.length}</span></div>
         {!vehicles.length ? (
@@ -279,6 +338,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
           )
         })}
       </div>
+      ) : null}
     </div>
   )
 }
