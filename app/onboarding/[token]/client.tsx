@@ -352,8 +352,31 @@ function StatutoryFormCard({ code, title, rows }: { code: string; title: string;
     </div>
   )
 }
-function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, candidate, esicApplicable, isForeign = false, epsFamily = [], epsFallback = {} }: {
-  personal: any; contact: any; statutory: any; insurance: any; esic: any; candidate: any; esicApplicable: boolean; isForeign?: boolean
+// The official form (EPF 11 / EPF 2 / ESIC 1) filled in by /api/onboarding/forms and shown as the
+// PDF itself; the candidate reads it and confirms. Phones that cannot show a PDF inline get the
+// Open button.
+function PdfFormCard({ code, title, token, form, note }: { code: string; title: string; token: string; form: 'form11' | 'form2' | 'esic1'; note: string }) {
+  const [ok, setOk] = useState(false)
+  const url = `/api/onboarding/forms?form=${form}&token=${encodeURIComponent(token)}`
+  return (
+    <div style={{ ...S.card, border: `1px solid ${ok ? TK.positiveEdge : TK.brandTint}`, background: ok ? TK.positiveTint : TK.surface }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 9, fontWeight: 700, color: TK.brand, background: TK.brandTint, padding: '2px 8px', borderRadius: 99 }}>{code}</span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{title}</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <a href={url} target="_blank" rel="noreferrer" style={{ ...S.btnO, fontSize: 11, padding: '5px 10px', textDecoration: 'none' }}>Open ↗</a>
+          <a href={`${url}&mode=download`} style={{ ...S.btnO, fontSize: 11, padding: '5px 10px', textDecoration: 'none' }}>Download</a>
+        </span>
+        {ok && <span style={{ fontSize: 11, fontWeight: 600, color: TK.positive }}>Looks correct</span>}
+      </div>
+      <div style={{ fontSize: 11.5, color: TK.muted, marginBottom: 8 }}>{note} If anything is wrong, go back to the step and correct it — the form updates by itself.</div>
+      <iframe title={title} src={`${url}#toolbar=0&navpanes=0&view=FitH`} style={{ width: '100%', height: 'min(70vh, 640px)', border: `1px solid ${TK.line}`, borderRadius: 8, background: TK.sunken }} />
+      {!ok && <button onClick={() => setOk(true)} style={{ ...S.btnO, marginTop: 10, fontSize: 12, padding: '6px 14px' }}>Looks correct</button>}
+    </div>
+  )
+}
+function StatutoryFormsPreview({ token, personal, contact, statutory, insurance, esic, candidate, esicApplicable, isForeign = false, epsFamily = [], epsFallback = {} }: {
+  token: string; personal: any; contact: any; statutory: any; insurance: any; esic: any; candidate: any; esicApplicable: boolean; isForeign?: boolean
   epsFamily?: any[]; epsFallback?: any
 }) {
   const doj = candidate.date_of_joining ? new Date(candidate.date_of_joining).toLocaleDateString('en-IN') : '—'
@@ -407,25 +430,12 @@ function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, 
       </div>
 
       {activeTab === 'form11' && (
-        <StatutoryFormCard code="EPF FORM 11" title="PF Declaration (new member)" rows={[
-          ['Name of member', personal.full_name],
-          ["Father's / Husband's name", personal.father_name],
-          ['Date of birth', personal.dob],
-          ['Gender', personal.gender],
-          ['Date of joining', doj],
-          ['PAN', statutory.pan_number],
-          ['Existing PF member', statutory.has_uan ? `Yes — UAN ${statutory.uan_number || '—'}` : 'No'],
-          ['International worker', isForeign ? 'Yes' : 'No'],
-        ]} />
+        <PdfFormCard code="EPF FORM 11" title="New Form 11 — Declaration" token={token} form="form11"
+          note="Filled from your details: name, father's / husband's name, date of birth, marital status, email, mobile, UAN and previous PF account (if any), bank account, Aadhaar and PAN." />
       )}
       {activeTab === 'form2' && (
-        <StatutoryFormCard code="EPF FORM 2" title="PF & Pension Nomination" rows={[
-          ...(statutory.pf_nominees.length > 1
-            ? [['Nominees', statutory.pf_nominees.map((n: Nominee, i: number) => `${i + 1}. ${n.name || '—'} (${n.relation || '—'}, DOB ${n.dob || '—'}) — ${n.share || '0'}%`).join(' · ')] as [string, any]]
-            : [['Nominee name', statutory.nominee_name], ['Relationship', statutory.nominee_relation], ['Nominee date of birth', statutory.nominee_dob], ['Share of accumulation', statutory.nominee_share ? `${statutory.nominee_share}%` : '—'], ['Nominee address', statutory.nominee_address]] as [string, any][]),
-          ['Family members (Part B)', epsFamStr],
-          ['Fallback nominee (EPS)', epsFallbackStr],
-        ]} />
+        <PdfFormCard code="EPF FORM 2" title="Form 2 (Revised) — Nomination & Declaration" token={token} form="form2"
+          note="Part A lists your PF nominees with their shares; Part B (EPS) lists your family members for the pension and the fallback nominee." />
       )}
       {activeTab === 'form3' && (
         <StatutoryFormCard code="FORM III" title="Gratuity Nomination (Form F)" rows={[
@@ -442,13 +452,8 @@ function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, 
         ]} />
       )}
       {activeTab === 'esic1' && esicApplicable && (
-        <StatutoryFormCard code="ESIC FORM 1" title="ESIC Declaration & Family" rows={[
-          ['Insured person', personal.full_name],
-          ['Date of birth', personal.dob],
-          ['Family members', fam],
-          ['Previous ESIC IP no.', esic.prev_ip],
-          ['Nearest dispensary', esic.dispensary],
-        ]} />
+        <PdfFormCard code="ESIC FORM 1" title="Form 1 — Declaration Form" token={token} form="esic1"
+          note="Your particulars, present and permanent addresses, the nominee for the cash benefit, your family members and the temporary identity card with your photo." />
       )}
     </div>
   )
@@ -1826,7 +1831,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {step === 9 && (
           <div>
             {/* Phase 8 — read-only statutory form previews */}
-            <StatutoryFormsPreview personal={personal} contact={contact} statutory={statutory} insurance={insurance} esic={esic} candidate={c} esicApplicable={esicApplicable} isForeign={isForeign} epsFamily={epsFamily} epsFallback={epsFallback} />
+            <StatutoryFormsPreview token={token} personal={personal} contact={contact} statutory={statutory} insurance={insurance} esic={esic} candidate={c} esicApplicable={esicApplicable} isForeign={isForeign} epsFamily={epsFamily} epsFallback={epsFallback} />
             {/* Summary */}
             <div style={S.card}>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Review & Declaration</div>

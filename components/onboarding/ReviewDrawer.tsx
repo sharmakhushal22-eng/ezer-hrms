@@ -192,6 +192,19 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
   const [marks, setMarks] = useState<Record<string, Mark>>({})
   const [remark, setRemark] = useState('')
   const [busy, setBusy] = useState(false)
+  const [opening, setOpening] = useState('')
+
+  /** A filled statutory form in a new tab. The route needs the session header, so it is fetched and shown as a blob. */
+  async function openForm(form: string, label: string) {
+    setOpening(form)
+    try {
+      const res = await fetch(`/api/onboarding/forms?form=${form}&onboarding_id=${onboardingId}`, { headers: await authHeaders() })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Could not open ${label}`)
+      const url = URL.createObjectURL(await res.blob())
+      if (!window.open(url, '_blank')) onDone('The browser blocked the new tab — allow pop-ups for this site.', 'err')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e: any) { onDone(e.message, 'err') } finally { setOpening('') }
+  }
 
   useEffect(() => {
     let alive = true
@@ -325,6 +338,13 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               <h3 className="rv-h">01 <span>Documents</span><span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: TK.muted, letterSpacing: 0, textTransform: 'none' }}>{docs.length} uploaded</span></h3>
               {docs.length === 0 && <div style={{ fontSize: 12, color: TK.muted, marginTop: 8 }}>No documents uploaded.</div>}
               <div className="rv-docs">{docs.map(doc => <DocCard key={doc.doc_code} doc={doc} on={!!marks[`doc:${doc.doc_code}`]} pick={canDecide} onPick={() => toggle({ key: `doc:${doc.doc_code}`, kind: 'doc', label: doc.label, doc_code: doc.doc_code })} />)}</div>
+              {/* The official forms, filled from this sheet — opened in a new tab (the call needs the session header). */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+                <span className="rv-sub" style={{ marginBottom: 0 }}>Statutory forms, filled</span>
+                {([['form11', 'EPF Form 11'], ['form2', 'EPF Form 2'], ...(item.esic_applicable ? [['esic1', 'ESIC Form 1']] : [])] as [string, string][]).map(([k, l]) => (
+                  <button key={k} type="button" className="rv-view" disabled={!!opening} onClick={() => openForm(k, l)} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{opening === k ? 'Opening…' : `${l} ↗`}</button>
+                ))}
+              </div>
             </section>
 
             {/* ── Details, section by section ── */}

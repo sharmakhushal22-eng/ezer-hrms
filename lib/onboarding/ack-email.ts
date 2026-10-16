@@ -8,6 +8,7 @@ import { resolveLetterhead, letterheadHeaderHtml, letterheadFooterHtml } from '@
 import { resolveTemplate } from '@/lib/config/store'
 import { renderText, renderLetterParagraphs, paragraphsToHtml, stripMarkup } from '@/lib/config/render'
 import { mailConfigured, sendMail } from '@/lib/mail/send'
+import { statutoryAttachments } from '@/lib/onboarding/statutory-forms'
 
 const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string))
 
@@ -98,7 +99,8 @@ export async function sendAckEmail(supa: any, onboardingId: string, employeeCode
       subject: renderText(tpl.subject, vars).text.replace(/\s*\n\s*/g, ' '),
       text: stripMarkup(renderText(tpl.body, vars).text),
       html,
-      attachments: [{ filename: `Acknowledgement_${employeeCode}.html`, content: Buffer.from(html, 'utf-8'), contentType: 'text/html' }],
+      // The acknowledgement, plus the filled statutory forms (EPF 11, EPF 2, ESIC 1 when it applies).
+      attachments: [{ filename: `Acknowledgement_${employeeCode}.html`, content: Buffer.from(html, 'utf-8'), contentType: 'text/html' }, ...(await statutoryAttachments(supa, c.id).catch(() => []))],
     })
     if (!sent.sent) return { error: sent.error || sent.skipped || 'email failed' }
     // record that documents were emailed

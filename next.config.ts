@@ -37,6 +37,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['pdfkit', 'fontkit'],
   outputFileTracingIncludes: {
     '/api/recruitment/offer-approval': ['./node_modules/pdfkit/js/data/**'],
+    // The blank statutory forms (EPF 11, EPF 2, ESIC 1) are read from disk and filled in.
+    '/api/onboarding/forms': ['./public/statutory-forms/*.pdf'],
   },
 
   // The ESS portal is one page with many addresses (/ess/leave, /ess/recruitment/mrf …),
