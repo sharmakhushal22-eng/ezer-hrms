@@ -98,7 +98,7 @@ export function canInvite(
     effectiveStatus(i, now) === 'PENDING')
   if (open) {
     return { ok: false, because:
-      `You already have an invite waiting with them — ${minutesLeft(open, now)} minutes left on it.` }
+      `You already have an invite waiting with them (${minutesLeft(open, now)} minutes left on it).` }
   }
   return { ok: true, because: '' }
 }

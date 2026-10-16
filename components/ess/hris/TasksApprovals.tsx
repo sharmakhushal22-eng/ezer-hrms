@@ -103,7 +103,7 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
         <div className="hx-appr">
           {shown.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--ez-muted)', padding: '6px 0' }}>
-              Nothing here — {filter === 'MINE' ? 'nothing is waiting on you.' : 'nothing in this view.'}
+              Nothing here: {filter === 'MINE' ? 'nothing is waiting on you.' : 'nothing in this view.'}
             </div>
           ) : shown.map((it, i) => (
             <PendingCard key={`${it.kind}:${it.id}`} item={it} api={api} go={go} animate={animate} i={i}
@@ -152,7 +152,7 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
         method: 'POST',
         body: JSON.stringify({ kind: item.kind, id: item.id, action: a, note: note || null, lwd: lwd || null, regrettable: regret }),
       })
-      onDone(`${a} — done`)
+      onDone(`${a}: done`)
     } catch (e) { setErr((e as Error)?.message || String(e)) } finally { setBusy(false) }
   }
 
@@ -203,7 +203,7 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
             <div>
               <label className="hx-label">Regrettable exit?</label>
               <div className="hx-toggle">
-                <button className={`hx-btn ${regret === true ? '' : 'o'} sm`} onClick={() => setRegret(true)}>Yes — regrettable</button>
+                <button className={`hx-btn ${regret === true ? '' : 'o'} sm`} onClick={() => setRegret(true)}>Yes, regrettable</button>
                 <button className={`hx-btn ${regret === false ? '' : 'o'} sm`} onClick={() => setRegret(false)}>No</button>
               </div>
             </div>
@@ -213,7 +213,7 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
             <textarea className="hx-area" style={{ minHeight: 60 }} value={note} onChange={e => setNote(e.target.value)} />
           </div>
           <div style={{ display: 'flex', gap: 7 }}>
-            <button className="hx-btn sm" disabled={busy} onClick={() => void fire(ask)}>Confirm — {ask}</button>
+            <button className="hx-btn sm" disabled={busy} onClick={() => void fire(ask)}>Confirm: {ask}</button>
             <button className="hx-btn o sm" onClick={() => { setAsk(null); setNote(''); setLwd('') }}>Cancel</button>
           </div>
         </div>

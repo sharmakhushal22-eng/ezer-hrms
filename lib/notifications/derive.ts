@@ -67,7 +67,7 @@ export async function deriveFor(me: string): Promise<Derived[]> {
         // Finance sees the same row under its own code once it reaches them.
         code: r.status === 'PENDING_FINANCE' ? 'FIN_TRAVEL_STAGE' : 'MGR_NEW_TRAVEL',
         title: `Travel claim from ${names.get(r.employee_id) ?? 'a team member'}`,
-        body: `Status ${r.status} — waiting on you.`,
+        body: `Status ${r.status}. Waiting on you.`,
         link: ref('/ess?tab=approvals', r.id),
       })))
     }

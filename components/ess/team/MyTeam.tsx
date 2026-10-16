@@ -95,7 +95,7 @@ export function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boole
           <span className="tm-htext">
             <span className="tm-h" style={{ display: 'block' }}>Where you sit</span>
             <span className="tm-hsub" style={{ display: 'block' }}>
-              Above you, beside you, below you — read from the reporting lines HR maintains
+              Above you, beside you, below you, read from the reporting lines HR maintains
             </span>
           </span>
         </div>
@@ -104,7 +104,7 @@ export function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boole
           <div className="tl">
             <p className="tl-label">Reporting line above you</p>
             {chain.length === 0 ? (
-              <p className="tl-empty">Nobody above you — you are at the top of your chain.</p>
+              <p className="tl-empty">Nobody above you. You are at the top of your chain.</p>
             ) : (
               <div className="tl-up">
                 {chain.map(m => (
@@ -128,15 +128,15 @@ export function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boole
               {/* mates.length, not peers.length — the count now matches the cards. */}
               <p className="tl-beside">Your team-mates{mates.length ? ` (${mates.length})` : ''}</p>
               {mates.length === 0 ? (
-                <p className="tl-empty">Nobody else shares your reporting manager — or you have no manager on record.</p>
+                <p className="tl-empty">Nobody else shares your reporting manager, or you have no manager on record.</p>
               ) : (
                 <div className="tl-mates">
                   {mates.map(p => (
                     <span className="tl-chip" key={p.id}>
                       <Avatar name={p.full_name} />
-                      {p.full_name || '—'}
+                      {p.full_name || '-'}
                       <small>
-                        {p.designation || '—'}
+                        {p.designation || '-'}
                         {p.direct_reports > 0 && ` · ${p.direct_reports} ${p.direct_reports === 1 ? 'report' : 'reports'}`}
                       </small>
                     </span>

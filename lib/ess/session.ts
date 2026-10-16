@@ -81,7 +81,7 @@ export async function essContext(caller: EssCaller): Promise<EssContext> {
     grantForEmployee(caller.employeeId),
     sb.from('employees').select('company_id').eq('id', caller.employeeId).maybeSingle(),
   ])
-  if (error) throw new Error(`ess_menu: ${error.message} — has migration 071 been run?`)
+  if (error) throw new Error(`ess_menu: ${error.message}. Has migration 071 been run?`)
   const menu: EssMenu = {
     employee_id: caller.employeeId,
     is_rm: !!m?.is_rm, direct_reports: Number(m?.direct_reports || 0),
@@ -150,7 +150,7 @@ export async function employeesById(ids: string[]): Promise<Map<string, EmpLite>
   return out
 }
 
-export const fmtDate = (d: string | null | undefined) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+export const fmtDate = (d: string | null | undefined) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 export const daysAgo = (d: string | null | undefined) => {
   if (!d) return ''
   const n = Math.floor((Date.now() - new Date(d).getTime()) / 86400000)

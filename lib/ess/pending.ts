@@ -40,7 +40,7 @@ export interface PendingItem {
 
 const RES_STAGE_LABEL: Record<string, string> = {
   PENDING_RM_L1: 'Acknowledge (RM L1)', PENDING_RM_L2: 'Acknowledge (RM L2)', PENDING_HOD: 'Acknowledge (HOD)',
-  PENDING_HR_MANAGER: 'HR Manager — set final LWD', RETENTION_HOLD: 'On retention hold',
+  PENDING_HR_MANAGER: 'HR Manager: set final LWD', RETENTION_HOLD: 'On retention hold',
 }
 const RES_ACTIONS_RM = ['Acknowledge & forward', 'Accept with my date', 'Request retention']
 const RES_ACTIONS_HR = ['Set final LWD', 'View full chain']
@@ -191,7 +191,7 @@ export async function buildPending(ctx: EssContext): Promise<PendingItem[]> {
     const stage = r.status === 'PENDING_RM' ? 'RM approval' : r.status === 'PENDING_HR' ? 'HR approval' : 'Finance approval'
     items.push({
       kind: 'TRAVEL', id: r.id, employee_id: r.employee_id, who: who(r.employee_id),
-      what: `Travel claim — ₹${Math.round(Number(r.total_claimed || 0)).toLocaleString('en-IN')}${r.claim_no ? ' · ' + r.claim_no : ''}`,
+      what: `Travel claim: ₹${Math.round(Number(r.total_claimed || 0)).toLocaleString('en-IN')}${r.claim_no ? ' · ' + r.claim_no : ''}`,
       meta: [r.period_from ? `${fmtDate(r.period_from)} – ${fmtDate(r.period_to)}` : null, `Submitted ${daysAgo(r.submitted_at)}`].filter(Boolean).join(' · '),
       stage, raised_at: r.submitted_at, surfaced_via: via, mine, actions: ['Open claim'], link: 'claims',
     })
@@ -202,9 +202,9 @@ export async function buildPending(ctx: EssContext): Promise<PendingItem[]> {
     const shortfall = Number(r.notice_shortfall_days || 0)
     items.push({
       kind: 'RESIGNATION', id: r.id, employee_id: r.employee_id, who: who(r.employee_id),
-      what: `Resignation — ${RES_STAGE_LABEL[r.status] || r.status}`,
+      what: `Resignation: ${RES_STAGE_LABEL[r.status] || r.status}`,
       meta: [`Submitted ${fmtDate(r.submitted_at || r.created_at)}`, r.exit_reason_master?.label ? `reason: ${r.exit_reason_master.label}` : null,
-             `notice ${r.notice_period_days ?? '—'} days`, r.proposed_lwd ? `RM proposed LWD ${fmtDate(r.proposed_lwd)}` : null,
+             `notice ${r.notice_period_days ?? '-'} days`, r.proposed_lwd ? `RM proposed LWD ${fmtDate(r.proposed_lwd)}` : null,
              shortfall ? `${shortfall} days shortfall` : null].filter(Boolean).join(' · '),
       stage: RES_STAGE_LABEL[r.status] || r.status, raised_at: r.submitted_at || r.created_at, surfaced_via: via, mine,
       actions: !mine ? ['View full chain'] : r.status === 'RETENTION_HOLD' ? ['Resume chain', 'View full chain'] : hr ? RES_ACTIONS_HR : RES_ACTIONS_RM,

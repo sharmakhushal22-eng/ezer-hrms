@@ -56,9 +56,9 @@ export default function EsicConfig() {
     setError('')
     try {
       const c = await getCurrentEsicConfig()
-      if (!c) setError('No ESIC config found — run sql75 first.')
+      if (!c) setError('No ESIC config found. Run sql75 first.')
       setCfg(c)
-    } catch (e: any) { setError(e.message || 'Could not load — run sql75 first.') }
+    } catch (e: any) { setError(e.message || 'Could not load. Run sql75 first.') }
   }, [])
   useEffect(() => { load() }, [load])
 
@@ -89,7 +89,7 @@ export default function EsicConfig() {
         <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>ESIC</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Employees&apos; State Insurance — wage ceiling, contributions &amp; mid-period coverage continuity</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Employees&apos; State Insurance: wage ceiling, contributions &amp; mid-period coverage continuity</div>
         </div>
       </div>
 
@@ -159,7 +159,7 @@ export default function EsicConfig() {
                 )}
               </div>
             )}
-            <div style={{ fontSize: 10, color: C.muted, marginTop: 8 }}>Estimate only — a first-month, no-history view. The payroll run uses the stateful check that also applies mid-period continuity.</div>
+            <div style={{ fontSize: 10, color: C.muted, marginTop: 8 }}>Estimate only: a first-month, no-history view. The payroll run uses the stateful check that also applies mid-period continuity.</div>
           </div>
         </>
       )}

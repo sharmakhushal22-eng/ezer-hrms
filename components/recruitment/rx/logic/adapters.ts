@@ -72,7 +72,7 @@ export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
     role: String(pick(s, ['role'], 'Approver')),
     // RESOLVED: steps carry `approver_name` OR `actor` (the page reads both),
     // falling back to resolving `approver_id`.
-    approverName: String(pick(s, ['approver_name', 'actor'], '') || (s.approver_id ? ctx.nameOf(String(s.approver_id)) : '—')),
+    approverName: String(pick(s, ['approver_name', 'actor'], '') || (s.approver_id ? ctx.nameOf(String(s.approver_id)) : '-')),
     status: String(pick(s, ['status'], 'PENDING')).toUpperCase(),
     actedAt: pick<string | null>(s, ['acted_at'], null),
   }));
@@ -83,8 +83,8 @@ export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
     // RESOLVED: the page's own precedence is job_title || designation || position.
     // `position_title` and `title` do not exist on this table.
     title: String(pick(row, ['job_title', 'designation', 'position'], 'Untitled role')),
-    department: String(dept?.dept_name ?? '—'),
-    location: String(loc?.location_name ?? '—'),
+    department: String(dept?.dept_name ?? '-'),
+    location: String(loc?.location_name ?? '-'),
     status: String(row.status ?? 'DRAFT').toUpperCase() as MrfStatus,                    // MRF_STATUSES
     lane: (lane === 'Quick Hire' || lane === 'Full MRF' ? lane : laneFor(budgetMax ?? 0, ctx.quickHireCap)) as Lane,
     priority: pick<string | null>(row, ['urgency'], null),                               // RESOLVED: `urgency`, not `priority`
@@ -105,7 +105,7 @@ export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
     // `recruiterInitials.length`, so either would render blank avatar circles
     // instead of the honest "Unassigned". Keep only initials with real letters.
     recruiterInitials: recruiters.map((r) => initials(ctx.nameOf(r))).filter((s) => /[a-z0-9]/i.test(s)),
-    company: comp ? String(comp.company_name ?? comp.company_code ?? '—') : null,
+    company: comp ? String(comp.company_name ?? comp.company_code ?? '-') : null,
     businessUnit: pick<string | null>(row, ['business_unit'], null),
     employmentType: pick<string | null>(row, ['employment_type'], null),
     workMode: pick<string | null>(row, ['work_mode'], null),
@@ -165,7 +165,7 @@ export function toRoundVM(row: Row, nameOf: (id: string) => string): RoundVM {
   const submittedAt = pick<string | null>(row, ['feedback_submitted_at'], null);
   return {
     name: String(pick(row, ['round_type'], 'Round')),                                    // RESOLVED: `round_type`
-    interviewer: String(pick(row, ['interviewer_name'], '') || (row.interviewer_id ? nameOf(String(row.interviewer_id)) : '—')),
+    interviewer: String(pick(row, ['interviewer_name'], '') || (row.interviewer_id ? nameOf(String(row.interviewer_id)) : '-')),
     at: pick<string | null>(row, ['scheduled_at'], null),                                // RESOLVED
     hasFeedback: done || (submittedAt != null && String(submittedAt).trim() !== ''),
   };

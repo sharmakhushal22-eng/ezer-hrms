@@ -179,7 +179,7 @@ function QuestionsList({ value, onChange }: { value: string[]; onChange: (v: str
   const del = (i: number) => onChange(value.filter((_, idx) => idx !== i))
   return (
     <div style={{ display: 'grid', gap: 6 }}>
-      {value.length === 0 && <div style={{ fontSize: 11, color: C.faint }}>No questions added — click “+ Add question” to add one.</div>}
+      {value.length === 0 && <div style={{ fontSize: 11, color: C.faint }}>No questions added. Click “+ Add question” to add one.</div>}
       {value.map((q, i) => (
         <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: C.faint, width: 18, textAlign: 'right' }}>{i + 1}.</span>
@@ -228,7 +228,7 @@ function Locked({ label, value, hint }: { label: string; value: string; hint?: s
           Pvt Ltd" wrapped to FOUR lines and the tag rendered on top of it in
           four of the five fields. The kit's 112px assumes the wide centre
           column of RaiseMrfLayout, which this form does not use. */}
-      <div className="rx-input" style={{ height: 'auto', minHeight: 42, display: 'flex', alignItems: 'center', paddingRight: 13 }}>{value || '—'}</div>
+      <div className="rx-input" style={{ height: 'auto', minHeight: 42, display: 'flex', alignItems: 'center', paddingRight: 13 }}>{value || '-'}</div>
       {/* ...and with the inset gone the tag can no longer float over the value,
           so it takes its own row. Inline position beats the stylesheet's
           absolute; .rx-field is already a column flex, so it simply flows. */}
@@ -438,12 +438,12 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         if (names.length) role = names[0].role_name
         if (live) setCanConfidential(names.some((r: any) => String(r.role_code).toUpperCase() === 'HR_HEAD'))
       }
-      const fmt = (p: any) => p ? `${p.full_name} (${p.emp_code})` : '—'
+      const fmt = (p: any) => p ? `${p.full_name} (${p.emp_code})` : '-'
       const bundle = {
         name: mm.full_name || '', code: mm.emp_code || '', designation: mm.designation || '', role,
-        company_id: mm.company_id || '', company_name: mm.companies?.company_name || '—',
-        department_id: mm.department_id || '', department_name: mm.departments?.dept_name || '—', department_code: mm.departments?.dept_code || '',
-        rm1: mm.full_name ? `${mm.full_name} (${mm.emp_code})` : '—',
+        company_id: mm.company_id || '', company_name: mm.companies?.company_name || '-',
+        department_id: mm.department_id || '', department_name: mm.departments?.dept_name || '-', department_code: mm.departments?.dept_code || '',
+        rm1: mm.full_name ? `${mm.full_name} (${mm.emp_code})` : '-',
         rm2: fmt(byId[mm.l1_manager_id]), rm2_id: mm.l1_manager_id || '',
         hod: fmt(byId[mm.hod_id]), hod_id: mm.hod_id || '',
       }
@@ -617,7 +617,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       {done.mrf_number && <div style={{ display: 'inline-block', marginTop: 8, fontSize: 13, fontWeight: 700, color: C.purpleD, background: C.soft, borderRadius: 99, padding: '4px 14px', letterSpacing: '.03em' }}>Requisition ID: {done.mrf_number}</div>}
       <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
         {done.confidential
-          ? <>It is <b>approved already</b> — no approval chain, and nobody has been notified. Only you and the HR Manager can see it; add the candidate from Recruitment → Pipeline.</>
+          ? <>It is <b>approved already</b>: no approval chain, and nobody has been notified. Only you and the HR Manager can see it; add the candidate from Recruitment → Pipeline.</>
           : <>It’s been sent for approval through your reporting chain (RM2 → HR Head).</>}
         {' '}You can raise another, or resubmit this one if you spotted a mistake (the one you just submitted will be scrapped).
       </div>
@@ -645,7 +645,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
 .ez-mrf input::placeholder,.ez-mrf textarea::placeholder{color:${TK.faint}}`}</style>
       {readOnly && (
         <div style={{ fontSize: 12.5, color: C.ink, background: C.greenBg, border: `1px solid ${C.green}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10, fontWeight: 600 }}>
-          Reviewing this requisition — read only. Use the buttons at the bottom to Approve, Send back, or Reject.
+          Reviewing this requisition (read only). Use the buttons at the bottom to Approve, Send back, or Reject.
         </div>
       )}
       <div style={{ pointerEvents: readOnly ? 'none' : undefined }}>
@@ -711,8 +711,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Requisition Type"><Sel value={form.hiring_type} onChange={v => F('hiring_type', v)}>{REQ_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
         <Field label="Priority"><Sel value={form.urgency} onChange={v => F('urgency', v)}>{PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Sel></Field>
         <Field label="Requisition ID" hint={form.mrf_number ? 'Reserved for this requisition' : 'Reserving a number…'}><div style={{ ...st.input, background: C.locked, color: form.mrf_number ? C.ink : C.faint, fontWeight: form.mrf_number ? 700 : 400, letterSpacing: form.mrf_number ? '.03em' : 0, display: 'flex', alignItems: 'center', minHeight: 38 }}>{form.mrf_number || 'Generating…'}</div></Field>
-        <Field label="Raised By — Name"><input style={st.input} value={form.raised_by_name} onChange={e => F('raised_by_name', e.target.value)} placeholder="Your name" /></Field>
-        <Field label="Raised By — Role"><input style={st.input} value={form.raised_by_role} onChange={e => F('raised_by_role', e.target.value)} placeholder="e.g. Department Head" /></Field>
+        <Field label="Raised By: Name"><input style={st.input} value={form.raised_by_name} onChange={e => F('raised_by_name', e.target.value)} placeholder="Your name" /></Field>
+        <Field label="Raised By: Role"><input style={st.input} value={form.raised_by_role} onChange={e => F('raised_by_role', e.target.value)} placeholder="e.g. Department Head" /></Field>
       </div>
       {/* Confidential hiring — HR Head only. Self-approved, invisible to everyone but the HR
           Head and HR Manager, one Telephonic round, offer self-approved on acceptance. */}
@@ -722,7 +722,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
           <span>
             <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: TK.ink }}>🔒 Confidential hiring</span>
             <span style={{ display: 'block', fontSize: 12, color: TK.muted, lineHeight: 1.55, marginTop: 2 }}>
-              Approved the moment you submit — no RM2 / HR Head chain, nobody notified. The requisition and its candidates are visible only to you and the HR Manager of your company.
+              Approved the moment you submit: no RM2 / HR Head chain, nobody notified. The requisition and its candidates are visible only to you and the HR Manager of your company.
               You add the candidate, record one Telephonic round yourself (a Shortlist takes them straight to Negotiation), and once they accept the salary link the offer is self-approved and goes to Send Offers.
             </span>
           </span>
@@ -742,10 +742,10 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Designation" required><input style={st.input} value={form.designation} onChange={e => F('designation', e.target.value)} placeholder="e.g. Senior Engineer" /></Field>
         <Field label="No. of Openings"><input type="number" min="1" style={st.input} value={form.no_of_openings} onChange={e => F('no_of_openings', e.target.value)} /></Field>
         <Field label="Grade / Band"><MasterSel value={form.grade} onChange={v => F('grade', v)} opts={masters.grade || []} placeholder="Select…" /></Field>
-        <Field label="Job Code" hint={form.job_code ? 'Custom code' : 'Auto-generated on save — leave blank, or type your own'}><input style={st.input} value={form.job_code} onChange={e => F('job_code', e.target.value)} placeholder={`${jobCodePrefix(auto?.department_code, auto?.department_name, form.designation)}## (auto)`} /></Field>
-        <Locked label="RM1 — Reporting Manager" value={auto?.rm1} hint="auto · you" />
-        <Locked label="RM2 — Skip-level Manager" value={auto?.rm2} hint="auto · your manager" />
-        <Locked label="HOD — Department Head" value={auto?.hod} hint="auto · your HOD" />
+        <Field label="Job Code" hint={form.job_code ? 'Custom code' : 'Auto-generated on save. Leave blank, or type your own'}><input style={st.input} value={form.job_code} onChange={e => F('job_code', e.target.value)} placeholder={`${jobCodePrefix(auto?.department_code, auto?.department_name, form.designation)}## (auto)`} /></Field>
+        <Locked label="RM1: Reporting Manager" value={auto?.rm1} hint="auto · you" />
+        <Locked label="RM2: Skip-level Manager" value={auto?.rm2} hint="auto · your manager" />
+        <Locked label="HOD: Department Head" value={auto?.hod} hint="auto · your HOD" />
       </div>
 
       </>)}
@@ -769,13 +769,13 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       </div>
       <div style={g2}>
         <Field label="Cost Center"><MasterSel value={form.cost_center} onChange={v => F('cost_center', v)} opts={masters.cost_center || []} placeholder="Select…" /></Field>
-        <Field label="Budgeted Position"><Sel value={form.is_budgeted} onChange={v => F('is_budgeted', v)}><option value="">Not specified</option><option value="yes">Yes — budgeted</option><option value="no">No — unbudgeted</option></Sel></Field>
+        <Field label="Budgeted Position"><Sel value={form.is_budgeted} onChange={v => F('is_budgeted', v)}><option value="">Not specified</option><option value="yes">Yes, budgeted</option><option value="no">No, unbudgeted</option></Sel></Field>
         <Field label="Approved Headcount Ref."><input style={st.input} value={form.headcount_ref} onChange={e => F('headcount_ref', e.target.value)} placeholder="e.g. HCP-2026-014" /></Field>
         <Field label="Currency"><MasterSel value={form.currency} onChange={v => F('currency', v)} opts={masters.currency || []} placeholder="INR" useCode /></Field>
-        <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}><input type="number" style={st.input} value={form.budget_min} onChange={e => F('budget_min', e.target.value)} placeholder={comp.ph[0]} /></Field>
-        <Field label={`${comp.label} Range — Max`} hint={perLabel(comp.period)}><input type="number" style={{ ...st.input, ...((Number(form.budget_min) > 0 && Number(form.budget_max) > 0 && Number(form.budget_min) > Number(form.budget_max)) ? { borderColor: C.red } : {}) }} value={form.budget_max} onChange={e => F('budget_max', e.target.value)} placeholder={comp.ph[1]} /></Field>
+        <Field label={`${comp.label} Range: Min`} hint={perLabel(comp.period)}><input type="number" style={st.input} value={form.budget_min} onChange={e => F('budget_min', e.target.value)} placeholder={comp.ph[0]} /></Field>
+        <Field label={`${comp.label} Range: Max`} hint={perLabel(comp.period)}><input type="number" style={{ ...st.input, ...((Number(form.budget_min) > 0 && Number(form.budget_max) > 0 && Number(form.budget_min) > Number(form.budget_max)) ? { borderColor: C.red } : {}) }} value={form.budget_max} onChange={e => F('budget_max', e.target.value)} placeholder={comp.ph[1]} /></Field>
         {Number(form.budget_min) > 0 && Number(form.budget_max) > 0 && Number(form.budget_min) > Number(form.budget_max) && (
-          <div style={{ gridColumn: '1 / -1', fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '7px 10px' }}>Minimum cannot be more than maximum — please correct the {comp.label.toLowerCase()} range.</div>
+          <div style={{ gridColumn: '1 / -1', fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '7px 10px' }}>Minimum cannot be more than maximum. Please correct the {comp.label.toLowerCase()} range.</div>
         )}
         <Field label="Worker / Skill Category" hint="Sets the state minimum wage applied in salary negotiation">
           <Sel value={form.wage_category} onChange={v => F('wage_category', v)}>
@@ -811,14 +811,14 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Reason for Hire"><Sel value={form.reason} onChange={v => F('reason', v)}><option value="">Select Reason</option>{REASON_FOR_HIRE.map(r => <option key={r}>{r}</option>)}</Sel></Field>
         <Field label="Outgoing Employee" hint="Only for Replacement / Backfill">
           <Sel value={form.outgoing_employee_id} onChange={v => F('outgoing_employee_id', v)}>
-            <option value="">{isReplacement ? 'Select Employee' : '— N/A —'}</option>
+            <option value="">{isReplacement ? 'Select Employee' : 'N/A'}</option>
             {isReplacement && people.map(p => <option key={p.id} value={p.id}>{p.full_name} ({p.emp_code})</option>)}
           </Sel>
         </Field>
-        <Field label="Reason for Exit"><MasterSel value={form.exit_reason} onChange={v => F('exit_reason', v)} opts={isReplacement ? (masters.separation_reason || []) : []} placeholder={isReplacement ? 'Select Reason' : '— N/A —'} /></Field>
+        <Field label="Reason for Exit"><MasterSel value={form.exit_reason} onChange={v => F('exit_reason', v)} opts={isReplacement ? (masters.separation_reason || []) : []} placeholder={isReplacement ? 'Select Reason' : 'N/A'} /></Field>
       </div>
       <div style={{ marginTop: 10 }}>
-        <Field label="Business Justification"><textarea style={{ ...st.area, minHeight: 80 }} value={form.business_justification} onChange={e => F('business_justification', e.target.value)} placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" /></Field>
+        <Field label="Business Justification"><textarea style={{ ...st.area, minHeight: 80 }} value={form.business_justification} onChange={e => F('business_justification', e.target.value)} placeholder="Why this headcount is needed: business impact, workload, revenue linkage…" /></Field>
       </div>
 
       </>)}
@@ -837,10 +837,10 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       {!isQuick && (readOnly || activeId === 'cand') && <>
         <SectionLine n="7" title="Candidate Requirements" />
         <div style={g2}>
-          <Field label="Experience — Min (years)"><input type="number" style={st.input} value={form.experience_min} onChange={e => F('experience_min', e.target.value)} /></Field>
-          <Field label="Experience — Max (years)"><input type="number" style={st.input} value={form.experience_max} onChange={e => F('experience_max', e.target.value)} /></Field>
-          <Field label="Education — Minimum"><Sel value={form.education_min} onChange={v => F('education_min', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
-          <Field label="Education — Maximum"><Sel value={form.education_max} onChange={v => F('education_max', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
+          <Field label="Experience: Min (years)"><input type="number" style={st.input} value={form.experience_min} onChange={e => F('experience_min', e.target.value)} /></Field>
+          <Field label="Experience: Max (years)"><input type="number" style={st.input} value={form.experience_max} onChange={e => F('experience_max', e.target.value)} /></Field>
+          <Field label="Education: Minimum"><Sel value={form.education_min} onChange={v => F('education_min', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
+          <Field label="Education: Maximum"><Sel value={form.education_max} onChange={v => F('education_max', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
           <Field label="Previous Company Preference"><Sel value={form.previous_company_preference} onChange={v => F('previous_company_preference', v)}>{PREV_COMPANY.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Sel></Field>
         </div>
         <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
@@ -856,7 +856,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       <SectionLine n="8" title="Approval Workflow" />
       <div style={{ fontSize: 12.5, color: C.muted, background: C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 11, padding: '12px 14px', lineHeight: 1.6 }}>
         On submit this routes through your reporting chain, company-scoped:
-        <div style={{ marginTop: 4, color: C.ink, fontWeight: 500 }}>You ({auto?.code}) → RM2 {auto?.rm2 !== '—' ? `· ${auto.rm2}` : '(if set)'} → HR Head</div>
+        <div style={{ marginTop: 4, color: C.ink, fontWeight: 500 }}>You ({auto?.code}) → RM2 {auto?.rm2 !== '-' ? `· ${auto.rm2}` : '(if set)'} → HR Head</div>
       </div>
 
       </>)}
@@ -885,8 +885,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <div style={{ marginTop: 16 }}>
           {sbOpen && (
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Remark — what should the raiser fix?</div>
-              <textarea autoFocus value={sbNote} onChange={e => setSbNote(e.target.value)} placeholder="e.g. Budget looks high for this grade — please revise the range." style={{ ...st.input, minHeight: 64, resize: 'vertical' }} />
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Remark: what should the raiser fix?</div>
+              <textarea autoFocus value={sbNote} onChange={e => setSbNote(e.target.value)} placeholder="e.g. Budget looks high for this grade. Please revise the range." style={{ ...st.input, minHeight: 64, resize: 'vertical' }} />
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

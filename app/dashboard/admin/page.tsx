@@ -290,12 +290,12 @@ function CompanySetupTab() {
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['EZER HRMS — Company Setup Template v1.0'],[''],
+      ['EZER HRMS: Company Setup Template v1.0'],[''],
       ['Company Name *','Employer Name *','Company Type *','Industry *','PAN *','TAN *','CIN','Date of Incorporation (DD/MM/YYYY)'],
       ['Sharma Sons Private Limited','Ramesh Kumar Sharma','Private Limited (Pvt Ltd)','Manufacturing','AAAPL1234C','DELA12345B','U12345MH2020PTC123456','01/04/2010'],
     ]), 'Company')
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['LOCATIONS — One row per location'],[''],
+      ['LOCATIONS: One row per location'],[''],
       ['Location Name *','Type *','Address *','State *','District *','PIN *','License/Reg No.'],
       ['Delhi Head Office','Head Office','Plot 12 Sector 5 Dwarka','Delhi','South West Delhi','110075',''],
       ['Panipat Factory','Factory','NH-1 Industrial Area Sector 29','Haryana','Panipat','132103','FAC/HR/2020/001'],
@@ -321,7 +321,7 @@ function CompanySetupTab() {
       ['2. Delete example rows before uploading'],
       ['3. Location Types: Head Office, Registered Office, Corporate Office, Branch, Factory, Warehouse, Shop, Refinery, Depot, Construction Site, Other'],
       ['4. Labour Law Types: EPF, ESIC, ESIC-SUB, PT, GST, LWF'],
-      ['5. PT is STATE + DISTRICT level — one PT covers all locations in same district'],
+      ['5. PT is STATE + DISTRICT level: one PT covers all locations in same district'],
       ['6. EPF Scope: All Locations OR specific names comma separated'],
       ['7. Save as .xlsx before uploading'],
     ]), 'Instructions')
@@ -409,7 +409,7 @@ function CompanySetupTab() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ background: TK.surface, borderRadius: '14px', padding: '24px', maxWidth: '820px', width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
             <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '4px' }}>Excel Upload Preview</div>
-            <div style={{ fontSize: '12px', color: TK.muted, marginBottom: '14px' }}>{uploadPreview.length} locations found — review and confirm</div>
+            <div style={{ fontSize: '12px', color: TK.muted, marginBottom: '14px' }}>{uploadPreview.length} locations found. Review and confirm</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead><tr style={{ background: TK.brand, color: TK.onAccent }}>
                 {['Name','Type','State','District','PIN'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left' }}>{h}</th>)}
@@ -498,7 +498,7 @@ function CompanySetupTab() {
               <label style={C.lbl}>Group Logo (optional)</label>
               <label style={{ cursor: 'pointer' }}>
                 <input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} />
-                <div style={uploadBox}>Click to upload (PNG, JPG — max 2MB)</div>
+                <div style={uploadBox}>Click to upload (PNG, JPG, max 2MB)</div>
               </label>
             </div>
           </div>
@@ -507,7 +507,7 @@ function CompanySetupTab() {
         {/* STEP 1: COMPANY */}
         {step === 1 && (
           <div style={C.card}>
-            <div style={C.secTitle}>Company Details — <span style={{ color: TK.brand, fontSize: '12px' }}>{savedGroup}</span></div>
+            <div style={C.secTitle}>Company Details: <span style={{ color: TK.brand, fontSize: '12px' }}>{savedGroup}</span></div>
             <div style={C.g2}>
               <div>
                 <label style={C.lbl}>Name of Establishment<span style={C.req}>*</span></label>
@@ -558,13 +558,13 @@ function CompanySetupTab() {
               <div style={{ fontSize: '12px', fontWeight: 600, color: TK.inkSoft, marginBottom: '10px' }}>Letterhead Setup</div>
               <div style={C.g2}>
                 <div>
-                  <label style={C.lbl}>Header — Upload Image</label>
+                  <label style={C.lbl}>Header: Upload Image</label>
                   <label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>Upload Header Image</div></label>
                   <label style={{ ...C.lbl, marginTop: '8px' }}>Or Header Text</label>
                   <textarea style={{ ...inp(), height: '60px', resize: 'none' as any }} value={headerText} onChange={e => setHeaderText(e.target.value)} placeholder="Company Name&#10;Address | Phone | Email" />
                 </div>
                 <div>
-                  <label style={C.lbl}>Footer — Upload Image</label>
+                  <label style={C.lbl}>Footer: Upload Image</label>
                   <label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>Upload Footer Image</div></label>
                   <label style={{ ...C.lbl, marginTop: '8px' }}>Or Footer Text</label>
                   <textarea style={{ ...inp(), height: '60px', resize: 'none' as any }} value={footerText} onChange={e => setFooterText(e.target.value)} placeholder="CIN: XXXXX | PAN: XXXXX | www.company.com" />
@@ -600,7 +600,7 @@ function CompanySetupTab() {
             {locations.map((loc, i) => (
               <div key={loc.id} style={C.sub}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: TK.inkSoft }}>Location {i + 1}{loc.name ? ` — ${loc.name}` : ''}</span>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: TK.inkSoft }}>Location {i + 1}{loc.name ? `: ${loc.name}` : ''}</span>
                   {i > 0 && <button style={C.rmBtn} onClick={() => setLocations(p => p.filter((_, idx) => idx !== i))}>Remove</button>}
                 </div>
                 <div style={{ ...C.g3, marginBottom: '10px' }}>
@@ -660,7 +660,7 @@ function CompanySetupTab() {
                   </div>
                 </div>
                 {loc.lat && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.positive, background: TK.positiveTint, padding: '5px 10px', borderRadius: '7px' }}>Geo-tagged: {loc.lat}, {loc.lng}</div>}
-                {loc.state && loc.district && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.info, background: TK.infoTint, padding: '5px 10px', borderRadius: '7px' }}>✦ {loc.state} › {loc.district} — PT & ESIC will auto-link here</div>}
+                {loc.state && loc.district && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.info, background: TK.infoTint, padding: '5px 10px', borderRadius: '7px' }}>✦ {loc.state} › {loc.district}: PT & ESIC will auto-link here</div>}
               </div>
             ))}
             <button style={C.addBtn} onClick={() => setLocations(p => [...p, { id: uid(), name: '', type: 'Branch', address: '', state: '', district: '', pincode: '', lat: '', lng: '', licenseNumber: '', certificate: '' }])}>＋ Add Location / Branch</button>
@@ -699,7 +699,7 @@ function CompanySetupTab() {
         {step === 4 && (
           <div style={C.card}>
             <div style={C.secTitle}>Labour Law Registrations</div>
-            <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: TK.inkSoft }}>EPF — Employee Provident Fund</div>
+            <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: TK.inkSoft }}>EPF: Employee Provident Fund</div>
             {epfList.map((epf, i) => (
               <div key={epf.id} style={C.sub}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -738,8 +738,8 @@ function CompanySetupTab() {
             ))}
             <button style={C.addBtn} onClick={() => setEpfList(p => [...p, { id: uid(), code: '', scope: 'all', locations: [], deptAddress: '', certificate: '' }])}>＋ Add EPF Code</button>
 
-            <div style={{ fontSize: '12px', fontWeight: 600, margin: '16px 0 6px', color: TK.inkSoft }}>ESIC — Employee State Insurance</div>
-            <div style={{ background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: '7px', padding: '8px 11px', marginBottom: '10px', fontSize: '11px', color: TK.warning }}>ESIC is State + District specific. Select district — locations auto-link. Add main code first, then sub-codes.
+            <div style={{ fontSize: '12px', fontWeight: 600, margin: '16px 0 6px', color: TK.inkSoft }}>ESIC: Employee State Insurance</div>
+            <div style={{ background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: '7px', padding: '8px 11px', marginBottom: '10px', fontSize: '11px', color: TK.warning }}>ESIC is State + District specific. Select district, locations auto-link. Add main code first, then sub-codes.
             </div>
             {esicList.map((esic, i) => (
               <div key={esic.id} style={C.sub}>
@@ -767,7 +767,7 @@ function CompanySetupTab() {
                 {esic.locations.length > 0 && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.positive, background: TK.positiveTint, padding: '5px 10px', borderRadius: '7px' }}>Auto-linked: {esic.locations.join(', ')}</div>}
                 {namedLocs.length > 0 && (
                   <div style={{ marginTop: '8px' }}>
-                    <label style={C.lbl}>Override — Select Specific Locations</label>
+                    <label style={C.lbl}>Override: Select Specific Locations</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                       {namedLocs.map(loc => (
                         <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '7px', background: esic.locations.includes(loc.name) ? TK.brandTint : TK.sunken, border: `1px solid ${esic.locations.includes(loc.name) ? TK.brandEdge : TK.line}` }}>
@@ -932,7 +932,7 @@ function CompanySetupTab() {
         {/* Navigation */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
           <button style={{ ...C.secBtn, opacity: step === 0 ? 0.4 : 1 }} onClick={() => step > 0 && setStep(s => s - 1)} disabled={step === 0}>Back</button>
-          <span style={{ fontSize: '11px', color: TK.faint }}>Step {step + 1} of {STEPS.length} {Object.keys(errors).length > 0 ? '— ⚠️ Fix errors above' : ''}</span>
+          <span style={{ fontSize: '11px', color: TK.faint }}>Step {step + 1} of {STEPS.length} {Object.keys(errors).length > 0 ? '· ⚠️ Fix errors above' : ''}</span>
           <button style={C.priBtn} onClick={goNext}>{step === STEPS.length - 1 ? 'Complete Setup' : 'Next →'}</button>
         </div>
       </div>
@@ -1168,7 +1168,7 @@ function MasterSetupTab() {
             <div style={{ textAlign:'center' as const, padding:'60px 20px', color:TK.faint }}>
               <div style={{ fontSize:'40px', marginBottom:'12px' }}></div>
               <div style={{ fontSize:'16px', fontWeight:500, marginBottom:'6px', color:TK.inkSoft }}>Master Setup</div>
-              <div style={{ fontSize:'13px' }}>Select a category on the left — then choose a master type</div>
+              <div style={{ fontSize:'13px' }}>Select a category on the left, then choose a master type</div>
             </div>
           )}
 
@@ -1241,7 +1241,7 @@ function MasterSetupTab() {
                           </td>
                         )}
                         <td style={{ padding:'8px 10px', fontWeight:500 }}>{v.label}</td>
-                        <td style={{ padding:'8px 10px', color:TK.muted, fontSize:'11px' }}>{v.description||'—'}</td>
+                        <td style={{ padding:'8px 10px', color:TK.muted, fontSize:'11px' }}>{v.description||'-'}</td>
                         {selType.has_extra_data && (
                           <td style={{ padding:'8px 10px' }}>
                             {v.extra_data && <button onClick={() => alert(JSON.stringify(v.extra_data, null, 2))} style={{ padding:'2px 8px', background:TK.brandTint, border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'10px', color:TK.brand }}>View</button>}
@@ -1273,7 +1273,7 @@ function MasterSetupTab() {
 
       {/* ── ADD/EDIT VALUE MODAL ─────────────────────────────────────── */}
       {showValueForm && selType && (
-        <Modal title={editValue ? `✏️ Edit — ${editValue.label}` : `+ Add New Value — ${selType.name}`} onClose={() => setShowValueForm(false)} onSave={handleSaveValue} saveLabel={editValue ? 'Update Value' : 'Add Value'}>
+        <Modal title={editValue ? `✏️ Edit: ${editValue.label}` : `+ Add New Value: ${selType.name}`} onClose={() => setShowValueForm(false)} onSave={handleSaveValue} saveLabel={editValue ? 'Update Value' : 'Add Value'}>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
             {selType.has_code && (
               <Fld label="Code" req>
@@ -1314,7 +1314,7 @@ function MasterSetupTab() {
             </div>
           )}
           {editValue?.is_system && (
-            <div style={{ padding:'8px 12px', background:TK.warningTint, borderRadius:'10px', fontSize:'11px', color:TK.warning }}>System value — only Label and Description can be edited
+            <div style={{ padding:'8px 12px', background:TK.warningTint, borderRadius:'10px', fontSize:'11px', color:TK.warning }}>System value: only Label and Description can be edited
             </div>
           )}
         </Modal>
@@ -1322,7 +1322,7 @@ function MasterSetupTab() {
 
       {/* ── ADD NEW MASTER TYPE MODAL ────────────────────────────────── */}
       {showTypeForm && selCat && (
-        <Modal title={`+ New Master Type — ${selCat.name}`} onClose={() => setShowTypeForm(false)} onSave={handleSaveType} saveLabel="Create Master Type">
+        <Modal title={`+ New Master Type: ${selCat.name}`} onClose={() => setShowTypeForm(false)} onSave={handleSaveType} saveLabel="Create Master Type">
           <div style={{ padding:'8px 12px', background:TK.infoTint, borderRadius:'10px', fontSize:'11px', color:TK.info, marginBottom:'12px' }}>After creating a new master type, you can add values to it. This master type will then be available in all forms.
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
@@ -1380,8 +1380,8 @@ export default function AdminPage() {
       {/* Tabs */}
       <div style={{ background: TK.surface, borderBottom: `1px solid ${TK.line}`, padding: '0 24px', display: 'flex' }}>
         {[
-          { id: 'company', label: 'Company Setup', desc: 'Onboard a new company — 7-step wizard' },
-          { id: 'master',  label: 'Master Setup',  desc: 'Manage dropdowns — Add/Edit/Disable' },
+          { id: 'company', label: 'Company Setup', desc: 'Onboard a new company (7-step wizard)' },
+          { id: 'master',  label: 'Master Setup',  desc: 'Manage dropdowns: Add/Edit/Disable' },
           { id: 'inbox',   label: 'Inbox',         desc: 'Who can message whom · department desks' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}

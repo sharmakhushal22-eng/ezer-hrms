@@ -44,7 +44,7 @@ const MIN_TOP_MM = 55, MIN_BOTTOM_MM = 35, MIN_SIDE_MM = 20
 
 const INK = '#1F2937', MUTED = '#6B7280', LINE = '#D1D5DB', HEAD_BG = '#F3F4F6'
 const money = (n: any) => `Rs. ${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
-const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'
+const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'
 // The core fonts only carry WinAnsi; anything else (a name in Devanagari, say) would print as
 // garbage and break line widths, so it becomes "?" instead.
 const clean = (s: any) => String(s ?? '').replace(/₹\s?/g, 'Rs. ').replace(/[−–—]/g, '-')

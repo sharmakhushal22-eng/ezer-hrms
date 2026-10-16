@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     if (cand.status === 'EMPLOYEE_CREATED') return NextResponse.json({ error: 'Employee code already generated' }, { status: 409 })
     // Gate: code only after the candidate has completed (submitted) onboarding.
     if (!['SUBMITTED', 'HR_REVIEW'].includes(cand.status)) {
-      return NextResponse.json({ error: 'Form not yet submitted by candidate — onboarding incomplete' }, { status: 400 })
+      return NextResponse.json({ error: 'Form not yet submitted by candidate. Onboarding incomplete' }, { status: 400 })
     }
 
     const { data: company } = await supa.from('companies').select('company_code').eq('id', cand.company_id).single()
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
         onboarding_id, action: 'EMPLOYEE_SYNC_FAILED', actor_type: 'HR', actor_id: approved_by || null,
         details: { employee_code: finalCode, error: why },
       })
-      return NextResponse.json({ error: `Employee record could not be created: ${why}. The onboarding is back in HR review — fix the data and generate the code again.`, employee_code: finalCode, employee_synced: false, sync_error: why }, { status: 500 })
+      return NextResponse.json({ error: `Employee record could not be created: ${why}. The onboarding is back in HR review. Fix the data and generate the code again.`, employee_code: finalCode, employee_synced: false, sync_error: why }, { status: 500 })
     }
 
     await supa.from('onboarding_statutory_enrollment').update({

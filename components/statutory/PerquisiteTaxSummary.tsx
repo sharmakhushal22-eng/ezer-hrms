@@ -59,7 +59,7 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', maxWidth: 420 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>
-        Perquisite tax impact — FY {fy}
+        Perquisite tax impact: FY {fy}
       </div>
 
       <Row label="Base taxable salary" value={inr(income.base_taxable_salary)} />
@@ -89,7 +89,7 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
       </div>
 
       <div style={{ fontSize: 10, color: C.muted, marginTop: 8 }}>
-        TDS/Cess/Surcharge shown here use a placeholder calculation — wired to EZER's existing tax engine at integration time.
+        TDS/Cess/Surcharge shown here use a placeholder calculation, wired to EZER's existing tax engine at integration time.
       </div>
     </div>
   )

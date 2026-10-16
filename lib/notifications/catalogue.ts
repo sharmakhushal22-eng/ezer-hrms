@@ -147,12 +147,12 @@ export const HOD: NotificationDef[] = [
 
 // ── 5. HR Manager ───────────────────────────────────────────────────────────
 export const HR_MANAGER: NotificationDef[] = [
-  D('HR_RESIGNATION_FINAL_STAGE', 'Resignation reached HR — set final LWD', 'HR_MANAGER', 'HIGH',   true,  '/dashboard/employees'),
+  D('HR_RESIGNATION_FINAL_STAGE', 'Resignation reached HR: set final LWD',  'HR_MANAGER', 'HIGH',   true,  '/dashboard/employees'),
   D('HR_PROOF_SUBMITTED',         'Investment proof needs verification',    'HR_MANAGER', 'NORMAL', false, '/dashboard/investment-proofs'),
   D('HR_EXIT_CLEARANCE_PENDING',  'HR line pending on an exit clearance',   'HR_MANAGER', 'HIGH',   true,  '/dashboard/employees', false),
   D('HR_SHORTFALL_REVIEW',        'Notice shortfall recovery needs review', 'HR_MANAGER', 'NORMAL', false, '/dashboard/employees'),
-  D('HR_ONBOARDING_TASK',         'New joiner — onboarding checklist',      'HR_MANAGER', 'NORMAL', false, '/dashboard/onboarding'),
-  D('HR_BULK_PROOF_REMINDER',     'Proof window closing — pending count',   'HR_MANAGER', 'HIGH',   true,  '/dashboard/investment-proofs', false),
+  D('HR_ONBOARDING_TASK',         'New joiner: onboarding checklist',       'HR_MANAGER', 'NORMAL', false, '/dashboard/onboarding'),
+  D('HR_BULK_PROOF_REMINDER',     'Proof window closing: pending count',    'HR_MANAGER', 'HIGH',   true,  '/dashboard/investment-proofs', false),
 ]
 
 // ── 6. HR Head / CHRO — everything HR Manager gets, plus these ──────────────
@@ -173,7 +173,7 @@ export const FINANCE: NotificationDef[] = [
 // ── 8. Payroll ──────────────────────────────────────────────────────────────
 export const PAYROLL: NotificationDef[] = [
   D('PAYROLL_RUN_READY',     'Payroll run ready to execute',        'PAYROLL', 'HIGH',   true,  '/dashboard/payroll'),
-  D('PAYROLL_RUN_COMPLETE',  'Run complete — TDS register ready',   'PAYROLL', 'NORMAL', false, '/dashboard/payroll'),
+  D('PAYROLL_RUN_COMPLETE',  'Run complete, TDS register ready',    'PAYROLL', 'NORMAL', false, '/dashboard/payroll'),
   D('PAYROLL_FILING_DUE',    'Statutory filing deadline approaching','PAYROLL','HIGH',   true,  '/dashboard/compliance', false),
   D('PAYROLL_NEGATIVE_NET',  'Negative net pay blocked the run',    'PAYROLL', 'HIGH',   true,  '/dashboard/payroll'),
 ]
@@ -182,12 +182,12 @@ export const PAYROLL: NotificationDef[] = [
 export const IT_ADMIN: NotificationDef[] = [
   D('IT_EXIT_CLEARANCE',    'IT line pending on an exit clearance',    'IT_ADMIN', 'HIGH',   true,  '/dashboard/employees', false),
   D('ADMIN_EXIT_CLEARANCE', 'Admin line pending on an exit clearance', 'IT_ADMIN', 'HIGH',   true,  '/dashboard/employees', false),
-  D('ADMIN_ASSET_ISSUE',    'New joiner — asset issuance task',        'IT_ADMIN', 'NORMAL', false, '/dashboard/onboarding'),
+  D('ADMIN_ASSET_ISSUE',    'New joiner: asset issuance task',         'IT_ADMIN', 'NORMAL', false, '/dashboard/onboarding'),
 ]
 
 // ── 10. MD ──────────────────────────────────────────────────────────────────
 export const MD: NotificationDef[] = [
-  D('MD_FINAL_SIGNOFF', 'Final sign-off needed — senior exit', 'MD', 'HIGH', true, '/dashboard/employees', false),
+  D('MD_FINAL_SIGNOFF', 'Final sign-off needed: senior exit', 'MD', 'HIGH', true, '/dashboard/employees', false),
   D('MD_MONTHLY_KPI',   'Monthly company KPI summary',         'MD', 'HIGH', true, '/dashboard',           false),
 ]
 

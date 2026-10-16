@@ -107,7 +107,7 @@ export function fmtDateTime(iso: string | null | undefined): string {
 }
 
 export function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return String(iso)
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })

@@ -62,7 +62,7 @@ export default function RecruiterPicker({ people, value, onChange, placeholder }
       <div style={{ border: `1px solid ${P.border}`, borderRadius: 10, overflow: 'hidden', maxHeight: 260, overflowY: 'auto' }}>
         {hits.length === 0 && (
           <div style={{ fontSize: 12.5, color: P.faint, padding: '14px 16px' }}>
-            {ql ? 'No employee matches that code or name.' : (people.length ? 'No recruiters suggested — search by employee code or name to add anyone.' : 'No employees found in your company.')}
+            {ql ? 'No employee matches that code or name.' : (people.length ? 'No recruiters suggested. Search by employee code or name to add anyone.' : 'No employees found in your company.')}
           </div>
         )}
         {hits.map((p, i) => (

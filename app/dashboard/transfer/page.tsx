@@ -54,7 +54,7 @@ function FilterBar({ companies, branches, company, setCompany, branch, setBranch
 function EmployeeSelectTable({ employees, branches, selected, setSelected }: {
   employees: any[]; branches: any[]; selected: Set<string>; setSelected: (s: Set<string>) => void
 }) {
-  const branchName = (id: string) => branches.find(b => b.id === id)?.location_name || '—'
+  const branchName = (id: string) => branches.find(b => b.id === id)?.location_name || '-'
   const allSelected = employees.length > 0 && employees.every(e => selected.has(e.id))
   const toggle = (id: string) => { const s = new Set(selected); s.has(id) ? s.delete(id) : s.add(id); setSelected(s) }
   const toggleAll = () => {
@@ -95,7 +95,7 @@ function MidMonthWarning({ effectiveDate, toBranch, fromBranch }: { effectiveDat
   if (!isMid) return null
   const msg = (fromBranch && toBranch.state !== fromBranch.state)
     ? `Effective date is mid-month. For this month, statutory (PT/LWF/PF) will be per the PREVIOUS state (${fromBranch.state}). New state (${toBranch.state}) applies next month.`
-    : `Effective mid-month; statutory stays ${fromBranch?.state || toBranch.state || '—'} this month.`
+    : `Effective mid-month; statutory stays ${fromBranch?.state || toBranch.state || '-'} this month.`
   return (
     <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:10, padding:'10px 12px', marginBottom:12, fontSize:13, color: TK.warning }}>
       ⚠ {msg}
@@ -245,7 +245,7 @@ export default function TransferPage() {
         benefit_amount: form.benefit_amount ? Number(form.benefit_amount) : undefined,
       }, { name: 'HR' })
       if (res?.ok) {
-        notify(`Transfer initiated for ${selected.size} employees — letters sent`, 'success')
+        notify(`Transfer initiated for ${selected.size} employees, letters sent`, 'success')
         setSelected(new Set())
         await load()
       } else {

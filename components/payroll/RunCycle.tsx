@@ -92,7 +92,7 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
         opacity: off ? 0.45 : 1, transition: 'all .15s',
       }}>
       {check.icon} {check.label}
-      <span style={countStyle}>{off ? '—' : n}</span>
+      <span style={countStyle}>{off ? '-' : n}</span>
     </button>
   )
 }
@@ -163,12 +163,12 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
                         fontSize: 11, fontWeight: 700, flexShrink: 0,
                       }}>{e.initials}</div>
                       <div>
-                        <div style={{ fontWeight: 600 }}>{e.name || '—'}</div>
+                        <div style={{ fontWeight: 600 }}>{e.name || '-'}</div>
                         <div style={{ fontSize: 11, color: C.muted }}>{e.code}</div>
                       </div>
                     </div>
                   </td>
-                  {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{e.company || '—'}</td>}
+                  {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{e.company || '-'}</td>}
                   <td style={{ ...td, color: check.blocking ? C.redDark : C.amber, fontSize: 12 }}>{e.impact}</td>
                 </tr>
               ))}
@@ -270,7 +270,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
           </select>
         </div>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <label style={lbl}>Employee — code or name, paste a list too</label>
+          <label style={lbl}>Employee (code or name, paste a list too)</label>
           <input style={{ ...inp, width: '100%' }} value={filter.employee}
             onChange={e => onChange({ employee: e.target.value })}
             placeholder="SSM9001, SSM9002   ya   kavya" />
@@ -283,10 +283,10 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
         )}
       </div>
       <div style={{ fontSize: 11, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
-        {!on ? <>No filter — payroll will run on the <b>whole month</b> ({rows.length} employees).</>
+        {!on ? <>No filter: payroll will run on the <b>whole month</b> ({rows.length} employees).</>
           : matched === 0
-            ? <b style={{ color: C.red }}>This filter matches no employees — there is nothing to run.</b>
-            : <>Filter on — payroll will run on <b>only these {matched}</b> of {rows.length} employees. The other {rows.length - matched} payslips stay exactly as they are, and the month will <b>not be marked CALCULATED</b> until a full run happens.</>}
+            ? <b style={{ color: C.red }}>This filter matches no employees, so there is nothing to run.</b>
+            : <>Filter on: payroll will run on <b>only these {matched}</b> of {rows.length} employees. The other {rows.length - matched} payslips stay exactly as they are, and the month will <b>not be marked CALCULATED</b> until a full run happens.</>}
       </div>
     </div>
   )
@@ -410,13 +410,13 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       // Regime rule first: anyone still undecided after the 4th goes on the New
       // Regime before the TDS step reads the snapshot (072). Reported, never fatal.
       const rd = await defaultRegimesForFy(r.fy)
-      if (rd.error) fails.push(`${r.company_name || label}: regime default — ${rd.error}`)
+      if (rd.error) fails.push(`${r.company_name || label}: regime default (${rd.error})`)
       let prereqFailed = false
       for (const [what, cat] of [['earnings', EARN_CAT], ['EPF', EPF_CAT], ['ESIC', ESIC_CAT], ['PT', PT_CAT], ['LWF', LWF_CAT], ['employer NPS', NPS_CAT], ['arrear', ARREAR_CAT], ['TDS', TDS_CAT]] as const) {
         if (!cat) continue
         const { error } = await runCategorySync(cat, [r.id], codes)
         if (!error) continue
-        fails.push(`${r.company_name || label}: ${what} — ${error}`)
+        fails.push(`${r.company_name || label}: ${what} (${error})`)
         if (what === 'earnings') { prereqFailed = true; break }
       }
       if (prereqFailed) continue
@@ -437,7 +437,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       // and open to a second run. `does not exist` also covers a bad column inside a
       // lock function that is present, and that must be reported, not hidden.
       if (lockErr && !/could not find the function|schema cache/i.test(lockErr)) {
-        fails.push(`${r.company_name || label}: lock — ${lockErr}`)
+        fails.push(`${r.company_name || label}: lock (${lockErr})`)
       }
     }
 
@@ -488,7 +488,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         const part = await loadRunRegister(r.id)
         part.forEach(x => rows.push(isGroup ? { Company: r.company_name || '', ...x } : x))
       }
-      if (!rows.length) { setErr('No payroll lines for this month yet — run payroll first.'); return }
+      if (!rows.length) { setErr('No payroll lines for this month yet. Run payroll first.'); return }
       const header: string[] = []
       rows.forEach(r => Object.keys(r).forEach(k => { if (!header.includes(k)) header.push(k) }))
       const wb = XLSX.utils.book_new()
@@ -508,7 +508,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
     // selected employees; unfiltered, the whole month. Anything else and HR reads a
     // verdict about people the button is not going to touch.
     if (filtering && shown.length === 0) {
-      return { tone: 'amber' as const, title: 'Nobody matches this filter', sub: 'Clear it or widen it — there is nothing to run.' }
+      return { tone: 'amber' as const, title: 'Nobody matches this filter', sub: 'Clear it or widen it. There is nothing to run.' }
     }
     // Red is now reserved for "nobody can be paid at all". Some people being left out is
     // a warning, not a stop — the other 301 salaries still go out today.
@@ -524,7 +524,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       }
       return {
         tone: 'red' as const, title: 'Nobody left to run',
-        sub: `${blockerSummary(blockers)} — nobody in scope is available.`,
+        sub: `${blockerSummary(blockers)}, so nobody in scope is available.`,
       }
     }
     if (result) {
@@ -532,7 +532,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         tone: excluded.length ? 'amber' as const : 'green' as const,
         title: 'Payroll run complete',
         sub: `${result.processed} paid · net ${inr(result.net)}`
-          + (excluded.length ? ` · ${excluded.length} left out (${blockerSummary(blockers)}) — fix and run again for them` : ''),
+          + (excluded.length ? ` · ${excluded.length} left out (${blockerSummary(blockers)}). Fix them and run again` : ''),
       }
     }
     const inScope = filtering ? shown.length : (rdAll?.totalEmployees ?? 0)
@@ -540,7 +540,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       return {
         tone: 'amber' as const,
         title: `Ready to run for ${willRun.length} of ${inScope}`,
-        sub: `${excluded.length} will be left out — ${blockerSummary(blockers)}. Their payslips will not be produced; everyone else's will.`,
+        sub: `${excluded.length} will be left out: ${blockerSummary(blockers)}. Their payslips will not be produced; everyone else's will.`,
       }
     }
     if (filtering) {
@@ -549,25 +549,25 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         tone: 'green' as const,
         title: `Ready to run for ${shown.length} employee${shown.length === 1 ? '' : 's'}`,
         sub: rest > 0
-          ? `Only the selected ${shown.length} will be calculated — the other ${rest} in this month stay exactly as they are.`
+          ? `Only the selected ${shown.length} will be calculated. The other ${rest} in this month stay exactly as they are.`
           : 'Every employee in this month is selected.',
       }
     }
-    if (calculated) return { tone: 'green' as const, title: 'Payroll already calculated', sub: 'Nothing outstanding — re-run it if attendance or salary changed since.' }
+    if (calculated) return { tone: 'green' as const, title: 'Payroll already calculated', sub: 'Nothing outstanding. Re-run it if attendance or salary changed since.' }
     return { tone: 'green' as const, title: 'Ready to run', sub: `All ${inScope} employees have nothing outstanding.` }
   })()
 
   const hint = !monthRuns.length ? 'Create a payroll month first'
-    : closed ? 'This month is locked — reopen it from Lock / Unlock'
+    : closed ? 'This month is locked. Reopen it from Lock / Unlock'
       : filtering && shown.length === 0 ? 'Nobody matches the filter'
         : willRun.length === 0
           ? (blockers.length === 1 && blockers[0].key === 'locked'
-            ? 'Everyone here is locked — unlock someone to run them again'
-            : 'Nobody in scope is available — fix one to enable this')
+            ? 'Everyone here is locked. Unlock someone to run them again'
+            : 'Nobody in scope is available. Fix one to enable this')
           : busy ? 'Working…'
-            : excluded.length ? `${excluded.length} left out — they keep their current payslip, nothing is zeroed`
+            : excluded.length ? `${excluded.length} left out: they keep their current payslip, nothing is zeroed`
               : filtering
-                ? `Only these ${shown.length} — the rest of the month is not touched`
+                ? `Only these ${shown.length}. The rest of the month is not touched`
                 : `Runs on all ${rdAll?.totalEmployees ?? 0} employees in this month`
 
   return (

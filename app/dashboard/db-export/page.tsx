@@ -38,7 +38,7 @@ export default function DbExportPage() {
         <div style={{ width: 66, height: 66, borderRadius: 20, background: `linear-gradient(135deg,${TK.ink},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 18px' }}></div>
         <div style={{ fontSize: 22, fontWeight: 700 }}>Database Export</div>
         <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6 }}>
-          Download the <b>entire HRMS database</b> — every table, every column, all rows — into one Excel workbook (a sheet per table, with column headers). Nothing is left out.
+          Download the <b>entire HRMS database</b> (every table, every column, all rows) into one Excel workbook (a sheet per table, with column headers). Nothing is left out.
         </div>
 
         <button onClick={download} disabled={busy} style={{
@@ -50,7 +50,7 @@ export default function DbExportPage() {
           {busy ? 'Exporting the whole database…' : '⬇ Download entire database (Excel)'}
         </button>
 
-        {busy && <div style={{ fontSize: 12, color: C.muted, marginTop: 12 }}>This can take a while for large databases — please keep this tab open.</div>}
+        {busy && <div style={{ fontSize: 12, color: C.muted, marginTop: 12 }}>This can take a while for large databases. Please keep this tab open.</div>}
         {done && <div style={{ fontSize: 13, color: C.green, marginTop: 14, fontWeight: 600 }}>Export downloaded.</div>}
         {err && <div style={{ fontSize: 13, color: C.red, marginTop: 14 }}>⚠ {err}</div>}
 

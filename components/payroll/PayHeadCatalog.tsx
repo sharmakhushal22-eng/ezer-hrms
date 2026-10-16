@@ -24,16 +24,16 @@ const EARNINGS: Row[] = [
   { label: 'Medical allowance', type: 'Fixed earning', rule: 'Config-driven (optional)', tone: 'earn' },
   { label: 'Special allowance', type: 'Balancing', rule: 'CTC − all other components', trigger: 'Auto-calculated', tone: 'earn' },
   { label: 'Statutory bonus', type: 'Fixed earning', rule: '8.33% of min(Basic, ₹21,000)', trigger: 'Bonus Act 1965', tone: 'earn' },
-  { label: 'Variable pay', type: 'Variable', rule: '% of CTC — grade-wise', trigger: 'PMS / config', tone: 'earn' },
+  { label: 'Variable pay', type: 'Variable', rule: '% of CTC, grade-wise', trigger: 'PMS / config', tone: 'earn' },
   { label: 'Flexi reimbursement', type: 'Reimbursement', rule: 'Approved flexi claims this month', trigger: 'From flexi_claims', tone: 'earn' },
   { label: 'Gross earnings', type: 'Computed total', rule: 'SUM of all earning components', tone: 'total' },
 ]
 const EE_DED: Row[] = [
   { label: 'Employee PF (EPF)', type: 'Statutory', rule: '12% of EPF wages (ceiling ₹15,000)', trigger: 'if PF applicable', tone: 'ded' },
   { label: 'Employee ESIC', type: 'Statutory', rule: '0.75% of gross', trigger: 'if gross ≤ ₹21,000/mo', tone: 'ded' },
-  { label: 'Professional Tax (PT)', type: 'Statutory', rule: 'State slab — Haryana ₹200/mo', trigger: 'if PT applicable', tone: 'ded' },
-  { label: 'Labour Welfare Fund (LWF)', type: 'Statutory', rule: 'State-wise — Haryana ₹25 (Jun & Dec)', trigger: 'if LWF applicable', tone: 'ded' },
-  { label: 'TDS (monthly)', type: 'Statutory', rule: 'Old/New regime — projected annual ÷ 12', trigger: 'TDS engine', tone: 'ded' },
+  { label: 'Professional Tax (PT)', type: 'Statutory', rule: 'State slab: Haryana ₹200/mo', trigger: 'if PT applicable', tone: 'ded' },
+  { label: 'Labour Welfare Fund (LWF)', type: 'Statutory', rule: 'State-wise: Haryana ₹25 (Jun & Dec)', trigger: 'if LWF applicable', tone: 'ded' },
+  { label: 'TDS (monthly)', type: 'Statutory', rule: 'Old/New regime: projected annual ÷ 12', trigger: 'TDS engine', tone: 'ded' },
   { label: 'VPF (Voluntary PF)', type: 'Voluntary', rule: 'Employee-opted % of EPF wage', trigger: 'if opted (else hidden)', tone: 'ded' },
   { label: 'NPS deduction', type: 'Voluntary', rule: '10% of Basic (employee)', trigger: 'if enrolled (else hidden)', tone: 'ded' },
   { label: 'Loan EMI', type: 'Recovery', rule: 'Per loan schedule', trigger: 'if active loan (else hidden)', tone: 'ded' },
@@ -43,7 +43,7 @@ const EE_DED: Row[] = [
 const EMPLOYER: Row[] = [
   { label: 'Employer PF', type: 'Employer', rule: '12% of EPF wages', trigger: 'Matched with employee PF', tone: 'employer' },
   { label: 'Employer ESIC', type: 'Employer', rule: '3.25% of gross', trigger: 'if gross ≤ ₹21,000', tone: 'employer' },
-  { label: 'Gratuity provision', type: 'Accrual', rule: '4.81% of Basic', trigger: 'Accrual — not paid monthly', tone: 'employer' },
+  { label: 'Gratuity provision', type: 'Accrual', rule: '4.81% of Basic', trigger: 'Accrual, not paid monthly', tone: 'employer' },
   { label: 'Total CTC (monthly)', type: 'Computed total', rule: 'Gross + employer contributions', trigger: 'Informational', tone: 'total' },
 ]
 const FLEXI: { code: string; name: string; bill: string; regime: string; source: string }[] = [
@@ -60,19 +60,19 @@ const FLEXI: { code: string; name: string; bill: string; regime: string; source:
   { code: 'HOSTEL', name: 'Hostel Allowance', bill: 'Yes', regime: 'Old only', source: '₹300 / child / mo' },
 ]
 const NONSTD: { type: string; icon: string; heads: [string, string][] }[] = [
-  { type: 'Intern / NAPS / NATS', icon: '', heads: [['Stipend', 'Monthly fixed — no PF / ESIC / PT'], ['TDS on stipend', '@10% Sec 194J if annual > ₹2.5L']] },
-  { type: 'Consultant', icon: '', heads: [['Professional fees', 'Monthly fixed'], ['GST', "18% — consultant's liability"], ['TDS', '@10% Sec 194J']] },
-  { type: 'Contract worker', icon: '', heads: [['Wages', 'Monthly'], ['Employee PF', '12% — mandatory'], ['Employer PF', '12% — mandatory'], ['ESIC', 'If gross ≤ ₹21,000']] },
+  { type: 'Intern / NAPS / NATS', icon: '', heads: [['Stipend', 'Monthly fixed, no PF / ESIC / PT'], ['TDS on stipend', '@10% Sec 194J if annual > ₹2.5L']] },
+  { type: 'Consultant', icon: '', heads: [['Professional fees', 'Monthly fixed'], ['GST', "18%, consultant's liability"], ['TDS', '@10% Sec 194J']] },
+  { type: 'Contract worker', icon: '', heads: [['Wages', 'Monthly'], ['Employee PF', '12%, mandatory'], ['Employer PF', '12%, mandatory'], ['ESIC', 'If gross ≤ ₹21,000']] },
 ]
 const RULES: string[] = [
-  'Basic ≥ 50% of fixed CTC — Code on Wages 2019. System warns if Basic < 50%.',
+  'Basic ≥ 50% of fixed CTC (Code on Wages 2019). System warns if Basic < 50%.',
   'EPF ceiling = ₹15,000 (default). If epf_wage_limit = 0, use actual basic (uncapped).',
-  'ESIC auto-check — applies if gross ≤ ₹21,000; stops from the month gross crosses ₹21,000.',
+  'ESIC auto-check: applies if gross ≤ ₹21,000; stops from the month gross crosses ₹21,000.',
   'Flexi balance = Annual limit − SUM(approved claims only). Rejected claims never reduce the limit.',
   'Rejected flexi is flagged separately and is never deducted from the employee limit.',
-  'Statutory bonus — 8.33% capped at ₹21,000 basis per Bonus Act 1965.',
-  'LWF — deducted only in June & December (bi-annual) in Haryana.',
-  'TDS — monthly estimate on projected annual income; trued-up in March.',
+  'Statutory bonus: 8.33% capped at ₹21,000 basis per Bonus Act 1965.',
+  'LWF: deducted only in June & December (bi-annual) in Haryana.',
+  'TDS: monthly estimate on projected annual income; trued-up in March.',
 ]
 
 function toneColor(t?: Row['tone']) {
@@ -104,7 +104,7 @@ function Table({ rows }: { rows: Row[] }) {
               <td style={{ padding: '9px 12px', fontWeight: r.tone === 'total' || r.tone === 'net' ? 700 : 600, color: tc.color }}>{r.label}</td>
               <td style={{ padding: '9px 12px' }}><TypeBadge t={r.type} /></td>
               <td style={{ padding: '9px 12px', color: TK.inkSoft }}>{r.rule}</td>
-              <td style={{ padding: '9px 12px', color: C.muted, fontSize: 12 }}>{r.trigger || '—'}</td>
+              <td style={{ padding: '9px 12px', color: C.muted, fontSize: 12 }}>{r.trigger || '-'}</td>
             </tr>
           )})}
         </tbody>
@@ -139,13 +139,13 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
       {!viewProp && <SubSectionDropdown items={TABS.map(([id, label]) => ({ id, label }))} active={view} onChange={id => setViewState(id as typeof view)} kicker="Pay Heads view" />}
 
       {view === 'catalog' && <>
-        <GroupCard title="Earnings" icon="💰" subtitle="salary_structures — fixed & computed earnings"><Table rows={EARNINGS} /></GroupCard>
-        <GroupCard title="Employee Deductions" icon="➖" subtitle="payroll_lines — statutory & voluntary"><Table rows={EE_DED} /></GroupCard>
-        <GroupCard title="Employer Contributions" icon="🏢" subtitle="employer cost — not on payslip by default"><Table rows={EMPLOYER} /></GroupCard>
+        <GroupCard title="Earnings" icon="💰" subtitle="salary_structures: fixed & computed earnings"><Table rows={EARNINGS} /></GroupCard>
+        <GroupCard title="Employee Deductions" icon="➖" subtitle="payroll_lines: statutory & voluntary"><Table rows={EE_DED} /></GroupCard>
+        <GroupCard title="Employer Contributions" icon="🏢" subtitle="employer cost, not on payslip by default"><Table rows={EMPLOYER} /></GroupCard>
       </>}
 
       {view === 'flexi' && (
-        <GroupCard title="Flexi / FBP Components" icon="🎛️" subtitle="declared at FY start, claimed monthly via bills — 11 components">
+        <GroupCard title="Flexi / FBP Components" icon="🎛️" subtitle="declared at FY start, claimed monthly via bills (11 components)">
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead><tr style={{ background: C.bg }}>{['Code', 'Component', 'Bill required?', 'Regime', 'Annual limit source'].map(h => <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>

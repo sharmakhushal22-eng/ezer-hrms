@@ -147,7 +147,7 @@ function Table({ head, rows, empty, statusCol }: {
                 <td key={i} style={{ padding: '10px 12px', fontSize: F.small, verticalAlign: 'middle',
                                      color: i === 0 ? C.ink : C.inkSoft,
                                      fontWeight: i === 0 ? W.semi : W.regular }}>
-                  {i === statusCol && typeof c === 'string' ? <StatusCell value={c} /> : (c ?? '—')}
+                  {i === statusCol && typeof c === 'string' ? <StatusCell value={c} /> : (c ?? '-')}
                 </td>
               ))}
             </tr>
@@ -244,7 +244,7 @@ function ScreensManager({ employeeId }: { employeeId: string }) {
     const { error } = await wallRpc('create_board_screen', { p_location: locId, p_name: name.trim(), p_rotate: Number(rotate) || 8 }, employeeId)
     setBusy(false)
     if (error) return flash(setErr, error.message)
-    setName(''); flash(setMsg, 'Screen added — share its pair code with the TV'); load()
+    setName(''); flash(setMsg, 'Screen added. Share its pair code with the TV'); load()
   }
   async function toggle(sc: Screen) {
     const { error } = await wallRpc('set_board_screen_active', { p_screen: sc.id, p_active: !sc.is_active }, employeeId)
@@ -252,7 +252,7 @@ function ScreensManager({ employeeId }: { employeeId: string }) {
   }
   async function rotateCode(sc: Screen) {
     const { error } = await wallRpc('rotate_board_pair_code', { p_screen: sc.id }, employeeId)
-    if (error) return flash(setErr, error.message); flash(setMsg, 'New pair code issued — the old one no longer works'); load()
+    if (error) return flash(setErr, error.message); flash(setMsg, 'New pair code issued. The old one no longer works'); load()
   }
   async function remove(sc: Screen) {
     if (confirmId !== sc.id) { setConfirmId(sc.id); return }
@@ -397,7 +397,7 @@ export default function AdminConsole({ employeeId }: { employeeId: string }) {
                  [r.admin_level as string, r.grant_reason as string, r.is_active ? 'active' : 'revoked']],
       audit:   ['wall_audit_log', 'action, entity, created_at', (r: Record<string, unknown>) =>
                  [r.action as string, r.entity as string,
-                  r.created_at ? new Date(r.created_at as string).toLocaleString('en-IN') : '—']],
+                  r.created_at ? new Date(r.created_at as string).toLocaleString('en-IN') : '-']],
     }[area] as [string, string, (r: Record<string, unknown>) => Cell[]]
 
     // SCOPED TO THE VIEWER'S COMPANY — every table here holds one row per company.

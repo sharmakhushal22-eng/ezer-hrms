@@ -40,13 +40,13 @@ export default function StatTiles({ data }: { data: TodayPayload }) {
       </T>
       <T i={3}>
         <div><div className="k">Net salary{pay ? `, ${new Date(pay.month).toLocaleDateString('en-IN', { month: 'long' })}` : ''}</div>
-          <div className="v"><span className={showSal ? '' : 'masked'}>{pay ? (showSal ? inr(pay.net) : '₹ ••,•••') : '—'}</span></div>
+          <div className="v"><span className={showSal ? '' : 'masked'}>{pay ? (showSal ? inr(pay.net) : '₹ ••,•••') : '-'}</span></div>
           {pay && <div className="paybar" title="Net · TDS · PF"><span className="net" style={{ width: w(pay.net) }} /><span className="tax" style={{ width: w(pay.tds) }} /><span className="pf" style={{ width: w(pay.pf) }} /></div>}
           <div className="s">{pay?.paid_on ? <>Credited {new Date(pay.paid_on).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}{pay.on_time && <span className="delta up">on time</span>}</> : 'No payslip yet'}</div></div>
         {pay && <button className="eye" aria-label={showSal ? 'Hide salary' : 'Show salary'} onClick={() => setShowSal(s => !s)}><Eye width={16} height={16} /></button>}
       </T>
       <T i={4}>
-        <Ring to={(pct ?? 0) / 100} cls="pos" label={pct !== null ? `${pct}%` : '—'} />
+        <Ring to={(pct ?? 0) / 100} cls="pos" label={pct !== null ? `${pct}%` : '-'} />
         <div><div className="k">Attendance, {new Date().toLocaleDateString('en-IN', { month: 'long' })}</div>
           <div className="v"><span>{present}</span><span>of {am?.working_days ?? 0} days</span></div>
           <div className="s">{am?.late ? `${am.late} late mark${am.late > 1 ? 's' : ''}` : 'No late marks'}{delta !== null && delta !== 0 && <span className={'delta ' + (delta > 0 ? 'up' : 'warn')}>{delta > 0 ? '+' : ''}{delta}%</span>}</div></div>

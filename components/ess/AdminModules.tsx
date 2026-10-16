@@ -73,7 +73,7 @@ export function AdminModuleHost({ moduleKey }: { moduleKey: string }) {
   if (!Cmp) {
     return (
       <div style={{ padding: 30, fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.muted, fontSize: 13 }}>
-        This module is not available inside ESS yet — open it from the Admin dashboard.
+        This module is not available inside ESS yet. Open it from the Admin dashboard.
       </div>
     )
   }

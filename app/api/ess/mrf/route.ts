@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
     }
     // HR Head is the final step — skipped only if they are the raiser or already the RM2 step.
     if (!wantConfidential && hh && hh.id !== me && hh.id !== rm2Brief?.id) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
-    if (status === 'SUBMITTED' && !chain.length) return NextResponse.json({ error: 'No approver could be found — your company has no HR Head / manager set. Please contact HR.' }, { status: 400 })
+    if (status === 'SUBMITTED' && !chain.length) return NextResponse.json({ error: 'No approver could be found: your company has no HR Head / manager set. Please contact HR.' }, { status: 400 })
 
     const openings = Math.max(1, Number(body.openings) || 1)
     const nOrNull = (v: any) => (v === '' || v === null || v === undefined) ? null : (Number(v) || null)
@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
       ...(wantConfidential ? { is_confidential: true, confidential_by: me, approved_at: new Date().toISOString(), assigned_recruiter_ids: [me], acknowledged_recruiter_ids: [me] } : {}),
     }
     let { data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single()
-    if (error && wantConfidential && /is_confidential|confidential_by/i.test(error.message || '')) return NextResponse.json({ error: 'Confidential hiring needs migration 135 (manpower_requisitions.is_confidential) — run it in the SQL Editor first.' }, { status: 409 })
+    if (error && wantConfidential && /is_confidential|confidential_by/i.test(error.message || '')) return NextResponse.json({ error: 'Confidential hiring needs migration 135 (manpower_requisitions.is_confidential). Run it in the SQL Editor first.' }, { status: 409 })
     // Until migration 130 adds manpower_requisitions.wage_category, PostgREST rejects the
     // unknown column — drop it and retry rather than blocking every MRF from being raised.
     if (error && /wage_category/i.test(error.message || '')) {

@@ -208,7 +208,7 @@ export async function GET(req: NextRequest) {
     //
     // Blocking also surfaces the missing record instead of hiding it.
     if (t.gender !== 'ANY' && t.gender !== gender) {
-      reasons.push(gender ? 'Not available for your gender' : 'Your gender is not on file — ask HR to update it')
+      reasons.push(gender ? 'Not available for your gender' : 'Your gender is not on file. Ask HR to update it')
     }
     // Probation does NOT block every leave type.
     //
@@ -421,7 +421,7 @@ export async function POST(req: NextRequest) {
         return bad('Leave cannot be applied for a past date. Ask HR if you need to claim an absence.')
       }
       if (from < earliest) {
-        return bad(`Leave can only be backdated ${days} day${days === 1 ? '' : 's'} — the earliest you can claim is ${fmtDate(iso(earliest))}.`)
+        return bad(`Leave can only be backdated ${days} day${days === 1 ? '' : 's'}. The earliest you can claim is ${fmtDate(iso(earliest))}.`)
       }
     }
   }

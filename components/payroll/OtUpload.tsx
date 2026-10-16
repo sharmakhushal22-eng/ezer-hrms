@@ -51,7 +51,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
         const ws = wb.Sheets[wb.SheetNames[0]]
         const raw = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' })
         const parsed = raw.map(normalizeRow).filter(Boolean) as OtUploadRow[]
-        if (parsed.length === 0) { setParseErr('No valid rows found — check the "Emp Code" and "OT Hours" columns.'); return }
+        if (parsed.length === 0) { setParseErr('No valid rows found. Check the "Emp Code" and "OT Hours" columns.'); return }
         setRows(parsed); runValidation(parsed)
       } catch (err: any) { setParseErr('Could not read the file: ' + (err.message || err)) }
     }
@@ -94,14 +94,14 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
         <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.warning},${TK.warning})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(217,119,6,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>OT Upload</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Overtime hours only — a separate sheet that never overwrites leave or paid days</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Overtime hours only: a separate sheet that never overwrites leave or paid days</div>
         </div>
       </div>
 
       {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months. (Download works for any company.)</div>}
 
       <DownloadCard companyId={companyId} fy={fy}
-        heading="Download OT sheet" note="— filter and download a ready-to-fill OT sheet"
+        heading="Download OT sheet" note="· filter and download a ready-to-fill OT sheet"
         filePrefix="OT" sheetName="OT"
         buildRow={(r, ctx) => ({
           ...(ctx.isGroup ? { 'Company': ctx.companyName } : {}),
@@ -116,7 +116,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
           <div>
             <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>
             <select style={{ ...inp, minWidth: 300 }} value={runId} onChange={e => { setRunId(e.target.value); resetUpload() }}>
-              {runs.length === 0 && <option value="">No month created — create one first</option>}
+              {runs.length === 0 && <option value="">No month yet. Create one first</option>}
               {runs.map(r => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}
             </select>
           </div>
@@ -145,7 +145,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
                 {rows.slice(0, 8).map((r, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
                     <td style={{ padding: '7px 10px', fontWeight: 700, color: C.navy }}>{r.emp_code}</td>
-                    <td style={{ padding: '7px 10px', textAlign: 'right', color: C.navy }}>{r.ot_hours ?? '—'}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', color: C.navy }}>{r.ot_hours ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>

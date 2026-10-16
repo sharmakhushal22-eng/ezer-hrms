@@ -19,7 +19,7 @@ function buildAckHtml(d: {
   ackById: Record<string, { policy_code: string; policy_title: string; policy_version: string }>
   intro: string
 }): string {
-  const detail = (l: string, v: any) => `<tr><td style="padding:6px 10px;color:#6B7280;font-size:13px;border-bottom:1px solid #EEE">${l}</td><td style="padding:6px 10px;color:#111;font-weight:600;font-size:13px;border-bottom:1px solid #EEE">${esc(v) || '—'}</td></tr>`
+  const detail = (l: string, v: any) => `<tr><td style="padding:6px 10px;color:#6B7280;font-size:13px;border-bottom:1px solid #EEE">${l}</td><td style="padding:6px 10px;color:#111;font-weight:600;font-size:13px;border-bottom:1px solid #EEE">${esc(v) || '-'}</td></tr>`
   const policyBlocks = d.acks.map(a => `
     <div style="margin:14px 0;padding:12px 14px;border:1px solid #E5E5E5;border-radius:8px">
       <div style="font-weight:700;font-size:14px;color:#111">${esc(a.policy_title)} <span style="color:#999;font-weight:400;font-size:11px">${esc(a.policy_code)} · v${esc(a.policy_version)}</span> <span style="color:#059669;font-size:11px">✓ Acknowledged</span></div>
@@ -63,10 +63,10 @@ export async function sendAckEmail(supa: any, onboardingId: string, employeeCode
     if (!c?.email) return { skipped: 'candidate has no email' }
 
     const { data: company } = await supa.from('companies').select('company_name').eq('id', c.company_id).maybeSingle()
-    let work_location = '—'
+    let work_location = '-'
     if (c.location_id) {
       const { data: loc } = await supa.from('locations').select('location_name, city').eq('id', c.location_id).maybeSingle()
-      work_location = [loc?.location_name, loc?.city].filter(Boolean).join(', ') || '—'
+      work_location = [loc?.location_name, loc?.city].filter(Boolean).join(', ') || '-'
     }
     const { data: acks } = await supa.from('onboarding_policy_acks')
       .select('policy_id, policy_code, policy_title, policy_version').eq('onboarding_id', c.id)
@@ -81,7 +81,7 @@ export async function sendAckEmail(supa: any, onboardingId: string, employeeCode
     }
 
     const fd: any = c.form_data || {}
-    const father = fd.step_3?.father_name || fd.step_5?.father_name || fd.step_7?.insurance?.father_name || '—'
+    const father = fd.step_3?.father_name || fd.step_5?.father_name || fd.step_7?.insurance?.father_name || '-'
     const aadhaar_last4 = fd.step_7?.aadhaar_last4 || fd.statutory?.aadhaar_last4 || '****'
     const tpl = (await resolveTemplate('onboarding.welcome_ack', { companyId: c.company_id, locationId: c.location_id }))!
     const vars = { employee_name: c.full_name, employee_code: employeeCode, company_name: company?.company_name || 'the team' }

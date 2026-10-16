@@ -66,13 +66,13 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
         <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Bank Details</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Salary account per employee — maintained in the Employee Master, shown here for payroll</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Salary account per employee, maintained in the Employee Master, shown here for payroll</div>
         </div>
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search or paste codes — e.g. SRS0001, SRS0002" style={{ ...inp, flex: 1, minWidth: 260 }} />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search or paste codes, e.g. SRS0001, SRS0002" style={{ ...inp, flex: 1, minWidth: 260 }} />
           <select value={dept} onChange={e => setDept(e.target.value)} style={{ ...inp, minWidth: 160 }}>
             <option value="">All departments</option>
             {depts.sort().map(d => <option key={d} value={d}>{d}</option>)}
@@ -110,14 +110,14 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
                       <tr key={r.emp_code + i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
                         <td style={{ ...td, fontWeight: 700 }}>{r.emp_code}</td>
                         <td style={td}>{r.full_name}</td>
-                        <td style={td}>{r.department || '—'}</td>
-                        <td style={td}>{r.location || '—'}</td>
-                        <td style={td}>{fmtDate(r.doj) || '—'}</td>
-                        <td style={{ ...td, color: r.dol ? C.red : C.muted }}>{fmtDate(r.dol) || '—'}</td>
-                        <td style={td}>{r.bank_name || '—'}</td>
-                        <td style={{ ...td, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{r.account_number || (r.account_last4 ? `•••• ${r.account_last4}` : '—')}</td>
-                        <td style={td}>{r.ifsc_code || '—'}</td>
-                        <td style={td}>{r.account_type || '—'}</td>
+                        <td style={td}>{r.department || '-'}</td>
+                        <td style={td}>{r.location || '-'}</td>
+                        <td style={td}>{fmtDate(r.doj) || '-'}</td>
+                        <td style={{ ...td, color: r.dol ? C.red : C.muted }}>{fmtDate(r.dol) || '-'}</td>
+                        <td style={td}>{r.bank_name || '-'}</td>
+                        <td style={{ ...td, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{r.account_number || (r.account_last4 ? `•••• ${r.account_last4}` : '-')}</td>
+                        <td style={td}>{r.ifsc_code || '-'}</td>
+                        <td style={td}>{r.account_type || '-'}</td>
                       </tr>
                     ))}
                   </tbody>

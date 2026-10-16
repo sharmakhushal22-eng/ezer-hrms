@@ -191,7 +191,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     setSaving(false)
     if (error) { setDraftMsg('⚠ ' + error.message); return }
     setStatus('DRAFT')
-    setDraftMsg('Draft saved — you can leave and return anytime')
+    setDraftMsg('Draft saved. You can leave and return anytime')
     setTimeout(() => setDraftMsg(''), 3500)
   }
 
@@ -344,7 +344,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     <div>
       <div style={s.card}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Employee Information</div>
-        <div style={{ fontSize: 12, color: P.muted, marginBottom: 12 }}>Prefilled from your record — adjust CTC / variable if needed.</div>
+        <div style={{ fontSize: 12, color: P.muted, marginBottom: 12 }}>Prefilled from your record. Adjust CTC / variable if needed.</div>
         <div style={s.g2}>
           <Fg label="Employee Name"><input style={{ ...s.input, background: TK.sunken }} value={empName || ''} readOnly /></Fg>
           <Fg label="Employee Code"><input style={{ ...s.input, background: TK.sunken }} value={empCode || ''} readOnly /></Fg>
@@ -426,7 +426,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             })()}
           </div>
           <div style={{ fontSize: 10, color: TK.faint, marginTop: 6 }}>
-            FY 2026-27 salary structure — the same figures shown in your HR record. Monthly amounts are pro-rated on actual paid days during payroll.
+            FY 2026-27 salary structure: the same figures shown in your HR record. Monthly amounts are pro-rated on actual paid days during payroll.
           </div>
         </div>
       )}
@@ -460,7 +460,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                 <div style={{ fontSize: 11, opacity: .8 }}>Fixed − Basic − HRA − PF</div>
               </>
             )}
-            {rd && <div style={{ fontSize: 11, opacity: .8 }}>Your full Special Allowance — {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
+            {rd && <div style={{ fontSize: 11, opacity: .8 }}>Your full Special Allowance: {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
           </div>
           <div style={{ marginTop: 10, background: P.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.amber }}>
             {rd
@@ -471,12 +471,12 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       )}
       {sal.ctc > 0 && join.mid && (
         <div style={{ ...s.card, background: TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: TK.info, marginBottom: 4 }}>Mid-year joining — pro-rata applies</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: TK.info, marginBottom: 4 }}>Mid-year joining: pro-rata applies</div>
           <div style={{ fontSize: 12, color: TK.brand, lineHeight: 1.65 }}>You are with the company for <b>{join.months} month{join.months === 1 ? '' : 's'}</b> of FY 2026-27, so your salary income is earned for ≈<b>{Math.round(join.pr * 100)}%</b> of the year. Tax is computed on this pro-rated income and the <b>monthly TDS is spread over the {join.months} remaining pay month{join.months === 1 ? '' : 's'}</b>. (Employees who joined on/before 1 Apr 2026 are taxed on the full 12 months.)</div>
         </div>
       )}
       {sal.ctc > 0 && !join.mid && f.doj && (
-        <div style={{ fontSize: 12, color: P.muted, margin: '0 4px 12px' }}>Joined on/before 1 Apr 2026 — taxed on the full financial year.</div>
+        <div style={{ fontSize: 12, color: P.muted, margin: '0 4px 12px' }}>Joined on/before 1 Apr 2026: taxed on the full financial year.</div>
       )}
     </div>
   )
@@ -494,7 +494,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         </div>
         <div style={{ height: 8, background: TK.sunken, borderRadius: 99, overflow: 'hidden' }}><div style={{ width: pctv + '%', height: '100%', background: col, transition: 'width .2s' }} /></div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: P.muted, marginTop: 6 }}><span>Used: {R(used)}</span><span>Budget: {R(bud)}</span></div>
-        {ov && <div style={{ marginTop: 8, background: P.redBg, color: P.red, borderRadius: 10, padding: '7px 10px', fontSize: 11 }}>Flexi wallet limit exceeded — remove some allowances.</div>}
+        {ov && <div style={{ marginTop: 8, background: P.redBg, color: P.red, borderRadius: 10, padding: '7px 10px', fontSize: 11 }}>Flexi wallet limit exceeded. Remove some allowances.</div>}
       </div>
     )
   }
@@ -502,7 +502,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     <div>
       {carSel && (
         <div style={{ ...s.card, background: P.amberBg, border: `1px solid ${TK.warningTint}` }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Car Lease + Driver — Perquisite Tax Applied</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Car Lease + Driver: Perquisite Tax Applied</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
             {[['Car Lease Perq', '₹7,000', 'per month'], ['Driver Perq', '₹3,000', 'per month'], ['Total Perquisite', '₹10,000', '₹1,20,000/yr → taxable']].map(([l, v, sub]) => (
               <div key={l} style={{ background: TK.surface, borderRadius: 10, padding: '9px 11px', border: `1px solid ${TK.warningTint}` }}>
@@ -519,7 +519,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         <div style={{ maxWidth: 240 }}>
           <Fg label="Number of Children">
             <select style={s.input} value={child.count} onChange={e => setChild(c => ({ ...c, count: +e.target.value }))}>
-              <option value={0}>0 — No children</option><option value={1}>1 child</option><option value={2}>2 children (max)</option>
+              <option value={0}>0 children</option><option value={1}>1 child</option><option value={2}>2 children (max)</option>
             </select>
           </Fg>
         </div>
@@ -577,13 +577,13 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Std Deduction ₹50,000 | 80C max ₹1,50,000</div>
           {sal.hra > 0 && (
             <div style={{ background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: P.purpleDark, marginBottom: 6 }}>Your HRA — Annual {R(sal.hra)} · Monthly {R(sal.hra / 12)}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: P.purpleDark, marginBottom: 6 }}>Your HRA: Annual {R(sal.hra)} · Monthly {R(sal.hra / 12)}</div>
               <button style={{ ...s.btn, padding: '5px 12px', fontSize: 11 }} onClick={() => setF(p => ({ ...p, rentM: String(Math.round(sal.hra / 12)), hra1From: '1', hra1To: '12' }))}>Apply suggested rent →</button>
             </div>
           )}
           <div style={s.sec}>HRA Exemption (Old Regime only)</div>
           <div style={{ background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Period 1 — Rent Paid</div>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Period 1: Rent Paid</div>
             <div style={s.g2}>
               <Fg label="From Month"><select style={s.input} value={f.hra1From} onChange={e => set('hra1From', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
               <Fg label="To Month"><select style={s.input} value={f.hra1To} onChange={e => set('hra1To', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
@@ -618,14 +618,14 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <Fg label="80D Self + Family (max ₹25,000)">{numIn('medSelf')}</Fg>
           <Fg label="80D Parents (max ₹50,000)">{numIn('medParents')}</Fg>
           <Fg label="Home Loan Interest Sec 24(b) (max ₹2,00,000)">{numIn('hlInt')}</Fg>
-          <Fg label="NPS Self 80CCD(1B) (max ₹50,000)"><select style={s.input} value={f.npsSelf} onChange={e => set('npsSelf', e.target.value)}><option value="0">₹0 — Not investing</option><option value="50000">₹50,000 — Max benefit</option></select></Fg>
-          <Fg label="Employer NPS 80CCD(2) — 10% of Basic (fully exempt)"><select style={s.input} value={f.emplrNpsOld} onChange={e => set('emplrNpsOld', e.target.value)}><option value="0">₹0 — Not applicable</option><option value="on">{R(Math.round(sal.basic * .1))} — Basic × 10%</option></select></Fg>
+          <Fg label="NPS Self 80CCD(1B) (max ₹50,000)"><select style={s.input} value={f.npsSelf} onChange={e => set('npsSelf', e.target.value)}><option value="0">₹0: Not investing</option><option value="50000">₹50,000: Max benefit</option></select></Fg>
+          <Fg label="Employer NPS 80CCD(2): 10% of Basic (fully exempt)"><select style={s.input} value={f.emplrNpsOld} onChange={e => set('emplrNpsOld', e.target.value)}><option value="0">₹0: Not applicable</option><option value="on">{R(Math.round(sal.basic * .1))} (Basic × 10%)</option></select></Fg>
 
           <div style={s.sec}>Other Deductions (80E · 80DD · 80DDB · 80G)</div>
-          <Fg label="80E — Education Loan Interest (max ₹2,00,000)">{numIn('eduLoan')}</Fg>
-          <Fg label="80DD — Dependent Disability (fixed)"><select style={s.input} value={f.dep80dd} onChange={e => set('dep80dd', e.target.value)}><option value="0">₹0 — Not applicable</option><option value="75000">₹75,000 — 40–80% (Normal)</option><option value="125000">₹1,25,000 — 80%+ Severe</option></select></Fg>
-          <Fg label="80DDB — Specified Disease (max ₹1,00,000)">{numIn('dis80ddb')}</Fg>
-          <Fg label="80G — PM Relief / PM CARES (100%, max ₹2,00,000)">{numIn('pmFund')}</Fg>
+          <Fg label="80E: Education Loan Interest (max ₹2,00,000)">{numIn('eduLoan')}</Fg>
+          <Fg label="80DD: Dependent Disability (fixed)"><select style={s.input} value={f.dep80dd} onChange={e => set('dep80dd', e.target.value)}><option value="0">₹0: Not applicable</option><option value="75000">₹75,000: 40–80% (Normal)</option><option value="125000">₹1,25,000: 80%+ Severe</option></select></Fg>
+          <Fg label="80DDB: Specified Disease (max ₹1,00,000)">{numIn('dis80ddb')}</Fg>
+          <Fg label="80G: PM Relief / PM CARES (100%, max ₹2,00,000)">{numIn('pmFund')}</Fg>
         </div>
         {/* NEW */}
         <div style={{ ...s.card, borderLeft: `3px solid ${P.green}` }}>
@@ -633,9 +633,9 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Std Deduction ₹75,000 | No HRA / 80C / 80D</div>
           <div style={{ background: P.greenBg, borderRadius: 10, padding: 12, marginBottom: 13, border: `1px solid ${TK.lineStrong}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span style={{ color: P.teal, fontWeight: 500 }}>Standard Deduction (auto)</span><span style={{ fontWeight: 700 }}>₹75,000</span></div>
-            <div style={{ fontSize: 10, color: P.green }}>HRA · LTA · 80C · 80D · Home Loan — Not applicable</div>
+            <div style={{ fontSize: 10, color: P.green }}>HRA · LTA · 80C · 80D · Home Loan: Not applicable</div>
           </div>
-          <Fg label="Employer NPS 80CCD(2) — 14% of Basic (fully exempt)"><select style={s.input} value={f.emplrNpsNew} onChange={e => set('emplrNpsNew', e.target.value)}><option value="0">₹0 — Not applicable</option><option value="on">{R(Math.round(sal.basic * .14))} — Basic × 14%</option></select></Fg>
+          <Fg label="Employer NPS 80CCD(2): 14% of Basic (fully exempt)"><select style={s.input} value={f.emplrNpsNew} onChange={e => set('emplrNpsNew', e.target.value)}><option value="0">₹0: Not applicable</option><option value="on">{R(Math.round(sal.basic * .14))} (Basic × 14%)</option></select></Fg>
           <div style={s.sec}>Additional Income (FY 2026-27)</div>
           <Fg label="Other Income (rental, freelance)">{numIn('oi')}</Fg>
           <Fg label="Bonus / Commission">{numIn('bon')}</Fg>
@@ -658,7 +658,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
     // 1) Summary
     const summary: any[][] = [
-      ['EZER HRMS — Flexi & TDS Declaration', ''],
+      ['EZER HRMS: Flexi & TDS Declaration', ''],
       ['Financial Year', 'FY 2026-27 (AY 2027-28)'],
       ['Employee', `${empName || ''} (${empCode || ''})`],
       ['Submitted On', dt],
@@ -686,22 +686,22 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       ['Deduction / Investment', 'Amount (₹)', 'Applies to'],
       ['Monthly Rent Declared', N(f.rentM), 'Old (HRA)'],
       ['HRA Exemption', num(T.hE), 'Old'],
-      ['80C — LIC', N(f.lic), 'Old'],
-      ['80C — PPF', N(f.ppf), 'Old'],
-      ['80C — ELSS / Mutual Funds', N(f.elss), 'Old'],
-      ['80C — Tuition Fees', N(f.tuit), 'Old'],
-      ['80C — Home Loan Principal', N(f.hlP), 'Old'],
-      ['80C — Employee PF (auto)', num(sal.epf), 'Old'],
+      ['80C: LIC', N(f.lic), 'Old'],
+      ['80C: PPF', N(f.ppf), 'Old'],
+      ['80C: ELSS / Mutual Funds', N(f.elss), 'Old'],
+      ['80C: Tuition Fees', N(f.tuit), 'Old'],
+      ['80C: Home Loan Principal', N(f.hlP), 'Old'],
+      ['80C: Employee PF (auto)', num(sal.epf), 'Old'],
       ['80C Total (capped ₹1.5L)', num(T.c80), 'Old'],
-      ['80D — Self + Family', num(T.medS), 'Old'],
-      ['80D — Parents', num(T.medP), 'Old'],
+      ['80D: Self + Family', num(T.medS), 'Old'],
+      ['80D: Parents', num(T.medP), 'Old'],
       ['Home Loan Interest 24(b)', num(T.hlI), 'Old'],
       ['NPS Self 80CCD(1B)', num(T.npsS), 'Old'],
       ['Employer NPS 80CCD(2)', num(isOld ? T.eNpsO : T.eNpsN), 'Both'],
-      ['80E — Education Loan', num(T.eduLoan), 'Old'],
-      ['80DD — Dependent Disability', num(T.dep80dd), 'Old'],
-      ['80DDB — Disease Treatment', num(T.dis80ddb), 'Old'],
-      ['80G — PM Relief / Donations', num(T.pmFund), 'Old'],
+      ['80E: Education Loan', num(T.eduLoan), 'Old'],
+      ['80DD: Dependent Disability', num(T.dep80dd), 'Old'],
+      ['80DDB: Disease Treatment', num(T.dis80ddb), 'Old'],
+      ['80G: PM Relief / Donations', num(T.pmFund), 'Old'],
       ['Additional Income', num(T.addI), 'Both'],
     ]
 
@@ -744,7 +744,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       ['Home Loan Interest 24(b)', R(T.hlI)], ['NPS Self 80CCD(1B)', R(T.npsS)], ['Employer NPS 80CCD(2)', R(isOld ? T.eNpsO : T.eNpsN)],
       ['80E Education Loan', R(T.eduLoan)], ['80DD Dependent Disability', R(T.dep80dd)], ['80DDB Disease', R(T.dis80ddb)], ['80G Donations', R(T.pmFund)], ['Additional Income', R(T.addI)],
     ] as [string, string][]).filter(([, v]) => v !== '₹0').map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${esc(v)}</td></tr>`).join('')
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Flexi & TDS Declaration — ${esc(empCode)}</title><style>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Flexi & TDS Declaration: ${esc(empCode)}</title><style>
       *{box-sizing:border-box} body{font-family:"DM Sans","Segoe UI",sans-serif;color:#1E1B4B;margin:0;background:#F5F3FF}
       .doc{background:#fff;max-width:820px;margin:22px auto;padding:34px 40px;border:1px solid #E9E7F5;border-radius:14px}
       .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #2563EB;padding-bottom:14px;margin-bottom:16px}
@@ -866,13 +866,13 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         {/* ── Save & Submit: choose Old / New regime, save draft, or submit (locks) ── */}
         <div style={s.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Save &amp; Submit — Tax Regime</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Save &amp; Submit: Tax Regime</div>
             {isSubmitted && !editMode && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: P.greenBg, color: P.green }}>Submitted &amp; locked</span>}
             {editMode && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: P.amberBg, color: P.amber }}>Editing {editMode === 'all' ? 'flexi + investments' : 'flexi only'}</span>}
             {status === 'DRAFT' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: TK.infoTint, color: TK.info }}>Draft saved</span>}
           </div>
           {!userPicked && !isSubmitted && recRegime && (
-            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: TK.brand, marginBottom: 10 }}>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b> — it gives you the <b>lower annual tax</b>. You can change it below before submitting.
+            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: TK.brand, marginBottom: 10 }}>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. It gives you the <b>lower annual tax</b>. You can change it below before submitting.
             </div>
           )}
           {isSubmitted && !editMode && (
@@ -948,40 +948,40 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           })}
         </div>
         <div style={{ ...s.card, padding: 0, overflow: 'hidden', marginTop: 14 }}>
-          <div style={{ padding: '12px 14px', borderBottom: `1px solid ${P.border}` }}><div style={{ fontSize: 13, fontWeight: 700 }}>Taxable Income Breakup — Component-wise</div><div style={{ fontSize: 11, color: P.muted }}>What is taxable, what is exempt, and how TDS is computed</div></div>
+          <div style={{ padding: '12px 14px', borderBottom: `1px solid ${P.border}` }}><div style={{ fontSize: 13, fontWeight: 700 }}>Taxable Income Breakup (Component-wise)</div><div style={{ fontSize: 11, color: P.muted }}>What is taxable, what is exempt, and how TDS is computed</div></div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={{ background: TK.brandTint }}><th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: P.muted }}>Component</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: TK.warning }}>Old (₹)</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: P.green }}>New (₹)</th></tr></thead>
               <tbody>
                 {sec(T.mid ? `📌 INCOME (${T.months} months · pro-rated ${Math.round(T.pr * 100)}%)` : 'INCOME')}
-                {row('Basic Salary — 100% taxable', R(T.eBasic), R(T.eBasic))}
+                {row('Basic Salary (100% taxable)', R(T.eBasic), R(T.eBasic))}
                 {row('HRA Received (' + R(T.eHra) + ')', '', '')}
-                {T.hE > 0 && row('&nbsp;&nbsp;✓ HRA Exemption', `(${R(T.hE)})`, '— N/A', true)}
+                {T.hE > 0 && row('&nbsp;&nbsp;✓ HRA Exemption', `(${R(T.hE)})`, 'N/A', true)}
                 {row('&nbsp;&nbsp;= Net Taxable HRA', R(T.eHra - T.hE), R(T.eHra))}
-                {row('Flexi Wallet — Total ' + R(T.eOther), '', '')}
-                {(T.oClaim > 0 || T.nClaim > 0) && row('&nbsp;&nbsp;✓ Flexi Claimed (exempt on bills)', T.oClaim ? `(${R(T.oClaim)})` : '—', T.nClaim ? `(${R(T.nClaim)})` : '—', true)}
+                {row('Flexi Wallet: Total ' + R(T.eOther), '', '')}
+                {(T.oClaim > 0 || T.nClaim > 0) && row('&nbsp;&nbsp;✓ Flexi Claimed (exempt on bills)', T.oClaim ? `(${R(T.oClaim)})` : '-', T.nClaim ? `(${R(T.nClaim)})` : '-', true)}
                 {row('&nbsp;&nbsp;= Wallet Balance (taxable)', R(T.walBalO), R(T.walBalN))}
                 {T.eVari > 0 && row('Variable Pay', R(T.eVari), R(T.eVari))}
                 {T.addI > 0 && row('Additional Income', R(T.addI), R(T.addI))}
-                {(T.oPerq > 0 || T.nPerq > 0) && row('Car+Driver Perquisite (₹10,000/mo)', T.oPerq ? `+${R(T.oPerq)}` : '—', T.nPerq ? `+${R(T.nPerq)}` : '—')}
+                {(T.oPerq > 0 || T.nPerq > 0) && row('Car+Driver Perquisite (₹10,000/mo)', T.oPerq ? `+${R(T.oPerq)}` : '-', T.nPerq ? `+${R(T.nPerq)}` : '-')}
                 {bold('Gross Taxable Income', R(T.grossO), R(T.grossN), TK.warningTint, TK.critical)}
                 {sec('DEDUCTIONS')}
                 {row('Standard Deduction', '(₹50,000)', '(₹75,000)', true)}
-                {T.ltaAmt > 0 && row('Leave Travel Allowance', `(${R(T.ltaAmt)})`, '— N/A', true)}
-                {T.c80 > 0 && row('80C — EPF + Investments', `(${R(T.c80)})`, '— N/A', true)}
-                {T.medS > 0 && row('80D Self + Family', `(${R(T.medS)})`, '— N/A', true)}
-                {T.medP > 0 && row('80D Parents', `(${R(T.medP)})`, '— N/A', true)}
-                {T.hlI > 0 && row('Home Loan Interest 24(b)', `(${R(T.hlI)})`, '— N/A', true)}
-                {T.dep80dd > 0 && row('80DD — Dependent Disability', `(${R(T.dep80dd)})`, '— N/A', true)}
-                {T.dis80ddb > 0 && row('80DDB — Disease Treatment', `(${R(T.dis80ddb)})`, '— N/A', true)}
-                {T.pmFund > 0 && row('80G — PM Relief Fund', `(${R(T.pmFund)})`, '— N/A', true)}
-                {T.eduLoan > 0 && row('80E — Education Loan', `(${R(T.eduLoan)})`, '— N/A', true)}
-                {T.npsS > 0 && row('NPS Self 80CCD(1B)', `(${R(T.npsS)})`, '— N/A', true)}
-                {(T.eNpsO > 0 || T.eNpsN > 0) && row('Employer NPS 80CCD(2)', T.eNpsO ? `(${R(T.eNpsO)})` : '—', T.eNpsN ? `(${R(T.eNpsN)})` : '—', true)}
+                {T.ltaAmt > 0 && row('Leave Travel Allowance', `(${R(T.ltaAmt)})`, 'N/A', true)}
+                {T.c80 > 0 && row('80C: EPF + Investments', `(${R(T.c80)})`, 'N/A', true)}
+                {T.medS > 0 && row('80D Self + Family', `(${R(T.medS)})`, 'N/A', true)}
+                {T.medP > 0 && row('80D Parents', `(${R(T.medP)})`, 'N/A', true)}
+                {T.hlI > 0 && row('Home Loan Interest 24(b)', `(${R(T.hlI)})`, 'N/A', true)}
+                {T.dep80dd > 0 && row('80DD: Dependent Disability', `(${R(T.dep80dd)})`, 'N/A', true)}
+                {T.dis80ddb > 0 && row('80DDB: Disease Treatment', `(${R(T.dis80ddb)})`, 'N/A', true)}
+                {T.pmFund > 0 && row('80G: PM Relief Fund', `(${R(T.pmFund)})`, 'N/A', true)}
+                {T.eduLoan > 0 && row('80E: Education Loan', `(${R(T.eduLoan)})`, 'N/A', true)}
+                {T.npsS > 0 && row('NPS Self 80CCD(1B)', `(${R(T.npsS)})`, 'N/A', true)}
+                {(T.eNpsO > 0 || T.eNpsN > 0) && row('Employer NPS 80CCD(2)', T.eNpsO ? `(${R(T.eNpsO)})` : '-', T.eNpsN ? `(${R(T.eNpsN)})` : '-', true)}
                 {bold('Net Taxable Income', R(T.tO), R(T.tN), P.purpleBg, P.purpleDark)}
                 {sec('TAX')}
                 {row('Tax on income (slab)', R(T.bO), R(T.bN))}
-                {row('Rebate u/s 87A', T.tO <= 500000 ? `(${R(Math.min(T.bO, 12500))})` : '—', T.tN <= 1200000 ? `(${R(T.bN)})` : '—', true)}
+                {row('Rebate u/s 87A', T.tO <= 500000 ? `(${R(Math.min(T.bO, 12500))})` : '-', T.tN <= 1200000 ? `(${R(T.bN)})` : '-', true)}
                 {row('Add: 4% Health & Edu Cess', R(Math.round(T.fO / 1.04 * .04)), R(Math.round(T.fN / 1.04 * .04)))}
                 {bold('TOTAL ANNUAL TAX', R(T.fO), R(T.fN), P.navy, TK.surface)}
                 {bold(`MONTHLY TDS (÷${T.months})`, R(T.moO), R(T.moN), TK.warningTint, TK.critical)}
@@ -1015,7 +1015,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? TK.critical : TK.positive}`, borderRadius: 10, padding: '8px 12px' }}>{draftMsg}</div>}
       {defaultedByRule && !isSubmitted && (
         <div style={{ marginBottom: 12, fontSize: 12, color: P.amber, background: P.amberBg, border: `1px solid ${P.amber}`, borderRadius: 10, padding: '9px 12px' }}>
-          <b>New Regime applied by default</b> — no regime was chosen by the 4th of the month{/^\d{4}-/.test(defaultedByRule) ? ` (set on ${new Date(defaultedByRule).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Payroll is taxing you on the New Regime. You can still submit your own choice here; submitting replaces the default.
+          <b>New Regime applied by default</b>: no regime was chosen by the 4th of the month{/^\d{4}-/.test(defaultedByRule) ? ` (set on ${new Date(defaultedByRule).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Payroll is taxing you on the New Regime. You can still submit your own choice here; submitting replaces the default.
         </div>
       )}
       {viewLocked && <div style={{ marginBottom: 12, fontSize: 12, color: P.purpleDark, background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px' }}>This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}

@@ -19,7 +19,7 @@ export interface OfferImageData {
   date?: string
 }
 
-const inr = (n?: number) => (n && n > 0 ? '₹ ' + Math.round(n).toLocaleString('en-IN') : '—')
+const inr = (n?: number) => (n && n > 0 ? '₹ ' + Math.round(n).toLocaleString('en-IN') : '-')
 
 function row(label: string, value: string, strong = false) {
   return (
@@ -77,7 +77,7 @@ export async function renderOfferLetterPng(d: OfferImageData): Promise<Buffer> {
 
         <div style={{ display: 'flex', fontSize: 25, color: '#111827', marginBottom: 12 }}>Dear {d.candidate_name || 'Candidate'},</div>
         <div style={{ display: 'flex', fontSize: 22, color: '#374151', lineHeight: 1.5, marginBottom: 26 }}>
-          We are delighted to extend an offer of employment for the position of {d.designation || 'the role'} at {company} — we were impressed by your background and look forward to welcoming you to our team.
+          We are delighted to extend an offer of employment for the position of {d.designation || 'the role'} at {company}. We were impressed by your background and look forward to welcoming you to our team.
         </div>
 
         {/* Compensation */}

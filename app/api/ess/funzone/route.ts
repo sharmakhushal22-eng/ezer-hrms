@@ -250,8 +250,8 @@ export async function POST(req: NextRequest) {
         return bad(
           `This invite was sent to ${nameOf(inv.toId) ?? 'somebody else'}, `
           + `and you are signed in as ${nameOf(me) ?? 'another employee'}. `
-          + `If that is not who you expected, you are looking at a colleague's portal — `
-          + `open your own to accept invites addressed to you.`, 403)
+          + `If that is not who you expected, you are looking at a colleague's portal. `
+          + `Open your own to accept invites addressed to you.`, 403)
       }
 
       const v = canAccept(inv, me, new Date().toISOString())

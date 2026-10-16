@@ -63,7 +63,7 @@ const initialsOf = (name: string) =>
     .slice(0, 2)
     .map(w => w[0] || '')
     .join('')
-    .toUpperCase() || '—'
+    .toUpperCase() || '-'
 
 const blank = (v: any) => v === null || v === undefined || String(v).trim() === ''
 const numOr = (v: any, fallback: number) => (blank(v) ? fallback : Number(v) || 0)
@@ -88,65 +88,65 @@ const CHECKS: CheckDef[] = [
     // is the same: the run leaves these employees alone. Payroll has already been paid
     // for them, and pressing Run again must not quietly rewrite a payslip that is out.
     key: 'locked', label: 'Already Run', icon: '🔒', blocking: true, available: true,
-    desc: 'Left out of the run — payroll has already run for these employees and their month is locked.',
+    desc: 'Left out of the run: payroll has already run for these employees and their month is locked.',
     test: r => (r.is_locked === true
       ? 'Already paid this month. To run again, unlock them in Lock / Unlock with a reason.'
       : null),
   },
   {
     key: 'bank', label: 'Missing Bank', icon: '🏦', blocking: true, available: true,
-    desc: 'Left out of the run — payment cannot be initiated without a valid account. Everyone else is still paid.',
+    desc: 'Left out of the run: payment cannot be initiated without a valid account. Everyone else is still paid.',
     test: r => {
       const noAcct = blank(r.bank_account_number)
       const noIfsc = blank(r.ifsc_code)
       if (!noAcct && !noIfsc) return null
       const what = noAcct && noIfsc ? 'no account number and no IFSC' : noAcct ? 'no account number' : 'no IFSC'
-      return `Left out — ${what} to credit. Fix the account, then run again for just this employee.`
+      return `Left out: ${what} to credit. Fix the account, then run again for just this employee.`
     },
   },
   {
     key: 'days', label: 'Zero Paid Days', icon: '📆', blocking: true, available: true,
-    desc: 'Left out of the run — attendance is uploaded but says this employee earned no days.',
+    desc: 'Left out of the run: attendance is uploaded but says this employee earned no days.',
     // Only counts employees whose attendance HAS arrived and reads zero. A null paid_days
     // is a different problem with a different fix, and it has its own check below.
     test: r => (!blank(r.paid_days) && Number(r.paid_days) <= 0
-      ? 'Left out — salary would calculate as ₹0, every earning component prorates to zero.'
+      ? 'Left out: salary would calculate as ₹0, every earning component prorates to zero.'
       : null),
   },
   {
     key: 'attendance', label: 'Attendance Not Processed', icon: '🕐', blocking: true, available: true,
-    desc: 'Left out of the run — no attendance has been uploaded for these employees yet.',
+    desc: 'Left out of the run: no attendance has been uploaded for these employees yet.',
     // The engine skips these rows entirely rather than guessing a full month, so they
     // silently disappear from the register. Silent is exactly what this screen exists to stop.
     test: r => (blank(r.paid_days) && blank(r.attendance_uploaded_at)
-      ? 'Left out — nothing to prorate. Upload attendance, then run again for just this employee.'
+      ? 'Left out: nothing to prorate. Upload attendance, then run again for just this employee.'
       : null),
   },
   {
     key: 'ctc', label: 'CTC Not Synced', icon: '🔄', blocking: true, available: true,
-    desc: 'Left out of the run — no salary structure was frozen into this month for these employees.',
+    desc: 'Left out of the run: no salary structure was frozen into this month for these employees.',
     test: r => (numOr(r.gross_monthly, 0) <= 0 && numOr(r.basic_monthly, 0) <= 0
-      ? 'Left out — payslip would be ₹0. Run Data Sync → Salary, then run again for this employee.'
+      ? 'Left out: payslip would be ₹0. Run Data Sync → Salary, then run again for this employee.'
       : null),
   },
   {
     key: 'hold', label: 'On Hold', icon: '⏸️', blocking: false, available: true,
-    desc: 'Still paid — informational, but worth reviewing before you approve the run.',
+    desc: 'Still paid: informational, but worth reviewing before you approve the run.',
     test: r => (r.payment_hold === true
-      ? 'Included in this run despite the hold flag — confirm this is intended before approving.'
+      ? 'Included in this run despite the hold flag. Confirm this is intended before approving.'
       : null),
   },
   {
     key: 'pan', label: 'Missing PAN', icon: '🪪', blocking: false, available: true,
-    desc: 'Still paid — a statutory filing concern, not a payment blocker.',
+    desc: 'Still paid: a statutory filing concern, not a payment blocker.',
     test: r => (blank(r.pan_number)
-      ? "TDS return (Form 24Q) will reject this employee's row at filing time — fix before quarter-end."
+      ? "TDS return (Form 24Q) will reject this employee's row at filing time. Fix before quarter-end."
       : null),
   },
   {
     key: 'arrear', label: 'Arrear Not Processed', icon: '📋', blocking: false, available: false,
     desc: 'Arrear days are recorded, but there is no rule yet for what "processed" means.',
-    unavailableNote: 'Arrear days are captured in the Month Master, but nothing yet decides when an arrear counts as settled — so this check would either pass everyone or fail everyone.',
+    unavailableNote: 'Arrear days are captured in the Month Master, but nothing yet decides when an arrear counts as settled, so this check would either pass everyone or fail everyone.',
   },
 ]
 

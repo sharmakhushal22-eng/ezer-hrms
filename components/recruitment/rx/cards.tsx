@@ -44,7 +44,7 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, candidatesN
             {urgent && <Badge tone="crit" live>{d! < 0 ? 'Past target' : `${d} days left`}</Badge>}
             {/* Past its validity date: a warning the compact card must still carry. */}
             {m.expired && <Badge tone="crit" title="Past its validity date">Expired</Badge>}
-            {m.confidential && <Badge tone="dark" dot={false} title="Confidential hiring — visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
+            {m.confidential && <Badge tone="dark" dot={false} title="Confidential hiring: visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
             <Badge tone={m.lane === 'Full MRF' ? 'brand' : 'mute'} dot={false}>{m.lane}</Badge>
             <Badge tone={MRF_TONE[m.status]}>{MRF_LABEL[m.status]}</Badge>
           </div>
@@ -57,7 +57,7 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, candidatesN
           {/* budgetLabel is pre-formatted by the tab with its own compOf/payAmount,
               so a stipend stays "Stipend ₹15,000/mo" rather than being rendered as
               an annual lakh figure. formatLakh is only the fallback. */}
-          <div className="rx-mt"><span className="rx-mt-l"><Icon name="wallet" />Budget</span><b>{m.budgetLabel ?? (m.budgetMaxRupees != null ? formatLakh(m.budgetMaxRupees, 1) : '—')}</b>{!m.budgetLabel && m.budgetMaxRupees != null && <span className="rx-mt-s">max per year</span>}</div>
+          <div className="rx-mt"><span className="rx-mt-l"><Icon name="wallet" />Budget</span><b>{m.budgetLabel ?? (m.budgetMaxRupees != null ? formatLakh(m.budgetMaxRupees, 1) : '-')}</b>{!m.budgetLabel && m.budgetMaxRupees != null && <span className="rx-mt-s">max per year</span>}</div>
         </div>
         <div className="rx-mc-chain">
           <div className="rx-cd">{m.chain.map((s, i) => {
@@ -103,7 +103,7 @@ export function CandidateCard({ c, next, onOpen }: { c: CandidateVM; next: NextS
         <Avatar initials={initialsOf(c.name)} tone={toneFor(c.name)} />
         <span style={{ minWidth: 0, flex: 1, display: 'block' }}>
           <span className="rx-name" style={{ fontSize: 13.5, display: 'block' }}>{c.name}</span>
-          <span className="rx-meta" style={{ fontSize: 12, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.currentRole ?? '—'}</span>
+          <span className="rx-meta" style={{ fontSize: 12, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.currentRole ?? '-'}</span>
         </span>
       </span>
       <span style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'var(--ez-sunken)' }}>
@@ -114,7 +114,7 @@ export function CandidateCard({ c, next, onOpen }: { c: CandidateVM; next: NextS
       <span className="rx-row" style={{ justifyContent: 'space-between' }}>
         <span className="rx-meta" style={{ fontSize: 12 }}>{c.source ?? ''}</span>
         <span className="rx-row" style={{ gap: 6 }}>
-          {c.confidential && <Badge tone="dark" dot={false} title="Confidential hiring — visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
+          {c.confidential && <Badge tone="dark" dot={false} title="Confidential hiring: visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
           {c.aiScore != null && <Badge tone="pos" dot={false}>AI {c.aiScore}</Badge>}
         </span>
       </span>

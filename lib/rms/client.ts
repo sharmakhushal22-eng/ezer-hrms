@@ -168,7 +168,7 @@ export function useManagerChain(employeeId: string | null | undefined) {
  *  caller is a button that has to show the user what happened. */
 export async function rmsAdmin(body: Record<string, any>): Promise<{ ok?: true; error?: string; [k: string]: any }> {
   const token = await authToken()
-  if (!token) return { error: 'Your session has expired — sign in again.' }
+  if (!token) return { error: 'Your session has expired. Sign in again.' }
   try {
     const res = await fetch('/api/rms/admin', {
       method: 'POST',

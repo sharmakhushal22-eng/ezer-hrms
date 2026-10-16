@@ -104,8 +104,8 @@ const s = {
 }
 
 const initials = (n: string) => n?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'NA'
-const fmt = (v: any) => !v || v === '' ? '—' : String(v)
-const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
+const fmt = (v: any) => !v || v === '' ? '-' : String(v)
+const fmtDate = (v: string) => { if(!v) return '-'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
 
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
 const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
@@ -199,7 +199,7 @@ const ONBOARDING_SECTIONS: Section[] = [
   { title: 'Personal details', fields: [
     { k:'salutation', label:'Salutation', t:'select', opts:['','Mr','Ms','Mrs','Dr'] },
     { k:'name_as_per_aadhar', label:'Name as per Aadhaar', req:true, span:2,
-      hint:'Must match Aadhaar exactly — used for PF/UAN and bank validation' },
+      hint:'Must match Aadhaar exactly. Used for PF/UAN and bank validation' },
     { k:'father_name', label:"Father's name", req:true },
     { k:'mother_name', label:"Mother's name" },
     { k:'gender', label:'Gender', t:'select', opts:['','Male','Female','Other'], req:true },
@@ -245,16 +245,16 @@ const ONBOARDING_SECTIONS: Section[] = [
     { k:'perm_country', label:'Country' },
   ]},
   { title: 'Emergency contacts', fields: [
-    { k:'emergency_name', label:'Contact 1 — name', req:true },
-    { k:'emergency_relation', label:'Contact 1 — relation', req:true },
-    { k:'emergency_mobile', label:'Contact 1 — mobile', t:'tel', req:true },
-    { k:'emergency_email', label:'Contact 1 — email', t:'email' },
-    { k:'emergency_address', label:'Contact 1 — address', span:2 },
-    { k:'emergency2_name', label:'Contact 2 — name' },
-    { k:'emergency2_relation', label:'Contact 2 — relation' },
-    { k:'emergency2_mobile', label:'Contact 2 — mobile', t:'tel' },
-    { k:'emergency2_email', label:'Contact 2 — email', t:'email' },
-    { k:'emergency2_address', label:'Contact 2 — address', span:2 },
+    { k:'emergency_name', label:'Contact 1: name', req:true },
+    { k:'emergency_relation', label:'Contact 1: relation', req:true },
+    { k:'emergency_mobile', label:'Contact 1: mobile', t:'tel', req:true },
+    { k:'emergency_email', label:'Contact 1: email', t:'email' },
+    { k:'emergency_address', label:'Contact 1: address', span:2 },
+    { k:'emergency2_name', label:'Contact 2: name' },
+    { k:'emergency2_relation', label:'Contact 2: relation' },
+    { k:'emergency2_mobile', label:'Contact 2: mobile', t:'tel' },
+    { k:'emergency2_email', label:'Contact 2: email', t:'email' },
+    { k:'emergency2_address', label:'Contact 2: address', span:2 },
   ]},
   { title: 'Education', fields: [
     { k:'highest_qualification', label:'Highest qualification' },
@@ -264,16 +264,16 @@ const ONBOARDING_SECTIONS: Section[] = [
   { title: 'Previous employment and references', fields: [
     { k:'total_experience', label:'Total experience (years)', t:'number' },
     { k:'current_co_exp', label:'Current / last company experience', span:2 },
-    { k:'reference1_name', label:'Reference 1 — name' },
-    { k:'reference1_mobile', label:'Reference 1 — mobile', t:'tel' },
-    { k:'reference1_relation', label:'Reference 1 — relation' },
-    { k:'reference1_years', label:'Reference 1 — years known', t:'number' },
-    { k:'reference2_name', label:'Reference 2 — name' },
-    { k:'reference2_mobile', label:'Reference 2 — mobile', t:'tel' },
-    { k:'reference2_relation', label:'Reference 2 — relation' },
-    { k:'reference2_years', label:'Reference 2 — years known', t:'number' },
+    { k:'reference1_name', label:'Reference 1: name' },
+    { k:'reference1_mobile', label:'Reference 1: mobile', t:'tel' },
+    { k:'reference1_relation', label:'Reference 1: relation' },
+    { k:'reference1_years', label:'Reference 1: years known', t:'number' },
+    { k:'reference2_name', label:'Reference 2: name' },
+    { k:'reference2_mobile', label:'Reference 2: mobile', t:'tel' },
+    { k:'reference2_relation', label:'Reference 2: relation' },
+    { k:'reference2_years', label:'Reference 2: years known', t:'number' },
   ]},
-  { title: 'Statutory IDs', note:'Aadhaar is stored masked — only the last four digits are kept in the clear', fields: [
+  { title: 'Statutory IDs', note:'Aadhaar is stored masked: only the last four digits are kept in the clear', fields: [
     { k:'pan_number', label:'PAN', req:true, hint:'ABCDE1234F' },
     { k:'aadhaar_input', label:'Aadhaar number', req:true, hint:'12 digits' },
     { k:'uan_number', label:'UAN', cond:'existing PF members' },
@@ -293,7 +293,7 @@ const ONBOARDING_SECTIONS: Section[] = [
     { k:'bank_name', label:'Bank name', req:true },
     { k:'bank_account_input', label:'Account number', req:true },
     { k:'bank_holder_name', label:'Account holder name', req:true, span:2,
-      hint:'As printed on the passbook — the bank validates against this' },
+      hint:'As printed on the passbook. The bank validates against this' },
     { k:'ifsc_code', label:'IFSC', req:true, hint:'XXXX0XXXXXX' },
     { k:'account_type', label:'Account type', t:'select', opts:['','Savings','Current','Salary'] },
   ]},
@@ -315,11 +315,11 @@ function Field({ d, value, onChange }: { d: FieldDef; value: any; onChange: (v: 
     <div style={{ gridColumn: span > 1 ? `span ${span}` : undefined, minWidth: 0 }}>
       <label style={mc.lbl}>
         {d.label}{d.req && ' *'}
-        {d.cond && !d.hint && <span style={{ color:C.faint, fontWeight:400, textTransform:'none', letterSpacing:0 }}> — {d.cond}</span>}
+        {d.cond && !d.hint && <span style={{ color:C.faint, fontWeight:400, textTransform:'none', letterSpacing:0 }}> ({d.cond})</span>}
       </label>
       {d.t === 'select' ? (
         <select style={mc.inp} value={value ?? ''} onChange={e => onChange(e.target.value)}>
-          {(d.opts ?? []).map(o => <option key={o} value={o}>{o || '—'}</option>)}
+          {(d.opts ?? []).map(o => <option key={o} value={o}>{o || '-'}</option>)}
         </select>
       ) : d.t === 'check' ? (
         <label style={{ display:'flex', alignItems:'center', gap:8, height:36, fontSize:13, color:C.ink }}>
@@ -512,7 +512,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
         for (const co of chosen) {
           const c = await nextEmpCode(co.company_code || 'EZ', co.id, f.employment_type)
           const { data: clash } = await supabase.from('employees').select('id').eq('emp_code', c).maybeSingle()
-          if (clash) { setErr(`Code ${c} already exists — nothing was created.`); setBusy(false); return }
+          if (clash) { setErr(`Code ${c} already exists. Nothing was created.`); setBusy(false); return }
           rows.push({ ...common, emp_code: c, common_code: shared, company_id: co.id,
                       location_id: null, department_id: null })
         }
@@ -680,8 +680,8 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
               {picked.length}
             </span>
             <div style={{ fontSize:12, color:C.ink, lineHeight:1.65 }}>
-              <b>{picked.length} records will be created</b> — one in{' '}
-              {companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')} — each with
+              <b>{picked.length} records will be created</b>: one in{' '}
+              {companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')}, each with
               its own employee code, tied together by a single group code so the system treats them as
               one person.
               <div style={{ color:C.muted, marginTop:2 }}>
@@ -715,8 +715,8 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
         <div style={{ marginTop:'18px', borderTop:`1px solid ${C.line}`, paddingTop:'12px' }}>
           <div style={{ ...eyebrow, color:C.ink, marginBottom:6 }}>Photo and documents</div>
           <div style={{ fontSize:12, color:C.muted, lineHeight:1.6 }}>
-            The passport photo and the twelve document uploads — PAN, Aadhaar, cancelled cheque,
-            education and experience certificates — are collected after the record exists, from the
+            The passport photo and the twelve document uploads (PAN, Aadhaar, cancelled cheque,
+            education and experience certificates) are collected after the record exists, from the
             employee&rsquo;s profile. They are files rather than fields and do not belong in this form.
           </div>
         </div>
@@ -725,7 +725,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
           <div style={{ background:C.criticalTint, color:C.critical, fontSize:12,
                         padding:'9px 12px', borderRadius:8, marginTop:14, lineHeight:1.6 }}>
             <b>{problems.length} field{problems.length === 1 ? '' : 's'} need{problems.length === 1 ? 's' : ''} checking</b>
-            {' — '}{problems.map(([k]) => k.replace(/_/g, ' ').replace('input', '')).join(', ')}
+            {': '}{problems.map(([k]) => k.replace(/_/g, ' ').replace('input', '')).join(', ')}
           </div>
         )}
         {err && <div style={{ background:C.criticalTint, color:C.critical, fontSize:'12px', padding:'8px 12px', borderRadius:'7px', margin:'14px 0' }}>{err}</div>}
@@ -751,7 +751,7 @@ function StatCard({ label, value, color, onClick, active }: any) {
 
 function Badge({ val, map }: { val: string; map: Record<string,{bg:string;color:string}> }) {
   const c = map[val] || {bg:C.sunken,color:C.inkSoft}
-  return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '—'}</span>
+  return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '-'}</span>
 }
 
 // Profile header strip
@@ -767,7 +767,7 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         {/* Info */}
         <div style={{ flex:1 }}>
           <div style={{ fontSize:'17px', fontWeight:600, color:C.onAccent, marginBottom:'3px' }}>{emp.full_name}</div>
-          <div style={{ fontSize:'12px', color:C.onAccentDim, marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
+          <div style={{ fontSize:'12px', color:C.onAccentDim, marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '-'}</div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...TYPE_COLORS[emp.employment_type] }}>{emp.employment_type}</span>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...STATUS_COLORS[emp.employment_status] }}>{emp.employment_status}</span>
@@ -796,9 +796,9 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
           { l:'Group DOJ', v: fmtDate(emp.group_doj) },
           { l:'Company DOJ', v: fmtDate(emp.company_doj) },
           { l:'Confirmation', v: fmt(emp.confirmation_status) },
-          { l:'Department', v: (emp as any).departments?.dept_name || '—' },
-          { l:'Location', v: (emp as any).locations?.location_name || '—' },
-          { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
+          { l:'Department', v: (emp as any).departments?.dept_name || '-' },
+          { l:'Location', v: (emp as any).locations?.location_name || '-' },
+          { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '-' },
         ].map(x => (
           <div key={x.l} style={{ fontSize:'11px', color:C.onAccentDim }}>
             {x.l}: <span style={{ color:C.onAccent, fontWeight:500 }}>{x.v}</span>
@@ -1178,7 +1178,7 @@ export default function EmployeeMaster() {
                 // pill. A solid deeper fill of the brand carries them.
                 background: f.on ? C.brandDeep : C.sunken,
                 color: f.on ? C.surface : C.faint, ...numeric,
-              }}>{loading ? '—' : f.n}</span>
+              }}>{loading ? '-' : f.n}</span>
             </button>
           ))}
         </div>
@@ -1198,7 +1198,7 @@ export default function EmployeeMaster() {
           </div>
           <select style={{ ...s.sel, width:'auto', minWidth:'140px' }} value={filterCompany} onChange={e=>{setFCo(e.target.value);setFLoc('');setFDept('')}}>
             <option value="">All Companies</option>
-            {companies.map(c=><option key={c.id} value={c.id}>{c.company_code} — {c.company_name}</option>)}
+            {companies.map(c=><option key={c.id} value={c.id}>{c.company_code} · {c.company_name}</option>)}
           </select>
           <select style={{ ...s.sel, width:'auto', minWidth:'130px' }} value={filterLocation} onChange={e=>setFLoc(e.target.value)}>
             <option value="">All Locations</option>
@@ -1306,7 +1306,7 @@ export default function EmployeeMaster() {
                       <Td>
                         {/* Avatar + name + designation. The face makes a long
                             list scannable in a way a column of text does not. */}
-                        <Person name={emp.full_name} meta={emp.designation || '—'} />
+                        <Person name={emp.full_name} meta={emp.designation || ''} />
                       </Td>
                       <Td><Badge val={emp.employment_type} map={TYPE_COLORS} /></Td>
                       <Td style={{ maxWidth:108 }}>
@@ -1321,7 +1321,7 @@ export default function EmployeeMaster() {
                               <div title={loc || co || ''} style={{
                                 color: loc ? C.ink : C.muted, whiteSpace:'nowrap',
                                 overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.3,
-                              }}>{loc || co || '—'}</div>
+                              }}>{loc || co || '-'}</div>
                               {loc && co && (
                                 <div style={{ fontSize:F.micro, color:C.faint, lineHeight:1.3 }}>{co}</div>
                               )}
@@ -1333,7 +1333,7 @@ export default function EmployeeMaster() {
                         <span style={{
                           padding:'2px 9px', borderRadius:R.pill, fontSize:F.tiny,
                           fontWeight:W.semi, whiteSpace:'nowrap', ...gc,
-                        }}>{emp.grade || '—'}</span>
+                        }}>{emp.grade || '-'}</span>
                       </Td>
                       <Td>
                         <span style={{
@@ -1347,7 +1347,7 @@ export default function EmployeeMaster() {
                         )}
                       </Td>
                       <Td mono style={{ color:C.muted, fontSize:F.tiny, whiteSpace:'nowrap' }}>{fmtDate(emp.company_doj)}</Td>
-                      <Td mono style={{ fontSize:F.tiny, whiteSpace:'nowrap' }}>{emp.mobile||'—'}</Td>
+                      <Td mono style={{ fontSize:F.tiny, whiteSpace:'nowrap' }}>{emp.mobile||'-'}</Td>
                       <Td align="right" style={{
                         whiteSpace:'nowrap', position:'sticky', right:0,
                         background:C.surface, boxShadow:`inset 1px 0 0 ${C.line}`,

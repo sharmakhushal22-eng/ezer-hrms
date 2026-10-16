@@ -155,7 +155,7 @@ function PersonCard({ e, animate, i, onOpen }: {
         <div className="hx-av" style={avatarStyle(e.full_name)}>{initials(e.full_name)}</div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="nm">{e.full_name}</div>
-          <div className="dg">{e.designation || '—'}</div>
+          <div className="dg">{e.designation || '-'}</div>
         </div>
       </div>
       {/* Code, department and location share one row at the card's own left

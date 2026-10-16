@@ -874,11 +874,11 @@ export function Person({ name, meta, size = 28, src }: {
         <div style={{
           fontSize: F.small, fontWeight: W.semi, color: C.ink, lineHeight: 1.3,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{name || '—'}</div>
+        }}>{name || '-'}</div>
         {/* Rendered only when there is something to say. An empty second line
             still reserves its height, which is how a 398-row table ends up
             showing ten people. */}
-        {meta != null && meta !== '' && meta !== '—' && (
+        {meta != null && meta !== '' && meta !== '-' && (
           <div style={{ fontSize: F.micro, color: C.muted, lineHeight: 1.3, ...numeric }}>{meta}</div>
         )}
       </div>
@@ -895,7 +895,7 @@ export function Person({ name, meta, size = 28, src }: {
  * every number in this product is read by the people using it.
  */
 export function money(n: number | null | undefined, opts?: { paise?: boolean; symbol?: boolean }): string {
-  if (n == null || Number.isNaN(n)) return '—';
+  if (n == null || Number.isNaN(n)) return '-';
   const s = new Intl.NumberFormat('en-IN', {
     minimumFractionDigits: opts?.paise ? 2 : 0,
     maximumFractionDigits: opts?.paise ? 2 : 0,
@@ -905,7 +905,7 @@ export function money(n: number | null | undefined, opts?: { paise?: boolean; sy
 
 /** Compact form for headline figures: ₹4.2 Cr, ₹12.5 L. */
 export function moneyShort(n: number | null | undefined): string {
-  if (n == null || Number.isNaN(n)) return '—';
+  if (n == null || Number.isNaN(n)) return '-';
   const a = Math.abs(n);
   if (a >= 1e7) return `₹${(n / 1e7).toFixed(a >= 1e8 ? 0 : 1)} Cr`;
   if (a >= 1e5) return `₹${(n / 1e5).toFixed(a >= 1e6 ? 0 : 1)} L`;

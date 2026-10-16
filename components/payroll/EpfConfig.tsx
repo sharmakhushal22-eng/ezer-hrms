@@ -97,9 +97,9 @@ export default function EpfConfig() {
     setError('')
     try {
       const c = await getCurrentEpfConfig()
-      if (!c) setError('No EPF config found — run sql76 + sql77 first.')
+      if (!c) setError('No EPF config found. Run sql76 + sql77 first.')
       setCfg(c)
-    } catch (e: any) { setError(e.message || 'Could not load — run sql76 + sql77 first.') }
+    } catch (e: any) { setError(e.message || 'Could not load. Run sql76 + sql77 first.') }
   }, [])
   useEffect(() => { load() }, [load])
 
@@ -124,7 +124,7 @@ export default function EpfConfig() {
         <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>EPF</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Provident Fund — EPF Wages = Gross − HRA, capped at each employee&apos;s PF limit</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Provident Fund: EPF Wages = Gross − HRA, capped at each employee&apos;s PF limit</div>
         </div>
       </div>
 
@@ -171,7 +171,7 @@ export default function EpfConfig() {
             {result && (result.is_excluded_employee ? (
               <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 11, padding: '13px 15px' }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: TK.onAccent, background: TK.lineStrong, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase' }}>Excluded employee</span>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>COC-holding International Worker — zero EPF applies in India.</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>COC-holding International Worker: zero EPF applies in India.</div>
               </div>
             ) : (
               <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 11, padding: '13px 15px' }}>
@@ -197,7 +197,7 @@ export default function EpfConfig() {
           {/* EDLI + Admin charges (establishment) */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>EDLI + Admin charges</div>
-            <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>Establishment-level (employer only) — on ₹15,000 base, pro-rated by paid days.</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>Establishment-level (employer only), on ₹15,000 base, pro-rated by paid days.</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
               <div style={{ width: 110 }}><label style={lbl}>Paid days</label><input type="number" value={paidDays} onChange={e => setPaidDays(e.target.value)} style={inputStyle} /></div>
               <div style={{ width: 120 }}><label style={lbl}>Days in month</label><input type="number" value={daysInMonth} onChange={e => setDaysInMonth(e.target.value)} style={inputStyle} /></div>

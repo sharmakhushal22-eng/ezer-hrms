@@ -159,7 +159,7 @@ const NOTHING_CONFIGURED_YET =
 /** dd-Mmm-yy, the mockup's date format, which is what an Indian HR team reads. */
 function shortDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`)
-  if (Number.isNaN(d.getTime())) return '—'
+  if (Number.isNaN(d.getTime())) return '-'
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   return `${String(d.getUTCDate()).padStart(2, '0')}-${M[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(2)}`
 }
@@ -167,7 +167,7 @@ function shortDate(iso: string): string {
 /** "01–15 Apr" — a window, collapsed when both ends share a month. */
 function windowText(from: string, to: string): string {
   const a = new Date(`${from}T00:00:00Z`), b = new Date(`${to}T00:00:00Z`)
-  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return '—'
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return '-'
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   const dd = (d: Date) => String(d.getUTCDate()).padStart(2, '0')
   return a.getUTCMonth() === b.getUTCMonth() && a.getUTCFullYear() === b.getUTCFullYear()
@@ -190,7 +190,7 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
   return (
     <>
       <Card title="Cycle & frequency preview"
-            sub="Try a frequency and every period below regenerates, windows and all. This is a preview — nothing here is saved.">
+            sub="Try a frequency and every period below regenerates, windows and all. This is a preview. Nothing here is saved.">
         <div className="grid g4">
           <Fixed label="Company" value="All companies" />
           <Fixed label="Financial year" value={fyLabel} hint={`Starts ${shortDate(fyStart)}`} />
@@ -249,8 +249,8 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
           </table>
         </div>
         <div className="k" style={{ marginTop: 8, lineHeight: 1.6 }}>
-          KRAs are agreed at the <b>start</b> of a period and rated after it <b>ends</b> —
-          settling KRAs in the last week would leave the one-to-one nothing to influence.
+          KRAs are agreed at the <b>start</b> of a period and rated after it <b>ends</b>.
+          Settling KRAs in the last week would leave the one-to-one nothing to influence.
         </div>
 
         <div className="divider" />
@@ -261,11 +261,11 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
           <Fixed label="Maximum KRA count" value={String(DEFAULT_RULES.maxKra)}
                  hint="Past ten, weightages get too thin to mean anything" />
           <Fixed label="Total weightage must be" value={String(DEFAULT_RULES.totalWeightage)}
-                 hint="Exactly — not at least" />
+                 hint="Exactly, not at least" />
           <Fixed label="Minimum weightage per KRA" value={String(DEFAULT_RULES.minWeightagePerKra)}
                  hint="Stops a token KRA carrying 1%" />
           <Fixed label="Who creates KRAs" value="Employee (RM approves)" />
-          <Fixed label="One-to-one mandatory" value="Yes — before weightage lock" />
+          <Fixed label="One-to-one mandatory" value="Yes, before weightage lock" />
           <Fixed label="Mid-period check-in" value="Optional" />
           <Fixed label="Final review one-to-one" value="Mandatory before publish" />
         </div>
@@ -276,13 +276,13 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
           <Fixed label="Approval chain" value={CHAIN_LABEL[CHAINS[0]]} />
           <Fixed label="Who can finalise" value={FINALISER_LABEL[FINALISERS[0]]} />
           <Fixed label="Rating scale" value="5 point (1–5)" />
-          <Fixed label="Self rating mandatory" value="Yes — a manager cannot rate first" />
+          <Fixed label="Self rating mandatory" value="Yes, a manager cannot rate first" />
         </div>
 
         <div className="divider" />
         <Section>Linkage &amp; eligibility</Section>
         <div className="grid g4">
-          <Fixed label="Payout / CTC linkage" value="OFF — developmental only" locked
+          <Fixed label="Payout / CTC linkage" value="OFF (developmental only)" locked
                  hint="Locked off. No increment, variable or CTC impact." />
           <Fixed label="New joiner cut-off" value="30 days before the period ends" />
           <Fixed label="Notice period employees" value="Include, and highlight" />
@@ -293,7 +293,7 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
           <div>
             The payout lock is a database constraint, not a setting:{' '}
             <code>payout_linkage_enabled = false</code>. No screen, admin or API
-            call can turn it on — enabling it would take a migration that drops
+            call can turn it on. Enabling it would take a migration that drops
             the CHECK. This PMS is developmental, and additional benefits stay
             recognition-only: certificate, nomination, award, no cash component.
           </div>
@@ -312,7 +312,7 @@ export function PolicyTab({ policies, people }: {
   return (
     <>
       <Card title="Policy builder"
-            sub="One company can run several policies at once — sales monthly, leadership half-yearly, workmen annual.">
+            sub="One company can run several policies at once: sales monthly, leadership half-yearly, workmen annual.">
         <div className="tblwrap">
           <table>
             <thead>
@@ -334,7 +334,7 @@ export function PolicyTab({ policies, people }: {
                   <td>{FREQ_LABEL[p.frequency]}</td>
                   <td>{p.minKra} / {p.maxKra}</td>
                   <td>{FINALISER_LABEL[p.whoCanFinalise]}</td>
-                  <td className="num">—</td>
+                  <td className="num">-</td>
                   <td>{p.isActive ? <Pill tone="green">Active</Pill> : <Pill tone="amber">Draft</Pill>}</td>
                 </tr>
               ))}
@@ -355,7 +355,7 @@ export function PolicyTab({ policies, people }: {
         <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
           Rule 14 says an employee is in <b>exactly one</b> active policy. Two policies
           of equal narrowness is a configuration mistake, so it is refused rather than
-          guessed — silently picking one only surfaces months later, when an appraisal
+          guessed. Silently picking one only surfaces months later, when an appraisal
           routes to the wrong manager.
         </div>
       </Card>
@@ -372,14 +372,14 @@ export function PolicyTab({ policies, people }: {
               <div className={`val ${trouble.uncovered.length ? 'bad' : 'good'}`}>
                 {trouble.uncovered.length}
               </div>
-              <div className="note">No policy matches them — they cannot be rated at all</div>
+              <div className="note">No policy matches them. They cannot be rated at all</div>
             </div>
             <div className="stat">
               <div className="lbl">Contested</div>
               <div className={`val ${trouble.contested.length ? 'bad' : 'good'}`}>
                 {trouble.contested.length}
               </div>
-              <div className="note">Two policies match equally — the tie has to be broken by hand</div>
+              <div className="note">Two policies match equally. The tie has to be broken by hand</div>
             </div>
           </div>
         )}
@@ -486,8 +486,8 @@ export function FillTab({ rows, deptNames, loading }: {
                 const wt = r.total_weightage ?? 0
                 return (
                   <tr key={`${r.employee_code ?? i}`}>
-                    <td>{r.employee_code ?? '—'}</td>
-                    <td style={{ fontWeight: 600 }}>{r.employee_name ?? '—'}</td>
+                    <td>{r.employee_code ?? '-'}</td>
+                    <td style={{ fontWeight: 600 }}>{r.employee_name ?? '-'}</td>
                     <td>{deptNames[r.department_id ?? ''] ?? 'Unknown'}</td>
                     <td className="num">{r.kra_count ?? 0}</td>
                     <td className="num">
@@ -518,11 +518,11 @@ export function FillTab({ rows, deptNames, loading }: {
 
 /** The chase-list phrasing, trimmed to fit a table cell. */
 const FILL_MEANING_SHORT: Record<FillStatus, string> = {
-  NOT_STARTED: 'Cannot be rated at all — chase first',
+  NOT_STARTED: 'Cannot be rated at all. Chase first',
   DRAFT_SAVED: 'Started, nothing sent. A nudge, not an escalation',
   SUBMITTED:   'Waiting on their manager',
   IN_REVIEW:   'Waiting on the next approver or the HOD',
-  FINALISED:   'Settled — nothing further owed',
+  FINALISED:   'Settled, nothing further owed',
 }
 
 // ── §6.4 Final Rating Upload ─────────────────────────────────────────────
@@ -540,7 +540,7 @@ export function UploadTab() {
           These are <b>override rights</b>. A manual upload replaces the rating the
           system computed, and every row is written to the audit log with the actor,
           the timestamp and the reason. Use it for an offline calibration or a legacy
-          migration — not to correct one person.
+          migration, not to correct one person.
         </div>
       </div>
 
@@ -569,7 +569,7 @@ export function UploadTab() {
 
         <div className="divider" />
         <Section>
-          {preview ? `Validation preview — ${preview.rows.length} rows` : 'Validation preview'}
+          {preview ? `Validation preview: ${preview.rows.length} rows` : 'Validation preview'}
         </Section>
         <div className="tblwrap">
           <table>
@@ -593,15 +593,15 @@ export function UploadTab() {
               ) : preview.rows.map((r, i) => (
                 <tr key={i} className={r.errors.length ? 'exitrow' : undefined}>
                   <td className="num">{i + 1}</td>
-                  <td>{r.row.employee_code || '—'}</td>
-                  <td>{r.row.period_code || '—'}</td>
-                  <td className="num">{r.computed ?? '—'}</td>
-                  <td className="num">{r.uploaded ?? '—'}</td>
-                  <td>{r.delta === null ? <Pill tone="grey">—</Pill>
+                  <td>{r.row.employee_code || '-'}</td>
+                  <td>{r.row.period_code || '-'}</td>
+                  <td className="num">{r.computed ?? '-'}</td>
+                  <td className="num">{r.uploaded ?? '-'}</td>
+                  <td>{r.delta === null ? <Pill tone="grey">-</Pill>
                      : r.delta === 0 ? <Pill tone="grey">No change</Pill>
                      : <Pill tone="amber">{r.delta > 0 ? `+${r.delta}` : r.delta}</Pill>}</td>
                   <td className={r.errors.includes('ERROR_REASON_MISSING') ? 'bad' : undefined}>
-                    {r.row.override_reason || (r.errors.includes('ERROR_REASON_MISSING') ? 'Missing' : '—')}
+                    {r.row.override_reason || (r.errors.includes('ERROR_REASON_MISSING') ? 'Missing' : '-')}
                   </td>
                   <td>{r.errors.length
                     ? <Pill tone="red">{ERROR_TEXT[r.errors[0]]}</Pill>
@@ -620,8 +620,8 @@ export function UploadTab() {
               </button>
               <button className="btn dark sm" type="button" disabled={!preview.canCommit}>
                 {preview.canCommit
-                  ? `Commit upload — ${preview.rows.length} rows`
-                  : `Commit blocked — ${preview.errorCount} ${preview.errorCount === 1 ? 'row needs' : 'rows need'} fixing`}
+                  ? `Commit upload (${preview.rows.length} rows)`
+                  : `Commit blocked: ${preview.errorCount} ${preview.errorCount === 1 ? 'row needs' : 'rows need'} fixing`}
               </button>
             </div>
             <div className="k" style={{ marginTop: 8, lineHeight: 1.6 }}>{summarise(preview)}</div>
@@ -630,7 +630,7 @@ export function UploadTab() {
         <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
           A reason is owed only where the rating actually <b>changes</b>. Demanding one
           on an unchanged row teaches people to type &ldquo;n/a&rdquo;, which is worse
-          than not asking. And a part-applied upload is worse than a refused one — some
+          than not asking. And a part-applied upload is worse than a refused one: some
           people on the system&rsquo;s rating, some on the spreadsheet&rsquo;s, and
           nothing on screen to say which.
         </div>
@@ -715,7 +715,7 @@ export function PipTab({ queue }: { queue: PipRow[] }) {
         </div>
       </div>
 
-      <Card title="PIP requests — HR action queue"
+      <Card title="PIP requests: HR action queue"
             sub="Raised by managers, waiting on a decision from HR.">
         <div className="tblwrap">
           <table>
@@ -742,7 +742,7 @@ export function PipTab({ queue }: { queue: PipRow[] }) {
                                   : 'amber'}>
                       {STATUS_LABEL[r.pip.status]}
                     </Pill></td>
-                    <td>{nx.who ?? '—'}</td>
+                    <td>{nx.who ?? '-'}</td>
                     <td className="k">{nx.what}</td>
                   </tr>
                 )
@@ -773,11 +773,11 @@ export function PipTab({ queue }: { queue: PipRow[] }) {
 }
 
 const PIP_STEPS = [
-  { n: 1, who: 'RM',         what: 'Raises the request — trigger rating, proposed dates, improvement areas with a current state, a target, a measure and a review date, plus the support being offered' },
+  { n: 1, who: 'RM',         what: 'Raises the request: trigger rating, proposed dates, improvement areas with a current state, a target, a measure and a review date, plus the support being offered' },
   { n: 2, who: 'HR Manager', what: 'Reviews: adjusts dates, drops an area that does not belong, rejects with a reason, or sends it back to the RM. Writes a note to the employee and an internal one to the RM' },
-  { n: 3, who: 'HR',         what: 'Initiates. Review frequency is set — fortnightly or monthly — and the employee is notified' },
+  { n: 3, who: 'HR',         what: 'Initiates. Review frequency is set (fortnightly or monthly) and the employee is notified' },
   { n: 4, who: 'Employee',   what: 'Acknowledges, with an optional note of their own' },
-  { n: 5, who: 'RM + HR',    what: 'Periodic reviews — each area marked improved, partial or no change, with notes' },
+  { n: 5, who: 'RM + HR',    what: 'Periodic reviews: each area marked improved, partial or no change, with notes' },
   { n: 6, who: 'HR',         what: 'Outcome: improved, extended, or referred for separation review' },
 ]
 
@@ -806,7 +806,7 @@ export function ReportsTab() {
         </table>
       </div>
       <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
-        Exports are UTF-8 with a BOM, the EZER standard — without it Excel mangles
+        Exports are UTF-8 with a BOM, the EZER standard. Without it Excel mangles
         every name with an accent in it. Columns are filtered by role: HR and admin
         see all of them, an RM sees their own team, a HOD their department, an
         employee only their own row.
@@ -818,23 +818,23 @@ export function ReportsTab() {
 /** Spec §9, all fourteen. */
 const REPORTS = [
   { n: 1,  name: 'Employee-wise KRA detail', filters: 'Company, dept, RM, period, status',
-    contains: 'Every KRA per employee — title, KPI, target, weightage, category, achievement, self, RM L1, RM L2, final, comments and the weighted contribution' },
+    contains: 'Every KRA per employee: title, KPI, target, weightage, category, achievement, self, RM L1, RM L2, final, comments and the weighted contribution' },
   { n: 2,  name: 'Fill status', filters: 'All, plus employment type',
-    contains: 'Not started, draft saved, submitted, finalised — with the last action timestamp' },
+    contains: 'Not started, draft saved, submitted, finalised, with the last action timestamp' },
   { n: 3,  name: 'Rating summary', filters: 'Company, dept, rating',
     contains: 'Final rating per employee with department, RM, HOD and who finalised it' },
   { n: 4,  name: 'Self vs manager gap', filters: 'Dept, RM, delta range',
-    contains: 'Self score, final score and the delta — an expectation-mismatch detector' },
+    contains: 'Self score, final score and the delta: an expectation-mismatch detector' },
   { n: 5,  name: 'KRA weightage compliance', filters: 'Company, dept',
     contains: 'Fewer than four KRAs, totals that are not 100, one-to-ones that never happened' },
   { n: 6,  name: 'One-to-one log', filters: 'Dept, RM, type',
-    contains: 'Every discussion — date, type, points covered, and both acknowledgements' },
+    contains: 'Every discussion: date, type, points covered, and both acknowledgements' },
   { n: 7,  name: 'Exit & notice period', filters: 'Company, dept',
     contains: 'Ratings still owed before somebody’s last working day' },
   { n: 8,  name: 'Appreciation & benefits register', filters: 'Company, dept, type',
-    contains: 'Who received what recognition — certificate, nomination, award' },
+    contains: 'Who received what recognition: certificate, nomination, award' },
   { n: 9,  name: 'PIP register', filters: 'Status, outcome',
-    contains: 'Request to initiation to reviews to outcome — the full trail' },
+    contains: 'Request to initiation to reviews to outcome: the full trail' },
   { n: 10, name: 'Period-on-period trend', filters: 'Employee, dept',
     contains: 'Rating movement across periods, per employee or per department' },
   { n: 11, name: 'Category analysis', filters: 'Dept, category',
@@ -842,7 +842,7 @@ const REPORTS = [
   { n: 12, name: 'Manager rating behaviour', filters: 'Dept, RM',
     contains: 'Per-RM average and distribution, with a lenient or harsh flag' },
   { n: 13, name: 'Override / audit log', filters: 'Actor, date range',
-    contains: 'Manual uploads and changes — actor, old value, new value, reason, timestamp' },
+    contains: 'Manual uploads and changes: actor, old value, new value, reason, timestamp' },
   { n: 14, name: 'Cycle completion', filters: 'Dept, location, grade',
     contains: 'Completion percentage by department, location and grade' },
 ]
@@ -853,7 +853,7 @@ export function FlowTab({ chainCoverage }: { chainCoverage?: React.ReactNode }) 
   return (
     <>
       <Card title="How a period runs, start to finish"
-            sub="Spec §1. Each step names the gate that stops it — most delays are one of these, not somebody being slow.">
+            sub="Spec §1. Each step names the gate that stops it. Most delays are one of these, not somebody being slow.">
         <div className="tblwrap">
           <table>
             <thead><tr><th className="num">#</th><th>Who</th><th>What happens</th><th>The gate</th></tr></thead>
@@ -863,7 +863,7 @@ export function FlowTab({ chainCoverage }: { chainCoverage?: React.ReactNode }) 
                   <td className="num">{s.n}</td>
                   <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{s.actor}</td>
                   <td>{s.what}</td>
-                  <td className="k">{s.gate ?? '—'}</td>
+                  <td className="k">{s.gate ?? '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -873,7 +873,7 @@ export function FlowTab({ chainCoverage }: { chainCoverage?: React.ReactNode }) 
           <span aria-hidden="true">✓</span><div><b>{FLOW_ENDS}</b></div>
         </div>
         <div className="k" style={{ marginTop: 8 }}>
-          Steps 9 to 12 only run when a rating is low — they are the PIP branch.
+          Steps 9 to 12 only run when a rating is low. They are the PIP branch.
         </div>
       </Card>
 
@@ -883,7 +883,7 @@ export function FlowTab({ chainCoverage }: { chainCoverage?: React.ReactNode }) 
       </Card>
 
       <Card title="Who may do what"
-            sub="Spec §2, cell for cell. ⚙ means the policy decides — see “who can finalise” in the cycle setup.">
+            sub="Spec §2, cell for cell. ⚙ means the policy decides (see “who can finalise” in the cycle setup).">
         <div className="tblwrap">
           <table>
             <thead>
@@ -905,7 +905,7 @@ export function FlowTab({ chainCoverage }: { chainCoverage?: React.ReactNode }) 
                             ? <span className="pill p-green">{scope}</span>
                             : <span className="ok" style={{ fontWeight: 800 }}>✓</span>)
                          : p === 'policy' ? <span className="pill p-amber">policy</span>
-                         : <span className="k">—</span>}
+                         : <span className="k">-</span>}
                       </td>
                     )
                   })}
@@ -915,7 +915,7 @@ export function FlowTab({ chainCoverage }: { chainCoverage?: React.ReactNode }) 
           </table>
         </div>
         <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
-          Two rows are worth reading twice. <b>Initiate PIP</b> is HR only — an RM can
+          Two rows are worth reading twice. <b>Initiate PIP</b> is HR only: an RM can
           raise a request and nothing more. <b>Finalise rating</b>{' '}
           {/* An explicit space, not a literal one. The text chunk that follows
               </b> starts with a space AND contains an entity (&rsquo;), and in

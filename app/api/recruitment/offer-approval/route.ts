@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   // ── Recruiter → HR Head: "review and approve" ──
   if (body.action === 'submitted') {
     const heads = await roleHolders(companyId, ['HR_HEAD'])
-    if (!heads.length) return NextResponse.json({ ok: true, notified: 0, warning: 'No HR Head is set for this company — nobody was notified.' })
+    if (!heads.length) return NextResponse.json({ ok: true, notified: 0, warning: 'No HR Head is set for this company. Nobody was notified.' })
     // The HR Manager(s) of the company are told at the same time: the candidate's card is already
     // on their Send Offers screen, with the Send Offer button locked until the HR Head approves.
     const managers = (await roleHolders(companyId, ['HR_MANAGER'])).filter(m => !heads.some(h => h.id === m.id))

@@ -137,7 +137,7 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
                     <td className="rx-num">{m.candidates}</td>
                     {/* The pre-redesign table carried a Recruiter column; keeping it
                         means the list view loses nothing to the card view. */}
-                    <td className="rx-meta">{m.recruiterEmail || (m.recruiterInitials.length ? m.recruiterInitials.join(', ') : '—')}</td>
+                    <td className="rx-meta">{m.recruiterEmail || (m.recruiterInitials.length ? m.recruiterInitials.join(', ') : '-')}</td>
                     <td><NextStepLine step={mrfNextStep(m)} compact /></td>
                     <td>
                       <div className="rx-row" style={{ gap: 6, justifyContent: 'flex-end' }}>

@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     sb.rpc('fn_ess_enabled', { p_employee_id: caller.employeeId }),
     sb.from('employees').select('id, emp_code, full_name, designation, company_id, department_id, departments!employees_department_id_fkey(dept_name)').eq('id', caller.employeeId).maybeSingle(),
   ])
-  if (error) return NextResponse.json({ error: `fn_ess_enabled: ${error.message} — has migration 071 been run?` }, { status: 500 })
+  if (error) return NextResponse.json({ error: `fn_ess_enabled: ${error.message}. Has migration 071 been run?` }, { status: 500 })
   if (!emp) return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
   if (caller.viewAs) await audit(caller, 'VIEW_AS_START', caller.employeeId, { route: 'session' })
   const blocked = !en?.enabled

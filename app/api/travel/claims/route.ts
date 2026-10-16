@@ -75,7 +75,7 @@ async function notifyFinance(
         p_module: 'TRAVEL',
         p_ref_table: 'travel_claims',
         p_ref_id: claim.id,
-        p_title: `${claim.claim_no} — ${emp?.full_name ?? 'employee'}`,
+        p_title: `${claim.claim_no} · ${emp?.full_name ?? 'employee'}`,
         p_subtitle: `${emp?.emp_code ?? ''} · ${claim.period_from ?? ''} to ${claim.period_to ?? ''}`.trim(),
         p_employee_id: claim.employee_id,
         p_amount: claim.total_claimed,
@@ -235,7 +235,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ claims: data ?? [] });
   } catch (e) {
     return errorResponse(e, 'Failed to load claims',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -361,7 +361,7 @@ export async function POST(req: NextRequest) {
       expense_date: l.log_date,
       city: l.city,
       city_class: l.city_class,
-      description: [l.purpose, l.client_name].filter(Boolean).join(' — '),
+      description: [l.purpose, l.client_name].filter(Boolean).join(' · '),
       paid_by: employee_id,
       is_shared: l.is_shared,
       consumer_count: (l.passenger_count ?? 0) + 1,
@@ -432,11 +432,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       claim,
       lines: savedLines ?? [],
-      message: `${claim.claim_no} submitted — now with ${withWhom} for approval.`,
+      message: `${claim.claim_no} submitted, now with ${withWhom} for approval.`,
     });
   } catch (e) {
     return errorResponse(e, 'Failed to submit claim',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -666,7 +666,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ claim: updated });
   } catch (e) {
     return errorResponse(e, 'Failed to action claim',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
