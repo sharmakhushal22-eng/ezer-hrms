@@ -19,6 +19,7 @@ import { errorText } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
 import TePinMap from './TePinMap'
+import { reverseGeocodeHere, TePlaceSearch } from './TeGoogleMap'
 import type { PinView } from '@/lib/te/trip-map'
 
 /** Where a chosen place is going back to. */
@@ -60,30 +61,45 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
     setTyping(true)
     setBusy(true)
     setNote('Looking up the address…')
+    // THE SERVER FIRST, THEN THE BROWSER. The server is the better place for
+    // this — its key is not in the page source and the Geocoding quota stays
+    // off a public key — but it answers found:false whenever its own Google
+    // project cannot geocode, and today that project has no billing enabled.
+    // The browser key's project is billed, which the map tiles prove, so the
+    // fallback works now and enabling billing later silently moves the work
+    // back to the server with no code change.
+    const fill = (r: { name?: string; address?: string; city?: string; pin?: string; country?: string }) => {
+      setAddr(a => ({
+        ...a,
+        src: 'gps',
+        // Only fill what is empty: somebody who has already typed their
+        // building name should not have it overwritten by a street number.
+        line: a.line?.trim() ? a.line : (r.name ?? ''),
+        area: a.area?.trim() ? a.area : '',
+        city: a.city?.trim() ? a.city : (r.city ?? ''),
+        pin: a.pin?.trim() ? a.pin : (r.pin ?? ''),
+        country: a.country?.trim() ? a.country : (r.country ?? 'India'),
+      }))
+      setNote(`${r.address || r.name || 'Found'}${acc ? ` · accurate to about ${Math.round(acc)} m` : ''}. Drag the pin if it is not the right spot.`)
+    }
+
     te.placeLookup(lat, lng)
-      .then(r => {
+      .then(async r => {
+        if (r.found) { setBusy(false); fill(r); return }
+        const here = await reverseGeocodeHere(lat, lng)
         setBusy(false)
-        if (!r.found) {
-          // No geocoder configured. The pin is still the useful half — the
-          // distance is measured to it — so it is kept and the person types
-          // the address. Never a guessed one.
-          setNote(`Pinned at ${lat.toFixed(5)}, ${lng.toFixed(5)}. Type the address for this spot.`)
-          return
-        }
-        setAddr(a => ({
-          ...a,
-          src: 'gps',
-          // Only fill what is empty: somebody who has already typed their
-          // building name should not have it overwritten by a street number.
-          line: a.line?.trim() ? a.line : (r.name ?? ''),
-          area: a.area?.trim() ? a.area : '',
-          city: a.city?.trim() ? a.city : (r.city ?? ''),
-          pin: a.pin?.trim() ? a.pin : (r.pin ?? ''),
-          country: a.country?.trim() ? a.country : (r.country ?? 'India'),
-        }))
-        setNote(`${r.address || r.name || 'Found'}${acc ? ` · accurate to about ${Math.round(acc)} m` : ''}. Drag the pin if it is not the right spot.`)
+        if (here) { fill(here); return }
+        // Neither path could answer. The pin is still the useful half — the
+        // distance is measured to it — so it is kept and the person types the
+        // address. Never a guessed one.
+        setNote(`Pinned at ${lat.toFixed(5)}, ${lng.toFixed(5)}. Type the address for this spot.`)
       })
-      .catch(e => { setBusy(false); setNote(errorText(e)) })
+      .catch(async e => {
+        const here = await reverseGeocodeHere(lat, lng).catch(() => null)
+        setBusy(false)
+        if (here) { fill(here); return }
+        setNote(errorText(e))
+      })
   }, [])
 
   const locate = useCallback(() => {
@@ -117,7 +133,7 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
    *  the area, and a PIN that has to match the state — are not demanded. The
    *  server applies the same distinction: te-service only insists on those for
    *  src 'address'. */
-  const fromMap = addr.src === 'gps'
+  const fromMap = addr.src === 'gps' || addr.src === 'search'
 
   async function saveTyped() {
     // Said in the order a person fills the form, so the first thing missing is
@@ -175,6 +191,30 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
         </>
       }
     >
+      {/* FIND IT BY NAME, which is the cheapest way in for everybody: no
+          postal address typed from memory, no pin dropped and hoped over.
+          A suggestion carries Google's own coordinates for that building plus
+          the address, city and PIN, so the form fills itself and the pin is
+          exact. Renders nothing when the Places API is not enabled on the key,
+          leaving the two routes below untouched. */}
+      <TePlaceSearch
+        label={intl ? 'Find a place by name, in any country' : 'Find a place by name'}
+        onFound={p => {
+          setPin({ lat: p.lat, lng: p.lng })
+          setView(v => ({ ...v, lat: p.lat, lng: p.lng }))
+          setTyping(true)
+          setAddr(a => ({
+            ...a,
+            src: 'search',
+            line: p.name || a.line,
+            city: p.city || a.city,
+            pin: p.pin || a.pin,
+            country: p.country || a.country,
+          }))
+          setNote(`${p.address || p.name}. Drag the pin if it is not the right spot.`)
+        }}
+      />
+
       <button type="button" className="act pri" disabled={busy} onClick={locate}>
         <span className="ico-b"><TeIcon name="target" /></span>
         <span>

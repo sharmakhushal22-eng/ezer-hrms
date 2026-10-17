@@ -32,6 +32,15 @@ export const hasMapKey = (): boolean => !!mapsKey()
 
 export interface MapPin { lat: number; lng: number }
 
+/** Did the script bring the Places library? Absent when the Places API is not
+ *  enabled on the key, in which case the search box must not be drawn: an
+ *  input that looks like a search and never suggests anything is worse than
+ *  no input. */
+const hasPlaces = (): boolean => {
+  const G = gmaps() as unknown as { places?: { Autocomplete?: unknown } } | null
+  return !!G?.places?.Autocomplete
+}
+
 /* The Maps JS API is loaded at runtime and has no types here. One alias, used
    deliberately, rather than `any` scattered through the file. */
 type GMaps = Record<string, never> & { [k: string]: unknown }
@@ -43,15 +52,20 @@ const gmaps = (): GMaps | null => ((window as unknown as { google?: GoogleGlobal
  * `failed` means the script did not load: a bad key, a referrer restriction,
  * an offline browser or an ad blocker. The caller falls back.
  */
-export function useGoogleMaps(): { ready: boolean; failed: boolean } {
+export function useGoogleMaps(): { ready: boolean; failed: boolean; places: boolean } {
   const key = mapsKey()
   const [ready, setReady] = useState(() => !!key && !!gmaps())
   const [failed, setFailed] = useState(false)
+  /** Whether the script actually came back with the Places library. Asked here
+   *  rather than in the component that needs it, so there is one answer about
+   *  what this script provides — and so the answer arrives the same way
+   *  `ready` does, from the load callback, never from an effect body. */
+  const [places, setPlaces] = useState(() => hasPlaces())
 
   useEffect(() => {
     if (!key || ready) return
     let live = true
-    const done = () => { if (live) setReady(true) }
+    const done = () => { if (live) { setReady(true); setPlaces(hasPlaces()) } }
     const bad = () => { if (live) setFailed(true) }
 
     if (gmaps()) { done(); return }
@@ -65,7 +79,12 @@ export function useGoogleMaps(): { ready: boolean; failed: boolean } {
 
     const s = document.createElement('script')
     s.id = 'ezer-gmaps'
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}`
+    // libraries=places so a place can be found by NAME — "Taj Hotel Mumbai"
+    // rather than a street address nobody remembers. The library is requested
+    // once here for every map in the module; if the Places API is not enabled
+    // on the key, google.maps.places is simply absent and TePlaceSearch below
+    // renders nothing rather than an input that silently does nothing.
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`
     s.async = true
     s.addEventListener('load', done)
     s.addEventListener('error', bad)
@@ -73,7 +92,7 @@ export function useGoogleMaps(): { ready: boolean; failed: boolean } {
     return () => { live = false; s.removeEventListener('load', done); s.removeEventListener('error', bad) }
   }, [key, ready])
 
-  return { ready, failed }
+  return { ready, failed, places }
 }
 
 export type FixState = 'idle' | 'asking' | 'ok' | 'denied' | 'unavailable'
@@ -155,7 +174,13 @@ export default function TeGoogleMap({ pin, onPin, height = 260, zoom = 15, label
     const centre = pin ?? { lat: 20.5937, lng: 78.9629 }   // India, when there is no pin yet
     const m = new M.Map(box.current, {
       center: centre, zoom: pin ? zoom : 4,
-      mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
+      // THE REAL MAP'S OWN CONTROLS, which used to be switched off. Satellite
+      // is how somebody confirms the pin is on the right building rather than
+      // the car park behind it, and fullscreen is how that is done on a phone.
+      mapTypeControl: true, streetViewControl: true, fullscreenControl: true, zoomControl: true,
+      // POI pins stay unclickable on purpose: tapping anywhere on this map
+      // moves YOUR pin, and a Google info window opening instead — on the
+      // restaurant next door — would quietly swallow that tap.
       clickableIcons: false,
     })
     const mk = new M.Marker({ position: centre, map: m, draggable: true })
@@ -283,4 +308,178 @@ export function TeGoogleRoute({ points, legs, height = 220, label }: {
 
   if (!hasMapKey() || failed || !points.length) return null
   return <div ref={box} className="gmap" style={{ height }} role="img" aria-label={label || 'Map of the route'} />
+}
+
+/** What a Places result gives us: a position AND the address parts, in one
+ *  request. The whole point is that nobody has to type any of it. */
+export interface FoundPlace {
+  lat: number
+  lng: number
+  name: string
+  address: string
+  city: string
+  pin: string
+  country: string
+}
+
+/** Pull the address parts out of a Places result. Shaped like the geocoder's
+ *  parser in lib/te/providers/geocode.ts and for the same reason: Google
+ *  returns components in no particular order, so each one is looked up by its
+ *  type rather than by position. */
+function partsOf(place: {
+  name?: string
+  formatted_address?: string
+  address_components?: { long_name?: string; short_name?: string; types?: string[] }[]
+  geometry?: { location?: { lat: () => number; lng: () => number } }
+}): FoundPlace | null {
+  const loc = place.geometry?.location
+  if (!loc) return null
+  const comp = (...types: string[]) => {
+    for (const t of types) {
+      const c = (place.address_components || []).find(k => (k.types || []).includes(t))
+      if (c?.long_name) return c.long_name
+    }
+    return ''
+  }
+  return {
+    lat: loc.lat(),
+    lng: loc.lng(),
+    name: place.name || place.formatted_address || '',
+    address: place.formatted_address || '',
+    // locality first, then the administrative levels, because an office in a
+    // satellite town reports its own town and not the metro it sits beside.
+    city: comp('locality', 'postal_town', 'administrative_area_level_3', 'administrative_area_level_2'),
+    pin: comp('postal_code'),
+    country: comp('country') || 'India',
+  }
+}
+
+/**
+ * Find a place by name, on the real map.
+ *
+ * WHY THIS IS THE BEST WAY IN. Every other route to a place costs the person
+ * something: typing a full postal address from memory, or dropping a pin and
+ * trusting a reverse lookup. Searching "Taj Hotel Mumbai" gives the name, the
+ * formatted address, the city, the PIN and the exact coordinates in one go —
+ * and the coordinates are Google's own for that building, not a guess from a
+ * finger on a map.
+ *
+ * IT RENDERS NOTHING WITHOUT THE PLACES LIBRARY. If the Places API is not
+ * enabled on the browser key, google.maps.places is absent and this returns
+ * null, leaving the saved-place search and the typed address exactly as they
+ * were. An input that looks like a search and never suggests anything is worse
+ * than no input.
+ *
+ * THE LEGACY WIDGET, DELIBERATELY. google.maps.places.Autocomplete is
+ * deprecated in favour of PlaceAutocompleteElement, but the replacement is a
+ * web component with a different event shape and is not available on every
+ * loader version. This feature-detects the new one and falls back, so whichever
+ * the key serves, the box works.
+ */
+export function TePlaceSearch({ onFound, label, placeholder }: {
+  onFound: (p: FoundPlace) => void
+  label?: string
+  placeholder?: string
+}) {
+  const { ready, failed, places } = useGoogleMaps()
+  const input = useRef<HTMLInputElement | null>(null)
+  const wired = useRef(false)
+  const cb = useRef(onFound)
+  useEffect(() => { cb.current = onFound }, [onFound])
+
+  useEffect(() => {
+    if (!ready || !places || !input.current || wired.current) return
+    const G = gmaps() as unknown as {
+      places?: { Autocomplete?: new (el: HTMLInputElement, o?: unknown) => { addListener: (e: string, f: () => void) => void; getPlace: () => unknown } }
+      event?: { clearInstanceListeners?: (x: unknown) => void }
+    } | null
+    const Ctor = G?.places?.Autocomplete
+    if (!Ctor) return
+    wired.current = true
+    const ac = new Ctor(input.current, { fields: ['name', 'formatted_address', 'address_components', 'geometry'] })
+    ac.addListener('place_changed', () => {
+      const parsed = partsOf(ac.getPlace() as Parameters<typeof partsOf>[0])
+      // A person who types and presses Enter without choosing a suggestion
+      // gets a result with no geometry. Nothing is reported for it rather than
+      // a place at 0,0.
+      if (parsed) cb.current(parsed)
+    })
+    return () => { G?.event?.clearInstanceListeners?.(ac) }
+  }, [ready, places])
+
+  // Drawn only once the library is known to be there. Before the script
+  // answers, `places` is false and the box is simply absent for that moment.
+  if (!hasMapKey() || failed || !places) return null
+
+  return (
+    <label className="fld">
+      <span>{label || 'Find a place by name'}</span>
+      <input
+        ref={input}
+        type="text"
+        placeholder={placeholder || 'Hotel, office, airport or landmark'}
+        // The browser's own autofill fights the suggestion list for the same
+        // dropdown space.
+        autoComplete="off"
+      />
+      <small>Pick a suggestion and the address, city and PIN fill themselves.</small>
+    </label>
+  )
+}
+
+/**
+ * Turn a position into an address IN THE BROWSER, using the already-loaded
+ * Maps script and the browser key.
+ *
+ * WHY A SECOND PATH EXISTS. /api/te/places/lookup does the same job on the
+ * server, which is the better place for it: the server key is not exposed and
+ * the Geocoding quota stays off a key that sits in the page source. But the
+ * server key's Google Cloud project has to have BILLING enabled, and when it
+ * does not, Geocoding answers REQUEST_DENIED no matter which APIs are switched
+ * on. The browser key's project is already billed — the map tiles prove it —
+ * so this path works when the server one cannot.
+ *
+ * The caller tries the server first and falls back here, so enabling billing
+ * later silently moves the work back to the server with no code change.
+ *
+ * Returns null for anything other than a clean answer: no library, no result,
+ * ZERO_RESULTS, or an API that is not enabled. The caller then keeps the pin
+ * and lets the person type, which is the honest outcome — never a guess.
+ */
+export async function reverseGeocodeHere(lat: number, lng: number): Promise<FoundPlace | null> {
+  const G = gmaps() as unknown as {
+    Geocoder?: new () => { geocode: (r: unknown, cb: (res: unknown, status: string) => void) => void }
+  } | null
+  if (!G?.Geocoder) return null
+  const geocoder = new G.Geocoder()
+  const results = await new Promise<unknown[]>(resolve => {
+    // The callback form, not the promise form: the promise form REJECTS on
+    // ZERO_RESULTS, which is an answer and not an error.
+    let settled = false
+    const finish = (r: unknown[]) => { if (!settled) { settled = true; resolve(r) } }
+    // A geocoder that never calls back would hang the form open on "Looking
+    // up the address…" forever.
+    const timer = setTimeout(() => finish([]), 10000)
+    geocoder.geocode({ location: { lat, lng } }, (res, status) => {
+      clearTimeout(timer)
+      finish(status === 'OK' && Array.isArray(res) ? res : [])
+    })
+  })
+  if (!results.length) return null
+  // Google returns the most specific match first — the building, then the
+  // street, then the suburb — and the building is what somebody recognises.
+  const parsed = partsOf(results[0] as Parameters<typeof partsOf>[0])
+  if (!parsed) return null
+  return {
+    ...parsed,
+    // THE PIN'S OWN COORDINATES, not the geocoder's. Google answers with the
+    // centroid of whatever it matched — the street, or the whole suburb — and
+    // returning that would quietly drag the pin off the spot the person chose.
+    // The distance on their claim is measured to this point, so it is theirs.
+    lat,
+    lng,
+    // A reverse-geocoded result has no place NAME, only a formatted address,
+    // so the first line of that address stands in for one.
+    name: parsed.name || parsed.address.split(',')[0] || '',
+  }
 }
