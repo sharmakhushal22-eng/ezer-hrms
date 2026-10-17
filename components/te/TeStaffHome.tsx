@@ -7,7 +7,8 @@
 //   Approvals      trips and claims waiting on this person
 //   Travel Desk    tickets and hotels to book, vehicles to check
 //   Finance desk   verification, advances, payouts, corrections, months
-//   Setup          rates, limits, GPS rules, checks, categories, who approves
+//   Setup          rates, limits, GPS rules, checks, categories, who approves,
+//                  and Desks — who answers for which company and branch
 //   Reports        the claim register, the flag report, the trip GPS log
 //   Audit          who did what, and when
 //
@@ -34,6 +35,7 @@ import TeGpsRules from './admin/TeGpsRules'
 import TeChecks from './admin/TeChecks'
 import TeCategories from './admin/TeCategories'
 import TeWorkflow from './admin/TeWorkflow'
+import TeDesks from './admin/TeDesks'
 import TeReports from './admin/TeReports'
 import TeAudit from './admin/TeAudit'
 import TeTripLog from './admin/TeTripLog'
@@ -43,7 +45,7 @@ import './te.css'
 
 type Desk =
   | 'home' | 'approvals' | 'deskwork' | 'finance'
-  | 'rates' | 'policy' | 'gps' | 'checks' | 'categories' | 'workflow'
+  | 'rates' | 'policy' | 'gps' | 'checks' | 'categories' | 'workflow' | 'desks'
   | 'reports' | 'triplog' | 'audit'
 
 /** The desks, and what each needs before it is worth offering. A desk is shown
@@ -61,6 +63,9 @@ const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; nee
   { k: 'checks', label: 'Checks', icon: 'verify', needsAdmin: true },
   { k: 'categories', label: 'Categories', icon: 'other', needsAdmin: true },
   { k: 'workflow', label: 'Who approves', icon: 'people', needsAdmin: true },
+  // Who answers for which company and branch — the configuration behind the
+  // Travel Desk and Finance desk tabs above.
+  { k: 'desks', label: 'Desks', icon: 'pin', needsAdmin: true },
   { k: 'reports', label: 'Reports', icon: 'claims', needsAdmin: true },
   { k: 'triplog', label: 'Trip log', icon: 'route', needsAdmin: true },
   { k: 'audit', label: 'Audit', icon: 'clock', needsAdmin: true },
@@ -116,6 +121,7 @@ export default function TeStaffHome() {
     if (desk === 'finance') return <TeFinanceDesk onToast={setToast} />
     if (desk === 'deskwork') return <TeTravelDesk vehicleTypes={cfg?.vehicles ?? []} fuelPrice={cfg?.fuelPrice ?? {}} onToast={setToast} />
     if (desk === 'workflow') return <TeWorkflow onToast={setToast} />
+    if (desk === 'desks') return <TeDesks onToast={setToast} />
     if (desk === 'reports') return <TeReports onToast={setToast} />
     if (desk === 'triplog') return <TeTripLog />
     if (desk === 'audit') return <TeAudit />

@@ -165,6 +165,38 @@ export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; fou
 export interface TeStayOption { name: string; location: string; url: string; price?: number }
 /** What the Travel Desk decided about those hotels. 'NONE' means nobody has
  *  looked yet, which is what the desk's own work list is built from. */
+/** GET /api/te/admin/desks — the desk configuration screen, in one read.
+ *  Rows are the raw database shape on purpose: this screen edits the table,
+ *  and renaming the columns on the way in and out would be two mappings to
+ *  keep in step with a migration. */
+export interface TeDeskPerson {
+  id: Uuid; emp_code: string; full_name: string
+  grade: string | null; department_id: Uuid | null; location_id: Uuid | null
+  company_id?: Uuid
+}
+export interface TeFinanceDeskRow {
+  id: Uuid; company_id: Uuid; location_id: Uuid | null; employee_id: Uuid
+  role: string; can_approve: boolean; can_disburse: boolean
+  approval_limit: number | null; is_group_scope: boolean; is_active: boolean
+}
+export interface TeTravelDeskRow {
+  id: Uuid; company_id: Uuid; location_id: Uuid | null; employee_id: Uuid
+  role: string; can_book: boolean; is_group_scope: boolean; is_active: boolean
+}
+export interface TeDesksPayload {
+  company_id: Uuid
+  company: { id: Uuid; company_code: string; company_name: string; group_id: Uuid | null } | null
+  group_companies: Uuid[]
+  locations: { id: Uuid; location_name: string; location_type: string | null; city: string | null; status: string | null }[]
+  departments: { id: Uuid; dept_name: string }[]
+  finance: TeFinanceDeskRow[]
+  travel: TeTravelDeskRow[]
+  /** true until migration 161 is applied; the Travel half is then unavailable. */
+  travel_table_missing: boolean
+  people: TeDeskPerson[]
+  pool: TeDeskPerson[]
+}
+
 /** GET /api/te/dashboard — the Reports and Dashboard tab, in one read. */
 export interface TeDashboardRow {
   kind: 'trip' | 'claim'

@@ -18,11 +18,13 @@
 //     flags    the flags that block (expense, leg report, claim)
 //     issues   every problem of a trip plan
 import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
+import type { DeskKind } from './desks'
 import type {
   Uuid, Snapshot, TeQueueRow, TeTripDetail, TeClaimDetail, PlaceInput, VehicleInput, TripDraft, TripPreview, TripIssue,
   TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput, LegPreview, TeLegStats, TeFlag,
   ExpenseInput, ExpensePreview, ClaimInput, ClaimPreview, ClaimStatus, ClaimStage, RiskBand, DecideInput, PayoutRoute,
   TeConfig, TeMasters, TeWorkflowLevel, TeChainRow, TeHealthRow, TeUploadedFile, RcChecked, TeStayOption, TeDashboard,
+  TeDesksPayload,
 } from './types'
 
 export class TeApiError extends Error {
@@ -275,6 +277,10 @@ export const te = {
     config: (q?: { company_id?: string }) => get<{ company_id: Uuid; config: TeConfig; masters: TeMasters; settings: Record<string, unknown> | null }>('admin/config', q),
     settingsSave: (patch: Record<string, unknown>) => call<{ company_id: Uuid; settings: Record<string, unknown>; config: TeConfig }>('PATCH', 'admin/settings', patch),
     mastersSave: (table: string, rows: Record<string, unknown>[]) => call<{ table: string; updated: number; inserted: number; rows: Record<string, unknown>[] }>('PUT', `admin/masters/${table}`, { rows }),
+    /** Who is on the Finance desk and the Travel desk, per company and branch. */
+    desks: () => get<TeDesksPayload>('admin/desks'),
+    desksSave: (kind: DeskKind, rows: Record<string, unknown>[]) =>
+      call<{ kind: DeskKind; company_id: Uuid; saved: number; rows: Record<string, unknown>[] }>('PUT', 'admin/desks', { kind, rows }),
     workflow: (code: 'claim' | 'trip') => get<{ workflow: string; levels: TeWorkflowLevel[]; fallback: Uuid | null; finance_team: Uuid[] }>(`admin/workflow/${code}`),
     workflowSave: (code: 'claim' | 'trip', levels: TeWorkflowLevel[]) => call<{ ok: true; version: number; levels: TeWorkflowLevel[] }>('PUT', `admin/workflow/${code}`, { levels }),
     workflowPreview: (code: 'claim' | 'trip', sample: WorkflowSample, levels?: TeWorkflowLevel[]) => post<{ workflow: string; chain: TeChainRow[] }>(`admin/workflow/${code}/preview`, { levels, sample }),
