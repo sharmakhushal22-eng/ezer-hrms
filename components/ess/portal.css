@@ -22,18 +22,16 @@
   --ess-a3: #0EA5E9;   /* sky         */
   /* one blue, lightly shaded, not a blue-to-violet sweep: the sweep is what read as "generated" */
   --ess-grad: linear-gradient(135deg, #3B82F6 0%, var(--ess-a1) 100%);
-  --ess-canvas: #F3F6FC;
-  --ess-aurora:
-    radial-gradient(900px 420px at 100% -10%, rgba(59, 130, 246, .10) 0%, transparent 60%),
-    radial-gradient(700px 520px at 85% 110%, rgba(14, 165, 233, .06) 0%, transparent 60%);
+  /* the page: a plain light grey with a hint of blue. No colour wash — it read as noise. */
+  --ess-canvas: #F6F8FB;
+  --ess-aurora: none;
   --ess-glass: rgba(255, 255, 255, .62);
   --ess-glass-strong: rgba(255, 255, 255, .80);
-  /* the rail: a pale blue-lavender glass, light at the top, a touch deeper at the foot */
-  /* the rail: a light sky blue — the same sky that glows in the corner of Home's hero —
-     so the panel and the page share one colour without the rail competing with it */
-  --ess-rail-bg: linear-gradient(180deg, #EAF6FD 0%, #DCEFFB 100%);
-  --ess-rail-ink: #1B2B45;
-  --ess-rail-edge: #CDE4F4;
+  /* the rail: a blue-grey one step deeper than the page, so the two are the same family and
+     the rail still reads as its own panel. Cards stay white on top of both. */
+  --ess-rail-bg: #EBF0F7;
+  --ess-rail-ink: #1F2A44;
+  --ess-rail-edge: #DCE3EE;
   --ess-glass-edge: rgba(255, 255, 255, .85);
   --ess-hair: rgba(15, 23, 42, .07);
   --ess-ink: #0F172A;
