@@ -560,10 +560,11 @@
 /* This week: each day coloured by its status, matching the attendance calendar. */
 .ezt .day { --d: var(--ez-muted); }
 .ezt .day.present { --d: var(--ez-positive); }
-.ezt .day.late    { --d: var(--ez-warning); }
-.ezt .day.miss    { --d: var(--ez-critical); }
-.ezt .day.absent  { --d: var(--ez-critical); }
-.ezt .day.present, .ezt .day.late, .ezt .day.absent {
+.ezt .day.late, .ezt .day.half { --d: var(--ez-warning); }
+.ezt .day.miss, .ezt .day.absent { --d: var(--ez-critical); }
+.ezt .day.leave   { --d: var(--ez-brand); }
+.ezt .day.holiday { --d: var(--ez-info); }
+.ezt .day:is(.present, .late, .half, .absent, .leave, .holiday) {
   background: color-mix(in srgb, var(--d) 11%, var(--ez-surface));
   border-color: color-mix(in srgb, var(--d) 30%, var(--ez-surface));
 }
@@ -571,8 +572,10 @@
   background: color-mix(in srgb, var(--ez-warning) 12%, var(--ez-surface));
   border-color: color-mix(in srgb, var(--ez-critical) 45%, var(--ez-surface));
 }
-.ezt .day.present .dd, .ezt .day.late .dd, .ezt .day.miss .dd, .ezt .day.absent .dd { color: var(--d); }
-.ezt .day.absent .st:first-of-type, .ezt .day.miss .st:nth-of-type(2) { color: var(--d); }
-.ezt .day.present .bar, .ezt .day.late .bar, .ezt .day.miss .bar, .ezt .day.absent .bar { background: color-mix(in srgb, var(--d) 18%, var(--ez-surface)); }
+.ezt .day:is(.present, .late, .half, .miss, .absent, .leave, .holiday) .dd { color: var(--d); }
+.ezt .day:is(.present, .late, .half, .miss, .absent, .leave, .holiday) .st + .st { color: var(--d); }
+.ezt .day.absent .st { color: var(--d); }
+.ezt .day:is(.present, .late, .half, .miss, .absent, .leave, .holiday) .bar { background: color-mix(in srgb, var(--d) 18%, var(--ez-surface)); }
+.ezt .day:is(.present, .late, .half, .miss) .bar i { background: var(--d); }
 .ezt .day.off { background: var(--ez-sunken); }
 .ezt .day.next { background: var(--ez-surface); }

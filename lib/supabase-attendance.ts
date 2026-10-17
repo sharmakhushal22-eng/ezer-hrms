@@ -150,7 +150,10 @@ export function resolveDay(dateStr: string, m: MonthlyData, todayStr: string): D
   const leave = m.leaveMap.get(dateStr) || null
   const day = m.dayMap.get(dateStr) || null
   const k = day?.kind ?? (dateStr > todayStr ? 'UPCOMING' : 'ABSENT')
-  const status = k === 'UPCOMING' ? 'FUTURE' : k === 'LEAVE' ? 'ON_LEAVE' : k
+  // Today with nothing punched yet is UPCOMING to the server, but it is not the
+  // future: it opens like any other day (its punches, shift and status) instead
+  // of rendering as a disabled future cell.
+  const status = k === 'UPCOMING' ? (dateStr === todayStr ? 'TODAY' : 'FUTURE') : k === 'LEAVE' ? 'ON_LEAVE' : k
   return { status, rec, holiday: k === 'HOLIDAY' ? holiday : null, leave: k === 'LEAVE' || k === 'HALF_LEAVE' ? leave : null, day }
 }
 

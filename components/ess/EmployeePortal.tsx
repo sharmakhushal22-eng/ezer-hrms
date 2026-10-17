@@ -1382,7 +1382,7 @@ const STATUS_BAR: Record<string,string> = new Proxy({} as Record<string,string>,
   get: (_t, k: string) => k === 'LWP' ? C.critical : (metaOf(k)?.bar ?? C.line),
 })
 const STATUS_FULL: Record<string,string> = new Proxy({} as Record<string,string>, {
-  get: (_t, k: string) => k === 'LWP' ? 'Loss of pay' : k === 'FUTURE' ? '—' : (metaOf(k)?.label ?? k),
+  get: (_t, k: string) => k === 'LWP' ? 'Loss of pay' : k === 'FUTURE' ? '—' : k === 'TODAY' ? 'Today, not in yet' : (metaOf(k)?.label ?? k),
 })
 
 const STATUS_LABEL: Record<string,string> = new Proxy({} as Record<string,string>, {
