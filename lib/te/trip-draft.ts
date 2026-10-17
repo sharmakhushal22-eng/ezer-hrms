@@ -41,6 +41,19 @@ export interface DraftPoint {
    * knows that. Everywhere else the server fills arrival in from the legs.
    */
   arrive?: IsoDate | ''
+  /**
+   * The TIME of day, 'HH:MM' or '' for not recorded — which is not the same as
+   * midnight, and the database keeps that difference (migration 165).
+   *
+   * Asked for where the date is asked for: the departure on point 0, and the
+   * arrival back on the return point. A time tells the approver and the
+   * Travel Desk whether "the 16th" is a 6am flight needing a cab at 4 or an
+   * evening train, which is the whole reason it is collected.
+   *
+   * Nothing computes on it. No estimate and no leg timing reads it yet.
+   */
+  leaveAt?: string
+  arriveAt?: string
   /** What you will do there, or why you stop. */
   what: string
   /** Only ever set on the one point you come back to. */
@@ -205,7 +218,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
  */
 export function fromTrip(trip: {
   id: Uuid; name: string; scope: TripScope; origin: TripOrigin; purpose: string; project: string
-  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; ret?: true }[]
+  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: true }[]
   segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
   pax: number; people: { id: string; name?: string }[]; stayBy: 'self' | 'desk'; advance: number
   stayWanted?: boolean | null; foodWanted?: boolean | null; stayOptions?: TeStayOption[]
@@ -233,6 +246,7 @@ export function fromTrip(trip: {
     people: (trip.people ?? []).map(p => ({ id: p.id ?? '', name: p.name ?? '' })),
     points: (trip.points ?? []).map(p => ({
       place: p.place ?? '', pt: p.pt ?? '', what: p.what ?? '', leave: p.leave ?? '',
+      leaveAt: p.leaveAt ?? '', arriveAt: p.arriveAt ?? '',
       // Only the return point's arrival is kept. The server fills `arrive` in
       // on every point from the legs, and that is derived — pulling it all
       // back into the draft would have the planner storing answers it did not
@@ -486,6 +500,10 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
     // so this date becomes the trip's end without the engine changing at all.
     points: d.points.map(p => ({
       place: p.place, pt: p.pt, what: p.what, leave: p.leave,
+      // Omitted entirely when blank, so the server's nullif() sees nothing
+      // rather than an empty string pretending to be a time.
+      ...(p.leaveAt ? { leaveAt: p.leaveAt } : {}),
+      ...(p.ret && p.arriveAt ? { arriveAt: p.arriveAt } : {}),
       ...(p.ret && p.arrive ? { arrive: p.arrive } : {}),
       ...(p.ret ? { ret: true } : {}),
     })),

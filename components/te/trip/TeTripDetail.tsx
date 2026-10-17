@@ -15,7 +15,7 @@ import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/t
 import { tripChip } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
 import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
-import { day, errorText, plural, rs, when } from '@/lib/te/format'
+import { day, dayAt, errorText, plural, rs, when } from '@/lib/te/format'
 import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
@@ -179,7 +179,11 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
             <h1 className="tname">{t.name}</h1>
             <p className="muted">{(t.points || []).map(p => pname(p.place) || '…').join(' → ')}</p>
             <p className="small muted">
-              {t.start ? (t.start === t.end ? day(t.start) : `${day(t.start)} to ${day(t.end)}`) : 'No dates yet'}
+              {t.start
+                ? (t.start === t.end
+                  ? dayAt(t.start, t.points?.[0]?.leaveAt)
+                  : `${dayAt(t.start, t.points?.[0]?.leaveAt)} to ${day(t.end)}`)
+                : 'No dates yet'}
               {t.purpose ? ` · ${t.purpose}` : ''}{t.project ? ` · ${t.project}` : ''}
             </p>
             {t.pax > 1 ? (

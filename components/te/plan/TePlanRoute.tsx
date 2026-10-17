@@ -86,6 +86,21 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
             onChange={e => edit(d => ({ ...d, points: d.points.map((p, i) => (i === 0 ? { ...p, leave: e.target.value } : p)) }))}
           />
         </label>
+        {/* THE TIME, beside the date it belongs to. Optional on purpose: plenty
+            of people know they travel on the 16th and not yet at what hour, and
+            an empty time is kept as "not recorded" rather than as midnight
+            (migration 165). It is here because "the 16th" does not tell an
+            approver, or the Travel Desk booking the ticket, whether that is a
+            6am flight needing a cab at 4 or an evening train. */}
+        <label className="fld sm">
+          <span>Leaving at</span>
+          <input
+            type="time"
+            value={draft.points[0]?.leaveAt || ''}
+            onChange={e => edit(d => ({ ...d, points: d.points.map((p, i) => (i === 0 ? { ...p, leaveAt: e.target.value } : p)) }))}
+          />
+          <small>Optional</small>
+        </label>
         {/* The other half of a round trip, next to the date it pairs with.
             Asked for rather than derived because the journey home can cross
             midnight: leaving at 10pm on the 16th and reaching home at 6am on
@@ -102,16 +117,27 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
             one day. What makes it local is staying inside the one state, not
             finishing the day it started. */}
         {hasReturn ? (
-          <label className="fld sm">
-            <span>Back at the start on</span>
-            <input
-              type="date"
-              value={retPoint?.arrive || ''}
-              min={lastLeave || draft.points[0]?.leave || undefined}
-              max={planning ? undefined : snap.today}
-              onChange={e => edit(d => ({ ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: e.target.value } : p)) }))}
-            />
-          </label>
+          <>
+            <label className="fld sm">
+              <span>Back at the start on</span>
+              <input
+                type="date"
+                value={retPoint?.arrive || ''}
+                min={lastLeave || draft.points[0]?.leave || undefined}
+                max={planning ? undefined : snap.today}
+                onChange={e => edit(d => ({ ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: e.target.value } : p)) }))}
+              />
+            </label>
+            <label className="fld sm">
+              <span>Back at</span>
+              <input
+                type="time"
+                value={retPoint?.arriveAt || ''}
+                onChange={e => edit(d => ({ ...d, points: d.points.map(p => (p.ret ? { ...p, arriveAt: e.target.value } : p)) }))}
+              />
+              <small>Optional</small>
+            </label>
+          </>
         ) : null}
         <p className="small muted">
           {PATTERN_WORD[draft.pattern]}{stops > 0 ? `, ${plural(stops, 'stop')}` : ''}. Tap a line to change it.

@@ -157,7 +157,13 @@ export interface TeChainPreview { role: string; who: Uuid | null; team: string |
 export interface TeChainRow { step_no: number; stage: ClaimStage; level_id: Uuid | null; role_label: string; approver_id: Uuid | null; team_code: string | null; note: string | null }
 
 // ── trips and legs ──────────────────────────────────────────────────────────
-export interface TeTripPoint { place: Uuid; pt: string; what: string; arrive: IsoDate | ''; leave: IsoDate | ''; ret?: true }
+export interface TeTripPoint {
+  place: Uuid; pt: string; what: string
+  arrive: IsoDate | ''; leave: IsoDate | ''
+  /** 'HH:MM' or '' for not recorded, which is not midnight. Migration 165. */
+  leaveAt?: string; arriveAt?: string
+  ret?: true
+}
 export interface TeTripSegment { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }
 export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; found?: boolean }
 /** One hotel the employee would accept. Stored whole on the trip; the link is
@@ -746,7 +752,7 @@ export interface TripDraft {
   origin?: TripOrigin
   purpose?: string
   project?: string
-  points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; ret?: boolean }[]
+  points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: boolean }[]
   segs: { mode: string; bookedBy?: string; vehicleId?: Uuid | null; xfer?: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
   pax?: number
   /** Co-travellers by employee code. */

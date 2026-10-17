@@ -8,7 +8,7 @@
 // chooses the words and the order.
 import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
 import { blockingOn, errorFor, type PlanStep, type PlannerDraft } from '@/lib/te/trip-draft'
-import { day, plural, rs } from '@/lib/te/format'
+import { day, dayAt, plural, rs } from '@/lib/te/format'
 import type { MapPlace } from '@/lib/te/trip-map'
 import { nightsBetween, STAY_OPTIONS_WANTED, usableStayOptions } from '@/lib/te/trip-stay'
 import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
@@ -49,6 +49,8 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
   const places = new Map<string, MapPlace>(
     snap.masters.places.map(p => [p.id, { id: p.id, s: p.s, lat: p.lat, lng: p.lng }]),
   )
+  const start = draft.points[0]?.leave ? draft.points[0] : null
+  const back = draft.points.find(p => p.ret && p.arrive) ?? null
   const usable = usableStayOptions(draft.stayOptions)
   const nights = nightsBetween(preview?.start ?? null, preview?.end ?? null)
   const blocking = issues.filter(i => i.block)
@@ -56,6 +58,25 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
 
   return (
     <>
+      {/* WHEN, said once at the top. The times are collected on step 2 and
+          nothing computes on them, so Review is where they have to be visible
+          — otherwise an approver would never see the 6am they were told. */}
+      {start ? (
+        <div className="card flat tint">
+          <div className="ch">
+            <h3>When</h3>
+            <button type="button" className="link small" onClick={() => onGoStep(2)}>Change</button>
+          </div>
+          <dl className="kv">
+            <dt>Leaving</dt><dd>{dayAt(start.leave, start.leaveAt)}</dd>
+            {back ? <><dt>Back at the start</dt><dd>{dayAt(back.arrive, back.arriveAt)}</dd></> : null}
+          </dl>
+          {!start.leaveAt || (back && !back.arriveAt) ? (
+            <p className="small muted">No time was given for part of this, which is fine — the dates are what the plan is approved on.</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="sec">
         <h4>Journeys</h4>
         <p className="small muted">Each journey is tracked and paid on its own: GPS on the road, check-ins at airports and abroad.</p>
