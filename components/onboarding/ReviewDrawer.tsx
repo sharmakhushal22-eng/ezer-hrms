@@ -341,7 +341,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               {/* The official forms, filled from this sheet — opened in a new tab (the call needs the session header). */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
                 <span className="rv-sub" style={{ marginBottom: 0 }}>Statutory forms, filled</span>
-                {([['form11', 'EPF Form 11'], ['form2', 'EPF Form 2'], ...(item.esic_applicable ? [['esic1', 'ESIC Form 1']] : [])] as [string, string][]).map(([k, l]) => (
+                {([['form11', 'EPF Form 11'], ['form2', 'EPF Form 2'], ['formf', 'Gratuity Form F'], ...(item.esic_applicable ? [['esic1', 'ESIC Form 1']] : [])] as [string, string][]).map(([k, l]) => (
                   <button key={k} type="button" className="rv-view" disabled={!!opening} onClick={() => openForm(k, l)} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{opening === k ? 'Opening…' : `${l} ↗`}</button>
                 ))}
               </div>

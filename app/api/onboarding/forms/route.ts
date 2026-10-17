@@ -1,6 +1,6 @@
 // app/api/onboarding/forms/route.ts — a statutory form, filled from the onboarding record.
 //
-//   GET ?form=form11|form2|esic1 &token=<magic link>          the candidate, from the portal
+//   GET ?form=form11|form2|esic1|formf &token=<magic link>          the candidate, from the portal
 //   GET ?form=…               &onboarding_id=<id>             HR, from the review sheet (Onboarding module)
 //   &mode=download                                           attachment instead of inline
 //
@@ -21,7 +21,7 @@ const supa = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, (process.env.SU
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams
   const form = q.get('form') || ''
-  if (!isFormKey(form)) return NextResponse.json({ error: 'form must be form11, form2 or esic1' }, { status: 400 })
+  if (!isFormKey(form)) return NextResponse.json({ error: 'form must be form11, form2, esic1 or formf' }, { status: 400 })
   const token = q.get('token') || '', onboardingId = q.get('onboarding_id') || ''
   if (!token && !onboardingId) return NextResponse.json({ error: 'token or onboarding_id required' }, { status: 400 })
   if (!token) {

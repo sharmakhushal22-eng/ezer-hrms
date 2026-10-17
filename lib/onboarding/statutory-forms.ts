@@ -6,6 +6,8 @@
 //   form11  EPF New Form 11 (declaration)              1 page
 //   form2   EPF Form 2 (revised) nomination, Part A + Part B (EPS)   2 pages
 //   esic1   ESIC Form 1 declaration + family particulars + TIC        2 pages (page 2 = instructions)
+//   formf   Gratuity Form F (Payment of Gratuity (Central) Rules, 1972, rule 6(1)) — no blank was
+//           issued, so it is drawn here in the statutory wording, nominees and statement filled.
 // Positions are given in pixels of the 1800px-tall renders the layout was measured on and
 // converted to points per page, so a template re-measured at that size drops straight in.
 // What is printed comes from statutory-data.ts, shared with the tests.
@@ -17,16 +19,18 @@ import { toWinAnsi } from '@/lib/letters/winAnsi'
 import { statutoryData, type StatutoryData } from './statutory-data'
 export { statutoryData, type StatutoryData }
 
-export type FormKey = 'form11' | 'form2' | 'esic1'
-export const FORMS: Record<FormKey, { file: string; label: string; filename: (d: StatutoryData) => string; imgW: number }> = {
+export type FormKey = 'form11' | 'form2' | 'esic1' | 'formf'
+export const FORMS: Record<FormKey, { file: string | null; label: string; filename: (d: StatutoryData) => string; imgW: number }> = {
   form11: { file: 'form11.pdf', label: 'EPF Form 11 — Declaration', filename: d => `EPF_Form11_${slug(d.name)}.pdf`, imgW: 1390 },
   form2:  { file: 'form2.pdf',  label: 'EPF Form 2 — Nomination & Declaration', filename: d => `EPF_Form2_${slug(d.name)}.pdf`, imgW: 1272 },
   esic1:  { file: 'esi1.pdf',   label: 'ESIC Form 1 — Declaration', filename: d => `ESIC_Form1_${slug(d.name)}.pdf`, imgW: 1080 },
+  formf:  { file: null,         label: 'Gratuity Form F — Nomination', filename: d => `Gratuity_FormF_${slug(d.name)}.pdf`, imgW: 595 },
 }
-export const isFormKey = (k: any): k is FormKey => k === 'form11' || k === 'form2' || k === 'esic1'
+export const isFormKey = (k: any): k is FormKey => k === 'form11' || k === 'form2' || k === 'esic1' || k === 'formf'
 const slug = (n: string) => (n || 'candidate').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '')
 
 const INK = rgb(0.08, 0.14, 0.42)
+const BLACK = rgb(0.1, 0.1, 0.1)
 
 /** A page with a drawing helper that takes pixel coordinates of the measured render. */
 class Sheet {
@@ -34,7 +38,7 @@ class Sheet {
   constructor(public page: PDFPage, imgW: number, private font: PDFFont, private bold: PDFFont) { this.k = page.getWidth() / imgW }
   private pt = (px: number) => px * this.k
   /** Draw text with its baseline at (x, y) px. `w` clips to a width (px) by shrinking the size, never below 5.5pt. */
-  text(t: string, x: number, y: number, o: { size?: number; bold?: boolean; w?: number; align?: 'left' | 'center' | 'right' } = {}) {
+  text(t: string, x: number, y: number, o: { size?: number; bold?: boolean; w?: number; align?: 'left' | 'center' | 'right'; black?: boolean } = {}) {
     const str = toWinAnsi(String(t ?? '')).trim()
     if (!str) return
     const f = o.bold ? this.bold : this.font
@@ -44,7 +48,7 @@ class Sheet {
     let px = this.pt(x)
     if (o.align === 'center') px -= f.widthOfTextAtSize(str, size) / 2
     if (o.align === 'right') px -= f.widthOfTextAtSize(str, size)
-    this.page.drawText(str, { x: px, y: this.page.getHeight() - this.pt(y), size, font: f, color: INK })
+    this.page.drawText(str, { x: px, y: this.page.getHeight() - this.pt(y), size, font: f, color: o.black ? BLACK : INK })
   }
   /** Wrap `t` inside width w (px) from baseline y, `lh` px between lines, at most `max` lines. Returns lines used. */
   lines(t: string, x: number, y: number, w: number, o: { size?: number; lh?: number; max?: number } = {}): number {
@@ -63,6 +67,28 @@ class Sheet {
     if (out.length > max) shown[max - 1] = shown[max - 1].replace(/.{2}$/, '…')
     shown.forEach((l, i) => this.text(l, x, y + i * lh, { size, w }))
     return shown.length
+  }
+  /** The lines `t` wraps into inside width w (px) at `size`. */
+  wrap(t: string, w: number, size: number): string[] {
+    const str = toWinAnsi(String(t ?? '')).trim()
+    if (!str) return []
+    const maxW = this.pt(w), out: string[] = []
+    let cur = ''
+    for (const word of str.split(/\s+/)) {
+      const next = cur ? `${cur} ${word}` : word
+      if (this.font.widthOfTextAtSize(next, size) <= maxW || !cur) cur = next
+      else { out.push(cur); cur = word }
+    }
+    if (cur) out.push(cur)
+    return out
+  }
+  width(t: string, size: number, bold = false) { return (bold ? this.bold : this.font).widthOfTextAtSize(toWinAnsi(String(t ?? '')), size) / this.k }
+  rule(x1: number, y1: number, x2: number, y2: number, thickness = 0.6) {
+    const H = this.page.getHeight()
+    this.page.drawLine({ start: { x: this.pt(x1), y: H - this.pt(y1) }, end: { x: this.pt(x2), y: H - this.pt(y2) }, thickness, color: rgb(0.1, 0.1, 0.1) })
+  }
+  box(x: number, y: number, w: number, h: number) {
+    this.page.drawRectangle({ x: this.pt(x), y: this.page.getHeight() - this.pt(y + h), width: this.pt(w), height: this.pt(h), borderColor: rgb(0.1, 0.1, 0.1), borderWidth: 0.6 })
   }
   /** A tick drawn as two strokes (no standard font has the glyph), centred on (x, y) px, `size` px wide. */
   tick(x: number, y: number, size = 16) {
@@ -86,11 +112,12 @@ class Sheet {
   }
 }
 
-async function open(key: FormKey): Promise<{ doc: PDFDocument; sheets: Sheet[] }> {
-  const bytes = await fs.readFile(path.join(process.cwd(), 'public', 'statutory-forms', FORMS[key].file))
-  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true })
+async function open(key: FormKey): Promise<{ doc: PDFDocument; sheets: Sheet[]; sheet: () => Sheet }> {
+  const file = FORMS[key].file
+  const doc = file ? await PDFDocument.load(await fs.readFile(path.join(process.cwd(), 'public', 'statutory-forms', file)), { ignoreEncryption: true }) : await PDFDocument.create()
   const font = await doc.embedFont(StandardFonts.Helvetica), bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  return { doc, sheets: doc.getPages().map(p => new Sheet(p, FORMS[key].imgW, font, bold)) }
+  // `sheet()` adds an A4 page for a form that is drawn rather than filled in.
+  return { doc, sheets: doc.getPages().map(p => new Sheet(p, FORMS[key].imgW, font, bold)), sheet: () => new Sheet(doc.addPage([595, 842]), 595, font, bold) }
 }
 const dmy = (v: string) => { const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? { d: m[1], m: m[2], y: m[3] } : null }
 const yesNo = (b: boolean) => b ? 'Yes' : 'No'
@@ -216,22 +243,138 @@ async function drawEsic1(s: Sheet, d: StatutoryData, photo: { bytes: Uint8Array;
   if (photo) { try { await s.image(photo.bytes, photo.mime, 768, 1492, 258, 185) } catch { /* a photo that is not a PNG/JPG is simply not printed */ } }
 }
 
+// ── Gratuity Form F (A4, drawn in points: imgW = 595 so px = pt) ──────────────────────────
+function drawFormF(sheet: () => Sheet, d: StatutoryData) {
+  const W = 595, M = 46, CW = W - 2 * M, BODY = 9.3, LH = 12.6
+  let s = sheet(), y = 44
+  const text = (t: string, x: number, o: { size?: number; bold?: boolean; w?: number; align?: 'left' | 'center' | 'right'; black?: boolean } = {}) => s.text(t, x, y, { black: true, ...o })
+  /** A wrapped paragraph; `strike` draws the statutory strike-out through it. */
+  const para = (t: string, o: { size?: number; bold?: boolean; indent?: number; after?: number; strike?: boolean; align?: 'center' } = {}) => {
+    const size = o.size ?? BODY, lh = size * 1.36, x = M + (o.indent ?? 0)
+    for (const l of s.wrap(t, CW - (o.indent ?? 0), size)) {
+      // Static wording is black like a printed form; what came from the candidate (bold) stays ink-blue.
+      if (o.align === 'center') s.text(l, W / 2, y, { size, bold: o.bold, align: 'center', black: !o.bold })
+      else s.text(l, x, y, { size, bold: o.bold, black: !o.bold })
+      if (o.strike) s.rule(x, y - size * 0.32, x + s.width(l, size, o.bold), y - size * 0.32, 0.7)
+      y += lh
+    }
+    y += o.after ?? 3
+  }
+  const field = (label: string, value: string, labelW = 215) => {   // "label : value", value wrapped
+    s.text(label, M, y, { size: BODY, black: true }); s.text(':', M + labelW - 8, y, { size: BODY, black: true })
+    const ls = s.wrap(value || '', CW - labelW, BODY)
+    if (!ls.length) s.rule(M + labelW, y + 1, W - M, y + 1, 0.4)
+    ls.forEach((l, i) => s.text(l, M + labelW, y + i * LH, { size: BODY, bold: true }))
+    y += Math.max(1, ls.length) * LH + 2
+  }
+  const hasFamily = d.grat_nominees.length > 0
+  const female = /^f/i.test(d.gender)
+  const marital = d.marital === 'Widow' ? (female ? 'Widow' : 'Widower') : d.marital
+
+  text("FORM 'F'", W / 2, { size: 13, bold: true, align: 'center' }); y += 15
+  text('[See sub-rule (1) of rule 6]', W / 2, { size: 8.5, align: 'center' }); y += 14
+  text('NOMINATION', W / 2, { size: 11, bold: true, align: 'center' }); y += 18
+  text('To,', M, { size: BODY }); y += LH
+  para([d.company_name, d.company_address].filter(Boolean).join(', ') || '(Name or description of the establishment with full address)', { indent: 18, bold: true, after: 6 })
+  para(`I, Shri/Shrimati/Kumari ${d.name.toUpperCase() || '______________________'}, whose particulars are given in the statement below, hereby nominate the person(s) mentioned below to receive the gratuity payable after my death as also the gratuity standing to my credit in the event of my death before that amount has become payable, or having become payable has not been paid, and direct that the said amount of gratuity shall be paid in proportion indicated against the name(s) of the nominee(s).`)
+  para('2. I hereby certify that the person(s) mentioned is/are a member(s) of my family within the meaning of clause (h) of section 2 of the Payment of Gratuity Act, 1972.', { strike: !hasFamily })
+  para('3. I hereby declare that I have no family within the meaning of clause (h) of section 2 of the said Act.', { strike: hasFamily })
+  para('4. (a) My father/mother/parents is/are not dependent on me.', { indent: 0, after: 1 })
+  para('    (b) My husband\'s father/mother/parents is/are not dependent on my husband.', { strike: !female })
+  para('5. I have excluded my husband from my family by a notice dated the ______________ to the controlling authority in view of the proviso to clause (h) of section 2 of the said Act.', { strike: !female })
+  para('6. Nomination made herein invalidates my previous nomination.', { after: 8 })
+
+  // Nominee table
+  text('Nominee(s)', W / 2, { size: 10.5, bold: true, align: 'center' }); y += 14
+  const cols = [0, 232, 335, 395, CW]
+  const heads = ['Name in full with full address of nominee(s)', 'Relationship with the employee', 'Age of nominee', 'Proportion by which the gratuity will be shared']
+  const headLines = heads.map((h, i) => s.wrap(h, cols[i + 1] - cols[i] - 8, 8.2))
+  const headH = Math.max(...headLines.map(l => l.length)) * 10.5 + 18
+  s.box(M, y - 4, CW, headH)
+  cols.slice(1, -1).forEach(c => s.rule(M + c, y - 4, M + c, y - 4 + headH))
+  headLines.forEach((ls, i) => ls.forEach((l, j) => s.text(l, M + cols[i] + 4, y + 7 + j * 10.5, { size: 8.2, black: true })))
+  heads.forEach((_, i) => s.text(`(${i + 1})`, M + (cols[i] + cols[i + 1]) / 2, y + headH - 8, { size: 8, align: 'center', black: true }))
+  y += headH - 4
+  const rows = d.grat_nominees.length ? d.grat_nominees : [{ name: '', address: '', relation: '', age: '', share: '', dob: '' }]
+  for (const n of rows) {
+    const nameLs = n.name ? [n.name] : [], addrLs = s.wrap(n.address, cols[1] - 10, 8.5)
+    const h = Math.max(2, nameLs.length + addrLs.length) * 11 + 10
+    s.box(M, y, CW, h)
+    cols.slice(1, -1).forEach(c => s.rule(M + c, y, M + c, y + h))
+    nameLs.forEach((l, j) => s.text(l, M + 4, y + 13 + j * 11, { size: 9, bold: true, w: cols[1] - 8 }))
+    addrLs.forEach((l, j) => s.text(l, M + 4, y + 13 + (nameLs.length + j) * 11, { size: 8.5 }))
+    s.text(n.relation, M + cols[1] + 4, y + 13, { size: 9, w: cols[2] - cols[1] - 8 })
+    s.text(n.age ? `${n.age} years` : '', M + cols[2] + 4, y + 13, { size: 9, w: cols[3] - cols[2] - 8 })
+    s.text(n.share || '', M + cols[3] + 4, y + 13, { size: 9, w: cols[4] - cols[3] - 8 })
+    y += h
+  }
+  y += 14
+
+  // Statement
+  text('Statement', W / 2, { size: 10.5, bold: true, align: 'center' }); y += 15
+  field('1. Name of employee in full', d.name.toUpperCase())
+  field('2. Sex', d.gender)
+  field('3. Religion', d.religion)
+  field('4. Whether unmarried / married / widow / widower', marital)
+  field('5. Department / Branch / Section where employed', d.department)
+  field('6. Post held with Ticket or Serial No., if any', [d.designation, d.emp_code ? `(${d.emp_code})` : ''].filter(Boolean).join(' '))
+  field('7. Date of appointment', d.doj)
+  const pp = d.perm_parts
+  field('8. Permanent address', [pp.line1, pp.city, pp.pin].filter(Boolean).join(', '))
+  const parts: [string, string][] = [['Village', pp.village], ['Thana', pp.thana], ['Sub-division', pp.sub_division], ['Post Office', pp.po], ['District', pp.district], ['State', pp.state]]
+  parts.forEach(([l, v], i) => {
+    const col = i % 2, x = M + 20 + col * (CW / 2)
+    s.text(`${l}:`, x, y, { size: BODY, black: true }); s.text(v || '', x + 62, y, { size: BODY, bold: true, w: CW / 2 - 70 })
+    if (!v) s.rule(x + 62, y + 1, x + CW / 2 - 12, y + 1, 0.4)
+    if (col === 1 || i === parts.length - 1) y += LH
+  })
+  y += 10
+  s.text(`Place: ${d.place || '____________'}`, M, y, { size: BODY }); s.text('Signature / Thumb-impression of the employee', W - M, y, { size: BODY, align: 'right', black: true }); y += LH
+  s.text(`Date: ${d.date}`, M, y, { size: BODY })
+
+  // ── Page 2: witnesses, employer, acknowledgement ──
+  s = sheet(); y = 50
+  text('Declaration by witnesses', W / 2, { size: 10.5, bold: true, align: 'center' }); y += 16
+  para('Nomination signed / thumb-impressed before me.', { after: 6 })
+  s.text('Name in full and full address of witnesses', M, y, { size: BODY, bold: true, black: true }); s.text('Signature of witnesses', M + CW * 0.62, y, { size: BODY, bold: true, black: true }); y += LH + 4
+  for (const n of ['1.', '2.']) {
+    s.text(n, M, y, { size: BODY, black: true }); s.rule(M + 16, y + 1, M + CW * 0.58, y + 1, 0.4); s.text(n, M + CW * 0.62, y, { size: BODY, black: true }); s.rule(M + CW * 0.62 + 16, y + 1, W - M, y + 1, 0.4); y += LH + 8
+    s.rule(M + 16, y + 1, M + CW * 0.58, y + 1, 0.4); y += LH + 6
+  }
+  s.text('Place: ______________________', M, y, { size: BODY, black: true }); s.text('Date: ______________________', M + CW * 0.62, y, { size: BODY, black: true }); y += 34
+
+  text('Certificate by the employer', W / 2, { size: 10.5, bold: true, align: 'center' }); y += 16
+  para('Certified that the particulars of the above nomination have been verified and recorded in this establishment.', { after: 8 })
+  field("Employer's Reference No., if any", '', 200)
+  y += 6
+  s.text('Signature of the employer / Officer authorised: ________________________________', M, y, { size: BODY, black: true }); y += LH + 6
+  s.text('Date: ______________________', M, y, { size: BODY, black: true }); s.text('Designation: ________________________', M + CW * 0.5, y, { size: BODY, black: true }); y += LH + 6
+  para('Name and address of the establishment or rubber stamp thereof:', { after: 2 })
+  para([d.company_name, d.company_address].filter(Boolean).join(', ') || '______________________________________________', { indent: 18, bold: true, after: 30 })
+
+  text('Acknowledgement by the employee', W / 2, { size: 10.5, bold: true, align: 'center' }); y += 16
+  para("Received the duplicate copy of nomination in Form 'F' filed by me and duly certified by the employer.", { after: 14 })
+  s.text('Date: ______________________', M, y, { size: BODY, black: true }); s.text('Signature of the employee', W - M, y, { size: BODY, align: 'right', black: true }); y += 40
+  para('Note: Strike out the words / paragraphs not applicable. Paragraphs are struck through here from the details given on the onboarding form; the employee confirms them while signing.', { size: 8, after: 0 })
+}
+
 export interface RenderOptions { photo?: { bytes: Uint8Array; mime: string } | null }
 
 /** The filled form as PDF bytes. */
 export async function renderStatutoryForm(key: FormKey, d: StatutoryData, o: RenderOptions = {}): Promise<Uint8Array> {
-  const { doc, sheets } = await open(key)
+  const { doc, sheets, sheet } = await open(key)
   if (key === 'form11') drawForm11(sheets[0], d)
   else if (key === 'form2') drawForm2(sheets[0], sheets[1], d)
+  else if (key === 'formf') drawFormF(sheet, d)
   else await drawEsic1(sheets[0], d, o.photo || null)
   doc.setTitle(`${FORMS[key].label} — ${d.name}`)
   doc.setProducer('EZER HRMS')
   return doc.save()
 }
 
-/** The forms a candidate gets: EPF Form 11 and Form 2 always, ESIC Form 1 when ESIC applies. */
+/** The forms a candidate gets: EPF Form 11, EPF Form 2 and Gratuity Form F always, ESIC Form 1 when ESIC applies. */
 export function formsFor(d: StatutoryData): FormKey[] {
-  return d.esic_applicable ? ['form11', 'form2', 'esic1'] : ['form11', 'form2']
+  return d.esic_applicable ? ['form11', 'form2', 'formf', 'esic1'] : ['form11', 'form2', 'formf']
 }
 
 // ── Loading the facts from the database (the route and the acknowledgement mail share this) ──

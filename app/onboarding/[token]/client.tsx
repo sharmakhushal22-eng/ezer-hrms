@@ -355,7 +355,7 @@ function StatutoryFormCard({ code, title, rows }: { code: string; title: string;
 // The official form (EPF 11 / EPF 2 / ESIC 1) filled in by /api/onboarding/forms and shown as the
 // PDF itself; the candidate reads it and confirms. Phones that cannot show a PDF inline get the
 // Open button.
-function PdfFormCard({ code, title, token, form, note }: { code: string; title: string; token: string; form: 'form11' | 'form2' | 'esic1'; note: string }) {
+function PdfFormCard({ code, title, token, form, note }: { code: string; title: string; token: string; form: 'form11' | 'form2' | 'esic1' | 'formf'; note: string }) {
   const [ok, setOk] = useState(false)
   const url = `/api/onboarding/forms?form=${form}&token=${encodeURIComponent(token)}`
   return (
@@ -438,18 +438,8 @@ function StatutoryFormsPreview({ token, personal, contact, statutory, insurance,
           note="Part A lists your PF nominees with their shares; Part B (EPS) lists your family members for the pension and the fallback nominee." />
       )}
       {activeTab === 'form3' && (
-        <StatutoryFormCard code="FORM III" title="Gratuity Nomination (Form F)" rows={[
-          ['Employee name', personal.full_name],
-          ['Religion', personal.religion],
-          ['Department', candidate.department],
-          ['Designation', candidate.designation],
-          ['Date of appointment', doj],
-          ['Date of superannuation (DOB + 60)', superannuation],
-          ['Permanent address', permAddr],
-          ...(statutory.grat_nominees.filter((n: Nominee) => n.name).length > 1
-            ? [['Nominees', statutory.grat_nominees.filter((n: Nominee) => n.name).map((n: Nominee, i: number) => `${i + 1}. ${n.name} (${n.relation || '—'}${n.dob ? `, ${ageFromDob(n.dob)} yrs` : ''}) — ${n.share || '0'}%`).join(' · ')] as [string, any]]
-            : [['Nominee name', statutory.grat_nominee_name || statutory.nominee_name], ['Relationship', statutory.grat_nominee_relation || statutory.nominee_relation], ['Nominee age', (statutory.grat_nominees[0]?.dob || statutory.nominee_dob) ? `${ageFromDob(statutory.grat_nominees[0]?.dob || statutory.nominee_dob)} yrs` : '—'], ['Proportion', '100%']] as [string, any][]),
-        ]} />
+        <PdfFormCard code="FORM F" title="Gratuity Form F — Nomination" token={token} form="formf"
+          note="Your gratuity nominee(s) with relationship, age and share, and the statement: name, sex, religion, marital status, department, post, date of appointment and the permanent address split as the form asks." />
       )}
       {activeTab === 'esic1' && esicApplicable && (
         <PdfFormCard code="ESIC FORM 1" title="Form 1 — Declaration Form" token={token} form="esic1"
