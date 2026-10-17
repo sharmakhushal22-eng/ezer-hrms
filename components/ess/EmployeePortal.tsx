@@ -2178,12 +2178,16 @@ function RegularisationList({ requests, onWithdraw, busyId }: {
     return [...m.values()].map(rs => rs.sort((a, b) => a.attendance_date.localeCompare(b.attendance_date)))
       .sort((a, b) => String(b[0].created_at).localeCompare(String(a[0].created_at)))
   }, [requests])
+  // Three, then "Show all": the list grows with every correction filed and
+  // pushed everything below it out of sight.
+  const [all, setAll] = useState(false)
+  const shownGroups = all ? groups : groups.slice(0, 3)
 
   return (
     <div style={T.card}>
       <div style={T.section}>My Regularisation Requests</div>
       {groups.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No regularisation requests yet.</div>}
-      {groups.map(rs => {
+      {shownGroups.map(rs => {
         const r = rs[0]
         const [bg,c] = STY[r.status] || [C.brandTint,C.brandDeep]
         const sameTimes = new Set(rs.map(x => `${hm(x.requested_in)}-${hm(x.requested_out)}`)).size === 1
@@ -2231,6 +2235,15 @@ function RegularisationList({ requests, onWithdraw, busyId }: {
           </div>
         )
       })}
+      {groups.length > 3 && (
+        <button type="button" onClick={() => setAll(v => !v)} aria-expanded={all}
+          style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, width:'100%', height:34, marginTop:4,
+                   border:`1px dashed ${C.lineStrong}`, borderRadius:10, background:'transparent', color:C.brand,
+                   fontSize:12, fontWeight:600, fontFamily:'inherit', cursor:'pointer' }}>
+          {all ? 'Show fewer' : `Show all ${groups.length} requests`}
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ transform: all ? 'rotate(180deg)' : 'none' }}><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+      )}
     </div>
   )
 }

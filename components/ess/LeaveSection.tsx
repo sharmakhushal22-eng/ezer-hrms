@@ -175,6 +175,10 @@ export default function LeaveSection({ emp, notify }: {
   const [cancelReason, setCancelReason] = useState('')
   const [splitOffer, setSplitOffer] = useState<SplitOffer | null>(null)
   const [typeNote, setTypeNote] = useState('')
+  // The side lists show three each; the rest is one click away, so Upcoming
+  // holidays is not pushed below the fold by a long request history.
+  const [allReq, setAllReq] = useState(false)
+  const [allHol, setAllHol] = useState(false)
   // Motion state. `lit` flips one tick after the data lands so the balance
   // meters transition up from zero instead of appearing at full width; `dir`
   // is which way the month grid should slide in.
@@ -819,7 +823,7 @@ export default function LeaveSection({ emp, notify }: {
             </div>
             {!data.applications.length ? (
               <div className="ezlv-empty"><b>No requests yet.</b><br />Anything you apply for will show here with its status.</div>
-            ) : data.applications.map((a: any) => {
+            ) : <>{(allReq ? data.applications : data.applications.slice(0, PEEK)).map((a: any) => {
               const status = String(a.status || '').toUpperCase()
               const half = a.half_day
               return (
@@ -911,6 +915,12 @@ export default function LeaveSection({ emp, notify }: {
                 </div>
               )
             })}
+            {data.applications.length > PEEK && (
+              <button type="button" className="ezlv-more" aria-expanded={allReq} onClick={() => setAllReq(v => !v)}>
+                {allReq ? 'Show fewer' : `Show all ${data.applications.length} requests`}
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ transform: allReq ? 'rotate(180deg)' : 'none' }}><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+            )}</>}
           </section>
 
           {/* ══ Holidays ══════════════════════════════════════════════════ */}
@@ -928,7 +938,7 @@ export default function LeaveSection({ emp, notify }: {
               </div>
             ) : (() => {
               let lastMonth = ''
-              return upcoming.map((h: any, i: number) => {
+              return <>{(allHol ? upcoming : upcoming.slice(0, PEEK)).map((h: any, i: number) => {
                 const d = fromIso(h.holiday_date)
                 const mon = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
                 const head = mon !== lastMonth ? (lastMonth = mon) : null
@@ -953,7 +963,13 @@ export default function LeaveSection({ emp, notify }: {
                     </div>
                   </div>
                 )
-              })
+              })}
+              {upcoming.length > PEEK && (
+                <button type="button" className="ezlv-more" aria-expanded={allHol} onClick={() => setAllHol(v => !v)}>
+                  {allHol ? 'Show fewer' : `Show all ${upcoming.length} holidays`}
+                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ transform: allHol ? 'rotate(180deg)' : 'none' }}><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
+              )}</>
             })()}
           </section>
         </div>
@@ -963,6 +979,9 @@ export default function LeaveSection({ emp, notify }: {
 }
 
 // ── Scoped stylesheet ──────────────────────────────────────────────────────
+/** How many requests / holidays the side lists show before "Show all". */
+const PEEK = 3
+
 const CSS = `
 .ezlv {
   --lv-gap: 12px;
@@ -1907,6 +1926,14 @@ const CSS = `
 .ezlv-ghost:hover { color: var(--lv-ink); border-color: var(--lv-faint); }
 .ezlv-ghost.is-danger { color: var(--lv-bad); border-color: var(--lv-bad); }
 .ezlv-ghost:disabled { opacity: .5; cursor: not-allowed; }
+.ezlv-more {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 34px; margin-top: 8px;
+  border: 1px dashed var(--lv-line-strong); border-radius: var(--lv-r-md); background: transparent;
+  color: var(--lv-brand); font: 600 12px var(--lv-font); cursor: pointer; transition: background .14s ease, border-color .14s ease;
+}
+.ezlv-more:hover { background: var(--lv-brand-tint); border-color: var(--lv-brand-edge); }
+.ezlv-more:focus-visible { outline: 2px solid var(--lv-brand); outline-offset: 2px; }
+.ezlv-more svg { transition: transform .18s ease; }
 .ezlv-confirm { font-size: 11px; color: var(--lv-bad); font-weight: 600; }
 
 /* ── Holidays ───────────────────────────────────────────────────────────── */
