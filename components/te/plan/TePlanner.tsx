@@ -1,10 +1,26 @@
 'use client'
-// components/te/plan/TePlanner.tsx — plan a trip, in three steps.
+// components/te/plan/TePlanner.tsx — plan a trip, in five steps.
 //
 // Screens 10-23, 25, 26, 28 and 35-39 are all this one component: the same
-// three steps serve a local, domestic or international trip, a plan for later
+// five steps serve a local, domestic or international trip, a plan for later
 // and a trip you already took. What changes between them is which fields the
 // steps show, and that is decided by `scope` and `origin` on the draft.
+//
+// WHY FIVE AND NOT THREE. The old step 2 asked for the route AND how you
+// travel every leg of it — places, dates, a mode each, the vehicle, which
+// airport, who books the ticket — and the hotel question was a block buried in
+// Review, where nobody expects to be asked something new. Four questions were
+// wearing one step. Now each step is one decision:
+//
+//   1 Trip      what it is, why, who is going
+//   2 Route     one way or round trip, where from, where to, when
+//   3 Commute   how you travel each journey, offered per kind of trip
+//   4 Stay      a hotel, and the food budget
+//   5 Review    the whole plan, the map, the money, then send
+//
+// Nothing the server computes changed. The same preview answers the same way;
+// only which step shows which of its refusals moved, and that lives in
+// stepOfIssue in lib/te/trip-draft.ts.
 //
 // WHO DECIDES WHAT
 //   This file owns the FORM: which step you are on, which route line is open,
@@ -19,21 +35,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { Snapshot, TeTrip, TripIssue, TripOrigin, TripPreview, TripScope, Uuid } from '@/lib/te/types'
 import {
-  blockingOn, firstOpenLine, fromTrip, newPlannerDraft, setScope, stepOfIssue, syncDraft, toTripDraft,
-  type DraftContext, type PlannerDraft,
+  blockingOn, firstOpenLine, fromTrip, LAST_STEP, newPlannerDraft, setScope, stepOfIssue, syncDraft, toTripDraft,
+  type DraftContext, type PlanStep, type PlannerDraft,
 } from '@/lib/te/trip-draft'
 import { errorText, plural, rs } from '@/lib/te/format'
+import { nightsBetween } from '@/lib/te/trip-stay'
 import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
 import TePlanTrip from './TePlanTrip'
 import TePlanRoute from './TePlanRoute'
+import TePlanCommute from './TePlanCommute'
+import TePlanStay from './TePlanStay'
 import TePlanReview from './TePlanReview'
 import TePlacePicker, { type PickTarget } from './TePlacePicker'
 
 const STEPS: { title: string; sub: string }[] = [
-  { title: 'Trip', sub: 'Name, reason, people' },
-  { title: 'Route', sub: 'Places, stops, travel' },
-  { title: 'Review', sub: 'Journeys, money, approval' },
+  { title: 'Trip', sub: 'What and why' },
+  { title: 'Route', sub: 'Where and when' },
+  { title: 'Commute', sub: 'How you travel' },
+  { title: 'Stay', sub: 'Hotel and food' },
+  { title: 'Review', sub: 'Check, then send' },
 ]
 
 /** The day before today that was a working day. Used to date a local trip that
@@ -120,12 +141,12 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
   const issues = useMemo<TripIssue[]>(() => preview?.issues ?? [], [preview])
   const step = draft.step
 
-  const goStep = useCallback((n: 1 | 2 | 3) => {
+  const goStep = useCallback((n: PlanStep) => {
     setDraft(d => {
       const next = syncDraft({ ...d, step: n }, ctx)
-      // Arriving on the route, open the first line that still needs something —
-      // unless the person has deliberately closed them all.
-      return n === 2 && next.open === undefined ? { ...next, open: firstOpenLine(issues) } : next
+      // Arriving on the route or the commute, open the first line that still
+      // needs something — unless the person has deliberately closed them all.
+      return (n === 2 || n === 3) && next.open === undefined ? { ...next, open: firstOpenLine(issues) } : next
     })
     if (bodyRef.current) bodyRef.current.scrollTop = 0
   }, [ctx, issues])
@@ -142,11 +163,11 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
     }
     const blocking = blockingOn(issues, step)
     if (blocking.length) {
-      setDraft(d => ({ ...d, tried: true, ...(step === 2 ? { open: firstOpenLine(issues) } : {}) }))
+      setDraft(d => ({ ...d, tried: true, ...(step === 2 || step === 3 ? { open: firstOpenLine(issues) } : {}) }))
       setToast(blocking.length === 1 ? blocking[0].t : `${blocking.length} things to fill on this step. They are marked in red.`)
       return
     }
-    goStep(Math.min(3, step + 1) as 1 | 2 | 3)
+    goStep(Math.min(LAST_STEP, step + 1) as PlanStep)
   }
 
   async function save() {
@@ -157,7 +178,7 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
     }
     const blocking = issues.filter(i => i.block)
     if (blocking.length) {
-      const lowest = Math.min(...blocking.map(i => stepOfIssue(i.k))) as 1 | 2 | 3
+      const lowest = Math.min(...blocking.map(i => stepOfIssue(i.k))) as PlanStep
       setDraft(d => ({ ...d, tried: true, step: lowest }))
       setToast('A few things are missing. They are marked in red.')
       return
@@ -183,7 +204,7 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
       : 'Record a trip you already did'
   const lead = editingThis
     ? (draft.answerNeeded ? 'Change what your approver asked about, then send it again.' : 'Change the plan.')
-    : planning ? 'Three short steps. Every journey, stop and bill stays inside this trip.'
+    : planning ? 'Five short steps, one question each. Every journey, stop and bill stays inside this trip.'
       : 'For a trip that was not tracked. The journeys are added without GPS and your approver sees why.'
 
   // The send button says what will actually happen, which the server has already
@@ -193,12 +214,12 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
       : preview && !preview.needsApproval ? 'Save the plan'
         : 'Send for approval'
 
-  const stepHasError = (n: 1 | 2 | 3) => !!draft.tried && blockingOn(issues, n).length > 0
+  const stepHasError = (n: PlanStep) => !!draft.tried && blockingOn(issues, n).length > 0
 
   const bar = (
     <nav className="wsteps" aria-label="Steps">
       {STEPS.map((s, i) => {
-        const n = (i + 1) as 1 | 2 | 3
+        const n = (i + 1) as PlanStep
         const done = step > n && !stepHasError(n)
         return (
           <button
@@ -221,9 +242,9 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
       <div className="tw-bar">{summary(preview, draft.pax, planning)}</div>
       <div className="row tight">
         {step > 1
-          ? <button type="button" className="btn" onClick={() => goStep((step - 1) as 1 | 2)}><TeIcon name="back" size="sm" />Back</button>
+          ? <button type="button" className="btn" onClick={() => goStep((step - 1) as PlanStep)}><TeIcon name="back" size="sm" />Back</button>
           : <button type="button" className="btn" onClick={onClose}>Cancel</button>}
-        {step < 3
+        {step < LAST_STEP
           ? <button type="button" className="btn pri" onClick={next}>Next: {STEPS[step].title}<TeIcon name="go" size="sm" /></button>
           : <button type="button" className="btn pri" onClick={save} disabled={saving}>{saving ? 'Saving…' : sendLabel}</button>}
       </div>
@@ -281,12 +302,23 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
           />
         ) : null}
         {step === 2 ? (
-          <TePlanRoute
-            snap={snap} draft={draft} issues={issues} preview={preview} edit={edit} onPick={setPicking}
+          <TePlanRoute snap={snap} draft={draft} issues={issues} preview={preview} edit={edit} onPick={setPicking} />
+        ) : null}
+        {step === 3 ? (
+          <TePlanCommute
+            snap={snap} draft={draft} issues={issues} edit={edit} onPick={setPicking}
             onVehicleAdded={message => { setToast(message); onVehicleAdded?.() }}
           />
         ) : null}
-        {step === 3 ? <TePlanReview snap={snap} draft={draft} issues={issues} preview={preview} edit={edit} onGoStep={goStep} /> : null}
+        {step === 4 ? (
+          <TePlanStay
+            draft={draft}
+            foodBudget={preview?.estimate.meals ?? 0}
+            nights={nightsBetween(preview?.start ?? null, preview?.end ?? null)}
+            edit={edit}
+          />
+        ) : null}
+        {step === 5 ? <TePlanReview snap={snap} draft={draft} issues={issues} preview={preview} edit={edit} onGoStep={goStep} /> : null}
       </div>
       {toast ? <div className="toasts"><div className="toast err"><TeIcon name="warn" size="sm" />{toast}</div></div> : null}
     </TeSheet>

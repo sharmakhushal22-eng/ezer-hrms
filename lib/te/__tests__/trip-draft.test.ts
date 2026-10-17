@@ -268,14 +268,27 @@ describe('what a route line is called', () => {
 describe('where a refusal belongs', () => {
   it('sends each key to the step that can fix it', () => {
     for (const k of ['scope', 'purpose', 'name', 'pax']) assert.equal(stepOfIssue(k), 1, k)
-    for (const k of ['p0', 'p12', 'm1', 'd0', 'd3', 'pr']) assert.equal(stepOfIssue(k), 2, k)
-    for (const k of ['pf', 'adv']) assert.equal(stepOfIssue(k), 3, k)
+    // Where and when — step 2 since the planner was split into five.
+    for (const k of ['p0', 'p12', 'd0', 'd3', 'pr']) assert.equal(stepOfIssue(k), 2, k)
+    // How you travel — its own step now, so a missing mode no longer sends
+    // somebody back to a screen full of places and dates.
+    for (const k of ['m0', 'm1', 's0', 's4']) assert.equal(stepOfIssue(k), 3, k)
+    for (const k of ['pf', 'adv']) assert.equal(stepOfIssue(k), 5, k)
+  })
+
+  it('routes nothing to the stay step, because the stay only ever warns', () => {
+    // trip-stay.ts warns when fewer than three hotels are named and never
+    // blocks, so the server emits no key that belongs to step 4. If that ever
+    // changes, this test is the reminder that stepOfIssue needs a case.
+    const keys = ['scope', 'purpose', 'name', 'pax', 'p0', 'd0', 'pr', 'm0', 's0', 'pf', 'adv', '', undefined]
+    assert.equal(keys.filter(k => stepOfIssue(k) === 4).length, 0)
   })
 
   it('puts a refusal with no field of its own on the last step', () => {
-    // These have nowhere to sit, so the summary on step 3 is where they show.
-    assert.equal(stepOfIssue(undefined), 3)
-    assert.equal(stepOfIssue(''), 3)
+    // These have nowhere to sit, so the summary on the last step is where they
+    // show.
+    assert.equal(stepOfIssue(undefined), 5)
+    assert.equal(stepOfIssue(''), 5)
   })
 
   it('says nothing until the person has tried to move on', () => {
@@ -300,8 +313,11 @@ describe('where a refusal belongs', () => {
       { block: true, t: 'no key at all', k: undefined },
     ]
     assert.deepEqual(blockingOn(issues, 1).map(i => i.k), ['name'])
-    assert.deepEqual(blockingOn(issues, 2).map(i => i.k), ['p1', 'm0'])
-    assert.deepEqual(blockingOn(issues, 3).map(i => i.t), ['no key at all'])
+    assert.deepEqual(blockingOn(issues, 2).map(i => i.k), ['p1'])
+    // The mode moved to its own step, so it no longer lands beside the places.
+    assert.deepEqual(blockingOn(issues, 3).map(i => i.k), ['m0'])
+    assert.deepEqual(blockingOn(issues, 4), [])
+    assert.deepEqual(blockingOn(issues, 5).map(i => i.t), ['no key at all'])
   })
 })
 
@@ -456,7 +472,7 @@ describe('opening a saved trip to change it', () => {
 
   it('opens a sent-back trip on Review, where the answer is asked for', () => {
     const d = fromTrip({ ...saved, status: 'SENT_BACK' }, ctx())
-    assert.equal(d.step, 3)
+    assert.equal(d.step, 5)
     assert.equal(d.answerNeeded, true)
   })
 

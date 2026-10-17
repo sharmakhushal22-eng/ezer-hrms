@@ -1,42 +1,36 @@
 'use client'
-// components/te/plan/TePlanRoute.tsx — step 2: the route, as a short list.
+// components/te/plan/TePlanRoute.tsx — step 2: where you go, and when.
 // Screens 12, 15, 16, 16b, 19, 22, 25, 26, 35, 37.
 //
-// One line per place, a thin line for the travel between them, tap a line to
-// change it. Only one line is open at a time, which is what keeps a six-leg
-// international trip readable on a phone.
+// ONE DECISION PER STEP. This used to ask for the route AND how you travel it:
+// a place, then a thin line asking for a mode, a vehicle, which airport and
+// who books the ticket, then the next place. How you travel is step 3 now, and
+// this step is only the shape of the trip — one way or round trip, where from,
+// where to, and the dates. The thin line between two places still shows what
+// was chosen, but it is read-only here.
+//
+// One line per place, tap a line to change it, only one open at a time, which
+// is what keeps a six-leg international trip readable on a phone.
 //
 // `arrive` is never stored on the draft — the server works out when you get
 // somewhere from when you left the place before. It is read off the preview's
 // legs for display only.
-import { Fragment, useState } from 'react'
+import { Fragment } from 'react'
 import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
 import { errorFor, pointLabel, addStop, movePoint, removePoint, setPattern, type DraftContext, type PlannerDraft } from '@/lib/te/trip-draft'
 import { day, plural } from '@/lib/te/format'
-import { vehicleSubtitle } from '@/lib/te/vehicle'
 import TeIcon from '../TeIcon'
-import TeVehicleAdd from '../vehicle/TeVehicleAdd'
 import type { PickTarget } from './TePlacePicker'
 
-const MODE_ICON: Record<string, string> = {
-  own: 'car', company: 'car', cab: 'car', auto: 'car', rental: 'car',
-  public: 'bus', bus: 'bus', train: 'train', flight: 'plane',
-}
-const PAY_WORDS: Record<string, string> = {
-  km: 'Paid per km', bill: 'Paid on your bill', nobill: 'Fare, no bill needed',
-  ticket: 'Paid on the ticket', none: 'Not paid, only logged',
-}
 const PATTERN_WORD: Record<string, string> = { oneway: 'Single', round: 'Round trip', multi: 'Multi-city' }
 
-export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick, onVehicleAdded }: {
+export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick }: {
   snap: Snapshot
   draft: PlannerDraft
   issues: TripIssue[]
   preview: TripPreview | null
   edit: (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
   onPick: (t: PickTarget) => void
-  /** A vehicle was registered from inside the plan; the snapshot needs refetching. */
-  onVehicleAdded: (message: string) => void
 }) {
   const local = draft.scope === 'local'
   const planning = draft.origin !== 'POST_FACTO'
@@ -256,175 +250,22 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
                 ) : null}
               </div>
 
+              {/* How you travel between these two places used to sit here, as a
+                  thin line between every pair of points. It is step 3 now: one
+                  step for where you are going, the next for how. */}
               {i < draft.points.length - 1 ? (
-                <SegRow
-                  snap={snap} draft={draft} issues={issues} i={i}
-                  open={draft.open === `s${i}`} tried={!!tried}
-                  onToggle={() => toggle(`s${i}`)} edit={edit} onPick={onPick}
-                  onVehicleAdded={onVehicleAdded}
-                />
+                <div className="rline thin">
+                  <span className="ico-b sm"><TeIcon name="route" size="sm" /></span>
+                  <span className="small muted">
+                    {snap.cfg.modes.find(m => m.id === draft.segs[i]?.mode)?.name ?? 'How you travel — chosen next'}
+                  </span>
+                </div>
               ) : null}
             </Fragment>
           )
         })}
       </div>
       {err('pr') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('pr')}</div> : null}
-    </div>
-  )
-}
-
-/** How you travel between two places. Defined outside the parent, or it would
- *  remount on every keystroke and drop focus. */
-function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, onVehicleAdded }: {
-  snap: Snapshot
-  draft: PlannerDraft
-  issues: TripIssue[]
-  i: number
-  open: boolean
-  tried: boolean
-  onToggle: () => void
-  edit: (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
-  onPick: (t: PickTarget) => void
-  onVehicleAdded: (message: string) => void
-}) {
-  const [addingVehicle, setAddingVehicle] = useState(false)
-  const s = draft.segs[i]
-  const mine = snap.vehicles.filter(v => v.emp === snap.me)
-  if (!s) return null
-  const md = snap.cfg.modes.find(m => m.id === s.mode) ?? null
-  const place = (id: string) => snap.masters.places.find(p => p.id === id) ?? null
-  const a = place(draft.points[i]?.place ?? '')
-  const b = place(draft.points[i + 1]?.place ?? '')
-  const err = issues.find(q => q.block && q.k === `m${i}`)
-
-  const modes = snap.cfg.modes.filter(m => m.on && m.scopes.includes(draft.scope))
-  const vehicle = s.mode === 'own' ? snap.vehicles.find(v => v.id === s.vehicleId) : null
-  // The Travel Desk books tickets, but not for a local trip and not for one that
-  // already happened — there is nothing left to book.
-  const desk = !!md && md.basis === 'ticket' && draft.origin !== 'POST_FACTO' && draft.scope !== 'local'
-  const checkIn = md?.gps === 'checkin'
-
-  const setSeg = (patch: Partial<typeof s>) => edit(d => ({ ...d, segs: d.segs.map((q, k) => (k === i ? { ...q, ...patch } : q)) }))
-
-  const bits = [
-    vehicle?.reg ?? '',
-    desk ? (s.bookedBy === 'self' ? 'You book' : 'Travel Desk books') : '',
-  ].filter(Boolean)
-
-  return (
-    <div className={`rseg ${open ? 'open ' : ''}${err && tried ? 'bad' : ''}`}>
-      <button type="button" className="rshead" aria-expanded={open} onClick={onToggle}>
-        <TeIcon name={md ? MODE_ICON[md.id] ?? 'route' : 'route'} size="sm" />
-        <b>{md ? md.name : 'Choose how you travel'}</b>
-        {bits.length ? <span className="rsub">{bits.join(' · ')}</span> : null}
-        <span className="grow" />
-        {md ? <span className="rtag"><TeIcon name={checkIn ? 'target' : 'route'} size="sm" />{checkIn ? 'Check-ins' : 'GPS'}</span> : null}
-        <TeIcon name={open ? 'up' : 'down'} size="sm" />
-      </button>
-
-      {!open && err && tried ? <div className="ferr"><TeIcon name="alert" size="sm" />{err.t}</div> : null}
-
-      {open ? (
-        <div className="redit sg">
-          <div className="rs-modes" role="group" aria-label={a && b ? `How you travel from ${a.s} to ${b.s}` : 'How you travel'}>
-            {modes.map(m => (
-              <button
-                key={m.id}
-                type="button"
-                className="mchip"
-                aria-pressed={s.mode === m.id}
-                title={`${m.name}: ${PAY_WORDS[m.basis] ?? ''}`}
-                onClick={() => setSeg({ mode: m.id, vehicleId: m.id === 'own' ? (s.vehicleId || snap.vehicles[0]?.id || '') : '' })}
-              >
-                <TeIcon name={MODE_ICON[m.id] ?? 'route'} size="sm" />
-                <span>{m.name}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Picking the vehicle, and adding one without leaving the plan: a
-              person who gets here has already chosen to drive, and sending them
-              to another screen to register the car loses the trip they were
-              halfway through writing. */}
-          {s.mode === 'own' ? (
-            <div className="vpick">
-              <div className="vchips">
-                {mine.map(v => (
-                  <button key={v.id} type="button" className="vchip" aria-pressed={s.vehicleId === v.id} onClick={() => setSeg({ vehicleId: v.id })}>
-                    <TeIcon name={v.type === 'bike' ? 'bike' : 'car'} size="sm" />
-                    <span>
-                      <b className="mono">{v.reg}</b>
-                      <small>{vehicleSubtitle(v, snap.cfg.vehicles, snap.cfg.fuelPrice)}{v.verified ? '' : ' · HR to check'}</small>
-                    </span>
-                  </button>
-                ))}
-                {mine.length ? (
-                  <button type="button" className="vchip add" aria-expanded={addingVehicle} onClick={() => setAddingVehicle(v => !v)}>
-                    <TeIcon name="plus" size="sm" />
-                    <span><b>Another vehicle</b><small>Any vehicle, by its number</small></span>
-                  </button>
-                ) : null}
-              </div>
-              {addingVehicle || !mine.length ? (
-                <TeVehicleAdd
-                  snap={snap}
-                  first={!mine.length}
-                  onClose={mine.length ? () => setAddingVehicle(false) : undefined}
-                  onAdded={(vehicleId, message) => {
-                    setAddingVehicle(false)
-                    // Use it on this leg straight away, and on any other
-                    // own-vehicle leg still waiting for one.
-                    edit(d => ({ ...d, segs: d.segs.map((q, k) => (k === i || (q.mode === 'own' && !q.vehicleId) ? { ...q, mode: 'own', vehicleId } : q)) }))
-                    onVehicleAdded(message)
-                  }}
-                />
-              ) : null}
-            </div>
-          ) : null}
-
-          {desk ? (
-            <div className="seg sm" role="group" aria-label="Who books">
-              <button type="button" aria-pressed={s.bookedBy !== 'self'} onClick={() => setSeg({ bookedBy: 'desk' })}>Travel Desk books</button>
-              <button type="button" aria-pressed={s.bookedBy === 'self'} onClick={() => setSeg({ bookedBy: 'self' })}>I book and claim</button>
-            </div>
-          ) : null}
-
-          {/* A flight or a train starts at an airport or a station. When the city
-              has none set up, the person picks one and it becomes a leg of its own. */}
-          {md && (md.id === 'flight' || md.id === 'train') && draft.scope !== 'local' ? (
-            <div className="hubs">
-              {(['A', 'B'] as const).map(side => {
-                const city = side === 'A' ? a : b
-                const hub = place(side === 'A' ? s.xfer.hubA ?? '' : s.xfer.hubB ?? '')
-                const word = md.id === 'flight' ? 'airport' : 'station'
-                return (
-                  <button key={side} type="button" className={`locb hubb ${hub ? '' : 'need'}`} onClick={() => onPick({ kind: 'hub', index: i, side, title: `${word === 'airport' ? 'Airport' : 'Railway station'} in ${city?.city || city?.s || 'this city'}`, hub: word })}>
-                    <span className="ico-b sm"><TeIcon name={md.id === 'flight' ? 'plane' : 'train'} size="sm" /></span>
-                    <span className="grow">
-                      <small>The {word} you {side === 'A' ? 'leave from' : 'arrive at'}{city ? `, ${city.city || city.s}` : ''}</small>
-                      {hub
-                        ? <><b>{hub.s}</b><span className="ad">Chosen by you. Tap to change</span></>
-                        : <><b className="ph0">Choose the {word}</b><span className="ad">No {word} is set up for {city?.city || city?.s || 'this city'}</span></>}
-                    </span>
-                    <TeIcon name="rightc" size="sm" />
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
-
-          <div className="rs-note">
-            <TeIcon name={checkIn ? 'target' : 'route'} size="sm" />
-            {md ? ` ${PAY_WORDS[md.basis] ?? ''}. ${checkIn ? 'Check-in by GPS at both ends. No stops on the way.' : `GPS records the route.${md.stops ? ' Stops can be added on the way.' : ' Stops are the operator’s.'}`}` : ''}
-          </div>
-          {tried && err ? <div className="ferr"><TeIcon name="warn" size="sm" />{err.t}</div> : null}
-
-          <div className="rfoot">
-            <span className="grow" />
-            <button type="button" className="btn sm pri" onClick={onToggle}><TeIcon name="check" size="sm" />Done</button>
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

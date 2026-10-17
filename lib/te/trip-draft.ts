@@ -57,8 +57,22 @@ export interface DraftSeg {
 
 export interface DraftPerson { id: string; name: string; autoName?: boolean }
 
+/** The planner's five steps. Was three until the route, how you travel, and
+ *  where you stay were pulled apart: one long "Route" step asked for places,
+ *  dates, a mode per leg, first and last mile and who books it, all at once,
+ *  and the stay was a block buried in Review where nobody expected a question.
+ *
+ *    1 Trip      what it is, why, who is going
+ *    2 Route     one way or round trip, where from, where to, when
+ *    3 Commute   how you travel each leg  (offered per trip kind)
+ *    4 Stay      a hotel, and the food budget
+ *    5 Review    the whole plan, the map, the money, then send
+ */
+export type PlanStep = 1 | 2 | 3 | 4 | 5
+export const LAST_STEP: PlanStep = 5
+
 export interface PlannerDraft {
-  step: 1 | 2 | 3
+  step: PlanStep
   origin: TripOrigin
   scope: TripScope
   /** Derived by syncDraft from the route; never set by hand. */
@@ -201,7 +215,7 @@ export function fromTrip(trip: {
   return syncDraft({
     // Answering a question starts where the answer is asked for; an ordinary
     // edit starts at the beginning, because anything may be what you came for.
-    step: sentBack ? 3 : 1,
+    step: sentBack ? LAST_STEP : 1,
     origin: trip.origin,
     scope: trip.scope,
     pattern: 'round',
@@ -402,12 +416,21 @@ export function pointLabel(d: PlannerDraft, i: number): { label: string; isStop:
 
 /** Which step owns a refusal, so the planner can send the person to it.
  *  The keys are the server's (TripIssue.k), not the screen's. */
-export function stepOfIssue(k: string | undefined): 1 | 2 | 3 {
-  if (/^(scope|purpose|name|pax)$/.test(k ?? '')) return 1
-  if (/^(p|m|d)\d+$|^pr$/.test(k ?? '')) return 2
-  // Everything else, a refusal with no key included, belongs to the last step —
-  // where the summary lists it, since it has no field to sit under.
-  return 3
+export function stepOfIssue(k: string | undefined): PlanStep {
+  const key = k ?? ''
+  if (/^(scope|purpose|name|pax)$/.test(key)) return 1
+  // Where you go and when: the points and their dates, and the shape of the
+  // route. `pr` is the pattern — one way, round trip or multi-city.
+  if (/^(p|d)\d+$|^pr$/.test(key)) return 2
+  // How you travel: one segment per gap between two points. `m` is the mode,
+  // `s` its sub-questions (the vehicle, the ride to the airport).
+  if (/^(m|s)\d+$/.test(key)) return 3
+  // Nothing routes to step 4 from the server: whether three hotels were named
+  // warns, it does not block, so it has no issue key. See trip-stay.ts.
+  //
+  // Everything else — and any refusal with no key at all — belongs to the last
+  // step, where the summary lists it, since it has no field to sit under.
+  return LAST_STEP
 }
 
 /** The message to show under one field. Nothing is shown before the person has
@@ -418,7 +441,7 @@ export function errorFor(issues: TripIssue[], k: string, tried: boolean | undefi
   return issues.find(i => i.block && i.k === k)?.t ?? ''
 }
 
-export function blockingOn(issues: TripIssue[], step: 1 | 2 | 3): TripIssue[] {
+export function blockingOn(issues: TripIssue[], step: PlanStep): TripIssue[] {
   return issues.filter(i => i.block && stepOfIssue(i.k) === step)
 }
 

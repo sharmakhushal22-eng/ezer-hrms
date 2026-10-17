@@ -7,15 +7,14 @@
 // whether approval is needed at all come back from te.tripPreview. This file
 // chooses the words and the order.
 import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
-import { blockingOn, errorFor, type PlannerDraft } from '@/lib/te/trip-draft'
-import { day, rs } from '@/lib/te/format'
+import { blockingOn, errorFor, type PlanStep, type PlannerDraft } from '@/lib/te/trip-draft'
+import { day, plural, rs } from '@/lib/te/format'
 import type { MapPlace } from '@/lib/te/trip-map'
-import { nightsBetween } from '@/lib/te/trip-stay'
+import { nightsBetween, STAY_OPTIONS_WANTED, usableStayOptions } from '@/lib/te/trip-stay'
 import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 import TeTripMap from './TeTripMap'
 import TeMapLinks from './TeMapLinks'
-import TePlanStay from './TePlanStay'
 
 const MODE_ICON: Record<string, string> = {
   own: 'car', company: 'car', cab: 'car', auto: 'car', rental: 'car',
@@ -31,7 +30,7 @@ const NO_GPS = ['Forgot to start the travel', 'Phone battery was low', 'No netwo
 /** Why there was no approval before a longer trip. */
 const NO_APPROVAL = ['Urgent client call', 'Verbal approval by my manager', 'Same-day travel', 'Other']
 
-const STEP_NAME = ['Trip', 'Route', 'Review']
+const STEP_NAME = ['Trip', 'Route', 'Commute', 'Stay', 'Review']
 
 export default function TePlanReview({ snap, draft, issues, preview, edit, onGoStep }: {
   snap: Snapshot
@@ -39,7 +38,7 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
   issues: TripIssue[]
   preview: TripPreview | null
   edit: (patch: Partial<PlannerDraft>) => void
-  onGoStep: (n: 1 | 2 | 3) => void
+  onGoStep: (n: PlanStep) => void
 }) {
   const local = draft.scope === 'local'
   const planning = draft.origin !== 'POST_FACTO'
@@ -50,6 +49,8 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
   const places = new Map<string, MapPlace>(
     snap.masters.places.map(p => [p.id, { id: p.id, s: p.s, lat: p.lat, lng: p.lng }]),
   )
+  const usable = usableStayOptions(draft.stayOptions)
+  const nights = nightsBetween(preview?.start ?? null, preview?.end ?? null)
   const blocking = issues.filter(i => i.block)
   const warnings = issues.filter(i => !i.block)
 
@@ -149,17 +150,43 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
           </>
         ) : null}
 
-        {/* ── the stay and the food budget ──
-            Asked on every kind of trip, local included. A local trip used to
-            be defined as one day out with nowhere to sleep; a late finish near
-            the client says otherwise, and the refusal has been lifted. */}
-        {planning ? (
-          <TePlanStay
-            draft={draft}
-            foodBudget={preview?.estimate.meals ?? 0}
-            nights={nightsBetween(preview?.start ?? null, preview?.end ?? null)}
-            edit={edit}
-          />
+        {/* THE STAY IS ASKED FOR ON STEP 4 NOW, not here. It used to be a
+            block in the middle of Review, which is the one screen somebody
+            arrives at expecting to read rather than to answer — so the hotel
+            question was the easiest thing in the planner to miss. What is
+            left here is what was decided, read-only, with a way back. */}
+        {planning && draft.stayWanted !== undefined ? (
+          <div className="card flat tint">
+            <div className="ch">
+              <h3>Stay and food</h3>
+              <button type="button" className="link small" onClick={() => onGoStep(4)}>Change</button>
+            </div>
+            <dl className="kv">
+              <dt>Hotel</dt>
+              <dd>
+                {draft.stayWanted
+                  ? `${usable.length} of ${STAY_OPTIONS_WANTED} hotels named${nights ? `, ${plural(nights, 'night')}` : ''}`
+                  : 'Not needed on this trip'}
+              </dd>
+              {draft.stayWanted ? (
+                <>
+                  <dt>Booked by</dt>
+                  <dd>{draft.stayBy === 'desk' ? 'The Travel Desk, company pays' : 'Me, I claim it later'}</dd>
+                </>
+              ) : null}
+              <dt>Food</dt>
+              <dd>
+                {draft.foodWanted
+                  ? `Yes — budget ${rs(preview?.estimate.meals ?? 0)}, claimed against bills on the trip`
+                  : 'Not needed on this trip'}
+              </dd>
+            </dl>
+            {draft.stayWanted && usable.length < STAY_OPTIONS_WANTED ? (
+              <p className="small muted">
+                The Travel Desk picks from the hotels you named. Fewer than {STAY_OPTIONS_WANTED} gives them less to choose from.
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {planning ? (
@@ -244,7 +271,7 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
               <TeIcon name="claims" />
               <div className="tx">
                 <b>{draft.tried ? `${blocking.length} things to fix` : 'Still to fill'}</b>
-                {([1, 2, 3] as const).map(n => {
+                {([1, 2, 3, 4] as const).map(n => {
                   const on = blockingOn(issues, n)
                   if (!on.length) return null
                   return (
