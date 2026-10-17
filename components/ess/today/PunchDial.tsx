@@ -78,7 +78,7 @@ export default function PunchDial({ data, prefs, onToast, onPunched, onState, co
       const j = await res.json();
       // A refusal (already in / nothing to close) carries the real state: adopt it,
       // so the right button is live without a reload.
-      if (j.state) onState(j.state as PunchStateLite);
+      if (j.state) { onState(j.state as PunchStateLite); window.dispatchEvent(new CustomEvent('ezer:punch', { detail: j.state })); }
       if (!res.ok) throw new Error(j.error || 'Punch failed');
       const at = new Date(j.at);
       if (kind === 'in') { setPulseKey(k => k + 1); confetti(); onToast(`Punched in at ${fmtClock(at, prefs.time_format)}`); }
