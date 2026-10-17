@@ -675,6 +675,24 @@
 .te .fsep{flex:1;height:2px;min-width:12px;background:var(--ez-line);border-radius:2px}
 .te .fs:disabled{opacity:1}
 .te .fcrumb{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+/* ── LONG UNBROKEN STRINGS ───────────────────────────────────────────────────
+   A filename, a pasted hotel URL, a GSTIN or a registration number has no
+   spaces to break at, so it pushes its container wider than the screen. .grow
+   already carries min-width:0, which lets the BOX shrink; these let the TEXT
+   inside it, which is the half that was missing.
+
+   Targeted rather than a blanket rule on .te: break-anywhere on everything
+   would also break the tabular money columns, where a number splitting across
+   two lines is worse than a wide one. */
+.te .drop .grow b{overflow-wrap:anywhere}
+.te .kv dt,.te .kv dd{overflow-wrap:anywhere;min-width:0}
+/* The RC photo label carries the file's own name, which is often one long
+   token, in an inline-flex box sized to its content with nothing stopping it. */
+.te .vphoto{max-width:100%;overflow-wrap:anywhere;text-align:left}
+/* The decision column on an approval row: 170px is a floor, and on a phone a
+   floor wider than the gap it sits in is an overflow. */
+@media (max-width:420px){.te .dec{min-width:0}}
+
 .te .fpath{font-size:12.5px;color:var(--ez-ink-soft);display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .te .fstep{font-size:11px;font-weight:700;color:var(--ez-brand);background:var(--ez-brand-tint);border-radius:99px;padding:2px 8px}
 .te .hk{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--te-k);color:var(--ez-surface);margin-right:8px;vertical-align:-6px}
