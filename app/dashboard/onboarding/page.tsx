@@ -9,7 +9,8 @@ import { canSeeScreen } from '@/lib/rms/resolve'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 // send-magic-link / resend-link are guarded server-side now, so the session goes along.
 import { authHeaders } from '@/lib/auth-headers'
-import ActivationWizard from '@/components/onboarding/ActivationWizard'
+import RoleAssignmentModal from '@/components/onboarding/RoleAssignmentModal'
+import GenerateCodeModal from '@/components/onboarding/GenerateCodeModal'
 import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -22,6 +23,9 @@ type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
 
 interface Candidate {
   approvals?: { team: string; status: string }[]
+  /** The HR Manager's Role assignment (after IT, Admin and Payroll approve): role, permissions snapshot, L1 / L2 / HOD. Required before Generate code. */
+  role_assignment?: { role_id: string; role_code: string; role_name: string; permissions?: { module: string; access_level: string }[]; l1_name?: string | null; l2_name?: string | null; hod_name?: string | null; by_name?: string | null; at?: string } | null
+  l1_manager_id?: string | null; l2_manager_id?: string | null
   /** The HR Manager's last review (Review form on the card): ACCEPTED / RETURNED / RESUBMITTED with the rejected documents and flagged details. */
   hr_review?: { outcome: string; by_name?: string | null; at?: string; documents?: { doc_code: string; label: string; reason: string }[]; details?: { field: string; reason: string }[]; note?: string | null } | null
   id: string; full_name: string; designation: string; department: string
@@ -45,8 +49,8 @@ const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
   INVITED:          { label:'Link sent',        bg:TK.warningTint, color:TK.warning },
   IN_PROGRESS:      { label:'In progress',      bg: TK.brandTint, color: TK.brand },
   SUBMITTED:        { label:'Submitted',         bg:TK.brandTint, color:P        },
-  HR_REVIEW:        { label:'HR accepted',       bg:TK.infoTint, color:TK.info },
-  APPROVED:         { label:'Approved',          bg:TK.positiveTint, color:TK.positive },
+  HR_REVIEW:        { label:'HR accepted · with teams', bg:TK.infoTint, color:TK.info },
+  APPROVED:         { label:'Teams approved',    bg:TK.positiveTint, color:TK.positive },
   EMPLOYEE_CREATED: { label:'Employee created',  bg: TK.sunken, color: TK.positive },
 }
 const TEAM_SHORT: Record<string,string> = { IT:'IT', ADMIN:'Admin', PAYROLL:'Payroll', HR_MANAGER:'HR Mgr' }
@@ -127,6 +131,7 @@ export default function OnboardingDashboard() {
   const [editMobile,   setEditMobile] = useState('')
   const [resendingId,  setResendingId] = useState('')
   const [reviewing,    setReviewing]  = useState<{ id: string; readOnly: boolean } | null>(null)
+  const [assigning,    setAssigning]  = useState<Candidate|null>(null)
   const [selIds,       setSelIds]     = useState<Set<string>>(new Set())
   // New link form
   const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
@@ -501,11 +506,14 @@ export default function OnboardingDashboard() {
     if (c.status==='SUBMITTED') {
       actions.push({priority:'HIGH',label:'Form submitted — review the documents and details (Review form)',candidate:c.full_name,action:'review',cid:c.id})
     }
-    if (c.status==='HR_REVIEW' || c.status==='APPROVED') {
-      const waiting = (c.approvals||[]).filter(a=>a.status!=='APPROVED').map(a=>TEAM_SHORT[a.team]||a.team)
-      actions.push(waiting.length
-        ? {priority:'HIGH',label:`Accepted by HR — awaiting ${waiting.join(', ')} (ESS → Tasks & Approvals), then generate the code`,candidate:c.full_name,action:'approvals',cid:c.id}
-        : {priority:'HIGH',label:'All four teams approved — generate employee code',candidate:c.full_name,action:'generate',cid:c.id})
+    if (c.status==='HR_REVIEW') {
+      const waiting = (c.approvals||[]).filter(a=>a.status!=='APPROVED'&&a.team!=='HR_MANAGER').map(a=>TEAM_SHORT[a.team]||a.team)
+      actions.push({priority:'MEDIUM',label:`Accepted by HR — with ${waiting.join(', ') || 'the teams'} for their checklist (ESS → HRIS → Tasks & Approvals)`,candidate:c.full_name,action:'approvals',cid:c.id})
+    }
+    if (c.status==='APPROVED') {
+      actions.push(c.role_assignment
+        ? {priority:'HIGH',label:`Role assigned (${c.role_assignment.role_name}) — generate the employee code`,candidate:c.full_name,action:'generate',cid:c.id}
+        : {priority:'HIGH',label:'IT, Admin and Payroll approved — assign the role (L1, L2, ESS role), then generate the code',candidate:c.full_name,action:'assign',cid:c.id})
     }
     if (c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED') {
       const n = (c.hr_review.documents||[]).length, m = (c.hr_review.details||[]).length
@@ -626,8 +634,13 @@ export default function OnboardingDashboard() {
                         Review form
                       </button>
                     )}
-                    {(c.status==='HR_REVIEW'||c.status==='APPROVED') && (
-                      <button onClick={()=>{openCodeModal(c)}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontFamily:'inherit'}}>
+                    {c.status==='APPROVED' && !c.role_assignment && (
+                      <button onClick={()=>setAssigning(c)} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontFamily:'inherit'}}>
+                        Role assignment
+                      </button>
+                    )}
+                    {c.status==='APPROVED' && c.role_assignment && (
+                      <button onClick={()=>{openCodeModal(c)}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontFamily:'inherit'}}>
                         Generate code
                       </button>
                     )}
@@ -758,8 +771,8 @@ export default function OnboardingDashboard() {
                           {c.policy_ack?'Policy✓':'Policy'}
                         </span>
                       </div>
-                      {(c.status==='SUBMITTED'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
-                        <div style={{display:'flex',gap:3,marginTop:3}} title="Team approvals — IT, Admin, Payroll, HR Manager (from ESS → Tasks & Approvals)">
+                      {(c.status==='SUBMITTED'||c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
+                        <div style={{display:'flex',gap:3,marginTop:3}} title="HR Manager accepts the form; then IT, Admin and Payroll confirm their checklists (ESS → HRIS → Tasks & Approvals)">
                           {(c.approvals||[]).map(a=>(
                             <span key={a.team} style={{fontSize:9,padding:'1px 5px',borderRadius:99,fontWeight:600,background:a.status==='APPROVED'?TK.positiveTint:a.status==='RETURNED'?TK.criticalTint:TK.warningTint,color:a.status==='APPROVED'?TK.positive:a.status==='RETURNED'?TK.critical:TK.warning}}>
                               {TEAM_SHORT[a.team]} {a.status==='APPROVED'?'✓':a.status==='RETURNED'?'↩':'○'}
@@ -788,10 +801,18 @@ export default function OnboardingDashboard() {
                             <i className="ti ti-checklist" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Review form
                           </button>
                         )}
-                        {(c.status==='HR_REVIEW'||c.status==='APPROVED') && (
-                          <button onClick={()=>{openCodeModal(c)}} title={(c.approvals||[]).some(a=>a.status!=='APPROVED') ? `Waiting on ${(c.approvals||[]).filter(a=>a.status!=='APPROVED').map(a=>TEAM_SHORT[a.team]).join(', ')} — you can still generate` : 'All four teams approved'} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                        {c.status==='APPROVED' && !c.role_assignment && (
+                          <button onClick={()=>setAssigning(c)} title="IT, Admin and Payroll have approved — assign the L1, L2 and the ESS role" style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                            <i className="ti ti-user-cog" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Role assignment
+                          </button>
+                        )}
+                        {c.status==='APPROVED' && c.role_assignment && (
+                          <button onClick={()=>{openCodeModal(c)}} title={`Role ${c.role_assignment.role_name} · L1 ${c.role_assignment.l1_name||'—'}`} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
                             <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Generate code
                           </button>
+                        )}
+                        {c.status==='APPROVED' && c.role_assignment && (
+                          <button onClick={()=>setAssigning(c)} title="Change the role assignment" style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>Role ✓ {c.role_assignment.role_name}</button>
                         )}
                         {(c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
                           <button onClick={()=>setReviewing({ id: c.id, readOnly: true })} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>View form</button>
@@ -875,6 +896,11 @@ export default function OnboardingDashboard() {
                         {cand?.date_of_joining && <span style={{marginLeft:8}}>· DOJ: {fmt(cand.date_of_joining)}</span>}
                       </div>
                     </div>
+                    {a.action==='assign' && cand && (
+                      <button onClick={()=>setAssigning(cand)} style={{padding:'5px 12px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                        <i className="ti ti-user-cog" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Role assignment
+                      </button>
+                    )}
                     {a.action==='generate' && cand && (
                       <button onClick={()=>{openCodeModal(cand)}} style={{padding:'5px 12px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
                         <i className="ti ti-bolt" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Generate code
@@ -934,7 +960,13 @@ export default function OnboardingDashboard() {
                   </div>
                   <div style={{display:'flex',gap:6}}>
                     {c.status==='SUBMITTED' && (
-                      <button onClick={()=>{openCodeModal(c)}} style={{padding:'5px 10px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontFamily:'inherit'}}>Generate code</button>
+                      <button onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={{padding:'5px 10px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontFamily:'inherit'}}>Review form</button>
+                    )}
+                    {c.status==='APPROVED' && !c.role_assignment && (
+                      <button onClick={()=>setAssigning(c)} style={{padding:'5px 10px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontFamily:'inherit'}}>Role assignment</button>
+                    )}
+                    {c.status==='APPROVED' && c.role_assignment && (
+                      <button onClick={()=>{openCodeModal(c)}} style={{padding:'5px 10px',borderRadius:'10px',border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontSize:10,fontFamily:'inherit'}}>Generate code</button>
                     )}
                   </div>
                 </div>
@@ -1233,15 +1265,22 @@ export default function OnboardingDashboard() {
         </div>
       )}
 
-      {/* ── HR ACTIVATION WIZARD ─────────────────────────────── */}
+      {/* ── GENERATE CODE (after the three heads approve and the role is assigned) ── */}
       {codeModal && (
-        <ActivationWizard
+        <GenerateCodeModal
           candidate={codeModal}
           genCode={genCode} setGenCode={setGenCode}
           codeType={codeType} codeLoading={codeLoading} saving={saving}
           onGenerate={generateCode}
           onClose={() => setCodeModal(null)}
         />
+      )}
+
+      {/* ── ROLE ASSIGNMENT (L1, L2, HOD and the ESS role) ── */}
+      {assigning && (
+        <RoleAssignmentModal onboardingId={assigning.id} name={assigning.full_name}
+          onClose={()=>setAssigning(null)}
+          onDone={(m,t)=>{ showToast(m,t); load() }} />
       )}
 
       {/* ── HR MANAGER REVIEW (Review form / View form on the card) ── */}

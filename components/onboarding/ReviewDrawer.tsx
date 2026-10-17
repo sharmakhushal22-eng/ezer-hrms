@@ -253,7 +253,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error || 'Failed')
-      if (outcome === 'ACCEPTED') onDone(d.all_approved ? (d.employee_code ? `Accepted. All four teams have approved — employee code ${d.employee_code} generated.` : `Accepted, but the employee could not be created: ${d.create_error}`) : 'Form accepted. Generate the employee code once IT, Admin and Payroll have approved too.', d.create_error ? 'err' : 'ok')
+      if (outcome === 'ACCEPTED') onDone('Form accepted. IT, Admin and Payroll have been asked to confirm their checklists and approve; after that, assign the role and generate the code from the card.', 'ok')
       else onDone(`Sent to ${item.full_name}${d.mailed ? ' — they have been emailed the corrections with the link' : ' (no email on file — use Resend link or share it)'}.`, 'ok')
       onClose()
     } catch (e: any) { onDone(e.message, 'err') } finally { setBusy(false) }

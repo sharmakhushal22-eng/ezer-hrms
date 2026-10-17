@@ -3,14 +3,14 @@
 // The one place an onboarding becomes an employee: the code is reserved atomically
 // (get_next_employee_code, migration 031), the employees row is written
 // (onboardingToEmployee), the enrolment/notification/audit rows follow, and the joiner is
-// mailed their acknowledgement pack. Called from two places:
-//   - lib/onboarding/approvals.ts, automatically, when the fourth team approves
-//   - app/api/onboarding/generate-code (HR's manual path, which may type a custom code)
+// mailed their acknowledgement pack. Called from app/api/onboarding/generate-code — the HR
+// Manager's step after the three heads have approved and the role is assigned.
 //
 // The employee row IS the outcome. If it cannot be written, the onboarding goes back to
 // HR review (the reserved number is never reused) and the caller gets the reason.
 
 import { onboardingToEmployee } from './to-employee'
+import { applyRoleAssignment } from './role-assignment'
 import { buildEmpCode, isValidEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import { sendAckEmail } from './ack-email'
 import { renderEmail, onboardingScope } from '@/lib/config/store'
@@ -19,6 +19,8 @@ import { sendMail } from '@/lib/mail/send'
 export interface CreateResult {
   ok: boolean; employee_code?: string; employee_id?: string | null; error?: string; status?: number
   employee_synced?: boolean; docs_emailed?: boolean; dept_matched?: boolean | null; sync_error?: string | null
+  /** What of the role assignment landed on the new employee (relationships, ESS role) and what did not. */
+  role_applied?: string[]; role_warnings?: string[]
 }
 
 export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId: string; customCode?: string | null; by?: string | null; notes?: string | null; actorType?: 'HR' | 'SYSTEM' }): Promise<CreateResult> {
@@ -71,6 +73,12 @@ export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId:
     return { ok: false, employee_code: finalCode, employee_synced: false, sync_error: why, status: 500, error: `Employee record could not be created: ${why}. The onboarding is back in HR review — fix the data and generate the code again.` }
   }
 
+  // The HR Manager's role assignment becomes the reporting line and the ESS role (best effort).
+  let roleApplied: { applied: string[]; warnings: string[] } = { applied: [], warnings: [] }
+  if (sync.employee_id) {
+    try { roleApplied = await applyRoleAssignment(supa, o.onboardingId, sync.employee_id, o.by || null) } catch (e: any) { roleApplied.warnings.push(e?.message || 'role assignment failed') }
+    if (roleApplied.warnings.length) console.error('role assignment warnings', o.onboardingId, roleApplied.warnings)
+  }
   await supa.from('onboarding_statutory_enrollment').update({ enrolled_at: new Date().toISOString(), enrolled_by: o.by || null }).eq('onboarding_id', o.onboardingId)
   // "Welcome — your Employee ID" (Configuration → Onboarding). Sent for real, and the log
   // records what happened rather than an unconditional SENT.
@@ -89,10 +97,10 @@ export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId:
   } catch (e) { console.error('employee-id welcome mail failed', e) }
   await supa.from('onboarding_audit_log').insert({
     onboarding_id: o.onboardingId, action: 'EMPLOYEE_CODE_GENERATED', actor_type: o.actorType || 'HR', actor_id: o.by || null,
-    details: { employee_code: finalCode, employment_type: employmentType, company_id: cand.company_id, employee_synced: true, sync_error: null },
+    details: { employee_code: finalCode, employment_type: employmentType, company_id: cand.company_id, employee_synced: true, sync_error: null, role_applied: roleApplied.applied, role_warnings: roleApplied.warnings },
   })
   let docsEmailed = false
   try { const r = await sendAckEmail(supa, o.onboardingId, finalCode); docsEmailed = !!r.ok } catch { /* never block code gen */ }
 
-  return { ok: true, employee_code: finalCode, employee_id: sync.employee_id || null, employee_synced: true, docs_emailed: docsEmailed, dept_matched: sync.dept_matched ?? null, sync_error: null }
+  return { ok: true, employee_code: finalCode, employee_id: sync.employee_id || null, employee_synced: true, docs_emailed: docsEmailed, dept_matched: sync.dept_matched ?? null, sync_error: null, role_applied: roleApplied.applied, role_warnings: roleApplied.warnings }
 }

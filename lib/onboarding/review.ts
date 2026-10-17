@@ -2,9 +2,9 @@
 // document labels are pure and shared with the tests.
 //
 // The HR Manager's review of a submitted onboarding form, from the onboarding card:
-//   Review form → every document is accepted or rejected with a reason, any detail the
-//   candidate filled in can be flagged with a reason, then the form is ACCEPTED (which is the
-//   HR Manager's team approval — lib/onboarding/approvals.ts) or RETURNED to the candidate.
+//   Review form → the reviewer marks what is wrong (documents, details) with one remark, then the
+//   form is ACCEPTED (the HR Manager's approval — lib/onboarding/approvals.ts — which opens it to
+//   the IT, Admin and Payroll heads) or RETURNED to the candidate.
 //   A return reopens the link, mails the candidate the list of what to fix, and the card shows
 //   Resend link until they resubmit. Rejected documents must be replaced before resubmitting.
 
@@ -50,7 +50,7 @@ export interface ReviewInput {
 /** Record the HR Manager's review and act on it: ACCEPTED is the HR Manager's team approval
  *  (the fourth one generates the code); RETURNED reopens the link and mails the candidate the
  *  list of corrections. */
-export async function applyReview(sb: SupabaseClient, r: ReviewInput): Promise<{ ok: boolean; error?: string; status?: number; all_approved?: boolean; employee_code?: string | null; create_error?: string | null; corrections?: Corrections; mailed?: boolean }> {
+export async function applyReview(sb: SupabaseClient, r: ReviewInput): Promise<{ ok: boolean; error?: string; status?: number; all_approved?: boolean; corrections?: Corrections; mailed?: boolean }> {
   const { data: oc } = await sb.from('onboarding_candidates').select('id, status, full_name, email, company_id').eq('id', r.onboardingId).maybeSingle()
   if (!oc) return { ok: false, error: 'Onboarding record not found', status: 404 }
   if (oc.status === 'EMPLOYEE_CREATED') return { ok: false, error: 'The employee code is already generated.', status: 409 }
