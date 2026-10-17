@@ -29,12 +29,26 @@ export type PickTarget =
 
 const SRC_WORD: Record<string, string> = { gps: 'GPS', address: 'Typed address', pin: 'Pin on map', search: 'Map search' }
 
-export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
+export default function TePlacePicker({ snap, target, onCancel, onChosen, onPlaceAdded }: {
   snap: Snapshot
   target: PickTarget
   onCancel: () => void
   /** The place id, and the type it carries when it is a company place. */
   onChosen: (placeId: Uuid, pt?: string) => void
+  /**
+   * A place that did not exist until a moment ago was just created.
+   *
+   * WHY THE HOST HAS TO BE TOLD. Every screen names a point by looking its id
+   * up in snap.masters.places. That snapshot was fetched before this place
+   * existed, so the lookup misses and the route line renders "—": the place
+   * was saved, the point does carry its id, and it still looks as though
+   * nothing happened. This is what made "Use my location" appear not to be
+   * used as the start, the end or a stop.
+   *
+   * The host refetches the snapshot WITHOUT closing itself — the half-built
+   * trip lives in its state — exactly as it already does for a new vehicle.
+   */
+  onPlaceAdded?: () => void
 }) {
   const intl = target.kind === 'point' && !!target.intl
   const [q, setQ] = useState(target.kind === 'hub' ? (target.hub === 'airport' ? 'airport' : 'station') : '')
@@ -43,6 +57,11 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null)
+  /** A refusal, shown BESIDE THE BUTTON that caused it. `note` is drawn at the
+   *  top of the sheet, under "Use my current location" — and the save button
+   *  is in the sticky footer, so a person at the address form pressed it and
+   *  watched nothing happen while the reason sat off-screen above them. */
+  const [fault, setFault] = useState('')
   // The panel opens over the employee's own office, which is the nearest
   // thing to a useful starting view when there is no map behind it.
   const [view, setView] = useState<PinView>(() => {
@@ -56,6 +75,7 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
   /** Fill the address from a position, without saving. Also used when the pin
    *  is dragged, so the address follows the pin rather than going stale. */
   const fillFrom = useCallback((lat: number, lng: number, acc?: number) => {
+    setFault('')
     setPin({ lat, lng })
     setView(v => ({ ...v, lat, lng }))
     setTyping(true)
@@ -135,19 +155,33 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
    *  src 'address'. */
   const fromMap = addr.src === 'gps' || addr.src === 'search'
 
+  /** What is still missing, or '' when the place can be saved.
+   *
+   *  A PLACE THE MAP FOUND NEEDS ONLY THE PIN. This used to demand the
+   *  building, the city, the area and a six-digit PIN for every place —
+   *  including one just pinned by GPS, where the position IS the answer and
+   *  the postal parts only exist to locate it. The server has never asked for
+   *  them on a GPS place: te-service's src === 'gps' branch requires lat and
+   *  lng and nothing else, and fills the name from the reverse lookup.
+   *
+   *  So the form was stricter than the rules, and the result was the bug this
+   *  fixes: "Use my location" found the place, and pressing "Use this address"
+   *  silently refused because Google had not returned a locality. */
+  const missingFor = (): string => {
+    if (!pin) return 'Tap the exact spot on the map before you use this address.'
+    if (intl && !addr.country) return 'Choose the country.'
+    if (fromMap) return ''
+    if (!addr.line?.trim()) return 'Enter the building and street.'
+    if (!addr.area?.trim()) return 'Enter the area or locality.'
+    if (!addr.city?.trim()) return 'Enter the city.'
+    if (!intl && !/^\d{6}$/.test(addr.pin ?? '')) return 'Enter the 6-digit PIN code.'
+    return ''
+  }
+
   async function saveTyped() {
-    // Said in the order a person fills the form, so the first thing missing is
-    // the first thing mentioned.
-    const missing = intl && !addr.country ? 'Choose the country.'
-      : !addr.line?.trim() ? 'Enter the building and street.'
-        : (!fromMap && !addr.area?.trim()) ? 'Enter the area or locality.'
-          : !addr.city?.trim() ? 'Enter the city.'
-            : (!fromMap && !intl && !/^\d{6}$/.test(addr.pin ?? '')) ? 'Enter the 6-digit PIN code.'
-              // Without a pin the place reaches the server with no position and
-              // nothing can be measured to it.
-              : !pin ? 'Tap the exact spot on the map before you use this address.'
-                : ''
-    if (missing) { setNote(missing); return }
+    const missing = missingFor()
+    if (missing) { setFault(missing); return }
+    setFault('')
     setBusy(true); setNote('')
     try {
       // The source is the truth about where this came from, and the server
@@ -160,9 +194,12 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
         lat: pin!.lat,
         lng: pin!.lng,
       })
+      // The order matters: make the snapshot stale-check run first, so by the
+      // time the route line re-renders with this id it can find the place.
+      if (!r.matched) onPlaceAdded?.()
       onChosen(r.place_id)
     } catch (e) {
-      setNote(errorText(e)); setBusy(false)
+      setFault(errorText(e)); setBusy(false)
     }
   }
 
@@ -184,9 +221,13 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
         <>
           <button type="button" className="btn" onClick={onCancel}>Back</button>
           {typing ? (
-            <button type="button" className="btn pri" disabled={busy} onClick={saveTyped}>
-              <TeIcon name="pin" size="sm" />{busy ? 'Saving…' : 'Use this address'}
-            </button>
+            <>
+              {fault ? <span className="ferr"><TeIcon name="warn" size="sm" />{fault}</span> : null}
+              <button type="button" className="btn pri" disabled={busy} onClick={saveTyped}>
+                <TeIcon name="pin" size="sm" />
+                {busy ? 'Saving…' : fromMap ? 'Use this place' : 'Use this address'}
+              </button>
+            </>
           ) : null}
         </>
       }

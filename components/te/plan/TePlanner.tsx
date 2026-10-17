@@ -264,6 +264,10 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
         snap={snap}
         target={picking}
         onCancel={() => setPicking(null)}
+        // A place created in the picker is not in the snapshot this planner was
+        // handed, so the route line would name it "—". Same callback the new
+        // vehicle uses: refetch, do not close.
+        onPlaceAdded={onVehicleAdded}
         onChosen={(placeId, pt) => {
           const t = picking
           setPicking(null)

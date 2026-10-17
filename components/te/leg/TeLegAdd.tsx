@@ -16,11 +16,15 @@ import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
 import TePlacePicker, { type PickTarget } from '../plan/TePlacePicker'
 
-export default function TeLegAdd({ snap, detail, onClose, onAdded }: {
+export default function TeLegAdd({ snap, detail, onClose, onAdded, onPlaceAdded }: {
   snap: Snapshot
   detail: TeTripDetail
   onClose: () => void
   onAdded: (legId: Uuid, message: string) => void
+  /** A place was created inside the picker, so the snapshot this screen is
+   *  holding does not know it yet and would name the point "—". The host
+   *  refetches WITHOUT closing: the half-filled form lives in here. */
+  onPlaceAdded?: () => void
 }) {
   const trip = detail.trip
   const [from, setFrom] = useState<string>('')
@@ -56,6 +60,7 @@ export default function TeLegAdd({ snap, detail, onClose, onAdded }: {
         snap={snap}
         target={{ kind: 'point', index: 0, title: side === 'from' ? 'Where the journey starts' : 'Where the journey goes' } as PickTarget}
         onCancel={() => setPicking(null)}
+        onPlaceAdded={onPlaceAdded}
         onChosen={id => { setPicking(null); if (side === 'from') setFrom(id); else setTo(id); setError('') }}
       />
     )

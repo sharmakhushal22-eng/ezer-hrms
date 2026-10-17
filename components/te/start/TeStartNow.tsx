@@ -23,11 +23,15 @@ import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
 import TePlacePicker, { type PickTarget } from '../plan/TePlacePicker'
 
-export default function TeStartNow({ snap, onClose, onStarted }: {
+export default function TeStartNow({ snap, onClose, onStarted, onPlaceAdded }: {
   snap: Snapshot
   onClose: () => void
   /** The trip exists and its first leg is running. */
   onStarted: (tripId: Uuid, legId: Uuid, message: string) => void
+  /** A place was created inside the picker, so the snapshot this screen is
+   *  holding does not know it yet and would name the point "—". The host
+   *  refetches WITHOUT closing: the half-filled form lives in here. */
+  onPlaceAdded?: () => void
 }) {
   const ctx = useMemo<DraftContext>(() => ({
     today: snap.today,
@@ -122,6 +126,7 @@ export default function TeStartNow({ snap, onClose, onStarted }: {
         snap={snap}
         target={picking}
         onCancel={() => setPicking(null)}
+        onPlaceAdded={onPlaceAdded}
         onChosen={(placeId, pt) => {
           const at = picking
           setPicking(null)

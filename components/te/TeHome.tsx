@@ -624,6 +624,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           snap={snap}
           detail={sheet.detail}
           onClose={() => setSheet(null)}
+          onPlaceAdded={reload}
           onAdded={(_legId, message) => done(message)}
         />
       ) : null}
@@ -631,6 +632,7 @@ export default function TeHome({ initialClaimId, onExit }: {
         <TeStartNow
           snap={snap}
           onClose={() => setSheet(null)}
+          onPlaceAdded={reload}
           onStarted={(tripId, legId, message) => {
             setSheet(null); setToast(message); reload()
             const leg = snap.journeys.find(j => j.id === legId)
