@@ -144,24 +144,8 @@
 .ess-crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--ess-ink-3); white-space: nowrap; }
 .ess-crumbs b { color: var(--ess-ink); font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
 .ess-crumbs svg { flex: none; color: var(--ez-line-strong); }
-.ess-crumbs b { font-size: 15px; }
-/* Top bar, left: today's date and live attendance status (TopStatus). */
-.ess-status { display: flex; align-items: center; gap: 10px; min-width: 0; padding-left: 14px; margin-left: 2px; border-left: 1px solid var(--ess-hair); }
-.ess-status-date { font-size: 13px; font-weight: 600; color: var(--ess-ink-2); white-space: nowrap; }
-.ess-status-pill {
-  display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px 0 10px; border-radius: 99px;
-  border: 1px solid color-mix(in srgb, var(--tone) 28%, transparent);
-  background: color-mix(in srgb, var(--tone) 9%, var(--ez-surface));
-  color: color-mix(in srgb, var(--tone) 80%, var(--ess-ink)); font: inherit; font-size: 12.5px; font-weight: 600;
-  white-space: nowrap; cursor: pointer; transition: background .15s ease, border-color .15s ease;
-}
-.ess-status-pill:hover { background: color-mix(in srgb, var(--tone) 15%, var(--ez-surface)); }
-.ess-status-pill:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 2px; }
-.ess-status-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--tone); flex: none; }
-.ess-status-pill i[data-live] { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tone) 50%, transparent); animation: ess-live 1.8s ease-out infinite; }
-@keyframes ess-live { to { box-shadow: 0 0 0 7px transparent; } }
-@media (prefers-reduced-motion: reduce) { .ess-status-pill i[data-live] { animation: none; } }
-@media (max-width: 1180px) { .ess-status-date { display: none; } }
+/* Search, on the left beside the title: a hairline separates the two. */
+.ess-top-search { display: flex; align-items: center; flex: 0 1 440px; padding-left: 16px; margin-left: 4px; border-left: 1px solid var(--ess-hair); min-width: 0; }
 .ess-manage {
   display: flex; align-items: center; gap: 8px; padding: 6px 20px 7px;
   border-top: 1px solid var(--ess-hair);

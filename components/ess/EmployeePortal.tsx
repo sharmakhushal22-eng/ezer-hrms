@@ -166,56 +166,6 @@ const istToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkat
  * again, so a punch made on Today or on the phone is reflected here.
  */
 type PunchStateLite = { open: boolean; first_in: string | null; last_in: string | null; last_out: string | null }
-
-/**
- * The top bar's left side: today's date and where the person stands with
- * attendance right now — at work since when and for how long, punched out, or
- * not in yet. The bar held only a one-word breadcrumb and read as empty; this
- * is the one fact an employee checks most often, visible on every screen.
- * Clicking it opens Attendance. It re-reads on focus, every minute, and on the
- * `ezer:punch` event that both punch buttons dispatch.
- */
-function TopStatus({ onOpen }: { onOpen: () => void }) {
-  const [st, setSt] = useState<PunchStateLite | null>(null)
-  const [, tick] = useState(0)
-  const refresh = useCallback(async () => {
-    try {
-      const t = await authToken()
-      const r = await fetch('/api/ess/punch', { headers: t ? { Authorization: `Bearer ${t}` } : {}, cache: 'no-store' })
-      const d = await r.json()
-      if (r.ok && d.state) setSt(d.state)
-    } catch { /* leave the last known state */ }
-  }, [])
-  useEffect(() => {
-    void refresh()
-    const onPunch = (e: Event) => { const d = (e as CustomEvent).detail; if (d) setSt(d); else void refresh() }
-    const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
-    const t = setInterval(() => { tick(n => n + 1); void refresh() }, 60000)
-    window.addEventListener('ezer:punch', onPunch)
-    document.addEventListener('visibilitychange', onVisible)
-    return () => { clearInterval(t); window.removeEventListener('ezer:punch', onPunch); document.removeEventListener('visibilitychange', onVisible) }
-  }, [refresh])
-
-  const hm = (ts: string) => new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })
-  const date = new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
-  let tone = C.muted, text = 'Checking attendance…'
-  if (st) {
-    if (st.open && st.last_in) {
-      const mins = Math.max(0, Math.floor((Date.now() - new Date(st.first_in || st.last_in).getTime()) / 60000))
-      tone = C.positive; text = `At work since ${hm(st.first_in || st.last_in)} · ${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`
-    } else if (st.last_out) { tone = C.info; text = `Punched out at ${hm(st.last_out)}` }
-    else { tone = C.warning; text = 'Not punched in yet' }
-  }
-  return (
-    <div className="ess-status">
-      <span className="ess-status-date">{date}</span>
-      <button type="button" className="ess-status-pill" onClick={onOpen} title="Open Attendance"
-              style={{ ['--tone' as string]: tone }}>
-        <i data-live={st?.open ? '1' : undefined} />{text}
-      </button>
-    </div>
-  )
-}
 function PunchButton({ employeeId }: { employeeId: string }) {
   const [st, setSt] = useState<PunchStateLite | null>(null) // null = loading
   const [busy, setBusy] = useState(false)
@@ -253,7 +203,7 @@ function PunchButton({ employeeId }: { employeeId: string }) {
     try {
       const r = await fetch('/api/ess/punch', { method: 'POST', headers: await headers(), body: JSON.stringify({ kind }), cache: 'no-store' })
       const d = await r.json()
-      if (d.state) { setSt(d.state); window.dispatchEvent(new CustomEvent('ezer:punch', { detail: d.state })) }
+      if (d.state) setSt(d.state)
       if (!r.ok) { setMsg({ text: d.error || 'Punch failed', ok: false }); return }
       setMsg({ text: `✓ Punched ${kind === 'in' ? 'in' : 'out'} at ${tm(d.at)}`, ok: true })
     } catch { setMsg({ text: 'Punch failed — try again', ok: false }) }
@@ -3587,7 +3537,7 @@ function FeatureSearch({ entries, compact }: { entries: SearchEntry[]; compact?:
 
   return (
     <div ref={boxRef} style={compact
-      ? { position:'relative', flex:'0 1 320px', minWidth:180 }
+      ? { position:'relative', flex:1, minWidth:180 }
       : { position:'relative', marginBottom:16 }}>
       <div style={{ display:'flex', alignItems:'center', gap: compact ? 8 : 10, height: compact ? 38 : 46, padding: compact ? '0 10px 0 12px' : '0 14px', borderRadius:R.lg,
         background: compact && !open ? C.sunken : C.surface,
@@ -3603,7 +3553,7 @@ function FeatureSearch({ entries, compact }: { entries: SearchEntry[]; compact?:
       </div>
 
       {showList && (
-        <div id="ess-feature-results" role="listbox" style={{ position:'absolute', top:'calc(100% + 8px)', ...(compact ? { right:0, width:420, maxWidth:'calc(100vw - 32px)' } : { left:0, right:0 }), zIndex:Z.navMenu, background:C.surface,
+        <div id="ess-feature-results" role="listbox" style={{ position:'absolute', top:'calc(100% + 8px)', ...(compact ? { left:0, width:'max(100%, 420px)', maxWidth:'calc(100vw - 32px)' } : { left:0, right:0 }), zIndex:Z.navMenu, background:C.surface,
           border:`1px solid ${C.line}`, borderRadius:R.lg, boxShadow:E.floating, padding:6, animation:'ezFadeUp .16s both' }}>
           {results.length === 0 ? (
             <div style={{ padding:'14px 12px', fontSize:13, color:C.muted }}>No feature matches “{q.trim()}”, or it isn’t part of your access.</div>
@@ -4078,15 +4028,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
                 ))}
               </div>
             )}
-            {!isMobile && !adminKey && !adminMode && <TopStatus onOpen={() => go('attendance')} />}
+            {/* Search sits on the left, beside the page title. */}
+            {!isMobile && <div className="ess-top-search"><FeatureSearch entries={searchEntries} compact /></div>}
             {adminMode && <span style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:700, whiteSpace:'nowrap', flexShrink:0 }}>Viewing {emp.first_name || emp.full_name}</span>}
             <div style={{ flex:1 }} />
             {adminKey && (
               <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap', flexShrink:0 }}>← My portal</button>
             )}
             {!isMobile && headerExtra}
-            {/* Search sits at the right, beside the theme and notification controls. */}
-            {!isMobile && <FeatureSearch entries={searchEntries} compact />}
             <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 6 : 8, flexShrink:0 }}>
               {/* Light / dark / system. On mobile it collapses to one cycling button. */}
               <ThemeToggle compact={isMobile} />
