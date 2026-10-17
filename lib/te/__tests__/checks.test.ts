@@ -119,8 +119,12 @@ test('the tally separates what is off by choice from what cannot run', () => {
   const rows = [
     { code: 'A1', on: true, live: true },    // running
     { code: 'A2', on: false, live: true },   // switched off deliberately
-    { code: 'C7', on: true, live: false },   // unbuilt, whatever the switch says
-    { code: 'C7', on: false, live: false },  // still unbuilt
+    // G6 on purpose: a browser may not inspect the device for a mock-location
+    // app, so unlike the others this one is not waiting to be written. Using a
+    // merely-unbuilt code here means this fixture breaks every time one gets
+    // built, which has now happened twice.
+    { code: 'G6', on: true, live: false },   // unbuilt, whatever the switch says
+    { code: 'G6', on: false, live: false },  // still unbuilt
   ]
   assert.deepEqual(checkTally(rows), { total: 4, running: 1, unbuilt: 2, offByChoice: 1 })
 })

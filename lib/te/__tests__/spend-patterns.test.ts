@@ -253,3 +253,100 @@ test('D5 compares within a category, not across them', () => {
   const codes = flagsFor(EZ, [{ cat: 'local', bill: 4000, claimed: 4000, desc: 'auto', file: { sha: 'other' } }], who)
   assert.ok(!codes.includes('D5'), 'D5 compared a local ride against meal bills')
 })
+
+// ── C7: in another city on that date ────────────────────────────────────────
+
+/** Checksum-valid GSTINs, which gstValid() demands before C5 or C7 look at a
+ *  bill at all, and dates that sit before the engine's today (2026-11-16) and
+ *  inside its 90-day bill-age limit.
+ *
+ *  Both of those sank the first version of these tests: an invented GSTIN
+ *  raises A4 and a future date raises A2, and in either case the line never
+ *  reaches the check under test. The flags said so plainly — "got A2 A4" — and
+ *  the check was right both times. */
+const VALID_GSTIN = { MH: '27AAAAA0000A1Z2', KL: '32AAAAA0000A1ZB' }
+//
+// The sharp complement of C5. C5 fires when the merchant's state is NOWHERE on
+// the trip; C7 when the state IS on the trip but not on that day. They must
+// never both fire, which is asserted below — two flags for one fact is how an
+// approver learns to skim them.
+
+/** A two-city domestic trip: Jaipur on the 10th, Mumbai on the 11th-12th. */
+function twoCityTrip(EZ: Any): Any {
+  const place = (id: string, city: string, state: string) => {
+    EZ.S.places.push({ id, src: 'saved', pt: 'client', s: city, name: city, addr: city, city, state, pin: '', country: 'India', lat: 0, lng: 0, code: null, owner: null })
+    return id
+  }
+  const home = EZ.S.places[0]?.id ?? place('P-HOME', 'Gurugram', '06')
+  const jai = place('P-JAI', 'Jaipur', '08')
+  const bom = place('P-BOM', 'Mumbai', '27')
+  const t = {
+    id: 'TRIP-C7', emp: EZ.S.expenses[0].emp, no: 'TRP-C7', name: 'Two city', scope: 'domestic',
+    pattern: 'multi', origin: 'PRE_APPROVED', purpose: 'Client meeting', project: '',
+    status: 'APPROVED', start: '2026-11-10', end: '2026-11-12', pax: 1, co: [],
+    points: [
+      { place: home, pt: 'off', what: '', leave: '2026-11-10' },
+      { place: jai, pt: 'client', what: '', arrive: '2026-11-10', leave: '2026-11-10' },
+      { place: bom, pt: 'client', what: '', arrive: '2026-11-11', leave: '2026-11-12' },
+    ],
+    segs: [], legIds: [], history: [],
+  }
+  EZ.S.trips.push(t)
+  return t
+}
+
+test('C7 fires on a bill from a trip city you were not in that day', () => {
+  const EZ = engine()
+  const t = twoCityTrip(EZ)
+  // Mumbai GSTIN (27), dated the 10th — the day the trip was in Jaipur.
+  const codes = flagsFor(EZ, [{
+    cat: 'meals', tripId: t.id, date: '2026-11-10',
+    gstin: VALID_GSTIN.MH, bill: 900, claimed: 900, file: { sha: 'c7' },
+  }], t.emp)
+  assert.ok(codes.includes('C7'), `expected C7, got ${codes.join(' ') || 'nothing'}`)
+})
+
+test('C7 and C5 never both fire — they are complements, not duplicates', () => {
+  const EZ = engine()
+  const t = twoCityTrip(EZ)
+  // Kerala (32): nowhere on this trip, so this is C5's case and not C7's.
+  const codes = flagsFor(EZ, [{
+    cat: 'meals', tripId: t.id, date: '2026-11-10',
+    gstin: VALID_GSTIN.KL, bill: 900, claimed: 900, file: { sha: 'c5' },
+  }], t.emp)
+  assert.ok(codes.includes('C5'), 'a state nowhere on the trip should raise C5')
+  assert.ok(!codes.includes('C7'), 'C7 fired on a state that is not on the trip at all — that is C5')
+})
+
+test('C7 stays quiet when the bill matches where you were that day', () => {
+  const EZ = engine()
+  const t = twoCityTrip(EZ)
+  const codes = flagsFor(EZ, [{
+    cat: 'meals', tripId: t.id, date: '2026-11-11',
+    gstin: VALID_GSTIN.MH, bill: 900, claimed: 900, file: { sha: 'ok' },
+  }], t.emp)
+  assert.ok(!codes.includes('C7'), 'C7 fired on a Mumbai bill dated a Mumbai day')
+})
+
+test('a stay is judged over its whole range, not its first night', () => {
+  // Three nights spanning the move: one of them is in the right city, so the
+  // stay is in the right city. Judging only check-in would flag every hotel
+  // somebody checks into the evening they arrive.
+  const EZ = engine()
+  const t = twoCityTrip(EZ)
+  const codes = flagsFor(EZ, [{
+    cat: 'hotel', tripId: t.id, date: '2026-11-10',
+    checkIn: '2026-11-10', checkOut: '2026-11-12',
+    gstin: VALID_GSTIN.MH, bill: 6000, claimed: 6000, file: { sha: 'stay' },
+  }], t.emp)
+  assert.ok(!codes.includes('C7'), `a stay covering a Mumbai night should not raise C7, got ${codes.join(' ')}`)
+})
+
+test('C7 says nothing without a GSTIN, because it has no city to compare', () => {
+  const EZ = engine()
+  const t = twoCityTrip(EZ)
+  const codes = flagsFor(EZ, [{
+    cat: 'meals', tripId: t.id, date: '2026-11-10', bill: 900, claimed: 900, file: { sha: 'n' },
+  }], t.emp)
+  assert.ok(!codes.includes('C7'))
+})

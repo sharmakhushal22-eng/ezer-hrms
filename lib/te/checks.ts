@@ -24,7 +24,7 @@
 
 /** Checks declared in the catalogue that nothing evaluates. */
 export const NOT_IMPLEMENTED = [
-  'C7', 'E4', 'F2', 'F3', 'G6',
+  'E4', 'F2', 'F3', 'G6',
 ] as const
 
 /**
@@ -44,7 +44,6 @@ export const ENFORCED_ELSEWHERE: Record<string, string> = {
  *  decisions and which are simply unbuilt — an administrator deciding whether
  *  to rely on one deserves to know the difference. */
 export const WHY_NOT: Record<string, string> = {
-  C7: 'Not built. Needs the travel timeline and the spend timeline compared journey by journey.',
   E4: 'Needs a GSTIN status provider. None is configured, so there is nothing to ask.',
   F2: 'Not built. Needs the time between a claim arriving and being cleared, per approver.',
   F3: 'Not built. Needs approver-to-employee approval patterns over time.',
