@@ -85,6 +85,8 @@ export interface Decision {
   onboardingId: string; team: Team; action: 'approve' | 'return' | 'save'; actorId: string | null; actorName: string | null; remark: string | null
   /** A head team's checklist, as the form sent it. Required (complete) to approve; `save` keeps it without deciding. */
   checklist?: Record<string, any> | null
+  /** Kept with the checklist as-is, unvalidated — Payroll's salary breakdown snapshot, for instance. */
+  extra?: Record<string, any> | null
   /** The HR Manager's itemised return (lib/onboarding/review.ts): the mail lists every rejected document and flagged detail. */
   corrections?: Corrections | null
   mail?: { t: Transporter; from: string } | null; baseUrl?: string | null
@@ -121,6 +123,7 @@ export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<D
     checklist = normaliseChecklist(d.team, d.checklist)
     const cols = checklistColumns(d.team, checklist)
     if (Object.keys(cols).length) await sb.from('onboarding_candidates').update(cols).eq('id', d.onboardingId)
+    if (d.extra) checklist = { ...checklist, ...d.extra }
   }
   if (d.action === 'save') {
     if (!isHeadTeam(d.team)) return { ok: false, error: 'Only IT, Admin and Payroll keep a checklist.', status: 400 }

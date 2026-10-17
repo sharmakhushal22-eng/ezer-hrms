@@ -12,9 +12,9 @@ test('IT cannot approve until the email, laptop and access are confirmed', () =>
   assert.deepEqual(missingItems('IT', { it_email: '  ', it_email_created: 'true', it_laptop_issued: true, it_access_done: true }), ['Official email ID', 'Email ID is created'], 'a blank email and a string true are not confirmations')
 })
 
-test('Payroll needs a positive CTC and basic %, and the structure entered', () => {
+test('Payroll needs a positive CTC and the structure entered; basic % comes from the breakdown', () => {
   assert.deepEqual(missingItems('PAYROLL', { annual_ctc: 0, basic_pct: '40', payroll_setup_done: true }), ['Annual CTC (₹)'])
-  assert.deepEqual(missingItems('PAYROLL', { annual_ctc: '900000', basic_pct: 40, payroll_setup_done: true }), [])
+  assert.deepEqual(missingItems('PAYROLL', { annual_ctc: '900000', payroll_setup_done: true }), [])
 })
 
 test('normalising types the values and drops unknown keys; columns keep only candidate columns', () => {

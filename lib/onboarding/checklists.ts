@@ -44,10 +44,10 @@ export const CHECKLISTS: Record<HeadTeam, { title: string; intro: string; fields
   },
   PAYROLL: {
     title: 'Payroll setup',
-    intro: 'Confirm the salary structure the joiner will be paid on. The CTC comes from the offer; correct it here if it changed.',
+    intro: 'Confirm the salary structure the joiner will be paid on. The CTC and the breakdown come from the negotiation / offer; correct the CTC here if it changed and the structure follows.',
     fields: [
       { key: 'annual_ctc', label: 'Annual CTC (₹)', kind: 'number', required: true, column: true },
-      { key: 'basic_pct', label: 'Basic as % of CTC', kind: 'number', required: true, column: true },
+      { key: 'basic_pct', label: 'Basic as % of CTC', kind: 'number', column: true, hint: 'from the breakdown' },
       { key: 'pf_applicable', label: 'PF applicable', kind: 'bool', column: true },
       { key: 'pf_wage_type', label: 'PF wage base', kind: 'select', column: true, options: [{ value: 'BASIC_DA', label: 'Basic + DA' }, { value: 'GROSS', label: 'Gross' }] },
       { key: 'tds_regime', label: 'Tax regime', kind: 'select', column: true, options: [{ value: 'NEW', label: 'New regime' }, { value: 'OLD', label: 'Old regime' }] },

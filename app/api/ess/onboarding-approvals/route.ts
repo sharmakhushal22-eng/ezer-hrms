@@ -20,6 +20,7 @@ import { essRoute, forbidden } from '@/lib/ess/session'
 import { teamsFor, decideApproval, TEAMS, HEAD_TEAMS, type Team } from '@/lib/onboarding/approvals'
 import { CHECKLISTS, isHeadTeam } from '@/lib/onboarding/checklists'
 import { reviewPayload } from '@/lib/onboarding/review'
+import { loadSalaryBreakdown } from '@/lib/onboarding/salary-breakdown'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -45,16 +46,23 @@ export async function GET(req: NextRequest) {
     if (!payload) return NextResponse.json({ error: 'Not found in your company' }, { status: 404 })
     // Each head's checklist: what the row holds, else what the candidate's columns already say
     // (the offer's CTC for Payroll, for instance).
-    const { data: cols } = await sb.from('onboarding_candidates').select(['offered_ctc', ...COLUMN_KEYS].join(', ')).eq('id', open).maybeSingle()
+    const { data: cols } = await sb.from('onboarding_candidates').select(['id', 'candidate_id', 'offered_ctc', 'location_id', 'form_data', ...COLUMN_KEYS].join(', ')).eq('id', open).maybeSingle()
+    // Payroll approves the salary structure, so their form carries the breakdown: the saved
+    // negotiation model, the offer letter, or the CTC model on the CTC held — and the CTC and
+    // basic % of the checklist start from it.
+    const salary = teams.includes('PAYROLL') && cols ? await loadSalaryBreakdown(sb, cols as any) : null
     const checklists: Record<string, any> = {}
     for (const t of HEAD_TEAMS) {
       const row = payload.approvals.find((a: any) => a.team === t)
       const fromCols: Record<string, any> = {}
       for (const f of CHECKLISTS[t].fields) if (f.column && cols && (cols as any)[f.key] != null) fromCols[f.key] = (cols as any)[f.key]
-      if (t === 'PAYROLL' && fromCols.annual_ctc == null && (cols as any)?.offered_ctc) fromCols.annual_ctc = (cols as any).offered_ctc
+      if (t === 'PAYROLL') {
+        if (fromCols.annual_ctc == null) fromCols.annual_ctc = salary?.annual_ctc || (cols as any)?.offered_ctc || null
+        if (fromCols.basic_pct == null && salary?.basic_pct != null) fromCols.basic_pct = salary.basic_pct
+      }
       checklists[t] = { ...fromCols, ...(row?.checklist || {}) }
     }
-    return NextResponse.json({ teams, ...payload, checklists })
+    return NextResponse.json({ teams, ...payload, checklists, salary })
   }
 
   const { data: rows } = await sb.from('onboarding_candidates')
@@ -91,12 +99,23 @@ export async function POST(req: NextRequest) {
   if (!onboardingId || !isHeadTeam(team) || !action) return NextResponse.json({ error: 'onboarding_id, team (IT | ADMIN | PAYROLL) and action are required' }, { status: 400 })
   const teams = headTeamsOf(ctx.menu.roles || [], !!ctx.grant.isSuperAdmin)
   if (!teams.includes(team)) return forbidden(`You do not act for ${team} approvals.`)
-  const { data: oc } = await sb.from('onboarding_candidates').select('id, company_id').eq('id', onboardingId).maybeSingle()
+  const { data: oc } = await sb.from('onboarding_candidates').select('id, company_id, candidate_id, offered_ctc, annual_ctc, pt_state, location_id, form_data').eq('id', onboardingId).maybeSingle()
   if (!oc || oc.company_id !== ctx.companyId) return forbidden('This onboarding is not in your company.')
   const { data: me } = await sb.from('employees').select('full_name').eq('id', ctx.caller.employeeId).maybeSingle()
+  const checklist: Record<string, any> | null = body.checklist && typeof body.checklist === 'object' ? { ...body.checklist } : null
+  // Payroll approves a salary structure: the breakdown for the CTC they confirmed is kept with
+  // the approval, and the basic % of the checklist follows it.
+  let extra: Record<string, any> | null = null
+  if (team === 'PAYROLL' && checklist && action !== 'return') {
+    const s = await loadSalaryBreakdown(sb, oc as any, Number(checklist.annual_ctc) || null)
+    if (s.source !== 'none') {
+      if (s.basic_pct != null) checklist.basic_pct = s.basic_pct
+      extra = { salary_breakdown: { source: s.source, label: s.label, annual_ctc: s.annual_ctc, basic_monthly: s.basic_monthly, basic_pct: s.basic_pct, rows: s.rows, note: s.note || null } }
+    }
+  }
   const out = await decideApproval(sb, {
     onboardingId, team, action, actorId: ctx.caller.employeeId, actorName: me?.full_name || null, remark: String(body.remark || '').trim() || null,
-    checklist: body.checklist && typeof body.checklist === 'object' ? body.checklist : null,
+    checklist, extra,
     mail: mailer(), baseUrl: process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin,
   })
   if (!out.ok) return NextResponse.json({ error: out.error, missing: out.missing }, { status: out.status || 500 })
