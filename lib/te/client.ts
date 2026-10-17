@@ -174,6 +174,12 @@ export const te = {
   /** Everything my own screens show. Render from this; call it again after every change. */
   me: () => get<Snapshot>('me'),
   placeAdd: (input: PlaceInput) => post<{ place_id: Uuid; matched?: true }>('places', input),
+  /** What is at this position, without saving anything — so "Use my location"
+   *  can fill the address in front of the person instead of after the save.
+   *  found: false means no geocoder is configured; the fields stay empty. */
+  placeLookup: (lat: number, lng: number) =>
+    get<{ found: boolean; lat: number; lng: number; name?: string; address?: string; city?: string; pin?: string; country?: string }>(
+      'places/lookup', { lat, lng }),
   /** Ask the Travel Desk to book a stay on my own trip. Not te.desk.* — that
    *  is the desk acting on somebody else's trip and needs Travel Claims EDIT;
    *  this is the traveller asking, and the SQL checks the trip is theirs. */

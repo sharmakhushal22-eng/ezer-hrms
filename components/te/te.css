@@ -697,6 +697,9 @@
 .te .rtop{margin-bottom:8px;gap:8px;flex-wrap:wrap}
 .te .rdate{display:flex;align-items:flex-end;gap:8px 14px;flex-wrap:wrap;margin-bottom:10px}
 .te .rdate .fld{width:180px;flex:none}
+/* A time belongs beside the date it qualifies, not under it. Narrower than a
+   date field because 'HH:MM' needs less room than a date picker. */
+.te .rdate .fld.tm{width:122px}
 .te .rdate p{margin:0 0 9px}
 .te .rhint{margin:-2px 0 8px}
 .te .rlist{position:relative;display:flex;flex-direction:column;gap:2px}
@@ -747,7 +750,12 @@
 .te .raddstop:hover{background:var(--ez-brand-tint)}
 .te .raddstop .ic{background:var(--ez-brand);color:var(--ez-on-accent);border-radius:50%;padding:2px;width:19px;height:19px;stroke-width:2.4}
 @media (max-width:640px){
-.te .rdate .fld{width:100%;flex:1 1 100%}.te .rdate p{margin:0}
+/* On a phone each field was full width, so a round trip with times became four
+   stacked rows. Pair each date with its own time instead. */
+.te .rdate .fld{width:100%;flex:1 1 100%}
+.te .rdate .fld.dt{width:auto;flex:1 1 58%}
+.te .rdate .fld.tm{width:auto;flex:1 1 34%}
+.te .rdate p{margin:0}
 .te .redit{margin-left:0}.te .rseg{padding-left:30px}
 .te .rtag{display:none}
 .te .rshead .rsub{display:none}

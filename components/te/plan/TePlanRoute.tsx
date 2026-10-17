@@ -20,6 +20,7 @@ import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
 import { errorFor, pointLabel, addStop, movePoint, removePoint, setPattern, type DraftContext, type PlannerDraft } from '@/lib/te/trip-draft'
 import { day, plural } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
+import TeTripMap from './TeTripMap'
 import type { PickTarget } from './TePlacePicker'
 
 const PATTERN_WORD: Record<string, string> = { oneway: 'Single', round: 'Round trip', multi: 'Multi-city' }
@@ -37,6 +38,10 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
   const tried = draft.tried
   const err = (k: string) => errorFor(issues, k, tried)
   const place = (id: string) => snap.masters.places.find(p => p.id === id) ?? null
+
+  /** The placed points, in order, for the map above the list. */
+  const mapPoints = draft.points.map(p => p.place).filter(Boolean)
+  const places = new Map(snap.masters.places.map(p => [p.id, { id: p.id, s: p.s, lat: p.lat, lng: p.lng }]))
   const ptName = (id: string) => snap.cfg.ptypes.find(p => p.id === id)?.name ?? ''
   const hasReturn = draft.points.some(p => p.ret)
   const label0 = local ? (planning ? 'Date of the trip' : 'Date you travelled') : (planning ? 'Leave on' : 'Left on')
@@ -76,7 +81,7 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
       </div>
 
       <div className="rdate">
-        <label className="fld sm">
+        <label className="fld sm dt">
           <span>{label0}</span>
           <input
             type="date"
@@ -92,7 +97,7 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
             (migration 165). It is here because "the 16th" does not tell an
             approver, or the Travel Desk booking the ticket, whether that is a
             6am flight needing a cab at 4 or an evening train. */}
-        <label className="fld sm">
+        <label className="fld sm tm">
           <span>Leaving at</span>
           <input
             type="time"
@@ -118,7 +123,7 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
             finishing the day it started. */}
         {hasReturn ? (
           <>
-            <label className="fld sm">
+            <label className="fld sm dt">
               <span>Back at the start on</span>
               <input
                 type="date"
@@ -128,7 +133,7 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
                 onChange={e => edit(d => ({ ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: e.target.value } : p)) }))}
               />
             </label>
-            <label className="fld sm">
+            <label className="fld sm tm">
               <span>Back at</span>
               <input
                 type="time"
@@ -144,6 +149,29 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
         </p>
       </div>
       {err('d0') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('d0')}</div> : null}
+
+      {/* THE MAP, WHILE THE ROUTE IS BEING BUILT, not only on Review. Seeing
+          the shape of the trip appear as places are chosen is how somebody
+          notices they picked the Pune in the wrong state — which is a money
+          error, because every kilometre on the claim is measured between these
+          points. Real Google tiles when a browser key is configured; the same
+          to-scale schematic as before when there is none. */}
+      {mapPoints.length > 1 ? (
+        <TeTripMap
+          points={mapPoints}
+          // The route's own shape, from the draft rather than the preview: this
+          // map has to redraw while a place is still being chosen, and the
+          // preview is 350ms behind on purpose.
+          legs={draft.segs.map((sg, i) => ({
+            from: draft.points[i]?.place ?? '',
+            to: draft.points[i + 1]?.place ?? '',
+            mode: sg.mode,
+          })).filter(l => l.from && l.to)}
+          places={places}
+          height={190}
+          label={`Map of ${draft.name || 'the route so far'}`}
+        />
+      ) : null}
 
       <div className="rlist">
         {draft.points.map((p, i) => {
