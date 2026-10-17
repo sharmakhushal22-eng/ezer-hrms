@@ -24,7 +24,7 @@
 
 /** Checks declared in the catalogue that nothing evaluates. */
 export const NOT_IMPLEMENTED = [
-  'C7', 'D3', 'D5', 'D6', 'D7', 'E4', 'F2', 'F3', 'G6',
+  'C7', 'E4', 'F2', 'F3', 'G6',
 ] as const
 
 /**
@@ -45,10 +45,6 @@ export const ENFORCED_ELSEWHERE: Record<string, string> = {
  *  to rely on one deserves to know the difference. */
 export const WHY_NOT: Record<string, string> = {
   C7: 'Not built. Needs the travel timeline and the spend timeline compared journey by journey.',
-  D3: 'Not built. Needs spending history per employee to see amounts clustering under a limit.',
-  D5: 'Not built. Needs a peer group — same grade, same city — to compare against.',
-  D6: 'Not built. Needs bill numbers from one merchant compared across claims.',
-  D7: 'Not built. Needs the no-bill share of an employee’s history.',
   E4: 'Needs a GSTIN status provider. None is configured, so there is nothing to ask.',
   F2: 'Not built. Needs the time between a claim arriving and being cleared, per approver.',
   F3: 'Not built. Needs approver-to-employee approval patterns over time.',
