@@ -327,6 +327,66 @@ export interface FoundPlace {
  *  parser in lib/te/providers/geocode.ts and for the same reason: Google
  *  returns components in no particular order, so each one is looked up by its
  *  type rather than by position. */
+/** One prediction from the new Places API. `toPlace()` turns it into a Place
+ *  whose fields are then fetched — which is also what consumes the session
+ *  token, so the whole search is billed as one session. */
+interface NewPrediction {
+  mainText?: { toString: () => string } | null
+  secondaryText?: { toString: () => string } | null
+  toPlace: () => {
+    fetchFields: (o: { fields: string[] }) => Promise<unknown>
+    displayName?: string | null
+    formattedAddress?: string | null
+    addressComponents?: { longText?: string | null; types?: string[] }[]
+    location?: { lat: () => number; lng: () => number } | null
+  }
+}
+
+/** Both generations of the Places library, as much of each as is used here. */
+interface PlacesLib {
+  AutocompleteSuggestion?: {
+    fetchAutocompleteSuggestions: (o: {
+      input: string; sessionToken?: unknown; includedRegionCodes?: string[]
+    }) => Promise<{ suggestions?: { placePrediction?: NewPrediction | null }[] }>
+  }
+  AutocompleteSessionToken?: new () => unknown
+  AutocompleteService?: new () => {
+    getPlacePredictions: (r: unknown, cb: (res: unknown, status: string) => void) => void
+  }
+  PlacesService?: new (el: HTMLElement) => {
+    getDetails: (r: unknown, cb: (res: unknown, status: string) => void) => void
+  }
+}
+
+/** The NEW Places API returns address components as {longText, shortText,
+ *  types} rather than the legacy {long_name, short_name, types}, and the
+ *  objects are minified — only those accessors are safe to read. */
+function partsOfNew(place: {
+  displayName?: string | null
+  formattedAddress?: string | null
+  addressComponents?: { longText?: string | null; types?: string[] }[]
+  location?: { lat: () => number; lng: () => number } | null
+}): FoundPlace | null {
+  const loc = place.location
+  if (!loc) return null
+  const comp = (...types: string[]) => {
+    for (const t of types) {
+      const c = (place.addressComponents || []).find(k => (k.types || []).includes(t))
+      if (c?.longText) return c.longText
+    }
+    return ''
+  }
+  return {
+    lat: loc.lat(),
+    lng: loc.lng(),
+    name: place.displayName || place.formattedAddress || '',
+    address: place.formattedAddress || '',
+    city: comp('locality', 'postal_town', 'administrative_area_level_3', 'administrative_area_level_2'),
+    pin: comp('postal_code'),
+    country: comp('country') || 'India',
+  }
+}
+
 function partsOf(place: {
   name?: string
   formatted_address?: string
@@ -395,13 +455,18 @@ export function TePlaceSearch({ onFound, label, placeholder, country }: {
 }) {
   const { ready, failed, places } = useGoogleMaps()
   const [q, setQ] = useState('')
-  const [list, setList] = useState<{ id: string; main: string; rest: string }[]>([])
+  /** A prediction carries either a new-API place object or a legacy place_id,
+   *  never both — whichever generation answered. */
+  const [list, setList] = useState<{ id: string; place?: NewPrediction | null; main: string; rest: string }[]>([])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const cb = useRef(onFound)
   useEffect(() => { cb.current = onFound }, [onFound])
   /** Which query the list belongs to, so a slow answer to an old one is dropped. */
   const asked = useRef('')
+  /** Reused across the keystrokes of one search and consumed by the details
+   *  fetch, which is how Google bills a session instead of every request. */
+  const token = useRef<unknown>(undefined)
 
   useEffect(() => {
     const text = q.trim()
@@ -411,22 +476,57 @@ export function TePlaceSearch({ onFound, label, placeholder, country }: {
     // not — it cascades a second render before the first has painted, and it
     // is the one lint rule every screen in this module is held to.
     if (!ready || !places || text.length < 3) return
-    const G = gmaps() as unknown as {
-      places?: {
-        AutocompleteService?: new () => {
-          getPlacePredictions: (r: unknown, cb: (res: unknown, status: string) => void) => void
-        }
-      }
-    } | null
-    const Svc = G?.places?.AutocompleteService
-    if (!Svc) return
+    const G = gmaps() as unknown as { places?: PlacesLib } | null
     // Debounced: one request per pause, not one per keystroke — these are
     // billed per session and per request.
-    const timer = setTimeout(() => {
-      new Svc().getPlacePredictions(
-        { input: text, ...(country ? { componentRestrictions: { country } } : {}) },
+    const timer = setTimeout(() => { void run(text) }, 300)
+    return () => clearTimeout(timer)
+
+    async function run(input: string) {
+      // THE NEW PLACES API FIRST. Google split Places in two: the legacy
+      // AutocompleteService needs the "Places API" product enabled, and
+      // AutocompleteSuggestion needs "Places API (New)". A project with only
+      // the new one — which is what Google now tells people to enable —
+      // answers the legacy call with REQUEST_DENIED and the message "You're
+      // calling a legacy API, which is not enabled for your project". That is
+      // exactly what this deployment did, so the new one is tried first and
+      // the legacy one is only a fallback for a project that has the old
+      // product and not the new.
+      const New = G?.places?.AutocompleteSuggestion
+      if (New) {
+        try {
+          // One token covers every keystroke of a search and is consumed by the
+          // details fetch, which is how Google bills a session rather than each
+          // request. A new one starts after a place is chosen.
+          token.current ??= G?.places?.AutocompleteSessionToken ? new G.places.AutocompleteSessionToken() : undefined
+          const { suggestions } = await New.fetchAutocompleteSuggestions({
+            input,
+            ...(token.current ? { sessionToken: token.current } : {}),
+            ...(country ? { includedRegionCodes: [country] } : {}),
+          })
+          if (asked.current !== input) return
+          setList((suggestions ?? []).slice(0, 6).map((sg: { placePrediction?: NewPrediction | null }) => ({
+            id: '',
+            place: sg.placePrediction,
+            main: sg.placePrediction?.mainText?.toString() ?? '',
+            rest: sg.placePrediction?.secondaryText?.toString() ?? '',
+          })).filter(r => r.main))
+          setNote('')
+          return
+        } catch (e) {
+          if (asked.current !== input) return
+          // Fall through to the legacy service rather than giving up: a
+          // project may have the old product and not the new one.
+          setNote(String((e as Error)?.message || e).slice(0, 160))
+        }
+      }
+
+      const Old = G?.places?.AutocompleteService
+      if (!Old) return
+      new Old().getPlacePredictions(
+        { input, ...(country ? { componentRestrictions: { country } } : {}) },
         (res, status) => {
-          if (asked.current !== text) return
+          if (asked.current !== input) return
           const ok = status === 'OK' && Array.isArray(res)
           setList(ok
             ? (res as { place_id: string; structured_formatting?: { main_text?: string; secondary_text?: string }; description?: string }[])
@@ -440,32 +540,48 @@ export function TePlaceSearch({ onFound, label, placeholder, country }: {
           setNote(ok || status === 'ZERO_RESULTS' ? '' : `Place search is unavailable (${status}).`)
         },
       )
-    }, 300)
-    return () => clearTimeout(timer)
+    }
   }, [q, ready, places, country])
 
   /** Turn the chosen prediction into a position and an address. */
-  function choose(placeId: string, shown: string) {
-    const G = gmaps() as unknown as {
-      places?: { PlacesService?: new (el: HTMLElement) => { getDetails: (r: unknown, cb: (res: unknown, status: string) => void) => void } }
-    } | null
-    const Svc = G?.places?.PlacesService
-    if (!Svc) return
+  async function choose(row: { id: string; place?: NewPrediction | null; main: string }) {
+    const G = gmaps() as unknown as { places?: PlacesLib } | null
     setBusy(true)
-    setNote(`Reading ${shown}…`)
+    setNote(`Reading ${row.main}…`)
+
+    const done = (parsed: FoundPlace | null) => {
+      setBusy(false)
+      if (!parsed) { setNote('That place could not be read. Try another, or type the address.'); return }
+      // The session ends with the details fetch; the next search starts a new
+      // one, which is what Google's per-session billing expects.
+      token.current = undefined
+      setNote('')
+      setList([])
+      setQ('')
+      cb.current(parsed)
+    }
+
+    // The new API: the prediction becomes a Place and its fields are fetched.
+    if (row.place) {
+      try {
+        const place = row.place.toPlace()
+        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'addressComponents', 'location'] })
+        done(partsOfNew(place))
+      } catch (e) {
+        setBusy(false)
+        setNote(String((e as Error)?.message || e).slice(0, 160))
+      }
+      return
+    }
+
+    // The legacy one, for a project that has only the old product.
+    const Svc = G?.places?.PlacesService
+    if (!Svc) { setBusy(false); return }
     // PlacesService needs a node to attribute into; it is never shown, because
     // the wordmark below is rendered by this component instead.
     new Svc(document.createElement('div')).getDetails(
-      { placeId, fields: ['name', 'formatted_address', 'address_components', 'geometry'] },
-      (res, status) => {
-        setBusy(false)
-        const parsed = status === 'OK' ? partsOf(res as Parameters<typeof partsOf>[0]) : null
-        if (!parsed) { setNote('That place could not be read. Try another, or type the address.'); return }
-        setNote('')
-        setList([])
-        setQ('')
-        cb.current(parsed)
-      },
+      { placeId: row.id, fields: ['name', 'formatted_address', 'address_components', 'geometry'] },
+      (res, status) => done(status === 'OK' ? partsOf(res as Parameters<typeof partsOf>[0]) : null),
     )
   }
 
@@ -498,7 +614,7 @@ export function TePlaceSearch({ onFound, label, placeholder, country }: {
       {q.trim().length >= 3 && list.length ? (
         <div className="stack sm">
           {list.map(r => (
-            <button key={r.id} type="button" className="act flat" disabled={busy} onClick={() => choose(r.id, r.main)}>
+            <button key={r.id || r.main} type="button" className="act flat" disabled={busy} onClick={() => { void choose(r) }}>
               <span className="ico-b sm"><TeIcon name="pin" size="sm" /></span>
               <span><b>{r.main}</b><small>{r.rest}</small></span>
             </button>
