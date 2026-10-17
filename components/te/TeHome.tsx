@@ -22,7 +22,7 @@
 //     is fetched again; no screen keeps its own copy of server state.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail as TeTripDetailT, TripScope } from '@/lib/te/types'
+import type { Snapshot, TeConfig, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail as TeTripDetailT, TripScope } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeSheet from './TeSheet'
 import TeSteps from './TeSteps'
@@ -42,6 +42,8 @@ import TeLegAdd from './leg/TeLegAdd'
 import TeAdvances from './claim/TeAdvances'
 import TeApprovals from './approve/TeApprovals'
 import TeDashboard from './report/TeDashboard'
+import TeFinanceDesk from './finance/TeFinanceDesk'
+import TeTravelDesk from './desk/TeTravelDesk'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type WayId } from '@/lib/te/entry-flow'
@@ -52,6 +54,10 @@ type View =
   | { name: 'claim'; id: string } | { name: 'trip'; id: string } | { name: 'advances' } | { name: 'approvals' }
   /** Tab 1 of the three: everybody's reports and dashboard. */
   | { name: 'dashboard' }
+  /** Tabs 2 and 3. Offered here, in ESS, only to the people on each desk —
+   *  see deskProbe below. The same screens are also in the admin console at
+   *  /dashboard/expenses for whoever administers the module. */
+  | { name: 'traveldesk' } | { name: 'financedesk' }
   /** The claim for one trip: its lines, what they are worth, and submit. */
   | { name: 'tripClaim'; trip: TeTrip }
   /** A leg, opened from its trip. Which screen it gets is the leg's own
@@ -72,7 +78,7 @@ type Sheet =
   | { name: 'addLeg'; detail: TeTripDetailT }
 
 /** The views the rail can land on. A claim is opened from a list, never from the rail. */
-type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits' | 'approvals' | 'dashboard'
+type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits' | 'approvals' | 'dashboard' | 'traveldesk' | 'financedesk'
 const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'home', label: 'Home', icon: 'home' },
   { k: 'trips', label: 'Trips', icon: 'local' },
@@ -119,6 +125,23 @@ export default function TeHome({ initialClaimId, onExit }: {
   const [sheet, setSheet] = useState<Sheet>(null)
   const [toast, setToast] = useState('')
   const [tick, setTick] = useState(0)
+  /** Whether this person is on the Travel desk and the Finance desk.
+   *
+   *  THE CALL SUCCEEDING *IS* THE PERMISSION, which is the same test the admin
+   *  console uses and the only honest one: both routes resolve membership in
+   *  SQL (te_on_desk, migration 161), so asking them is asking the database.
+   *  No role is named here and no department is named here — a Finance person
+   *  is somebody on the Finance desk, which is what the admin Desks screen
+   *  edits.
+   *
+   *  A desk whose call fails is simply not offered. Hidden rather than greyed
+   *  out: a disabled rail entry invites somebody to ask why, and the answer
+   *  would be "you are not on that desk", which is not a problem to solve. */
+  const [onTravelDesk, setOnTravelDesk] = useState(false)
+  const [onFinanceDesk, setOnFinanceDesk] = useState(false)
+  /** Vehicle types for the Travel desk's rate note. Admin-only, so absent for
+   *  an ordinary desk user — the screen degrades and says so. */
+  const [cfg, setCfg] = useState<TeConfig | null>(null)
   const reload = useCallback(() => setTick(n => n + 1), [])
 
   useEffect(() => {
@@ -126,6 +149,19 @@ export default function TeHome({ initialClaimId, onExit }: {
     te.me().then(s => { if (current) { setSnap(s); setError('') } }).catch(e => { if (current) setError(errorText(e)) })
     // The queue is empty for most people; a failure here must not hide the rest of the screen.
     te.queue().then(q => { if (current) setQueue(q) }).catch(() => { if (current) setQueue([]) })
+    // Neither probe may surface an error: for almost everybody these 403, and
+    // that is the normal answer, not a fault.
+    te.desk.list()
+      .then(() => {
+        if (!current) return
+        setOnTravelDesk(true)
+        // Only now, and only for the handful of people who have the desk. Asked
+        // unconditionally this is a 403 round trip on every module load for all
+        // 397 employees who will never see the Travel desk.
+        te.admin.config().then(r => { if (current) setCfg(r.config) }).catch(() => { if (current) setCfg(null) })
+      })
+      .catch(() => { if (current) setOnTravelDesk(false) })
+    te.finance.summary().then(() => { if (current) setOnFinanceDesk(true) }).catch(() => { if (current) setOnFinanceDesk(false) })
     return () => { current = false }
   }, [tick])
 
@@ -219,6 +255,8 @@ export default function TeHome({ initialClaimId, onExit }: {
               : name === 'advances' ? { name: 'advances' }
                 : name === 'approvals' ? { name: 'approvals' }
                   : name === 'dashboard' ? { name: 'dashboard' }
+                    : name === 'traveldesk' ? { name: 'traveldesk' }
+                      : name === 'financedesk' ? { name: 'financedesk' }
               : { name: 'home' },
     )
   }
@@ -260,6 +298,18 @@ export default function TeHome({ initialClaimId, onExit }: {
               {r.k === 'claims' && open.length ? <span className="ct">{open.length}</span> : null}
             </button>
           ))}
+          {/* The two desks, under everything personal: this is work somebody
+              does on behalf of other people, not their own travel. */}
+          {onTravelDesk ? (
+            <button type="button" aria-current={view.name === 'traveldesk' ? 'page' : 'false'} onClick={() => goto('traveldesk')}>
+              <TeIcon name="plane" /><span>Travel desk</span>
+            </button>
+          ) : null}
+          {onFinanceDesk ? (
+            <button type="button" aria-current={view.name === 'financedesk' ? 'page' : 'false'} onClick={() => goto('financedesk')}>
+              <TeIcon name="claims" /><span>Finance desk</span>
+            </button>
+          ) : null}
           {RAIL_SOON.map(r => (
             <button key={r.label} type="button" aria-current="false" onClick={() => setToast(`${r.label} is build step ${r.step}.`)}>
               <TeIcon name={r.icon} /><span>{r.label}</span><span className="ct">soon</span>
@@ -356,6 +406,16 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'advances' ? <TeAdvances snap={snap} onOpenTrip={id => setView({ name: 'trip', id })} /> : null}
           {view.name === 'approvals' ? <TeApprovals onToast={message => { setToast(message); reload() }} /> : null}
           {view.name === 'dashboard' ? <TeDashboard /> : null}
+          {view.name === 'traveldesk' && onTravelDesk ? (
+            <TeTravelDesk
+              vehicleTypes={cfg?.vehicles ?? []}
+              fuelPrice={cfg?.fuelPrice ?? {}}
+              onToast={message => { setToast(message); reload() }}
+            />
+          ) : null}
+          {view.name === 'financedesk' && onFinanceDesk ? (
+            <TeFinanceDesk onToast={message => { setToast(message); reload() }} />
+          ) : null}
           {view.name === 'tripClaim' ? (
             <TeOtherExpenses
               snap={snap}
