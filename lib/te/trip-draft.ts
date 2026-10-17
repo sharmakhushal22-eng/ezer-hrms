@@ -19,6 +19,7 @@
 // the server never sees a half-edited route.
 import type { IsoDate, TeMode, TeStayOption, TripDraft, TripIssue, TripOrigin, TripPattern, TripScope, Uuid } from './types.ts'
 import { emptyStayOption, usableStayOptions, type StayOption } from './trip-stay.ts'
+import { foldOther, splitOther } from './other-reason.ts'
 
 /** One place on the route. */
 export interface DraftPoint {
@@ -66,6 +67,10 @@ export interface PlannerDraft {
   /** Once you type a name, it stops being replaced by the generated one. */
   nameTouched: boolean
   purpose: string
+  /** The explanation behind "Other". Held apart from `purpose` while the form
+   *  is open so the picker and the box are each editable, and folded into the
+   *  one `purpose` string on the way to the server. */
+  purposeNote: string
   project: string
   pax: number
   people: DraftPerson[]
@@ -159,7 +164,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
     origin: o.origin,
     scope: o.scope,
     pattern: 'round',
-    name: '', nameTouched: false, purpose: '', project: '',
+    name: '', nameTouched: false, purpose: '', purposeNote: '', project: '',
     pax: 1, people: [],
     points: [
       { place: c.officePlace, pt: 'corp', leave: start, what: '' },
@@ -204,7 +209,11 @@ export function fromTrip(trip: {
     // The name is already the person's, whether they typed it or accepted the
     // generated one. Reopening a trip must not silently rename it.
     nameTouched: true,
-    purpose: trip.purpose ?? '',
+    // A saved "Other — <reason>" comes back as the option plus its note, so
+    // reopening a trip shows the picker selected and the box filled rather
+    // than an unrecognised purpose and nothing chosen.
+    purpose: splitOther(trip.purpose).choice,
+    purposeNote: splitOther(trip.purpose).note,
     project: trip.project ?? '',
     pax: trip.pax || 1,
     people: (trip.people ?? []).map(p => ({ id: p.id ?? '', name: p.name ?? '' })),
@@ -445,7 +454,9 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
     scope: d.scope,
     pattern: d.pattern,
     origin: d.origin,
-    purpose: d.purpose,
+    // One column holds both. te_trips.purpose is free text and every screen
+    // that shows a purpose then shows the real reason.
+    purpose: foldOther(d.purpose, d.purposeNote),
     project: d.project || '',
     // `arrive` is sent only where it was asked for — the return point. The
     // engine computes t.end as the latest of every point's (leave || arrive),

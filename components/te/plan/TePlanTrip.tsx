@@ -7,6 +7,7 @@
 // roster is acceptable is the server's answer, and arrives as an issue on `pax`.
 import type { Snapshot, TripIssue, TripScope } from '@/lib/te/types'
 import { errorFor, MAX_NAME, MAX_PEOPLE, PURPOSES, type PlannerDraft } from '@/lib/te/trip-draft'
+import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 
 const KIND: Record<string, { name: string; tag: string; desc: string }> = {
@@ -110,6 +111,29 @@ export default function TePlanTrip({ snap, draft, issues, edit, setScope }: {
           ))}
         </div>
         {err('purpose') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('purpose')}</div> : null}
+
+        {/* INSTANTLY, the moment Other is picked. "Other" on its own tells the
+            approver nothing, and it is exactly the trip whose reason is not on
+            the list that most needs explaining. The box used to not exist at
+            all here. */}
+        {needsExplanation(draft.purpose) ? (
+          <div className="form">
+            <label className="fld full">
+              <span>{whyLabel('purpose').label}</span>
+              <textarea
+                autoFocus
+                value={draft.purposeNote}
+                placeholder="Supplier arbitration hearing in Indore"
+                onChange={e => edit({ purposeNote: e.target.value })}
+              />
+              <small>{whyLabel('purpose').hint}</small>
+            </label>
+            {draft.tried && whyProblem(draft.purpose, draft.purposeNote)
+              ? <div className="ferr"><TeIcon name="warn" size="sm" />{whyProblem(draft.purpose, draft.purposeNote)}</div>
+              : null}
+          </div>
+        ) : null}
+
         <div className="form">
           <label className="fld full">
             <span>Client or project</span>

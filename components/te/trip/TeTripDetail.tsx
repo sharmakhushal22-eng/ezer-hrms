@@ -16,6 +16,7 @@ import { tripChip } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
 import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
 import { day, errorText, plural, rs, when } from '@/lib/te/format'
+import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeStayRequest from './TeStayRequest'
@@ -276,14 +277,31 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
               {NO_GPS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </label>
-          <label className="fld">
-            <span>What happened</span>
-            <input value={missedNote} onChange={e => setMissedNote(e.target.value)} placeholder="Needed for Other" />
-          </label>
+          {/* Appears on picking Other, and the button stays disabled until it
+              says something. A placeholder reading "Needed for Other" on a
+              permanently visible box was not a requirement, only a hint, and
+              an unexplained Other went through. */}
+          {needsExplanation(missedReason) ? (
+            <>
+              <label className="fld">
+                <span>{whyLabel('gps').label}</span>
+                <textarea
+                  autoFocus
+                  value={missedNote}
+                  placeholder="The tracking screen would not open on my phone"
+                  onChange={e => setMissedNote(e.target.value)}
+                />
+                <small>{whyLabel('gps').hint}</small>
+              </label>
+              {missedNote.trim() && whyProblem(missedReason, missedNote)
+                ? <div className="ferr"><TeIcon name="warn" size="sm" />{whyProblem(missedReason, missedNote)}</div>
+                : null}
+            </>
+          ) : null}
           <button
             type="button"
             className="btn pri wide"
-            disabled={!missedReason || busy === 'missed'}
+            disabled={!missedReason || !!whyProblem(missedReason, missedNote) || busy === 'missed'}
             onClick={() => act('missed', async () => {
               await te.tripRecordMissed(t.id, missedReason, missedNote.trim() || undefined)
               return 'Recorded. Add each journey without GPS, then claim.'

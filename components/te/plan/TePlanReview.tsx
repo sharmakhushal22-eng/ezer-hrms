@@ -11,6 +11,7 @@ import { blockingOn, errorFor, type PlannerDraft } from '@/lib/te/trip-draft'
 import { day, rs } from '@/lib/te/format'
 import type { MapPlace } from '@/lib/te/trip-map'
 import { nightsBetween } from '@/lib/te/trip-stay'
+import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 import TeTripMap from './TeTripMap'
 import TeMapLinks from './TeMapLinks'
@@ -110,16 +111,41 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
                   {(local ? NO_GPS : NO_APPROVAL).map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </label>
-              <label className="fld">
-                <span>{local ? 'What happened' : 'Evidence, if any'}</span>
-                <input
-                  value={draft.pfNote}
-                  placeholder={local ? 'Needed for Other' : 'Meeting invite, e-mail from the client'}
-                  onChange={e => edit({ pfNote: e.target.value })}
-                />
-              </label>
+              {/* REQUIRED WHEN THE REASON IS OTHER, and a textarea rather than
+                  a one-line input then, because a reason that was not on the
+                  list takes a sentence. Otherwise it stays the optional
+                  evidence field it has always been.
+
+                  This used to be a permanently visible optional input whose
+                  placeholder read "Needed for Other" — which nobody who had
+                  already picked a listed reason ever read, and which did not
+                  stop an unexplained Other being submitted. */}
+              {needsExplanation(draft.pfReason) ? (
+                <label className="fld full">
+                  <span>{whyLabel(local ? 'gps' : 'approval').label}</span>
+                  <textarea
+                    autoFocus
+                    value={draft.pfNote}
+                    placeholder={local ? 'The tracking screen would not open on my phone' : 'The client moved the meeting to the next morning'}
+                    onChange={e => edit({ pfNote: e.target.value })}
+                  />
+                  <small>{whyLabel(local ? 'gps' : 'approval').hint}</small>
+                </label>
+              ) : (
+                <label className="fld">
+                  <span>{local ? 'What happened' : 'Evidence, if any'}</span>
+                  <input
+                    value={draft.pfNote}
+                    placeholder={local ? 'Optional' : 'Meeting invite, e-mail from the client'}
+                    onChange={e => edit({ pfNote: e.target.value })}
+                  />
+                </label>
+              )}
             </div>
             {err('pf') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('pf')}</div> : null}
+            {draft.tried && whyProblem(draft.pfReason, draft.pfNote)
+              ? <div className="ferr"><TeIcon name="warn" size="sm" />{whyProblem(draft.pfReason, draft.pfNote)}</div>
+              : null}
           </>
         ) : null}
 
