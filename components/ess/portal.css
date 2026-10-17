@@ -230,15 +230,15 @@ body:has(.ess-tabbar) [data-ez-dock] { bottom: 82px !important; }
 .ess-soft-hero {
   position: relative; overflow: hidden; border-radius: 18px;
   background:
-    radial-gradient(560px 240px at 100% 0%, rgba(99, 102, 241, .20) 0%, transparent 65%),
-    radial-gradient(380px 200px at 0% 100%, rgba(14, 165, 233, .16) 0%, transparent 65%),
-    linear-gradient(135deg, var(--ez-surface) 0%, color-mix(in srgb, var(--ess-a1) 7%, var(--ez-surface)) 100%);
+    radial-gradient(560px 240px at 100% 0%, color-mix(in srgb, var(--ess-a1) 13%, transparent) 0%, transparent 65%),
+    radial-gradient(380px 200px at 0% 100%, color-mix(in srgb, var(--ess-rail-ink) 8%, transparent) 0%, transparent 65%),
+    linear-gradient(135deg, var(--ez-surface) 0%, color-mix(in srgb, var(--ess-rail-ink) 5%, var(--ez-surface)) 100%);
   border: 1px solid var(--ess-glass-edge);
   box-shadow: var(--ess-shadow);
 }
 .ess-soft-hero::after {
   content: ""; position: absolute; right: -70px; top: -70px; width: 220px; height: 220px; border-radius: 50%;
-  border: 28px solid color-mix(in srgb, var(--ess-a2) 7%, transparent); pointer-events: none;
+  border: 28px solid color-mix(in srgb, var(--ess-a1) 6%, transparent); pointer-events: none;
 }
 
 /* ── Cards across ESS screens: one depth, a hairline, a little glass ─────── */

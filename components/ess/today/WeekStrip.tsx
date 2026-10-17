@@ -15,7 +15,10 @@ export default function WeekStrip({ data, prefs, liveIn, nav }: { data: TodayPay
       <div className="week">
         {data.week.map(d => {
           const isToday = d.date === todayISO, future = d.date > todayISO;
-          const cls = ['day', isToday && 'today', d.is_off && 'off', d.is_late && 'late', future && !d.is_off && 'next'].filter(Boolean).join(' ');
+          // The day's status, coloured the way the attendance calendar colours it.
+          const kind = d.is_off ? 'off' : future ? 'next' : isToday ? 'today'
+            : !d.punch_in ? 'absent' : !d.punch_out ? 'miss' : d.is_late ? 'late' : 'present';
+          const cls = `day ${kind}`;
           const liveHours = isToday && liveIn ? (Date.now() - liveIn.getTime()) / 3.6e6 : null;
           const w = ready ? Math.min(100, ((liveHours ?? d.hours ?? 0) / SHIFT_H) * 100) : 0;
           let l1 = '', l2 = '';
