@@ -1384,9 +1384,57 @@ const STATUS_BAR: Record<string,string> = new Proxy({} as Record<string,string>,
 const STATUS_FULL: Record<string,string> = new Proxy({} as Record<string,string>, {
   get: (_t, k: string) => k === 'LWP' ? 'Loss of pay' : k === 'FUTURE' ? '—' : (metaOf(k)?.label ?? k),
 })
-const STATUS_LABEL: Record<string,string> = new Proxy({} as Record<string,string>, {
-  get: (_t, k: string) => k === 'LWP' ? 'LWP' : (metaOf(k)?.code ?? ''),
-})
+
+/**
+ * How a day is marked on the calendar — a shape, not a letter code. A month of
+ * "P P P MI ½ A" read as clutter; a tick, a cross or a half-disc is read before
+ * the eye gets to it, and a corner flag says "something about this day" without
+ * covering the date.
+ *
+ * Missed punches are told apart by WHICH corner is flagged: a missed punch-in
+ * flags the top-left (the start of the day), a missed punch-out the bottom-right
+ * (the end of it). The legend shows both.
+ */
+type MarkGlyph = 'tick' | 'half' | 'cross' | 'star' | 'live' | null
+type MarkCorner = 'tr' | 'tl' | 'br' | null
+function markOf(status: string): { glyph: MarkGlyph; corner: MarkCorner } {
+  switch (status) {
+    case 'PRESENT':     return { glyph: 'tick',  corner: null }
+    case 'IN_PROGRESS': return { glyph: 'live',  corner: null }
+    case 'LATE':        return { glyph: 'tick',  corner: 'tr' }
+    case 'HALF_DAY':    return { glyph: 'half',  corner: null }
+    case 'MISS_IN':     return { glyph: null,    corner: 'tl' }
+    case 'MISS_OUT': case 'MISS_PUNCH': return { glyph: null, corner: 'br' }
+    case 'ABSENT': case 'LWP': return { glyph: 'cross', corner: null }
+    case 'ON_LEAVE': case 'HALF_LEAVE': return { glyph: null, corner: 'tr' }
+    case 'HOLIDAY':     return { glyph: 'star',  corner: null }
+    default:            return { glyph: null,    corner: null }
+  }
+}
+/** The mark's colour. Late is a present day, so its status colour is green — but the
+ *  mark is there to flag the lateness, which is amber. */
+const markColor = (status: string) => status === 'LATE' ? C.warning : STATUS_BAR[status]
+const CORNER_CLIP: Record<Exclude<MarkCorner, null>, string> = {
+  tr: 'polygon(0 0,100% 0,100% 100%)', tl: 'polygon(0 0,100% 0,0 100%)', br: 'polygon(100% 0,100% 100%,0 100%)',
+}
+function CornerFlag({ corner, color, size }: { corner: MarkCorner; color: string; size: number }) {
+  if (!corner) return null
+  const pos: React.CSSProperties = corner === 'tr' ? { top: 0, right: 0 } : corner === 'tl' ? { top: 0, left: 0 } : { bottom: 0, right: 0 }
+  return <span aria-hidden style={{ position: 'absolute', ...pos, width: size, height: size, background: color, clipPath: CORNER_CLIP[corner] }} />
+}
+function DayGlyph({ glyph, color, size }: { glyph: MarkGlyph; color: string; size: number }) {
+  if (!glyph) return null
+  const sw = 2.4
+  return (
+    <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden style={{ display: 'block', flex: 'none' }}>
+      {glyph === 'tick'  && <path d="M2.5 6.4 L5 8.8 L9.6 3.4" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />}
+      {glyph === 'cross' && <path d="M3.4 3.4 L8.6 8.6 M8.6 3.4 L3.4 8.6" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" />}
+      {glyph === 'half'  && <><circle cx="6" cy="6" r="4.3" fill="none" stroke={color} strokeWidth="1.6" /><path d="M6 1.7 A4.3 4.3 0 0 0 6 10.3 Z" fill={color} /></>}
+      {glyph === 'star'  && <path d="M6 1.4 L7.3 4.5 L10.6 4.7 L8 6.8 L8.9 10.1 L6 8.3 L3.1 10.1 L4 6.8 L1.4 4.7 L4.7 4.5 Z" fill={color} />}
+      {glyph === 'live'  && <circle cx="6" cy="6" r="3" fill={color} />}
+    </svg>
+  )
+}
 
 const fmtT = (iso: string|null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '-'
 
@@ -1603,20 +1651,28 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
 function CalendarLegend() {
   const items = ['PRESENT','LATE','HALF_DAY','MISS_IN','MISS_OUT','ABSENT','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
   return (
-    <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 13px', marginTop:11, paddingTop:9,
-                  borderTop: `1px solid ${C.brandEdge}` }}>
-      {items.map(k => (
-        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:4,
-                               fontSize:10, color:C.muted }}>
-          <span style={{ minWidth:18, textAlign:'center', fontSize:9, fontWeight:800, color:STATUS_BAR[k] }}>{STATUS_LABEL[k] || '•'}</span>
-          {STATUS_FULL[k]}
-        </span>
-      ))}
-      <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:C.muted }}>
-        <span style={{ width:6, height:6, borderRadius:'50%', background:C.warning }} />Correction pending
+    <div style={{ display:'flex', flexWrap:'wrap', gap:'8px 14px', marginTop:12, paddingTop:10,
+                  borderTop: `1px solid ${C.line}` }}>
+      {items.map(k => {
+        const m = markOf(k)
+        const [bg] = STATUS_STYLE[k] || [C.surface]
+        return (
+          <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:C.muted }}>
+            <span style={{ position:'relative', width:18, height:18, borderRadius:5, overflow:'hidden', flex:'none',
+                           background: k === 'PRESENT' || k === 'LATE' ? C.surface : bg, border:`1px solid ${C.line}`,
+                           display:'grid', placeItems:'center' }}>
+              <DayGlyph glyph={m.glyph} color={markColor(k)} size={11} />
+              <CornerFlag corner={m.corner} color={markColor(k)} size={8} />
+            </span>
+            {STATUS_FULL[k]}
+          </span>
+        )
+      })}
+      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:C.muted }}>
+        <span style={{ width:7, height:7, borderRadius:'50%', background:C.warning }} />Correction pending
       </span>
-      <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:C.muted }}>
-        <span style={{ fontSize:10, fontWeight:800, color:C.positive }}>✓</span>Regularised
+      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:C.muted }}>
+        <span style={{ width:7, height:7, borderRadius:'50%', background:C.positive }} />Regularised
       </span>
     </div>
   )
@@ -1715,34 +1771,66 @@ function ShimmerKeyframes() {
  */
 /** The right column before a day is picked. An empty panel reads as broken. */
 function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }) {
-  const rows: [string, string, string][] = [
-    ['Present',   String(summary.present),   STATUS_BAR.PRESENT],
-    ['Absent',    String(summary.absent),    STATUS_BAR.ABSENT],
-    ['Half day',  String(summary.halfDay),   STATUS_BAR.HALF_DAY],
-    ['Missed punch', String(summary.missPunch), STATUS_BAR.MISS_OUT],
-    ['On leave',  String(summary.onLeave),   STATUS_BAR.ON_LEAVE],
+  // Present here excludes the missed-punch days, which get their own slice.
+  const rows: [string, number, string][] = [
+    ['Present',      Math.max(0, summary.present - summary.missPunch), STATUS_BAR.PRESENT],
+    // a lighter red than Absent, so the two read as different slices
+    ['Missed punch', summary.missPunch,                `color-mix(in srgb, ${STATUS_BAR.MISS_OUT} 50%, ${C.surface})`],
+    ['Half day',     summary.halfDay,                  STATUS_BAR.HALF_DAY],
+    ['Absent',       summary.absent + summary.lopDays, STATUS_BAR.ABSENT],
+    ['On leave',     summary.onLeave,                  STATUS_BAR.ON_LEAVE],
   ]
+  const total = rows.reduce((a, r) => a + r[1], 0)
+  const D = 168, R = 66, SW = 18, CIRC = 2 * Math.PI * R
+  let at = 0
   return (
-    <div style={{ ...T.card, height: '100%', display: 'flex', flexDirection: 'column',
-                  justifyContent: 'center', marginBottom: 0 }}>
-      <div style={{ textAlign: 'center', padding: '6px 0 16px' }}>
-        <div style={{ fontSize: 26, marginBottom: 6 }}></div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>Pick a day</div>
-        <div style={{ fontSize: 12, color: C.faint, marginTop: 3, lineHeight: 1.55 }}>
-          Its punches, hours and status appear here.
+    <div style={{ ...T.card, height: '100%', display: 'flex', flexDirection: 'column', marginBottom: 0 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '.06em',
+                    textTransform: 'uppercase' }}>This month so far</div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '14px 0 10px' }}>
+        {/* The month as one donut: each slice is a kind of day, the centre is the score. */}
+        <div style={{ position: 'relative', width: D, height: D, flex: 'none' }}>
+          <svg width={D} height={D} viewBox={`0 0 ${D} ${D}`} role="img"
+               aria-label={rows.map(([k, v]) => `${k} ${v}`).join(', ')}>
+            <circle cx={D/2} cy={D/2} r={R} fill="none" stroke={C.sunken} strokeWidth={SW} />
+            {total > 0 && rows.map(([k, v, c]) => {
+              if (!v) return null
+              const len = (v / total) * CIRC
+              const seg = (
+                <circle key={k} cx={D/2} cy={D/2} r={R} fill="none" strokeWidth={SW} style={{ stroke: c }}
+                        strokeDasharray={`${Math.max(0, len - 2.5)} ${CIRC}`} strokeDashoffset={-at}
+                        transform={`rotate(-90 ${D/2} ${D/2})`} />
+              )
+              at += len
+              return seg
+            })}
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: C.ink, lineHeight: 1, letterSpacing: '-.02em' }}>
+                {summary.pct === null ? '–' : `${summary.pct}%`}
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>attendance</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 18px' }}>
+          {rows.map(([k, v, c]) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                                  borderRadius: 9, background: C.sunken }}>
+              <span style={{ width: 9, height: 9, borderRadius: 3, background: c, opacity: v ? 1 : .35 }} />
+              <span style={{ fontSize: 12, color: C.inkSoft, flex: 1 }}>{k}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: v === 0 ? C.faint : C.ink }}>{v}</span>
+            </div>
+          ))}
         </div>
       </div>
-      <div style={{ borderTop: `1px solid ${C.brandEdge}`, paddingTop: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.faint, letterSpacing: '.06em',
-                      textTransform: 'uppercase', marginBottom: 8 }}>This month so far</div>
-        {rows.map(([k, v, c]) => (
-          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />
-            <span style={{ fontSize: 12, color: C.muted, flex: 1 }}>{k}</span>
-            <span style={{ fontSize: 13, fontWeight: 700,
-                           color: v === '0' ? C.faint : C.ink }}>{v}</span>
-          </div>
-        ))}
+
+      <div style={{ paddingTop: 12, borderTop: `1px solid ${C.line}`,
+                    fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+        <b style={{ color: C.ink, fontWeight: 650 }}>Pick a day</b> on the calendar to see its punches, hours and status.
       </div>
     </div>
   )
@@ -1847,18 +1935,17 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
-    const { status, rec, leave, day } = resolveDay(dateStr, monthData, todayStr)
+    const { status, rec, day } = resolveDay(dateStr, monthData, todayStr)
     const [bg, ink] = STATUS_STYLE[status] || [C.surface, C.ink]
-    const dot = STATUS_BAR[status]
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
     const isFuture = status === 'FUTURE'
     // Present days show when they began; every other day shows its code, so a
     // half day (½), a missed punch-in (MI) and a missed punch-out (MO) are
     // readable without opening the day.
-    const calm = status === 'PRESENT' || status === 'IN_PROGRESS'
-    const hasTimes = !isMobile && !isFuture && calm && rec && rec.work_in
-    const code = status === 'ON_LEAVE' || status === 'HALF_LEAVE' ? (leave?.short_name || STATUS_LABEL[status]) : STATUS_LABEL[status]
+    const calm = status === 'PRESENT' || status === 'LATE' || status === 'IN_PROGRESS'
+    const mark = markOf(status)
+    const markInk = isSel ? C.onAccent : markColor(status)
     const pendingFix = day?.correction?.status === 'PENDING'
     const fixed = !!day?.regularised || day?.correction?.status === 'APPROVED'
     // Wave across the grid rather than a uniform fade. Capped so the last cell
@@ -1878,7 +1965,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           // that is nearly invisible on a #0F1216 canvas, so in dark mode the
           // grid lost its structure and the days ran together.
           background: isSel ? `linear-gradient(145deg, ${C.brand}, ${C.brandDeep})`
-                    : isFuture ? 'transparent' : bg,
+                    : isFuture ? 'transparent' : calm ? C.surface : bg,
           color: isSel ? C.onAccent : ink,
           border: isSel ? `1px solid ${C.brandDeep}`
                 : isToday ? `2px solid ${C.brand}`
@@ -1902,35 +1989,23 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           {d}
         </span>
 
-        {/* The status: a dot for an ordinary present day, the code otherwise.
-            onAccent, not white, on the selected cell: in dark its fill is a
-            LIGHT blue, and white disappears on it. */}
-        {!isFuture && (hasTimes ? (
-          <span style={{ fontSize: 8, lineHeight: 1, opacity: .75, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
-            {fmtT(rec!.work_in)}
-          </span>
-        ) : calm ? (
-          <span style={{ width: 5, height: 5, borderRadius: '50%', marginTop: 2, background: isSel ? C.onAccent : dot }} />
-        ) : code ? (
-          <span style={{ fontSize: isMobile ? 8 : 9, fontWeight: 800, lineHeight: 1, marginTop: 1, letterSpacing: '.02em',
-                         color: isSel ? C.onAccent : dot }}>
-            {code}
-          </span>
-        ) : null)}
+        {/* The status as a shape — tick, cross, half-disc, star — and a corner
+            flag for the exceptions. onAccent, not white, on the selected cell:
+            in dark its fill is a LIGHT blue, and white disappears on it. */}
+        {!isFuture && <span style={{ height: isMobile ? 10 : 12, marginTop: 3, display: 'grid', placeItems: 'center' }}>
+          <DayGlyph glyph={mark.glyph} color={markInk} size={isMobile ? 10 : 12} />
+        </span>}
+        {!isFuture && <CornerFlag corner={mark.corner} color={markInk} size={isMobile ? 10 : 13} />}
 
-        {/* Correction state, top-left: amber = waiting on the approver, ✓ = done. */}
+        {/* Correction state, bottom-left: amber = waiting on the approver, green = regularised. */}
         {pendingFix && (
-          <span style={{ position: 'absolute', top: 3, left: 4, width: 5, height: 5, borderRadius: '50%', background: C.warning }} />
+          <span style={{ position: 'absolute', bottom: 4, left: 4, width: 6, height: 6, borderRadius: '50%', background: C.warning }} />
         )}
         {!pendingFix && fixed && (
-          <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 8, fontWeight: 800, lineHeight: 1,
-                         color: isSel ? C.onAccent : C.positive }}>✓</span>
+          <span style={{ position: 'absolute', bottom: 4, left: 4, width: 6, height: 6, borderRadius: '50%',
+                         background: isSel ? C.onAccent : C.positive }} />
         )}
 
-        {isToday && !isSel && (
-          <span style={{ position: 'absolute', top: 3, right: 4, width: 4, height: 4,
-                         borderRadius: '50%', background: C.brand }} />
-        )}
       </button>
     )
   }

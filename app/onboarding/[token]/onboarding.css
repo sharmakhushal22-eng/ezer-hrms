@@ -27,7 +27,7 @@
   scrollbar-width: thin;
 }
 .ezo-main { flex: 1; min-width: 0; padding: 40px 48px 64px; }
-.ezo-col { max-width: 800px; margin: 0 auto; }
+.ezo-col { max-width: 1120px; margin: 0 auto; }  /* fills the space beside the journey rail; was 800px with empty gutters */
 
 .ezo-co { display: flex; align-items: center; gap: 12px; }
 .ezo-mono {

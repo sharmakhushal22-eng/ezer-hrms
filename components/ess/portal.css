@@ -20,17 +20,19 @@
   --ess-a1: #2563EB;   /* brand blue  */
   --ess-a2: #4F46E5;   /* indigo      */
   --ess-a3: #0EA5E9;   /* sky         */
-  --ess-grad: linear-gradient(135deg, var(--ess-a1) 0%, var(--ess-a2) 100%);
-  --ess-canvas: #ECF0F8;
+  /* one blue, lightly shaded, not a blue-to-violet sweep: the sweep is what read as "generated" */
+  --ess-grad: linear-gradient(135deg, #3B82F6 0%, var(--ess-a1) 100%);
+  --ess-canvas: #F3F6FC;
   --ess-aurora:
-    radial-gradient(900px 520px at 100% -10%, rgba(99, 102, 241, .16) 0%, transparent 60%),
-    radial-gradient(800px 480px at 20% -20%, rgba(37, 99, 235, .14) 0%, transparent 62%),
-    radial-gradient(700px 520px at 85% 110%, rgba(14, 165, 233, .12) 0%, transparent 60%),
-    radial-gradient(600px 420px at -10% 90%, rgba(99, 102, 241, .08) 0%, transparent 60%);
+    radial-gradient(900px 420px at 100% -10%, rgba(59, 130, 246, .10) 0%, transparent 60%),
+    radial-gradient(700px 520px at 85% 110%, rgba(14, 165, 233, .06) 0%, transparent 60%);
   --ess-glass: rgba(255, 255, 255, .62);
   --ess-glass-strong: rgba(255, 255, 255, .80);
   /* the rail: a pale blue-lavender glass, light at the top, a touch deeper at the foot */
-  --ess-rail-bg: linear-gradient(180deg, rgba(241, 245, 255, .82) 0%, rgba(232, 237, 252, .78) 55%, rgba(226, 232, 250, .80) 100%);
+  /* the rail: a clear periwinkle, so it reads as its own surface against the pale canvas */
+  --ess-rail-bg: linear-gradient(180deg, #E4EBFF 0%, #DAE3FE 100%);
+  --ess-rail-ink: #1E2B4F;
+  --ess-rail-edge: rgba(37, 99, 235, .16);
   --ess-glass-edge: rgba(255, 255, 255, .85);
   --ess-hair: rgba(15, 23, 42, .07);
   --ess-ink: #0F172A;
@@ -49,7 +51,7 @@
       radial-gradient(900px 520px at 100% -10%, rgba(99, 102, 241, .16) 0%, transparent 60%),
       radial-gradient(800px 480px at 20% -20%, rgba(37, 99, 235, .14) 0%, transparent 62%),
       radial-gradient(700px 520px at 85% 110%, rgba(14, 165, 233, .10) 0%, transparent 60%);
-    --ess-rail-bg: linear-gradient(180deg, rgba(24, 30, 44, .85), rgba(20, 25, 38, .85)); --ess-glass: rgba(22, 27, 36, .62); --ess-glass-strong: rgba(22, 27, 36, .82); --ess-glass-edge: rgba(255, 255, 255, .06);
+    --ess-rail-bg: linear-gradient(180deg, rgba(24, 30, 44, .85), rgba(20, 25, 38, .85)); --ess-rail-ink: #CBD5E1; --ess-rail-edge: rgba(255, 255, 255, .06); --ess-glass: rgba(22, 27, 36, .62); --ess-glass-strong: rgba(22, 27, 36, .82); --ess-glass-edge: rgba(255, 255, 255, .06);
     --ess-hair: rgba(255, 255, 255, .07); --ess-ink: #F1F5F9; --ess-ink-2: #CBD5E1; --ess-ink-3: #94A3B8;
     --ess-chip: rgba(96, 165, 250, .14); --ess-chip-ink: #93C5FD;
     --ess-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 30px -18px rgba(0, 0, 0, .7);
@@ -61,7 +63,7 @@
     radial-gradient(900px 520px at 100% -10%, rgba(99, 102, 241, .16) 0%, transparent 60%),
     radial-gradient(800px 480px at 20% -20%, rgba(37, 99, 235, .14) 0%, transparent 62%),
     radial-gradient(700px 520px at 85% 110%, rgba(14, 165, 233, .10) 0%, transparent 60%);
-  --ess-rail-bg: linear-gradient(180deg, rgba(24, 30, 44, .85), rgba(20, 25, 38, .85)); --ess-glass: rgba(22, 27, 36, .62); --ess-glass-strong: rgba(22, 27, 36, .82); --ess-glass-edge: rgba(255, 255, 255, .06);
+  --ess-rail-bg: linear-gradient(180deg, rgba(24, 30, 44, .85), rgba(20, 25, 38, .85)); --ess-rail-ink: #CBD5E1; --ess-rail-edge: rgba(255, 255, 255, .06); --ess-glass: rgba(22, 27, 36, .62); --ess-glass-strong: rgba(22, 27, 36, .82); --ess-glass-edge: rgba(255, 255, 255, .06);
   --ess-hair: rgba(255, 255, 255, .07); --ess-ink: #F1F5F9; --ess-ink-2: #CBD5E1; --ess-ink-3: #94A3B8;
   --ess-chip: rgba(96, 165, 250, .14); --ess-chip-ink: #93C5FD;
   --ess-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 30px -18px rgba(0, 0, 0, .7);
@@ -74,8 +76,7 @@
   display: flex; flex-direction: column;
   background: var(--ess-rail-bg);
   backdrop-filter: blur(20px) saturate(1.5); -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  border-right: 1px solid var(--ess-glass-edge);
-  box-shadow: 1px 0 0 var(--ess-hair), 10px 0 40px -30px rgba(30, 58, 138, .35);
+  border-right: 1px solid var(--ess-rail-edge);
 }
 .ess-brand { display: flex; align-items: center; gap: 10px; padding: 18px 20px 14px; }
 .ess-brand-tag {
@@ -89,25 +90,25 @@
 .ess-group + .ess-group { margin-top: 12px; }
 .ess-group-label {
   font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--ess-ink-3); padding: 0 10px 6px;
+  color: color-mix(in srgb, var(--ess-rail-ink) 62%, transparent); padding: 0 10px 6px;
 }
 .ess-item {
   position: relative; width: 100%; height: 38px; margin: 1px 0; padding: 0 8px;
   display: flex; align-items: center; gap: 10px; text-align: left; text-decoration: none; box-sizing: border-box;
   border: 0; border-radius: 11px; background: transparent; cursor: pointer;
-  color: var(--ess-ink-2); font-family: inherit; font-size: 13.5px; font-weight: 550;
+  color: var(--ess-rail-ink); font-family: inherit; font-size: 13.5px; font-weight: 550;
   transition: background .16s ease, color .16s ease, box-shadow .16s ease;
 }
 .ess-item-ic {
   width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 8px;
-  background: var(--ess-chip); color: var(--ess-chip-ink);
+  background: color-mix(in srgb, var(--ez-surface) 70%, transparent); color: var(--ess-chip-ink);
   transition: background .16s ease, color .16s ease;
 }
 .ess-item svg { flex: none; }
-.ess-item:hover { background: var(--ess-glass-strong); color: var(--ess-ink); box-shadow: 0 1px 2px rgba(15, 23, 42, .05); }
+.ess-item:hover { background: color-mix(in srgb, var(--ez-surface) 60%, transparent); color: var(--ess-ink); }
 .ess-item[data-on="1"] {
-  background: var(--ess-grad); color: #FFFFFF; font-weight: 650;
-  box-shadow: 0 8px 20px -10px var(--ess-a2), inset 0 1px 0 rgba(255, 255, 255, .2);
+  background: var(--ess-a1); color: #FFFFFF; font-weight: 650;
+  box-shadow: 0 6px 16px -8px rgba(37, 99, 235, .7);
 }
 .ess-item[data-on="1"] .ess-item-ic { background: rgba(255, 255, 255, .2); color: #FFFFFF; }
 .ess-item-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -121,7 +122,7 @@
 /* The signed-in person, pinned to the bottom of the rail. */
 .ess-me {
   margin: 8px 12px 14px; padding: 10px; display: flex; align-items: center; gap: 10px;
-  border-radius: 14px; border: 1px solid var(--ess-glass-edge); background: var(--ess-glass-strong);
+  border-radius: 14px; border: 1px solid var(--ess-rail-edge); background: var(--ez-surface);
   box-shadow: var(--ess-shadow);
 }
 .ess-me-name { font-size: 13px; font-weight: 700; color: var(--ess-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -157,8 +158,8 @@
 .ess-head { display: flex; align-items: center; gap: 15px; margin: 2px 0 20px; }
 .ess-head-ic {
   width: 48px; height: 48px; flex: none; display: grid; place-items: center; border-radius: 15px;
-  color: #FFFFFF; background: var(--ess-grad);
-  box-shadow: 0 12px 24px -12px var(--ess-a2), inset 0 1px 0 rgba(255, 255, 255, .25);
+  color: var(--ess-a1); background: color-mix(in srgb, var(--ess-a1) 11%, var(--ez-surface));
+  border: 1px solid color-mix(in srgb, var(--ess-a1) 18%, transparent);
 }
 .ess-head h1 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 750; letter-spacing: -.022em; color: var(--ess-ink); }
 .ess-head p { margin: 3px 0 0; font-size: 13.5px; color: var(--ess-ink-3); }
@@ -178,8 +179,8 @@
 .ess-seg {
   display: flex; gap: 2px; padding: 4px; margin-bottom: 18px;
   width: max-content; max-width: 100%; overflow-x: auto; scrollbar-width: none;
-  background: var(--ess-glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--ess-glass-edge); border-radius: 13px; box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  background: color-mix(in srgb, var(--ess-a1) 7%, var(--ez-surface));
+  border: 1px solid color-mix(in srgb, var(--ess-a1) 14%, transparent); border-radius: 13px;
 }
 .ess-seg::-webkit-scrollbar { display: none; }
 .ess-seg button {
@@ -191,7 +192,8 @@
 .ess-seg button:hover { color: var(--ess-ink); background: var(--ess-glass-strong); }
 .ess-seg button[data-on="1"] {
   background: var(--ez-surface); color: var(--ess-chip-ink);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 4px 12px -6px rgba(37, 99, 235, .35);
+  /* a short brand bar under the active tab, so the colour sits where the eye already is */
+  box-shadow: inset 0 -2.5px 0 var(--ess-a1), 0 1px 2px rgba(15, 23, 42, .08);
 }
 .ess-seg .ess-seg-soon { margin-left: 6px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ess-ink-3); }
 
