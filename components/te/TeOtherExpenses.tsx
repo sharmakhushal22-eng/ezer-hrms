@@ -17,6 +17,7 @@ import type { ClaimPreview, Snapshot, TeExpense, TeFlag, TeTrip } from '@/lib/te
 import TeIcon from './TeIcon'
 import { errorText, flagClass, plural, rs } from '@/lib/te/format'
 import { linesWaitingInTrips } from '@/lib/te/trips-list'
+import { claimDateOf, periodFor } from '@/lib/te/period'
 import { isCoTraveller } from '@/lib/te/co-traveller'
 
 export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted, onBack, onOpenTrip }: {
@@ -76,7 +77,18 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
 
   const review = lines.length ? preview : null
   const stops = review ? [...review.blockers, ...review.needs] : []
-  const period = snap.periods.filter(p => p.status === 'OPEN').map(p => p.label)[0]
+  // The month this claim will actually land in. This used to be "the first
+  // open month in the list", which showed a 17 October trip as "Jun 2026"
+  // whenever an older month was still open. The claim went into October
+  // regardless — te_period_for decides at submit — but the screen promised the
+  // wrong one. periodFor mirrors that rule; see lib/te/period.ts.
+  // With no lines there is no claim yet and no date to place it by, so the
+  // month is not asserted at all rather than guessed and painted amber.
+  const period = useMemo(() => {
+    if (!lines.length) return null
+    const when = claimDateOf(trip?.end, lines.map(x => x.date))
+    return periodFor(snap.periods, when, snap.today)
+  }, [snap.periods, snap.today, trip?.end, lines])
 
   return (
     <>
@@ -163,7 +175,9 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
           <div className="card">
             <div className="ch">
               <h3>{trip ? 'This claim' : 'This month’s claim'}</h3>
-              {period ? <span className="chip plain t-brand">{period}</span> : null}
+              {period ? (
+                <span className={period.isLate ? 'chip plain t-warn' : 'chip plain t-brand'}>{period.period.label}</span>
+              ) : null}
             </div>
             {review ? (
               <>
@@ -173,6 +187,12 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
                   {review.outstanding > 0 ? <><dt>Advance with you</dt><dd>{rs(-review.outstanding)}</dd></> : null}
                   <dt className="tot">Expected to be paid</dt><dd className="tot">{rs(review.net)}</dd>
                 </dl>
+                {/* Worth saying out loud: it is how an October bill ends up
+                    reimbursed in November, and the employee should hear it
+                    before they submit rather than after. */}
+                {period?.isLate ? (
+                  <p className="small muted">Its own month is closed, so this goes into {period.period.label}.</p>
+                ) : null}
                 {review.chain.length ? <p className="small muted">Goes to {review.chain.map(c => c.name || c.role).join(', then ')}.</p> : null}
                 <div className="stack sm">
                   {stops.map(fl => (
