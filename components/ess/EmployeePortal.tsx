@@ -1385,33 +1385,9 @@ const STATUS_FULL: Record<string,string> = new Proxy({} as Record<string,string>
   get: (_t, k: string) => k === 'LWP' ? 'Loss of pay' : k === 'FUTURE' ? '—' : (metaOf(k)?.label ?? k),
 })
 
-/**
- * How a day looks on the calendar: colour only. The user found letter codes
- * cluttered and shapes busy, so a day is read from its fill and its edge.
- * Present is green, absent red, half day amber, leave brand blue, holiday sky.
- * The two "present but flagged" days keep a green or amber fill and add a
- * stronger edge: late = green with an amber edge, missed punch = amber with a
- * red edge. Hover shows the full status; the day panel explains it.
- */
-function cellLook(status: string): { bg: string; ink: string; edge: string; strong?: boolean } {
-  // A fill a step deeper than the …Tint tokens, mixed from the status colour so it
-  // follows the theme. The tints alone were too pale to read as colour on a grid.
-  const fill = (c: string, pct = 14) => `color-mix(in srgb, ${c} ${pct}%, ${C.surface})`
-  const edge = (c: string) => `color-mix(in srgb, ${c} 35%, ${C.surface})`
-  switch (status) {
-    case 'PRESENT': case 'IN_PROGRESS': return { bg: fill(C.positive), ink: C.positive, edge: edge(C.positive) }
-    case 'LATE':        return { bg: fill(C.positive), ink: C.positive, edge: C.warning, strong: true }
-    case 'HALF_DAY':    return { bg: fill(C.warning, 16), ink: C.warning, edge: edge(C.warning) }
-    case 'MISS_IN': case 'MISS_OUT': case 'MISS_PUNCH':
-                        return { bg: fill(C.warning, 16), ink: C.critical, edge: C.critical, strong: true }
-    case 'ABSENT': case 'LWP': return { bg: fill(C.critical), ink: C.critical, edge: edge(C.critical) }
-    case 'ON_LEAVE': case 'HALF_LEAVE': return { bg: fill(C.brand), ink: C.brandDeep, edge: edge(C.brand) }
-    case 'HOLIDAY':     return { bg: fill(C.info), ink: C.info, edge: edge(C.info) }
-    case 'WEEKLY_OFF':  return { bg: C.sunken, ink: C.faint, edge: C.line }
-    case 'FUTURE':      return { bg: 'transparent', ink: C.faint, edge: C.line }
-    default:            return { bg: C.surface, ink: C.ink, edge: C.line }
-  }
-}
+const STATUS_LABEL: Record<string,string> = new Proxy({} as Record<string,string>, {
+  get: (_t, k: string) => k === 'LWP' ? 'LWP' : (metaOf(k)?.code ?? ''),
+})
 
 const fmtT = (iso: string|null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '-'
 
@@ -1626,25 +1602,22 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
 
 /** What the colours mean. Without this the calendar is a puzzle on first visit. */
 function CalendarLegend() {
-  const items = ['PRESENT','LATE','HALF_DAY','MISS_OUT','ABSENT','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
+  const items = ['PRESENT','LATE','HALF_DAY','MISS_IN','MISS_OUT','ABSENT','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
   return (
-    <div style={{ display:'flex', flexWrap:'wrap', gap:'8px 14px', marginTop:12, paddingTop:10,
-                  borderTop: `1px solid ${C.line}` }}>
-      {items.map(k => {
-        const l = cellLook(k)
-        return (
-          <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:C.muted }}>
-            <span style={{ width:14, height:14, borderRadius:4, flex:'none', background:l.bg,
-                           border:`${l.strong ? 2 : 1}px solid ${l.edge}`, boxSizing:'border-box' }} />
-            {k === 'MISS_OUT' ? 'Missed punch' : STATUS_FULL[k]}
-          </span>
-        )
-      })}
-      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:C.muted }}>
-        <span style={{ width:7, height:7, borderRadius:'50%', background:C.warning }} />Correction pending
+    <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 13px', marginTop:11, paddingTop:9,
+                  borderTop: `1px solid ${C.brandEdge}` }}>
+      {items.map(k => (
+        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:4,
+                               fontSize:10, color:C.muted }}>
+          <span style={{ minWidth:18, textAlign:'center', fontSize:9, fontWeight:800, color:STATUS_BAR[k] }}>{STATUS_LABEL[k] || '•'}</span>
+          {STATUS_FULL[k]}
+        </span>
+      ))}
+      <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:C.muted }}>
+        <span style={{ width:6, height:6, borderRadius:'50%', background:C.warning }} />Correction pending
       </span>
-      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:C.muted }}>
-        <span style={{ width:7, height:7, borderRadius:'50%', background:C.positive }} />Regularised
+      <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:C.muted }}>
+        <span style={{ fontSize:10, fontWeight:800, color:C.positive }}>✓</span>Regularised
       </span>
     </div>
   )
@@ -1907,11 +1880,15 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
-    const { status, rec, day } = resolveDay(dateStr, monthData, todayStr)
-    const look = cellLook(status)
+    const { status, rec, leave, day } = resolveDay(dateStr, monthData, todayStr)
+    const [bg, ink] = STATUS_STYLE[status] || [C.surface, C.ink]
+    const dot = STATUS_BAR[status]
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
     const isFuture = status === 'FUTURE'
+    // Every day shows its code — P, LT, ½, MI, MO, A, the leave type, H — matching the
+    // legend. Punch times are not printed in the cell; clicking the day shows them.
+    const code = status === 'ON_LEAVE' || status === 'HALF_LEAVE' ? (leave?.short_name || STATUS_LABEL[status]) : STATUS_LABEL[status]
     const pendingFix = day?.correction?.status === 'PENDING'
     const fixed = !!day?.regularised || day?.correction?.status === 'APPROVED'
     // Wave across the grid rather than a uniform fade. Capped so the last cell
@@ -1931,12 +1908,11 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           // that is nearly invisible on a #0F1216 canvas, so in dark mode the
           // grid lost its structure and the days ran together.
           background: isSel ? `linear-gradient(145deg, ${C.brand}, ${C.brandDeep})`
-                    : isFuture ? 'transparent' : look.bg,
-          color: isSel ? C.onAccent : look.ink,
+                    : isFuture ? 'transparent' : bg,
+          color: isSel ? C.onAccent : ink,
           border: isSel ? `1px solid ${C.brandDeep}`
                 : isToday ? `2px solid ${C.brand}`
-                : isFuture ? `1px solid ${C.line}`
-                : `${look.strong ? 2 : 1}px solid ${look.edge}`,
+                : `1px solid ${C.line}`,
           borderRadius: 10, padding: 0,
           cursor: isFuture ? 'default' : 'pointer',
           opacity: isFuture ? .45 : 1,
@@ -1956,15 +1932,28 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           {d}
         </span>
 
-        {/* Correction state, bottom-left: amber = waiting on the approver, green = regularised. */}
-        {pendingFix && (
-          <span style={{ position: 'absolute', bottom: 4, left: 4, width: 6, height: 6, borderRadius: '50%', background: C.warning }} />
-        )}
-        {!pendingFix && fixed && (
-          <span style={{ position: 'absolute', bottom: 4, left: 4, width: 6, height: 6, borderRadius: '50%',
-                         background: isSel ? C.onAccent : C.positive }} />
+        {/* The status code. onAccent, not white, on the selected cell: in dark its
+            fill is a LIGHT blue, and white disappears on it. */}
+        {!isFuture && code && (
+          <span style={{ fontSize: isMobile ? 8 : 9, fontWeight: 800, lineHeight: 1, marginTop: 1, letterSpacing: '.02em',
+                         color: isSel ? C.onAccent : dot }}>
+            {code}
+          </span>
         )}
 
+        {/* Correction state, top-left: amber = waiting on the approver, ✓ = done. */}
+        {pendingFix && (
+          <span style={{ position: 'absolute', top: 3, left: 4, width: 5, height: 5, borderRadius: '50%', background: C.warning }} />
+        )}
+        {!pendingFix && fixed && (
+          <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 8, fontWeight: 800, lineHeight: 1,
+                         color: isSel ? C.onAccent : C.positive }}>✓</span>
+        )}
+
+        {isToday && !isSel && (
+          <span style={{ position: 'absolute', top: 3, right: 4, width: 4, height: 4,
+                         borderRadius: '50%', background: C.brand }} />
+        )}
       </button>
     )
   }

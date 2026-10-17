@@ -506,21 +506,20 @@
 .ezt { background: transparent; }
 .ezt .hero { padding: 20px 24px; gap: 22px; align-items: center; border-radius: 18px; }
 .ezt .sky .orb { display: none; }
-.ezt .dialwrap {
-  display: grid; grid-template-columns: auto 176px; grid-template-areas: "dial bar" "dial shift" "dial streak";
-  column-gap: 18px; row-gap: 8px; align-items: center; justify-items: stretch;
-}
-.ezt .dial { grid-area: dial; width: 156px; height: 156px; }
+.ezt .dialwrap { display: flex; flex-direction: column; align-items: center; gap: 10px; flex: none; width: min(310px, 100%); }
+/* The punch buttons sit under the dial, side by side — the dial is the reading, the
+   buttons the action beneath it. */
+.ezt .dial { width: 156px; height: 156px; }
 .ezt .face { width: 112px; height: 112px; }
 .ezt .face .timer { font-size: 18px; }
 .ezt .face .big { font-size: 17px; }
 .ezt .face .eyebrow { font-size: 8.5px; }
 .ezt .face small { font-size: 9.5px; }
-.ezt .punchbar { grid-area: bar; flex-direction: column; gap: 8px; max-width: none; }
-.ezt .pbtn { padding: 8px 10px 8px 8px; }
+.ezt .punchbar { flex-direction: row; gap: 8px; width: 100%; max-width: 320px; }
+.ezt .pbtn { flex: 1; min-width: 0; padding: 8px 10px 8px 8px; }
+.ezt .pbtn .lbl b { white-space: nowrap; }
 .ezt .pbtn .ic { width: 30px; height: 30px; }
-.ezt .shift { grid-area: shift; text-align: left; font-size: 11.5px; }
-.ezt .streak { grid-area: streak; justify-self: start; }
+.ezt .shift { text-align: center; font-size: 11.5px; }
 
 .ezt .tile, .ezt .card { border: 1px solid var(--ez-line); border-radius: 16px; box-shadow: var(--shadow-card); }
 /* Tiles: no corner glow, no top bar. The label is a small tinted pill with a dot in the
@@ -549,13 +548,3 @@
 .ezt .qa .ic { box-shadow: 0 8px 16px -10px var(--c-fg, #2563EB); }
 .ezt .day { border: 1px solid var(--ez-line); }
 .ezt .todo li { border: 1px solid var(--ez-line); }
-
-@container ezt (max-width: 900px) {
-  .ezt .dialwrap { grid-template-columns: auto 1fr; }
-}
-@container ezt (max-width: 520px) {
-  .ezt .dialwrap { grid-template-columns: 1fr; grid-template-areas: "dial" "bar" "shift" "streak"; justify-items: center; }
-  .ezt .punchbar { flex-direction: row; width: 100%; }
-  .ezt .shift { text-align: center; }
-  .ezt .streak { justify-self: center; }
-}
