@@ -29,10 +29,11 @@
   --ess-glass: rgba(255, 255, 255, .62);
   --ess-glass-strong: rgba(255, 255, 255, .80);
   /* the rail: a pale blue-lavender glass, light at the top, a touch deeper at the foot */
-  /* the rail: a clear periwinkle, so it reads as its own surface against the pale canvas */
-  --ess-rail-bg: linear-gradient(180deg, #E4EBFF 0%, #DAE3FE 100%);
-  --ess-rail-ink: #1E2B4F;
-  --ess-rail-edge: rgba(37, 99, 235, .16);
+  /* the rail: a cool blue-grey from the same family as the canvas and Home's hero, one step
+     deeper so it reads as its own panel without a colour of its own competing with the page */
+  --ess-rail-bg: linear-gradient(180deg, #EAF0FA 0%, #E3EAF6 100%);
+  --ess-rail-ink: #1F2A44;
+  --ess-rail-edge: #D6DFEE;
   --ess-glass-edge: rgba(255, 255, 255, .85);
   --ess-hair: rgba(15, 23, 42, .07);
   --ess-ink: #0F172A;

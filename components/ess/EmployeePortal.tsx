@@ -1386,54 +1386,31 @@ const STATUS_FULL: Record<string,string> = new Proxy({} as Record<string,string>
 })
 
 /**
- * How a day is marked on the calendar — a shape, not a letter code. A month of
- * "P P P MI ½ A" read as clutter; a tick, a cross or a half-disc is read before
- * the eye gets to it, and a corner flag says "something about this day" without
- * covering the date.
- *
- * Missed punches are told apart by WHICH corner is flagged: a missed punch-in
- * flags the top-left (the start of the day), a missed punch-out the bottom-right
- * (the end of it). The legend shows both.
+ * How a day looks on the calendar: colour only. The user found letter codes
+ * cluttered and shapes busy, so a day is read from its fill and its edge.
+ * Present is green, absent red, half day amber, leave brand blue, holiday sky.
+ * The two "present but flagged" days keep a green or amber fill and add a
+ * stronger edge: late = green with an amber edge, missed punch = amber with a
+ * red edge. Hover shows the full status; the day panel explains it.
  */
-type MarkGlyph = 'tick' | 'half' | 'cross' | 'star' | 'live' | null
-type MarkCorner = 'tr' | 'tl' | 'br' | null
-function markOf(status: string): { glyph: MarkGlyph; corner: MarkCorner } {
+function cellLook(status: string): { bg: string; ink: string; edge: string; strong?: boolean } {
+  // A fill a step deeper than the …Tint tokens, mixed from the status colour so it
+  // follows the theme. The tints alone were too pale to read as colour on a grid.
+  const fill = (c: string, pct = 14) => `color-mix(in srgb, ${c} ${pct}%, ${C.surface})`
+  const edge = (c: string) => `color-mix(in srgb, ${c} 35%, ${C.surface})`
   switch (status) {
-    case 'PRESENT':     return { glyph: 'tick',  corner: null }
-    case 'IN_PROGRESS': return { glyph: 'live',  corner: null }
-    case 'LATE':        return { glyph: 'tick',  corner: 'tr' }
-    case 'HALF_DAY':    return { glyph: 'half',  corner: null }
-    case 'MISS_IN':     return { glyph: null,    corner: 'tl' }
-    case 'MISS_OUT': case 'MISS_PUNCH': return { glyph: null, corner: 'br' }
-    case 'ABSENT': case 'LWP': return { glyph: 'cross', corner: null }
-    case 'ON_LEAVE': case 'HALF_LEAVE': return { glyph: null, corner: 'tr' }
-    case 'HOLIDAY':     return { glyph: 'star',  corner: null }
-    default:            return { glyph: null,    corner: null }
+    case 'PRESENT': case 'IN_PROGRESS': return { bg: fill(C.positive), ink: C.positive, edge: edge(C.positive) }
+    case 'LATE':        return { bg: fill(C.positive), ink: C.positive, edge: C.warning, strong: true }
+    case 'HALF_DAY':    return { bg: fill(C.warning, 16), ink: C.warning, edge: edge(C.warning) }
+    case 'MISS_IN': case 'MISS_OUT': case 'MISS_PUNCH':
+                        return { bg: fill(C.warning, 16), ink: C.critical, edge: C.critical, strong: true }
+    case 'ABSENT': case 'LWP': return { bg: fill(C.critical), ink: C.critical, edge: edge(C.critical) }
+    case 'ON_LEAVE': case 'HALF_LEAVE': return { bg: fill(C.brand), ink: C.brandDeep, edge: edge(C.brand) }
+    case 'HOLIDAY':     return { bg: fill(C.info), ink: C.info, edge: edge(C.info) }
+    case 'WEEKLY_OFF':  return { bg: C.sunken, ink: C.faint, edge: C.line }
+    case 'FUTURE':      return { bg: 'transparent', ink: C.faint, edge: C.line }
+    default:            return { bg: C.surface, ink: C.ink, edge: C.line }
   }
-}
-/** The mark's colour. Late is a present day, so its status colour is green — but the
- *  mark is there to flag the lateness, which is amber. */
-const markColor = (status: string) => status === 'LATE' ? C.warning : STATUS_BAR[status]
-const CORNER_CLIP: Record<Exclude<MarkCorner, null>, string> = {
-  tr: 'polygon(0 0,100% 0,100% 100%)', tl: 'polygon(0 0,100% 0,0 100%)', br: 'polygon(100% 0,100% 100%,0 100%)',
-}
-function CornerFlag({ corner, color, size }: { corner: MarkCorner; color: string; size: number }) {
-  if (!corner) return null
-  const pos: React.CSSProperties = corner === 'tr' ? { top: 0, right: 0 } : corner === 'tl' ? { top: 0, left: 0 } : { bottom: 0, right: 0 }
-  return <span aria-hidden style={{ position: 'absolute', ...pos, width: size, height: size, background: color, clipPath: CORNER_CLIP[corner] }} />
-}
-function DayGlyph({ glyph, color, size }: { glyph: MarkGlyph; color: string; size: number }) {
-  if (!glyph) return null
-  const sw = 2.4
-  return (
-    <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden style={{ display: 'block', flex: 'none' }}>
-      {glyph === 'tick'  && <path d="M2.5 6.4 L5 8.8 L9.6 3.4" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />}
-      {glyph === 'cross' && <path d="M3.4 3.4 L8.6 8.6 M8.6 3.4 L3.4 8.6" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" />}
-      {glyph === 'half'  && <><circle cx="6" cy="6" r="4.3" fill="none" stroke={color} strokeWidth="1.6" /><path d="M6 1.7 A4.3 4.3 0 0 0 6 10.3 Z" fill={color} /></>}
-      {glyph === 'star'  && <path d="M6 1.4 L7.3 4.5 L10.6 4.7 L8 6.8 L8.9 10.1 L6 8.3 L3.1 10.1 L4 6.8 L1.4 4.7 L4.7 4.5 Z" fill={color} />}
-      {glyph === 'live'  && <circle cx="6" cy="6" r="3" fill={color} />}
-    </svg>
-  )
 }
 
 const fmtT = (iso: string|null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '-'
@@ -1649,22 +1626,17 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
 
 /** What the colours mean. Without this the calendar is a puzzle on first visit. */
 function CalendarLegend() {
-  const items = ['PRESENT','LATE','HALF_DAY','MISS_IN','MISS_OUT','ABSENT','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
+  const items = ['PRESENT','LATE','HALF_DAY','MISS_OUT','ABSENT','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:'8px 14px', marginTop:12, paddingTop:10,
                   borderTop: `1px solid ${C.line}` }}>
       {items.map(k => {
-        const m = markOf(k)
-        const [bg] = STATUS_STYLE[k] || [C.surface]
+        const l = cellLook(k)
         return (
           <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:C.muted }}>
-            <span style={{ position:'relative', width:18, height:18, borderRadius:5, overflow:'hidden', flex:'none',
-                           background: k === 'PRESENT' || k === 'LATE' ? C.surface : bg, border:`1px solid ${C.line}`,
-                           display:'grid', placeItems:'center' }}>
-              <DayGlyph glyph={m.glyph} color={markColor(k)} size={11} />
-              <CornerFlag corner={m.corner} color={markColor(k)} size={8} />
-            </span>
-            {STATUS_FULL[k]}
+            <span style={{ width:14, height:14, borderRadius:4, flex:'none', background:l.bg,
+                           border:`${l.strong ? 2 : 1}px solid ${l.edge}`, boxSizing:'border-box' }} />
+            {k === 'MISS_OUT' ? 'Missed punch' : STATUS_FULL[k]}
           </span>
         )
       })}
@@ -1936,16 +1908,10 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
     const { status, rec, day } = resolveDay(dateStr, monthData, todayStr)
-    const [bg, ink] = STATUS_STYLE[status] || [C.surface, C.ink]
+    const look = cellLook(status)
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
     const isFuture = status === 'FUTURE'
-    // Present days show when they began; every other day shows its code, so a
-    // half day (½), a missed punch-in (MI) and a missed punch-out (MO) are
-    // readable without opening the day.
-    const calm = status === 'PRESENT' || status === 'LATE' || status === 'IN_PROGRESS'
-    const mark = markOf(status)
-    const markInk = isSel ? C.onAccent : markColor(status)
     const pendingFix = day?.correction?.status === 'PENDING'
     const fixed = !!day?.regularised || day?.correction?.status === 'APPROVED'
     // Wave across the grid rather than a uniform fade. Capped so the last cell
@@ -1965,11 +1931,12 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           // that is nearly invisible on a #0F1216 canvas, so in dark mode the
           // grid lost its structure and the days ran together.
           background: isSel ? `linear-gradient(145deg, ${C.brand}, ${C.brandDeep})`
-                    : isFuture ? 'transparent' : calm ? C.surface : bg,
-          color: isSel ? C.onAccent : ink,
+                    : isFuture ? 'transparent' : look.bg,
+          color: isSel ? C.onAccent : look.ink,
           border: isSel ? `1px solid ${C.brandDeep}`
                 : isToday ? `2px solid ${C.brand}`
-                : `1px solid ${C.line}`,
+                : isFuture ? `1px solid ${C.line}`
+                : `${look.strong ? 2 : 1}px solid ${look.edge}`,
           borderRadius: 10, padding: 0,
           cursor: isFuture ? 'default' : 'pointer',
           opacity: isFuture ? .45 : 1,
@@ -1988,14 +1955,6 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
         <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: isToday ? 800 : 600, lineHeight: 1 }}>
           {d}
         </span>
-
-        {/* The status as a shape — tick, cross, half-disc, star — and a corner
-            flag for the exceptions. onAccent, not white, on the selected cell:
-            in dark its fill is a LIGHT blue, and white disappears on it. */}
-        {!isFuture && <span style={{ height: isMobile ? 10 : 12, marginTop: 3, display: 'grid', placeItems: 'center' }}>
-          <DayGlyph glyph={mark.glyph} color={markInk} size={isMobile ? 10 : 12} />
-        </span>}
-        {!isFuture && <CornerFlag corner={mark.corner} color={markInk} size={isMobile ? 10 : 13} />}
 
         {/* Correction state, bottom-left: amber = waiting on the approver, green = regularised. */}
         {pendingFix && (
