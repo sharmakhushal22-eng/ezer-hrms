@@ -53,9 +53,7 @@
 /* ---- page shell ---- */
 /* The prototype owned the viewport (min-height:100vh). Here it is a tab
    inside a page that already scrolls, so it takes its own height. */
-.hx-app{display:flex;flex-direction:column;background:
-  radial-gradient(1200px 420px at 82% -8%, color-mix(in srgb,var(--ez-brand) 8%,transparent), transparent 60%),
-  var(--ez-canvas);}
+.hx-app{display:flex;flex-direction:column;background:transparent;} /* the portal's aurora canvas shows through */
 
 /* ---- command header band (the hue-distinct plane) ---- */
 /* Scrolls away with the content, by choice. The handover package had this
@@ -67,9 +65,9 @@
 .hx-head{z-index:20;background:transparent;border-bottom:1px solid var(--ez-line)}
 .hx-head-in{max-width:var(--col);margin:0 auto;padding:24px 28px 0}
 .hx-head-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.hx-mark{width:44px;height:44px;border-radius:13px;flex-shrink:0;display:grid;place-items:center;
-  background:linear-gradient(145deg,var(--ez-brand-tint),var(--ez-surface));color:var(--ez-brand);
-  border:1px solid var(--ez-brand-edge)}
+.hx-mark{width:48px;height:48px;border-radius:15px;flex-shrink:0;display:grid;place-items:center;
+  background:linear-gradient(135deg,#2563EB,#4F46E5);color:#fff;
+  box-shadow:0 12px 24px -12px #4F46E5,inset 0 1px 0 rgba(255,255,255,.25)}
 .hx-mark svg{width:20px;height:20px;display:block}
 .hx-title{display:flex;flex-direction:column;gap:2px;min-width:0}
 .hx-title h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2;color:var(--ez-ink);

@@ -156,10 +156,11 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
   ]
 
   // ── styles ──
-  const card: React.CSSProperties = { background: C.surface, borderRadius: R.lg, border: `1px solid ${C.line}`, padding: '14px 16px', marginBottom: S.md, boxShadow: E.raised }
+  // Same card as the rest of ESS: 18px corners, a hairline, soft depth.
+  const card: React.CSSProperties = { background: C.surface, borderRadius: 18, border: `1px solid ${C.line}`, padding: '18px 20px', marginBottom: S.md, boxShadow: 'var(--ess-shadow, none)' }
   const seg = (on: boolean): React.CSSProperties => ({
     height: 32, padding: '0 12px', borderRadius: R.md, cursor: 'pointer', fontFamily: 'inherit', fontSize: F.tiny, fontWeight: W.semi,
-    border: `1px solid ${on ? C.brandDeep : C.line}`, background: on ? C.brand : C.surface, color: on ? C.onAccent : C.inkSoft,
+    border: `1px solid ${on ? 'transparent' : C.line}`, background: on ? 'var(--ess-grad, var(--ez-brand))' : C.surface, color: on ? C.onAccent : C.inkSoft, boxShadow: on ? '0 6px 14px -8px var(--ess-a2, transparent)' : 'none',
   })
   const chip = (on: boolean, tone?: KindMeta): React.CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', borderRadius: R.pill, cursor: 'pointer',
@@ -241,7 +242,7 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
       )}
 
       {data && shown.length > 0 && !isMobile && (
-        <div style={{ overflowX: 'auto', border: `1px solid ${C.line}`, borderRadius: R.md, opacity: loading ? .6 : 1 }}>
+        <div style={{ overflowX: 'auto', border: `1px solid ${C.line}`, borderRadius: 14, opacity: loading ? .6 : 1 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
             <thead>
               <tr>
@@ -385,7 +386,7 @@ function ReviewPanel({ empId, days, isMobile, onCancel, onDone }: {
   const time: React.CSSProperties = { ...inputStyle(), width: 108, height: 32, padding: '0 8px' }
   const btn = (primary: boolean): React.CSSProperties => ({
     height: 36, padding: '0 16px', borderRadius: R.md, cursor: 'pointer', fontFamily: 'inherit', fontSize: F.small, fontWeight: W.semi,
-    border: `1px solid ${primary ? C.brandDeep : C.lineStrong}`, background: primary ? C.brand : C.surface, color: primary ? C.onAccent : C.ink,
+    border: `1px solid ${primary ? 'transparent' : C.lineStrong}`, background: primary ? 'var(--ess-grad, var(--ez-brand))' : C.surface, color: primary ? C.onAccent : C.ink,
   })
 
   return (

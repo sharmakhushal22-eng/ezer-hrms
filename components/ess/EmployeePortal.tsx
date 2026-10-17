@@ -2166,12 +2166,13 @@ function RegularisationList({ requests, onWithdraw, busyId }: {
         const sameTimes = new Set(rs.map(x => `${hm(x.requested_in)}-${hm(x.requested_out)}`)).size === 1
         const withdrawId = r.request_group || r.id
         return (
-          <div key={`${withdrawId}:${r.status}`} style={{ padding:'10px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+          // A soft card with the status as its left edge — the same shape as Leave's requests.
+          <div key={`${withdrawId}:${r.status}`} style={{ padding:'12px 14px', marginBottom:8, borderRadius:12, border:`1px solid ${C.line}`, borderLeft:`3px solid ${c}`, background:`linear-gradient(90deg, ${bg} 0%, ${C.surface} 65%)` }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
               <div style={{ fontSize:13, fontWeight:600 }}>
                 {rs.length === 1 ? fmt(r.attendance_date) : `${rs.length} days · ${short(rs[0].attendance_date)} – ${short(rs[rs.length - 1].attendance_date)}`}
               </div>
-              <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{LABEL[r.status] || r.status}</span>
+              <span style={{ fontSize:10.5, padding:'3px 10px', borderRadius:99, background:C.surface, color:c, fontWeight:700, border:`1px solid ${c}` }}>{LABEL[r.status] || r.status}</span>
             </div>
             {rs.length > 1 && (
               <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginTop:5 }}>
@@ -3252,7 +3253,7 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
   // from the rail token family, which is defined for both light and dark.
   return (
     <button onClick={onClick} className="ess-item" data-on={active ? '1' : '0'} aria-current={active ? 'page' : undefined}>
-      <EssIcon k={s.k} size={18} />
+      <span className="ess-item-ic" aria-hidden><EssIcon k={s.k} size={16} strokeWidth={1.8} /></span>
       <span className="ess-item-label">{s.label}</span>
       {s.status === 'soon' && <span className="ess-soon">Soon</span>}
     </button>
@@ -3929,7 +3930,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     : sectionItems.length > 1 ? [section.label, meta.label] : [section.label]
 
   return (
-    <div className="ess" style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+    <div className="ess" style={{ minHeight:'100vh', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
       <LogoStyles />
       {/* The shared stylesheet. It was imported here but never rendered, so
           ESS was running without the header band, the tab and press classes,
@@ -3988,7 +3989,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
         {/* Top bar. Row 1 is the same for everyone: where you are, search, and your
             controls. Row 2 ("Manage") appears only for someone who administers modules —
             those menus used to share row 1 and pushed it onto two lines. */}
-        <header style={{ position:'sticky', top:0, zIndex:Z.nav, background:C.surface, borderBottom:`1px solid ${C.line}` }}>
+        <header className="ess-top" style={{ position:'sticky', top:0, zIndex:Z.nav }}>
           <div style={{ height: isMobile ? 56 : 64, padding: isMobile ? '0 12px' : '0 24px', display:'flex', alignItems:'center', gap: isMobile ? 8 : 12 }}>
             {isMobile ? (
               <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0, flexShrink:1 }}>
@@ -4126,7 +4127,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                   {g.items.map(s => (
                     <button key={s.k} className="ess-sheet-tile" data-on={!adminKey && section.k === s.k ? '1' : '0'} onClick={() => goSection(s)}>
-                      <EssIcon k={s.k} size={17} />
+                      <span className="ess-sheet-ic" aria-hidden><EssIcon k={s.k} size={16} /></span>
                       <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
                       {s.status === 'soon' && <span className="ess-soon">Soon</span>}
                     </button>

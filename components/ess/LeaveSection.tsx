@@ -1000,12 +1000,13 @@ const CSS = `
      portal. Dark keeps its own fixed navy below, because brand-on-brand
      inverts there and a bright panel in a dark portal reads as a bug. */
   --lv-hero:
-    radial-gradient(520px 200px at 100% 0%, var(--ez-brand-edge) 0%, transparent 70%),
-    linear-gradient(135deg, var(--ez-surface) 0%, var(--ez-brand-tint) 100%);
+    radial-gradient(560px 240px at 100% 0%, rgba(99, 102, 241, .20) 0%, transparent 65%),
+    radial-gradient(380px 200px at 0% 100%, rgba(14, 165, 233, .16) 0%, transparent 65%),
+    linear-gradient(135deg, var(--ez-surface) 0%, color-mix(in srgb, var(--ez-brand) 7%, var(--ez-surface)) 100%);
   --lv-hero-ink: var(--ez-ink);
   --lv-hero-sub: var(--ez-muted);
   --lv-hero-fill: var(--ez-surface);
-  --lv-hero-edge: var(--ez-brand-edge);
+  --lv-hero-edge: rgba(255, 255, 255, .85);
   --lv-hero-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 10px 28px -20px rgba(29, 78, 216, .45);
   --lv-hero-hover: var(--ez-brand-tint);
   --lv-hero-chip: var(--ez-brand-tint);
@@ -1562,7 +1563,9 @@ const CSS = `
 
 .ezlv-day {
   position: relative;
-  aspect-ratio: 1 / 1;
+  /* A fixed height, not a square: on a wide panel square cells made each week 70px
+     tall and the month ran off the screen. */
+  height: 42px;
   min-height: 38px;
   display: grid;
   place-items: center;
@@ -1609,11 +1612,11 @@ const CSS = `
 .ezlv-day:disabled.is-past {
   background: transparent;
   color: var(--lv-faint);
-  opacity: .38;
+  /* Quiet, not crossed out: a struck-through month read as an error, and at .38 the
+     dates were unreadable. Disabled + muted is enough to say "not selectable". */
+  opacity: .55;
   font-weight: 500;
   cursor: not-allowed;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
 }
 .ezlv-day:disabled.is-past::before { background: var(--lv-faint); }
 .ezlv-day:disabled { cursor: not-allowed; }
@@ -2151,10 +2154,13 @@ const CSS = `
 .ezlv-req::after {
   content: "";
   position: absolute;
-  inset: 2px -9px;
-  border-radius: var(--lv-r-sm);
-  background: linear-gradient(90deg, var(--lv-tint, transparent) 0%, transparent 58%);
+  inset: 3px -8px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--lv-tint, transparent) 0%, transparent 70%);
   pointer-events: none;
+  /* BEHIND the row's text. It had no z-index, so — being painted after the row's
+     children — it lay over them and every request read as faded. */
+  z-index: var(--ez-z-base);
 }
 
 .ezlv-req::before,
@@ -2171,7 +2177,11 @@ const CSS = `
 .ezlv-req:hover::before,
 .ezlv-hol:hover::before { opacity: 1; }
 .ezlv-req > *,
-.ezlv-hol > * { position: relative; }
+.ezlv-hol > * { position: relative; z-index: var(--ez-z-raised); }
+.ezlv-req::before, .ezlv-hol::before { z-index: var(--ez-z-base); }
+.ezlv-req { padding: 12px 0; }
+.ezlv-req-dates { font-size: 13.5px; }
+.ezlv-req-sub { font-size: 12px; color: var(--lv-soft); }
 
 /* ── Narrow ─────────────────────────────────────────────────────────────── */
 
