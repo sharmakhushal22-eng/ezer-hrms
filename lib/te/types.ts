@@ -171,6 +171,33 @@ export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; fou
 export interface TeStayOption { name: string; location: string; url: string; price?: number }
 /** What the Travel Desk decided about those hotels. 'NONE' means nobody has
  *  looked yet, which is what the desk's own work list is built from. */
+/** GET /api/te/admin/reports/approvers — F2 and F3, which are reports about
+ *  approvers rather than flags on claims. `on` reflects the switch in Admin →
+ *  Checks: a switched-off check still returns its rows, because the report is
+ *  how somebody decides whether to switch it on. */
+export interface TeFastApprover {
+  who: Uuid; name: string
+  /** Flagged claims this person decided in the window. */
+  flagged: number
+  /** How many of those were decided inside the threshold. */
+  fast: number
+  fastestSecs: number
+  medianSecs: number
+}
+export interface TeApproverPair {
+  who: Uuid; name: string
+  employee: Uuid; employeeName: string
+  /** This pairing's flagged claims, and that employee's total in the window. */
+  pairs: number; theirTotal: number
+  pct: number
+}
+export interface TeApproverWatch {
+  from: IsoDate
+  to: IsoDate
+  f2: { on: boolean; seconds: number; minClaims: number; rows: TeFastApprover[] }
+  f3: { on: boolean; pct: number; minClaims: number; rows: TeApproverPair[] }
+}
+
 /** GET /api/te/admin/desks — the desk configuration screen, in one read.
  *  Rows are the raw database shape on purpose: this screen edits the table,
  *  and renaming the columns on the way in and out would be two mappings to

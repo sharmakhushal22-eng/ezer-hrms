@@ -2,7 +2,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { checkState, checkStateWords, checkTally, ENFORCED_ELSEWHERE, NOT_IMPLEMENTED, WHY_NOT } from '../checks.ts'
+import {
+  ENFORCED_ELSEWHERE, NOT_IMPLEMENTED, WHY_NOT, approverWatchEmpty, checkState, checkStateWords, checkTally, fastApproverText, pairedApproverText, tookText,
+} from '../checks.ts'
 
 /** Every code the catalogue declares. A1-A6, B1-B7, C1-C11, D1-D10, E1-E4,
  *  F1-F4, G1-G13 — 55 of them, as seeded by migration 149. */
@@ -127,4 +129,46 @@ test('the tally separates what is off by choice from what cannot run', () => {
     { code: 'G6', on: false, live: false },  // still unbuilt
   ]
   assert.deepEqual(checkTally(rows), { total: 4, running: 1, unbuilt: 2, offByChoice: 1 })
+})
+
+// ── F2 and F3 wording ───────────────────────────────────────────────────────
+
+test('a duration is read in the unit a person would use', () => {
+  assert.equal(tookText(0), 'under a second')
+  assert.equal(tookText(4), '4 seconds')
+  assert.equal(tookText(90), '2 minutes')
+  assert.equal(tookText(5400), '2 hours')
+  assert.equal(tookText(172800), '2 days')
+  // Singulars, because "1 minutes" is how a report loses its reader.
+  assert.equal(tookText(60), '1 minute')
+  assert.equal(tookText(3600), '1 hour')
+  assert.equal(tookText(86400), '1 day')
+})
+
+test('an F2 line gives the count, the fastest and the typical', () => {
+  const s = fastApproverText({ flagged: 9, fast: 7, fastestSecs: 3, medianSecs: 22 }, 60)
+  assert.match(s, /7 of 9 flagged claims/)
+  assert.match(s, /within 60 seconds/)
+  assert.match(s, /Fastest 3 seconds/)
+  assert.match(s, /typically 22 seconds/)
+})
+
+test('an F2 line says claim, not claims, for one', () => {
+  assert.match(fastApproverText({ flagged: 1, fast: 1, fastestSecs: 2, medianSecs: 2 }, 60), /1 of 1 flagged claim decided/)
+})
+
+test('an F3 line is a share and says so', () => {
+  // The denominator is the point: three of three is a pattern, three of
+  // thirty is not, and a bare count cannot tell them apart.
+  const s = pairedApproverText({ pairs: 6, theirTotal: 7, pct: 86, employeeName: 'Anil Verma' })
+  assert.match(s, /6 of Anil Verma's 7 flagged claims/)
+  assert.match(s, /86%/)
+})
+
+test('finding nothing reads as a clean result, not a broken report', () => {
+  assert.match(approverWatchEmpty('f2', 60, 80), /Nobody has been clearing/)
+  assert.match(approverWatchEmpty('f3', 60, 80), /No approver is taking more than 80%/)
+  for (const k of ['f2', 'f3'] as const) {
+    assert.ok(!/no data|none found|empty/i.test(approverWatchEmpty(k, 60, 80)), k)
+  }
 })

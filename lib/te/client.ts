@@ -24,7 +24,7 @@ import type {
   TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput, LegPreview, TeLegStats, TeFlag,
   ExpenseInput, ExpensePreview, ClaimInput, ClaimPreview, ClaimStatus, ClaimStage, RiskBand, DecideInput, PayoutRoute,
   TeConfig, TeMasters, TeWorkflowLevel, TeChainRow, TeHealthRow, TeUploadedFile, RcChecked, TeStayOption, TeDashboard,
-  TeDesksPayload,
+  TeDesksPayload, TeApproverWatch,
 } from './types'
 
 export class TeApiError extends Error {
@@ -285,6 +285,10 @@ export const te = {
     mastersSave: (table: string, rows: Record<string, unknown>[]) => call<{ table: string; updated: number; inserted: number; rows: Record<string, unknown>[] }>('PUT', `admin/masters/${table}`, { rows }),
     /** Who is on the Finance desk and the Travel desk, per company and branch. */
     desks: () => get<TeDesksPayload>('admin/desks'),
+    /** F2 and F3: approvers who clear flagged claims within seconds, and
+     *  approver-to-employee pairings on flagged claims. */
+    approverWatch: (q?: { from?: string; to?: string }) =>
+      get<TeApproverWatch>('admin/reports/approvers', q),
     desksSave: (kind: DeskKind, rows: Record<string, unknown>[]) =>
       call<{ kind: DeskKind; company_id: Uuid; saved: number; rows: Record<string, unknown>[] }>('PUT', 'admin/desks', { kind, rows }),
     workflow: (code: 'claim' | 'trip') => get<{ workflow: string; levels: TeWorkflowLevel[]; fallback: Uuid | null; finance_team: Uuid[] }>(`admin/workflow/${code}`),

@@ -24,7 +24,7 @@
 
 /** Checks declared in the catalogue that nothing evaluates. */
 export const NOT_IMPLEMENTED = [
-  'E4', 'F2', 'F3', 'G6',
+  'E4', 'G6',
 ] as const
 
 /**
@@ -45,8 +45,6 @@ export const ENFORCED_ELSEWHERE: Record<string, string> = {
  *  to rely on one deserves to know the difference. */
 export const WHY_NOT: Record<string, string> = {
   E4: 'Needs a GSTIN status provider. None is configured, so there is nothing to ask.',
-  F2: 'Not built. Needs the time between a claim arriving and being cleared, per approver.',
-  F3: 'Not built. Needs approver-to-employee approval patterns over time.',
   G6: 'Cannot be done from a browser. Detecting a mock-location app needs the device, which a web page is not allowed to inspect.',
 }
 
@@ -90,4 +88,48 @@ export function checkTally(rows: { code: string; on: boolean; live: boolean }[])
     else running++
   }
   return { total: rows.length, running, unbuilt, offByChoice }
+}
+
+// ── F2 and F3: the words for a report about approvers ───────────────────────
+//
+// NEITHER IS AN ACCUSATION, and the wording has to carry that. Both have
+// ordinary explanations — a small team with one approver, a manager who reads
+// the flags on their phone before the claim reaches their desk — and a report
+// that reads like a charge sheet gets argued with instead of acted on. These
+// say what happened, with the numbers, and leave the question to a person.
+
+/** How long a decision took, in words a person reads rather than seconds. */
+export function tookText(secs: number): string {
+  if (secs < 1) return 'under a second'
+  if (secs < 60) return `${Math.round(secs)} seconds`
+  if (secs < 3600) {
+    const m = Math.round(secs / 60)
+    return `${m} ${m === 1 ? 'minute' : 'minutes'}`
+  }
+  if (secs < 86400) {
+    const h = Math.round(secs / 3600)
+    return `${h} ${h === 1 ? 'hour' : 'hours'}`
+  }
+  const d = Math.round(secs / 86400)
+  return `${d} ${d === 1 ? 'day' : 'days'}`
+}
+
+/** The line under one F2 row. */
+export function fastApproverText(r: { flagged: number; fast: number; fastestSecs: number; medianSecs: number }, seconds: number): string {
+  return `${r.fast} of ${r.flagged} flagged ${r.flagged === 1 ? 'claim' : 'claims'} decided within ${seconds} seconds.`
+    + ` Fastest ${tookText(r.fastestSecs)}, typically ${tookText(r.medianSecs)}.`
+}
+
+/** The line under one F3 row. `pairs of theirTotal` is the whole point: a
+ *  share, not a count. */
+export function pairedApproverText(r: { pairs: number; theirTotal: number; pct: number; employeeName: string }): string {
+  return `${r.pairs} of ${r.employeeName}'s ${r.theirTotal} flagged claims in this window, ${r.pct}%.`
+}
+
+/** What to say when a report found nothing — which is the usual and the good
+ *  answer, and should not read like the report is broken. */
+export function approverWatchEmpty(kind: 'f2' | 'f3', seconds: number, pct: number): string {
+  return kind === 'f2'
+    ? `Nobody has been clearing flagged claims inside ${seconds} seconds.`
+    : `No approver is taking more than ${pct}% of one person's flagged claims.`
 }
