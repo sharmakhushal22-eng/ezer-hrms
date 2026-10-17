@@ -26,7 +26,26 @@ const day = (v: string | null): string | null => (v && /^\d{4}-\d{2}-\d{2}$/.tes
 
 export async function GET(req: NextRequest) {
   return teRoute(req, async t => {
-    await t.permit('Finance', 'VIEW')
+    // WHO MAY OPEN THE FINANCE DESK. Being on it, or holding full admin access
+    // to the module. It used to be the 'Finance' VIEW role permission alone,
+    // which in this data lets an HR Head with no finance_team row at all read
+    // the whole company's claims, advances and payouts — the Finance desk was
+    // meant to be visible to Finance people.
+    //
+    // Falls back to the permission alone while migration 161 is unapplied:
+    // te_on_desk does not exist then, and the desk must not go dark.
+    const actorId = (await t.actor()).employeeId
+    let onDesk = false
+    try {
+      onDesk = actorId ? await t.db().rpc<boolean>('te_on_desk', { p_kind: 'finance', p_actor: actorId }) === true : false
+    } catch {
+      onDesk = await t.holds('Finance', 'VIEW')
+    }
+    if (!onDesk && !(await t.holds('Travel Claims', 'FULL'))) {
+      // Still 403 through permit(), so the message and the code stay the ones
+      // every other Finance route gives.
+      await t.permit('Finance', 'FULL')
+    }
     const company = await t.company()
     const q = req.nextUrl.searchParams
     const view = needOneOf(q.get('view') ?? 'claims', VIEWS, 'view')
