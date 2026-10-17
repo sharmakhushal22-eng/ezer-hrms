@@ -125,14 +125,43 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen, onPlac
   const locate = useCallback(() => {
     if (!('geolocation' in navigator)) { setNote('This device cannot read its location.'); return }
     setBusy(true); setNote('Reading your location…')
+
+    // OUR OWN CLOCK, because getCurrentPosition's `timeout` does not run while
+    // the browser's permission prompt is still on screen. Somebody who leaves
+    // that prompt sitting there — or never sees it, because it opens in the
+    // address bar rather than in the page — gets neither the success callback
+    // nor the error one, and the picker used to sit on "Reading your
+    // location…" for ever with no way forward but Back.
+    //
+    // Observed in testing: fifteen seconds on a pending prompt with the 12s
+    // option set, and no callback either way.
+    let answered = false
+    const giveUp = setTimeout(() => {
+      if (answered) return
+      answered = true
+      setBusy(false)
+      setNote('Still waiting for your location. Your browser may be asking permission — look for the prompt near the address bar. Or find the place by name, or type the address.')
+    }, 15000)
+    const settle = (fn: () => void) => {
+      if (answered) return
+      answered = true
+      clearTimeout(giveUp)
+      fn()
+    }
+
     navigator.geolocation.getCurrentPosition(
       // IT USED TO SAVE AND CLOSE HERE. The address was resolved on the server
       // on the way in, so the person never saw what was found, could not fix a
       // pin that landed on the next building, and the button's own subtitle
       // promised something invisible. Now the position fills the form in front
       // of them and they confirm it.
-      pos => fillFrom(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
-      e => { setBusy(false); setNote(e.code === e.PERMISSION_DENIED ? 'Location is switched off for this site. Pick a place or type the address.' : 'Could not read your location. Pick a place or type the address.') },
+      pos => settle(() => fillFrom(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy)),
+      e => settle(() => {
+        setBusy(false)
+        setNote(e.code === e.PERMISSION_DENIED
+          ? 'Location is switched off for this site. Find the place by name, or type the address.'
+          : 'Could not read your location. Find the place by name, or type the address.')
+      }),
       { enableHighAccuracy: true, timeout: 12000 },
     )
   }, [fillFrom])
@@ -240,6 +269,9 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen, onPlac
           leaving the two routes below untouched. */}
       <TePlaceSearch
         label={intl ? 'Find a place by name, in any country' : 'Find a place by name'}
+        // A domestic trip is inside India, so the suggestions should be too.
+        // An international one is biased to nothing, by design.
+        country={intl ? undefined : 'in'}
         onFound={p => {
           setPin({ lat: p.lat, lng: p.lng })
           setView(v => ({ ...v, lat: p.lat, lng: p.lng }))

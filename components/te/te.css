@@ -551,6 +551,10 @@
    other four are a number and a word, which is all a stepper needs. */
 .te .wsteps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;position:relative}
 .te .ws:not(.on) .wt small{display:none}
+/* The one subtitle on screen is allowed two lines. At five columns "Where and
+   when" was ellipsised to "Where and w…", which is worse than useless — it
+   reads as a bug. The grid row grows and every box stretches with it. */
+.te .ws.on .wt small{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
 .te .ws{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid var(--ez-line);background:var(--ez-surface);border-radius:12px;padding:8px 10px;cursor:pointer;color:var(--ez-ink);min-width:0}
 .te .ws:hover{border-color:var(--ez-brand-edge)}
 .te .ws .wn{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12.5px;flex:none;background:var(--ez-sunken);color:var(--ez-muted);border:1px solid var(--ez-line)}

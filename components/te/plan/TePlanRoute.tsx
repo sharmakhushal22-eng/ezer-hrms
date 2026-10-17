@@ -41,6 +41,11 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
 
   /** The placed points, in order, for the map above the list. */
   const mapPoints = draft.points.map(p => p.place).filter(Boolean)
+  /** How many DIFFERENT places are on the route. A round trip starts with its
+   *  return point mirroring the start, so one chosen place already counts as
+   *  two points — and the map drew a single marker in a 190px grey box that
+   *  told nobody anything. It appears once there is a journey to show. */
+  const distinctPlaces = new Set(mapPoints).size
   const places = new Map(snap.masters.places.map(p => [p.id, { id: p.id, s: p.s, lat: p.lat, lng: p.lng }]))
   const ptName = (id: string) => snap.cfg.ptypes.find(p => p.id === id)?.name ?? ''
   const hasReturn = draft.points.some(p => p.ret)
@@ -156,7 +161,7 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
           error, because every kilometre on the claim is measured between these
           points. Real Google tiles when a browser key is configured; the same
           to-scale schematic as before when there is none. */}
-      {mapPoints.length > 1 ? (
+      {distinctPlaces > 1 ? (
         <TeTripMap
           points={mapPoints}
           // The route's own shape, from the draft rather than the preview: this

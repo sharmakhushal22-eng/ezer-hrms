@@ -293,9 +293,13 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
       lead={lead}
       // No entry-flow crumb on an edit: the person did not come through the
       // four tiles, so "Step 3 of 3" would be describing a journey they never made.
+      // NO STEP COUNTER HERE. It read "Step 3 of 3" — the entry flow's own three
+      // steps, which was true — directly above a bar saying step 1 of 5. Two
+      // step counters disagreeing on one screen is read as a bug, and the only
+      // one that matters now is the bar's. The path stays: which kind of trip
+      // this is remains worth knowing.
       crumb={editingThis ? undefined : (
         <span className="fpath">
-          <span className="fstep">Step 3 of 3</span>
           {KIND_LABEL[draft.scope]}<span className="muted"> › </span>{planning ? 'Plan a trip' : 'I already travelled'}
         </span>
       )}

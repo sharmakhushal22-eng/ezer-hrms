@@ -24,6 +24,7 @@
 // reports failure rather than leaving an empty panel. A bad key, a referrer
 // restriction or a blocked request all land there.
 import { useEffect, useRef, useState } from 'react'
+import TeIcon from '../TeIcon'
 
 /** Set once, at build time. Read through a helper so callers do not each
  *  reach into process.env and disagree about what "configured" means. */
@@ -359,71 +360,156 @@ function partsOf(place: {
  *
  * WHY THIS IS THE BEST WAY IN. Every other route to a place costs the person
  * something: typing a full postal address from memory, or dropping a pin and
- * trusting a reverse lookup. Searching "Taj Hotel Mumbai" gives the name, the
- * formatted address, the city, the PIN and the exact coordinates in one go —
- * and the coordinates are Google's own for that building, not a guess from a
- * finger on a map.
+ * trusting a reverse lookup. Searching "Radisson Blu Indore" gives the name,
+ * the formatted address, the city, the PIN and the exact coordinates in one
+ * go — and the coordinates are Google's own for that building.
  *
- * IT RENDERS NOTHING WITHOUT THE PLACES LIBRARY. If the Places API is not
- * enabled on the browser key, google.maps.places is absent and this returns
- * null, leaving the saved-place search and the typed address exactly as they
- * were. An input that looks like a search and never suggests anything is worse
- * than no input.
+ * WHY THIS DOES NOT USE google.maps.places.Autocomplete, which is the widget
+ * built for exactly this and would be three lines instead of ninety.
  *
- * THE LEGACY WIDGET, DELIBERATELY. google.maps.places.Autocomplete is
- * deprecated in favour of PlaceAutocompleteElement, but the replacement is a
- * web component with a different event shape and is not available on every
- * loader version. This feature-detects the new one and falls back, so whichever
- * the key serves, the box works.
+ * That widget appends its suggestion list to document.body as .pac-container
+ * and positions it absolutely, relying on z-index to sit above the page. Every
+ * screen in this module is inside a <dialog> opened with showModal(), and a
+ * modal dialog renders in the browser's TOP LAYER — above the whole normal
+ * stacking context, z-index 1000 or 2147483647 alike. So the list rendered,
+ * correctly positioned and visible, permanently behind the sheet.
+ *
+ * Measured in the live app: .pac-container on <body>, one child, display
+ * block, visibility visible, 710x135 at the right coordinates, and nothing on
+ * screen. Re-parenting it into the dialog is the usual workaround and breaks
+ * its positioning, because Google keeps writing page-relative top/left to it.
+ *
+ * So the predictions are fetched with AutocompleteService and drawn as part of
+ * this component, inside the dialog, in the module's own list styles. It also
+ * drops a widget Google deprecated in March 2025.
+ *
+ * ATTRIBUTION IS NOT OPTIONAL. Showing Places predictions outside a Google map
+ * requires the Google wordmark, which is why the note below the list is there.
  */
-export function TePlaceSearch({ onFound, label, placeholder }: {
+export function TePlaceSearch({ onFound, label, placeholder, country }: {
   onFound: (p: FoundPlace) => void
   label?: string
   placeholder?: string
+  /** An ISO country code to bias to, or undefined for anywhere. */
+  country?: string
 }) {
   const { ready, failed, places } = useGoogleMaps()
-  const input = useRef<HTMLInputElement | null>(null)
-  const wired = useRef(false)
+  const [q, setQ] = useState('')
+  const [list, setList] = useState<{ id: string; main: string; rest: string }[]>([])
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
   const cb = useRef(onFound)
   useEffect(() => { cb.current = onFound }, [onFound])
+  /** Which query the list belongs to, so a slow answer to an old one is dropped. */
+  const asked = useRef('')
 
   useEffect(() => {
-    if (!ready || !places || !input.current || wired.current) return
+    const text = q.trim()
+    asked.current = text
+    // No setState here: clearing the list is done where the typing happens,
+    // which is an event handler and may set state freely. An effect body may
+    // not — it cascades a second render before the first has painted, and it
+    // is the one lint rule every screen in this module is held to.
+    if (!ready || !places || text.length < 3) return
     const G = gmaps() as unknown as {
-      places?: { Autocomplete?: new (el: HTMLInputElement, o?: unknown) => { addListener: (e: string, f: () => void) => void; getPlace: () => unknown } }
-      event?: { clearInstanceListeners?: (x: unknown) => void }
+      places?: {
+        AutocompleteService?: new () => {
+          getPlacePredictions: (r: unknown, cb: (res: unknown, status: string) => void) => void
+        }
+      }
     } | null
-    const Ctor = G?.places?.Autocomplete
-    if (!Ctor) return
-    wired.current = true
-    const ac = new Ctor(input.current, { fields: ['name', 'formatted_address', 'address_components', 'geometry'] })
-    ac.addListener('place_changed', () => {
-      const parsed = partsOf(ac.getPlace() as Parameters<typeof partsOf>[0])
-      // A person who types and presses Enter without choosing a suggestion
-      // gets a result with no geometry. Nothing is reported for it rather than
-      // a place at 0,0.
-      if (parsed) cb.current(parsed)
-    })
-    return () => { G?.event?.clearInstanceListeners?.(ac) }
-  }, [ready, places])
+    const Svc = G?.places?.AutocompleteService
+    if (!Svc) return
+    // Debounced: one request per pause, not one per keystroke — these are
+    // billed per session and per request.
+    const timer = setTimeout(() => {
+      new Svc().getPlacePredictions(
+        { input: text, ...(country ? { componentRestrictions: { country } } : {}) },
+        (res, status) => {
+          if (asked.current !== text) return
+          const ok = status === 'OK' && Array.isArray(res)
+          setList(ok
+            ? (res as { place_id: string; structured_formatting?: { main_text?: string; secondary_text?: string }; description?: string }[])
+              .slice(0, 6)
+              .map(r => ({
+                id: r.place_id,
+                main: r.structured_formatting?.main_text || r.description || '',
+                rest: r.structured_formatting?.secondary_text || '',
+              }))
+            : [])
+          setNote(ok || status === 'ZERO_RESULTS' ? '' : `Place search is unavailable (${status}).`)
+        },
+      )
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [q, ready, places, country])
 
-  // Drawn only once the library is known to be there. Before the script
-  // answers, `places` is false and the box is simply absent for that moment.
+  /** Turn the chosen prediction into a position and an address. */
+  function choose(placeId: string, shown: string) {
+    const G = gmaps() as unknown as {
+      places?: { PlacesService?: new (el: HTMLElement) => { getDetails: (r: unknown, cb: (res: unknown, status: string) => void) => void } }
+    } | null
+    const Svc = G?.places?.PlacesService
+    if (!Svc) return
+    setBusy(true)
+    setNote(`Reading ${shown}…`)
+    // PlacesService needs a node to attribute into; it is never shown, because
+    // the wordmark below is rendered by this component instead.
+    new Svc(document.createElement('div')).getDetails(
+      { placeId, fields: ['name', 'formatted_address', 'address_components', 'geometry'] },
+      (res, status) => {
+        setBusy(false)
+        const parsed = status === 'OK' ? partsOf(res as Parameters<typeof partsOf>[0]) : null
+        if (!parsed) { setNote('That place could not be read. Try another, or type the address.'); return }
+        setNote('')
+        setList([])
+        setQ('')
+        cb.current(parsed)
+      },
+    )
+  }
+
   if (!hasMapKey() || failed || !places) return null
 
   return (
-    <label className="fld">
-      <span>{label || 'Find a place by name'}</span>
-      <input
-        ref={input}
-        type="text"
-        placeholder={placeholder || 'Hotel, office, airport or landmark'}
-        // The browser's own autofill fights the suggestion list for the same
-        // dropdown space.
-        autoComplete="off"
-      />
-      <small>Pick a suggestion and the address, city and PIN fill themselves.</small>
-    </label>
+    <div className="sec">
+      <label className="fld">
+        <span>{label || 'Find a place by name'}</span>
+        <input
+          type="text"
+          value={q}
+          placeholder={placeholder || 'Hotel, office, airport or landmark'}
+          autoComplete="off"
+          onChange={e => {
+            const v = e.target.value
+            setQ(v)
+            // Below the threshold there is nothing to suggest, and a list left
+            // over from a longer query would be answering a question that is
+            // no longer on screen.
+            if (v.trim().length < 3) { setList([]); setNote('') }
+          }}
+        />
+        <small>Pick a suggestion and the address, city and PIN fill themselves.</small>
+      </label>
+
+      {/* Guarded by the query length as well as by the list, so a result that
+          arrives just as somebody deletes back to two characters does not
+          flash up under an input that no longer asked for it. */}
+      {q.trim().length >= 3 && list.length ? (
+        <div className="stack sm">
+          {list.map(r => (
+            <button key={r.id} type="button" className="act flat" disabled={busy} onClick={() => choose(r.id, r.main)}>
+              <span className="ico-b sm"><TeIcon name="pin" size="sm" /></span>
+              <span><b>{r.main}</b><small>{r.rest}</small></span>
+            </button>
+          ))}
+          {/* Required when predictions are shown outside a Google map. */}
+          <small className="muted">Place suggestions by Google</small>
+        </div>
+      ) : null}
+
+      {note ? <div className="note"><TeIcon name="info" size="sm" /><span>{note}</span></div> : null}
+    </div>
   )
 }
 
