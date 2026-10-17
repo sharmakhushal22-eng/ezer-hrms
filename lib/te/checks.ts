@@ -1,11 +1,12 @@
 // lib/te/checks.ts — which of the 55 fraud checks actually run.
 //
 // WHY THIS FILE EXISTS. Admin → Checks lists all 55 with a switch, and every
-// one of them reads as a control that is on. Eleven of them are never
-// evaluated: not by the rules engine, not by any SQL function. An
-// administrator reading that screen — or an auditor being shown it — believes
-// in eleven controls that do not execute. A control nobody runs is worse than
-// no control, because it is relied upon.
+// one of them reads as a control that is on. Ten of them are never evaluated:
+// not by the rules engine, not by any SQL function. (It was eleven until C8
+// was built — the co-traveller double-claim.) An administrator reading that
+// screen, or an auditor being shown it, was believing in controls that do not
+// execute. A control nobody runs is worse than no control, because it is
+// relied upon.
 //
 // So the screen now says which is which, and this file is where that is
 // recorded. It changes no behaviour: a check that does not run did not run
@@ -23,7 +24,7 @@
 
 /** Checks declared in the catalogue that nothing evaluates. */
 export const NOT_IMPLEMENTED = [
-  'C7', 'C8', 'D3', 'D5', 'D6', 'D7', 'E4', 'F2', 'F3', 'G6',
+  'C7', 'D3', 'D5', 'D6', 'D7', 'E4', 'F2', 'F3', 'G6',
 ] as const
 
 /**
@@ -44,7 +45,6 @@ export const ENFORCED_ELSEWHERE: Record<string, string> = {
  *  to rely on one deserves to know the difference. */
 export const WHY_NOT: Record<string, string> = {
   C7: 'Not built. Needs the travel timeline and the spend timeline compared journey by journey.',
-  C8: 'Not built. The identical-file case is already blocked by B1, and two people claiming the same merchant, date and amount is warned by B5 — so the gap is narrow: separate photographs of one receipt.',
   D3: 'Not built. Needs spending history per employee to see amounts clustering under a limit.',
   D5: 'Not built. Needs a peer group — same grade, same city — to compare against.',
   D6: 'Not built. Needs bill numbers from one merchant compared across claims.',

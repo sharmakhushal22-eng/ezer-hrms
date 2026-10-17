@@ -119,8 +119,8 @@ test('the tally separates what is off by choice from what cannot run', () => {
   const rows = [
     { code: 'A1', on: true, live: true },    // running
     { code: 'A2', on: false, live: true },   // switched off deliberately
-    { code: 'C8', on: true, live: false },   // unbuilt, whatever the switch says
-    { code: 'C8', on: false, live: false },  // still unbuilt
+    { code: 'C7', on: true, live: false },   // unbuilt, whatever the switch says
+    { code: 'C7', on: false, live: false },  // still unbuilt
   ]
   assert.deepEqual(checkTally(rows), { total: 4, running: 1, unbuilt: 2, offByChoice: 1 })
 })
