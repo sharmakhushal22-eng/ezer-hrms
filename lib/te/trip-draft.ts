@@ -459,6 +459,35 @@ export function blockingOn(issues: TripIssue[], step: PlanStep): TripIssue[] {
   return issues.filter(i => i.block && stepOfIssue(i.k) === step)
 }
 
+/** Give every journey the same mode. A round trip is two journeys and a
+ *  multi-city one is four or six; choosing "flight" once and then again, and
+ *  again, is the kind of repetition a form should do for you.
+ *
+ *  A VEHICLE IS CARRIED ONLY WHERE IT MAKES SENSE. 'own' needs one, and the
+ *  same car drives every leg. Any other mode has no vehicle, so the field is
+ *  cleared rather than left pointing at a car nobody is driving.
+ *
+ *  WHO BOOKS IT IS NOT TOUCHED. That is a separate decision per journey — a
+ *  flight out booked by the desk and a train back booked by the traveller is a
+ *  real trip — and silently rewriting it would undo an answer nobody revisited.
+ */
+export function applyModeToAll(d: PlannerDraft, mode: string, vehicleId: string): PlannerDraft {
+  return {
+    ...d,
+    segs: d.segs.map(sg => ({
+      ...sg,
+      mode,
+      vehicleId: mode === 'own' ? (vehicleId || sg.vehicleId || '') : '',
+    })),
+  }
+}
+
+/** How many journeys do NOT already travel this way. 0 means the button that
+ *  offers to apply it has nothing to do and should not be shown. */
+export function journeysUnlike(d: PlannerDraft, mode: string): number {
+  return d.segs.filter(sg => sg.mode !== mode).length
+}
+
 /** The position of a route line, so "the next one that needs work" has an order:
  *  a point is 2i, the travel after it is 2i+1. */
 function linePos(k: string | undefined): number {

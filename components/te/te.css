@@ -545,7 +545,12 @@
 .te .locb.hubb .ico-b{background:var(--ez-brand-tint);color:var(--ez-brand)}
 @media (max-width:720px){.te .hubs{grid-template-columns:1fr}}
 .te .wbar{padding:10px 20px 12px;border-bottom:1px solid var(--ez-line);background:var(--ez-surface)}
-.te .wsteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;position:relative}
+/* FIVE STEPS, ONE ROW. Was repeat(3) when the planner had three steps; five
+   in a three-column grid silently wrapped into three cramped rows. Each box is
+   narrower now, so only the step you are ON spells out what it is for — the
+   other four are a number and a word, which is all a stepper needs. */
+.te .wsteps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;position:relative}
+.te .ws:not(.on) .wt small{display:none}
 .te .ws{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid var(--ez-line);background:var(--ez-surface);border-radius:12px;padding:8px 10px;cursor:pointer;color:var(--ez-ink);min-width:0}
 .te .ws:hover{border-color:var(--ez-brand-edge)}
 .te .ws .wn{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12.5px;flex:none;background:var(--ez-sunken);color:var(--ez-muted);border:1px solid var(--ez-line)}
@@ -610,7 +615,7 @@
 .te .iconbtn.sm{width:30px;height:30px}
 @media (max-width:720px){
 .te .wbar{padding:8px 12px}
-.te .ws{padding:6px 8px;gap:6px}.te .ws .wt small{display:none}
+.te .ws{padding:6px;gap:6px;justify-content:center}.te .ws .wt small{display:none}.te .ws:not(.on) .wt{display:none}
 .te .ppl-row{grid-template-columns:24px minmax(0,1fr) 30px}.te .ppl-row .ppl-n{grid-row:1;grid-column:1}.te .ppl-row .pid{grid-row:1;grid-column:2}.te .ppl-row .iconbtn{grid-row:1;grid-column:3}.te .ppl-row .pnm{grid-row:2;grid-column:2}.te .ppl-row .ppl-st{grid-row:3;grid-column:2/-1}
 .te .rs{padding-left:4px}
 .te .wfoot .tw-bar{width:100%}

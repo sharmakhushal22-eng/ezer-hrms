@@ -6,10 +6,7 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
 import {
-  addStop, autoName, blockingOn, defaultMode, errorFor, firstOpenLine, movePoint,
-  newPlannerDraft, pointLabel, removePoint, setPattern, stepOfIssue, syncDraft,
-  toTripDraft, fromTrip, setScope,
-  type DraftContext, type PlannerDraft,
+  addStop, applyModeToAll, autoName, blockingOn, defaultMode, errorFor, firstOpenLine, fromTrip, journeysUnlike, movePoint, newPlannerDraft, pointLabel, removePoint, setPattern, setScope, stepOfIssue, syncDraft, toTripDraft, type DraftContext, type PlannerDraft,
 } from '../trip-draft.ts'
 import type { TeMode, TripIssue } from '../types.ts'
 
@@ -581,5 +578,41 @@ describe('the day you are back at the start', () => {
     assert.equal(reopened.points.find(p => p.ret)?.arrive, '2026-10-17')
     // The middle point's arrival was the server's calculation, not an answer.
     assert.equal(reopened.points[1].arrive, undefined)
+  })
+})
+
+describe('one mode for every journey', () => {
+  const twoLegs = () => syncDraft({ ...fresh(), points: [
+    { place: 'a', pt: '', what: '', leave: '2026-04-16' },
+    { place: 'b', pt: '', what: '', leave: '' },
+    { place: 'a', pt: '', what: '', leave: '', ret: true as const },
+  ] }, ctx())
+
+  it('gives every journey the same mode', () => {
+    const d = applyModeToAll(twoLegs(), 'train', '')
+    assert.ok(d.segs.length >= 2)
+    assert.deepEqual([...new Set(d.segs.map(s => s.mode))], ['train'])
+  })
+
+  it('carries the vehicle for own, and clears it for anything else', () => {
+    const own = applyModeToAll(twoLegs(), 'own', 'VEH-1')
+    assert.deepEqual([...new Set(own.segs.map(s => s.vehicleId))], ['VEH-1'])
+    const train = applyModeToAll(own, 'train', '')
+    assert.deepEqual([...new Set(train.segs.map(s => s.vehicleId))], [''])
+  })
+
+  it('leaves who books each journey alone', () => {
+    // A flight out booked by the desk and a train back booked by the traveller
+    // is a real trip. Applying a mode must not quietly rewrite that answer.
+    const start = twoLegs()
+    const mixed = { ...start, segs: start.segs.map((s, i) => ({ ...s, bookedBy: (i === 0 ? 'desk' : 'self') as 'desk' | 'self' })) }
+    const after = applyModeToAll(mixed, 'train', '')
+    assert.deepEqual(after.segs.map(s => s.bookedBy), mixed.segs.map(s => s.bookedBy))
+  })
+
+  it('counts what is not already that mode, so the offer can hide itself', () => {
+    const d = twoLegs()
+    assert.equal(journeysUnlike(applyModeToAll(d, 'train', ''), 'train'), 0)
+    assert.ok(journeysUnlike(applyModeToAll(d, 'train', ''), 'flight') > 0)
   })
 })

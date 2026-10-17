@@ -19,7 +19,7 @@
 // reason: it is what keeps a long trip readable on a phone.
 import { useState } from 'react'
 import type { Snapshot, TripIssue } from '@/lib/te/types'
-import { blockingOn, type PlannerDraft } from '@/lib/te/trip-draft'
+import { applyModeToAll, blockingOn, journeysUnlike, type PlannerDraft } from '@/lib/te/trip-draft'
 import { plural } from '@/lib/te/format'
 import { vehicleSubtitle } from '@/lib/te/vehicle'
 import TeIcon from '../TeIcon'
@@ -52,6 +52,12 @@ export default function TePlanCommute({ snap, draft, issues, edit, onPick, onVeh
   const open = (i: number) => draft.open === `s${i}`
   const toggle = (i: number) => edit({ open: open(i) ? null : `s${i}` })
   const left = blockingOn(issues, 3).length
+  /** The journey whose row is open, so the offer below can name its mode. */
+  const openAt = draft.segs.findIndex((_, i) => open(i))
+  const openSeg = openAt >= 0 ? draft.segs[openAt] : null
+  const openMode = openSeg ? snap.cfg.modes.find(m => m.id === openSeg.mode) ?? null : null
+  const others = openSeg ? journeysUnlike(draft, openSeg.mode) : 0
+  const done = draft.segs.filter(sg => sg.mode).length
 
   return (
     <div className="sec">
@@ -62,6 +68,17 @@ export default function TePlanCommute({ snap, draft, issues, edit, onPick, onVeh
           : `${plural(legs, 'journey')} — choose how you travel each one.`}
         {' '}Only what is allowed for {KIND_WORD[draft.scope] ?? 'this trip'} is offered.
       </p>
+
+      {legs > 1 ? (
+        <div className="fsteps" aria-label={`${done} of ${legs} journeys chosen`}>
+          {draft.segs.map((sg, i) => (
+            <span key={i} className={`fs ${open(i) ? 'on' : sg.mode ? 'done' : ''}`}>
+              <span className="fn">{sg.mode ? <TeIcon name="check" size="sm" /> : i + 1}</span>
+            </span>
+          ))}
+          <span className="small muted">{done} of {legs} chosen</span>
+        </div>
+      ) : null}
 
       {!legs ? (
         <div className="empty">
@@ -99,6 +116,22 @@ export default function TePlanCommute({ snap, draft, issues, edit, onPick, onVeh
           )
         })}
       </div>
+
+      {/* ONE TAP FOR A WHOLE ROUND TRIP. Two journeys is the common case and
+          four is not rare; picking "flight" and then picking it again is the
+          kind of repetition a form should do for you. Offered only when it
+          would actually change something, so it disappears once every journey
+          already travels this way. */}
+      {openSeg && openMode && others > 0 ? (
+        <button
+          type="button"
+          className="btn wide"
+          onClick={() => edit(d => applyModeToAll(d, openSeg.mode, openSeg.vehicleId))}
+        >
+          <TeIcon name="swap" size="sm" />
+          Use {openMode.name.toLowerCase()} for {others === legs - 1 ? 'every journey' : `the other ${plural(others, 'journey')}`}
+        </button>
+      ) : null}
 
       {draft.tried && left ? (
         <div className="ferr"><TeIcon name="warn" size="sm" />{left === 1 ? 'One journey still needs a mode.' : `${left} journeys still need a mode.`}</div>

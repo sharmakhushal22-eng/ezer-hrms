@@ -42,8 +42,25 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
   const setOption = (i: number, patch: Partial<PlannerDraft['stayOptions'][number]>) =>
     edit({ stayOptions: draft.stayOptions.map((o, j) => (j === i ? { ...o, ...patch } : o)) })
 
+  /** Both questions answered, so the step can confirm it is finished rather
+   *  than leaving somebody wondering whether they missed something. */
+  const answered = draft.stayWanted !== undefined && draft.foodWanted !== undefined
+
   return (
     <div className="stack">
+      {/* THIS IS A WHOLE STEP NOW, not the block it used to be in the middle of
+          Review. So it opens by saying what the step is for — a step that
+          starts straight in on a Yes/No reads like a question with no
+          subject. */}
+      <div className="sec">
+        <h4>Stay and food</h4>
+        <p className="small muted">
+          Two questions, and neither commits you to anything: the hotel is picked and booked
+          by the Travel Desk, and the food budget is only spent against bills you add while
+          the trip is on.
+        </p>
+      </div>
+
       {/* ── the stay ── */}
       <div className="card flat tint">
         <div className="ch">
@@ -112,6 +129,21 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
           </>
         ) : null}
       </div>
+
+      {answered ? (
+        <div className="flag ok">
+          <TeIcon name="check" />
+          <div className="tx">
+            <b>Both answered</b>
+            <p>
+              {draft.stayWanted
+                ? 'The Travel Desk sees your hotels once the plan is approved, picks one and books it.'
+                : 'No hotel on this trip.'}
+              {draft.foodWanted ? ' Food is claimed against bills you add while the trip is on.' : ' No food budget on this trip.'}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {/* ── food ── */}
       <div className="card flat tint">

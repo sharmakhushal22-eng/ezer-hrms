@@ -227,6 +227,11 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
             type="button"
             className={`ws ${step === n ? 'on' : done ? 'done' : ''} ${stepHasError(n) ? 'bad' : ''}`}
             aria-current={step === n ? 'step' : 'false'}
+            // The label is spelled out because te.css hides the title text on a
+            // phone for every step but the current one — five titles do not fit
+            // at 360px. Hiding it visually must not take the name away from a
+            // screen reader, so it lives here too.
+            aria-label={`Step ${n} of ${STEPS.length}: ${s.title}. ${s.sub}`}
             onClick={() => goStep(n)}
           >
             <span className="wn">{done ? <TeIcon name="check" size="sm" /> : n}</span>
