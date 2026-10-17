@@ -20,6 +20,7 @@
 import { useState } from 'react'
 import type { Snapshot, TripIssue } from '@/lib/te/types'
 import { applyModeToAll, blockingOn, journeysUnlike, type PlannerDraft } from '@/lib/te/trip-draft'
+import { chainCount, commuteChain, hubKind, NO_XFER, sameHub, xferModes } from '@/lib/te/commute'
 import { plural } from '@/lib/te/format'
 import { vehicleSubtitle } from '@/lib/te/vehicle'
 import TeIcon from '../TeIcon'
@@ -93,18 +94,31 @@ export default function TePlanCommute({ snap, draft, issues, edit, onPick, onVeh
           const b = place(draft.points[i + 1]?.place ?? '')
           const md = snap.cfg.modes.find(m => m.id === s.mode) ?? null
           return (
-            <div key={i} className="rline">
-              <button type="button" className="rhead" aria-expanded={open(i)} onClick={() => toggle(i)}>
-                <span className="ico-b sm"><TeIcon name={MODE_ICON[s.mode] ?? 'route'} size="sm" /></span>
-                <span className="grow">
-                  <b className="small">{a?.s ?? '—'} → {b?.s ?? '—'}</b>
-                  <small className="muted">
-                    {md?.name ?? 'Choose how you travel'}
-                    {s.bookedBy === 'desk' ? ' · the Travel Desk books it' : ''}
-                  </small>
-                </span>
-                <TeIcon name={open(i) ? 'up' : 'down'} size="sm" />
-              </button>
+            /* .rrow wraps, .rline is the header's own flex row, and the open
+               panel is a SIBLING of .rline rather than a child. .rline is
+               display:flex with align-items:center, so a panel inside it sat
+               BESIDE the header and squeezed the place names into a column one
+               word wide. te.css has always expected this shape — `.rrow.open >
+               .rline .rhead` only resolves with the wrapper there. */
+            <div key={i} className={`rrow ${open(i) ? 'open' : ''}`}>
+              <div className="rline">
+                <button type="button" className="rhead" aria-expanded={open(i)} onClick={() => toggle(i)}>
+                  <span className="ico-b sm"><TeIcon name={MODE_ICON[s.mode] ?? 'route'} size="sm" /></span>
+                  {/* .rtx, not .grow: .grow is a plain flex child, so the
+                      title and the subtitle sat on one line and read as
+                      "Mumbai Head OfficeFlight · the Travel Desk books it".
+                      te.css already styles .rtx as the column a route row
+                      wants, with the title ellipsised rather than wrapped. */}
+                  <span className="rtx">
+                    <b>{a?.s ?? '—'} → {b?.s ?? '—'}</b>
+                    <span className="rsub">
+                      {md?.name ?? 'Choose how you travel'}
+                      {s.bookedBy === 'desk' ? ' · the Travel Desk books it' : ''}
+                    </span>
+                  </span>
+                  <TeIcon name={open(i) ? 'up' : 'down'} size="sm" />
+                </button>
+              </div>
               {open(i) ? (
                 <SegRow
                   snap={snap} draft={draft} issues={issues} i={i}
@@ -172,6 +186,20 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
   const err = issues.find(q => q.block && q.k === `m${i}`)
 
   const modes = snap.cfg.modes.filter(m => m.on && m.scopes.includes(draft.scope))
+  /** The door-to-door shape of this journey. Mirrors the engine's buildLegs so
+   *  the person sees it before the preview answers; the engine stays the
+   *  authority on what is actually estimated. */
+  const chain = commuteChain({
+    mode: s.mode,
+    scope: draft.scope,
+    from: draft.points[i]?.place ?? '',
+    to: draft.points[i + 1]?.place ?? '',
+    hubA: s.xfer.hubA,
+    hubB: s.xfer.hubB,
+    first: s.xfer.first,
+    last: s.xfer.last,
+  })
+  const hubName = hubKind(s.mode, draft.scope) ?? 'hub'
   const vehicle = s.mode === 'own' ? snap.vehicles.find(v => v.id === s.vehicleId) : null
   // The Travel Desk books tickets, but not for a local trip and not for one that
   // already happened — there is nothing left to book.
@@ -282,6 +310,87 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
                     </span>
                     <TeIcon name="rightc" size="sm" />
                   </button>
+                )
+              })}
+            </div>
+          ) : null}
+
+          {/* The same airport at both ends is not a journey, and it almost
+              always means the wrong city was picked on the route. The engine
+              collapses both hubs and quietly plans one direct leg, so without
+              this the plan silently becomes something else. */}
+          {sameHub(s.xfer.hubA, s.xfer.hubB) ? (
+            <div className="ferr warn">
+              <TeIcon name="alert" size="sm" />
+              Both ends use the same {hubName}. Check the places on the route — this is usually the wrong city.
+            </div>
+          ) : null}
+
+          {/* ── DOOR TO DOOR ──
+              "Delhi to Mumbai by flight" is three journeys, and the engine has
+              always built it that way — a first leg to the airport, the flight,
+              a last leg from the other airport — each estimated, tracked and
+              claimed on its own. What no screen ever did was ASK: xfer.first
+              and xfer.last defaulted to a cab in newSeg and were invisible, so
+              somebody who took the metro, or whose colleague dropped them, had
+              a cab planned for them and an estimate built on it.
+
+              The chain is drawn first because it is the thing a person
+              recognises — their own trip, in order — and the pickers under it
+              change what the chain says. */}
+          {chain.length > 1 ? (
+            <div className="stack sm">
+              <div className="rs-note">
+                <TeIcon name="route" size="sm" />
+                <span>
+                  {chainCount(chain)} {chainCount(chain) === 1 ? 'journey' : 'journeys'} door to door.
+                  {' '}Each is estimated, tracked and claimed on its own.
+                </span>
+              </div>
+
+              <ol className="itin">
+                {chain.map((step, n) => {
+                  const pf = place(step.from), pt = place(step.to)
+                  return (
+                    <li key={`${step.kind}-${n}`} className={step.skipped ? 'faint' : undefined}>
+                      <span className="mk">{n + 1}</span>
+                      <span className="grow">
+                        <span>{pf?.s ?? '—'} → {pt?.s ?? '—'}</span>
+                        <span className="chip plain">
+                          {step.skipped ? 'Nothing to claim' : (snap.cfg.modes.find(m => m.id === step.mode)?.name ?? step.mode)}
+                        </span>
+                      </span>
+                    </li>
+                  )
+                })}
+              </ol>
+
+              {/* One picker per end that exists. A journey that starts at the
+                  airport has no first mile to ask about, and the chain above
+                  already shows that. */}
+              {(['first', 'last'] as const).map(side => {
+                if (!chain.some(st => st.kind === side)) return null
+                const atHub = side === 'first'
+                const label = atHub
+                  ? `Getting to the ${hubName}`
+                  : `Getting from the ${hubName} to where you are going`
+                const value = (side === 'first' ? s.xfer.first : s.xfer.last) || 'cab'
+                return (
+                  <label key={side} className="fld sm">
+                    <span>{label}</span>
+                    <select
+                      value={value}
+                      onChange={e => setSeg({ xfer: { ...s.xfer, [side]: e.target.value } })}
+                    >
+                      {xferModes(snap.cfg.modes).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      {/* The honest option, and the one that was impossible
+                          before: somebody drops you, or you walk. */}
+                      <option value={NO_XFER}>Nothing to claim — dropped, walked or already there</option>
+                    </select>
+                    {value === 'own' ? (
+                      <small>Your own vehicle. The same one as the main journey unless you change it there.</small>
+                    ) : null}
+                  </label>
                 )
               })}
             </div>
