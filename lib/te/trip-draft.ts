@@ -565,6 +565,9 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
       ...(p.ret && p.arriveAt ? { arriveAt: p.arriveAt } : {}),
       ...(p.ret && p.arrive ? { arrive: p.arrive } : {}),
       ...(p.ret ? { ret: true } : {}),
+      // Which places are only passed through. Omitted when false so a trip
+      // saved before migration 170 keeps sending exactly what it always did.
+      ...(p.stop ? { stop: true } : {}),
     })),
     segs: d.segs.map(s => ({ mode: s.mode, bookedBy: s.bookedBy, vehicleId: s.vehicleId || null, xfer: { ...s.xfer } })),
     pax: Number(d.pax) || 1,

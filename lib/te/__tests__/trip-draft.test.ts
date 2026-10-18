@@ -521,6 +521,28 @@ describe('what gets sent to the server', () => {
   it('tidies the people: upper-case ids, trimmed names, blanks dropped', () => {
     const d = syncDraft({ ...fresh(), pax: 3, people: [{ id: ' srs0533 ', name: '  Priya Nair ' }, { id: '', name: '' }] }, ctx())
     assert.deepEqual(toTripDraft(d).people, [{ id: 'SRS0533', name: 'Priya Nair' }])
+
+  // THE BOUNDARY THAT LET A BUG THROUGH. pointLabel and the engine both knew
+  // about `stop`, and both were tested — but toTripDraft rebuilds each point
+  // field by field on the way to the server, and it did not carry the flag.
+  // So the planner labelled the trip correctly, the save dropped it, and the
+  // stored trip was named after the stop. Nothing in either unit test could
+  // see that: the gap was between them.
+  it('sends which places are only passed through', () => {
+    const d = addStop(fresh(), 1, ctx())          // a stop on the way home
+    const sent = toTripDraft(d)
+    assert.equal(sent.points.length, 4)
+    assert.equal(sent.points[1].stop, undefined, 'the destination is not a stop')
+    assert.equal(sent.points[2].stop, true, 'the stop must reach the server')
+    assert.equal(sent.points[3].ret, true)
+  })
+
+  it('omits the flag entirely when nothing is a stop', () => {
+    // A trip planned before stops could be marked must send exactly what it
+    // always sent, so the server's defaults keep it reading as it did.
+    const sent = toTripDraft(fresh())
+    for (const q of sent.points) assert.ok(!('stop' in q), `unexpected stop key: ${JSON.stringify(q)}`)
+  })
   })
 
   it('a local trip has no hotel and no advance, whatever the form says', () => {
