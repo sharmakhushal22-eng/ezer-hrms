@@ -36,6 +36,12 @@ const PAY_WORDS: Record<string, string> = {
   km: 'Paid per km', bill: 'Paid on your bill', nobill: 'Fare, no bill needed',
   ticket: 'Paid on the ticket', none: 'Not paid, only logged',
 }
+/** Modes nobody books for you, so there is nothing to ask the desk about:
+ *  your own vehicle and the company's. Everything else — a flight, a train, a
+ *  bus, a cab, a rental — can be booked, and a link to the one you found is
+ *  worth having. */
+const NO_BOOKING: Record<string, true> = { own: true, company: true }
+
 const KIND_WORD: Record<string, string> = {
   local: 'this city', domestic: 'travel inside India', international: 'international travel',
 }
@@ -412,7 +418,7 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
               Not for your own vehicle — nothing is booked when you drive
               yourself. Everything here is optional; a journey with none of it
               is exactly the journey that was planned before. */}
-          {md && md.id !== 'own' ? (
+          {md && !NO_BOOKING[md.id] ? (
             <div className="prefbox">
               <div className="pref-h">
                 <TeIcon name={deskBooks ? 'plane' : 'info'} size="sm" />

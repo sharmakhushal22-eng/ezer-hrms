@@ -20,13 +20,18 @@
 // place. Selecting a card is the same `draft.open` the accordion used, so
 // nothing about the draft or its validation changed — only what you see.
 //
-// `arrive` is never stored on the draft — the server works out when you get
-// somewhere from when you left the place before. It is read off the preview's
-// legs for display only.
+// WHEN YOU ARE WHERE IS ASKED FOR, NOT GUESSED. `arrive` used to be derived
+// by the engine from the previous departure and never stored on the draft.
+// That is wrong for anything travelling overnight — a train out on the 2nd
+// lands on the 3rd — and it left the Travel Desk with no idea when somebody
+// actually wants to be somewhere. Every place now carries its own arrival
+// date and time, departure time, a remark and a link. All optional: a blank
+// arrival still falls back to the old guess, and the panel says so.
 import { Fragment } from 'react'
 import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
 import { errorFor, pointLabel, addStop, movePoint, removePoint, setPattern, type DraftContext, type PlannerDraft } from '@/lib/te/trip-draft'
 import { day, plural } from '@/lib/te/format'
+import { badUrl } from '@/lib/te/trip-stay'
 import TeIcon from '../TeIcon'
 import TeTripMap from './TeTripMap'
 import type { PickTarget } from './TePlacePicker'
@@ -333,6 +338,10 @@ function PointPanel({ snap, draft, issues, i, tried, preview, local, edit, onPic
   })()
   const placeholder = i === 0 ? 'Choose where you start' : p.ret ? 'Choose where you come back to' : L.isStop ? 'Choose the stop' : 'Choose where you go'
   const title = pickTitle(i, p.ret, draft.pattern)
+  const placeShort = pc?.s ?? ''
+  /** What the plan would assume if the arrival is left blank: the day you
+   *  leave the place before. Shown so a blank field is not a mystery. */
+  const derived = i > 0 ? (draft.points[i - 1]?.leave || draft.points[i - 1]?.arrive || '') : ''
 
   return (
     <div className="jpanel">
@@ -405,12 +414,94 @@ function PointPanel({ snap, draft, issues, i, tried, preview, local, edit, onPic
               <input
                 type="date"
                 value={p.leave || ''}
-                min={arrive || undefined}
+                min={p.arrive || arrive || undefined}
                 onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, leave: e.target.value } : q)) }))}
               />
-              <small>{arrive ? `Arrive ${day(arrive)}` : ' '}</small>
             </label>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* ── WHEN YOU ARE HERE ──
+          The arrival used to be derived from the previous departure and never
+          asked. That is wrong for anything that travels overnight — a train
+          out on the 2nd lands on the 3rd — and it left the Travel Desk with
+          no idea when somebody actually wants to be somewhere.
+
+          Typed answers win; blank ones still fall back to the old guess, so
+          a trip that answers none of this behaves exactly as it did. The
+          first point has no arrival (you start there) and the return point's
+          departure is the end of the trip, so neither is asked. */}
+      {pc && !lockRet ? (
+        <div className="prefbox">
+          <div className="pref-h">
+            <TeIcon name="clock" size="sm" />
+            <b>When you are {placeShort || 'here'}</b>
+            <span className="chip plain">Optional</span>
+          </div>
+          <p className="small muted">
+            {i === 0
+              ? 'The time you set off. The date is above.'
+              : p.ret
+                ? 'When you are back. The date is on the Route panel above.'
+                : derived
+                  ? `Left blank, the plan assumes you arrive ${day(derived)} — the day you leave the place before.`
+                  : 'Say when you reach here and when you move on.'}
+          </p>
+          <div className="jp-grid">
+            {i > 0 ? (
+              <label className="fld sm">
+                <span>Reach on</span>
+                <input
+                  type="date"
+                  value={p.arrive || ''}
+                  onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, arrive: e.target.value } : q)) }))}
+                />
+                <small>{derived && !p.arrive ? `Assumed ${day(derived)}` : ' '}</small>
+              </label>
+            ) : null}
+            {i > 0 ? (
+              <label className="fld sm">
+                <span>Reach at</span>
+                <input
+                  type="time"
+                  value={p.arriveAt || ''}
+                  onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, arriveAt: e.target.value } : q)) }))}
+                />
+              </label>
+            ) : null}
+            {!p.ret ? (
+              <label className="fld sm">
+                <span>{i === 0 ? 'Set off at' : 'Move on at'}</span>
+                <input
+                  type="time"
+                  value={p.leaveAt || ''}
+                  onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, leaveAt: e.target.value } : q)) }))}
+                />
+              </label>
+            ) : null}
+          </div>
+          <div className="jp-grid">
+            <label className="fld sm">
+              <span>Note for the Travel Desk</span>
+              <input
+                value={p.prefNote ?? ''}
+                placeholder="Late check-in; the client office shuts at 6"
+                onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, prefNote: e.target.value } : q)) }))}
+              />
+            </label>
+            <label className="fld sm">
+              <span>Link</span>
+              <input
+                value={p.prefUrl ?? ''}
+                placeholder="https://…"
+                onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, prefUrl: e.target.value } : q)) }))}
+              />
+              {badUrl(p.prefUrl ?? '')
+                ? <small className="bad">That does not look like a web address. Paste the whole link, starting with https://</small>
+                : <small>The hotel, the venue, anything about this place.</small>}
+            </label>
+          </div>
         </div>
       ) : null}
       {i > 0 && err(`d${i}`) ? <div className="ferr"><TeIcon name="warn" size="sm" />{err(`d${i}`)}</div> : null}

@@ -166,6 +166,8 @@ export interface TeTripPoint {
   /** A place passed through rather than the place you are going to. Lets a
    *  stop sit on either leg; see DraftPoint.stop. Migration 170. */
   stop?: true
+  /** For the Travel Desk, about this place: a remark and a link. Migration 172. */
+  prefNote?: string; prefUrl?: string
 }
 export interface TeTripSegment {
   mode: string; bookedBy: string; vehicleId: Uuid | null
@@ -789,7 +791,7 @@ export interface TripDraft {
   origin?: TripOrigin
   purpose?: string
   project?: string
-  points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: boolean; stop?: boolean }[]
+  points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: boolean; stop?: boolean; prefNote?: string; prefUrl?: string }[]
   segs: { mode: string; bookedBy?: string; vehicleId?: Uuid | null; xfer?: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid }; prefTime?: string; prefUrl?: string; prefNote?: string }[]
   pax?: number
   /** Co-travellers by employee code. */

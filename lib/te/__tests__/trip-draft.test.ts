@@ -473,13 +473,26 @@ describe('opening a saved trip to change it', () => {
     assert.deepEqual(d.points.map(p => p.place), ['off', 'pune', 'off'])
   })
 
-  it('drops the arrival dates the server derived, but keeps the one that was typed', () => {
-    // This used to drop every arrival, because every arrival WAS derived. The
-    // return point's arrival is now an answer — the day you are back at your
-    // starting point — so it is the one that survives a reopen. Everything
-    // else is still the server's calculation off the legs.
+  it('keeps every arrival that was stored, not only the return point\'s', () => {
+    // This used to drop every arrival but the return's, because every other
+    // arrival WAS the server's calculation off the legs. The planner asks for
+    // all of them now, so reopening a trip has to show what was said — and
+    // `saved` here carries none, which is what a trip planned before the
+    // question existed looks like.
     const d = fromTrip(saved, ctx())
-    for (const p of d.points) if (!p.ret) assert.equal('arrive' in p, false, 'a derived arrival must not be stored')
+    // The middle point's arrival used to be thrown away here as the server's
+    // own calculation; it comes back now.
+    assert.equal(d.points[1].arrive, '2026-12-07')
+    assert.equal(d.points.find(p => p.ret)?.arrive, '2026-12-09')
+    // The start is the exception, and not because of this change: you do not
+    // arrive where you begin, and derive() clears it on every trip.
+    assert.equal(d.points[0].arrive ?? '', '')
+    // A time comes back with it.
+    const withTime = fromTrip({
+      ...saved,
+      points: saved.points.map((q, i) => (i === 1 ? { ...q, arriveAt: '06:15' } : q)),
+    }, ctx())
+    assert.equal(withTime.points[1].arriveAt, '06:15')
   })
 
   it('does not rename a trip that is reopened', () => {
@@ -561,6 +574,32 @@ describe('what gets sent to the server', () => {
     }
   })
 
+  it('sends every time of every place, not just the two it used to', () => {
+    // The arrival was derived and dropped here; the departure time was only
+    // ever sent for the first place. Both are asked for on every place now.
+    const d = fresh()
+    const withTimes = {
+      ...d,
+      points: d.points.map((q, i) => (i === 1
+        ? { ...q, arrive: '2026-11-03', arriveAt: '06:15', leaveAt: '19:00', prefNote: ' Late check-in ', prefUrl: ' https://hotel.example/x ' }
+        : q)),
+    }
+    const sent = toTripDraft(withTimes)
+    assert.equal(sent.points[1].arrive, '2026-11-03')
+    assert.equal(sent.points[1].arriveAt, '06:15')
+    assert.equal(sent.points[1].leaveAt, '19:00')
+    assert.equal(sent.points[1].prefNote, 'Late check-in')
+    assert.equal(sent.points[1].prefUrl, 'https://hotel.example/x')
+  })
+
+  it('omits every one of them when nothing was said', () => {
+    for (const q of toTripDraft(fresh()).points) {
+      for (const k of ['arrive', 'arriveAt', 'prefNote', 'prefUrl']) {
+        assert.ok(!(k in q), `unexpected ${k}: ${JSON.stringify(q)}`)
+      }
+    }
+  })
+
   it('omits the flag entirely when nothing is a stop', () => {
     // A trip planned before stops could be marked must send exactly what it
     // always sent, so the server's defaults keep it reading as it did.
@@ -617,15 +656,17 @@ describe('the day you are back at the start', () => {
     assert.equal(ret!.arrive, '')
   })
 
-  it('sends the return arrival to the server, and only for the return point', () => {
-    // Every other point's arrival is the server's own answer, read off the
-    // legs. Sending ours back would have the planner arguing with it.
+  it('sends every arrival that was typed, on every point', () => {
+    // It used to send only the return point's: every other arrival was the
+    // server's own calculation and sending ours back would have had the
+    // planner arguing with it. The planner asks for them now, so they go.
     let d = newPlannerDraft({ scope: 'domestic', origin: 'PRE_APPROVED', lastWorkday: '2026-10-09' }, ctx())
     d = { ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: '2026-10-17' } : { ...p, arrive: '2026-10-14' })) }
-    const payload = toTripDraft(d)
-    const sent = payload.points as { arrive?: string; ret?: true }[]
+    const sent = toTripDraft(d).points as { arrive?: string; ret?: true }[]
     assert.equal(sent.find(p => p.ret)?.arrive, '2026-10-17')
-    assert.equal(sent.filter(p => !p.ret).every(p => p.arrive === undefined), true)
+    // The start has no arrival to send — you begin there — and syncDraft
+    // clears it; every other point sends what was typed.
+    assert.equal(sent[1].arrive, '2026-10-14')
   })
 
   it('drops the arrival when the trip stops coming back', () => {
@@ -661,8 +702,9 @@ describe('the day you are back at the start', () => {
       segs: [{ mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: {} }, { mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: {} }],
     }, ctx())
     assert.equal(reopened.points.find(p => p.ret)?.arrive, '2026-10-17')
-    // The middle point's arrival was the server's calculation, not an answer.
-    assert.equal(reopened.points[1].arrive, undefined)
+    // And the middle point's, which used to be dropped as the server's own
+    // calculation and is now an answer the traveller can give.
+    assert.equal(reopened.points[1].arrive, '2026-10-14')
   })
 })
 

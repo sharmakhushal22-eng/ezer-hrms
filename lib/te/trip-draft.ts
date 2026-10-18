@@ -56,6 +56,12 @@ export interface DraftPoint {
   arriveAt?: string
   /** What you will do there, or why you stop. */
   what: string
+  /** For the Travel Desk, about this place rather than about a journey:
+   *  "need a late check-in", "the client office shuts at 6". Separate from
+   *  `what`, which says why you are going and which the approver reads. */
+  prefNote?: string
+  /** A link about this place — the hotel, the venue, the booking. */
+  prefUrl?: string
   /** Only ever set on the one point you come back to. */
   ret?: true
   /**
@@ -255,7 +261,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
  */
 export function fromTrip(trip: {
   id: Uuid; name: string; scope: TripScope; origin: TripOrigin; purpose: string; project: string
-  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: true; stop?: true }[]
+  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: true; stop?: true; prefNote?: string; prefUrl?: string }[]
   segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid }; prefTime?: string; prefUrl?: string; prefNote?: string }[]
   pax: number; people: { id: string; name?: string }[]; stayBy: 'self' | 'desk'; advance: number
   stayWanted?: boolean | null; foodWanted?: boolean | null; stayOptions?: TeStayOption[]
@@ -281,14 +287,20 @@ export function fromTrip(trip: {
     project: trip.project ?? '',
     pax: trip.pax || 1,
     people: (trip.people ?? []).map(p => ({ id: p.id ?? '', name: p.name ?? '' })),
-    points: (trip.points ?? []).map(p => ({
+    points: (trip.points ?? []).map((p, i) => ({
       place: p.place ?? '', pt: p.pt ?? '', what: p.what ?? '', leave: p.leave ?? '',
       leaveAt: p.leaveAt ?? '', arriveAt: p.arriveAt ?? '',
-      // Only the return point's arrival is kept. The server fills `arrive` in
-      // on every point from the legs, and that is derived — pulling it all
-      // back into the draft would have the planner storing answers it did not
-      // ask for. The return point is the one place the person typed it.
-      ...(p.ret && p.arrive ? { arrive: p.arrive } : {}),
+      // The arrival of every point now, not only the return's. It used to be
+      // dropped here because the server derived it and pulling it back would
+      // have stored an answer the planner never asked for. The planner asks
+      // for it, so reopening a trip has to show what was said.
+      //
+      // Except the start: you do not arrive where you begin. derive() clears
+      // it on every trip, so carrying it into the draft would show a field
+      // the engine is about to throw away.
+      ...(i > 0 && p.arrive ? { arrive: p.arrive } : {}),
+      ...(p.prefNote ? { prefNote: p.prefNote } : {}),
+      ...(p.prefUrl ? { prefUrl: p.prefUrl } : {}),
       ...(p.ret ? { ret: true as const } : {}),
       ...(p.stop ? { stop: true as const } : {}),
     })),
@@ -581,13 +593,21 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
     // `arrive` is sent only where it was asked for — the return point. The
     // engine computes t.end as the latest of every point's (leave || arrive),
     // so this date becomes the trip's end without the engine changing at all.
-    points: d.points.map(p => ({
+    points: d.points.map((p, i) => ({
       place: p.place, pt: p.pt, what: p.what, leave: p.leave,
-      // Omitted entirely when blank, so the server's nullif() sees nothing
-      // rather than an empty string pretending to be a time.
+      // EVERY TIME ON EVERY POINT, not just the two the planner used to ask
+      // for. The arrival was derived from the previous departure, which is
+      // wrong for anything that travels overnight, and the Travel Desk had no
+      // way to be told when somebody actually wants to be somewhere.
+      //
+      // Each is omitted when blank, so the server's nullif() sees nothing
+      // rather than an empty string pretending to be a time, and a trip that
+      // answers none of them sends what it always sent.
       ...(p.leaveAt ? { leaveAt: p.leaveAt } : {}),
-      ...(p.ret && p.arriveAt ? { arriveAt: p.arriveAt } : {}),
-      ...(p.ret && p.arrive ? { arrive: p.arrive } : {}),
+      ...(i > 0 && p.arriveAt ? { arriveAt: p.arriveAt } : {}),
+      ...(i > 0 && p.arrive ? { arrive: p.arrive } : {}),
+      ...(p.prefNote ? { prefNote: p.prefNote.trim() } : {}),
+      ...(p.prefUrl ? { prefUrl: p.prefUrl.trim() } : {}),
       ...(p.ret ? { ret: true } : {}),
       // Which places are only passed through. Omitted when false so a trip
       // saved before migration 170 keeps sending exactly what it always did.
