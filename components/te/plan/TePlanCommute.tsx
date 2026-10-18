@@ -20,7 +20,7 @@
 import { Fragment, useState } from 'react'
 import type { Snapshot, TripIssue } from '@/lib/te/types'
 import { applyModeToAll, blockingOn, journeysUnlike, type PlannerDraft } from '@/lib/te/trip-draft'
-import { chainCount, commuteChain, hubKind, NO_XFER, sameHub, xferModes } from '@/lib/te/commute'
+import { chainCount, commuteChain, hubForCity, hubKind, NO_XFER, sameHub, xferModes } from '@/lib/te/commute'
 import { day, plural } from '@/lib/te/format'
 import { vehicleSubtitle } from '@/lib/te/vehicle'
 import { badUrl } from '@/lib/te/trip-stay'
@@ -310,7 +310,15 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
             <div className="hubs">
               {(['A', 'B'] as const).map(side => {
                 const city = side === 'A' ? a : b
-                const hub = place(side === 'A' ? s.xfer.hubA ?? '' : s.xfer.hubB ?? '')
+                const chosen = place(side === 'A' ? s.xfer.hubA ?? '' : s.xfer.hubB ?? '')
+                // WHAT THE PLAN WILL ACTUALLY USE. Only the employee's own
+                // choice was read here, so a city with a perfectly good
+                // company airport was reported as having none — a sentence
+                // about an empty field, written as a statement about the
+                // configuration. hubForCity mirrors the engine, which is
+                // what decides.
+                const auto = chosen ? null : place(hubForCity(city, md.id === 'flight' ? 'air' : 'rail', snap.masters) ?? '')
+                const hub = chosen ?? auto
                 const word = md.id === 'flight' ? 'airport' : 'station'
                 return (
                   <button key={side} type="button" className={`locb hubb ${hub ? '' : 'need'}`} onClick={() => onPick({ kind: 'hub', index: i, side, title: `${word === 'airport' ? 'Airport' : 'Railway station'} in ${city?.city || city?.s || 'this city'}`, hub: word })}>
@@ -318,7 +326,7 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
                     <span className="grow">
                       <small>The {word} you {side === 'A' ? 'leave from' : 'arrive at'}{city ? `, ${city.city || city.s}` : ''}</small>
                       {hub
-                        ? <><b>{hub.s}</b><span className="ad">Chosen by you. Tap to change</span></>
+                        ? <><b>{hub.s}</b><span className="ad">{chosen ? 'Chosen by you. Tap to change' : `Your company’s ${word} for ${city?.city || city?.s || 'this city'}. Tap to change`}</span></>
                         : <><b className="ph0">Choose the {word}</b><span className="ad">No {word} is set up for {city?.city || city?.s || 'this city'}</span></>}
                     </span>
                     <TeIcon name="rightc" size="sm" />

@@ -151,3 +151,34 @@ export function commuteGap(input: {
 export function sameHub(hubA?: string, hubB?: string): boolean {
   return !!hubA && !!hubB && hubA === hubB
 }
+
+/**
+ * The hub a journey will actually leave from, when the traveller has not
+ * picked one.
+ *
+ * MIRRORS hubFor IN THE ENGINE, which is the authority: the place itself when
+ * it already IS a hub, otherwise the company's hub for that city, otherwise
+ * for the region the city belongs to (every NCR city shares Delhi's airport).
+ *
+ * WHY THE SCREEN NEEDS THIS. It did not have it, so the hub picker said "No
+ * airport is set up for Mumbai" whenever the employee had not chosen one by
+ * hand — on a company that had an airport for Mumbai and would have used it.
+ * The sentence was about the employee's own choice and read as a statement
+ * about the company's configuration, which sent at least one person looking
+ * for a problem that was two cities away.
+ */
+export function hubForCity(
+  p: { pt?: string | null; id?: string; city?: string | null } | null | undefined,
+  kind: 'air' | 'rail',
+  masters: { hubs?: Record<string, { air?: string; rail?: string }>; regions?: Record<string, string[]> },
+): string | null {
+  if (!p) return null
+  // The place IS the hub: a trip that starts at the airport needs no other.
+  if ((kind === 'air' && p.pt === 'airport') || (kind === 'rail' && p.pt === 'station')) return p.id ?? null
+  const city = p.city ?? ''
+  if (!city) return null
+  const regions = masters.regions ?? {}
+  const region = Object.keys(regions).find(r => (regions[r] ?? []).includes(city))
+  const hubs = masters.hubs ?? {}
+  return hubs[region ?? city]?.[kind] ?? hubs[city]?.[kind] ?? null
+}

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  chainCount, commuteChain, commuteGap, hubKind, NO_XFER, sameHub, xferLabel, xferModes,
+  chainCount, commuteChain, commuteGap, hubForCity, hubKind, NO_XFER, sameHub, xferLabel, xferModes,
 } from '../commute.ts'
 import type { TeMode } from '../types.ts'
 
@@ -176,4 +176,49 @@ test('the label says plainly when nothing is claimed', () => {
   assert.equal(xferLabel(NO_XFER, MODES), 'No journey to claim')
   assert.equal(xferLabel(undefined, MODES), 'No journey to claim')
   assert.equal(xferLabel('cab', MODES), 'cab')
+})
+
+// ── which hub a journey leaves from ─────────────────────────────────────────
+// Mirrors hubFor in the engine. The screen needs it because it was saying
+// "No airport is set up for Mumbai" on a company that had one.
+
+const MASTERS = {
+  hubs: {
+    NCR: { air: 'del', rail: 'ndls' },
+    Mumbai: { air: 'bom', rail: 'csmt' },
+    Jaipur: { air: 'jai', rail: 'jp' },
+  },
+  regions: { NCR: ['Delhi', 'Gurugram', 'Noida', 'Faridabad'] },
+}
+
+test('a city with its own hub uses it', () => {
+  assert.equal(hubForCity({ city: 'Mumbai', pt: 'corp' }, 'air', MASTERS), 'bom')
+  assert.equal(hubForCity({ city: 'Mumbai', pt: 'corp' }, 'rail', MASTERS), 'csmt')
+})
+
+test('a city in a region uses the region’s hub', () => {
+  // Every NCR city flies from Delhi; none of them has an airport of its own.
+  assert.equal(hubForCity({ city: 'Gurugram', pt: 'corp' }, 'air', MASTERS), 'del')
+  assert.equal(hubForCity({ city: 'Noida', pt: 'corp' }, 'rail', MASTERS), 'ndls')
+})
+
+test('a place that is already the hub is its own answer', () => {
+  // Somebody whose trip starts at the airport needs no ride to one.
+  assert.equal(hubForCity({ id: 'bom', city: 'Mumbai', pt: 'airport' }, 'air', MASTERS), 'bom')
+  assert.equal(hubForCity({ id: 'jp', city: 'Jaipur', pt: 'station' }, 'rail', MASTERS), 'jp')
+})
+
+test('a hub of the wrong kind does not answer for the other', () => {
+  // An airport is not a station. This is the case that was mislabelled:
+  // Jaipur had a station and no airport, and the screen blamed the city.
+  const onlyRail = { hubs: { Jaipur: { rail: 'jp' } }, regions: {} }
+  assert.equal(hubForCity({ city: 'Jaipur', pt: 'corp' }, 'rail', onlyRail), 'jp')
+  assert.equal(hubForCity({ city: 'Jaipur', pt: 'corp' }, 'air', onlyRail), null)
+})
+
+test('a city with nothing set up says so, and does not invent one', () => {
+  assert.equal(hubForCity({ city: 'Shimla', pt: 'corp' }, 'air', MASTERS), null)
+  assert.equal(hubForCity(null, 'air', MASTERS), null)
+  assert.equal(hubForCity({ city: '', pt: 'corp' }, 'air', MASTERS), null)
+  assert.equal(hubForCity({ city: 'Mumbai', pt: 'corp' }, 'air', {}), null)
 })
