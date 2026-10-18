@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
   if (up.error) {
     return NextResponse.json({
       error: noBucket(up.error)
-        ? 'Uploads are not available yet — the company-docs storage bucket has not been created.'
+        ? 'Uploads are not available yet: the company-docs storage bucket has not been created.'
         : 'Upload failed: ' + up.error.message,
     }, { status: noBucket(up.error) ? 503 : 500 })
   }

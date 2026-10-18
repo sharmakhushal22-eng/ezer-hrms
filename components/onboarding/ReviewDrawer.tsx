@@ -15,9 +15,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { authHeaders } from '@/lib/auth-headers'
 import { C as TK, Z, E } from '@/lib/ui'
 
-type Doc = { doc_code: string; label: string; file_name: string | null; mime_type: string | null; url: string | null; hr_verified: boolean | null; note: string | null; ai_status: string | null; uploaded_at: string | null }
-type Approval = { team: string; status: 'PENDING' | 'APPROVED' | 'RETURNED'; acted_by_name: string | null; remark: string | null }
-type Mark = { key: string; kind: 'doc' | 'detail'; label: string; section?: string; doc_code?: string }
+export type Doc = { doc_code: string; label: string; file_name: string | null; mime_type: string | null; url: string | null; hr_verified: boolean | null; note: string | null; ai_status: string | null; uploaded_at: string | null }
+export type Approval = { team: string; status: 'PENDING' | 'APPROVED' | 'RETURNED'; acted_by_name: string | null; remark: string | null }
+export type Mark = { key: string; kind: 'doc' | 'detail'; label: string; section?: string; doc_code?: string }
 type FieldDef = [string, string]
 type Block =
   | { kind: 'fields'; title?: string; fields: FieldDef[] }
@@ -25,13 +25,83 @@ type Block =
   | { kind: 'nested'; key: string; title: string; fields: FieldDef[] }
 type Section = { step: string; title: string; blocks: Block[] }
 
-const TEAM: Record<string, string> = { IT: 'IT', ADMIN: 'Admin', PAYROLL: 'Payroll', HR_MANAGER: 'HR Manager' }
+export const TEAM: Record<string, string> = { IT: 'IT', ADMIN: 'Admin', PAYROLL: 'Payroll', HR_MANAGER: 'HR Manager' }
+
+/** The paper sheet's styling — shared with the heads' approval form (components/ess/OnboardingApprovals.tsx). */
+export const SHEET_CSS = `
+  .rv-paper{background:${TK.surface};color:${TK.ink};width:min(920px,100%);margin:0 auto;border-radius:6px;box-shadow:${E.overlay};padding:40px 52px 0;font-size:13px;line-height:1.45;position:relative}
+  .rv-paper:before{content:'';position:absolute;left:0;right:0;top:0;height:5px;border-radius:6px 6px 0 0;background:${TK.brand}}
+  .rv-h{display:flex;align-items:baseline;gap:10px;margin:0;padding-bottom:6px;border-bottom:1px solid ${TK.lineStrong};font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:${TK.brand}}
+  .rv-h span{color:${TK.ink};font-size:14px;font-weight:700;letter-spacing:0;text-transform:none}
+  .rv-sub{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${TK.muted};margin-bottom:6px}
+  .rv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 18px}
+  .rv-cell{padding:7px 9px;border:1px solid transparent;border-radius:7px;min-width:0;transition:background .12s,border-color .12s}
+  .rv-cell.pick{cursor:pointer}
+  .rv-cell.pick:hover,.rv-cell.pick:focus-visible{background:${TK.brandTint};border-color:${TK.brandEdge};outline:none}
+  .rv-cell.on,.rv-cell.on:hover{background:${TK.criticalTint};border-color:${TK.criticalEdge}}
+  .rv-lbl{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:${TK.muted};font-weight:600}
+  .rv-val{font-size:13px;font-weight:500;word-break:break-word}
+  .rv-tag{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:99px;background:${TK.critical};color:${TK.onAccent};font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
+  .rv-table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .rv-table th{text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:${TK.muted};font-weight:600;padding:6px 9px;border-bottom:1px solid ${TK.line}}
+  .rv-table td{padding:7px 9px;border-bottom:1px solid ${TK.line};vertical-align:top;color:${TK.ink}}
+  .rv-row.pick{cursor:pointer}
+  .rv-row.pick:hover td{background:${TK.brandTint}}
+  .rv-row.on td,.rv-row.on:hover td{background:${TK.criticalTint}}
+  .rv-docs{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:8px;margin-top:10px}
+  .rv-doc{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid ${TK.line};border-radius:9px;background:${TK.surface};transition:background .12s,border-color .12s}
+  .rv-doc.pick{cursor:pointer}
+  .rv-doc.pick:hover,.rv-doc.pick:focus-visible{background:${TK.brandTint};border-color:${TK.brandEdge};outline:none}
+  .rv-doc.on,.rv-doc.on:hover{background:${TK.criticalTint};border-color:${TK.critical}}
+  .rv-doc-ic{flex:none;width:38px;height:44px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;letter-spacing:.06em}
+  .rv-view{flex:none;font-size:11.5px;font-weight:600;color:${TK.brand};text-decoration:none;padding:4px 8px;border-radius:6px;border:1px solid ${TK.brandEdge};background:${TK.surface}}
+  .rv-view:hover{background:${TK.brandTint}}
+  .rv-stamp{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;letter-spacing:.03em;border:1px solid}
+  .rv-bar{position:sticky;bottom:0;margin:34px -52px 0;padding:16px 52px 20px;background:${TK.surface};border-top:1px solid ${TK.lineStrong};border-radius:0 0 6px 6px;box-shadow:0 -12px 24px -18px rgba(15,23,42,.35)}
+  .rv-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 10px;border-radius:99px;background:${TK.criticalTint};color:${TK.critical};border:1px solid ${TK.criticalEdge};font-size:11.5px;font-weight:600}
+  .rv-chip button{all:unset;cursor:pointer;width:16px;height:16px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;background:${TK.critical};color:${TK.onAccent}}
+  .rv-btn{padding:10px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;white-space:nowrap;color:${TK.onAccent}}
+  .rv-btn:disabled{opacity:.55;cursor:not-allowed}
+  .rv-ghost{padding:7px 13px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${TK.surface};color:${TK.brandDeep};border:1px solid ${TK.brandEdge}}
+  .rv-ta{width:100%;min-height:76px;padding:10px 12px;border:1px solid ${TK.lineStrong};border-radius:8px;font-size:13px;font-family:inherit;color:${TK.ink};background:${TK.surface};box-sizing:border-box;resize:vertical;line-height:1.5}
+  .rv-ta:focus{outline:none;border-color:${TK.brand};box-shadow:0 0 0 3px ${TK.brandTint}}
+  .rv-in{width:100%;padding:9px 11px;border:1px solid ${TK.lineStrong};border-radius:8px;font-size:13px;font-family:inherit;color:${TK.ink};background:${TK.surface};box-sizing:border-box}
+  .rv-in:focus{outline:none;border-color:${TK.brand};box-shadow:0 0 0 3px ${TK.brandTint}}
+  .rv-in:disabled{background:${TK.sunken};color:${TK.inkSoft}}
+  .rv-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+  .rv-tile{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid ${TK.line};border-radius:10px;background:${TK.surface};cursor:pointer;transition:background .12s,border-color .12s,transform .12s;user-select:none}
+  .rv-tile:hover{border-color:${TK.brandEdge};background:${TK.brandTint}}
+  .rv-tile.on{border-color:${TK.positiveEdge};background:${TK.positiveTint}}
+  .rv-tile.need{border-color:${TK.warningEdge}}
+  .rv-tile.ro{cursor:default}
+  .rv-tile.ro:hover{border-color:${TK.line};background:${TK.surface}}
+  .rv-tile.ro.on:hover{border-color:${TK.positiveEdge};background:${TK.positiveTint}}
+  .rv-tick{flex:none;width:26px;height:26px;border-radius:99px;border:2px solid ${TK.lineStrong};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:${TK.onAccent};background:transparent;transition:background .12s,border-color .12s}
+  .rv-tile.on .rv-tick{background:${TK.positive};border-color:${TK.positive}}
+  .rv-prog{height:6px;border-radius:99px;background:${TK.sunken};overflow:hidden}
+  .rv-prog i{display:block;height:100%;border-radius:99px;background:${TK.positive};transition:width .25s}
+  .rv-sal{width:100%;border-collapse:collapse;font-size:12.5px}
+  .rv-sal th{text-align:right;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:${TK.muted};font-weight:600;padding:6px 9px;border-bottom:1px solid ${TK.lineStrong}}
+  .rv-sal th:first-child{text-align:left}
+  .rv-sal td{padding:6px 9px;border-bottom:1px solid ${TK.line};text-align:right;font-variant-numeric:tabular-nums;color:${TK.ink}}
+  .rv-sal td:first-child{text-align:left}
+  .rv-sal tr.head td{padding-top:14px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${TK.muted};border-bottom:1px solid ${TK.lineStrong}}
+  .rv-sal tr.sum td,.rv-sal tr.total td,.rv-sal tr.net td{font-weight:700}
+  .rv-sal tr.total td{background:${TK.brandTint};color:${TK.brandDeep}}
+  .rv-sal tr.net td{background:${TK.positiveTint};color:${TK.positive}}
+  .rv-sal tr.ded td{color:${TK.critical}}
+  .rv-sal tr.emp td,.rv-sal tr.grat td,.rv-sal tr.bonus td{color:${TK.inkSoft}}
+  .rv-sal tr.muted td{color:${TK.muted}}
+  .rv-sal tr.note td{font-size:11px;color:${TK.muted};text-align:left;border-bottom:none;padding-top:8px}
+  .rv-sal small{display:block;font-size:10.5px;color:${TK.muted};font-weight:400}
+  @media (max-width:640px){.rv-paper{padding:26px 18px 0}.rv-bar{margin:26px -18px 0;padding:14px 18px 16px}}
+`
 const HIDE = new Set(['bank_confirm', 'docs_uploaded', 'same_address'])
 
 // ── What the paper shows, in order. Keys the schema does not know are appended under “Other”. ──
 const ADDR = (p: string): FieldDef[] => [[`${p}line1`, 'Address line'], [`${p}village`, 'Village / locality'], [`${p}po`, 'Post office'], [`${p}thana`, 'Police station'], [`${p}sub_division`, 'Sub-division'], [`${p}city`, 'City'], [`${p}district`, 'District'], [`${p}state`, 'State'], [`${p}pin`, 'PIN code']]
 const NOMINEE: FieldDef[] = [['name', 'Name'], ['relation', 'Relation'], ['dob', 'Date of birth'], ['share', 'Share %'], ['address', 'Address']]
-const SCHEMA: Section[] = [
+export const SCHEMA: Section[] = [
   { step: 'step_3', title: 'Personal details', blocks: [
     { kind: 'fields', fields: [['full_name', 'Full name'], ['dob', 'Date of birth'], ['gender', 'Gender'], ['blood_group', 'Blood group'], ['marital_status', 'Marital status'], ['father_name', "Father's name"], ['mother_name', "Mother's name"], ['spouse_name', "Spouse's name"], ['nationality', 'Nationality'], ['country', 'Country'], ['religion', 'Religion'], ['birth_place', 'Place of birth'], ['aadhaar_number', 'Aadhaar number']] },
   ] },
@@ -124,7 +194,7 @@ function Table({ title, rows, cols, on, pick, onPick }: { title: string; rows: a
   )
 }
 
-function SectionView({ n, sec, obj, marks, pick, onToggle }: { n: number; sec: Section; obj: Record<string, any>; marks: Record<string, Mark>; pick: boolean; onToggle: (m: Mark) => void }) {
+export function SectionView({ n, sec, obj, marks, pick, onToggle }: { n: number; sec: Section; obj: Record<string, any>; marks: Record<string, Mark>; pick: boolean; onToggle: (m: Mark) => void }) {
   const blocks = blocksFor(sec, obj)
   const key = (field: string) => `det:${sec.title}|${field}`
   const toggle = (field: string) => onToggle({ key: key(field), kind: 'detail', label: field, section: sec.title })
@@ -166,7 +236,7 @@ function SectionView({ n, sec, obj, marks, pick, onToggle }: { n: number; sec: S
   )
 }
 
-function DocCard({ doc, on, pick, onPick }: { doc: Doc; on: boolean; pick: boolean; onPick: () => void }) {
+export function DocCard({ doc, on, pick, onPick }: { doc: Doc; on: boolean; pick: boolean; onPick: () => void }) {
   const img = /^image\//.test(doc.mime_type || '') || /\.(png|jpe?g|webp)$/i.test(doc.file_name || '')
   return (
     <div className={`rv-doc${pick ? ' pick' : ''}${on ? ' on' : ''}`} role={pick ? 'button' : undefined} tabIndex={pick ? 0 : undefined} onClick={pick ? onPick : undefined} onKeyDown={pick ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick() } } : undefined} title={pick ? (on ? 'Marked — click to clear' : 'Click if this document is wrong') : undefined}>
@@ -253,7 +323,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error || 'Failed')
-      if (outcome === 'ACCEPTED') onDone(d.all_approved ? (d.employee_code ? `Accepted. All four teams have approved — employee code ${d.employee_code} generated.` : `Accepted, but the employee could not be created: ${d.create_error}`) : 'Form accepted. Generate the employee code once IT, Admin and Payroll have approved too.', d.create_error ? 'err' : 'ok')
+      if (outcome === 'ACCEPTED') onDone('Form accepted. IT, Admin and Payroll have been asked to confirm their checklists and approve; after that, assign the role and generate the code from the card.', 'ok')
       else onDone(`Sent to ${item.full_name}${d.mailed ? ' — they have been emailed the corrections with the link' : ' (no email on file — use Resend link or share it)'}.`, 'ok')
       onClose()
     } catch (e: any) { onDone(e.message, 'err') } finally { setBusy(false) }
@@ -263,45 +333,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
 
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: Z.modal, overflowY: 'auto', padding: '28px 12px 40px', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
-      <style>{`
-        .rv-paper{background:${TK.surface};color:${TK.ink};width:min(920px,100%);margin:0 auto;border-radius:6px;box-shadow:${E.overlay};padding:40px 52px 0;font-size:13px;line-height:1.45;position:relative}
-        .rv-paper:before{content:'';position:absolute;left:0;right:0;top:0;height:5px;border-radius:6px 6px 0 0;background:${TK.brand}}
-        .rv-h{display:flex;align-items:baseline;gap:10px;margin:0;padding-bottom:6px;border-bottom:1px solid ${TK.lineStrong};font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:${TK.brand}}
-        .rv-h span{color:${TK.ink};font-size:14px;font-weight:700;letter-spacing:0;text-transform:none}
-        .rv-sub{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${TK.muted};margin-bottom:6px}
-        .rv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 18px}
-        .rv-cell{padding:7px 9px;border:1px solid transparent;border-radius:7px;min-width:0;transition:background .12s,border-color .12s}
-        .rv-cell.pick{cursor:pointer}
-        .rv-cell.pick:hover,.rv-cell.pick:focus-visible{background:${TK.brandTint};border-color:${TK.brandEdge};outline:none}
-        .rv-cell.on,.rv-cell.on:hover{background:${TK.criticalTint};border-color:${TK.criticalEdge}}
-        .rv-lbl{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:${TK.muted};font-weight:600}
-        .rv-val{font-size:13px;font-weight:500;word-break:break-word}
-        .rv-tag{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:99px;background:${TK.critical};color:${TK.onAccent};font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
-        .rv-table{width:100%;border-collapse:collapse;font-size:12.5px}
-        .rv-table th{text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:${TK.muted};font-weight:600;padding:6px 9px;border-bottom:1px solid ${TK.line}}
-        .rv-table td{padding:7px 9px;border-bottom:1px solid ${TK.line};vertical-align:top;color:${TK.ink}}
-        .rv-row.pick{cursor:pointer}
-        .rv-row.pick:hover td{background:${TK.brandTint}}
-        .rv-row.on td,.rv-row.on:hover td{background:${TK.criticalTint}}
-        .rv-docs{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:8px;margin-top:10px}
-        .rv-doc{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid ${TK.line};border-radius:9px;background:${TK.surface};transition:background .12s,border-color .12s}
-        .rv-doc.pick{cursor:pointer}
-        .rv-doc.pick:hover,.rv-doc.pick:focus-visible{background:${TK.brandTint};border-color:${TK.brandEdge};outline:none}
-        .rv-doc.on,.rv-doc.on:hover{background:${TK.criticalTint};border-color:${TK.critical}}
-        .rv-doc-ic{flex:none;width:38px;height:44px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;letter-spacing:.06em}
-        .rv-view{flex:none;font-size:11.5px;font-weight:600;color:${TK.brand};text-decoration:none;padding:4px 8px;border-radius:6px;border:1px solid ${TK.brandEdge};background:${TK.surface}}
-        .rv-view:hover{background:${TK.brandTint}}
-        .rv-stamp{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;letter-spacing:.03em;border:1px solid}
-        .rv-bar{position:sticky;bottom:0;margin:34px -52px 0;padding:16px 52px 20px;background:${TK.surface};border-top:1px solid ${TK.lineStrong};border-radius:0 0 6px 6px;box-shadow:0 -12px 24px -18px rgba(15,23,42,.35)}
-        .rv-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 10px;border-radius:99px;background:${TK.criticalTint};color:${TK.critical};border:1px solid ${TK.criticalEdge};font-size:11.5px;font-weight:600}
-        .rv-chip button{all:unset;cursor:pointer;width:16px;height:16px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;background:${TK.critical};color:${TK.onAccent}}
-        .rv-btn{padding:10px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;white-space:nowrap;color:${TK.onAccent}}
-        .rv-btn:disabled{opacity:.55;cursor:not-allowed}
-        .rv-ghost{padding:7px 13px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${TK.surface};color:${TK.brandDeep};border:1px solid ${TK.brandEdge}}
-        .rv-ta{width:100%;min-height:76px;padding:10px 12px;border:1px solid ${TK.lineStrong};border-radius:8px;font-size:13px;font-family:inherit;color:${TK.ink};background:${TK.surface};box-sizing:border-box;resize:vertical;line-height:1.5}
-        .rv-ta:focus{outline:none;border-color:${TK.brand};box-shadow:0 0 0 3px ${TK.brandTint}}
-        @media (max-width:640px){.rv-paper{padding:26px 18px 0}.rv-bar{margin:26px -18px 0;padding:14px 18px 16px}}
-      `}</style>
+      <style>{SHEET_CSS}</style>
 
       <div className="rv-paper">
         {err && <div style={{ color: TK.critical, paddingBottom: 30 }}>{err} <button onClick={onClose} className="rv-ghost" style={{ marginLeft: 8 }}>Close</button></div>}
@@ -341,7 +373,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               {/* The official forms, filled from this sheet — opened in a new tab (the call needs the session header). */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
                 <span className="rv-sub" style={{ marginBottom: 0 }}>Statutory forms, filled</span>
-                {([['form11', 'EPF Form 11'], ['form2', 'EPF Form 2'], ...(item.esic_applicable ? [['esic1', 'ESIC Form 1']] : [])] as [string, string][]).map(([k, l]) => (
+                {([['form11', 'EPF Form 11'], ['form2', 'EPF Form 2'], ['formf', 'Gratuity Form F'], ...(item.esic_applicable ? [['esic1', 'ESIC Form 1']] : [])] as [string, string][]).map(([k, l]) => (
                   <button key={k} type="button" className="rv-view" disabled={!!opening} onClick={() => openForm(k, l)} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{opening === k ? 'Opening…' : `${l} ↗`}</button>
                 ))}
               </div>

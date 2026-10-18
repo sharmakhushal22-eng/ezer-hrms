@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
 
   // Any of the three names the project has used for the Gemini key.
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'Resume parsing is not configured on the server — add GEMINI_API_KEY in Vercel → Settings → Environment Variables.' }, { status: 502 })
+  if (!apiKey) return NextResponse.json({ error: 'Resume parsing is not configured on the server. Add GEMINI_API_KEY in Vercel → Settings → Environment Variables.' }, { status: 502 })
 
   // Text + (for PDFs) the document itself: the model reads layout, the text keeps it honest.
   const parts: any[] = [{ text: buildPrompt(text || undefined) }]

@@ -305,7 +305,7 @@ export function nextAction(
           : `weightage adds to ${total}, not ${rules.totalWeightage}`
         return { title: 'Finish your KRA set', tab: 'mine', urgency: urgencyOf(d), daysLeft: d,
           cta: 'Fix and send to manager',
-          why: `Almost there — ${short}. Your manager cannot approve the set until it satisfies both rules.` }
+          why: `Almost there: ${short}. Your manager cannot approve the set until it satisfies both rules.` }
       }
       return { title: 'Send your KRAs to your manager', tab: 'mine', urgency: urgencyOf(d), daysLeft: d,
         cta: 'Send to manager',

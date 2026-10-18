@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
           match_tag: 'NOT_SUITABLE',
           matched_skills: [],
           missing_skills: required,
-          reasoning: `Pre-screen: none of the required skills (${required.join(', ')}) were found in the resume — skipped AI screening to save tokens.`,
+          reasoning: `Pre-screen: none of the required skills (${required.join(', ')}) were found in the resume, so AI screening was skipped to save tokens.`,
           prescreened: true,
           candidate_name,
         })

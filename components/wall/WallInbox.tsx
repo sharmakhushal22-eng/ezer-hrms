@@ -113,7 +113,7 @@ export default function WallInbox({ employeeId, onUnread }: {
         <h3>Not switched on yet</h3>
         <p>
           {err ?? 'The Wall of Fame is not switched on for this company yet. Once it is, notes, '
-                + 'comments and replies from colleagues will appear here — separately from your approvals.'}
+                + 'comments and replies from colleagues will appear here, separately from your approvals.'}
         </p>
       </div>
     )
@@ -128,7 +128,7 @@ export default function WallInbox({ employeeId, onUnread }: {
       // A badge nobody can clear by opening anything is worse than a wrong
       // number — it is a number with no explanation. Say so.
       notice={countsReconcile(counts) ? undefined
-        : 'The unread totals do not add up. Some events are not in any stream — worth telling HR.'}
+        : 'The unread totals do not add up. Some events are not in any stream. Worth telling HR.'}
       error={err ?? undefined}
       onThankBack={w => thank(w.thankId)}
       onMarkRead={w => { const r = rows.find(x => x.id === w.id); if (r) open(r) }}

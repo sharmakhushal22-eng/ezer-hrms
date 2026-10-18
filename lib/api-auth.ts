@@ -39,8 +39,8 @@ export interface ApiUser {
   kind: 'ess' | 'legacy'
 }
 
-const UNAUTHORISED = 'Sign in first — this endpoint needs a dashboard session.'
-const EXPIRED = 'Your session has expired — sign in again.'
+const UNAUTHORISED = 'Sign in first. This endpoint needs a dashboard session.'
+const EXPIRED = 'Your session has expired. Sign in again.'
 
 /** Returns the signed-in user, or a 401 response to return as-is. */
 export async function requireDashboardUser(

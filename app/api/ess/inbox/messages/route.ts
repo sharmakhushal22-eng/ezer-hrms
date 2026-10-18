@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   // A notification stream is the system talking to you. Replying into it
   // would produce a message with no reader, which is worse than no reply box.
   if (gate.conv?.kind === 'SYSTEM') {
-    return NextResponse.json({ error: 'This is a notification feed — there is nobody to reply to.' }, { status: 409 })
+    return NextResponse.json({ error: 'This is a notification feed. There is nobody to reply to.' }, { status: 409 })
   }
 
   // Answering as the desk, when that is how you got in.

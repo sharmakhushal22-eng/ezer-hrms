@@ -118,7 +118,7 @@ export default function IncomeTaxConfig() {
         getRegimeConfig('OLD'), getRegimeConfig('NEW'),
       ])
       setSlabs({ old: os, new: ns }); setSurcharge({ old: osc, new: nsc }); setConfig({ old: oc, new: nc })
-    } catch (e: any) { setError(e.message || 'Could not load — run sql72 + sql73 first.') }
+    } catch (e: any) { setError(e.message || 'Could not load. Run sql72 + sql73 first.') }
   }, [])
   useEffect(() => { load() }, [load])
 
@@ -142,7 +142,7 @@ export default function IncomeTaxConfig() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Income Tax — Old vs New</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Income Tax: Old vs New</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
             <span style={{ fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '1px 7px' }}>TY 2026-27</span>
             <span> · Income Tax Act 2025</span>
@@ -160,7 +160,7 @@ export default function IncomeTaxConfig() {
 
       {/* Calculator */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Compare — test a gross annual income</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Compare: test a gross annual income</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
           <input type="number" value={testIncome} onChange={e => setTestIncome(e.target.value)} placeholder="Gross annual (₹)" style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
           <select value={age} onChange={e => setAge(e.target.value as AgeCategory)} style={{ ...inputStyle, width: 160 }}>
@@ -197,8 +197,8 @@ export default function IncomeTaxConfig() {
               <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, fontSize: 13, color: C.green, fontWeight: 800 }}>
                 <span style={{ fontSize: 15 }}></span>
                 {newWins
-                  ? `New regime is better — saves ${inr(oldResult.total_tax - newResult.total_tax)} vs Old`
-                  : `Old regime is better — saves ${inr(newResult.total_tax - oldResult.total_tax)} vs New`}
+                  ? `New regime is better: saves ${inr(oldResult.total_tax - newResult.total_tax)} vs Old`
+                  : `Old regime is better: saves ${inr(newResult.total_tax - oldResult.total_tax)} vs New`}
               </div>
             </>
           )

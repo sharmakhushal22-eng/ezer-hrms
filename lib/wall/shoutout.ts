@@ -135,7 +135,7 @@ export function problems(
     out.push({ field: 'message',
       message: len === 0
         ? `Say why. At least ${rules.minMessageLength} characters.`
-        : `Say a little more — at least ${rules.minMessageLength} characters.` })
+        : `Say a little more: at least ${rules.minMessageLength} characters.` })
   }
 
   // ── quota ──

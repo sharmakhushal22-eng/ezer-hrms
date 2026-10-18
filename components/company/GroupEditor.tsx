@@ -149,7 +149,7 @@ export function GroupEditor({ g, onClose, onSaved, notify }: {
                                     textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>
                       {f.label}
                       {f.pending && (
-                        <span title="Needs migration 079 — saving this field will fail until it is applied"
+                        <span title="Needs migration 079. Saving this field will fail until it is applied"
                           style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', borderRadius: R.pill,
                                    background: C.warningTint, color: C.warning, letterSpacing: 0 }}>079</span>
                       )}
@@ -227,7 +227,7 @@ export function GroupEditor({ g, onClose, onSaved, notify }: {
                             background: C.brandTint, border: `1px solid ${C.brandEdge}`,
                             fontSize: 11.5, color: C.brandDeep, lineHeight: 1.55 }}>
                 Only these four are needed to create the company. Branches, registrations,
-                bank accounts and the rest are added on its own card afterwards — a long
+                bank accounts and the rest are added on its own card afterwards. A long
                 creation form is how an entity ends up half-entered.
               </div>
 

@@ -137,7 +137,7 @@ function AgreementsReview({ companyEmpIds, empMap, notify }: { companyEmpIds: Se
         <div key={a.id} style={S.row}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{a.agreement_number} · {empMap[a.employee_id] || a.employee_id}</div>
-            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Signed via {a.signature_type || '—'}{a.signed_at ? ` · ${new Date(a.signed_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}` : ''}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Signed via {a.signature_type || '-'}{a.signed_at ? ` · ${new Date(a.signed_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}` : ''}</div>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <button disabled={busy === a.id} onClick={() => act(a, 'APPROVED')} style={S.btnG}>Approve</button>
@@ -229,7 +229,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
     const { data, error } = await supabase.rpc('foreclose_loan', { p_loan_id: l.id })
     setBusy('')
     if (error) { setErr(error.message); return }
-    if (!data) { setErr('This loan is not running — only a running loan can be foreclosed.'); return }
+    if (!data) { setErr('This loan is not running. Only a running loan can be foreclosed.'); return }
     setMsg(`${l.loan_number} foreclosed. No EMI will be deducted from next month.`)
     load()
   }
@@ -272,7 +272,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
         </div>
       )}
       <div style={{ fontSize:11, color:C.muted, marginTop:10, lineHeight:1.55 }}>
-        EMI is deducted through <b>Payroll → Data Sync → Loan</b> — once per payroll month, however many times you run the sync. The last EMI is only as large as the balance that is left.
+        EMI is deducted through <b>Payroll → Data Sync → Loan</b>, once per payroll month, however many times you run the sync. The last EMI is only as large as the balance that is left.
       </div>
       {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:TK.positiveTint, borderRadius:10, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
       {err && <div style={{ fontSize:12, color:C.red, background:TK.criticalTint, borderRadius:10, padding:'9px 12px', marginTop:10 }}>{err}</div>}
@@ -295,7 +295,7 @@ function LoanTypes({ companyId }: { companyId: string }) {
         <div key={t.id} style={S.row}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{t.code ? `${t.code} · ` : ''}{t.name}</div>
-            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Base {t.eligibility_base || '—'} · max {t.max_loan_percent ?? '—'}% · tenure {t.min_tenure_months ?? '—'}–{t.max_tenure_months ?? '—'} mo · {t.interest_rate ?? '—'}% {t.interest_type ? `(${t.interest_type})` : ''}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Base {t.eligibility_base || '-'} · max {t.max_loan_percent ?? '-'}% · tenure {t.min_tenure_months ?? '-'}–{t.max_tenure_months ?? '-'} mo · {t.interest_rate ?? '-'}% {t.interest_type ? `(${t.interest_type})` : ''}</div>
           </div>
         </div>
       ))}
@@ -349,7 +349,7 @@ function LoanFilterBar({ locations, departments, location, department, search, m
           </div>
         )}
         <div style={{ flex: 1, minWidth: 230 }}>
-          <label style={lbl}>Emp code / name — paste a comma list too</label>
+          <label style={lbl}>Emp code / name (paste a comma list too)</label>
           <input style={{ ...inp, width: '100%', boxSizing: 'border-box' }} value={search} onChange={e => onSearch(e.target.value)}
             placeholder="SRS0001, SRS0042   ya   umesh" />
         </div>
@@ -363,8 +363,8 @@ function LoanFilterBar({ locations, departments, location, department, search, m
       {on && (
         <div style={{ fontSize: 11, marginTop: 8, color: TK.brandDeep }}>
           {matched === 0
-            ? <b style={{ color: TK.critical }}>Nobody matches — every panel below will be empty.</b>
-            : <>Filter on — every panel below shows only these <b>{matched}</b> of {total} employees.</>}
+            ? <b style={{ color: TK.critical }}>Nobody matches. Every panel below will be empty.</b>
+            : <>Filter on: every panel below shows only these <b>{matched}</b> of {total} employees.</>}
         </div>
       )}
     </div>

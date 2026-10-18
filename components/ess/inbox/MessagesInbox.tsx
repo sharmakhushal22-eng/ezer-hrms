@@ -82,7 +82,7 @@ export function MessagesInbox({ employeeId, firstName, onUnread, onPolled, onSta
       await data.reload();
       setLocal(l => { const { [id]: _drop, ...rest } = l; return rest; });
       toast.show(a === 'star' ? (c.starred ? 'Removed star' : 'Starred')
-        : a === 'mute' ? (c.muted ? 'Unmuted' : 'Muted — no badge for this conversation')
+        : a === 'mute' ? (c.muted ? 'Unmuted' : 'Muted: no badge for this conversation')
         : a === 'close' ? (c.closed ? 'Reopened' : 'Conversation closed') : 'Marked unread');
     } catch (e) {
       setLocal(l => { const { [id]: _drop, ...rest } = l; return rest; });

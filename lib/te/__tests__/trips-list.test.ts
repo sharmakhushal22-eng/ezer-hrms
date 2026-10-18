@@ -150,6 +150,24 @@ describe('the list itself', () => {
     const undated = trip({ id: 'z', start: null, display: 'DRAFT' })
     assert.deepEqual(myTrips([undated, trips[0]], 'me', null).map(t => t.id), ['a', 'z'])
   })
+
+  it('shows a trip I was taken on, and still not one I have nothing to do with', () => {
+    // The whole reason co-travellers exist: somebody else planned it, I am on
+    // it, and for a long time it appeared nowhere on my own screen.
+    const taken = trip({ id: 'with-me', emp: 'someone-else', co: ['me'], start: '2026-12-10' })
+    const notMine = trip({ id: 'nothing-to-do-with-me', emp: 'someone-else', co: ['asha'], start: '2026-12-31' })
+    // It sorts in among my own by date like any other trip, and the one I am
+    // not on stays out however recent it is.
+    assert.deepEqual(
+      myTrips([...trips, taken, notMine], 'me', null).map(t => t.id),
+      ['with-me', 'b', 'a', 'c', 'd'],
+    )
+  })
+
+  it('filters a trip I was taken on by kind like any other', () => {
+    const taken = trip({ id: 'with-me', emp: 'someone-else', co: ['me'], scope: 'international' })
+    assert.deepEqual(myTrips([...trips, taken], 'me', 'international').map(t => t.id), ['with-me', 'd'])
+  })
 })
 
 describe('lines waiting inside trips', () => {

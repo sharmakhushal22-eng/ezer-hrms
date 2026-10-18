@@ -40,6 +40,20 @@ export default function TeFileLink({ path, name, claimId, kind, small }: {
   // booking itself is the proof. There is nothing to open, so offer nothing.
   if (!path) return null
 
+  // AN EXTERNAL LINK IS NOT A STORED FILE. A requested stay carries the page
+  // the employee found it on — makemytrip.com/… — in the same slot a bill
+  // uses. Handing that to te.fileUrl would get "That is not a Travel and
+  // Expenses file", because the route only signs paths under te/bills/. So an
+  // http(s) address is rendered as what it is: a link out.
+  if (/^https?:\/\//i.test(path)) {
+    return (
+      <a className={small ? 'btn sm' : 'btn'} href={path} target="_blank" rel="noopener noreferrer">
+        <TeIcon name="go" size="sm" />
+        {name || 'Open the booking page'}
+      </a>
+    )
+  }
+
   async function open() {
     // Claimed during the click, before any await.
     const tab = window.open('', '_blank', 'noopener,noreferrer')

@@ -71,7 +71,7 @@ interface Invite {
 }
 interface Emp { id: string; emp_code: string | null; full_name: string; designation: string | null; company_id: string | null }
 
-const lpa = (n?: number | null) => (n ? `₹${(n / 100000).toFixed(1)}L` : '—')
+const lpa = (n?: number | null) => (n ? `₹${(n / 100000).toFixed(1)}L` : '-')
 const isMain = (i: Invite) => (i.role || 'MAIN') === 'MAIN'
 const decisionOf = (i?: Invite | null): Decision | null => (i?.decision || i?.feedback?.decision || null) as Decision | null
 
@@ -169,7 +169,7 @@ export default function CandidateInterviewModal({
   const lastPending = !!lastRound && !roundComplete(lastRound)   // scheduled/awaiting or not even scheduled
   const pipelineOver = ['Rejected', 'Shortlisted', 'Offer Sent', 'Joined'].includes(stageNow)
   const canAddRound = !confidential && !pipelineOver && !lastPending && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
-  const addRoundHint = confidential ? 'Confidential hiring — one Telephonic round only' : pipelineOver ? `Candidate is ${stageNow}` : lastPending ? `Waiting on the ${lastRound} round's feedback` : lastDecision === 'REJECT' ? 'The last round rejected this candidate' : ''
+  const addRoundHint = confidential ? 'Confidential hiring: one Telephonic round only' : pipelineOver ? `Candidate is ${stageNow}` : lastPending ? `Waiting on the ${lastRound} round's feedback` : lastDecision === 'REJECT' ? 'The last round rejected this candidate' : ''
   const canShortlist = !pipelineOver && !lastPending && decidedRounds.length >= roundsNeeded && (lastDecision === 'SHORTLIST' || lastDecision === 'HOLD')
 
   const addRound = () => {
@@ -233,7 +233,7 @@ export default function CandidateInterviewModal({
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { showNotify(j.error || 'Could not schedule', 'error'); setSending(false); return }
       const who = `${j.main || 'main interviewer'}${j.panelists ? ` + ${j.panelists} panelist${j.panelists > 1 ? 's' : ''}` : ''}`
-      showNotify(j.emailSkipped ? `Scheduled — ${who} notified in ESS (email off)` : `Scheduled — ${who}, ${j.emailed} email(s) sent`)
+      showNotify(j.emailSkipped ? `Scheduled: ${who} notified in ESS (email off)` : `Scheduled: ${who}, ${j.emailed} email(s) sent`)
       setOpenRound(null)
       setAddedRounds(a => a.filter(x => x.toLowerCase() !== openRound.toLowerCase()))
       await loadInvites()
@@ -257,7 +257,7 @@ export default function CandidateInterviewModal({
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { showNotify(j.error || 'Could not save feedback', 'error'); setFbSaving(false); return }
       const d = fb.decision as Decision
-      showNotify(d === 'REJECT' ? 'Feedback saved — candidate rejected' : d === 'HOLD' ? (confidential ? 'Feedback saved — candidate on hold.' : 'Feedback saved — candidate on hold. You can still add a round.') : j.confidential && j.stage === 'Shortlisted' ? 'Feedback saved — candidate shortlisted and moved to Negotiation.' : 'Feedback saved — candidate shortlisted for this round. Add the next round.')
+      showNotify(d === 'REJECT' ? 'Feedback saved. Candidate rejected' : d === 'HOLD' ? (confidential ? 'Feedback saved. Candidate on hold.' : 'Feedback saved. Candidate on hold. You can still add a round.') : j.confidential && j.stage === 'Shortlisted' ? 'Feedback saved. Candidate shortlisted and moved to Negotiation.' : 'Feedback saved. Candidate shortlisted for this round. Add the next round.')
       setFbRound(null)
       if (j.stage) setStageNow(j.stage)
       onChanged?.(j.stage || null)
@@ -313,7 +313,7 @@ export default function CandidateInterviewModal({
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
           <button onClick={() => !fbSaving && setFbRound(null)} style={btn.ghost}>← Back</button>
           <div>
-            <div style={{ fontSize:15, fontWeight:800 }}>{fbRound} round — record feedback</div>
+            <div style={{ fontSize:15, fontWeight:800 }}>{fbRound} round: record feedback</div>
             <div style={{ fontSize:11.5, color:C.muted }}>Score the 8 parameters, write your assessment, then Hold / Reject / Shortlist. Reject and Hold need a remark.</div>
           </div>
         </div>
@@ -346,14 +346,14 @@ export default function CandidateInterviewModal({
             <div style={{ fontSize:17, fontWeight:800 }}>{candidate.full_name}</div>
             <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, border:`1px solid ${C.line}`, lineHeight:1.45, color: stageText[stageNow] || C.muted }}>{stageNow}</span>
           </div>
-          <div style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{subLine || '—'}</div>
+          <div style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{subLine || '-'}</div>
         </div>
         <button onClick={onClose} style={btn.ghost}>Close</button>
       </div>
 
       {/* stats */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:8, marginBottom:16 }}>
-        {[['Current CTC', lpa(candidate.current_ctc)], ['Expected CTC', lpa(candidate.expected_ctc)], ['Notice', candidate.notice_period ? `${candidate.notice_period}d` : '—'], ['AI Score', candidate.ai_score != null ? `${candidate.ai_score}%` : '—']].map(([l, v]) => (
+        {[['Current CTC', lpa(candidate.current_ctc)], ['Expected CTC', lpa(candidate.expected_ctc)], ['Notice', candidate.notice_period ? `${candidate.notice_period}d` : '-'], ['AI Score', candidate.ai_score != null ? `${candidate.ai_score}%` : '-']].map(([l, v]) => (
           <div key={l} style={{ background:C.sunken, borderRadius:9, padding:'8px 10px', border:`1px solid ${C.line}` }}>
             <div style={{ fontSize:10, color:C.faint, textTransform:'uppercase', letterSpacing:.4 }}>{l}</div>
             <div style={{ fontSize:14, fontWeight:800, marginTop:2 }}>{v}</div>
@@ -365,7 +365,7 @@ export default function CandidateInterviewModal({
       {confidential && (
         <div style={{ display:'flex', gap:10, alignItems:'flex-start', background:TK.warningTint, border:`1px solid ${TK.warningEdge}`, borderRadius:10, padding:'9px 12px', marginBottom:10, fontSize:12, color:TK.ink, lineHeight:1.5 }}>
           <span style={{ fontSize:16 }}>🔒</span>
-          <span><b>Confidential hiring.</b> Only the HR Head and HR Manager see this candidate. There is one round — Telephonic — which you record here yourself; nobody is invited. A <b>Shortlist</b> decision moves the candidate straight to Negotiation.</span>
+          <span><b>Confidential hiring.</b> Only the HR Head and HR Manager see this candidate. There is one round (Telephonic), which you record here yourself; nobody is invited. A <b>Shortlist</b> decision moves the candidate straight to Negotiation.</span>
         </div>
       )}
       <div style={{ display:'flex', alignItems:'center', gap:8, margin:'2px 0 9px', flexWrap:'wrap' }}>
@@ -380,7 +380,7 @@ export default function CandidateInterviewModal({
         </div>
       </div>
       {!confidential && !canAddRound && addRoundHint && (
-        <div style={{ fontSize:11, color:C.faint, margin:'-4px 0 9px' }}>“+ Add round” unlocks once the latest round's feedback is Shortlist or Hold — {addRoundHint.toLowerCase()}.</div>
+        <div style={{ fontSize:11, color:C.faint, margin:'-4px 0 9px' }}>“+ Add round” unlocks once the latest round's feedback is Shortlist or Hold ({addRoundHint.toLowerCase()}).</div>
       )}
       <div style={{ display:'grid', gap:10, marginBottom:18 }}>
         {rounds.map((r, idx) => {
@@ -403,10 +403,10 @@ export default function CandidateInterviewModal({
               <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 13px', background: decision === 'REJECT' ? TK.criticalTint : complete ? C.okbg : C.card }}>
                 <div style={{ width:30, height:30, borderRadius:8, background: decision ? DECISION_COLOR[decision] : complete ? C.ok : scheduled ? C.info : C.sunken, color: scheduled || complete ? TK.onAccent : C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{decision === 'REJECT' ? '✕' : complete ? '✓' : idx + 1}</div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13.5, fontWeight:700 }}>{r}{direct && !scheduled ? <span style={{ fontSize:10, color:C.faint, fontWeight:600, marginLeft:8 }}>no scheduling — record feedback directly</span> : ''}</div>
+                  <div style={{ fontSize:13.5, fontWeight:700 }}>{r}{direct && !scheduled ? <span style={{ fontSize:10, color:C.faint, fontWeight:600, marginLeft:8 }}>no scheduling: record feedback directly</span> : ''}</div>
                   <div style={{ fontSize:11, color:C.muted }}>
                     {!scheduled ? (direct ? 'Feedback not recorded yet' : 'No interview scheduled yet')
-                      : complete ? `Main: ${main?.interviewer_name || '—'}${panelists.length ? ` · ${panelists.length} panelist${panelists.length > 1 ? 's' : ''}` : ''}`
+                      : complete ? `Main: ${main?.interviewer_name || '-'}${panelists.length ? ` · ${panelists.length} panelist${panelists.length > 1 ? 's' : ''}` : ''}`
                       : shown.length === 0 ? 'Awaiting acknowledgement from the invited interviewers'
                       : `${shown.length} acknowledged · awaiting the main interviewer's feedback`}
                   </div>
@@ -428,7 +428,7 @@ export default function CandidateInterviewModal({
 
               {/* interviewer rows — acknowledged / submitted only */}
               {scheduled && shown.length === 0 && (
-                <div style={{ padding:'8px 13px 12px', fontSize:11.5, color:C.faint, borderTop:`1px solid ${C.line}` }}>No interviewer has acknowledged yet — they’ll appear here once they accept the invite in ESS.</div>
+                <div style={{ padding:'8px 13px 12px', fontSize:11.5, color:C.faint, borderTop:`1px solid ${C.line}` }}>No interviewer has acknowledged yet. They’ll appear here once they accept the invite in ESS.</div>
               )}
               {shown.length > 0 && (
                 <div style={{ padding:'4px 13px 10px' }}>
@@ -459,18 +459,18 @@ export default function CandidateInterviewModal({
               {/* schedule form — one main interviewer + panelists */}
               {isOpen && (
                 <div style={{ padding:'12px 13px', borderTop:`1px solid ${C.line}`, background:C.sunken }}>
-                  <PeoplePicker label="Main interviewer" hint="— one person; they give the feedback" single emps={emps} value={mainPick} exclude={panel} onChange={setMainPick} placeholder="Search by name or emp code…" />
+                  <PeoplePicker label="Main interviewer" hint="(one person; they give the feedback)" single emps={emps} value={mainPick} exclude={panel} onChange={setMainPick} placeholder="Search by name or emp code…" />
                   <div style={{ marginTop:10 }}>
-                    <PeoplePicker label="Panelists" hint="— optional, any number; they get the details but not the feedback form" emps={emps} value={panel} exclude={mainPick} onChange={setPanel} placeholder="Add panelists by name or emp code…" />
+                    <PeoplePicker label="Panelists" hint="(optional, any number; they get the details but not the feedback form)" emps={emps} value={panel} exclude={mainPick} onChange={setPanel} placeholder="Add panelists by name or emp code…" />
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:10 }}>
                     <div><label style={lbl}>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={inp} /></div>
                     <div><label style={lbl}>Time</label><input type="time" value={time} onChange={e => setTime(e.target.value)} style={inp} /></div>
                   </div>
                   <div style={{ marginTop:10 }}>
-                    <label style={lbl}>Meeting link <span style={{ color:C.faint, fontWeight:500 }}>— Google Meet / Zoom / Teams</span></label>
+                    <label style={lbl}>Meeting link <span style={{ color:C.faint, fontWeight:500 }}>(Google Meet / Zoom / Teams)</span></label>
                     <input value={link} onChange={e => setLink(e.target.value)} placeholder="https://meet.google.com/…" style={inp} />
-                    <label style={{ ...lbl, marginTop:10 }}>Meeting passcode <span style={{ color:C.faint, fontWeight:500 }}>— optional (Zoom/Teams)</span></label>
+                    <label style={{ ...lbl, marginTop:10 }}>Meeting passcode <span style={{ color:C.faint, fontWeight:500 }}>(optional, Zoom/Teams)</span></label>
                     <input value={passcode} onChange={e => setPasscode(e.target.value)} placeholder="e.g. 4821" style={inp} />
                   </div>
                   <div style={{ display:'flex', gap:8, marginTop:12 }}>
@@ -488,7 +488,7 @@ export default function CandidateInterviewModal({
       {/* stage move — gated */}
       <SectionTitle>Move stage</SectionTitle>
       {moveOpts.length === 0 && !canReject ? (
-        <div style={{ fontSize:12, color:C.faint }}>No stage left to move to — this candidate is {stageNow}.</div>
+        <div style={{ fontSize:12, color:C.faint }}>No stage left to move to. This candidate is {stageNow}.</div>
       ) : (
         <>
           <div className="rx-move" role="radiogroup" aria-label="Next stage">
@@ -538,7 +538,7 @@ export default function CandidateInterviewModal({
       {confirmShortlist && (
         <Popup onClose={() => !shortlisting && setConfirmShortlist(false)}>
           <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>Shortlist {candidate.full_name}?</div>
-          <div style={{ fontSize:12.5, color:C.muted, marginBottom:6 }}>{decidedRounds.length} rounds decided — latest: <b style={{ color: DECISION_COLOR[lastDecision || 'SHORTLIST'] }}>{lastDecision ? DECISION_LABEL[lastDecision] : '—'}</b>.</div>
+          <div style={{ fontSize:12.5, color:C.muted, marginBottom:6 }}>{decidedRounds.length} rounds decided, latest: <b style={{ color: DECISION_COLOR[lastDecision || 'SHORTLIST'] }}>{lastDecision ? DECISION_LABEL[lastDecision] : '-'}</b>.</div>
           <div style={{ fontSize:12.5, color:C.muted, marginBottom:14 }}>The candidate will be marked <b style={{ color:C.ok }}>Shortlisted</b> and move on to offer negotiation.</div>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={doShortlist} disabled={shortlisting} style={{ ...btn.pri, background:C.ok, opacity: shortlisting ? .6 : 1 }}>{shortlisting ? 'Shortlisting…' : 'Yes, shortlist'}</button>
@@ -589,7 +589,7 @@ function PeoplePicker({ label, hint, single, emps, value, exclude, onChange, pla
                 const on = value.some(x => x.id === e.id)
                 return (
                   <button key={e.id} onClick={() => toggle(e)} style={{ display:'flex', width:'100%', textAlign:'left', gap:8, alignItems:'center', padding:'8px 11px', border:'none', borderBottom:`1px solid ${C.line}`, background: on ? C.brandTint : C.card, cursor:'pointer', fontFamily:font }}>
-                    <span style={{ flex:1, fontSize:12.5, color:C.ink }}>{e.full_name} <span style={{ color:C.faint }}>· {e.emp_code || '—'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
+                    <span style={{ flex:1, fontSize:12.5, color:C.ink }}>{e.full_name} <span style={{ color:C.faint }}>· {e.emp_code || '-'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
                     {on && <span style={{ color:C.ok, fontWeight:800 }}>✓</span>}
                   </button>
                 )

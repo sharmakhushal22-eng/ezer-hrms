@@ -18,11 +18,12 @@ import {
 } from '@/lib/supabase-ess'
 import {
   loadMonthlyAttendance, loadDayPunches,
-  resolveDay, computeSummary,
+  resolveDay,
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
 import * as HR from '@/lib/employees/hr-actions'
 import { api as essApi } from '@/lib/ess/api'
+import AttendanceLog, { KIND_META } from '@/components/ess/attendance/AttendanceLog'
 import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import dynamic from 'next/dynamic'
@@ -49,8 +50,12 @@ import {
   C, F, W, R, E, S, Z, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch, IconReceipt,
+  IconOrgChart, IconBuilding, IconPerformance, IconLogout, IconChevron, IconChevronDown,
+  IconUser, IconHeart, IconAward, IconGame, IconMore, IconCheck, IconAlert,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
+// The shell's sidebar, top bar, headings and sub-tabs (hover states and the like).
+import './portal.css'
 
 // ── Sections load on demand ────────────────────────────────────────
 //
@@ -110,14 +115,14 @@ const T = {
   btnO:  { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat } as React.CSSProperties,
   section: { ...eyebrow, marginBottom:S.md, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
-const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
-const fmtDT = (s?: string|null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : '—'
+const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
+const fmtDT = (s?: string|null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : '-'
 const initials = (n: string) => n.split(' ').filter(Boolean).slice(0,2).map(x => x[0]).join('').toUpperCase()
 const QUOTES = [
   'Small steps every day lead to big results.',
   'Your work today builds tomorrow.',
   'Progress, not perfection.',
-  'Great things take time — keep going.',
+  'Great things take time. Keep going.',
   'Be the energy you want to attract.',
 ]
 
@@ -138,7 +143,7 @@ function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void })
   if (!transfers.length) return null
   return (<>{transfers.map(tr => (
     <div key={tr.id} style={{ background: C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10, padding:'12px 16px', marginBottom:10 }}>
-      <div style={{ fontSize:13, fontWeight:600, color: C.warning }}>Transfer Letter — action required</div>
+      <div style={{ fontSize:13, fontWeight:600, color: C.warning }}>Transfer Letter: action required</div>
       <div style={{ fontSize:11, color: C.warning, marginTop:3 }}>You are being transferred, effective {tr.effective_date}.</div>
       <div style={{ display:'flex', gap:8, marginTop:10 }}>
         {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:C.surface, border: `1px solid ${C.warningTint}`, borderRadius:7, fontSize:11, color: C.warning, textDecoration:'none' }}>View Letter</a>}
@@ -153,58 +158,76 @@ function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void })
 // ════════════════════════════════════════════════════════════════
 // ── Punch In / Out (ESS attendance) ─────────────────────────────
 const istToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
+/**
+ * Home's punch card.
+ *
+ * It used to ask an unauthenticated route for "any punch today" and, once there
+ * was one, offered Punch Out for the rest of the day — every press another OUT.
+ * It now reads and writes through /api/ess/punch, where the rule lives
+ * (lib/attendance/punch.ts): punches alternate, so it offers Punch In when
+ * nothing is open and Punch Out when something is. A refused punch returns the
+ * true state and the card adopts it. It re-reads whenever the tab is shown
+ * again, so a punch made on Today or on the phone is reflected here.
+ */
+type PunchStateLite = { open: boolean; first_in: string | null; last_in: string | null; last_out: string | null }
 function PunchButton({ employeeId }: { employeeId: string }) {
-  const [punchedToday, setPunchedToday] = useState<boolean | null>(null) // null = loading
+  const [st, setSt] = useState<PunchStateLite | null>(null) // null = loading
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [day, setDay] = useState(istToday())
 
+  const headers = async (): Promise<Record<string, string>> => {
+    const t = await authToken()
+    return { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) }
+  }
   const refresh = useCallback(async () => {
     try {
-      const r = await fetch(`/api/attendance/punch?employee_id=${employeeId}&date=${istToday()}`)
+      const r = await fetch('/api/ess/punch', { headers: await headers(), cache: 'no-store' })
       const d = await r.json()
-      setPunchedToday((d.punches?.length || 0) > 0)
-    } catch { setPunchedToday(false) }
-  }, [employeeId])
-  useEffect(() => { refresh() }, [refresh])
+      if (r.ok && d.state) setSt(d.state)
+      else setSt({ open: false, first_in: null, last_in: null, last_out: null })
+    } catch { setSt({ open: false, first_in: null, last_in: null, last_out: null }) }
+  }, [employeeId])                                            // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh() }, [refresh])
 
-  // Reset at IST midnight: when the calendar day rolls over, re-check → new day = "Punch In".
+  // Reset at IST midnight, and re-read whenever the tab is shown again.
   useEffect(() => {
-    const t = setInterval(() => { const d = istToday(); if (d !== day) { setDay(d); refresh() } }, 30000)
-    return () => clearInterval(t)
+    const t = setInterval(() => { const d = istToday(); if (d !== day) { setDay(d); void refresh() } }, 30000)
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible) }
   }, [day, refresh])
 
+  const tm = (ts: string | null) => ts ? new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+  const open = !!st?.open
   const punch = async () => {
-    if (busy || punchedToday === null) return
-    const type = punchedToday ? 'OUT' : 'IN'
-    setBusy(true); setMsg('')
+    if (busy || !st) return
+    const kind = open ? 'out' : 'in'
+    setBusy(true); setMsg(null)
     try {
-      const r = await fetch('/api/attendance/punch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: employeeId, punch_type: type }) })
+      const r = await fetch('/api/ess/punch', { method: 'POST', headers: await headers(), body: JSON.stringify({ kind }), cache: 'no-store' })
       const d = await r.json()
-      if (!r.ok) { setMsg(d.error || 'Punch failed'); setBusy(false); return }
-      setPunchedToday(true) // after the first IN → "Punch Out"; stays till midnight
-      setMsg(`✓ Punched ${type} at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`)
-    } catch { setMsg('Punch failed — try again') }
-    setBusy(false)
+      if (d.state) setSt(d.state)
+      if (!r.ok) { setMsg({ text: d.error || 'Punch failed', ok: false }); return }
+      setMsg({ text: `✓ Punched ${kind === 'in' ? 'in' : 'out'} at ${tm(d.at)}`, ok: true })
+    } catch { setMsg({ text: 'Punch failed — try again', ok: false }) }
+    finally { setBusy(false) }
   }
 
-  const isOut = punchedToday === true
+  const loading = st === null
   return (
-    // The accent tracks the button it frames. Left green, it would be the
-    // only green element on a card whose primary action is now brand blue.
-    <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? C.critical : C.brand}` }}>
+    // The accent tracks the button it frames.
+    <div style={{ ...T.card, borderLeft: `3px solid ${open ? C.critical : C.brand}` }}>
       <div style={T.section}>Attendance</div>
-      {/* Punch In is the primary action of this page, so it takes the primary
-          colour the rest of the product uses. It was C.positive, the only green
-          primary button in the app. C.onAccent already flips per theme
-          (#FFFFFF light, #0D1117 dark), so the label stays legible on the
-          lighter dark-mode brand fill. */}
-      <button onClick={punch} disabled={busy || punchedToday === null}
-        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: C.onAccent, background: isOut ? C.critical : C.brand, opacity: (busy || punchedToday === null) ? .6 : 1 }}>
-        {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? 'Punch Out' : 'Punch In')}
+      <button onClick={punch} disabled={busy || loading}
+        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || loading) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: C.onAccent, background: open ? C.critical : C.brand, opacity: (busy || loading) ? .6 : 1 }}>
+        {loading ? 'Loading…' : busy ? '…' : (open ? 'Punch Out' : 'Punch In')}
       </button>
-      {msg && <div style={{ fontSize: 12, color: msg.startsWith('') ? C.positive : C.critical, marginTop: 8, textAlign: 'center' }}>{msg}</div>}
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 6, textAlign: 'center' }}>{isOut ? 'Punched in today · resets to “Punch In” at 12 AM.' : 'Tap to punch in for the day.'}</div>
+      {msg && <div style={{ fontSize: 12, color: msg.ok ? C.positive : C.critical, marginTop: 8, textAlign: 'center' }}>{msg.text}</div>}
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 6, textAlign: 'center' }}>
+        {loading ? '' : open ? `In since ${tm(st.last_in)}${st.first_in && st.first_in !== st.last_in ? ` · day started ${tm(st.first_in)}` : ''}`
+          : st.last_out ? `Punched out at ${tm(st.last_out)} · tap to punch in again` : 'Tap to punch in for the day.'}
+      </div>
     </div>
   )
 }
@@ -435,7 +458,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <div style={{ width:52, height:52, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
         <div>
           <div style={{ fontSize:17, fontWeight:700 }}>{greet}, {emp.first_name || emp.full_name.split(' ')[0]}! {emoji}</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{emp.designation || '—'} · {emp.emp_code}</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{emp.designation || '-'} · {emp.emp_code}</div>
           <div style={{ fontSize:12, color:C.brand, marginTop:4, fontStyle:'italic' }}>“{quote}”</div>
         </div>
       </div>
@@ -450,9 +473,9 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
       {editOpen && <EditProfileModal emp={emp} onClose={() => setEditOpen(false)} onSaved={reload} notify={notify} />}
 
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
-        <Stat label="Leave Balance" value="—" color={C.faint} />
-        <Stat label="Net Salary" value={salaryVisible ? '—' : 'Hidden'} color={C.faint} />
-        <Stat label="Attendance %" value="—" color={C.faint} />
+        <Stat label="Leave Balance" value="-" color={C.faint} />
+        <Stat label="Net Salary" value={salaryVisible ? '-' : 'Hidden'} color={C.faint} />
+        <Stat label="Attendance %" value="-" color={C.faint} />
         <Stat label="Pending Actions" value={String(pending)} color={pending ? C.warning : C.positive} />
       </div>
 
@@ -480,7 +503,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <div style={T.card}>
           <div style={T.section}>Birthday & Anniversary</div>
           {bdaySoon !== null
-            ? <div style={{ fontSize:13 }}>Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s)`} — wishing you ahead!</div>
+            ? <div style={{ fontSize:13 }}>Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s).`} Wishing you ahead!</div>
             : <div style={{ fontSize:12, color:C.faint }}>No upcoming birthdays in the next 30 days.</div>}
           {emp.group_doj && <div style={{ fontSize:12, color:C.muted, marginTop:6 }}>Joined {fmt(emp.group_doj)} · {tenureYrs} yr{tenureYrs===1?'':'s'} with us 🎊</div>}
         </div>
@@ -490,7 +513,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
           <div style={T.section}>My Journey</div>
           <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.9 }}>
             <div>Joined: <b>{fmt(emp.group_doj)}</b></div>
-            <div>Designation: <b>{emp.designation || '—'}</b></div>
+            <div>Designation: <b>{emp.designation || '-'}</b></div>
             <div>Tenure: <b>{tenureYrs} year{tenureYrs===1?'':'s'}</b></div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' }}>
               {[1,3,5].map(y => <span key={y} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, fontWeight:600, background: tenureYrs>=y?C.positiveTint:C.sunken, color: tenureYrs>=y?C.positive:C.faint }}>{tenureYrs>=y?'':''} {y}-yr</span>)}
@@ -501,8 +524,8 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         {/* Kudos */}
         <div style={T.card}>
           <div style={T.section}>Recognition & Kudos</div>
-          {kudos.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No kudos yet — appreciation from peers will show here.</div>}
-          {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom: `1px solid ${C.brandEdge}` }}>{k.badge ? `🏆 ${k.badge} — ` : ''}{k.message || 'Kudos!'}<span style={{ color:C.faint, fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
+          {kudos.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No kudos yet. Appreciation from peers will show here.</div>}
+          {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom: `1px solid ${C.brandEdge}` }}>{k.badge ? `🏆 ${k.badge}: ` : ''}{k.message || 'Kudos!'}<span style={{ color:C.faint, fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
         </div>
 
         {/* Announcements */}
@@ -546,9 +569,9 @@ const P = {
 
 /** Years and months since a date, in words. */
 function tenureOf(doj?: string | null): string {
-  if (!doj) return '—'
+  if (!doj) return '-'
   const from = new Date(doj), now = new Date()
-  if (isNaN(from.getTime()) || from > now) return '—'
+  if (isNaN(from.getTime()) || from > now) return '-'
   let months = (now.getFullYear() - from.getFullYear()) * 12 + (now.getMonth() - from.getMonth())
   if (now.getDate() < from.getDate()) months--
   const y = Math.floor(months / 12), m = months % 12
@@ -649,9 +672,9 @@ function Field({ label, value, icon, copyable, sensitive, notify }: {
 }) {
   const [hover, setHover] = useState(false)
   const [shown, setShown] = useState(false)
-  const has = !!value && value !== '—'
+  const has = !!value && value !== '-'
   const masked = sensitive && !shown && has
-  const display = !has ? '—' : masked ? '•'.repeat(Math.min(String(value).length, 12)) : String(value)
+  const display = !has ? '-' : masked ? '•'.repeat(Math.min(String(value).length, 12)) : String(value)
 
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -734,15 +757,15 @@ function ProfileHero({ emp, notify }: {
 
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 26, fontWeight: 700, color: C.onAccent, lineHeight: 1.15,
-                        letterSpacing: '-.02em' }}>{emp.full_name || '—'}</div>
+                        letterSpacing: '-.02em' }}>{emp.full_name || '-'}</div>
           <div style={{ fontSize: 13, color: C.onAccentSoft, marginTop: 3 }}>
             {emp.designation || 'Designation not set'}
             {emp.dept_name ? ` · ${emp.dept_name}` : ''}
           </div>
 
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 13 }}>
-            <Chip icon="🆔">{emp.emp_code || '—'}</Chip>
-            <Chip icon="🏢">{emp.company_name || '—'}</Chip>
+            <Chip icon="🆔">{emp.emp_code || '-'}</Chip>
+            <Chip icon="🏢">{emp.company_name || '-'}</Chip>
             {(emp.location_name || emp.city) && (
               <Chip icon="📍">{[emp.location_name, emp.city].filter(Boolean).join(', ')}</Chip>
             )}
@@ -845,7 +868,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
       if (!bank.ifsc.trim() || !bank.account_number.trim() || !bank.holder_name.trim()) { notify('Fill IFSC, account number and holder name', 'error'); return }
       if (bank.account_number !== bank.confirm) { notify('Account numbers do not match', 'error'); return }
       setBusy(true)
-      const detailStr = `Bank: ${bank.bank_name || '—'} · A/C ${bank.account_number} · IFSC ${bank.ifsc} · Branch ${bank.branch || '—'} · Holder ${bank.holder_name} · ${bank.account_type}`
+      const detailStr = `Bank: ${bank.bank_name || '-'} · A/C ${bank.account_number} · IFSC ${bank.ifsc} · Branch ${bank.branch || '-'} · Holder ${bank.holder_name} · ${bank.account_type}`
       const { error } = await createServiceRequest(emp.id, 'PROFILE_UPDATE', { field, detail: detailStr, bank }, { assigned_to: 'HR' })
       setBusy(false)
       if (error) { notify('Failed: ' + error.message, 'error'); return }
@@ -930,7 +953,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
           </div>
           <EmployeeProfileSections emp={emp} profileTab={recordTab} showManagerChain={false} />
           <div style={{ padding: '12px 20px', fontSize: 11.5, color: C.muted, background: C.sunken }}>
-            Something wrong here? Use <b>Request a change</b> — HR approves edits to your record.
+            Something wrong here? Use <b>Request a change</b>. HR approves edits to your record.
           </div>
         </div>
       )}
@@ -940,7 +963,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
                       padding: '18px 18px', maxWidth: 720 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Request a change</div>
           <div style={{ fontSize: 12, color: P.muted, marginTop: 4, marginBottom: 15, lineHeight: 1.6 }}>
-            You cannot edit these directly — payroll and statutory filings depend on them, so every
+            You cannot edit these directly: payroll and statutory filings depend on them, so every
             change goes to HR for approval. You will see it under Raise a Request.
           </div>
 
@@ -1015,7 +1038,7 @@ function Documents({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t
         {rows.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No requests yet.</div>}
         {rows.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
-            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.letter_type}</div><div style={{ fontSize:11, color:C.faint }}>{r.purpose || '—'} · {fmt(r.requested_at)}</div></div>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.letter_type}</div><div style={{ fontSize:11, color:C.faint }}>{r.purpose || '-'} · {fmt(r.requested_at)}</div></div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               <StatusPill status={r.status} />
               {r.letter_url && <a href={r.letter_url} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>Download</a>}
@@ -1059,7 +1082,7 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
         <div style={T.section}>Raise a Request</div>
         <label style={T.label}>Type</label>
         <select style={{ ...T.input, marginBottom:10 }} value={type} onChange={e => setType(e.target.value)}>{REQ_TYPES.map(r => <option key={r.k} value={r.k}>{r.label}</option>)}</select>
-        {def.confidential && <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:C.critical }}>This is confidential and routes only to the Internal Committee — not regular HR.</div>}
+        {def.confidential && <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:C.critical }}>This is confidential and routes only to the Internal Committee, not regular HR.</div>}
         <label style={T.label}>Details</label>
         <textarea style={{ ...T.input, minHeight:90, marginBottom:10, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="Describe your request…" />
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
@@ -1069,7 +1092,7 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
         {rows.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No requests yet.</div>}
         {rows.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
-            <div><div style={{ fontSize:13, fontWeight:600 }}>{REQ_TYPES.find(x => x.k === r.request_type)?.label || r.request_type}{r.is_confidential && ' 🔒'}</div><div style={{ fontSize:11, color:C.faint }}>{r.request_data?.detail?.slice(0,60) || '—'} · {fmt(r.submitted_at)}</div></div>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{REQ_TYPES.find(x => x.k === r.request_type)?.label || r.request_type}{r.is_confidential && ' 🔒'}</div><div style={{ fontSize:11, color:C.faint }}>{r.request_data?.detail?.slice(0,60) || '-'} · {fmt(r.submitted_at)}</div></div>
             <StatusPill status={r.status} />
           </div>
         ))}
@@ -1085,7 +1108,7 @@ function DirDetailRow({ label, value }: { label: string; value: React.ReactNode 
   return (
     <div style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
       <span style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }}>{label}</span>
-      <span style={{ fontSize:13, color:C.ink, textAlign:'right', wordBreak:'break-word' }}>{value || '—'}</span>
+      <span style={{ fontSize:13, color:C.ink, textAlign:'right', wordBreak:'break-word' }}>{value || '-'}</span>
     </div>
   )
 }
@@ -1097,7 +1120,7 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
           <div style={{ width:48, height:48, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, flexShrink:0 }}>{initials(e.full_name)}</div>
           <div style={{ minWidth:0, flex:1 }}>
             <div style={{ fontSize:16, fontWeight:700 }}>{e.full_name}</div>
-            <div style={{ fontSize:12, color:C.faint }}>{e.designation || '—'}</div>
+            <div style={{ fontSize:12, color:C.faint }}>{e.designation || '-'}</div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, lineHeight:1, cursor:'pointer', color:C.faint }}>×</button>
         </div>
@@ -1192,7 +1215,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
         </div>
       </div>
 
-      {err && <div style={{ ...T.card, color: C.critical, background: C.criticalTint, border: `1px solid ${C.criticalTint}` }}>Could not load the directory — {err}</div>}
+      {err && <div style={{ ...T.card, color: C.critical, background: C.criticalTint, border: `1px solid ${C.criticalTint}` }}>Could not load the directory: {err}</div>}
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill,minmax(280px,1fr))', gap: 10 }}>
@@ -1219,7 +1242,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
                   <div style={{ width: 44, height: 44, borderRadius: '50%', background: t.bg, color: t.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>{initials(e.full_name)}</div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
-                    <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '—'}</div>
+                    <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '-'}</div>
                     <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>{e.emp_code}</div>
                   </div>
                 </div>
@@ -1338,23 +1361,39 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
 // Higher-contrast pairs than the originals, which sat around olive on pale
 // green and were hard to read at calendar-cell size. Each is [background, ink]
 // and every pair clears WCAG AA at 11px.
+/**
+ * The calendar's status vocabulary. The words, codes and accent colours come
+ * from KIND_META (components/ess/attendance/AttendanceLog.tsx), so the calendar
+ * and the attendance list describe a day identically. Only the CELL FILL is the
+ * calendar's own: a month of present days stays calm (sunken), and only the
+ * exceptions are tinted.
+ *
+ * Half day and missed punch used to share one amber dot and could not be told
+ * apart, and a missed IN read the same as a missed OUT. Each now has its own
+ * code — ½, MI, MO — printed in the cell.
+ */
+const KEY_ALIAS: Record<string, keyof typeof KIND_META> = { ON_LEAVE: 'LEAVE', FUTURE: 'UPCOMING', MISS_PUNCH: 'MISS_OUT' }
+const metaOf = (status: string) => KIND_META[(KEY_ALIAS[status] || status) as keyof typeof KIND_META] || null
 const STATUS_STYLE: Record<string,[string,string]> = {
-  PRESENT:[C.sunken,C.positive], ABSENT:[C.criticalTint,C.critical], HALF_DAY:[C.warningTint,C.warning],
-  MISS_PUNCH:[C.warningTint,C.critical], LWP:[C.criticalTint,C.critical], WEEKLY_OFF:[C.sunken,C.faint],
-  HOLIDAY:[C.brandTint,C.info], ON_LEAVE:[C.brandTint,C.brandDeep], FUTURE:['transparent',C.lineStrong], TODAY:[C.canvas,C.brand],
+  PRESENT:[C.sunken,C.positive], LATE:[C.sunken,C.warning], IN_PROGRESS:[C.infoTint,C.info],
+  HALF_DAY:[C.warningTint,C.warning], MISS_IN:[C.warningTint,C.critical], MISS_OUT:[C.warningTint,C.critical],
+  MISS_PUNCH:[C.warningTint,C.critical], ABSENT:[C.criticalTint,C.critical], LWP:[C.criticalTint,C.critical],
+  WEEKLY_OFF:[C.sunken,C.faint], HOLIDAY:[C.infoTint,C.info], ON_LEAVE:[C.brandTint,C.brandDeep], HALF_LEAVE:[C.brandTint,C.brandDeep],
+  FUTURE:['transparent',C.lineStrong], TODAY:[C.canvas,C.brand],
 }
-/** Accent bar colour per status — the saturated version of the ink. */
-const STATUS_BAR: Record<string,string> = {
-  PRESENT: C.positive, ABSENT:C.critical, HALF_DAY:C.warning, MISS_PUNCH: C.warning,
-  LWP:C.critical, WEEKLY_OFF:C.lineStrong, HOLIDAY:C.info, ON_LEAVE: C.brand,
-}
-const STATUS_FULL: Record<string,string> = {
-  PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half day', MISS_PUNCH:'Missing punch',
-  LWP:'Loss of pay', WEEKLY_OFF:'Weekly off', HOLIDAY:'Holiday', ON_LEAVE:'On leave', FUTURE:'—',
-}
-const STATUS_LABEL: Record<string,string> = { PRESENT:'P', ABSENT:'A', HALF_DAY:'½', MISS_PUNCH:'!', LWP:'LWP', WEEKLY_OFF:'W', HOLIDAY:'H', ON_LEAVE:'L', FUTURE:'', ABSENT_FULL:'Absent' }
+/** Accent colour per status — the saturated version of the ink. */
+const STATUS_BAR: Record<string,string> = new Proxy({} as Record<string,string>, {
+  get: (_t, k: string) => k === 'LWP' ? C.critical : (metaOf(k)?.bar ?? C.line),
+})
+const STATUS_FULL: Record<string,string> = new Proxy({} as Record<string,string>, {
+  get: (_t, k: string) => k === 'LWP' ? 'Loss of pay' : k === 'FUTURE' ? '—' : k === 'TODAY' ? 'Today, not in yet' : (metaOf(k)?.label ?? k),
+})
 
-const fmtT = (iso: string|null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '—'
+const STATUS_LABEL: Record<string,string> = new Proxy({} as Record<string,string>, {
+  get: (_t, k: string) => k === 'LWP' ? 'LWP' : (metaOf(k)?.code ?? ''),
+})
+
+const fmtT = (iso: string|null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false }) : '-'
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
@@ -1362,8 +1401,11 @@ const pad2 = (n: number) => String(n).padStart(2,'0')
 
 function StatusBadge({ status }: { status: string }) {
   const [bg,c] = STATUS_STYLE[status] || [C.brandTint,C.brandDeep]
-  const lbl = ({ PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half Day', MISS_PUNCH:'Miss Punch', LWP:'LWP', WEEKLY_OFF:'Weekly Off', HOLIDAY:'Holiday', ON_LEAVE:'On Leave', FUTURE:'—' } as Record<string,string>)[status] || status
-  return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{lbl}</span>
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>
+      <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_BAR[status] }} />{STATUS_FULL[status]}
+    </span>
+  )
 }
 
 // 1) Summary chips ──────────────────────────────────────────────
@@ -1398,12 +1440,12 @@ function monthStats(year: number, month: number, md: MonthlyData | null, todaySt
     if (rec?.overtime_minutes) ot += rec.overtime_minutes
 
     switch (status) {
-      case 'PRESENT':    present++; break
+      case 'PRESENT': case 'LATE': case 'IN_PROGRESS': present++; break
       case 'HALF_DAY':   halfDay++; break
-      case 'MISS_PUNCH': miss++; present++; break   // they were here; the punch is what is missing
+      case 'MISS_IN': case 'MISS_OUT': miss++; present++; break   // they were here; the punch is what is missing
       case 'LWP':        lop++; break
       case 'ABSENT':     absent++; break
-      case 'ON_LEAVE':   leave++; break
+      case 'ON_LEAVE': case 'HALF_LEAVE': leave++; break
       default: break                                 // weekly off, holiday — not working days
     }
   }
@@ -1447,42 +1489,25 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
 
   const nav: React.CSSProperties = {
     width: 32, height: 32, borderRadius: 10, cursor: 'pointer',
-    border: '1px solid rgba(255,255,255,0.28)', background: 'rgba(255,255,255,0.14)',
-    color: C.onAccent, fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
+    border: `1px solid ${C.line}`, background: C.surface,
+    color: C.ink, fontSize: 15, fontFamily: 'inherit', lineHeight: 1, boxShadow: E.flat,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     transition: 'background .15s ease, transform .12s ease',
   }
 
   return (
-    // AN ACCENT PLANE — it must have contrast against the page in BOTH themes.
-    //
-    // Two wrong answers preceded this one, both from reading token NAMES
-    // instead of their values:
-    //
-    //   1. C.ink / C.inkSoft / C.brand. Those are TEXT tokens. In dark C.ink is
-    //      #F3F4F6, so a band meant as "dark navy → brand" inverted to
-    //      near-white and became the brightest thing on screen.
-    //   2. C.dark / darkMid / darkAccent. These exist for a plane that is dark
-    //      RELATIVE TO A WHITE PAGE. In dark mode --ez-dark is #0B0E12 against
-    //      a #0F1216 canvas — darker than the background — so the band
-    //      disappeared instead.
-    //
-    // The brand ramp is the one pair that carries contrast either way: it is a
-    // saturated blue in light and in dark, and C.onAccent is defined precisely
-    // as the ink that stays legible on a saturated fill in both themes.
-    <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 11, position: 'relative',
-                  background: `linear-gradient(135deg,${C.brandDeep} 0%,${C.brand} 55%,${C.info} 100%)`,
-                  boxShadow: '0 8px 26px rgba(30,27,75,0.26)' }}>
-      <div style={{ position: 'absolute', top: -80, right: -50, width: 220, height: 220,
-                    borderRadius: '50%', background: 'rgba(167,139,250,0.15)', pointerEvents: 'none' }} />
-
+    // The soft hero surface (portal.css .ess-soft-hero) shared with Home, Leave and
+    // Profile — white into the brand tint, ink text. It replaces a saturated blue slab:
+    // every screen opened with a different loud banner, and in light mode they were the
+    // heaviest thing on the page. Built from tokens, so dark mode follows on its own.
+    <div className="ess-soft-hero" style={{ marginBottom: 12 }}>
       <div style={{ position: 'relative', padding: isMobile ? '16px 16px' : '18px 20px',
                     display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 190 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
             <button onClick={onPrev} className="ezer-nav" style={nav} title="Previous month">‹</button>
-            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: C.onAccent, letterSpacing: '-.01em' }}>
-              {MONTH_NAMES[month - 1]} <span style={{ opacity: .55, fontWeight: 500 }}>{year}</span>
+            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: C.ink, letterSpacing: '-.01em' }}>
+              {MONTH_NAMES[month - 1]} <span style={{ color: C.faint, fontWeight: 500 }}>{year}</span>
             </div>
             <button onClick={onNext} className="ezer-nav" style={nav} title="Next month">›</button>
             {!isThisMonth && (
@@ -1492,7 +1517,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
               </button>
             )}
           </div>
-          <div style={{ fontSize: 12, color: C.onAccentSoft }}>
+          <div style={{ fontSize: 12.5, color: C.muted }}>
             {working > 0
               ? `${working} working day${working === 1 ? '' : 's'} · ${summary.present} present, ${summary.absent} absent`
               : 'No working days recorded yet'}
@@ -1506,7 +1531,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
 
         <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
           <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="7" />
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.line} strokeWidth="7" />
             {pct != null && (
               <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tone} strokeWidth="7" strokeLinecap="round"
                       strokeDasharray={`${(circ * pct) / 100} ${circ}`}
@@ -1515,11 +1540,11 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
             )}
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center', color: C.onAccent }}>
+                        alignItems: 'center', justifyContent: 'center', color: C.ink }}>
             <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, lineHeight: 1 }}>
-              {pct == null ? '—' : `${pct}%`}
+              {pct == null ? '-' : `${pct}%`}
             </span>
-            <span style={{ fontSize: 9, opacity: .65, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
+            <span style={{ fontSize: 9, color: C.muted, fontWeight: 600, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
           </div>
         </div>
       </div>
@@ -1535,7 +1560,7 @@ function StatTile({ label, value, bg, fg, bar, wide }: {
   return (
     <div className="ezer-tile" style={{ background: empty ? C.sunken : bg, borderRadius: 10, padding: '10px 13px',
                   border: `1px solid ${empty ? C.line : bg}`, position: 'relative',
-                  overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
+                  overflow: 'hidden', minWidth: 0, flex: wide ? '1 1 96px' : '1 1 74px' }}>
       {/* `faint`, not `line`. C.line is a HAIRLINE token — #E5E7EB light,
           #262C35 dark — and it was being used as a text colour, so on the dark
           canvas the zero tiles (Half day, Late, Overtime, Loss of pay) were
@@ -1559,13 +1584,17 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
     { label:'Present',   value:String(summary.present),   k:'PRESENT' },
     { label:'Absent',    value:String(summary.absent),    k:'ABSENT' },
     { label:'Half day',  value:String(summary.halfDay),   k:'HALF_DAY' },
-    { label:'Late',      value:String(summary.lateCount), k:'MISS_PUNCH' },
+    { label:'Missed punch', value:String(summary.missPunch), k:'MISS_OUT', wide:true },
+    { label:'Late',      value:String(summary.lateCount), k:'LATE' },
     { label:'Overtime',  value:summary.totalOTHours,      k:'ON_LEAVE', wide:true },
     { label:'Loss of pay', value:String(summary.lopDays), k:'LWP' },
   ]
   return (
-    <div style={{ display:'flex', flexWrap: isMobile ? 'nowrap' : 'wrap', gap:8, marginBottom:11,
-                  overflowX: isMobile ? 'auto' : 'visible', paddingBottom: isMobile ? 4 : 0 }}>
+    // Phone: a 3 x 2 grid. It was one sideways-scrolling row whose last two tiles sat cut off
+    // at the screen edge with nothing saying the row scrolled.
+    <div style={isMobile
+      ? { display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8, marginBottom:12 }
+      : { display:'flex', flexWrap:'wrap', gap:8, marginBottom:12 }}>
       {tiles.map(t => {
         const [bg, fg] = STATUS_STYLE[t.k]
         return <StatTile key={t.label} label={t.label} value={t.value}
@@ -1577,17 +1606,23 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
 
 /** What the colours mean. Without this the calendar is a puzzle on first visit. */
 function CalendarLegend() {
-  const items = ['PRESENT','ABSENT','HALF_DAY','MISS_PUNCH','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
+  const items = ['PRESENT','LATE','HALF_DAY','MISS_IN','MISS_OUT','ABSENT','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 13px', marginTop:11, paddingTop:9,
                   borderTop: `1px solid ${C.brandEdge}` }}>
       {items.map(k => (
-        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5,
-                               fontSize:10, color:C.faint }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_BAR[k] }} />
+        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:4,
+                               fontSize:10, color:C.muted }}>
+          <span style={{ minWidth:18, textAlign:'center', fontSize:9, fontWeight:800, color:STATUS_BAR[k] }}>{STATUS_LABEL[k] || '•'}</span>
           {STATUS_FULL[k]}
         </span>
       ))}
+      <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:C.muted }}>
+        <span style={{ width:6, height:6, borderRadius:'50%', background:C.warning }} />Correction pending
+      </span>
+      <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10, color:C.muted }}>
+        <span style={{ fontSize:10, fontWeight:800, color:C.positive }}>✓</span>Regularised
+      </span>
     </div>
   )
 }
@@ -1650,7 +1685,7 @@ function ShimmerKeyframes() {
     .ezer-day-panel{animation:ezerPanelIn .3s cubic-bezier(.22,1,.36,1) both}
 
     /* Month navigation. Inline styles cannot express :hover or :active. */
-    .ezer-nav:hover{background:rgba(255,255,255,.2)!important}
+    .ezer-nav:hover{background:var(--ez-brand-tint)!important;border-color:var(--ez-brand-edge)!important}
     .ezer-nav:active{transform:scale(.9)}
 
     /* Stat tiles rise very slightly, enough to say they are a group of objects. */
@@ -1685,33 +1720,66 @@ function ShimmerKeyframes() {
  */
 /** The right column before a day is picked. An empty panel reads as broken. */
 function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }) {
-  const rows: [string, string, string][] = [
-    ['Present',   String(summary.present),   STATUS_BAR.PRESENT],
-    ['Absent',    String(summary.absent),    STATUS_BAR.ABSENT],
-    ['Half day',  String(summary.halfDay),   STATUS_BAR.HALF_DAY],
-    ['On leave',  String(summary.onLeave),   STATUS_BAR.ON_LEAVE],
+  // Present here excludes the missed-punch days, which get their own slice.
+  const rows: [string, number, string][] = [
+    ['Present',      Math.max(0, summary.present - summary.missPunch), STATUS_BAR.PRESENT],
+    // a lighter red than Absent, so the two read as different slices
+    ['Missed punch', summary.missPunch,                `color-mix(in srgb, ${STATUS_BAR.MISS_OUT} 50%, ${C.surface})`],
+    ['Half day',     summary.halfDay,                  STATUS_BAR.HALF_DAY],
+    ['Absent',       summary.absent + summary.lopDays, STATUS_BAR.ABSENT],
+    ['On leave',     summary.onLeave,                  STATUS_BAR.ON_LEAVE],
   ]
+  const total = rows.reduce((a, r) => a + r[1], 0)
+  const D = 168, R = 66, SW = 18, CIRC = 2 * Math.PI * R
+  let at = 0
   return (
-    <div style={{ ...T.card, height: '100%', display: 'flex', flexDirection: 'column',
-                  justifyContent: 'center', marginBottom: 0 }}>
-      <div style={{ textAlign: 'center', padding: '6px 0 16px' }}>
-        <div style={{ fontSize: 26, marginBottom: 6 }}></div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>Pick a day</div>
-        <div style={{ fontSize: 12, color: C.faint, marginTop: 3, lineHeight: 1.55 }}>
-          Its punches, hours and status appear here.
+    <div style={{ ...T.card, height: '100%', display: 'flex', flexDirection: 'column', marginBottom: 0 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '.06em',
+                    textTransform: 'uppercase' }}>This month so far</div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: '14px 0 10px' }}>
+        {/* The month as one donut: each slice is a kind of day, the centre is the score. */}
+        <div style={{ position: 'relative', width: D, height: D, flex: 'none' }}>
+          <svg width={D} height={D} viewBox={`0 0 ${D} ${D}`} role="img"
+               aria-label={rows.map(([k, v]) => `${k} ${v}`).join(', ')}>
+            <circle cx={D/2} cy={D/2} r={R} fill="none" stroke={C.sunken} strokeWidth={SW} />
+            {total > 0 && rows.map(([k, v, c]) => {
+              if (!v) return null
+              const len = (v / total) * CIRC
+              const seg = (
+                <circle key={k} cx={D/2} cy={D/2} r={R} fill="none" strokeWidth={SW} style={{ stroke: c }}
+                        strokeDasharray={`${Math.max(0, len - 2.5)} ${CIRC}`} strokeDashoffset={-at}
+                        transform={`rotate(-90 ${D/2} ${D/2})`} />
+              )
+              at += len
+              return seg
+            })}
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: C.ink, lineHeight: 1, letterSpacing: '-.02em' }}>
+                {summary.pct === null ? '–' : `${summary.pct}%`}
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>attendance</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 18px' }}>
+          {rows.map(([k, v, c]) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                                  borderRadius: 9, background: C.sunken }}>
+              <span style={{ width: 9, height: 9, borderRadius: 3, background: c, opacity: v ? 1 : .35 }} />
+              <span style={{ fontSize: 12, color: C.inkSoft, flex: 1 }}>{k}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: v === 0 ? C.faint : C.ink }}>{v}</span>
+            </div>
+          ))}
         </div>
       </div>
-      <div style={{ borderTop: `1px solid ${C.brandEdge}`, paddingTop: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.faint, letterSpacing: '.06em',
-                      textTransform: 'uppercase', marginBottom: 8 }}>This month so far</div>
-        {rows.map(([k, v, c]) => (
-          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />
-            <span style={{ fontSize: 12, color: C.muted, flex: 1 }}>{k}</span>
-            <span style={{ fontSize: 13, fontWeight: 700,
-                           color: v === '0' ? C.faint : C.ink }}>{v}</span>
-          </div>
-        ))}
+
+      <div style={{ paddingTop: 12, borderTop: `1px solid ${C.line}`,
+                    fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+        <b style={{ color: C.ink, fontWeight: 650 }}>Pick a day</b> on the calendar to see its punches, hours and status.
       </div>
     </div>
   )
@@ -1806,19 +1874,27 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
   const maxW = isMobile ? '100%' : 7 * 60 + gap * 6   // a month, not a banner
   const daysInMonth = new Date(year, month, 0).getDate()
   const lead = new Date(year, month-1, 1).getDay()
+  // The weekdays that are off for this employee, from their configured weekly
+  // offs. The header used to tint Sunday AND Saturday; these companies work
+  // Saturdays.
+  const offDows = new Set([...monthData.weekoffSet].map(d => new Date(d + 'T00:00:00').getDay()))
 
   const cells: React.ReactNode[] = []
   for (let i = 0; i < lead; i++) cells.push(<div key={'b'+i} />)
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
-    const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
+    const { status, rec, leave, day } = resolveDay(dateStr, monthData, todayStr)
     const [bg, ink] = STATUS_STYLE[status] || [C.surface, C.ink]
     const dot = STATUS_BAR[status]
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
     const isFuture = status === 'FUTURE'
-    const hasTimes = !isMobile && !isFuture && rec && (rec.work_in || rec.work_out)
+    // Every day shows its code — P, LT, ½, MI, MO, A, the leave type, H — matching the
+    // legend. Punch times are not printed in the cell; clicking the day shows them.
+    const code = status === 'ON_LEAVE' || status === 'HALF_LEAVE' ? (leave?.short_name || STATUS_LABEL[status]) : STATUS_LABEL[status]
+    const pendingFix = day?.correction?.status === 'PENDING'
+    const fixed = !!day?.regularised || day?.correction?.status === 'APPROVED'
     // Wave across the grid rather than a uniform fade. Capped so the last cell
     // of a 31-day month is not still arriving half a second later.
     const delay = Math.min((lead + d - 1) * 9, 260)
@@ -1828,7 +1904,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
         className="ezer-cell"
         onClick={() => !isFuture && onDayClick(dateStr)}
         disabled={isFuture}
-        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}`}
+        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.work_out ? ` · out ${fmtT(rec.work_out)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}${pendingFix ? ' · correction pending' : fixed ? ' · regularised' : ''}`}
         style={{
           height: cell, position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
           // Tokens, not literals. The selected gradient and the today ring were
@@ -1860,25 +1936,22 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           {d}
         </span>
 
-        {/* the status, as a dot — small, and never the only signal */}
-        {!isFuture && dot && (
-          <span style={{ width: 5, height: 5, borderRadius: '50%', marginTop: 1,
-                         // onAccent, not white: in dark the selected fill is a
-                         // LIGHT blue, and a white dot on it disappears.
-                         background: isSel ? C.onAccent : dot }} />
-        )}
-
-        {hasTimes && (
-          <span style={{ fontSize: 8, lineHeight: 1, opacity: .75, marginTop: 1,
-                         fontVariantNumeric: 'tabular-nums' }}>
-            {fmtT(rec!.work_in)}
+        {/* The status code. onAccent, not white, on the selected cell: in dark its
+            fill is a LIGHT blue, and white disappears on it. */}
+        {!isFuture && code && (
+          <span style={{ fontSize: isMobile ? 8 : 9, fontWeight: 800, lineHeight: 1, marginTop: 1, letterSpacing: '.02em',
+                         color: isSel ? C.onAccent : dot }}>
+            {code}
           </span>
         )}
 
-        {!isFuture && status === 'ON_LEAVE' && leave?.short_name && (
-          <span style={{ fontSize: 8, fontWeight: 700, lineHeight: 1, marginTop: 1 }}>
-            {leave.short_name}
-          </span>
+        {/* Correction state, top-left: amber = waiting on the approver, ✓ = done. */}
+        {pendingFix && (
+          <span style={{ position: 'absolute', top: 3, left: 4, width: 5, height: 5, borderRadius: '50%', background: C.warning }} />
+        )}
+        {!pendingFix && fixed && (
+          <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 8, fontWeight: 800, lineHeight: 1,
+                         color: isSel ? C.onAccent : C.positive }}>✓</span>
         )}
 
         {isToday && !isSel && (
@@ -1900,7 +1973,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           // the third place in this file where a border token was used as ink.
           <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:700,
                                 letterSpacing:'.05em', padding:'3px 0',
-                                color: n % 6 === 0 ? C.brand : C.muted }}>
+                                color: offDows.has(n) ? C.brand : C.muted }}>
             {w[0]}{isMobile ? '' : w[1]}
           </div>
         ))}
@@ -1937,7 +2010,13 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
     return () => { active = false }
   }, [emp.id, date])
 
-  const { status, rec, holiday, leave } = dayInfo
+  const { status, rec, holiday, leave, day } = dayInfo
+  correction = correction ?? (day?.correction ? {
+    id: day.correction.id, attendance_date: date, recorded_in: rec?.work_in ?? null, recorded_out: rec?.work_out ?? null,
+    requested_in: day.correction.requested_in || '', requested_out: day.correction.requested_out || '', reason: '',
+    status: day.correction.status, reviewed_by: day.correction.decided_by, reviewed_at: null,
+    review_remark: day.correction.review_remark, created_at: '', waiting_on: day.correction.waiting_on, decided_by: day.correction.decided_by,
+  } : null)
   const worked = rec?.total_minutes != null ? `${Math.floor(rec.total_minutes/60)}h ${rec.total_minutes%60}m` : '—'
   const heading = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'short', year:'numeric' })
 
@@ -1950,7 +2029,20 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
 
       {holiday && <div style={{ fontSize:13, color: C.brand, background: C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>🎌 {holiday.description}{holiday.is_optional ? ' (Optional)' : ''}</div>}
       {status === 'WEEKLY_OFF' && <div style={{ fontSize:13, color:C.faint, background:C.sunken, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>Weekly Off</div>}
-      {leave && <div style={{ fontSize:13, color:C.brandDeep, background:C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>On Leave — {leave.name}{leave.half_day ? ' (Half day)' : ''}</div>}
+      {leave && <div style={{ fontSize:13, color:C.brandDeep, background:C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>On Leave — {leave.name}{leave.half_day ? ` (Half day${leave.half_session ? `, ${leave.half_session} half` : ''})` : ''}</div>}
+      {(status === 'MISS_IN' || status === 'MISS_OUT') && (
+        <div style={{ fontSize:12.5, color:C.critical, background:C.warningTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>
+          {status === 'MISS_IN' ? 'No punch-in was recorded' : 'No punch-out was recorded'} for this day. Raise a regularisation with the right time.
+        </div>
+      )}
+      {status === 'HALF_DAY' && (
+        <div style={{ fontSize:12.5, color:C.warning, background:C.warningTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>
+          Marked half day — the first punch came after the shift's last allowed punch-in time.
+        </div>
+      )}
+      {day?.expected_in && !['HOLIDAY','WEEKLY_OFF','ON_LEAVE'].includes(status) && (
+        <div style={{ fontSize:11.5, color:C.muted, marginBottom:8 }}>Shift {day.shift_code || ''} · expected {day.expected_in}–{day.expected_out}</div>
+      )}
 
       {rec && (
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:8, marginBottom:10 }}>
@@ -1970,7 +2062,7 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
           <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
             <span style={{ fontWeight:600, minWidth:52 }}>{fmtT(p.punch_time)}</span>
             <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: p.punch_type==='IN' ? C.positiveTint : C.criticalTint, color: p.punch_type==='IN' ? C.positive : C.critical }}>{p.punch_type}</span>
-            <span style={{ color:C.muted }}>{p.source || '—'}</span>
+            <span style={{ color:C.muted }}>{p.source || '-'}</span>
             {p.geofence_status && <span style={{ marginLeft:'auto', fontSize:10, color:C.faint }}>{p.geofence_status}</span>}
           </div>
         ))}
@@ -1991,7 +2083,7 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
         </div>
       )}
       {/* Past days only, and not while one is pending or already approved. */}
-      {date < todayStr && ['MISS_PUNCH', 'ABSENT', 'HALF_DAY'].includes(status) && !rec?.regularized_at
+      {date < todayStr && ['MISS_IN', 'MISS_OUT', 'ABSENT', 'HALF_DAY', 'LATE', 'HALF_LEAVE'].includes(status) && !rec?.regularized_at
         && correction?.status !== 'PENDING' && correction?.status !== 'APPROVED' && (
         <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:C.warning }}>
           {correction?.status === 'REJECTED' ? 'Raise again' : 'Raise regularisation'}
@@ -2002,214 +2094,19 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise, todayStr, corre
 }
 
 // 4) Regularisation form ─────────────────────────────────────────
-/**
- * Regularise a range of days in one submission.
- *
- * The single-day form is right when one punch was missed. It is the wrong shape
- * for "I was on site all last week and the biometric never picked me up" —
- * that was seven identical forms.
- *
- * The preview is the important half. A date range will always contain days that
- * must not be regularised: weekly offs, holidays, approved leave, and days
- * already recorded properly. Submitting those would put work on HR that should
- * never have reached them, and could overwrite a correct record with a guess.
- * So the range is filtered against the same rules resolveDay() uses, and every
- * skipped day says why before anything is sent.
- */
-function BulkRegularisationForm({ emp, onDone, onCancel }: {
-  emp: EmployeeDetail; onDone: () => void; onCancel: () => void
-}) {
-  const localYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-  const todayStr = localYMD(new Date())
-  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return localYMD(d) })()
-  const weekAgo   = (() => { const d = new Date(); d.setDate(d.getDate()-7); return localYMD(d) })()
-
-  const [from, setFrom] = useState(weekAgo)
-  const [to, setTo] = useState(yesterday)
-  const [actualIn, setActualIn] = useState('09:00')
-  const [actualOut, setActualOut] = useState('18:00')
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [scanning, setScanning] = useState(false)
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
-  const [preview, setPreview] = useState<{
-    eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[]
-    skipped: { date: string; why: string }[]
-  } | null>(null)
-
-  const MAX_DAYS = 62   // two months: enough for a real backlog, not a whole year
-
-  // Walk the range, pulling each month's attendance once, and decide day by day.
-  const scan = useCallback(async () => {
-    setPreview(null); setMsg(null)
-    if (!from || !to) return
-    if (from > to) { setMsg({ text: 'The start date is after the end date.', ok: false }); return }
-    if (to >= todayStr) { setMsg({ text: 'Regularisation is for past days only — the end date must be before today.', ok: false }); return }
-
-    const days: string[] = []
-    for (const d = new Date(from + 'T00:00:00'); localYMD(d) <= to; d.setDate(d.getDate() + 1)) {
-      days.push(localYMD(d))
-      if (days.length > MAX_DAYS) break
-    }
-    if (days.length > MAX_DAYS) {
-      setMsg({ text: `That range is longer than ${MAX_DAYS} days. Split it into smaller periods.`, ok: false }); return
-    }
-
-    setScanning(true)
-    const months = Array.from(new Set(days.map(d => d.slice(0, 7))))
-    const data = new Map<string, MonthlyData>()
-    for (const ym of months) {
-      const [y, mo] = ym.split('-').map(Number)
-      data.set(ym, await loadMonthlyAttendance(emp.id, y, mo))
-    }
-
-    const eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[] = []
-    const skipped: { date: string; why: string }[] = []
-
-    for (const date of days) {
-      const md = data.get(date.slice(0, 7))
-      if (!md) { skipped.push({ date, why: 'could not load that month' }); continue }
-      const info = resolveDay(date, md, todayStr)
-
-      if (info.status === 'HOLIDAY')      { skipped.push({ date, why: info.holiday?.description ? `holiday — ${info.holiday.description}` : 'holiday' }); continue }
-      if (info.status === 'WEEKLY_OFF')   { skipped.push({ date, why: 'weekly off' }); continue }
-      if (info.status === 'ON_LEAVE')     { skipped.push({ date, why: 'on approved leave' }); continue }
-      if (info.status === 'PRESENT' && info.rec?.work_in && info.rec?.work_out) {
-        skipped.push({ date, why: 'already recorded in full' }); continue
-      }
-      eligible.push({
-        date,
-        recordedIn: info.rec?.work_in || null,
-        recordedOut: info.rec?.work_out || null,
-        why: info.status === 'MISS_PUNCH' ? 'missing a punch'
-           : info.status === 'ABSENT' ? 'marked absent'
-           : info.status.toLowerCase().replace(/_/g, ' '),
-      })
-    }
-
-    setScanning(false)
-    setPreview({ eligible, skipped })
-  }, [from, to, emp.id, todayStr])
-
-  useEffect(() => { scan() }, [scan])
-
-  const submit = async () => {
-    if (!preview || preview.eligible.length === 0) { setMsg({ text: 'Nothing in that range needs regularising.', ok: false }); return }
-    if (!actualIn || !actualOut) { setMsg({ text: 'Enter both actual IN and OUT times', ok: false }); return }
-    if (actualIn >= actualOut) { setMsg({ text: 'Actual IN must be before Actual OUT', ok: false }); return }
-    if (!reason.trim()) { setMsg({ text: 'Reason is required', ok: false }); return }
-
-    setBusy(true); setMsg(null)
-    try {
-      const res = await essApi('/api/ess/attendance', emp.id, { method: 'POST', body: JSON.stringify({
-        dates: preview.eligible.map(d => d.date), requested_in: actualIn, requested_out: actualOut, reason: reason.trim(),
-      }) })
-      const to = res.waiting_on
-      setMsg({ text: `✓ ${res.filed} day${res.filed === 1 ? '' : 's'} sent${to ? ` to ${to.name} (${to.role})` : ' — no approver is set for you, so HR will see it'} for approval`, ok: true })
-      onDone()
-    } catch (e: any) {
-      setMsg({ text: e.message || 'Could not submit', ok: false })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const short = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-
-  return (
-    <div style={T.card}>
-      <div style={T.section}>Regularise a date range</div>
-      <div style={{ fontSize: 12, color: C.muted, marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
-        For a stretch of days with the same story — biometric down, on site, working from home.
-        Weekly offs, holidays, leave and days already recorded are left out automatically.
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-        <div><label style={T.label}>From *</label>
-          <input type="date" max={yesterday} style={T.input} value={from} onChange={e => setFrom(e.target.value)} /></div>
-        <div><label style={T.label}>To *</label>
-          <input type="date" max={yesterday} style={T.input} value={to} onChange={e => setTo(e.target.value)} /></div>
-        <div><label style={T.label}>Actual IN *</label>
-          <input type="time" style={T.input} value={actualIn} onChange={e => setActualIn(e.target.value)} /></div>
-        <div><label style={T.label}>Actual OUT *</label>
-          <input type="time" style={T.input} value={actualOut} onChange={e => setActualOut(e.target.value)} /></div>
-        <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason * <span style={{ fontWeight: 400, color: C.faint }}>(applies to every day)</span></label>
-          <input style={T.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Biometric device was down all week" /></div>
-      </div>
-
-      {scanning && <div style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>Checking those dates…</div>}
-
-      {preview && !scanning && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 9 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 99,
-                           background: preview.eligible.length ? C.positiveTint : C.criticalTint,
-                           color: preview.eligible.length ? C.positive : C.critical }}>
-              {preview.eligible.length} day{preview.eligible.length === 1 ? '' : 's'} will be sent
-            </span>
-            {preview.skipped.length > 0 && (
-              <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99,
-                             background: C.brandTint, color: C.brandDeep }}>
-                {preview.skipped.length} skipped
-              </span>
-            )}
-          </div>
-
-          {preview.eligible.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 9 }}>
-              {preview.eligible.map(d => (
-                <span key={d.date} title={d.why}
-                      style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
-                               background: C.positiveTint, color: C.positive,
-                               border: `1px solid ${C.positiveTint}`, fontWeight: 600 }}>
-                  {short(d.date)} <span style={{ fontWeight: 400, opacity: .8 }}>· {d.why}</span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          {preview.skipped.length > 0 && (
-            <details>
-              <summary style={{ fontSize: 12, color: C.muted, cursor: 'pointer', marginBottom: 6 }}>
-                Why {preview.skipped.length} day{preview.skipped.length === 1 ? ' was' : 's were'} left out
-              </summary>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {preview.skipped.map(d => (
-                  <span key={d.date} style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
-                                              background: C.sunken, color: C.faint,
-                                              border: `1px solid ${C.line}` }}>
-                    {short(d.date)} · {d.why}
-                  </span>
-                ))}
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-
-      {msg && <div style={{ fontSize: 12, marginBottom: 10, color: msg.ok ? C.positive : C.critical }}>{msg.text}</div>}
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={onCancel} style={{ ...T.btnO, flex: 1 }}>Cancel</button>
-        <button onClick={submit} disabled={busy || scanning || !preview?.eligible.length}
-                style={{ ...T.btnP, flex: 2, opacity: busy || scanning || !preview?.eligible.length ? .5 : 1 }}>
-          {busy ? 'Sending…'
-            : preview?.eligible.length
-              ? `Send ${preview.eligible.length} day${preview.eligible.length === 1 ? '' : 's'} for approval`
-              : 'Nothing to send'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
+// One day, from the calendar's day panel. Several days — any days — are picked
+// in the attendance list (components/ess/attendance/AttendanceLog.tsx), which
+// replaced the "Date range" form: that one could only take a continuous run.
+function RegularisationForm({ emp, date, rec, editable, onDone, onCancel, expected }: {
   emp: EmployeeDetail; date: string; rec: MonthlyData['records'][number] | null; editable?: boolean
   onDone: () => void; onCancel: () => void
+  /** The shift's times that day, used where a punch is missing. */
+  expected?: { in: string | null; out: string | null }
 }) {
   const [dateVal, setDateVal] = useState(date)
-  const [actualIn, setActualIn] = useState('09:00')   // default shift start 9 AM
-  const [actualOut, setActualOut] = useState('18:00') // default shift end 6 PM
+  // What was recorded is kept; only the missing side is filled, from the shift.
+  const [actualIn, setActualIn] = useState(() => (rec?.work_in ? fmtT(rec.work_in) : null) || expected?.in || '09:00')
+  const [actualOut, setActualOut] = useState(() => (rec?.work_out ? fmtT(rec.work_out) : null) || expected?.out || '18:00')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
@@ -2221,7 +2118,7 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
 
   const submit = async () => {
     if (!dateVal) { setMsg({ text:'Select the attendance date', ok:false }); return }
-    if (dateVal >= todayStr) { setMsg({ text:'Regularisation is allowed only for past dates — not the current day or future.', ok:false }); return }
+    if (dateVal >= todayStr) { setMsg({ text:'Regularisation is allowed only for past dates, not the current day or future.', ok:false }); return }
     if (!actualIn || !actualOut) { setMsg({ text:'Enter both actual IN and OUT times', ok:false }); return }
     if (actualIn >= actualOut) { setMsg({ text:'Actual IN must be before Actual OUT', ok:false }); return }
     if (!reason.trim()) { setMsg({ text:'Reason is required', ok:false }); return }
@@ -2270,38 +2167,87 @@ function RegularisationList({ requests, onWithdraw, busyId }: {
 }) {
   const STY: Record<string,[string,string]> = { PENDING:[C.warningTint,C.warning], APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical], CANCELLED:[C.sunken,C.faint] }
   const LABEL: Record<string,string> = { PENDING:'PENDING', APPROVED:'APPROVED', REJECTED:'DECLINED', CANCELLED:'WITHDRAWN' }
+  const hm = (t: string | null | undefined) => (t ? String(t).slice(0, 5) : '—')
+  const short = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short' })
+
+  // One card per SUBMISSION, not per day: a week picked in the attendance list
+  // is one request to the approver and is approved as one, so it reads as one
+  // here too. A group whose days ended differently is split by status.
+  const groups = useMemo(() => {
+    const m = new Map<string, RegularisationRequest[]>()
+    for (const r of requests) {
+      const k = `${r.request_group || r.id}:${r.status}`
+      m.set(k, [...(m.get(k) || []), r])
+    }
+    return [...m.values()].map(rs => rs.sort((a, b) => a.attendance_date.localeCompare(b.attendance_date)))
+      .sort((a, b) => String(b[0].created_at).localeCompare(String(a[0].created_at)))
+  }, [requests])
+  // Three, then "Show all": the list grows with every correction filed and
+  // pushed everything below it out of sight.
+  const [all, setAll] = useState(false)
+  const shownGroups = all ? groups : groups.slice(0, 3)
+
   return (
     <div style={T.card}>
       <div style={T.section}>My Regularisation Requests</div>
-      {requests.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No regularisation requests yet.</div>}
-      {requests.map(r => { const [bg,c] = STY[r.status] || [C.brandTint,C.brandDeep]; return (
-        <div key={r.id} style={{ padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
-            <div style={{ fontSize:13, fontWeight:600 }}>{fmt(r.attendance_date)}</div>
-            <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{LABEL[r.status] || r.status}</span>
-          </div>
-          <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>
-          <div style={{ fontSize:11, color:C.inkSoft, marginTop:1 }}>Requested: {r.requested_in} → {r.requested_out}</div>
-          {r.reason && <div style={{ fontSize:12, color:C.inkSoft, marginTop:3 }}>{r.reason}</div>}
-          {r.status === 'PENDING' && (
-            <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:3 }}>
-              {r.waiting_on ? <>Waiting on <b>{r.waiting_on.name}</b> · {r.waiting_on.role}</> : 'No approver is set for you — HR has been shown this request.'}
+      {groups.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No regularisation requests yet.</div>}
+      {shownGroups.map(rs => {
+        const r = rs[0]
+        const [bg,c] = STY[r.status] || [C.brandTint,C.brandDeep]
+        const sameTimes = new Set(rs.map(x => `${hm(x.requested_in)}-${hm(x.requested_out)}`)).size === 1
+        const withdrawId = r.request_group || r.id
+        return (
+          // A soft card with the status as its left edge — the same shape as Leave's requests.
+          <div key={`${withdrawId}:${r.status}`} style={{ padding:'12px 14px', marginBottom:8, borderRadius:12, border:`1px solid ${C.line}`, borderLeft:`3px solid ${c}`, background:`linear-gradient(90deg, ${bg} 0%, ${C.surface} 65%)` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+              <div style={{ fontSize:13, fontWeight:600 }}>
+                {rs.length === 1 ? fmt(r.attendance_date) : `${rs.length} days · ${short(rs[0].attendance_date)} – ${short(rs[rs.length - 1].attendance_date)}`}
+              </div>
+              <span style={{ fontSize:10.5, padding:'3px 10px', borderRadius:99, background:C.surface, color:c, fontWeight:700, border:`1px solid ${c}` }}>{LABEL[r.status] || r.status}</span>
             </div>
-          )}
-          {(r.status === 'APPROVED' || r.status === 'REJECTED') && (
-            <div style={{ fontSize:11.5, color: r.status === 'APPROVED' ? C.positive : C.critical, marginTop:3 }}>
-              {r.status === 'APPROVED' ? 'Approved — your attendance shows the corrected times' : 'Declined'}{r.decided_by ? ` by ${r.decided_by}` : ''}{r.reviewed_at ? ` on ${fmt(r.reviewed_at)}` : ''}{r.review_remark ? `: “${r.review_remark}”` : ''}
-            </div>
-          )}
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:3 }}>
-            <span style={{ fontSize:10, color:C.faint }}>Submitted {fmtDT(r.created_at)}</span>
-            {r.status === 'PENDING' && (
-              <button onClick={() => onWithdraw(r.id)} disabled={busyId === r.id}
-                style={{ ...T.btnO, marginLeft:'auto', padding:'3px 10px', fontSize:11 }}>{busyId === r.id ? 'Withdrawing…' : 'Withdraw'}</button>
+            {rs.length > 1 && (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginTop:5 }}>
+                {rs.map(x => (
+                  <span key={x.id} style={{ fontSize:10.5, padding:'2px 8px', borderRadius:99, background:C.sunken, color:C.inkSoft, border:`1px solid ${C.line}` }}>
+                    {short(x.attendance_date)}{sameTimes ? '' : ` · ${hm(x.requested_in)}–${hm(x.requested_out)}`}
+                  </span>
+                ))}
+              </div>
             )}
+            {rs.length === 1 && <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>}
+            {sameTimes && <div style={{ fontSize:11, color:C.inkSoft, marginTop:3 }}>Requested: {hm(r.requested_in)} → {hm(r.requested_out)}</div>}
+            {r.reason && <div style={{ fontSize:12, color:C.inkSoft, marginTop:3 }}>{r.reason}</div>}
+            {r.status === 'PENDING' && (
+              <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:3 }}>
+                {r.waiting_on ? <>Waiting on <b>{r.waiting_on.name}</b> · {r.waiting_on.role}</> : 'No approver is set for you — HR has been shown this request.'}
+              </div>
+            )}
+            {(r.status === 'APPROVED' || r.status === 'REJECTED') && (
+              <div style={{ fontSize:11.5, color: r.status === 'APPROVED' ? C.positive : C.critical, marginTop:3 }}>
+                {r.status === 'APPROVED' ? 'Approved — your attendance shows the corrected times' : 'Declined'}{r.decided_by ? ` by ${r.decided_by}` : ''}{r.reviewed_at ? ` on ${fmt(r.reviewed_at)}` : ''}{r.review_remark ? `: “${r.review_remark}”` : ''}
+              </div>
+            )}
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:3 }}>
+              <span style={{ fontSize:10, color:C.faint }}>Submitted {fmtDT(r.created_at)}</span>
+              {r.status === 'PENDING' && (
+                <button onClick={() => onWithdraw(withdrawId)} disabled={busyId === withdrawId}
+                  style={{ ...T.btnO, marginLeft:'auto', padding:'3px 10px', fontSize:11, height:28 }}>
+                  {busyId === withdrawId ? 'Withdrawing…' : rs.length > 1 ? `Withdraw all ${rs.length}` : 'Withdraw'}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )})}
+        )
+      })}
+      {groups.length > 3 && (
+        <button type="button" onClick={() => setAll(v => !v)} aria-expanded={all}
+          style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, width:'100%', height:34, marginTop:4,
+                   border:`1px dashed ${C.lineStrong}`, borderRadius:10, background:'transparent', color:C.brand,
+                   fontSize:12, fontWeight:600, fontFamily:'inherit', cursor:'pointer' }}>
+          {all ? 'Show fewer' : `Show all ${groups.length} requests`}
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ transform: all ? 'rotate(180deg)' : 'none' }}><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+      )}
     </div>
   )
 }
@@ -2315,8 +2261,6 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const [regs, setRegs] = useState<RegularisationRequest[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [raiseDate, setRaiseDate] = useState<string | null>(null)
-  const [manualRaise, setManualRaise] = useState(false)
-  const [bulkRaise, setBulkRaise] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [loading, setLoading] = useState(true)
   // Local date, not UTC: before 05:30 IST the UTC date is still yesterday.
@@ -2405,23 +2349,13 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
       </div>
 
       {/* (E) regularisation form */}
-      {raiseDate && <RegularisationForm emp={emp} date={raiseDate} rec={raiseRec} onDone={() => { loadRegs(); loadMonth(); setRaiseDate(null) }} onCancel={() => setRaiseDate(null)} />}
+      {raiseDate && <RegularisationForm emp={emp} date={raiseDate} rec={raiseRec}
+        expected={{ in: monthData?.dayMap.get(raiseDate)?.expected_in ?? null, out: monthData?.dayMap.get(raiseDate)?.expected_out ?? null }}
+        onDone={() => { loadRegs(); loadMonth(); setRaiseDate(null) }} onCancel={() => setRaiseDate(null)} />}
 
-      {/* (F) raise regularisation + list */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: ((manualRaise || bulkRaise) && !raiseDate) ? 0 : undefined }}>
-        <div>
-          <div style={{ fontSize:13, fontWeight:600 }}>Attendance Regularisation</div>
-          <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → your reporting manager approves it → your attendance is updated. Use a range when several days share the same reason.</div>
-        </div>
-        {!manualRaise && !bulkRaise && !raiseDate && (
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-            <button onClick={() => setManualRaise(true)} style={T.btnO}>+ Single day</button>
-            <button onClick={() => setBulkRaise(true)} style={T.btnP}>Date range</button>
-          </div>
-        )}
-      </div>
-      {manualRaise && !raiseDate && <RegularisationForm emp={emp} date={todayStr} rec={null} editable onDone={() => { loadRegs(); loadMonth(); setManualRaise(false) }} onCancel={() => setManualRaise(false)} />}
-      {bulkRaise && !raiseDate && <BulkRegularisationForm emp={emp} onDone={() => { loadRegs(); loadMonth(); setBulkRaise(false) }} onCancel={() => setBulkRaise(false)} />}
+      {/* (F) the day-by-day list — pick any days and regularise them together */}
+      <AttendanceLog empId={emp.id} isMobile={isMobile} onFiled={() => { loadRegs(); loadMonth() }} />
+
       <RegularisationList requests={regs} onWithdraw={withdraw} busyId={withdrawing} />
     </div>
   )
@@ -2478,18 +2412,18 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Voluntary PF (VPF)</div>
-        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages — set your own percentage.</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages. Set your own percentage.</div>
       </div>
 
       {!e.has_ctc && (
         <div style={{ ...card, background: V.amberBg, border: `1px solid ${C.warningTint}` }}>
-          <span style={{ fontSize: 12, color: C.warning }}>Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master) — then VPF will calculate correctly.</span>
+          <span style={{ fontSize: 12, color: C.warning }}>Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master). Then VPF will calculate correctly.</span>
         </div>
       )}
 
       {current && (
         <div style={{ ...card, background: C.sunken, border: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: V.teal }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo) — modify below</span>
+          <span style={{ fontSize: 12, color: V.teal }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo). Modify below</span>
           <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: C.surface, color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop VPF</button>
         </div>
       )}
@@ -2540,7 +2474,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
           <span style={{ fontSize: 12, fontWeight: 500, color: V.navy }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>
         </div>
         <div style={{ height: 8, background: C.line, borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — no 80C benefit on ${inr(total80c - e.c80_limit)}` : ''}</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` (no 80C benefit on ${inr(total80c - e.c80_limit)})` : ''}</div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
@@ -2596,13 +2530,13 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     const res = await fetch('/api/ess/nps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, has_existing_pran: hasPran, pran_number: hasPran ? pranClean : null, pran_holder_name: pranName, tier_type: tier, acknowledged: true }) })
     const d = await res.json().catch(() => ({}))
     setSaving(false)
-    if (res.ok) { notify(d.pending_pran ? 'PRAN form emailed — submit within 3 days' : 'NPS enrolment submitted ✓'); setAck(false); load() }
+    if (res.ok) { notify(d.pending_pran ? 'PRAN form emailed. Submit within 3 days' : 'NPS enrolment submitted ✓'); setAck(false); load() }
     else notify('Failed: ' + (d.error || ''), 'error')
   }
   const doSubmitPran = async () => {
     const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, action: 'SUBMIT_PRAN', pran_number: submitPran }) })
     const d = await res.json().catch(() => ({}))
-    if (res.ok) { notify('PRAN submitted — NPS active ✓'); setSubmitPran(''); load() } else notify('Failed: ' + (d.error || ''), 'error')
+    if (res.ok) { notify('PRAN submitted. NPS active ✓'); setSubmitPran(''); load() } else notify('Failed: ' + (d.error || ''), 'error')
   }
   const stop = async () => {
     const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, action: 'STOP', stopped_reason: 'Employee requested' }) })
@@ -2613,7 +2547,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Corporate NPS enrolment</div>
-        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I) — extra tax benefit under Section 80CCD(2).</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I). Extra tax benefit under Section 80CCD(2).</div>
       </div>
 
       {!e.has_ctc && (
@@ -2626,7 +2560,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <div style={{ ...card, background: current.status === 'PENDING_PRAN' ? V.blueBg: C.sunken, border: `1px solid ${current.status === 'PENDING_PRAN' ? '#B5D4F4' : '#C5E8DB'}` }}>
           {current.status === 'PENDING_PRAN' ? (
             <div>
-              <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending — generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '—'}.</div>
+              <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending: generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '-'}.</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`} style={{ ...input, letterSpacing: 2 }} />
                 <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: V.purple, color: C.onAccent, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
@@ -2688,7 +2622,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 
       <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
         <span style={{ color: V.amber }}></span>
-        <div style={{ fontSize: 12, color: C.warning, lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product — locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
+        <div style={{ fontSize: 12, color: C.warning, lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product, locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
       </div>
 
       <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
@@ -2762,7 +2696,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
   if (loading) return <div style={{ ...card }}><div style={{ color:V.muted, fontSize:13 }}>Loading agreement…</div></div>
   if (!agr) return (
     <div style={card}>
-      <div style={{ fontSize:13, color:V.red, marginBottom:8 }}>No agreement found yet — please check back shortly.</div>
+      <div style={{ fontSize:13, color:V.red, marginBottom:8 }}>No agreement found yet. Please check back shortly.</div>
       <button onClick={onClose} style={{ padding:'7px 13px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:12 }}>Close</button>
     </div>
   )
@@ -2772,7 +2706,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
   return (
     <div style={{ ...card, borderColor:V.purple }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-        <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement — {agr.agreement_number}</div>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement: {agr.agreement_number}</div>
         <div style={{ display:'flex', gap:8 }}>
           <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, textDecoration:'none', fontSize:11 }}>View / print</a>
           <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
@@ -2787,7 +2721,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
             {schedule.map((s, i) => (
               <tr key={i} style={{ borderTop:`1px solid ${V.border}` }}>
                 <td style={{ ...td, textAlign:'left' }}>{s.installment_number}</td>
-                <td style={td}>{s.due_date || s.month || '—'}</td>
+                <td style={td}>{s.due_date || s.month || '-'}</td>
                 <td style={td}>{loanInr(s.emi_amount)}</td>
                 <td style={td}>{loanInr(s.principal_component)}</td>
                 <td style={td}>{loanInr(s.interest_component)}</td>
@@ -2894,7 +2828,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 
       {!hasCtc && (
         <div style={{ ...card, background:V.amberBg, border: `1px solid ${C.warningTint}` }}>
-          <span style={{ fontSize:12, color: C.warning }}>CTC not configured — eligibility shows ₹0; ask HR to set CTC.</span>
+          <span style={{ fontSize:12, color: C.warning }}>CTC not configured: eligibility shows ₹0; ask HR to set CTC.</span>
         </div>
       )}
 
@@ -2949,7 +2883,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
             <div key={p.id} style={row}>
               <div style={{ minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:V.navy }}>{t?.name || 'Loan'} · {loanInr(p.requested_amount)}</div>
-                <div style={{ fontSize:11, color:V.muted, marginTop:2 }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '—'}</div>
+                <div style={{ fontSize:11, color:V.muted, marginTop:2 }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '-'}</div>
               </div>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 <LoanStatusBadge status={p.status} />
@@ -2991,12 +2925,20 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 }
 
 // Placeholder for Phase 3/4 modules
-function Placeholder({ title, phase, needs }: { title: string; phase: number; needs: string }) {
+/** A screen that isn't switched on yet. Written for the employee reading it: the old copy
+ *  ("Coming in Phase 3. This module needs the Payslip generation module's data") was a
+ *  note to the build team. phase / needs stay in the signature — and in SECTIONS — as the
+ *  record of what each one waits on. */
+function Placeholder({ title }: { title: string; phase: number; needs: string }) {
   return (
-    <div style={{ ...T.card, textAlign:'center', padding:40 }}>
-      <div style={{ fontSize:38, marginBottom:8 }}></div>
-      <div style={{ fontSize:16, fontWeight:600 }}>{title}</div>
-      <div style={{ fontSize:13, color:C.muted, marginTop:6, lineHeight:1.7 }}>Coming in Phase {phase}. This module needs the <b>{needs}</b> module's data, which isn't built yet.</div>
+    <div style={{ ...T.card, textAlign:'center', padding:'48px 24px' }}>
+      <div style={{ width:56, height:56, borderRadius:16, margin:'0 auto 14px', display:'grid', placeItems:'center', background:C.brandTint, color:C.brand, border:`1px solid ${C.brandEdge}` }}>
+        <IconCalendar size={26} strokeWidth={1.7} />
+      </div>
+      <div style={{ fontSize:17, fontWeight:700 }}>{title} is coming soon</div>
+      <div style={{ fontSize:13.5, color:C.muted, marginTop:6, lineHeight:1.6, maxWidth:420, marginInline:'auto' }}>
+        We’re getting this ready for you. It will appear here as soon as your HR team switches it on.
+      </div>
     </div>
   )
 }
@@ -3065,7 +3007,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
   const amt = (r: any) => {
     const max = regime === 'old' ? r.old_regime_max : r.new_regime_max
     const avail = regime === 'old' ? r.comp.old_available : r.comp.new_available
-    if (max == null || avail === false) return { text: '—', muted: true }
+    if (max == null || avail === false) return { text: '-', muted: true }
     if (r.is_formula || max === -1) return { text: '8.33% of Basic', muted: false }
     return { text: inr(num(max)) + '/yr', muted: false }
   }
@@ -3100,7 +3042,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
         </div>
         {rows.map((r, i) => {
           const a = amt(r)
-          const perq = num(r.perquisite_monthly) > 0 ? `${inr(num(r.perquisite_monthly))}/mo perq` : (r.comp.is_children_linked && r.children_count ? `${r.children_count} child` : '—')
+          const perq = num(r.perquisite_monthly) > 0 ? `${inr(num(r.perquisite_monthly))}/mo perq` : (r.comp.is_children_linked && r.children_count ? `${r.children_count} child` : '-')
           return (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '9px 14px', borderBottom: `1px solid ${V.border}`, fontSize: 13, background: a.muted ? '#FAFAFE' : '#fff' }}>
               <span style={{ color: V.navy }}>{r.comp.name}</span>
@@ -3110,7 +3052,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
           )
         })}
       </div>
-      <div style={{ fontSize: 11, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window — raise via HR / Payroll.</div>
+      <div style={{ fontSize: 11, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window. Raise via HR / Payroll.</div>
     </div>
   )
 }
@@ -3190,15 +3132,18 @@ interface NavSection {
  * rather than label a control.
  */
 const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => React.ReactElement> = {
-  home: IconHome, profile: IconEmployees, team: IconEmployees, payroll: IconPayroll,
+  home: IconHome, profile: IconUser, team: IconEmployees, payroll: IconPayroll,
   // An envelope, not a bell: this is the Inbox, and the bell in the header
   // is a different thing that still uses IconBell.
   inbox: IconMail,
-  attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
+  attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconPerformance,
+  // Every section has its own glyph now — Org Chart, Company and Reports had none and
+  // sat out of line in the rail, and Social / RNR / Fun Zone shared two between them.
+  orgchart: IconOrgChart, company: IconBuilding, reports: IconReports,
+  social: IconHeart, rnr: IconAward, funzone: IconGame,
   // The same glyph the dashboard rail gives this module, so the employee side
   // and the back office are recognisably the same thing.
   expenses: IconReceipt,
-  social: IconEmployees, rnr: IconAi, funzone: IconAi,
 }
 function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
   const I = ESS_ICON[k]
@@ -3207,7 +3152,7 @@ function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number
 
 const SECTIONS: NavSection[] = [
   { k:'home', label:'Home', short:'Home', icon:'', status:'ready',
-    desc:'The landing dashboard — everything at a glance',
+    desc:'The landing dashboard: everything at a glance',
     items:[{ k:'home', label:'Home' }] },
 
   { k:'profile', label:'Profile', short:'Profile', icon:'', status:'ready',
@@ -3219,15 +3164,15 @@ const SECTIONS: NavSection[] = [
     ]},
 
   { k:'team', label:'Team', short:'Team', icon:'', status:'ready',
-    desc:'Who is above you, who is beside you, who reports to you — read from the same reporting lines HR maintains',
+    desc:'Your manager, your peers and the people who report to you',
     items:[{ k:'team', label:'Team' }]},
 
   { k:'orgchart', label:'Org Chart', short:'Org', icon:'', status:'ready',
-    desc:'The whole company as one tree — the same chart HR sees, read from the same reporting lines',
+    desc:'See how the whole company fits together',
     items:[{ k:'orgchart', label:'Org Chart' }]},
 
   { k:'payroll', label:'Payroll', short:'Payroll', icon:'', status:'partial',
-    desc:'Salary, benefits, declarations and claims — all in one place',
+    desc:'Salary, benefits, tax declarations and claims',
     items:[
       { k:'payslip',     label:'Salary Slip',            phase:3, needs:'Payslip generation' },
       { k:'flexi',       label:'Flexi Benefits' },
@@ -3247,32 +3192,34 @@ const SECTIONS: NavSection[] = [
     ]},
 
   { k:'attendance', label:'Attendance', short:'Attend', icon:'', status:'ready',
-    desc:'Your own attendance, self-service',
+    desc:'Your punches, working hours and monthly calendar',
     items:[{ k:'attendance', label:'Attendance' }] },
 
   { k:'leave', label:'Leave', short:'Leave', icon:'', status:'ready',
-    desc:'Apply, track and plan leave',
+    desc:'Apply for leave, track your requests and plan around holidays',
     items:[{ k:'leave', label:'Leave' }] },
 
   // Below Leave, as asked. One section rather than a sub-tab of HRIS: it is
   // opened many times a day, and burying it a level down would make it the
   // one thing people go back to the bell for.
   { k:'inbox', label:'Inbox', short:'Inbox', icon:'', status:'ready',
-    desc:'Messages from colleagues and departments, and every notification in full',
+    desc:'Messages from colleagues and teams, and every notification in full',
     items:[{ k:'inbox', label:'Inbox' }] },
 
   // Travel & Expenses, in the rail in its own right rather than under Payroll.
   // It is a module of roughly 135 screens with its own navigation, and people
-  // open it to record a trip or send a claim — not to look at their salary.
+  // open it to record a trip or send a claim, not to look at their salary.
   //
   // The section key and its single item key are BOTH 'expenses', deliberately:
   // AWAY, go(), the ?tab=claims&ref= deep link and the render case below are all
   // keyed on that, so moving the tab changes where it sits and nothing else.
   { k:'expenses', label:'Travel & Expenses', short:'T&E', icon:'', status:'ready',
-    desc:'Trips, legs, bills and claims — travel from planning to payout',
+    desc:'Trips, legs, bills and claims: travel from planning to payout',
     items:[{ k:'expenses', label:'Travel & Expenses', href:'/ess/travel' }] },
 
-  { k:'hris', label:'HRIS', short:'HRIS', icon:'', status:'partial',
+  // Shown as "HR Services": "HRIS" is a term HR uses, not one an employee looks for.
+  // The key stays 'hris' — routes, deep links and the HRIS shell all read it.
+  { k:'hris', label:'HR Services', short:'HR', icon:'', status:'partial',
     desc:'Directory, requests, approvals and the exit process',
     items:[
       { k:'directory',   label:'Team Directory' },
@@ -3287,7 +3234,7 @@ const SECTIONS: NavSection[] = [
 
   // ── Role-wise tabs (071) — shown only when /api/ess/menu says so ──
   { k:'company', label:'Company', short:'Company', icon:'', status:'ready',
-    desc:'Headcount, why people are leaving, regime election — company-wide',
+    desc:'Headcount, attrition and tax-regime trends across the company',
     items:[{ k:'company', label:'Company' }] },
 
   { k:'reports', label:'Reports', short:'Reports', icon:'', status:'ready',
@@ -3298,7 +3245,7 @@ const SECTIONS: NavSection[] = [
   // data — everyone gets My KRAs, managers additionally get My Team, HODs get
   // Department. One section, three audiences.
   { k:'performance', label:'Performance', short:'PMS', icon:'', status:'ready',
-    desc:'Your KRAs, and the reviews you owe',
+    desc:'Your goals (KRAs) and the reviews you owe',
     items:[{ k:'performance', label:'Performance' }] },
 
   // Social (118). Wall of Fame used to be a top-level section here and is now
@@ -3310,22 +3257,23 @@ const SECTIONS: NavSection[] = [
   // preview shows. Listing them here as well would put two tab rows on one
   // screen, which is what the Inbox and HRIS shells already avoid.
   { k:'social', label:'Social', short:'Social', icon:'', status:'ready',
-    desc:'Birthdays, work anniversaries, new joiners and the Wall of Fame — everyone across your group, in one place',
+    desc:'Birthdays, work anniversaries, new joiners and the Wall of Fame',
     items:[{ k:'social', label:'Social' }]},
 
   { k:'rnr', label:'RNR', short:'RNR', icon:'', status:'soon',
-    desc:'Structured Reward & Recognition, points-based',
+    desc:'Reward and recognise great work with points you can redeem',
     items:[{ k:'rnr', label:'RNR' }],
+    // icon = an ESS_ICON key; FeatureGrid draws it.
     features:[
-      { icon:'', name:'Nominate',    note:'Pick a category, write why' },
-      { icon:'', name:'Approval',    note:'Manager / HR reviews' },
-      { icon:'', name:'Points',      note:'Credited on approval' },
-      { icon:'', name:'Redeem',      note:'Vouchers, leave, merch' },
-      { icon:'', name:'Leaderboard', note:'Top recognized employees' },
+      { icon:'social',      name:'Nominate',    note:'Pick a category, write why' },
+      { icon:'hris',        name:'Approval',    note:'Manager / HR reviews' },
+      { icon:'rnr',         name:'Points',      note:'Credited on approval' },
+      { icon:'payroll',     name:'Redeem',      note:'Vouchers, leave, merch' },
+      { icon:'performance', name:'Leaderboard', note:'Top recognized employees' },
     ]},
 
   { k:'funzone', label:'Fun Zone', short:'Fun', icon:'', status:'ready',
-    desc:'Take a break — play a quick game with your team',
+    desc:'Take a break: play a quick game with your team',
     items:[{ k:'funzone', label:'Fun Zone' }] },
 ]
 
@@ -3346,57 +3294,57 @@ const awayOf = (s: NavSection): string | undefined =>
 /** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
 const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 
-const DOT: Record<Ready, string> = { ready:C.positive, partial:C.warning, soon:C.critical }
-const BADGE: Record<Ready, [string, string, string]> = {
-  ready:   ['Available',        C.positiveTint, C.positive],
-  partial: ['Partly available', C.warningTint, C.warning],
-  soon:    ['Coming soon',      C.criticalTint, C.critical],
+/**
+ * How the rail is grouped. The sections themselves (and who sees which) still come from
+ * SECTIONS and /api/ess/menu; this only decides the order and the small group labels, so a
+ * section nobody grants simply drops out of its group. A section missing from every group
+ * is appended to the last one rather than disappearing.
+ *
+ * The green / amber / red readiness dots that used to sit on every item are gone: they were
+ * a build-progress marker, and to an employee a red dot reads as "something is wrong".
+ * A section that is not live yet carries a quiet "Soon" tag instead.
+ */
+const NAV_GROUPS: { label: string | null; keys: string[] }[] = [
+  { label: null,              keys: ['home', 'inbox'] },
+  { label: 'Time & pay',      keys: ['attendance', 'leave', 'payroll', 'expenses'] },
+  { label: 'You & your team', keys: ['profile', 'team', 'orgchart', 'performance'] },
+  { label: 'Workplace',       keys: ['hris', 'company', 'reports'] },
+  { label: 'Community',       keys: ['social', 'rnr', 'funzone'] },
+]
+function groupSections(list: NavSection[]): { label: string | null; items: NavSection[] }[] {
+  const placed = new Set(NAV_GROUPS.flatMap(g => g.keys))
+  const groups = NAV_GROUPS.map(g => ({ label: g.label, items: g.keys.map(k => list.find(s => s.k === k)).filter((s): s is NavSection => !!s) }))
+  const rest = list.filter(s => !placed.has(s.k))
+  if (rest.length) groups[groups.length - 1].items.push(...rest)
+  return groups.filter(g => g.items.length > 0)
 }
 
 // ── Sidebar / sub-tab / feature-grid bits (outside the parent — no focus loss) ──
 function SectionButton({ s, active, href, onClick }: { s: NavSection; active: boolean; href?: string; onClick: () => void }) {
-  // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
-  const [hover, setHover] = useState(false)
-  const bg = active ? C.railActiveBg : hover ? C.railHover : 'transparent'
-  // The rail follows the theme now — white in day, #171B21 in night — so its
-  // text comes from the rail family, which is defined for both. It must NOT use
-  // the onDark family: those are fixed near-white and would be invisible on a
-  // white rail in day mode. That was the original complaint. The earlier onDark
-  // fix was right for a rail that stayed dark; this replaces the premise, not
-  // the reasoning.
-  const style: React.CSSProperties = {
-    width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px',
-    color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600,
-    fontFamily:'inherit', background:bg, border:'none',
-    borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}`,
-    textDecoration:'none', boxSizing:'border-box',
-  }
+  // Hover and the active marker live in portal.css (.ess-item) — an inline style can't
+  // express :hover or ::before. The rail follows the theme, so every colour there comes
+  // from the rail token family, which is defined for both light and dark.
   const inner = (
     <>
-      <EssIcon k={s.k} size={16} />
-      <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
-      <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
+      <span className="ess-item-ic" aria-hidden><EssIcon k={s.k} size={16} strokeWidth={1.8} /></span>
+      <span className="ess-item-label">{s.label}</span>
+      {s.status === 'soon' && <span className="ess-soon">Soon</span>}
+      {href && <span className="ess-ext" aria-hidden>↗</span>}
     </>
   )
-
-  // A section that is a page of its own is a real link, not a scripted popup.
-  // That buys the browser's own behaviour for free: ctrl/cmd-click, middle
-  // click, "Open in new tab", and the address shown on hover. No onClick —
-  // the anchor's default opens the tab, and calling go() as well would open
-  // two.
+  // A section that is a page of its own is a real link, not a scripted popup:
+  // ctrl/cmd-click, middle click, "Open in new tab" and the address on hover all
+  // work. No onClick — the anchor's default opens the tab.
   if (href) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer"
-        title={`${s.label} — opens in a new tab`}
-        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        style={style}>
+      <a href={href} target="_blank" rel="noopener noreferrer" className="ess-item" data-on="0"
+        title={`${s.label} (opens in a new tab)`}>
         {inner}
       </a>
     )
   }
-
   return (
-    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={style}>
+    <button onClick={onClick} className="ess-item" data-on={active ? '1' : '0'} aria-current={active ? 'page' : undefined}>
       {inner}
     </button>
   )
@@ -3509,14 +3457,14 @@ function ManageMenu({ group, items, open, activeKey, alignRight, onToggle, onClo
     <div style={{ position:'relative', flexShrink:0 }}>
       <button data-ez-menu={group} onClick={onToggle}
         aria-expanded={open} aria-haspopup="true"
-        style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 11px', borderRadius:R.md,
-                 border:`1px solid ${open || holdsActive ? C.brand : 'transparent'}`,
+        style={{ display:'flex', alignItems:'center', gap:5, height:32, padding:'0 10px', borderRadius:R.md,
+                 border:`1px solid ${open || holdsActive ? C.brandEdge : 'transparent'}`,
                  background: open || holdsActive ? C.brandTint : 'transparent',
                  color: open || holdsActive ? C.brandDeep : C.inkSoft,
                  fontFamily:'inherit', fontSize:12.5, fontWeight: holdsActive ? 700 : 600,
                  cursor:'pointer', whiteSpace:'nowrap' }}>
         {group}
-        <span aria-hidden style={{ fontSize:9, opacity:.75, transform: open ? 'rotate(180deg)' : 'none', transition:'transform .12s' }}>▼</span>
+        <span aria-hidden style={{ display:'flex', opacity:.7, transform: open ? 'rotate(180deg)' : 'none', transition:'transform .12s' }}><IconChevronDown size={14} strokeWidth={2} /></span>
       </button>
       {open && (
         <div ref={pop} role="menu"
@@ -3617,7 +3565,9 @@ function Highlight({ text, q }: { text: string; q: string }) {
   return <>{text.slice(0, i)}<mark style={{ background:C.brandTint, color:C.brandDeep, borderRadius:4, padding:'0 2px' }}>{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>
 }
 
-function FeatureSearch({ entries }: { entries: SearchEntry[] }) {
+/** compact: the top-bar version (every screen, desktop). Without it: the full-width field
+ *  shown at the top of Home on a phone, where the top bar has no room for one. */
+function FeatureSearch({ entries, compact }: { entries: SearchEntry[]; compact?: boolean }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
@@ -3653,24 +3603,27 @@ function FeatureSearch({ entries }: { entries: SearchEntry[] }) {
   const showList = open && query.length > 0
 
   return (
-    <div ref={boxRef} style={{ position:'relative', marginTop:14, maxWidth:680 }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10, height:48, padding:'0 14px', borderRadius:R.lg, background:C.surface,
-        border:`1.5px solid ${open ? C.brand : C.line}`, boxShadow: open ? `0 0 0 4px ${C.brandTint}` : E.raised, transition:'border-color .15s, box-shadow .15s' }}>
-        <span style={{ color: open ? C.brand : C.muted, display:'flex', flexShrink:0 }}><IconSearch size={19} strokeWidth={2} /></span>
+    <div ref={boxRef} style={compact
+      ? { position:'relative', flex:1, minWidth:180 }
+      : { position:'relative', marginBottom:16 }}>
+      <div style={{ display:'flex', alignItems:'center', gap: compact ? 8 : 10, height: compact ? 38 : 46, padding: compact ? '0 10px 0 12px' : '0 14px', borderRadius:R.lg,
+        background: compact && !open ? C.sunken : C.surface,
+        border:`1px solid ${open ? C.brand : C.line}`, boxShadow: open ? `0 0 0 4px ${C.brandTint}` : compact ? 'none' : E.raised, transition:'border-color .15s, box-shadow .15s, background .15s' }}>
+        <span style={{ color: open ? C.brand : C.faint, display:'flex', flexShrink:0 }}><IconSearch size={compact ? 16 : 19} strokeWidth={2} /></span>
         <input ref={inputRef} value={q} onChange={e => { setQ(e.target.value); setOpen(true) }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown}
-          placeholder="Search a feature — Tasks & Approvals, MRF, Leave, Payslip…" aria-label="Search features"
+          placeholder={compact ? 'Search features…' : 'Search a feature (Leave, Payslip, Approvals…)'} aria-label="Search features"
           role="combobox" aria-expanded={showList} aria-controls="ess-feature-results" aria-autocomplete="list"
-          style={{ flex:1, minWidth:0, border:'none', outline:'none', background:'transparent', color:C.ink, fontSize:14.5, fontFamily:'inherit', height:'100%' }} />
+          style={{ flex:1, minWidth:0, border:'none', outline:'none', background:'transparent', color:C.ink, fontSize: compact ? 13 : 14.5, fontFamily:'inherit', height:'100%' }} />
         {q ? <button type="button" aria-label="Clear search" onClick={() => { setQ(''); inputRef.current?.focus() }}
                style={{ border:'none', background:C.sunken, color:C.muted, borderRadius:99, width:22, height:22, cursor:'pointer', fontSize:13, lineHeight:1, flexShrink:0 }}>×</button>
            : <kbd style={{ fontSize:11, fontFamily:'inherit', fontWeight:700, color:C.muted, background:C.sunken, border:`1px solid ${C.line}`, borderRadius:6, padding:'2px 7px', flexShrink:0 }}>/</kbd>}
       </div>
 
       {showList && (
-        <div id="ess-feature-results" role="listbox" style={{ position:'absolute', top:'calc(100% + 8px)', left:0, right:0, zIndex:Z.navMenu, background:C.surface,
+        <div id="ess-feature-results" role="listbox" style={{ position:'absolute', top:'calc(100% + 8px)', ...(compact ? { left:0, width:'max(100%, 420px)', maxWidth:'calc(100vw - 32px)' } : { left:0, right:0 }), zIndex:Z.navMenu, background:C.surface,
           border:`1px solid ${C.line}`, borderRadius:R.lg, boxShadow:E.floating, padding:6, animation:'ezFadeUp .16s both' }}>
           {results.length === 0 ? (
-            <div style={{ padding:'14px 12px', fontSize:13, color:C.muted }}>No feature matches “{q.trim()}” — or it isn’t part of your access.</div>
+            <div style={{ padding:'14px 12px', fontSize:13, color:C.muted }}>No feature matches “{q.trim()}”, or it isn’t part of your access.</div>
           ) : results.map((e, i) => (
             <button key={e.id} type="button" role="option" aria-selected={i === active} onMouseEnter={() => setActive(i)} onClick={() => pick(e)}
               style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'9px 10px', border:'none', borderRadius:R.md, cursor:'pointer', textAlign:'left', fontFamily:'inherit',
@@ -3694,34 +3647,38 @@ function FeatureSearch({ entries }: { entries: SearchEntry[] }) {
   )
 }
 
-function TabHeader({ s, search }: { s: NavSection; search?: React.ReactNode }) {
-  const [label, bg, fg] = BADGE[s.status]
-  // Same header band as the 32 dashboard routes. This sat directly on the
-  // canvas, so ESS read as a different product from the admin side.
+/**
+ * The page heading on ESS's own screens: an icon tile, the title and one line of context.
+ *
+ * It used to be the shared tinted band with an "Available" / "Partly available" pill on
+ * every screen. The band was a second box above the screen's own content, and the pill was
+ * a build-status marker that told an employee nothing they could act on. Only a section
+ * that is genuinely not live yet still says so.
+ */
+function TabHeader({ s }: { s: NavSection }) {
   return (
-    <div className="ez-page-head">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:4 }}>
-        <div style={{ fontSize:F.page, fontWeight:W.bold, letterSpacing:'-.02em',
-                      display:'flex', alignItems:'center', gap:9 }}>
-          <EssIcon k={s.k} size={20} strokeWidth={1.8} />{s.label}
-        </div>
-        <span style={{ fontSize:11, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
+    <div className="ess-head">
+      <span className="ess-head-ic" aria-hidden><EssIcon k={s.k} size={22} strokeWidth={1.7} /></span>
+      <div style={{ minWidth:0 }}>
+        <h1>{s.label}</h1>
+        {s.desc && <p>{s.desc}</p>}
       </div>
-      <div style={{ fontSize:13, color:C.muted }}>{s.desc}</div>
-      {search}
+      {s.status === 'soon' && <span className="ess-head-chip">Coming soon</span>}
     </div>
   )
 }
 
+/** A segmented control rather than a row of filled pills — the selected tab is the raised
+ *  white one, so the brand blue is kept for actions. Scrolls sideways on a phone. */
 function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: string) => void }) {
   if (items.length < 2) return null
   return (
-    <div style={{ display:'flex', gap:7, flexWrap:'wrap', marginBottom:14 }}>
+    <div className="ess-seg" role="tablist">
       {items.map(i => {
         const on = i.k === view
         return (
-          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.onAccent : C.inkSoft, whiteSpace:'nowrap' }}>
-            {i.label}{i.phase ? <span style={{ marginLeft:5, fontSize:9, opacity:.7 }}>soon</span> : null}
+          <button key={i.k} role="tab" aria-selected={on} data-on={on ? '1' : '0'} onClick={() => go(i.k)}>
+            {i.label}{i.phase ? <span className="ess-seg-soon">Soon</span> : null}
           </button>
         )
       })}
@@ -3750,15 +3707,19 @@ function FeatureGrid({ features }: { features: Feature[] }) {
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12 }}>
         {features.map(f => (
-          <div key={f.name} style={{ background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, padding:16 }}>
-            <div style={{ fontSize:22, marginBottom:6 }}>{f.icon}</div>
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:3 }}>{f.name}</div>
-            <div style={{ fontSize:11, color:C.muted }}>{f.note}</div>
+          <div key={f.name} style={{ background:C.surface, border: `1px solid ${C.line}`, borderRadius:R.lg, padding:16, boxShadow:E.flat }}>
+            {/* f.icon names an ESS_ICON key. It was an emoji until the emoji were stripped
+                and left empty strings, which is why these tiles showed a blank square. */}
+            <div style={{ width:38, height:38, borderRadius:11, display:'grid', placeItems:'center', marginBottom:10, background:C.brandTint, color:C.brand }}>
+              {ESS_ICON[f.icon] ? <EssIcon k={f.icon} size={19} strokeWidth={1.8} /> : <IconAward size={19} strokeWidth={1.8} />}
+            </div>
+            <div style={{ fontWeight:700, fontSize:13.5, marginBottom:3 }}>{f.name}</div>
+            <div style={{ fontSize:12, color:C.muted }}>{f.note}</div>
           </div>
         ))}
       </div>
-      <div style={{ background: C.brandTint, borderRadius:10, padding:'12px 16px', marginTop:20, fontSize:12, color:C.brandDeep }}>
-        This tab isn’t live yet. Everything above is what it will hold — nothing here is clickable so far.
+      <div style={{ background: C.brandTint, border:`1px solid ${C.brandEdge}`, borderRadius:R.md, padding:'12px 16px', marginTop:20, fontSize:12.5, color:C.brandDeep }}>
+        This is on its way. Above is what it will let you do. It isn’t switched on yet.
       </div>
     </div>
   )
@@ -3787,11 +3748,17 @@ const VIEW_KEYS: Set<string> = new Set([
 ])
 const ESS_KEYS: EssKeys = { views: VIEW_KEYS, modules: new Set(Object.keys(NAV_ENTRY_BY_KEY)) }
 
-export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync }: { employeeId: string; adminMode?: boolean; onExit?: () => void
+export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync, headerExtra, exitLabel }: { employeeId: string; adminMode?: boolean; onExit?: () => void
   /** This portal owns the address bar: it reads /ess/… on load and on Back/Forward, and pushes a
    *  history entry on every move. Off for a portal shown inside another screen (admin "login as",
    *  a manager viewing a team member). */
-  urlSync?: boolean }) {
+  urlSync?: boolean
+  /** Extra control for the top bar — PortalPage puts "View a team member" here, in place of
+   *  the full-width banner that used to sit above the whole portal. */
+  headerExtra?: React.ReactNode
+  /** What onExit is called. PortalPage's onExit signs the employee out, so it passes
+   *  "Sign out"; the default stays "Close" for the embedded uses. */
+  exitLabel?: string }) {
   const [emp, setEmp] = useState<EmployeeDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('home')
@@ -3921,14 +3888,17 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
   }
   useEffect(() => {
     if (typeof window === 'undefined') return
-    // Travel & Expenses v2 notifications are written by the database as
-    // "/ess?tab=claims&ref=<claim id>" (migration 147). Only they carry ref with
-    // tab=claims; that pair opens the T&E page, which reads the claim id itself.
-    // The module is a page of its own (app/ess/travel), so the pair is forwarded
-    // whole — TeHome's claimFromLink() looks for exactly these two params.
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('tab') === 'claims' && params.get('ref') && !params.get('module')) {
-      window.location.replace(`${AWAY.expenses}?tab=claims&ref=${encodeURIComponent(params.get('ref')!)}`); return
+    // Travel & Expenses v2 notifications are written by the DATABASE as
+    // "/ess?tab=claims&ref=<claim id>" (migration 147), and the module is its
+    // own page now. So that one pair is forwarded whole and we leave before
+    // any routing runs — TeHome's claimFromLink() reads both params off the
+    // address it lands on. Every other legacy ?tab= link is parseEssPath's
+    // job, which rewrites it to its canonical path.
+    const q = new URLSearchParams(window.location.search)
+    const ref = q.get('ref')
+    if (q.get('tab') === 'claims' && ref && !q.get('module')) {
+      window.location.replace(`${AWAY.expenses}?tab=claims&ref=${encodeURIComponent(ref)}`)
+      return
     }
     const loc = parseEssPath(window.location.pathname, window.location.search, ESS_KEYS)
     // A screen that is a page of its own (/ess/expenses → app/ess/travel) is never a view.
@@ -4085,15 +4055,29 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
       // lib/today/schema.ts — now say 'tab:social'.
       case 'social':        return <Social employeeId={emp.id} />
       case 'funzone':       return <FunZone employeeId={emp.id} />
-      default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
+      default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '-'} />
     }
   }
 
   if (loading) return <div style={{ padding:40, textAlign:'center', color:C.brand, fontFamily:'"DM Sans",sans-serif' }}>Loading portal…</div>
   if (!emp) return <div style={{ padding:40, textAlign:'center', color:C.critical, fontFamily:'"DM Sans",sans-serif' }}>Employee not found.</div>
 
+  // The rail, grouped (see NAV_GROUPS). The phone "More" sheet uses the same groups.
+  const navGroups = groupSections(sections)
+  const avatar = (size: number) => (
+    <div style={{ width:size, height:size, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: Math.round(size * .38), fontWeight:700, flexShrink:0, border:`1px solid ${C.brandEdge}` }}>
+      {emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}
+    </div>
+  )
+  const exitText = exitLabel || (adminMode ? 'Exit Admin' : 'Close')
+  // Where you are, for the top bar: "Payroll › Salary Slip", or "Manage › Recruitment".
+  const crumbs: string[] = adminKey
+    ? ['Manage', NAV_ENTRY_BY_KEY[adminKey]?.label || adminKey]
+    : section.k === 'home' ? ['Home']
+    : sectionItems.length > 1 ? [section.label, meta.label] : [section.label]
+
   return (
-    <div style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+    <div className="ess" style={{ minHeight:'100vh', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
       <LogoStyles />
       {/* The shared stylesheet. It was imported here but never rendered, so
           ESS was running without the header band, the tab and press classes,
@@ -4101,73 +4085,100 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
           sharpness rules — the whole design system the dashboard uses. That
           one missing element is most of why the two halves looked unrelated. */}
       <UIKeyframes />
-      {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
+      {/* Desktop sidebar. Only the employee's own tabs live here — what they administer
+          is the "Manage" row under the top bar. Grouped with small labels (NAV_GROUPS),
+          and the signed-in person is pinned to the bottom with Sign out. */}
       {!isMobile && (
-        <div style={{ width:220, background: C.rail, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0, borderRight:`1px solid ${C.railLine}` }}>
-          {/* Only the employee's own tabs live here now. What they administer moved to
-              the menu band at the top of the page — the two are different kinds of
-              thing, and thirteen personal entries plus up to twenty-five modules in
-              one vertical rail was a scrolling problem rather than a menu. */}
+        <aside className="ess-rail" aria-label="Employee portal">
           {/* The mark carries the wordmark, so "EZER" is not repeated as text.
               "ESS" stays, because which of the two products you are in is the
               one thing the logo does not tell you. */}
-          <div style={{ padding:'0 18px 16px', borderBottom:`1px solid ${C.railLine}`, marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
-            <Logo height={24} />
-            <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
+          <div className="ess-brand">
+            <Logo height={26} />
+            <span className="ess-brand-tag">ESS</span>
           </div>
-          {sections.map(s => (
-            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} href={awayOf(s)} onClick={() => goSection(s)} />
-          ))}
-          {/* A silent empty sidebar is indistinguishable from "you hold nothing", so
-              say when the answer could not be fetched rather than implying it. */}
-          {essMenuError && (
-            <div style={{ margin:'10px 12px', padding:'8px 10px', borderRadius:8, background:'rgba(220,38,38,0.18)',
-                          color:'#FCA5A5', fontSize:10.5, lineHeight:1.5 }}>
-              Could not load your access: {essMenuError}
-            </div>
-          )}
-          {/* Admin button removed from the ESS sidebar for all employees — admins use
-              /dashboard directly. */}
-        </div>
-      )}
-
-      <div style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 70 : 0 }}>
-        {/* Top bar */}
-        <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:Z.nav }}>
-          {/* The tab's own name and badge live in TabHeader below, so this bar carries
-              only what that header can't: the sub-tab you're on, and who you are. */}
-          <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flexShrink:0 }}>
-            {adminKey ? NAV_ENTRY_BY_KEY[adminKey]?.label : isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
-          </div>
-          {/* The modules this person administers, as menus. Desktop only: on a phone
-              the bottom bar and the "More" sheet already carry navigation, and a row
-              of dropdowns at 360px is worse than the sheet. */}
-          {!isMobile && <ManageBand groups={adminGroups} activeKey={adminKey} onPick={goAdmin} />}
-          {adminKey && (
-            <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap', flexShrink:0 }}>← My portal</button>
-          )}
-          {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
-          {/* Employee identity — always visible at the top */}
-          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9, flexShrink:0 }}>
-            {/* Light / dark / system. Three states rather than two, because
-                "follow my system" is a real preference and a two-way switch
-                silently overrides it. The dashboard has had this control all
-                along; ESS never rendered it, so an employee who never opens
-                the dashboard had no way to choose. On mobile it collapses to
-                one cycling button — three segments plus the bell, avatar and
-                name do not fit a phone header. */}
-            <ThemeToggle compact={isMobile} />
-            <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
-            <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
-            {!isMobile && (
-              <div style={{ lineHeight:1.2, textAlign:'right' }}>
-                <div style={{ fontSize:13, fontWeight:700, whiteSpace:'nowrap', maxWidth:220, overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
-                <div style={{ fontSize:11, color:C.muted, fontFamily:'monospace' }}>{emp.emp_code}</div>
+          <nav className="ess-rail-scroll">
+            {navGroups.map((g, gi) => (
+              <div key={g.label ?? gi} className="ess-group">
+                {g.label && <div className="ess-group-label">{g.label}</div>}
+                {g.items.map(s => (
+                  <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} href={awayOf(s)} onClick={() => goSection(s)} />
+                ))}
+              </div>
+            ))}
+            {/* A silent empty sidebar is indistinguishable from "you hold nothing", so
+                say when the answer could not be fetched rather than implying it. */}
+            {essMenuError && (
+              <div style={{ margin:'12px 4px', padding:'8px 10px', borderRadius:8, background:C.criticalTint,
+                            color:C.critical, fontSize:11, lineHeight:1.5 }}>
+                Could not load your access: {essMenuError}
               </div>
             )}
+            {/* Admin button removed from the ESS sidebar for all employees — admins use
+                /dashboard directly. */}
+          </nav>
+          <div className="ess-me">
+            {avatar(36)}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div className="ess-me-name">{emp.full_name}</div>
+              <div className="ess-me-sub">{[emp.emp_code, emp.designation].filter(Boolean).join(' · ')}</div>
+            </div>
+            {onExit && (
+              <button type="button" className="ess-icon-btn" onClick={onExit} title={exitText} aria-label={exitText}>
+                <IconLogout size={17} />
+              </button>
+            )}
           </div>
-          {onExit && <button onClick={onExit} style={{ ...T.btnO, whiteSpace:'nowrap' }}>{adminMode ? 'Exit Admin' : 'Close'}</button>}
-        </div>
+        </aside>
+      )}
+
+      <div className="ess-main" style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 76 : 0 }}>
+        {/* Top bar. Row 1 is the same for everyone: where you are, search, and your
+            controls. Row 2 ("Manage") appears only for someone who administers modules —
+            those menus used to share row 1 and pushed it onto two lines. */}
+        <header className="ess-top" style={{ position:'sticky', top:0, zIndex:Z.nav }}>
+          <div style={{ height: isMobile ? 56 : 64, padding: isMobile ? '0 12px' : '0 24px', display:'flex', alignItems:'center', gap: isMobile ? 8 : 12 }}>
+            {isMobile ? (
+              <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0, flexShrink:1 }}>
+                <Logo height={22} />
+              </div>
+            ) : (
+              <div className="ess-crumbs">
+                {crumbs.map((c, i) => (
+                  <span key={i} style={{ display:'contents' }}>
+                    {i > 0 && <IconChevron size={14} strokeWidth={2} />}
+                    {i === crumbs.length - 1 ? <b>{c}</b> : <span>{c}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* Search sits on the left, beside the page title. */}
+            {!isMobile && <div className="ess-top-search"><FeatureSearch entries={searchEntries} compact /></div>}
+            {adminMode && <span style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:700, whiteSpace:'nowrap', flexShrink:0 }}>Viewing {emp.first_name || emp.full_name}</span>}
+            <div style={{ flex:1 }} />
+            {adminKey && (
+              <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap', flexShrink:0 }}>← My portal</button>
+            )}
+            {!isMobile && headerExtra}
+            <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 6 : 8, flexShrink:0 }}>
+              {/* Light / dark / system. On mobile it collapses to one cycling button. */}
+              <ThemeToggle compact={isMobile} />
+              <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
+              {/* On a phone there is no rail, so the person is here; Sign out is in More. */}
+              {isMobile && avatar(32)}
+            </div>
+            {/* Embedded portals (admin "login as") have no rail card to hold the exit. */}
+            {onExit && !isMobile && adminMode && <button onClick={onExit} style={{ ...T.btnO, whiteSpace:'nowrap' }}>{exitText}</button>}
+          </div>
+          {/* The modules this person administers, as menus. Desktop only: on a phone the
+              "More" sheet lists them. Renders nothing for someone who administers nothing. */}
+          {!isMobile && adminGroups.length > 0 && (
+            <div className="ess-manage">
+              <span className="ess-manage-label">Manage</span>
+              <ManageBand groups={adminGroups} activeKey={adminKey} onPick={goAdmin} />
+            </div>
+          )}
+        </header>
 
         {adminKey ? (
           // The dashboard page renders exactly as it does at /dashboard/<module> —
@@ -4184,8 +4195,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
               // Fun Zone is the same case since the September 2026 redesign. It
               // opens with its own hero — the title, the blurb, Surprise me and
               // the filter chips — so the band above it was a second header
-              // saying the same thing in plainer words: "Fun Zone", "Available",
-              // "Take a break — play a quick game with your team".
+              // saying the same thing in plainer words.
               //
               // SubTabs is no loss either: it returns null below two items, and
               // Fun Zone has exactly one.
@@ -4193,26 +4203,22 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
             ) : (
             // The inbox is a full-bleed tab: three panes that fill the viewport
             // and scroll independently. .ib brings its own width and padding, so
-            // only the header band is padded here — and it now spans the window
-            // like every other section's does.
-            <div style={{ paddingTop: isMobile ? 14 : 18 }}>
-              <div style={{ padding: isMobile ? '0 12px' : '0 22px' }}>
+            // only the heading is padded here.
+            <div style={{ paddingTop: isMobile ? 16 : 22 }}>
+              <div style={{ padding: isMobile ? '0 14px' : '0 28px' }}>
                 <TabHeader s={section} />
               </div>
               {renderView()}
             </div>
             )
           ) : (
-            // Full width, padded. This carried maxWidth:1100 — but it was only
-            // one of FOUR different caps: Today and Social also set 1100 in their
-            // own stylesheets, HRIS used --col:1160px and the Inbox 1480px. Four
-            // numbers meant the portal visibly changed shape from tab to tab on
-            // anything wider than about 1150px. All four are gone; Fun Zone was
-            // the only section that genuinely never had one.
-            // Line length is still protected where it matters, inside the
-            // sections that render prose (Wall of Fame's 70ch, and so on).
-            <div style={{ padding: isMobile ? '14px 12px' : '18px 22px' }}>
-              <TabHeader s={section} search={section.k === 'home' ? <FeatureSearch entries={searchEntries} /> : undefined} />
+            // Full width, padded. One padding for every ESS screen, so the portal keeps
+            // its shape from tab to tab. Home has no heading — its hero is the heading —
+            // and on a phone it opens with the feature search the top bar has no room for.
+            <div className="ez-page-enter" key={section.k} style={{ padding: isMobile ? '16px 14px' : '24px 28px 40px' }}>
+              {section.k === 'home'
+                ? (isMobile ? <FeatureSearch entries={searchEntries} /> : null)
+                : <TabHeader s={section} />}
               <SubTabs items={sectionItems} view={view} go={go} />
               {renderView()}
             </div>
@@ -4224,56 +4230,69 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
       {bellOpen && (
         // No full-screen catcher: it used to swallow the next click, so
         // dismissing this panel and pressing anything else took two clicks.
-        // The panel was absolutely positioned inside that catcher, which
-        // covered the viewport — so `fixed` with the same offsets puts it in
-        // exactly the same place, now that the catcher is gone.
-        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:Z.navMenu, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 60 : 70, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:Z.navMenu, background:C.surface, border: `1px solid ${C.line}`, borderRadius:14, boxShadow:E.floating, padding:'12px 14px' }}>
           <Notifications emp={emp} onChange={refreshUnread} />
         </div>
       )}
 
-      {/* Mobile bottom bar — eleven tabs don't fit a thumb bar, so the four an employee
-          opens daily sit here and the rest are one tap away under More. */}
+      {/* Phone tab bar — the four an employee opens daily, the rest one tap away under More. */}
       {isMobile && (
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop: `1px solid ${C.brandEdge}`, display:'flex', zIndex:Z.nav }}>
-          {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
-            <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? C.brand : C.faint, fontWeight: on ? 600 : 500 }}>
-              <EssIcon k={s.k} size={16} />{s.short}
+        <nav className="ess-tabbar" style={{ zIndex:Z.nav }} aria-label="Main">
+          {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = !adminKey && section.k === k && !moreOpen; return (
+            <button key={k} data-on={on ? '1' : '0'} onClick={() => { setMoreOpen(false); goSection(s) }}>
+              <span className="ess-tab-ic"><EssIcon k={s.k} size={19} strokeWidth={on ? 2 : 1.7} /></span>{s.short}
             </button>
           )})}
-          <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? C.brand : C.faint, fontWeight: moreOpen ? 600 : 500 }}>
-            <div style={{ fontSize:17, lineHeight:1.3 }}>⋯</div>More
+          <button data-on={moreOpen ? '1' : '0'} onClick={() => setMoreOpen(o => !o)}>
+            <span className="ess-tab-ic"><IconMore size={19} strokeWidth={2} /></span>More
           </button>
-        </div>
+        </nav>
       )}
 
-      {/* Mobile "More" sheet — every tab, including the four in the bar, so nothing
-          is reachable from only one place. */}
+      {/* Phone "More" sheet — every tab, grouped like the rail, so nothing is reachable
+          from only one place. Also the team-member picker and Sign out, which the phone
+          top bar has no room for. */}
       {isMobile && moreOpen && (
-        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:Z.overlay, display:'flex', alignItems:'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
-            <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-              {sections.map(s => (
-                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${section.k === s.k ? C.brand : C.brandTint}`, background: section.k === s.k ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:C.ink }}>
-                  <span style={{ display:'flex' }}><EssIcon k={s.k} size={16} /></span>
-                  <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
-                  <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
+        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.45)', zIndex:Z.overlay, display:'flex', alignItems:'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'20px 20px 0 0', padding:'10px 16px 28px', maxHeight:'80vh', overflowY:'auto', boxShadow:E.overlay }}>
+            <div style={{ width:40, height:4, borderRadius:99, background:C.lineStrong, margin:'0 auto 14px' }} />
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'4px 2px 14px', borderBottom:`1px solid ${C.line}`, marginBottom:6 }}>
+              {avatar(40)}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:14, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
+                <div style={{ fontSize:12, color:C.muted }}>{[emp.emp_code, emp.designation].filter(Boolean).join(' · ')}</div>
+              </div>
+              {onExit && (
+                <button type="button" onClick={onExit} style={{ ...T.btnO, display:'flex', alignItems:'center', gap:6, color:C.critical }}>
+                  <IconLogout size={15} />{exitText}
                 </button>
-              ))}
+              )}
             </div>
+            {headerExtra && <div style={{ padding:'8px 0 2px' }}>{headerExtra}</div>}
+            {navGroups.map((g, gi) => (
+              <div key={g.label ?? gi} style={{ marginTop:12 }}>
+                {g.label && <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'.09em', textTransform:'uppercase', color:C.faint, marginBottom:7 }}>{g.label}</div>}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  {g.items.map(s => (
+                    <button key={s.k} className="ess-sheet-tile" data-on={!adminKey && section.k === s.k ? '1' : '0'} onClick={() => goSection(s)}>
+                      <span className="ess-sheet-ic" aria-hidden><EssIcon k={s.k} size={16} /></span>
+                      <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
+                      {s.status === 'soon' && <span className="ess-soon">Soon</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
             {adminGroups.length > 0 && (
               <>
-                <div style={{ fontSize:13, fontWeight:700, margin:'16px 0 10px' }}>What you manage</div>
+                <div style={{ fontSize:13, fontWeight:700, margin:'20px 0 4px' }}>Manage</div>
                 {adminGroups.map(g => (
-                  <div key={g.group} style={{ marginBottom:10 }}>
-                    <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.faint, marginBottom:6 }}>{g.group}</div>
+                  <div key={g.group} style={{ marginTop:10 }}>
+                    <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'.09em', textTransform:'uppercase', color:C.faint, marginBottom:7 }}>{g.group}</div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                       {g.items.map(i => (
-                        <button key={i.key} onClick={() => goAdmin(i.key)}
-                          style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${adminKey === i.key ? C.brand : C.brandTint}`,
-                                   background: adminKey === i.key ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit',
-                                   fontSize:12, textAlign:'left', color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                        <button key={i.key} className="ess-sheet-tile" data-on={adminKey === i.key ? '1' : '0'} onClick={() => goAdmin(i.key)}
+                          style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>
                           {i.label}
                         </button>
                       ))}
@@ -4286,7 +4305,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync 
         </div>
       )}
 
-      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:Z.toast, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
+      {toast && <div role="status" style={{ position:'fixed', bottom: isMobile ? 88 : 24, right:24, zIndex:Z.toast, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:12, padding:'12px 18px', fontSize:13, fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:8 }}>{toast.type==='success' ? <IconCheck size={16} strokeWidth={2.2} /> : <IconAlert size={16} strokeWidth={2} />}{toast.msg}</div>}
     </div>
   )
 }

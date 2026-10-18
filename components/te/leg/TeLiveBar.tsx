@@ -33,7 +33,7 @@ export default function TeLiveBar({ leg, tripName, placeName, onOpen }: {
       <span className="dotlive" aria-hidden />
       <div className="grow">
         <b>{state}</b>
-        <span className="small"> {tripName} · leg {leg.n}: {placeName(leg.from)} → {placeName(leg.to)}</span>
+        <span className="small"> {tripName} · journey {leg.n}: {placeName(leg.from)} → {placeName(leg.to)}</span>
       </div>
       {/* Said plainly: this bar is a pointer, and nothing is being collected
           while the recorder's own screen is closed. */}

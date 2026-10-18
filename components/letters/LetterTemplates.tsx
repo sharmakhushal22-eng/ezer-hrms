@@ -113,7 +113,7 @@ function ResultRow({ r }: { r: GenResult }) {
   return (
     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
       <td style={{ padding: '9px 8px', fontSize: 11, fontFamily: 'monospace', color: C.purpleD, fontWeight: 600 }}>{r.employee_code}</td>
-      <td style={{ padding: '9px 8px', fontSize: 12, color: C.navy }}>{r.employee_name ?? '—'}</td>
+      <td style={{ padding: '9px 8px', fontSize: 12, color: C.navy }}>{r.employee_name ?? '-'}</td>
       <td style={{ padding: '9px 8px' }}>
         <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 999, background: bg, color: fg, fontWeight: 700 }}>{label}</span>
         {r.unknown_tokens && <div style={{ fontSize: 10, color: C.amber, marginTop: 3 }}>{r.unknown_tokens.map(t => `{{${t}}}`).join(', ')}</div>}
@@ -223,7 +223,7 @@ export default function LetterTemplates() {
                 </select>
               </div>
             </div>
-            <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Employee codes — one per line or comma-separated</div>
+            <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Employee codes (one per line or comma-separated)</div>
             <textarea value={codesText} onChange={e => setCodesText(e.target.value)}
               placeholder={'SRS0001\nSRS0002\nSRS0007'}
               style={{ width: '100%', height: 110, padding: '10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, fontFamily: 'monospace', boxSizing: 'border-box', resize: 'vertical' }} />

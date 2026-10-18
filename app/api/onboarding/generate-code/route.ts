@@ -51,8 +51,9 @@ export async function GET(req: NextRequest) {
 }
 
 // ── POST — generate + lock the code (atomic), bridge to employees master ──
-// HR's manual path (it may type a custom code). The four team approvals must be in; the
-// automatic path (lib/onboarding/approvals.ts) runs the same creator on the fourth approval.
+// The HR Manager's step after the three heads have approved and the role is assigned (Role
+// assignment on the card): it may type a custom code. The role assignment is required — it is
+// what gives the new employee their reporting line and ESS access (lib/onboarding/role-assignment.ts).
 export async function POST(req: NextRequest) {
   try {
     const { onboarding_id, employee_code, hr_notes, approved_by, force } = await req.json()
@@ -60,7 +61,11 @@ export async function POST(req: NextRequest) {
     const approvals = await approvalsOf(supa as any, onboarding_id)
     const pending = approvals.filter(a => a.status !== 'APPROVED').map(a => TEAM_LABEL[a.team as Team])
     if (pending.length && !force) {
-      return NextResponse.json({ error: `Waiting on ${pending.join(', ')} approval${pending.length > 1 ? 's' : ''}. The code is generated automatically once all four teams have approved from ESS → Tasks & Approvals.`, pending }, { status: 409 })
+      return NextResponse.json({ error: `Waiting on ${pending.join(', ')} approval${pending.length > 1 ? 's' : ''} (ESS → Tasks & Approvals).`, pending }, { status: 409 })
+    }
+    const { data: ra } = await supa.from('onboarding_candidates').select('role_assignment').eq('id', onboarding_id).maybeSingle()
+    if (!ra?.role_assignment) {
+      return NextResponse.json({ error: 'Assign the role first — press Role assignment on the card and pick the L1, L2 and the ESS role. The employee code follows that.', needs_role: true }, { status: 400 })
     }
     const r = await createEmployeeFromOnboarding(supa as any, { onboardingId: onboarding_id, customCode: employee_code, by: approved_by, notes: hr_notes, actorType: 'HR' })
     if (!r.ok) return NextResponse.json({ error: r.error, employee_code: r.employee_code, employee_synced: r.employee_synced ?? false, sync_error: r.sync_error }, { status: r.status || 500 })

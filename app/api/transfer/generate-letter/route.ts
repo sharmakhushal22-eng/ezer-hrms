@@ -20,7 +20,7 @@ const supa = createClient(
 )
 
 const esc = (s: any) => String(s ?? '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string))
-const fmt = (d: any) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'
+const fmt = (d: any) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'
 
 async function buildLetterHtml(transferId: string): Promise<string | null> {
   const { data: tr } = await supa.from('employee_transfer').select('*').eq('id', transferId).maybeSingle()

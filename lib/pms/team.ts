@@ -84,7 +84,7 @@ export function teamQueue<T extends TeamMember>(
         next: next ?? 'Nothing owed on this one right now.',
         priorityNote: flag === 'NOTICE_PERIOD' && dl !== null
           ? (dl >= 0
-              ? `Last working day in ${dl} ${dl === 1 ? 'day' : 'days'} — after it this record locks and the rating can never be given.`
+              ? `Last working day in ${dl} ${dl === 1 ? 'day' : 'days'}. After it this record locks and the rating can never be given.`
               : 'Last working day has passed. This should already have been rated.')
           : flag === 'EXITED'
             ? 'Already left. Read-only once finalised; the result is emailed before their login closes.'
@@ -101,7 +101,7 @@ export function teamQueue<T extends TeamMember>(
 function nextForRm(m: TeamMember, flag: Flag): string | null {
   if (m.finalised) return null
   if (flag === 'NEW_JOINER') return null
-  if (m.kraCount === 0) return 'No KRAs written yet — they cannot be rated at all until there are.'
+  if (m.kraCount === 0) return 'No KRAs written yet. They cannot be rated at all until there are.'
   if (m.totalWeightage !== 100) return `Their weightages total ${m.totalWeightage}, not 100. Send it back before the one-to-one.`
   if (!m.oneToOneDone) return 'Hold the KRA one-to-one and acknowledge it, so the weightage can lock.'
   if (!m.selfSubmitted) return 'Waiting on their self rating. You cannot rate first.'
@@ -147,9 +147,9 @@ export function finaliseQueue<T extends TeamMember>(
     // rule 6 blocks them behind the self rating. The most fundamental block
     // has to be the one reported.
     if (r.member.finalised) insteadDo = null
-    else if (!allowed) insteadDo = `Your role cannot finalise under this policy — ${whoCanFinalise === 'HOD_ONLY' ? 'the HOD' : 'RM L2 or the HOD'} does.`
-    else if (!r.member.selfSubmitted) insteadDo = 'No self rating on record — the chain has not started, so there is nobody downstream to chase yet.'
-    else if (waiting) insteadDo = 'RM L2 has not submitted. Nudge them — finalising now would skip a step of the chain.'
+    else if (!allowed) insteadDo = `Your role cannot finalise under this policy. ${whoCanFinalise === 'HOD_ONLY' ? 'The HOD' : 'RM L2 or the HOD'} does.`
+    else if (!r.member.selfSubmitted) insteadDo = 'No self rating on record. The chain has not started, so there is nobody downstream to chase yet.'
+    else if (waiting) insteadDo = 'RM L2 has not submitted. Nudge them. Finalising now would skip a step of the chain.'
     return {
       ...r,
       canFinalise: allowed && !waiting && !r.member.finalised && r.member.selfSubmitted,

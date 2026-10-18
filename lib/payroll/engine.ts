@@ -80,7 +80,7 @@ function calcLineFromMonth(
   // who joined on the 16th has total_days 15 and paid_days 15, so dividing by total_days
   // would hand them a full month's salary for half a month on roll.
   const totalDays = num(row.days_in_month) || num(row.total_days)
-  if (totalDays <= 0) return `${code}: month has no days on record — re-sync Employee info`
+  if (totalDays <= 0) return `${code}: month has no days on record. Re-sync Employee info`
 
   // Paid days stay raw in the database for audit — the confirmed formula can go negative
   // when an employee has absences and no leave — but pay is never negative, and nobody is
@@ -291,7 +291,7 @@ export async function processPayrollRun(runId: string, codes: string[] | null = 
     all.push(...batch)
     if (batch.length < 1000) break
   }
-  if (!all.length) return { ...empty, errors: ['This month has no Month Master rows — run Data Sync → Employee info first.'] }
+  if (!all.length) return { ...empty, errors: ['This month has no Month Master rows. Run Data Sync → Employee info first.'] }
 
   // Filtered in memory rather than through .in() — a few hundred rows cost nothing to
   // fetch, and a several-hundred-code list would push the request URL past its limit.
@@ -370,7 +370,7 @@ export async function calculateRun(
   // Everything from AI_CHECKED onward is refused: a payslip that has been approved or
   // paid out must not silently change underneath the employee who received it.
   if (!['OPEN', 'SYNCED', 'ATTENDANCE_LOCKED', 'CALCULATED'].includes(run.status)) {
-    return { error: `This month is ${run.status} — reopen it from Lock / Unlock before recalculating.` }
+    return { error: `This month is ${run.status}. Reopen it from Lock / Unlock before recalculating.` }
   }
   const result = await processPayrollRun(run.id, codes)
   if (!result.processed && result.errors.length) return { error: result.errors[0], result }

@@ -188,7 +188,7 @@ export default function TeHome({ initialClaimId, onExit }: {
    *  which is in the snapshot it was listed from. */
   const openLeg = (tripId: string, legId: string) => {
     const leg = snap.journeys.find(j => j.id === legId)
-    if (!leg) { setToast('That leg is no longer there. Open the trip to see what changed.'); return }
+    if (!leg) { setToast('That journey is no longer there. Open the trip to see what changed.'); return }
     setSheet(null)
     setView({ name: 'leg', tripId, leg })
   }
@@ -371,7 +371,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                 <TeLegLive
                   snap={snap} leg={leg} placeName={placeName}
                   onBack={backToTrip}
-                  onEnded={() => { setToast('Leg ended. Add what it cost.'); reload(); backToTrip() }}
+                  onEnded={() => { setToast('Journey ended. Add what it cost.'); reload(); backToTrip() }}
                   onChanged={message => { setToast(message); reload() }}
                 />
               )
@@ -397,6 +397,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'trip' ? (
             <TeTripDetail
               tripId={view.id}
+              me={snap.me}
               today={snap.today}
               onBack={() => setView({ name: 'trips' })}
               onChanged={message => { setToast(message); reload() }}
@@ -404,6 +405,7 @@ export default function TeHome({ initialClaimId, onExit }: {
               onOpenClaim={id => setView({ name: 'claim', id })}
               onOpenLeg={leg => setView({ name: 'leg', tripId: view.id, leg })}
               onAddLeg={detail => setSheet({ name: 'addLeg', detail })}
+              onAddBill={tripId => setSheet({ name: 'expense', tripId })}
               onClaim={detail => setView({ name: 'tripClaim', trip: detail.trip })}
             />
           ) : null}

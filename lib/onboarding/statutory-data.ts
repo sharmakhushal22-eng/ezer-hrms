@@ -21,6 +21,11 @@ export interface StatutoryData {
   company_name: string; company_address: string; epf_code: string; esic_code: string
   perm_address: string; curr_address: string; perm_pin: string; curr_pin: string
   pf_nominees: Person[]
+  /** Gratuity nominees (Form F), each with the age Form F asks for. */
+  grat_nominees: (Person & { age: string })[]
+  religion: string; designation: string; department: string
+  /** Form F wants the permanent address split: village, thana, sub-division, post office, district, state. */
+  perm_parts: { line1: string; village: string; thana: string; sub_division: string; po: string; city: string; district: string; state: string; pin: string }
   eps_family: Person[]; eps_fallback: Person | null
   esic_prev_ip: string; dispensary: string; esic_applicable: boolean
   family: FamilyMember[]
@@ -38,6 +43,14 @@ export function ddmmyyyy(v: any): string {
   return t
 }
 const joinAddr = (parts: any[]) => parts.map(s).filter(Boolean).join(', ')
+/** Whole years between an ISO date of birth and `at`; '' when unknown. */
+export function ageOf(dob: any, at: Date): string {
+  const m = s(dob).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return ''
+  let a = at.getFullYear() - Number(m[1])
+  if (at.getMonth() + 1 < Number(m[2]) || (at.getMonth() + 1 === Number(m[2]) && at.getDate() < Number(m[3]))) a--
+  return a >= 0 ? String(a) : ''
+}
 
 function addressOf(c: Record<string, any>, p: 'perm_' | 'curr_'): string {
   return joinAddr([c[`${p}line1`], c[`${p}village`], c[`${p}po`] && `PO ${s(c[`${p}po`])}`, c[`${p}thana`] && `PS ${s(c[`${p}thana`])}`, c[`${p}sub_division`], c[`${p}city`], c[`${p}district`], c[`${p}state`], c[`${p}pin`]])
@@ -75,6 +88,12 @@ export function statutoryData(src: StatutorySource): StatutoryData {
   const nominees: Person[] = (Array.isArray(st.pf_nominees) && st.pf_nominees.length ? st.pf_nominees : [{ name: st.nominee_name, relation: st.nominee_relation, dob: st.nominee_dob, share: st.nominee_share, address: st.nominee_address }])
     .filter((n: any) => n && s(n.name))
     .map((n: any) => ({ name: s(n.name), address: s(n.address), dob: ddmmyyyy(n.dob), relation: s(n.relation), share: s(n.share) ? `${s(n.share).replace(/%$/, '')}%` : '' }))
+  const signedAt = src.oc.submitted_at ? new Date(src.oc.submitted_at) : (src.now || new Date())
+  const gratNominees = (Array.isArray(st.grat_nominees) && st.grat_nominees.length ? st.grat_nominees : [{ name: st.grat_nominee_name, relation: st.grat_nominee_relation, dob: st.grat_nominee_dob, share: st.grat_nominee_share || '100', address: st.grat_nominee_address || st.nominee_address }])
+    .filter((n: any) => n && s(n.name))
+    // Form F wants the nominee's full address; a blank one takes the same person's PF-nominee
+    // address, else the employee's permanent address (the family lives there).
+    .map((n: any) => ({ name: s(n.name), address: s(n.address) || nominees.find(x => x.name.toLowerCase() === s(n.name).toLowerCase())?.address || addressOf(c, 'perm_'), dob: ddmmyyyy(n.dob), relation: s(n.relation), share: s(n.share) ? `${s(n.share).replace(/%$/, '')}%` : '', age: ageOf(n.dob, signedAt) }))
   const epsFamily: Person[] = (Array.isArray(st.eps_family) ? st.eps_family : []).filter((m: any) => m && s(m.name)).map((m: any) => ({ name: s(m.name), address: s(m.address), dob: ddmmyyyy(m.dob), relation: s(m.relation) }))
   const fb = st.eps_fallback
   const epsFallback: Person | null = fb && s(fb.name) ? { name: s(fb.name), address: s(fb.address), dob: ddmmyyyy(fb.dob), relation: s(fb.relation) } : null
@@ -91,7 +110,7 @@ export function statutoryData(src: StatutorySource): StatutoryData {
   const prevEmployers = Array.isArray(e.prev_employers) ? e.prev_employers : []
   const prevExit = ddmmyyyy(e.prev_to || prevEmployers[prevEmployers.length - 1]?.to)
   const co = src.company || {}
-  const signed = src.oc.submitted_at ? new Date(src.oc.submitted_at) : (src.now || new Date())
+  const signed = signedAt
   const esicNominee = nominees[0] ? { name: nominees[0].name, relation: nominees[0].relation, address: nominees[0].address || addressOf(c, 'perm_') } : null
 
   return {
@@ -105,7 +124,9 @@ export function statutoryData(src: StatutorySource): StatutoryData {
     doj: ddmmyyyy(src.oc.date_of_joining), emp_code: s(src.oc.employee_code),
     company_name: s(co.company_name), company_address: s(co.reg_office || co.corp_office), epf_code: s(co.epf_code), esic_code: s(co.esic_code),
     perm_address: addressOf(c, 'perm_'), curr_address: c.same_address ? addressOf(c, 'perm_') : addressOf(c, 'curr_'), perm_pin: s(c.perm_pin), curr_pin: c.same_address ? s(c.perm_pin) : s(c.curr_pin),
-    pf_nominees: nominees, eps_family: epsFamily, eps_fallback: epsFallback,
+    pf_nominees: nominees, grat_nominees: gratNominees, eps_family: epsFamily, eps_fallback: epsFallback,
+    religion: s(p.religion), designation: s(src.oc.designation), department: s(src.oc.department),
+    perm_parts: { line1: s(c.perm_line1), village: s(c.perm_village), thana: s(c.perm_thana), sub_division: s(c.perm_sub_division), po: s(c.perm_po), city: s(c.perm_city), district: s(c.perm_district), state: s(c.perm_state), pin: s(c.perm_pin) },
     esic_prev_ip: s(st.esic_details?.prev_ip), dispensary: s(st.esic_details?.dispensary), esic_applicable: !!(src.oc.esic_applicable || st.esic_applicable),
     family, esic_nominee: esicNominee,
     date: ddmmyyyy(signed.toISOString()), place: town,

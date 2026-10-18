@@ -25,7 +25,7 @@ export default function BadgeCabinet({ badges, size = 118 }: { badges: MyBadge[]
   if (!badges.length) {
     return (
       <Empty icon="medal" title="Your cabinet is empty" compact>
-        Badges arrive from awards, company values and service milestones — the last of those
+        Badges arrive from awards, company values and service milestones, the last of those
         on their own, from your joining date.
       </Empty>
     )

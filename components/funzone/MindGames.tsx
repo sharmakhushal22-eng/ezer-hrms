@@ -106,7 +106,7 @@ function Tiles({ onBack }: Props) {
   return (
     <Frame code="tiles" onBack={onBack} confetti={won ? round : 0}
       aside={<><Stat label="score" value={score} hot bump /><Stat label="best" value={best} /></>}>
-      <Status text={won ? `You made ${TILES_GOAL}!` : stuck ? `No moves left — top tile ${top}` : `Top tile ${top}`}
+      <Status text={won ? `You made ${TILES_GOAL}!` : stuck ? `No moves left. Top tile ${top}` : `Top tile ${top}`}
               tone={won ? 'win' : stuck ? 'lose' : undefined} />
       <div className="t48" onPointerDown={onDown} onPointerUp={onUp} role="grid" aria-label="2048 board">
         {grid.map((v, i) => (
@@ -178,7 +178,7 @@ function Echo({ onBack }: Props) {
 
   const text = phase === 'idle' ? 'Press start and watch closely.'
     : phase === 'show' ? 'Watch…'
-    : phase === 'input' ? `Your turn — step ${at + 1} of ${seq.length}`
+    : phase === 'input' ? `Your turn: step ${at + 1} of ${seq.length}`
     : `Missed. You reached ${seq.length - 1}.`
 
   return (
@@ -234,7 +234,7 @@ function QuickDraw({ onBack }: Props) {
     ready:  ['Tap to start', `${REFLEX_ROUNDS} rounds. Wait for green.`],
     wait:   ['Wait…', 'Not yet'],
     go:     ['TAP!', 'Now'],
-    early:  ['Too soon', 'That was a false start — tap to try again'],
+    early:  ['Too soon', 'That was a false start. Tap to try again'],
     result: [`${last} ms`, `${reflexVerdict(last)} · tap for round ${times.length + 1}`],
     done:   [`${avg} ms`, `Average of ${REFLEX_ROUNDS} · ${reflexVerdict(avg)} · tap to go again`],
   }
@@ -242,7 +242,7 @@ function QuickDraw({ onBack }: Props) {
   return (
     <Frame code="reflex" onBack={onBack} confetti={phase === 'done' && avg < 300 ? times.length + avg : 0}
       aside={<><Stat label="round" value={`${Math.min(times.length + (phase === 'done' ? 0 : 1), REFLEX_ROUNDS)}/${REFLEX_ROUNDS}`} />
-               <Stat label="best ms" value={best ?? '—'} hot /></>}>
+               <Stat label="best ms" value={best ?? '-'} hot /></>}>
       <button type="button" className={cx('reflex', phase)} onPointerDown={press}
               onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); press() } }}>
         <b>{face[phase][0]}</b><span>{face[phase][1]}</span>
@@ -340,7 +340,7 @@ function Scramble({ onBack }: Props) {
           <div className="tiles-row">{'PAYROLL'.split('').map((c, i) => (
             <span key={i} className="ltile" style={{ '--i': i } as CSSProperties}>{c}</span>))}
           </div>
-          <div className="fz-hint">You get {SCRAMBLE_SECONDS} seconds. Type each word — it moves on by itself when it is right.</div>
+          <div className="fz-hint">You get {SCRAMBLE_SECONDS} seconds. Type each word. It moves on by itself when it is right.</div>
           <button type="button" className="fz-key lg" onClick={start}>Start</button>
         </>
       )}
@@ -374,7 +374,7 @@ function SlidePuzzle({ onBack }: Props) {
   // Tiles are rendered in VALUE order so each keeps its element and glides.
   return (
     <Frame code="slide" onBack={onBack} confetti={solved ? round : 0}
-      aside={<><Stat label="moves" value={moves} hot bump /><Stat label="best" value={best ?? '—'} /></>}>
+      aside={<><Stat label="moves" value={moves} hot bump /><Stat label="best" value={best ?? '-'} /></>}>
       <Status text={solved ? `Solved in ${moves} moves` : 'Tiles next to the gap can move'} tone={solved ? 'win' : undefined} />
       <div className="slide" role="group" aria-label="Slide puzzle">
         {[1, 2, 3, 4, 5, 6, 7, 8].map(v => {
@@ -495,7 +495,7 @@ function ColourClash({ onBack }: Props) {
       aside={<><Stat label="right" value={`${right}/${CLASH_ROUNDS}`} hot bump /><Stat label="streak" value={streak} bump /></>}>
       {phase === 'play' && card ? (
         <>
-          <div className="fz-hint">Card {n + 1} of {CLASH_ROUNDS} — tap the colour of the ink</div>
+          <div className="fz-hint">Card {n + 1} of {CLASH_ROUNDS}: tap the colour of the ink</div>
           <div className={cx('clash-word', `ink-${CLASH_COLOURS[card.ink].key}`, wrong && 'shake')}
                key={n} aria-label={`The word ${CLASH_COLOURS[card.word].name}`}>
             {CLASH_COLOURS[card.word].name.toUpperCase()}
@@ -520,7 +520,7 @@ function ColourClash({ onBack }: Props) {
       ) : (
         <>
           <div className="clash-word ink-blue">RED</div>
-          <div className="fz-hint">That one is <b>Blue</b>. {CLASH_ROUNDS} cards — be quick and be right.</div>
+          <div className="fz-hint">That one is <b>Blue</b>. {CLASH_ROUNDS} cards. Be quick and be right.</div>
           <button type="button" className="fz-key lg" onClick={start}>Start</button>
         </>
       )}
@@ -693,7 +693,7 @@ function Minesweeper({ onBack }: Props) {
   return (
     <Frame code="mines" onBack={onBack} confetti={won ? round : 0}
       aside={<><Stat label="mines left" value={MINES_COUNT - flagged} hot /><Stat label="seconds" value={secs} /></>}>
-      <Status text={won ? `Field cleared in ${secs} s` : boom !== null ? 'Boom. That one was a mine.' : mines.length ? 'Right-click or use flag mode to mark a mine' : 'Tap anywhere to start — the first square is always safe'}
+      <Status text={won ? `Field cleared in ${secs} s` : boom !== null ? 'Boom. That one was a mine.' : mines.length ? 'Right-click or use flag mode to mark a mine' : 'Tap anywhere to start. The first square is always safe'}
               tone={won ? 'win' : boom !== null ? 'lose' : undefined} />
       <div className="toggle" role="group" aria-label="Tap action">
         <button type="button" aria-pressed={!flagMode} onClick={() => setFlagMode(false)}>⛏ Dig</button>

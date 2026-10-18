@@ -175,6 +175,10 @@ export default function LeaveSection({ emp, notify }: {
   const [cancelReason, setCancelReason] = useState('')
   const [splitOffer, setSplitOffer] = useState<SplitOffer | null>(null)
   const [typeNote, setTypeNote] = useState('')
+  // The side lists show three each; the rest is one click away, so Upcoming
+  // holidays is not pushed below the fold by a long request history.
+  const [allReq, setAllReq] = useState(false)
+  const [allHol, setAllHol] = useState(false)
   // Motion state. `lit` flips one tick after the data lands so the balance
   // meters transition up from zero instead of appearing at full width; `dir`
   // is which way the month grid should slide in.
@@ -324,7 +328,7 @@ export default function LeaveSection({ emp, notify }: {
     if (isNonWorking(key)) {
       const h = holByDate.get(key)
       const when = fromIso(key).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
-      setTypeNote(`${when} is ${h ? h.description : 'a weekly off'} — leave cannot start or end on it.`)
+      setTypeNote(`${when} is ${h ? h.description : 'a weekly off'}. Leave cannot start or end on it.`)
       return
     }
     setTypeNote('')
@@ -385,7 +389,7 @@ export default function LeaveSection({ emp, notify }: {
   }
 
   const chooseType = (t: LeaveType) => {
-    if (!t.eligible) { setTypeNote(`${t.name} — ${t.reason || 'not available to you'}.`); return }
+    if (!t.eligible) { setTypeNote(`${t.name}: ${t.reason || 'not available to you'}.`); return }
     setTypeNote('')
     // Unchanged: switching type clears any half-day flag, so a stale half-day
     // can never survive onto a type that forbids it.
@@ -518,7 +522,7 @@ export default function LeaveSection({ emp, notify }: {
           <div>
             <p className="ezlv-hero-label" id="ezlv-bal-h">Leave balance · {data.fyLabel}</p>
             <p className="ezlv-hero-total">
-              <b>{data.balances.length ? heroTotal : '—'}</b>
+              <b>{data.balances.length ? heroTotal : '-'}</b>
               <span>{data.balances.length ? 'days available' : 'nothing loaded yet'}</span>
             </p>
           </div>
@@ -685,7 +689,7 @@ export default function LeaveSection({ emp, notify }: {
                           style={{ '--lv-d': `${sel && !hover ? sweep(key) : 0}ms` } as React.CSSProperties}
                           tabIndex={key === focusDay ? 0 : -1}
                           aria-pressed={sel}
-                          aria-label={`${fromIso(key).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}${h ? ` — ${h.description}` : ''}${past ? ' — already passed' : ''}`}
+                          aria-label={`${fromIso(key).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}${h ? `, ${h.description}` : ''}${past ? ', already passed' : ''}`}
                           onFocus={() => setFocusDay(key)}
                           onMouseEnter={() => { if (!past && form.from_date) setHover(key) }}
                           onClick={() => pickDay(key)}
@@ -720,7 +724,7 @@ export default function LeaveSection({ emp, notify }: {
                 <div className="ezlv-summary-top">
                   <span className="ezlv-summary-range">{rangeLabel(form.from_date, form.to_date)}</span>
                   <span className="ezlv-summary-days">
-                    {estimate ? `${estimate.working} day${estimate.working === 1 ? '' : 's'}` : '—'}
+                    {estimate ? `${estimate.working} day${estimate.working === 1 ? '' : 's'}` : '-'}
                   </span>
                 </div>
                 {estimate && (
@@ -819,7 +823,7 @@ export default function LeaveSection({ emp, notify }: {
             </div>
             {!data.applications.length ? (
               <div className="ezlv-empty"><b>No requests yet.</b><br />Anything you apply for will show here with its status.</div>
-            ) : data.applications.map((a: any) => {
+            ) : <>{(allReq ? data.applications : data.applications.slice(0, PEEK)).map((a: any) => {
               const status = String(a.status || '').toUpperCase()
               const half = a.half_day
               return (
@@ -911,6 +915,12 @@ export default function LeaveSection({ emp, notify }: {
                 </div>
               )
             })}
+            {data.applications.length > PEEK && (
+              <button type="button" className="ezlv-more" aria-expanded={allReq} onClick={() => setAllReq(v => !v)}>
+                {allReq ? 'Show fewer' : `Show all ${data.applications.length} requests`}
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ transform: allReq ? 'rotate(180deg)' : 'none' }}><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+            )}</>}
           </section>
 
           {/* ══ Holidays ══════════════════════════════════════════════════ */}
@@ -928,7 +938,7 @@ export default function LeaveSection({ emp, notify }: {
               </div>
             ) : (() => {
               let lastMonth = ''
-              return upcoming.map((h: any, i: number) => {
+              return <>{(allHol ? upcoming : upcoming.slice(0, PEEK)).map((h: any, i: number) => {
                 const d = fromIso(h.holiday_date)
                 const mon = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
                 const head = mon !== lastMonth ? (lastMonth = mon) : null
@@ -953,7 +963,13 @@ export default function LeaveSection({ emp, notify }: {
                     </div>
                   </div>
                 )
-              })
+              })}
+              {upcoming.length > PEEK && (
+                <button type="button" className="ezlv-more" aria-expanded={allHol} onClick={() => setAllHol(v => !v)}>
+                  {allHol ? 'Show fewer' : `Show all ${upcoming.length} holidays`}
+                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ transform: allHol ? 'rotate(180deg)' : 'none' }}><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
+              )}</>
             })()}
           </section>
         </div>
@@ -963,6 +979,9 @@ export default function LeaveSection({ emp, notify }: {
 }
 
 // ── Scoped stylesheet ──────────────────────────────────────────────────────
+/** How many requests / holidays the side lists show before "Show all". */
+const PEEK = 3
+
 const CSS = `
 .ezlv {
   --lv-gap: 12px;
@@ -994,15 +1013,28 @@ const CSS = `
   --lv-info-tint: var(--ez-info-tint, #F0F9FF);
   --lv-font: var(--ez-font, "DM Sans", "Segoe UI", system-ui, sans-serif);
 
-  /* The hero is the one saturated object in the section. Two fixed gradients
-     rather than tokens, because brand-on-brand inverts in the dark theme and a
-     bright panel in a dark portal reads as a bug. */
-  --lv-hero: linear-gradient(135deg, #0E2470 0%, #1D4ED8 46%, #4189FB 100%);
-  --lv-hero-ink: #FFFFFF;
-  --lv-hero-sub: rgba(255, 255, 255, .84);
-  --lv-hero-fill: rgba(255, 255, 255, .17);
-  --lv-hero-edge: rgba(255, 255, 255, .26);
-  --lv-hero-shadow: 0 2px 4px rgba(10, 24, 66, .34), 0 18px 40px -14px rgba(23, 62, 175, .62);
+  /* The hero, LIGHT: the portal's soft hero surface (white into the brand tint,
+     ink text), the same one Home, Attendance and Profile open with. It was a
+     saturated blue slab — one of four different loud banners across the
+     portal. Dark keeps its own fixed navy below, because brand-on-brand
+     inverts there and a bright panel in a dark portal reads as a bug. */
+  --lv-hero:
+    radial-gradient(560px 240px at 100% 0%, rgba(99, 102, 241, .20) 0%, transparent 65%),
+    radial-gradient(380px 200px at 0% 100%, rgba(14, 165, 233, .16) 0%, transparent 65%),
+    linear-gradient(135deg, var(--ez-surface) 0%, color-mix(in srgb, var(--ez-brand) 7%, var(--ez-surface)) 100%);
+  --lv-hero-ink: var(--ez-ink);
+  --lv-hero-sub: var(--ez-muted);
+  --lv-hero-fill: var(--ez-surface);
+  --lv-hero-edge: rgba(255, 255, 255, .85);
+  --lv-hero-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 10px 28px -20px rgba(29, 78, 216, .45);
+  --lv-hero-hover: var(--ez-brand-tint);
+  --lv-hero-chip: var(--ez-brand-tint);
+  --lv-hero-chip-ink: var(--ez-brand);
+  --lv-hero-track: var(--ez-sunken);
+  --lv-hero-bar: var(--ez-brand);
+  --lv-hero-ok: var(--ez-positive);
+  --lv-hero-warn: var(--ez-warning);
+  --lv-hero-bad: var(--ez-critical);
 
   font-family: var(--lv-font);
   font-size: 13px;
@@ -1019,6 +1051,14 @@ const CSS = `
     --lv-hero-fill: rgba(255, 255, 255, .085);
     --lv-hero-edge: rgba(255, 255, 255, .15);
     --lv-hero-shadow: 0 2px 4px rgba(0, 0, 0, .55), 0 18px 40px -14px rgba(0, 0, 0, .75);
+    --lv-hero-hover: rgba(255, 255, 255, .22);
+    --lv-hero-chip: rgba(255, 255, 255, .2);
+    --lv-hero-chip-ink: var(--lv-hero-ink);
+    --lv-hero-track: rgba(255, 255, 255, .18);
+    --lv-hero-bar: rgba(255, 255, 255, .95);
+    --lv-hero-ok: rgba(110, 231, 183, 1);
+    --lv-hero-warn: rgba(252, 211, 77, 1);
+    --lv-hero-bad: rgba(252, 165, 165, 1);
   }
 }
 :root[data-ez-theme="dark"] .ezlv {
@@ -1028,6 +1068,14 @@ const CSS = `
   --lv-hero-fill: rgba(255, 255, 255, .085);
   --lv-hero-edge: rgba(255, 255, 255, .15);
   --lv-hero-shadow: 0 2px 4px rgba(0, 0, 0, .55), 0 18px 40px -14px rgba(0, 0, 0, .75);
+  --lv-hero-hover: rgba(255, 255, 255, .22);
+  --lv-hero-chip: rgba(255, 255, 255, .2);
+  --lv-hero-chip-ink: var(--lv-hero-ink);
+  --lv-hero-track: rgba(255, 255, 255, .18);
+  --lv-hero-bar: rgba(255, 255, 255, .95);
+  --lv-hero-ok: rgba(110, 231, 183, 1);
+  --lv-hero-warn: rgba(252, 211, 77, 1);
+  --lv-hero-bad: rgba(252, 165, 165, 1);
 }
 
 .ezlv *,
@@ -1108,7 +1156,7 @@ const CSS = `
   cursor: pointer;
   transition: background .15s ease;
 }
-.ezlv-hero-jump:hover { background: rgba(255, 255, 255, .22); }
+.ezlv-hero-jump:hover { background: var(--lv-hero-hover); }
 
 .ezlv-tiles {
   display: grid;
@@ -1155,25 +1203,25 @@ const CSS = `
   letter-spacing: .04em;
   padding: 2px 6px;
   border-radius: var(--lv-pill);
-  background: rgba(255, 255, 255, .2);
-  color: var(--lv-hero-ink);
+  background: var(--lv-hero-chip);
+  color: var(--lv-hero-chip-ink);
 }
 .ezlv-meter {
   height: 4px;
   border-radius: var(--lv-pill);
-  background: rgba(255, 255, 255, .18);
+  background: var(--lv-hero-track);
   overflow: hidden;
 }
 .ezlv-meter > i {
   display: block;
   height: 100%;
   border-radius: var(--lv-pill);
-  background: #fff;
+  background: var(--lv-hero-bar);
   transition: width .35s cubic-bezier(.4, 0, .2, 1);
 }
-.ezlv-meter > i.is-ok { background: #6EE7B7; }
-.ezlv-meter > i.is-warn { background: #FCD34D; }
-.ezlv-meter > i.is-bad { background: #FCA5A5; }
+.ezlv-meter > i.is-ok { background: var(--lv-hero-ok); }
+.ezlv-meter > i.is-warn { background: var(--lv-hero-warn); }
+.ezlv-meter > i.is-bad { background: var(--lv-hero-bad); }
 
 .ezlv-hero-empty {
   margin-top: 14px;
@@ -1534,7 +1582,9 @@ const CSS = `
 
 .ezlv-day {
   position: relative;
-  aspect-ratio: 1 / 1;
+  /* A fixed height, not a square: on a wide panel square cells made each week 70px
+     tall and the month ran off the screen. */
+  height: 42px;
   min-height: 38px;
   display: grid;
   place-items: center;
@@ -1581,11 +1631,11 @@ const CSS = `
 .ezlv-day:disabled.is-past {
   background: transparent;
   color: var(--lv-faint);
-  opacity: .38;
+  /* Quiet, not crossed out: a struck-through month read as an error, and at .38 the
+     dates were unreadable. Disabled + muted is enough to say "not selectable". */
+  opacity: .55;
   font-weight: 500;
   cursor: not-allowed;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
 }
 .ezlv-day:disabled.is-past::before { background: var(--lv-faint); }
 .ezlv-day:disabled { cursor: not-allowed; }
@@ -1876,6 +1926,14 @@ const CSS = `
 .ezlv-ghost:hover { color: var(--lv-ink); border-color: var(--lv-faint); }
 .ezlv-ghost.is-danger { color: var(--lv-bad); border-color: var(--lv-bad); }
 .ezlv-ghost:disabled { opacity: .5; cursor: not-allowed; }
+.ezlv-more {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 34px; margin-top: 8px;
+  border: 1px dashed var(--lv-line-strong); border-radius: var(--lv-r-md); background: transparent;
+  color: var(--lv-brand); font: 600 12px var(--lv-font); cursor: pointer; transition: background .14s ease, border-color .14s ease;
+}
+.ezlv-more:hover { background: var(--lv-brand-tint); border-color: var(--lv-brand-edge); }
+.ezlv-more:focus-visible { outline: 2px solid var(--lv-brand); outline-offset: 2px; }
+.ezlv-more svg { transition: transform .18s ease; }
 .ezlv-confirm { font-size: 11px; color: var(--lv-bad); font-weight: 600; }
 
 /* ── Holidays ───────────────────────────────────────────────────────────── */
@@ -2123,10 +2181,13 @@ const CSS = `
 .ezlv-req::after {
   content: "";
   position: absolute;
-  inset: 2px -9px;
-  border-radius: var(--lv-r-sm);
-  background: linear-gradient(90deg, var(--lv-tint, transparent) 0%, transparent 58%);
+  inset: 3px -8px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--lv-tint, transparent) 0%, transparent 70%);
   pointer-events: none;
+  /* BEHIND the row's text. It had no z-index, so — being painted after the row's
+     children — it lay over them and every request read as faded. */
+  z-index: var(--ez-z-base);
 }
 
 .ezlv-req::before,
@@ -2143,7 +2204,11 @@ const CSS = `
 .ezlv-req:hover::before,
 .ezlv-hol:hover::before { opacity: 1; }
 .ezlv-req > *,
-.ezlv-hol > * { position: relative; }
+.ezlv-hol > * { position: relative; z-index: var(--ez-z-raised); }
+.ezlv-req::before, .ezlv-hol::before { z-index: var(--ez-z-base); }
+.ezlv-req { padding: 12px 0; }
+.ezlv-req-dates { font-size: 13.5px; }
+.ezlv-req-sub { font-size: 12px; color: var(--lv-soft); }
 
 /* ── Narrow ─────────────────────────────────────────────────────────────── */
 

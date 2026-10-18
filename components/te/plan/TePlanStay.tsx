@@ -1,0 +1,152 @@
+'use client'
+// components/te/plan/TePlanStay.tsx — "do you need a stay?" and "will you spend
+// on food?", asked while planning.
+//
+// THE TWO QUESTIONS ARE SHAPED DIFFERENTLY ON PURPOSE.
+//
+// A STAY can be planned, so it is asked properly. Yes opens three rows and the
+// employee names hotels they would be happy with — a name, where it is, and
+// the page they found it on. Three, because one suggestion is really a demand
+// and the desk needs room to find a rate. Fewer than three is allowed: a trip
+// should not be held up because somebody could only find two they liked, and
+// the approver is told how many were given.
+//
+// FOOD cannot be planned, so it is not asked for. Nobody knows on Monday where
+// they will eat on Thursday, and a number typed now would be invented. Saying
+// yes shows the budget the company has ALREADY set for this trip — the per-day
+// food limit for the employee's grade and the city they are in, summed over
+// the days, which an admin edits under Policy as "Food a day". Then the real
+// bills arrive during the trip and come off it. There is nothing here for the
+// employee to fill in, and that is the point.
+//
+// NOTHING HERE DECIDES MONEY. The trip's hotel estimate stays what the engine
+// computed from the grade and city limits; the prices typed against the three
+// hotels are there for the desk and the approver to read, not to re-price the
+// trip. Saying no to a stay does remove the hotel line, because then there is
+// no stay to pay for.
+import type { PlannerDraft } from '@/lib/te/trip-draft'
+import { badUrl, platformOf, stayOptionsNote, STAY_OPTIONS_WANTED } from '@/lib/te/trip-stay'
+import { rs } from '@/lib/te/format'
+import TeIcon from '../TeIcon'
+
+export default function TePlanStay({ draft, foodBudget, nights, edit }: {
+  draft: PlannerDraft
+  /** The trip's meals estimate: the budget, already computed. */
+  foodBudget: number
+  /** Nights away, for the hint under the stay question. */
+  nights: number
+  edit: (patch: Partial<PlannerDraft>) => void
+}) {
+  const note = draft.stayWanted ? stayOptionsNote(draft.stayOptions) : null
+
+  const setOption = (i: number, patch: Partial<PlannerDraft['stayOptions'][number]>) =>
+    edit({ stayOptions: draft.stayOptions.map((o, j) => (j === i ? { ...o, ...patch } : o)) })
+
+  return (
+    <div className="stack">
+      {/* ── the stay ── */}
+      <div className="card flat tint">
+        <div className="ch">
+          <h3>Do you need a place to stay?</h3>
+          {nights > 0 ? <span className="chip plain">{nights === 1 ? '1 night away' : `${nights} nights away`}</span> : null}
+        </div>
+
+        <div className="seg" role="group" aria-label="Do you need a stay">
+          <button type="button" aria-pressed={draft.stayWanted === true} onClick={() => edit({ stayWanted: true })}>Yes</button>
+          <button type="button" aria-pressed={draft.stayWanted === false} onClick={() => edit({ stayWanted: false })}>No</button>
+        </div>
+
+        {draft.stayWanted === false ? (
+          <p className="small muted">No hotel on this trip, so none is estimated for it.</p>
+        ) : null}
+
+        {draft.stayWanted ? (
+          <>
+            <p className="small muted">
+              Name {STAY_OPTIONS_WANTED} hotels you would be happy with and paste the page you found each on.
+              The Travel Desk picks one and books it.
+            </p>
+
+            <div className="stack sm">
+              {draft.stayOptions.map((o, i) => {
+                const site = platformOf(o.url)
+                return (
+                  <div key={i} className="card flat">
+                    <div className="ch">
+                      <h4>Hotel {i + 1}{i === 0 ? ' — your first choice' : ''}</h4>
+                      {site ? <span className="chip plain">{site}</span> : null}
+                    </div>
+                    <div className="form">
+                      <label className="fld"><span>Hotel</span>
+                        <input value={o.name} placeholder="The name of the hotel"
+                          onChange={e => setOption(i, { name: e.target.value })} />
+                      </label>
+                      <label className="fld"><span>Where it is</span>
+                        <input value={o.location} placeholder="Area, or near what"
+                          onChange={e => setOption(i, { location: e.target.value })} />
+                      </label>
+                      <label className="fld full"><span>Link</span>
+                        <input value={o.url} placeholder="https://www.makemytrip.com/hotels/…"
+                          onChange={e => setOption(i, { url: e.target.value })} />
+                        {badUrl(o.url)
+                          ? <small className="bad">That does not look like a web address. Paste the whole link, starting with https://</small>
+                          : <small>Any booking site. The desk and your approver can open it.</small>}
+                      </label>
+                      <label className="fld"><span>A night, roughly (₹)</span>
+                        <input type="number" min={0} value={o.price ?? ''}
+                          onChange={e => setOption(i, { price: e.target.value === '' ? '' : Number(e.target.value) })} />
+                        <small>Optional. For the desk to compare; it does not change the trip estimate.</small>
+                      </label>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {note ? (
+              <div className={note.warn ? 'note warn' : 'note'}>
+                <TeIcon name={note.warn ? 'warn' : 'check'} size="sm" />
+                <span>{note.text}</span>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+
+      {/* ── food ── */}
+      <div className="card flat tint">
+        <div className="ch"><h3>Will you spend on food?</h3></div>
+
+        <div className="seg" role="group" aria-label="Will you spend on food">
+          <button type="button" aria-pressed={draft.foodWanted === true} onClick={() => edit({ foodWanted: true })}>Yes</button>
+          <button type="button" aria-pressed={draft.foodWanted === false} onClick={() => edit({ foodWanted: false })}>No</button>
+        </div>
+
+        {draft.foodWanted ? (
+          <div className="note">
+            <TeIcon name="info" size="sm" />
+            <span>
+              {foodBudget > 0 ? (
+                <>
+                  {/* The explicit space survives JSX's whitespace trimming next to an element. */}
+                  <b>{rs(foodBudget)}</b>{' '}is set aside for food on this trip — your company&rsquo;s daily food limit for
+                  your grade, for each day you are away. There is nothing to fill in now. Add each food and drink bill
+                  while you are travelling, with a remark, and it comes off this budget as you go.
+                </>
+              ) : (
+                <>
+                  No food budget applies to this trip yet. It is worked out from your company&rsquo;s daily food limit
+                  once the dates and places are set.
+                </>
+              )}
+            </span>
+          </div>
+        ) : null}
+
+        {draft.foodWanted === false ? (
+          <p className="small muted">No food bills expected. You can still add one later if that changes.</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}

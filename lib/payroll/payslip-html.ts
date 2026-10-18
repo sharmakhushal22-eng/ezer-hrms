@@ -18,7 +18,7 @@ const esc = (v: unknown): string =>
   String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 /** A dash rather than an empty cell: blank reads as "not printed", '—' as "nothing here". */
-const val = (v: unknown): string => { const s = String(v ?? '').trim(); return s ? esc(s) : '—' }
+const val = (v: unknown): string => { const s = String(v ?? '').trim(); return s ? esc(s) : '-' }
 
 const rows2 = (list: [string, string | number][], bold: string[] = []) =>
   list.map(([l, v]) =>
@@ -38,7 +38,7 @@ export function renderPayslipHtml(d: PayslipData): string {
   const right: [string, string][] = [
     ['Location', e.location], ['IFSC Code', e.ifsc], ['Bank A/c No.', e.bankAccount], ['PAN', e.pan],
     ['PF No.', e.pfNumber], ['PF UAN.', e.uan], ['ESI No.', e.esiNumber],
-    ['Sub Department', e.subDepartment || '—'], ['Unit', e.unit],
+    ['Sub Department', e.subDepartment || '-'], ['Unit', e.unit],
   ]
   if (e.dol) right.push(['Date of Leaving', e.dol])
 
@@ -49,7 +49,7 @@ export function renderPayslipHtml(d: PayslipData): string {
   }).join('')
 
   const earnRows = d.earnings.map(r =>
-    `<tr><td>${esc(r.label)}</td><td class="n">${r.rate === null ? '—' : esc(inr2(r.rate))}</td>`
+    `<tr><td>${esc(r.label)}</td><td class="n">${r.rate === null ? '-' : esc(inr2(r.rate))}</td>`
     + `<td class="n">${esc(inr2(r.monthly))}</td><td class="n">${esc(inr2(r.arrear))}</td>`
     + `<td class="n">${esc(inr2(r.total))}</td></tr>`).join('')
 
@@ -58,7 +58,7 @@ export function renderPayslipHtml(d: PayslipData): string {
 
   const perqCell = (v: number | null) => v && v > 0 ? inr2(v) : 'NA'
   const perqLine = d.perquisites.car || d.perquisites.driver
-    ? `Perquisites (taxable value, this month) — Car lease : ${perqCell(d.perquisites.car)} &nbsp;&nbsp; Driver : ${perqCell(d.perquisites.driver)}`
+    ? `Perquisites (taxable value, this month): Car lease : ${perqCell(d.perquisites.car)} &nbsp;&nbsp; Driver : ${perqCell(d.perquisites.driver)}`
     : 'Perquisites (Car lease / Driver) : NA'
 
   const tw: [string, number, boolean?][] = [
@@ -82,7 +82,7 @@ export function renderPayslipHtml(d: PayslipData): string {
           + rows2(v.others.map(x => [x.label, inr2(x.amount)] as [string, string]))
           + rows2([['Total Ded Under Ch. VI-A', inr2(v.total)]], ['Total Ded Under Ch. VI-A'])
       })()
-    : `<tr><td>New Regime — only 80CCD(2)</td><td class="n">${esc(inr2(t.chapterVIA))}</td></tr>`
+    : `<tr><td>New Regime: only 80CCD(2)</td><td class="n">${esc(inr2(t.chapterVIA))}</td></tr>`
       + `<tr><td colspan="2">employer NPS is available</td></tr>`
 
   const hraHtml = d.hra ? (() => {
@@ -172,7 +172,7 @@ export function renderPayslipHtml(d: PayslipData): string {
   <div class="foot">
     <div>LWP Count: ${d.attendance.lwp.toFixed(2)}${t.projectedMonths ? ` &nbsp;|&nbsp; Projected months remaining: ${t.projectedMonths}` : ''}</div>
     ${d.footnotes.map(f => `<div class="note">${esc(f)}</div>`).join('')}
-    <div class="sig">This is a computer-generated payslip and does not require a signature. — EZER HRMS</div>
+    <div class="sig">This is a computer-generated payslip and does not require a signature. EZER HRMS</div>
   </div>
 </section>`
 }

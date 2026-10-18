@@ -57,7 +57,8 @@ export default function RootLayout({
             themselves independently because the zoom pill's label changes
             width — "125% ·auto" against "150%" — so any hardcoded offset
             between them would drift as the user zooms. */}
-        <div style={{
+        {/* data-ez-dock: ESS lifts this above its phone tab bar (components/ess/portal.css). */}
+        <div data-ez-dock style={{
           position: 'fixed', right: 14, bottom: 14, zIndex: 99999,
           display: 'flex', alignItems: 'center', gap: 8,
         }}>

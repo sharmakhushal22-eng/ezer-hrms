@@ -148,13 +148,13 @@ function LetterheadCard({
   async function pickFile(f: File) {
     setErr('')
     if (!ACCEPTED_LETTERHEAD_MIME.includes(f.type as any)) { setErr('Only PDF files are accepted for a letterhead.'); return }
-    if (f.size > MAX_LETTERHEAD_BYTES) { setErr('File too large — max 5MB.'); return }
+    if (f.size > MAX_LETTERHEAD_BYTES) { setErr('File too large (max 5MB).'); return }
     let info
     try { info = await readPdfInfo(f) }
-    catch { setErr('Could not read this PDF — it may be corrupted.'); return }
+    catch { setErr('Could not read this PDF. It may be corrupted.'); return }
     // A letterhead must be a single-page template — reject multi-page PDFs.
     if (info.pageCount > 1) {
-      setErr(`This PDF has ${info.pageCount} pages. A letterhead must be a single-page PDF — please upload a 1-page file.`)
+      setErr(`This PDF has ${info.pageCount} pages. A letterhead must be a single-page PDF. Please upload a 1-page file.`)
       return
     }
     setFile(f)
@@ -323,7 +323,7 @@ function SignatoryCard({
   function pickFile(f: File) {
     setErr('')
     if (!ACCEPTED_SIGNATURE_MIME.includes(f.type as any)) { setErr('Only PNG or JPG accepted.'); return }
-    if (f.size > MAX_SIGNATURE_BYTES) { setErr('File too large — max 2MB.'); return }
+    if (f.size > MAX_SIGNATURE_BYTES) { setErr('File too large (max 2MB).'); return }
     const url = URL.createObjectURL(f)
     const im = new Image()
     im.onload = () => { setImgNat({ w: im.naturalWidth, h: im.naturalHeight }); setRawUrl(url); setCropBox({ x: 8, y: 12, w: 84, h: 76 }); setStep('crop') }
@@ -351,7 +351,7 @@ function SignatoryCard({
     if (!rawUrl || !imgNat) return
     const img = new Image()
     try { await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error()); img.src = rawUrl }) }
-    catch { setErr('Crop failed — could not load image.'); return }
+    catch { setErr('Crop failed: could not load image.'); return }
     const sx = cropBox.x / 100 * imgNat.w, sy = cropBox.y / 100 * imgNat.h
     const sw = cropBox.w / 100 * imgNat.w, sh = cropBox.h / 100 * imgNat.h
     const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(sw)); canvas.height = Math.max(1, Math.round(sh))
@@ -448,7 +448,7 @@ function SignatoryCard({
           style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 10, fontSize: 13, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
       </div>
 
-      <UploadZone label={existingPreview ? 'Replace signature image' : 'Upload signature image'} sub="PNG or JPG, max 2MB — then crop & place it" onPick={pickFile} accept="image/png,image/jpeg" />
+      <UploadZone label={existingPreview ? 'Replace signature image' : 'Upload signature image'} sub="PNG or JPG, max 2MB, then crop & place it" onPick={pickFile} accept="image/png,image/jpeg" />
       {existingPreview && (
         <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -471,7 +471,7 @@ function SignatoryCard({
           <div style={modalCard} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: C.greenBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>✂️</div>
-              <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.navy }}>Step 1 — Crop the signature</div>
+              <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.navy }}>Step 1: Crop the signature</div>
               <button onClick={resetFlow} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.muted }}>×</button>
             </div>
             <div style={{ padding: 16, overflowY: 'auto' }}>
@@ -501,7 +501,7 @@ function SignatoryCard({
           <div style={modalCard} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: C.greenBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>📍</div>
-              <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.navy }}>Step 2 — Place on the letterhead</div>
+              <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.navy }}>Step 2: Place on the letterhead</div>
               <button onClick={resetFlow} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.muted }}>×</button>
             </div>
             <div style={{ padding: 16, overflowY: 'auto' }}>
@@ -513,7 +513,7 @@ function SignatoryCard({
                 <div ref={placeRef} style={{ position: 'relative', width: '100%', maxWidth: 320, aspectRatio: `${lhBg.wMm} / ${lhBg.hMm}`, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: TK.surface, boxShadow: '0 3px 14px rgba(30,27,75,0.12)', touchAction: 'none', userSelect: 'none' }}>
                   {lhBg.url
                     ? <iframe title="letterhead" src={`${lhBg.url}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} />
-                    : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: C.muted, textAlign: 'center', padding: 12 }}>No letterhead set at this level — position is relative to an A4 page.</div>}
+                    : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: C.muted, textAlign: 'center', padding: 12 }}>No letterhead set at this level. Position is relative to an A4 page.</div>}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={croppedUrl} alt="signature" draggable={false} onPointerDown={startPlaceDrag}
                     style={{ position: 'absolute', left: `${place.xPct}%`, top: `${place.yPct}%`, width: `${place.wPct}%`, cursor: 'grab', outline: `1.5px dashed ${TK.brand}`, outlineOffset: 1, touchAction: 'none' }} />
@@ -543,7 +543,7 @@ function ResolvedPreview({ letterhead, signatory }: { letterhead: ResolvedLetter
     <div style={{ background: `linear-gradient(135deg,${TK.brandTint},${TK.brandTint})`, border: `1px solid #C4B5FD`, borderRadius: 14, padding: '16px 18px', marginTop: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span style={{ fontSize: 15 }}>✨</span>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em' }}>Effective for this branch — what letters actually use</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em' }}>Effective for this branch: what letters actually use</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>

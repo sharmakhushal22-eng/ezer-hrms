@@ -62,10 +62,10 @@ export default function TeLegMissed({ snap, leg, placeName, onBack, onDone }: {
     try {
       if (choice === 'skip') {
         await te.legSkip(leg.id, fullReason(reason, note))
-        onDone(`Leg ${leg.n} skipped.`)
+        onDone(`Journey ${leg.n} skipped.`)
       } else {
         await te.legNoGps(leg.id, reason, note.trim() || undefined)
-        onDone(`Leg ${leg.n} added without GPS. Add its fare next.`)
+        onDone(`Journey ${leg.n} added without GPS. Add its fare next.`)
       }
     } catch (e) {
       setError(errorText(e)); setBusy(false)
@@ -76,11 +76,11 @@ export default function TeLegMissed({ snap, leg, placeName, onBack, onDone }: {
     <div className="page">
       <div className="row">
         <button type="button" className="btn sm" onClick={onBack}><TeIcon name="back" size="sm" />Trip</button>
-        <span className="mono muted">Leg {leg.n}</span>
+        <span className="mono muted">Journey {leg.n}</span>
       </div>
 
       <div className="card">
-        <div className="eyebrow">Leg {leg.n}</div>
+        <div className="eyebrow">Journey {leg.n}</div>
         <h1 className="tname">{placeName(leg.from)} → {placeName(leg.to)}</h1>
         <p className="muted">Not recorded. {leg.plannedKm ? `${leg.plannedKm} km were planned.` : ''}</p>
       </div>
@@ -100,14 +100,14 @@ export default function TeLegMissed({ snap, leg, placeName, onBack, onDone }: {
               <TeIcon name="alert" />
               <div className="tx">
                 <b>Your company accepts local travel only with a GPS record</b>
-                <p>This leg cannot be added without one. It can be skipped, or the trip recorded again with GPS.</p>
+                <p>This journey cannot be added without one. It can be skipped, or the trip recorded again with GPS.</p>
               </div>
             </div>
           )}
           <button type="button" className="act" onClick={() => { setChoice('skip'); setReason('') }}>
             <span className="ico-b"><TeIcon name="close" /></span>
             <span>
-              <b>I did not travel this leg</b>
+              <b>I did not travel this journey</b>
               <small>Nothing is paid for it. The rest of the trip can still be closed and claimed.</small>
             </span>
           </button>
@@ -139,15 +139,15 @@ export default function TeLegMissed({ snap, leg, placeName, onBack, onDone }: {
             <TeIcon name="info" size="sm" />
             <span>
               {choice === 'skip'
-                ? 'The leg is marked as not travelled and nothing is paid for it.'
-                : `The leg is paid on its planned distance${leg.plannedKm ? ` of ${leg.plannedKm} km` : ''} rather than a recorded one. Your approver sees this reason on the claim.`}
+                ? 'The journey is marked as not travelled and nothing is paid for it.'
+                : `The journey is paid on its planned distance${leg.plannedKm ? ` of ${leg.plannedKm} km` : ''} rather than a recorded one. Your approver sees this reason on the claim.`}
             </span>
           </div>
 
           {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
           <button type="button" className="btn pri wide" disabled={!ready || busy} onClick={go}>
-            {busy ? 'Saving…' : choice === 'skip' ? 'Skip this leg' : 'Add it without GPS'}
+            {busy ? 'Saving…' : choice === 'skip' ? 'Skip this journey' : 'Add it without GPS'}
           </button>
         </div>
       )}

@@ -93,8 +93,8 @@ export function resolvePolicy(policies: Policy[], who: Person): Resolution {
   if (narrowest.length > 1) {
     return { ok: false, candidates: narrowest,
       reason: `${narrowest.length} policies of the same scope claim this person `
-            + `(${narrowest.map(p => p.name).join(', ')}). Exactly one must apply — `
-            + 'narrow one of them or switch it off.' }
+            + `(${narrowest.map(p => p.name).join(', ')}). Exactly one must apply. `
+            + 'Narrow one of them or switch it off.' }
   }
   return { ok: true, policy: narrowest[0] }
 }

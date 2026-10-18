@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     return errorResponse(e, 'Failed to load logs',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
         {
           error:
             `${type.type_name} has no bill to verify against, so the journey must be recorded. ` +
-            'Use Start travel and End travel — a typed distance is not accepted for this mode.',
+            'Use Start travel and End travel. A typed distance is not accepted for this mode.',
           code: 'GPS_REQUIRED',
         },
         { status: 400 }
@@ -317,7 +317,7 @@ export async function POST(req: NextRequest) {
           flag_type: 'DUPLICATE_LEG',
           severity: 'BLOCK',
           message:
-            'Another traveller on this trip has already logged this same journey. Only the vehicle owner can claim a per-kilometre leg — you are a passenger for this one.',
+            'Another traveller on this trip has already logged this same journey. Only the vehicle owner can claim a per-kilometre leg, and you are a passenger for this one.',
         });
       }
     }
@@ -539,7 +539,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     return errorResponse(e, 'Failed to save travel log',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -584,6 +584,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     return errorResponse(e, 'Failed to delete log',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }

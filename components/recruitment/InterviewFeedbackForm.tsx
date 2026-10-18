@@ -130,9 +130,9 @@ export default function InterviewFeedbackForm({
   // Scores + written assessment must be complete before any decision button works.
   function ready(): boolean {
     const missing = FEEDBACK_PARAMS.filter(p => !params[p.k])
-    if (missing.length) { setErr(`${missing.length} parameter(s) not rated — all 8 must be rated.`); return false }
+    if (missing.length) { setErr(`${missing.length} parameter(s) not rated. All 8 must be rated.`); return false }
     const noRemark = FEEDBACK_PARAMS.filter(p => !(remarks[p.k] || '').trim())
-    if (noRemark.length) { setErr(`Remarks are mandatory for every parameter — ${noRemark.length} missing: ${noRemark.map(p => p.n).join(', ')}.`); return false }
+    if (noRemark.length) { setErr(`Remarks are mandatory for every parameter: ${noRemark.length} missing: ${noRemark.map(p => p.n).join(', ')}.`); return false }
     if (!overall.trim()) { setErr('Detailed feedback is mandatory.'); return false }
     setErr(null); return true
   }
@@ -174,7 +174,7 @@ export default function InterviewFeedbackForm({
         {/* questions the MRF raiser wants asked */}
         {!readOnly && Array.isArray(questions) && questions.length > 0 && (
           <div style={{ background:C.infobg, border:`1px solid ${C.infoEdge}`, borderRadius:12, padding:'12px 16px', marginBottom:12 }}>
-            <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.info, marginBottom:8 }}>Questions to ask — from the requisition</div>
+            <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.info, marginBottom:8 }}>Questions to ask (from the requisition)</div>
             <ol style={{ margin:0, paddingLeft:18, display:'grid', gap:4 }}>
               {questions.map((q, i) => <li key={i} style={{ fontSize:12.5, color:C.navy, lineHeight:1.5 }}>{q}</li>)}
             </ol>
@@ -184,7 +184,7 @@ export default function InterviewFeedbackForm({
         {/* parameters */}
         <div style={{ background:C.card, border:`1px solid ${C.line}`, borderRadius:12, padding:16, marginBottom:12 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-            <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.muted }}>Rate all 8 parameters{!readOnly && <span style={{ color:C.dang, textTransform:'none', letterSpacing:0, fontWeight:600 }}> — score and remark are both mandatory</span>}</div>
+            <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.muted }}>Rate all 8 parameters{!readOnly && <span style={{ color:C.dang, textTransform:'none', letterSpacing:0, fontWeight:600 }}>: score and remark are both mandatory</span>}</div>
             <span style={{ fontSize:10, fontWeight:800, padding:'2px 9px', borderRadius:20, background: done===8?C.okbg:C.bg, color: done===8?C.ok:C.muted, border: done===8?'none':`1px solid ${C.line}` }}>{done} of 8 rated</span>
           </div>
           {FEEDBACK_PARAMS.map((p, i) => {
@@ -197,7 +197,7 @@ export default function InterviewFeedbackForm({
                     <div style={{ fontWeight:700, fontSize:13 }}>{p.n}</div>
                     <div style={{ fontSize:11, color:C.muted }}>{p.d}</div>
                   </div>
-                  <div style={{ fontSize:20, fontWeight:800, minWidth:48, textAlign:'right', color: v?tone(v):C.faint }}>{v?`${v}/10`:'—'}</div>
+                  <div style={{ fontSize:20, fontWeight:800, minWidth:48, textAlign:'right', color: v?tone(v):C.faint }}>{v?`${v}/10`:'-'}</div>
                 </div>
                 <div style={{ display:'flex', gap:4, marginTop:10, flexWrap:'wrap' }}>
                   {Array.from({length:10},(_,n)=>n+1).map(n=>(
@@ -207,7 +207,7 @@ export default function InterviewFeedbackForm({
                   ))}
                 </div>
                 {!readOnly ? (
-                  <input value={remarks[p.k]||''} onChange={e=>setRem(p.k,e.target.value)} placeholder="Remarks for this parameter — mandatory"
+                  <input value={remarks[p.k]||''} onChange={e=>setRem(p.k,e.target.value)} placeholder="Remarks for this parameter (mandatory)"
                     style={{ width:'100%', marginTop:9, padding:'8px 10px', fontFamily:font, fontSize:12.5, border:`1px solid ${err && !(remarks[p.k]||'').trim() ? C.dang : C.line}`, borderRadius:8, outline:'none', color:C.navy, boxSizing:'border-box' }} />
                 ) : remarks[p.k] ? (
                   <div style={{ marginTop:8, fontSize:12, color:C.muted }}><b style={{ color:C.purple }}>Remark:</b> {remarks[p.k]}</div>
@@ -220,12 +220,12 @@ export default function InterviewFeedbackForm({
         {/* overall */}
         <div style={{ background:C.card, border:`1px solid ${C.line}`, borderRadius:12, padding:16 }}>
           <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.muted, marginBottom:12 }}>Overall assessment</div>
-          <label style={label}>Detailed feedback{!readOnly && <span style={{ color:C.dang }}> — mandatory</span>}</label>
+          <label style={label}>Detailed feedback{!readOnly && <span style={{ color:C.dang }}> (mandatory)</span>}</label>
           {!readOnly ? (
-            <textarea value={overall} onChange={e=>setOverall(e.target.value)} placeholder="Your full written assessment — what stood out, where the gaps are, and anything the next round should probe."
+            <textarea value={overall} onChange={e=>setOverall(e.target.value)} placeholder="Your full written assessment: what stood out, where the gaps are, and anything the next round should probe."
               style={{ width:'100%', minHeight:88, padding:'9px 11px', fontFamily:font, fontSize:13, border:`1px solid ${C.line}`, borderRadius:8, outline:'none', color:C.navy, resize:'vertical', boxSizing:'border-box' }} />
           ) : (
-            <div style={{ fontSize:13, color:C.navy, whiteSpace:'pre-wrap', lineHeight:1.6 }}>{overall || '—'}</div>
+            <div style={{ fontSize:13, color:C.navy, whiteSpace:'pre-wrap', lineHeight:1.6 }}>{overall || '-'}</div>
           )}
           {/* decision — view mode shows what was decided; fill mode offers the three buttons */}
           {readOnly ? (
@@ -237,12 +237,12 @@ export default function InterviewFeedbackForm({
                   {initial.decision_remark && <div style={{ marginTop:8, fontSize:12.5, color:C.navy, whiteSpace:'pre-wrap' }}><b style={{ color:C.purple }}>Remark:</b> {initial.decision_remark}</div>}
                 </>
               ) : (
-                <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{recomm || '—'}</div>
+                <div style={{ fontSize:13, fontWeight:700, color:C.navy }}>{recomm || '-'}</div>
               )}
             </div>
           ) : (
             <div style={{ marginTop:16 }}>
-              <label style={label}>Your decision <span style={{ color:C.faint, fontWeight:500 }}>— Hold and Reject need a remark</span></label>
+              <label style={label}>Your decision <span style={{ color:C.faint, fontWeight:500 }}>(Hold and Reject need a remark)</span></label>
               {!pending ? (
                 <div style={{ display:'flex', gap:9, flexWrap:'wrap' }}>
                   <button type="button" onClick={() => choose('HOLD')} disabled={submitting} style={decBtn(C.warn, submitting)}>Hold</button>
@@ -252,7 +252,7 @@ export default function InterviewFeedbackForm({
                 </div>
               ) : (
                 <div style={{ border:`1px solid ${DECISION_EDGE[pending]}`, background:DECISION_TINT[pending], borderRadius:11, padding:13 }}>
-                  <div style={{ fontSize:13, fontWeight:800, color:DECISION_COLOR[pending], marginBottom:8 }}>{pending === 'HOLD' ? 'Put the candidate on hold' : 'Reject the candidate'} — add your remark</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:DECISION_COLOR[pending], marginBottom:8 }}>{pending === 'HOLD' ? 'Put the candidate on hold' : 'Reject the candidate'}: add your remark</div>
                   <textarea autoFocus value={dRemark} onChange={e=>setDRemark(e.target.value)} placeholder={pending === 'HOLD' ? 'Why on hold, and what would change the call (e.g. waiting on a comparison, notice period, budget)…' : 'Why the candidate is not a fit for this role…'}
                     style={{ width:'100%', minHeight:70, padding:'9px 11px', fontFamily:font, fontSize:13, border:`1px solid ${C.line}`, borderRadius:8, outline:'none', color:C.navy, resize:'vertical', boxSizing:'border-box', background:C.card }} />
                   <div style={{ display:'flex', gap:9, marginTop:10 }}>
@@ -272,7 +272,7 @@ export default function InterviewFeedbackForm({
       <div style={{ background:C.card, border:`1px solid ${C.line}`, borderRadius:12, padding:16, position:'sticky', top:0 }}>
         <div style={{ fontSize:12, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.muted, marginBottom:10 }}>{readOnly?'Score':'Live score'}</div>
         <div style={{ textAlign:'center', padding:'6px 0 10px' }}>
-          <div style={{ fontSize:42, fontWeight:800, lineHeight:1, color: done?bandColor:C.faint }}>{done?total:'—'}</div>
+          <div style={{ fontSize:42, fontWeight:800, lineHeight:1, color: done?bandColor:C.faint }}>{done?total:'-'}</div>
           <div style={{ fontSize:13, color:C.faint, fontWeight:600 }}>out of 80</div>
           {done>0 && <div style={{ marginTop:9 }}><span style={{ fontSize:11, fontWeight:800, padding:'3px 11px', borderRadius:20, color:bandColor, background:bandTint }}>{bandLabel}</span></div>}
         </div>
@@ -290,7 +290,7 @@ export default function InterviewFeedbackForm({
           return (
             <div key={p.k} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0', fontSize:12, borderBottom:`1px solid ${C.line}` }}>
               <div style={{ color:C.muted, flex:1, paddingRight:8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.n}</div>
-              <div style={{ fontWeight:800, minWidth:32, textAlign:'right', color: v?tone(v):C.faint }}>{v||'—'}</div>
+              <div style={{ fontWeight:800, minWidth:32, textAlign:'right', color: v?tone(v):C.faint }}>{v||'-'}</div>
             </div>
           )
         })}

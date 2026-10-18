@@ -226,8 +226,10 @@
 .te .meter .t{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}
 .te .meter .bar{height:8px;border-radius:99px;background:var(--ez-brand-tint);overflow:hidden}
 .te .meter .bar i{display:block;height:100%;border-radius:99px;background:var(--ez-brand)}
-.te .meter.over .bar i{background:var(--ez-warning)}
-.te .meter.over .bar{background:var(--ez-warning-tint)}
+.te .meter.close .bar i{background:var(--ez-warning)}
+.te .meter.close .bar{background:var(--ez-warning-tint)}
+.te .meter.over .bar i{background:var(--ez-critical)}
+.te .meter.over .bar{background:var(--ez-critical-tint)}
 .te .trk{display:flex;gap:0;align-items:flex-start;overflow-x:auto;padding-bottom:2px}
 .te .trk .st{flex:1 1 0;min-width:86px;display:flex;flex-direction:column;gap:6px;position:relative;font-size:12px;color:var(--ez-muted)}
 .te .trk .st:before{content:"";height:3px;border-radius:3px;background:var(--ez-line);margin-right:4px}
@@ -253,6 +255,22 @@
 .te .li:last-child{border-bottom:0}
 .te .li.click{cursor:pointer}
 .te .li.click:hover{background:var(--ez-brand-tint)}
+/* a row that opens into a panel underneath it, rather than a single line */
+.te .li.col{flex-direction:column;align-items:stretch}
+/* one of several things to pick between: the whole row is the target, not the
+   radio, because a 16px circle is a poor thing to ask somebody to hit */
+.te .pickrow{display:flex;gap:10px;align-items:center;cursor:pointer;padding:10px 12px;border:1px solid var(--ez-line);border-radius:var(--te-r-sm)}
+.te .pickrow:hover{background:var(--ez-brand-tint)}
+.te .pickrow.on{border-color:var(--ez-brand);background:var(--ez-brand-tint)}
+/* the hotel the desk settled on, on the traveller's own trip screen */
+.te .row.picked{background:var(--ez-positive-tint);border-radius:var(--te-r-sm);padding:6px 8px;margin:-6px -8px}
+/* the two "open this in a real map" buttons under the schematic panel */
+.te .maplinks{display:flex;flex-direction:column;gap:5px;margin-top:9px}
+/* a real Google map, where there is a key for one. The height comes from the
+   component so a caller can ask for a taller one; the rest is the frame the
+   schematic panels already use, so the two look like the same thing. */
+.te .gmap{width:100%;border-radius:var(--te-r-sm);overflow:hidden;border:1px solid var(--ez-line);background:var(--ez-sunken)}
+.te .pickrow input{width:16px;height:16px;accent-color:var(--ez-brand);flex:0 0 auto}
 .te .li[aria-current="true"]{background:var(--ez-brand-tint);box-shadow:inset 3px 0 0 var(--ez-brand)}
 .te .li .ico{width:36px;height:36px;border-radius:10px;background:var(--ez-sunken);display:grid;place-items:center;color:var(--ez-ink-soft);flex:none}
 .te .li .amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}

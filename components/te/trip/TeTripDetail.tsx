@@ -13,9 +13,14 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
+import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
+import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
 import { day, errorText, plural, rs, when } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
+import TeFileLink from '../TeFileLink'
+import TeStayRequest from './TeStayRequest'
 import TeTripMap from '../plan/TeTripMap'
+import TeMapLinks from '../plan/TeMapLinks'
 import type { MapPlace } from '@/lib/te/trip-map'
 
 const SCOPE_WORD: Record<TripScope, string> = { local: 'Local', domestic: 'Domestic', international: 'International' }
@@ -37,8 +42,12 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onClaim }: {
+export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
   tripId: Uuid
+  /** The viewer. A trip can now be opened by somebody who did not plan it, so
+   *  "whose claim is this" and "whose trip is this" are no longer the same
+   *  question and the screen has to be told which one it is looking at. */
+  me: Uuid
   today: string
   onBack: () => void
   onChanged: (message: string) => void
@@ -51,6 +60,10 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
   onOpenLeg: (leg: TeLeg) => void
   /** Add a leg the plan did not have. Only while the trip is under way. */
   onAddLeg: (detail: TripDetail) => void
+  /** Open the bill form against this trip. Straight to the form rather than
+   *  via the claim screen: a hotel or a meal is a trip-only category, and this
+   *  is the only place in the product either can be entered. */
+  onAddBill: (tripId: Uuid) => void
   /** The claim for this trip: its lines, what they are worth, and submit. */
   onClaim: (detail: TripDetail) => void
 }) {
@@ -63,6 +76,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
   const [confirming, setConfirming] = useState<'cancel' | 'delete' | null>(null)
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick(n => n + 1), [])
+  const [asking, setAsking] = useState(false)
 
   useEffect(() => {
     let current = true
@@ -85,6 +99,10 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
 
   const t = detail.trip
   const st = t.display
+  // Asking only makes sense on your own trip, and only while there is still a
+  // trip to book for. The SQL refuses the rest (te_booking_request); this is
+  // about not offering a button that is going to be turned down.
+  const canAskStay = !!detail.can?.own && !['CANCELLED', 'REJECTED', 'CLAIMED', 'CLOSED'].includes(t.status)
   const legs = [...detail.legs].sort((a, b) => a.n - b.n)
   const chip = tripChip(t)
   const pname = (id: string) => detail.places[id]?.s ?? ''
@@ -96,6 +114,31 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
   // explicit that the owner is excluded. This is the employee's own screen, so
   // the guard for cancelling, editing and answering is `can.own`.
   const mine = detail.can.own
+  // Taken along on somebody else's trip. `can.own` is already false for them,
+  // so every owner-only action below hides itself; what is missing is the part
+  // the server cannot supply — saying why the screen looks like that, and
+  // leaving open the one thing that IS theirs: their own bills.
+  const note = coTravellerNote(t, me, detail.employee.name)
+  const riding = isCoTraveller(t, me)
+  // "With Asha Rao and 2 others" — who else is on it, whoever is reading.
+  const withWho = withText(t, me)
+  const canBill = canBillTrip(t, me)
+  // What the Travel Desk answered about the hotels, if it has yet.
+  const decided = stayDecisionText(t.stay)
+  // detail.expenses is every line on the trip, everyone's, so it has to be
+  // narrowed to mine before anything is counted or added up.
+  const myLines = canBill ? detail.expenses.filter(x => x.emp === me && x.status === 'UNCLAIMED') : []
+  // The food budget and what is left of it. Only when food was actually asked
+  // for: a trip where nobody expects to eat on expenses should not grow a bar.
+  const food = canBill && t.foodWanted
+    ? foodBalance(foodBudget(t), foodSpent(detail.expenses, t.id, me))
+    : null
+  // MY claims on this trip, not everybody's. te_trip_detail returns every
+  // claim against the trip, and now that two people can each claim one, "a
+  // claim exists" stopped meaning "my claim exists". Reading it unscoped would
+  // have hidden my own claim button because a colleague had already claimed,
+  // and shown me what they were paid.
+  const claims = myClaims(detail.claims, me)
   // Legs still owing something before the trip can be claimed.
   const openLegs = legs.filter(l => l.status !== 'SUBMITTED' && l.status !== 'SKIPPED' && l.status !== 'CANCELLED')
   // The next thing to deal with: a leg in progress, one waiting for its report,
@@ -138,7 +181,11 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
               {t.start ? (t.start === t.end ? day(t.start) : `${day(t.start)} to ${day(t.end)}`) : 'No dates yet'}
               {t.purpose ? ` · ${t.purpose}` : ''}{t.project ? ` · ${t.project}` : ''}
             </p>
-            {t.pax > 1 ? <p className="small muted">{t.pax} people travel. Each claims their own expenses.</p> : null}
+            {t.pax > 1 ? (
+              <p className="small muted">
+                {t.pax} people travel. Each claims their own expenses.{withWho ? ` ${withWho}.` : ''}
+              </p>
+            ) : null}
           </div>
           <div className="row tight">
             <span className={`chip plain sc sc-${t.scope}`}><TeIcon name={t.scope} size="sm" />{SCOPE_WORD[t.scope]}</span>
@@ -148,6 +195,17 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           </div>
         </div>
       </div>
+
+      {/* ── you did not plan this one; you are on it ── */}
+      {note ? (
+        <div className="flag info">
+          <TeIcon name="people" />
+          <div className="tx">
+            <b>You are travelling on this trip</b>
+            <p>{note}</p>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
@@ -210,7 +268,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
       {st === 'MISSED' && mine ? (
         <div className="card">
           <div className="ch"><h3>Not travelled on {day(t.start)}</h3><span className="chip t-warn">Missed</span></div>
-          <p className="small muted">No leg was started on the day, so there is no GPS record.</p>
+          <p className="small muted">No journey was started on the day, so there is no GPS record.</p>
           <label className="fld">
             <span>Why was GPS not used?</span>
             <select value={missedReason} onChange={e => setMissedReason(e.target.value)}>
@@ -228,10 +286,10 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
             disabled={!missedReason || busy === 'missed'}
             onClick={() => act('missed', async () => {
               await te.tripRecordMissed(t.id, missedReason, missedNote.trim() || undefined)
-              return 'Recorded. Add each leg without GPS, then claim.'
+              return 'Recorded. Add each journey without GPS, then claim.'
             })}
           >
-            {busy === 'missed' ? 'Recording…' : 'Record the legs without GPS'}
+            {busy === 'missed' ? 'Recording…' : 'Record the journeys without GPS'}
           </button>
         </div>
       ) : null}
@@ -242,7 +300,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           <div className="ch">
             <h3>
               {legs.some(l => l.status === 'ACTIVE' || l.status === 'PAUSED') ? 'On the road'
-                : st === 'ONGOING' ? 'Next leg'
+                : st === 'ONGOING' ? 'Next journey'
                   : t.start && t.start > today ? `Starts ${day(t.start)}`
                     : 'Ready to go'}
             </h3>
@@ -253,7 +311,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
               <div className="row tight">
                 <span className="ico-b sm"><TeIcon name={MODE_ICON[nextLeg.mode] ?? 'route'} size="sm" /></span>
                 <div className="grow">
-                  <b>Leg {nextLeg.n}: {pname(nextLeg.from)} → {pname(nextLeg.to)}</b>
+                  <b>Journey {nextLeg.n}: {pname(nextLeg.from)} → {pname(nextLeg.to)}</b>
                   <div className="small muted">
                     {nextLeg.mode} · {nextLeg.plannedKm} km · {nextLeg.gps === 'checkin' ? 'check-ins' : 'GPS'}
                   </div>
@@ -266,12 +324,12 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
               >
                 <TeIcon name="play" size="sm" />
                 {nextLeg.status === 'PLANNED' && nextLeg.date <= today
-                  ? (nextLeg.gps === 'checkin' ? 'Check in and go' : 'Start this leg')
-                  : nextLeg.status === 'ENDED' ? 'Save the leg report' : 'Open the leg'}
+                  ? (nextLeg.gps === 'checkin' ? 'Check in and go' : 'Start this journey')
+                  : nextLeg.status === 'ENDED' ? 'Save the journey report' : 'Open the journey'}
               </button>
             </>
           ) : null}
-          {t.start && t.start > today ? <p className="small muted">The first leg can start on {day(t.start)}.</p> : null}
+          {t.start && t.start > today ? <p className="small muted">The first journey can start on {day(t.start)}.</p> : null}
 
           {/* Once a leg has been travelled the plan is history, not a draft. */}
           {!started && mine ? (
@@ -287,7 +345,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
       {isDraftPostFacto && mine ? (
         <div className="card">
           <div className="ch"><h3>Recorded after travel</h3><span className="chip t-info">Draft</span></div>
-          <p className="small muted">Open each leg to add its fare, add your other bills, and submit. A draft that is not needed can be deleted.</p>
+          <p className="small muted">Open each journey to add its fare, add your other bills, and submit. A draft that is not needed can be deleted.</p>
           <div className="row tight">
             <button type="button" className="btn sm grow" onClick={() => onEdit(detail)}>Edit the trip</button>
             <button type="button" className="btn dan sm grow" onClick={() => setConfirming('delete')}>Delete draft</button>
@@ -298,13 +356,13 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
       {/* ── back, with legs still owing a report ── */}
       {st === 'COMPLETED' && openLegs.length && mine ? (
         <div className="card">
-          <div className="ch"><h3>Close every leg</h3><span className="chip plain t-warn">{plural(openLegs.length, 'leg')} open</span></div>
-          <p className="small muted">The claim goes once each leg has its report, was added without GPS, or was skipped.</p>
+          <div className="ch"><h3>Close every journey</h3><span className="chip plain t-warn">{plural(openLegs.length, 'journey')} open</span></div>
+          <p className="small muted">The claim goes once each journey has its report, was added without GPS, or was skipped.</p>
           <div className="stack sm">
             {openLegs.map(l => (
               <button key={l.id} type="button" className="act flat" onClick={() => onOpenLeg(l)}>
                 <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
-                <span><b>Leg {l.n}: {pname(l.from)} → {pname(l.to)}</b><small>{LEG_STATE[l.status] ?? l.status}</small></span>
+                <span><b>Journey {l.n}: {pname(l.from)} → {pname(l.to)}</b><small>{LEG_STATE[l.status] ?? l.status}</small></span>
               </button>
             ))}
           </div>
@@ -312,13 +370,117 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
       ) : null}
 
       {/* ── back, every leg closed: the claim is what is left ── (65) */}
-      {mine && !openLegs.length && (st === 'COMPLETED' || isDraftPostFacto) && !detail.claims.some(c => c.status !== 'CANCELLED' && c.status !== 'REJECTED') ? (
+      {mine && !openLegs.length && (st === 'COMPLETED' || isDraftPostFacto) && !claims.some(c => c.status !== 'CANCELLED' && c.status !== 'REJECTED') ? (
         <div className="card">
-          <div className="ch"><h3>Claim for this trip</h3><span className="chip plain t-brand">Every leg is closed</span></div>
+          <div className="ch"><h3>Claim for this trip</h3><span className="chip plain t-brand">Every journey is closed</span></div>
           <p className="small muted">Check what each line is worth, add any other bills, and send it.</p>
           <button type="button" className="btn pri wide" onClick={() => onClaim(detail)}>
             Review and submit the claim<TeIcon name="go" size="sm" />
           </button>
+        </div>
+      ) : null}
+
+      {/* ── what you spent on this trip ──
+          THE ONLY DOOR TO A HOTEL OR A FOOD BILL. Both categories are
+          `needsTrip`, so the Other-expenses form filters them out, and until
+          this card existed the only way into a trip's bills was the claim card
+          above — which appears once the trip is COMPLETED and every journey is
+          closed. That is the one moment you are NOT spending. A hotel bill
+          exists on the night, not a week later, and the two categories that
+          need a trip could not be reached anywhere in the product.
+
+          So it is shown to anyone on the trip, for as long as the trip could
+          still be spent on. It is not gated on the journeys: for the owner a
+          dinner does not wait on a GPS report, and for a co-traveller those
+          journeys are the planner's to close anyway. The server agrees —
+          te_expense_save takes a bill in any state, and te_claim_submit counts
+          only the claimant's own open journeys. */}
+      {canBill ? (
+        <div className="card">
+          <div className="ch">
+            <h3>What you spent on this trip</h3>
+            {myLines.length ? <span className="chip plain t-brand">{plural(myLines.length, 'bill')} saved</span> : null}
+          </div>
+          <p className="small muted">
+            {myLines.length
+              ? `${rs(myLines.reduce((a, x) => a + (Number(x.claimed) || 0), 0))} saved so far${riding ? `, in a claim of your own rather than ${detail.employee.name}’s` : ''}. Add the rest as you go.`
+              : `The hotel, food, cabs and anything else you paid for${riding ? `. They go in a claim of your own, not ${detail.employee.name}’s` : '. Add them as you go rather than from memory afterwards'}.`}
+          </p>
+          <div className="row tight">
+            <button type="button" className="btn pri grow" onClick={() => onAddBill(t.id)}>
+              <TeIcon name="plus" size="sm" />Add a bill
+            </button>
+            {myLines.length ? (
+              <button type="button" className="btn" onClick={() => onClaim(detail)}>
+                See all {myLines.length}<TeIcon name="go" size="sm" />
+              </button>
+            ) : null}
+          </div>
+
+          {/* ── the food budget, coming down as the bills arrive ──
+              The planner could not ask for a food plan, because nobody knows
+              in advance where they will eat. What it did instead was show the
+              budget the company had already set. This is the other half of
+              that promise: every food bill saved against the trip comes off
+              it, so the number means something while you are still travelling.
+              The budget is the trip's own meals estimate — the per-day food
+              limit for the grade and city, summed over the days — and not a
+              second figure kept anywhere. */}
+          {food ? (
+            <div className={food.tone === 'ok' ? 'meter' : `meter ${food.tone}`}>
+              <div className="t">
+                <span>Food budget</span>
+                <span className="num">{rs(food.spent)} of {rs(food.budget)}</span>
+              </div>
+              <div className="bar"><i style={{ width: `${food.pct}%` }} /></div>
+              <small className="muted">{foodBalanceText(food, rs)}</small>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* ── the hotels asked for while planning ──
+          Named before the trip and still worth showing: the desk books one of
+          them, and until it does this is the only record of what was asked
+          for. The links go out to wherever they were found; TeFileLink tells
+          an http address apart from a file in the private bucket. */}
+      {(t.stayOptions ?? []).length ? (
+        <div className="card">
+          <div className="ch">
+            <h3>Hotels you asked for</h3>
+            <span className="chip plain">{plural(t.stayOptions.length, 'option')}</span>
+          </div>
+          {/* What the desk said, once it has said anything. Until then the
+              line below explains what is going to happen to these. */}
+          {decided ? (
+            <div className={decided.tone === 'ok' ? 'flag ok' : 'flag warn'}>
+              <TeIcon name={decided.tone === 'ok' ? 'check' : 'alert'} />
+              <div className="tx"><p>{decided.text}</p></div>
+            </div>
+          ) : (
+            <p className="small muted">
+              {t.stayBy === 'desk'
+                ? 'The Travel Desk picks one of these and books it.'
+                : 'You book one of these yourself and claim it back.'}
+            </p>
+          )}
+          <div className="stack sm">
+            {t.stayOptions.map((o, i) => (
+              <div key={i} className={t.stay?.status === 'CHOSEN' && t.stay.chosen === i ? 'row tight picked' : 'row tight'}>
+                <span className="ico-b sm"><TeIcon name="home" size="sm" /></span>
+                <div className="grow">
+                  <b className="small">
+                    {i + 1}. {o.name}
+                    {t.stay?.status === 'CHOSEN' && t.stay.chosen === i ? <span className="chip t-pos">Chosen</span> : null}
+                  </b>
+                  <div className="small muted">
+                    {[o.location, o.price ? `about ${rs(o.price)} a night` : ''].filter(Boolean).join(' · ') || 'No other details given'}
+                  </div>
+                </div>
+                {o.url ? <TeFileLink path={o.url} name="Open" small /> : null}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -327,10 +489,10 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
         <div className="ch">
           <h3>Route</h3>
           <span className="row tight">
-            <span className="muted small">{plural(legs.length, 'leg')}</span>
+            <span className="muted small">{plural(legs.length, 'journey')}</span>
             {mine && (st === 'ONGOING' || st === 'COMPLETED') ? (
               <button type="button" className="btn sm" onClick={() => onAddLeg(detail)}>
-                <TeIcon name="plus" size="sm" />Add a leg
+                <TeIcon name="plus" size="sm" />Add a journey
               </button>
             ) : null}
           </span>
@@ -340,6 +502,13 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           points={(t.points || []).map(p => p.place).filter(Boolean)}
           places={places}
           label={`Map of ${t.name}`}
+        />
+        {/* The panel above is a schematic; this hands the real route to the
+            map app the person already has. No API key is involved. */}
+        <TeMapLinks
+          points={(t.points || []).map(p => detail.places[p.place]).filter(Boolean)}
+          scope={t.scope}
+          label={t.name}
         />
         <div className="tw-legs">
           {legs.map(l => (
@@ -377,7 +546,7 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
         </div>
       ) : null}
 
-      {detail.claims.length ? detail.claims.map(c => (
+      {claims.length ? claims.map(c => (
         <div key={c.id} className="card">
           <div className="ch"><h3>Claim <span className="mono muted">{c.no}</span></h3><span className="chip plain">{c.status.replace(/_/g, ' ').toLowerCase()}</span></div>
           <dl className="kv">
@@ -389,17 +558,51 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
         </div>
       )) : null}
 
-      {detail.bookings.length ? (
+      {/* Stays and tickets. A REQUESTED one is the employee asking the desk to
+          book something they found: nothing is bought, so it is not "booked by
+          the company" and does not claim to be. */}
+      {detail.bookings.length || canAskStay ? (
         <div className="card">
-          <div className="ch"><h3>Booked by the company</h3></div>
-          <div className="stack sm">
-            {detail.bookings.map(b => (
-              <div key={b.id} className="flag ok">
-                <TeIcon name="check" />
-                <div className="tx"><b>{b.vendor}</b><p>{b.kind === 'hotel' ? 'Booking' : 'PNR'} {b.pnr} · {rs(b.amount)}</p></div>
-              </div>
-            ))}
+          <div className="ch">
+            <h3>Stays and tickets</h3>
+            {canAskStay && !asking ? (
+              <button type="button" className="btn sm" onClick={() => setAsking(true)}>Ask for a stay</button>
+            ) : null}
           </div>
+          <div className="stack sm">
+            {detail.bookings.map(b => {
+              const asked = b.status === 'REQUESTED'
+              const off = b.status === 'CANCELLED'
+              const d = b.details ?? {}
+              return (
+                <div key={b.id} className={off ? 'flag' : asked ? 'flag info' : 'flag ok'}>
+                  <TeIcon name={off ? 'close' : asked ? 'clock' : 'check'} />
+                  <div className="tx">
+                    <b>{b.vendor}</b>
+                    <p>
+                      {asked ? 'Asked the Travel Desk' : off ? 'Cancelled' : `${b.kind === 'hotel' ? 'Booking' : 'PNR'} ${b.pnr ?? ''}`}
+                      {' · '}{rs(b.amount)}{asked ? ' expected' : ''}
+                      {d.check_in ? ` · ${day(d.check_in)}${d.check_out ? ` to ${day(d.check_out)}` : ''}` : ''}
+                    </p>
+                    {d.address || d.room || d.note ? (
+                      <p className="small muted">{[d.address, d.room, d.note].filter(Boolean).join(' · ')}</p>
+                    ) : null}
+                    {b.ticket ? (
+                      <TeFileLink path={b.ticket} name={asked ? `Open on ${d.platform || 'the booking site'}` : 'Open the ticket'} small />
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {asking ? (
+            <TeStayRequest
+              detail={detail}
+              placeName={pname}
+              onCancel={() => setAsking(false)}
+              onDone={message => { setAsking(false); onChanged(message); reload() }}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -434,8 +637,8 @@ export default function TeTripDetail({ tripId, today, onBack, onChanged, onEdit,
           <div className="ch"><h3>{confirming === 'delete' ? 'Delete this draft?' : 'Cancel this trip?'}</h3></div>
           <p className="small muted">
             {confirming === 'delete'
-              ? 'The draft and its legs are removed. Nothing has been claimed against it, so nothing else changes.'
-              : 'The plan is cancelled and its legs are dropped. Any advance asked for is cancelled with it. This cannot be undone.'}
+              ? 'The draft and its journeys are removed. Nothing has been claimed against it, so nothing else changes.'
+              : 'The plan is cancelled and its journeys are dropped. Any advance asked for is cancelled with it. This cannot be undone.'}
           </p>
           <div className="row tight">
             <button type="button" className="btn grow" onClick={() => setConfirming(null)}>Keep it</button>

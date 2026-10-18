@@ -131,7 +131,7 @@ export function whatChangingAffects(area: 'rates' | 'limits' | 'checks' | 'categ
     case 'limits': return `New claims are measured against the new limits from now on. ${common}`
     case 'checks': return 'Applies to claims checked from now on. Flags already raised stay as they are.'
     case 'categories': return 'Applies to lines added from now on. Lines already saved keep their category.'
-    case 'gps': return `Applies to legs started from now on. ${common}`
+    case 'gps': return `Applies to journeys started from now on. ${common}`
     case 'workflow': return 'Applies to claims and trips submitted from now on. Anything already in an approval chain keeps the chain it started in.'
   }
 }

@@ -27,7 +27,7 @@ type Status = { s: 'loading' | 'ready' | 'absent' | 'error'; reason?: string };
 const GROUPS: Array<{ id: Group; label: string; blurb: string; icon: () => React.ReactNode }> = [
   { id: 'messages', label: 'Messages', blurb: 'Conversations with colleagues and desks', icon: () => Ic.chat() },
   { id: 'wall', label: 'Wall of Fame', blurb: 'Notes, comments and replies about your recognition', icon: () => Ic.star() },
-  { id: 'broadcast', label: 'Broadcasts', blurb: 'Company-wide notices. Read only — nobody replies in public', icon: () => Ic.megaphone() },
+  { id: 'broadcast', label: 'Broadcasts', blurb: 'Company-wide notices. Read only. Nobody replies in public', icon: () => Ic.megaphone() },
 ];
 
 interface Props {

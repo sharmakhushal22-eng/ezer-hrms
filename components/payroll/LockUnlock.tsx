@@ -32,7 +32,7 @@ const periodLabel = (r: { period_label?: string | null; month?: number; fy?: str
   r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}`
 
 const initialsOf = (n: string) =>
-  (n || '').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '—'
+  (n || '').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '-'
 
 const ago = (iso: string) => {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
@@ -79,13 +79,13 @@ function EmpRow({ r, checked, onToggle, isGroup }: {
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0,
           }}>{initialsOf(r.full_name)}</div>
           <div>
-            <div style={{ fontWeight: 600 }}>{r.full_name || '—'}</div>
+            <div style={{ fontWeight: 600 }}>{r.full_name || '-'}</div>
             <div style={{ fontSize: 11, color: C.muted }}>{r.employee_code}</div>
           </div>
         </div>
       </td>
-      <td style={{ ...td, color: C.muted }}>{r.department || '—'}</td>
-      {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{r.company || '—'}</td>}
+      <td style={{ ...td, color: C.muted }}>{r.department || '-'}</td>
+      {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{r.company || '-'}</td>}
       <td style={td}>
         <span style={{
           fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 999,
@@ -229,7 +229,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
     setBusy(false)
     if (fails.length) setErr(fails.join('  ·  '))
     if (count) {
-      setMsg(`✓ ${count} employee${count === 1 ? '' : 's'} unlocked — you can now edit their data.`)
+      setMsg(`✓ ${count} employee${count === 1 ? '' : 's'} unlocked. You can now edit their data.`)
       setReason(''); setSel(new Set())
     }
     refresh()
@@ -282,8 +282,8 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
       </div>
 
       <div style={{ ...card, background: C.purpleSoft, border: `1px solid #DDD6FE`, fontSize: 12, color: C.purpleD, lineHeight: 1.6 }}>
-        <b>Once payroll has run for someone, their data locks</b> — attendance, bank, salary, none of it will change. Anyone it has not run for stays unlocked and can be edited normally.
-        Payroll <b>will not run again</b> for a locked employee — unlock them here first and only then will Run Payroll pick them up. That is why pressing Run twice cannot quietly change a payslip.
+        <b>Once payroll has run for someone, their data locks</b>: attendance, bank, salary, none of it will change. Anyone it has not run for stays unlocked and can be edited normally.
+        Payroll <b>will not run again</b> for a locked employee. Unlock them here first and only then will Run Payroll pick them up. That is why pressing Run twice cannot quietly change a payslip.
       </div>
 
       <div style={card}>
@@ -381,7 +381,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           <div style={{ fontSize: 12, color: C.muted, padding: '20px 0' }}>Loading…</div>
         ) : rows.length === 0 ? (
           <div style={{ fontSize: 12, color: C.muted, padding: '20px 0' }}>
-            {monthRuns.length ? 'No employee matches this filter.' : 'No payroll month here yet — create one in Configuration → Payroll Month.'}
+            {monthRuns.length ? 'No employee matches this filter.' : 'No payroll month here yet. Create one in Configuration → Payroll Month.'}
           </div>
         ) : (
           <div style={{ overflowX: 'auto', maxHeight: 460, overflowY: 'auto' }}>
@@ -409,7 +409,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           Reason for unlock <span style={{ color: C.red }}>*</span>
         </div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
-          Required — recorded in the audit log against every employee you unlock.
+          Required: recorded in the audit log against every employee you unlock.
         </div>
         <textarea ref={reasonRef} value={reason} onChange={e => { setReason(e.target.value); if (e.target.value.trim()) setReasonErr(false) }}
           placeholder="e.g. Correcting bank detail after employee update"
@@ -450,7 +450,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
             <div key={`${r.run_id}:${r.employee_code}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12 }}>
               <span style={{ fontWeight: 600 }}>{r.employee_code}</span>
               <span style={{ color: C.muted }}>{r.full_name}</span>
-              {r.unlock_reason && <span style={{ color: C.muted, fontSize: 11 }}>— “{r.unlock_reason}”</span>}
+              {r.unlock_reason && <span style={{ color: C.muted, fontSize: 11 }}>“{r.unlock_reason}”</span>}
               <button onClick={() => relock(r)} disabled={busy}
                 style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11, fontWeight: 700, color: C.red, background: TK.surface, border: `1px solid ${C.redBd}`, borderRadius: 10, padding: '5px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>Lock again
               </button>
@@ -472,7 +472,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
             }}>{a.action === 'EMPLOYEES_LOCKED' ? 'LOCKED' : 'UNLOCKED'}</span>
             <span>{a.count === 1 ? a.employees[0] : `${a.count} employees`}</span>
             <span style={{ color: C.muted }}>
-              {a.reason ? `— “${a.reason}”` : '— Run Payroll completed'} · {a.by} · {ago(a.at)}
+              {a.reason ? `“${a.reason}”` : 'Run Payroll completed'} · {a.by} · {ago(a.at)}
             </span>
           </div>
         ))}

@@ -45,7 +45,7 @@ export function WallInboxView({
     <div className="pane">
       <div className="top">
         <h2>Wall of Fame</h2>
-        <span className="why">Approvals and nominations stay in your approvals queue — only appreciation lives here.</span>
+        <span className="why">Approvals and nominations stay in your approvals queue. Only appreciation lives here.</span>
         <div className="chips" role="group" aria-label="Wall streams">
           {CHIPS.map(c => (
             <button key={c.k} className="chip" type="button" aria-pressed={stream === c.k} onClick={() => onStream(c.k)}>
@@ -63,7 +63,7 @@ export function WallInboxView({
         {!loading && items.length === 0 && (
           <div className="empty">
             <h4>Nothing here yet</h4>
-            <p>This is only what colleagues have said to you — approvals stay in their own queue.</p>
+            <p>This is only what colleagues have said to you. Approvals stay in their own queue.</p>
           </div>
         )}
         {!loading && items.map((w, i) => (

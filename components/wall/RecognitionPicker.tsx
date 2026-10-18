@@ -187,7 +187,7 @@ export default function RecognitionPicker({ value, onChange, disabled }: {
                       lineHeight: 1.55 }}>
           {tab === 'TAG' && atLimit && (
             <div style={{ color: C.warning }}>
-              {MAX_TAGS} tags is the limit — past that they stop telling anybody anything.
+              {MAX_TAGS} tags is the limit. Past that they stop telling anybody anything.
             </div>
           )}
           {!check.ok && (

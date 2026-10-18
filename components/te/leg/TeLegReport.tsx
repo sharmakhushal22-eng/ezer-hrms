@@ -75,7 +75,7 @@ export default function TeLegReport({ snap, leg, placeName, onBack, onFiled }: {
     setBusy('file'); setError('')
     try {
       const r = await te.legFile(leg.id, input)
-      onFiled(r.eligible ? `Leg ${leg.n} saved. ${rs(r.eligible)} is eligible.` : `Leg ${leg.n} saved.`)
+      onFiled(r.eligible ? `Journey ${leg.n} saved. ${rs(r.eligible)} is eligible.` : `Journey ${leg.n} saved.`)
     } catch (e) {
       setError(errorText(e)); setBusy('')
     }
@@ -89,13 +89,13 @@ export default function TeLegReport({ snap, leg, placeName, onBack, onFiled }: {
     <div className="page">
       <div className="row">
         <button type="button" className="btn sm" onClick={onBack}><TeIcon name="back" size="sm" />Trip</button>
-        <span className="mono muted">Leg {leg.n}</span>
+        <span className="mono muted">Journey {leg.n}</span>
       </div>
 
       <div className="card">
         <div className="row sp top">
           <div>
-            <div className="eyebrow">Leg {leg.n} ended</div>
+            <div className="eyebrow">Journey {leg.n} ended</div>
             <h1 className="tname">{placeName(leg.from)} → {placeName(leg.to)}</h1>
             <p className="muted">{mode?.name ?? leg.mode}{leg.endedAt ? ` · ended ${when(leg.endedAt)}` : ''}</p>
           </div>
@@ -211,7 +211,7 @@ export default function TeLegReport({ snap, leg, placeName, onBack, onFiled }: {
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
       <button type="button" className="btn pri lg wide" disabled={blocked || busy === 'file'} onClick={save}>
-        {busy === 'file' ? 'Saving…' : 'Save the leg report'}
+        {busy === 'file' ? 'Saving…' : 'Save the journey report'}
       </button>
       {blocked ? <p className="small muted">Fix what is marked above before this can be saved.</p> : null}
     </div>

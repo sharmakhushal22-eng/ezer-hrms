@@ -44,6 +44,8 @@ export const ZINDEX_BASELINE: Record<string, number> = {
   'app/dashboard/roles/page.tsx': 3,
   'app/dashboard/statutory-leave/page.tsx': 4,
   'app/dashboard/transfer/page.tsx': 3,
+  // main converted this one to a token; the ratchet requires the baseline to
+  // follow in the same change, or a later regression would hide behind the slack.
   'app/ess-portal/page.tsx': 0,
   'app/layout.tsx': 1,
   'app/onboarding/[token]/client.tsx': 1,
@@ -62,7 +64,7 @@ export const ZINDEX_BASELINE: Record<string, number> = {
   'components/ess/RoleTabs.tsx': 2,
   'components/ess/social/social.css': 1,
   'components/ess/team/team.css': 2,
-  'components/ess/today/today.css': 7,
+  'components/ess/today/today.css': 6,
   'components/funzone/fzStyles.ts': 1,
   'components/letters/LetterheadConfig.tsx': 2,
   'components/onboarding/ActivationWizard.tsx': 1,
@@ -89,4 +91,4 @@ export const ZINDEX_BASELINE: Record<string, number> = {
 };
 
 /** Total at generation time. */
-export const ZINDEX_TOTAL = 151;
+export const ZINDEX_TOTAL = 150;

@@ -212,7 +212,7 @@ export function DownloadCard({ companyId, fy, heading, note, filePrefix, sheetNa
     scope(supabase.from('departments').select('id, dept_name').eq('status', 'Active').order('dept_name'))
       .then(({ data }: any) => setDeptOpts((data || []).map((d: any) => ({ value: d.id, label: d.dept_name }))))
     scope(supabase.from('employees').select('emp_code, full_name').neq('is_test', true).order('emp_code'))
-      .then(({ data }: any) => setEmpOpts((data || []).filter((e: any) => e.emp_code).map((e: any) => ({ value: e.emp_code, label: `${e.emp_code} — ${e.full_name}` }))))
+      .then(({ data }: any) => setEmpOpts((data || []).filter((e: any) => e.emp_code).map((e: any) => ({ value: e.emp_code, label: `${e.emp_code} · ${e.full_name}` }))))
     setDlLoc(''); setDlDept(''); setDlEmpCodes([])
     if (grp) {
       const firstMonth = allRuns.map(r => r.month).sort((a, b) => (a || 0) - (b || 0))[0]
@@ -309,7 +309,7 @@ export function DownloadCard({ companyId, fy, heading, note, filePrefix, sheetNa
         <div><label style={lbl}>Department</label><SearchSelect value={dlDept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDlDept} /></div>
       </div>
       <div style={{ marginBottom: 12 }}>
-        <label style={lbl}>Employee codes <span style={{ textTransform: 'none', fontWeight: 400, color: C.muted }}>(optional — leave empty for all; paste a comma / newline list to add many)</span></label>
+        <label style={lbl}>Employee codes <span style={{ textTransform: 'none', fontWeight: 400, color: C.muted }}>(optional: leave empty for all; paste a comma / newline list to add many)</span></label>
         <MultiSelect values={dlEmpCodes} options={empOpts} placeholder="All employees" onChange={setDlEmpCodes} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -361,7 +361,7 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
 
       {!checking && strictUnmatched && unmatched.length > 0 && (
         <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Extra rows — these codes are not in this month&apos;s master. Remove them and upload again.</div>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Extra rows: these codes are not in this month&apos;s master. Remove them and upload again.</div>
           <div style={{ maxHeight: 120, overflowY: 'auto' }}>{unmatched.slice(0, 60).join(', ')}{unmatched.length > 60 ? ` +${unmatched.length - 60} more` : ''}</div>
         </div>
       )}
@@ -372,7 +372,7 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
           <div style={{ maxHeight: 170, overflowY: 'auto' }}>
             {violations.slice(0, 60).map((v, i) => (
               <div key={`${v.code}-${v.rule}-${i}`} style={{ padding: '2px 0' }}>
-                <b>{v.code}</b> — {v.rule} <b>{v.actual}</b> &gt; Max Days <b>{v.max}</b>
+                <b>{v.code}</b>: {v.rule} <b>{v.actual}</b> &gt; Max Days <b>{v.max}</b>
               </div>
             ))}
             {violations.length > 60 && <div style={{ marginTop: 4 }}>+ {violations.length - 60} more…</div>}

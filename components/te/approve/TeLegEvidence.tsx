@@ -32,13 +32,13 @@ export default function TeLegEvidence({ leg, places, onBack }: {
     <div className="page">
       <div className="row">
         <button type="button" className="btn sm" onClick={onBack}><TeIcon name="back" size="sm" />Claim</button>
-        <span className="mono muted">Leg {leg.n}</span>
+        <span className="mono muted">Journey {leg.n}</span>
       </div>
 
       <div className="card">
         <div className="row sp top">
           <div>
-            <div className="eyebrow">Leg {leg.n}</div>
+            <div className="eyebrow">Journey {leg.n}</div>
             <h1 className="tname">{pname(leg.from)} → {pname(leg.to)}</h1>
             <p className="muted">
               {leg.mode}{leg.startedAt ? ` · started ${when(leg.startedAt)}` : ''}{leg.endedAt ? ` · ended ${when(leg.endedAt)}` : ''}
@@ -58,7 +58,7 @@ export default function TeLegEvidence({ leg, places, onBack }: {
         <div className="flag warn">
           <TeIcon name="alert" />
           <div className="tx">
-            <b>{leg.manual ? 'This leg was not recorded' : 'No GPS record for this leg'}</b>
+            <b>{leg.manual ? 'This journey was not recorded' : 'No GPS record for this journey'}</b>
             <p>
               {leg.noGps || leg.skipReason || 'It is paid on the planned distance rather than a measured one.'}
               {leg.plannedKm ? ` The plan was ${leg.plannedKm} km.` : ''}
@@ -72,7 +72,7 @@ export default function TeLegEvidence({ leg, places, onBack }: {
               legs={[{ from: leg.from, to: leg.to, mode: leg.mode }]}
               points={[leg.from, leg.to]}
               places={mapPlaces}
-              label={`Leg ${leg.n} on the map`}
+              label={`Journey ${leg.n} on the map`}
             />
             <p className="small muted">
               The straight line between the two places. The recorded trail itself is held against the leg and is

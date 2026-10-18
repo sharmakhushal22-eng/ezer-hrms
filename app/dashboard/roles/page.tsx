@@ -35,7 +35,7 @@ const highestAccess = (levels: AccessLevel[]): AccessLevel =>
   levels.reduce((best, l) => (ACCESS_RANK.indexOf(l) > ACCESS_RANK.indexOf(best) ? l : best), 'NONE' as AccessLevel)
 // ESS portal baseline — always visible regardless of role.
 const BASELINE_MODULES = ['Home', 'Profile', 'Notifications']
-const fmtDT = (s?: string | null) => s ? new Date(s).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'
+const fmtDT = (s?: string | null) => s ? new Date(s).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '-'
 const typeLabel = (k: string) => APPROVAL_TYPES.find(t => t.key === k)?.label || k
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -74,7 +74,7 @@ function OverviewTab({ roles, perms, rights }: { roles: EssRole[]; perms: RolePe
             <div style={{ fontSize:11, color:TK.muted, marginBottom:8 }}>Salary: <b>{r.salary_visibility}</b> · Scope: <b>{r.scope}</b></div>
             <div style={{ fontSize:11, color:TK.muted, marginBottom:4 }}>Can approve ({apprv.length}):</div>
             <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:8 }}>
-              {apprv.length === 0 ? <span style={{ fontSize:10, color:TK.faint }}>—</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}
+              {apprv.length === 0 ? <span style={{ fontSize:10, color:TK.faint }}>-</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}
             </div>
             <div style={{ fontSize:11, color:TK.muted }}>Module access set: <b>{mods.length}</b> / {PERM_MODULES.length}</div>
           </div>
@@ -97,7 +97,7 @@ function ModuleAccessTab({ roles, perms, selId, onSelect, onSet }: {
       <div style={C.card}>
         {!sel ? <div style={{ fontSize:12, color:TK.faint }}>Pick a role.</div> : (
           <>
-            <div style={C.sec}>{sel.role_name} — module access</div>
+            <div style={C.sec}>{sel.role_name}: module access</div>
             <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>This controls which modules appear in the ESS portal. Changes save immediately.</div>
             {PERM_MODULES.map(m => {
               const lvl = levelOf(m)
@@ -132,7 +132,7 @@ function ApprovalRightsTab({ roles, rights, selId, onSelect, onSet }: {
       <div style={C.card}>
         {!sel ? <div style={{ fontSize:12, color:TK.faint }}>Pick a role.</div> : (
           <>
-            <div style={C.sec}>{sel.role_name} — approval rights</div>
+            <div style={C.sec}>{sel.role_name}: approval rights</div>
             <div style={{ display:'grid', gridTemplateColumns:'2fr repeat(3,70px)', gap:6, alignItems:'center', fontSize:10, color:TK.faint, fontWeight:600, textTransform:'uppercase', padding:'4px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
               <span>Workflow</span><span style={{ textAlign:'center' }}>Initiate</span><span style={{ textAlign:'center' }}>Approve</span><span style={{ textAlign:'center' }}>Reject</span>
             </div>
@@ -144,7 +144,7 @@ function ApprovalRightsTab({ roles, rights, selId, onSelect, onSet }: {
               )
               return (
                 <div key={t.key} style={{ display:'grid', gridTemplateColumns:'2fr repeat(3,70px)', gap:6, alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
-                  <span style={{ fontSize:13 }}>{t.label} {!t.live && <span style={{ fontSize:9, color:TK.warning }} title="No live request source yet — handled in its own module">·future</span>}</span>
+                  <span style={{ fontSize:13 }}>{t.label} {!t.live && <span style={{ fontSize:9, color:TK.warning }} title="No live request source yet. Handled in its own module">· future</span>}</span>
                   <Cell k="can_initiate" /><Cell k="can_approve" /><Cell k="can_reject" />
                 </div>
               )
@@ -204,7 +204,7 @@ function RequestCard({ item, recruiters, onResolve }: { item: PendingItem; recru
             </div>
           )}
           <div style={{ position:'relative' }}>
-            <input style={{ ...C.input, maxWidth:360 }} placeholder="Search recruiter — name or emp code" value={recQ} onChange={e => setRecQ(e.target.value)} />
+            <input style={{ ...C.input, maxWidth:360 }} placeholder="Search recruiter: name or emp code" value={recQ} onChange={e => setRecQ(e.target.value)} />
             {matches.length > 0 && (
               <div style={{ position:'absolute', top:'100%', left:0, right:0, maxWidth:360, background:TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius:7, marginTop:2, zIndex:30, boxShadow:'0 6px 18px rgba(0,0,0,.1)', maxHeight:200, overflowY:'auto' }}>
                 {matches.map(r => (
@@ -239,7 +239,7 @@ function ApprovalTab({ roles, selId, onSelect, pending, recruiters, onResolve }:
       <div style={C.card}>
         <label style={C.lbl}>Logged in as (role)</label>
         <select style={{ ...C.input, maxWidth:360 }} value={selId} onChange={e => onSelect(e.target.value)}>
-          <option value="">— Select a role —</option>
+          <option value="">Select a role</option>
           {roles.map(r => <option key={r.id} value={r.id}>{r.role_name}</option>)}
         </select>
         {sel && (
@@ -299,7 +299,7 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
 
   const Row = ({ u, add }: { u: EssUser; add: boolean }) => (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'7px 8px', borderBottom: `1px solid ${TK.brandEdge}` }}>
-      <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.location_name || '—'} · {u.dept_name || '—'}</div></div>
+      <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.location_name || '-'} · {u.dept_name || '-'}</div></div>
       {sel && (add
         ? <button style={{ ...C.out, border: `1px solid ${TK.positiveTint}`, color:TK.positive }} onClick={() => onToggle(u, sel, true)}>Assign →</button>
         : <button style={{ ...C.out, border: `1px solid ${TK.criticalTint}`, color:TK.critical }} onClick={() => onToggle(u, sel, false)}>Remove</button>)}
@@ -310,7 +310,7 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
     <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '240px 1fr', gap:10, alignItems:'start' }}>
       <RoleList roles={assignable} selId={selId} onSelect={onSelect} rightCount={r => `${users.filter(u => u.roles.some(x => x.id === r.id)).length}`} />
       <div>
-        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick a role — then filter employees by company, location/branch and department, and assign.</span></div> : (
+        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick a role, then filter employees by company, location/branch and department, and assign.</span></div> : (
           <>
             <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8 }}>
@@ -320,7 +320,7 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
               </div>
               <div style={{ fontSize:11, color:TK.muted, marginBottom:4 }}>Can approve:</div>
               <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:10 }}>
-                {apprv.length === 0 ? <span style={{ fontSize:10, color:TK.faint }}>—</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}
+                {apprv.length === 0 ? <span style={{ fontSize:10, color:TK.faint }}>-</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}
               </div>
               {/* Step 1 — narrow by company → location/branch → department */}
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:8 }}>
@@ -360,7 +360,7 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
                 <div style={C.sec}>Not assigned ({unassigned.length})</div>
                 <div style={{ maxHeight:'46vh', overflowY:'auto' }}>
                   {unassigned.slice(0, 100).map(u => <Row key={u.employee_id} u={u} add={true} />)}
-                  {unassigned.length > 100 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>+{unassigned.length - 100} more — search to narrow.</div>}
+                  {unassigned.length > 100 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>+{unassigned.length - 100} more. Search to narrow.</div>}
                 </div>
               </div>
             </div>
@@ -397,11 +397,11 @@ function ESSPortalTab({ users, perms, rights, selId, onSelect, isMobile }: {
         ))}
       </div>
       <div>
-        {!emp ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick an employee — a preview of their ESS portal appears.</span></div> : (
+        {!emp ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick an employee. A preview of their ESS portal appears.</span></div> : (
           <>
             <div style={C.card}>
               <div style={{ fontSize:15, fontWeight:600 }}>{emp.full_name}</div>
-              <div style={{ fontSize:11, color:TK.faint, marginBottom:8 }}>{emp.emp_code} · {emp.designation || '—'} · {emp.dept_name || '—'}</div>
+              <div style={{ fontSize:11, color:TK.faint, marginBottom:8 }}>{emp.emp_code} · {emp.designation || '-'} · {emp.dept_name || '-'}</div>
               <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
                 {emp.roles.length === 0 ? <Pill text="NO ROLE" bg={TK.sunken} color={TK.faint} /> : emp.roles.map(r => <Pill key={r.id} text={r.role_name} bg={TK.brandTint} color={TK.brand} />)}
               </div>
@@ -422,7 +422,7 @@ function ESSPortalTab({ users, perms, rights, selId, onSelect, isMobile }: {
                     </div>
                   )
                 })}
-                {modules.length === 0 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>Role-based module access is not set — configure it in the Module Access tab.</div>}
+                {modules.length === 0 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>Role-based module access is not set. Configure it in the Module Access tab.</div>}
               </div>
               <div style={C.card}>
                 <div style={C.sec}>Approval rights</div>
@@ -471,7 +471,7 @@ function CustomRolesTab({ roles, onCreate, onDelete, onGoModule }: {
       </div>
       <div style={C.card}>
         <div style={C.sec}>Custom roles ({custom.length})</div>
-        {custom.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>No custom roles yet — create one above.</div> : custom.map(r => (
+        {custom.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>No custom roles yet. Create one above.</div> : custom.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderBottom:`1px solid ${TK.brandEdge}` }}>
             <div><div style={{ fontSize:13, fontWeight:600 }}>{r.role_name}</div><div style={{ fontSize:10, color:TK.faint }}>{r.role_code}</div></div>
             <div style={{ display:'flex', gap:6 }}>
@@ -500,9 +500,9 @@ function ScreenAccessTab({ roles, screens, selId, onSelect, onSetModule }: {
         {!sel ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick a role to set which tabs it sees inside each module.</span></div> : (
           <>
             <div style={C.card}>
-              <div style={C.sec}>{sel.role_name} — tab visibility</div>
+              <div style={C.sec}>{sel.role_name}: tab visibility</div>
               <div style={{ fontSize:11.5, color:TK.muted, lineHeight:1.6 }}>
-                Tick the tabs this role may open inside each module. <b>All ticked</b> (or none) = no restriction — the role sees every tab.
+                Tick the tabs this role may open inside each module. <b>All ticked</b> (or none) = no restriction: the role sees every tab.
                 Untick some, and it sees only the ticked ones. Controls the tabs a role sees inside a module it already has access to (set module access in the <b>Module Access</b> tab first). Super admins are never restricted.
               </div>
             </div>
@@ -614,7 +614,7 @@ export function RolesPermissionsSection() {
     })
     const { error } = await setRoleModuleScreens(role_id, allKeys, allowedKeys)
     if (error) { notify('Save failed: ' + error.message, 'error'); reload() }
-    else notify(allowedKeys.length ? 'Tab visibility saved.' : 'Restriction cleared — all tabs visible.')
+    else notify(allowedKeys.length ? 'Tab visibility saved.' : 'Restriction cleared: all tabs visible.')
   }
 
   async function setRight(role_id: string, approval_type: string, triple: { can_approve: boolean; can_reject: boolean; can_initiate: boolean }) {

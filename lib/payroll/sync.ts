@@ -92,7 +92,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
   },
   {
     key: 'salary', label: 'Salary', icon: '💰', status: 'ready', diffable: true,
-    note: 'CTC, basic, HRA, conveyance, special allowance, gross, employer & employee PF/ESIC — from CTC Master and Salary Structures.',
+    note: 'CTC, basic, HRA, conveyance, special allowance, gross, employer & employee PF/ESIC (from CTC Master and Salary Structures).',
     rpc: 'sync_month_salary', countKey: 'with_salary',
     columns: [
       'employee_code', 'full_name', 'annual_ctc', 'total_ctc', 'variable_annual',
@@ -104,7 +104,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
   },
   {
     key: 'flexi', label: 'Flexi (allowances)', icon: '🎛️', status: 'ready', diffable: true,
-    note: 'Car lease, driver, fuel, telephone, meal, LTA and the rest — from the employee’s flexi declaration for this financial year.',
+    note: 'Car lease, driver, fuel, telephone, meal, LTA and the rest, from the employee’s flexi declaration for this financial year.',
     rpc: 'sync_month_flexi', countKey: 'with_flexi',
     columns: [
       'employee_code', 'full_name', 'flexi_regime', 'flexi_car', 'flexi_driver', 'flexi_fuel',
@@ -118,7 +118,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // adds whatever the Bulk Uploader posted. So it runs LAST, and running it again
     // after an attendance correction is the normal way to refresh the month's numbers.
     key: 'earnings', label: 'Earned salary', icon: '🧮', status: 'ready', syncable: false,
-    note: 'Earned amount for the month = frozen structure × paid days, plus Incentive / Variable / Bonus / Buyout and the Parking · Insurance · Canteen deductions from the Bulk Uploader. Employees whose attendance has not arrived keep a blank earned amount — not zero, or somebody would process salary on it.',
+    note: 'Earned amount for the month = frozen structure × paid days, plus Incentive / Variable / Bonus / Buyout and the Parking · Insurance · Canteen deductions from the Bulk Uploader. Employees whose attendance has not arrived keep a blank earned amount, not zero, or somebody would process salary on it.',
     rpc: 'sync_month_earnings', countKey: 'with_earnings',
     columns: [
       'employee_code', 'full_name', 'payday', 'paid_days', 'total_days',
@@ -138,7 +138,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // chain: EPF wages are Earn_Gross − Earn_HRA, which do not exist until the
     // earned columns have been written.
     key: 'epf', label: 'EPF · EPS · EDLI · Admin', icon: '🏛️', status: 'ready', syncable: false,
-    note: 'Code of Wages 50% basic floor, then EPF wages (Earn Gross − Earn HRA), the ceiling from each employee’s own pf_gross_limit, EPS capped at ₹1,250, EDLI at ₹75, and admin charges with the establishment’s ₹500 minimum. Every rate comes from epf_config and wage_rules_config — nothing is hardcoded.',
+    note: 'Code of Wages 50% basic floor, then EPF wages (Earn Gross − Earn HRA), the ceiling from each employee’s own pf_gross_limit, EPS capped at ₹1,250, EDLI at ₹75, and admin charges with the establishment’s ₹500 minimum. Every rate comes from epf_config and wage_rules_config. Nothing is hardcoded.',
     rpc: 'sync_month_epf', countKey: 'with_earnings',
     columns: [
       'employee_code', 'full_name', 'paid_days', 'days_in_month',
@@ -156,7 +156,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
   {
     // Reads the earned columns like EPF does, so it runs in the same pass, after them.
     key: 'esic', label: 'ESIC', icon: '🩺', status: 'ready', syncable: false,
-    note: 'Employee 0.75% and employer 3.25%, rounded up to the next rupee as ESIC requires. ESIC Wages = MAX(earned basic, 50% of earned gross) is always shown; whether the ₹21,000 ceiling is tested on that or on plain gross is set by esic_config.esic_threshold_basis — on this data the two differ by 135 employees, so the row records which basis judged it. The ceiling is tested on the full-month rate rather than the month’s earnings, so leave cannot push somebody in and out; and once covered at any point in a contribution period (Apr–Sep, Oct–Mar) an employee stays covered for the rest of it.',
+    note: 'Employee 0.75% and employer 3.25%, rounded up to the next rupee as ESIC requires. ESIC Wages = MAX(earned basic, 50% of earned gross) is always shown; whether the ₹21,000 ceiling is tested on that or on plain gross is set by esic_config.esic_threshold_basis. On this data the two differ by 135 employees, so the row records which basis judged it. The ceiling is tested on the full-month rate rather than the month’s earnings, so leave cannot push somebody in and out; and once covered at any point in a contribution period (Apr–Sep, Oct–Mar) an employee stays covered for the rest of it.',
     rpc: 'sync_month_esic', countKey: 'with_earnings',
     columns: [
       'employee_code', 'full_name', 'paid_days',
@@ -170,7 +170,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
   },
   {
     key: 'pt', label: 'Professional Tax', icon: '⚖️', status: 'ready', syncable: false,
-    note: 'Each employee’s PT from pt_config — their state, that month’s column, their gross. A month column per month because PT is not flat across the year: Maharashtra charges ₹300 in February, Tamil Nadu bills twice a year and nothing in the other ten months. PT is a fixed monthly amount, so leave never reduces it. States that levy no PT at all carry an explicit ₹0 row, which is why pt_rate_found matters — a zero and an unconfigured state are different answers.',
+    note: 'Each employee’s PT from pt_config: their state, that month’s column, their gross. A month column per month because PT is not flat across the year: Maharashtra charges ₹300 in February, Tamil Nadu bills twice a year and nothing in the other ten months. PT is a fixed monthly amount, so leave never reduces it. States that levy no PT at all carry an explicit ₹0 row, which is why pt_rate_found matters: a zero and an unconfigured state are different answers.',
     rpc: 'sync_month_pt', countKey: 'eligible',
     columns: [
       'employee_code', 'full_name', 'pt_applicable', 'professional_tax_state',
@@ -179,7 +179,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
   },
   {
     key: 'lwf', label: 'Labour Welfare Fund', icon: '🏛️', status: 'ready', syncable: false,
-    note: 'Each employee’s LWF from lwf_config — read off their lwf_state, NOT their PT state: the two differ for 300 of 302 employees here. Most states deduct only in June and December, some only in December, so a ₹0 in April is normal rather than missing. Where the state allows it, someone who left mid-period is exempt. LWF is a flat monthly amount — gross and paid days never affect it.',
+    note: 'Each employee’s LWF from lwf_config (read off their lwf_state, NOT their PT state): the two differ for 300 of 302 employees here. Most states deduct only in June and December, some only in December, so a ₹0 in April is normal rather than missing. Where the state allows it, someone who left mid-period is exempt. LWF is a flat monthly amount. Gross and paid days never affect it.',
     rpc: 'sync_month_lwf', countKey: 'eligible',
     columns: [
       'employee_code', 'full_name', 'lwf_applicable', 'lwf_state', 'lwf_state_used',
@@ -192,7 +192,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // wait for the earnings pass. It sat in the database unwired since sql124 — the
     // function existed, nothing called it, and every month's employer_nps stayed blank.
     key: 'nps', label: 'Employer NPS', icon: '🏛️', status: 'ready',
-    note: 'Only for employees whose NPS status is enrolled. Employer contribution = Earned Basic × 10% under the old regime, × 14% under the new one — the rate follows the regime, so an employee who switches regimes changes rate from that month. Anyone not enrolled keeps a blank, not a zero, so that "no NPS" and "NPS of nil" stay distinguishable on the sheet.',
+    note: 'Only for employees whose NPS status is enrolled. Employer contribution = Earned Basic × 10% under the old regime, × 14% under the new one. The rate follows the regime, so an employee who switches regimes changes rate from that month. Anyone not enrolled keeps a blank, not a zero, so that "no NPS" and "NPS of nil" stay distinguishable on the sheet.',
     rpc: 'sync_month_nps', countKey: 'with_earnings',
     columns: [
       'employee_code', 'full_name', 'nps_opted', 'nps_regime_used', 'nps_percent',
@@ -204,7 +204,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // and what the revised structure says it should have, so every other figure for those
     // months has to be settled first.
     key: 'arrear', label: 'Appraisal arrear', icon: '📈', status: 'ready',
-    note: 'Where an appraisal is effective in a back month but pays out in this one, the difference for each already-paid month is worked out head by head and lands in the arrear columns. The pay-out month itself is excluded — it gets the new rate through regular salary, so counting it again would pay it twice. Each back month is differenced against what that month actually froze, not against an assumed structure, and pro-rated on that month’s own paid days.',
+    note: 'Where an appraisal is effective in a back month but pays out in this one, the difference for each already-paid month is worked out head by head and lands in the arrear columns. The pay-out month itself is excluded: it gets the new rate through regular salary, so counting it again would pay it twice. Each back month is differenced against what that month actually froze, not against an assumed structure, and pro-rated on that month’s own paid days.',
     rpc: 'sync_month_arrear', countKey: 'eligible',
     columns: [
       'employee_code', 'full_name', 'arrear_appraisal_effective_date', 'arrear_months',
@@ -216,7 +216,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
   },
   {
     key: 'flexi_reimb', label: 'Flexi reimbursement', icon: '🧾', status: 'ready',
-    note: 'Rejected bills only. A rejected claim loses its exemption and becomes taxable — that rejected amount is what comes into payroll, against the month the claim was FOR, not the month it was reviewed in.',
+    note: 'Rejected bills only. A rejected claim loses its exemption and becomes taxable. That rejected amount is what comes into payroll, against the month the claim was FOR, not the month it was reviewed in.',
     rpc: 'sync_month_flexi_reimb', countKey: 'with_reject',
     columns: ['employee_code', 'full_name'],
   },
@@ -232,13 +232,13 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // month-level consequence: the regime the employee chose lands in this month's
     // snapshot. That column used to come from employees.tds_regime via Statutory,
     // which meant a fresh declaration never reached payroll.
-    note: 'Applies each employee’s chosen tax regime to this month. The declaration itself stays financial-year data — one declaration drives every month’s TDS, so it is never copied twelve times.',
+    note: 'Applies each employee’s chosen tax regime to this month. The declaration itself stays financial-year data: one declaration drives every month’s TDS, so it is never copied twelve times.',
     rpc: 'sync_month_investment_decl', countKey: 'with_decl',
     columns: ['employee_code', 'full_name', 'tds_regime'],
   },
   {
     key: 'inv_proof', label: 'Investment proofs', icon: '✅', status: 'ready',
-    note: 'Opens and refreshes the proof window for everyone who declared. Anyone who has resigned gets their deadline moved to their Date of Leaving — that is the part that changes month to month. Declared but unproven stops being exempt.',
+    note: 'Opens and refreshes the proof window for everyone who declared. Anyone who has resigned gets their deadline moved to their Date of Leaving. That is the part that changes month to month. Declared but unproven stops being exempt.',
     rpc: 'sync_month_investment_proof', countKey: 'with_decl',
     columns: ['employee_code', 'full_name'],
   },
@@ -251,7 +251,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // unpaid leave, a resignation or an incentive. Every step of the calculation is its
     // own column here, on purpose — see the Payroll Run sheet's TDS block.
     key: 'tds', label: 'TDS', icon: '🧾', status: 'ready',
-    note: 'Monthly TDS recomputed from this month’s own numbers — actual income so far this FY, this month, and projected to March (or the date of leaving), less HRA / LTA / professional tax / Chapter VI-A and whatever has already been deducted this FY, divided by the months left. Incentive, variable, bonus and buyout are never projected and instead drive Additional TDS — their tax is taken in full this month, not spread.',
+    note: 'Monthly TDS recomputed from this month’s own numbers: actual income so far this FY, this month, and projected to March (or the date of leaving), less HRA / LTA / professional tax / Chapter VI-A and whatever has already been deducted this FY, divided by the months left. Incentive, variable, bonus and buyout are never projected and instead drive Additional TDS: their tax is taken in full this month, not spread.',
     rpc: 'sync_month_tds', countKey: 'eligible',
     columns: [
       'employee_code', 'full_name',
@@ -371,7 +371,7 @@ export async function runCategorySync(cat: SyncCategory, runIds: string[], codes
         // Name the function the database could not find, rather than guessing a migration
         // number — the guess was wrong often enough to send HR after the wrong file.
         error: FN_MISSING.test(error.message)
-          ? `${cat.rpc}() does not exist in this database — the migration that creates it has not been applied. (${error.message})`
+          ? `${cat.rpc}() does not exist in this database. The migration that creates it has not been applied. (${error.message})`
           : error.message,
         count,
       }

@@ -40,7 +40,7 @@ import PhotoUploader from '@/components/profile/PhotoUploader'
 import '@/components/profile/profile.css'
 
 const val = (v: unknown): string => {
-  if (v === null || v === undefined || v === '') return '—'
+  if (v === null || v === undefined || v === '') return '-'
   if (typeof v === 'boolean') return v ? 'Yes' : 'No'
   return String(v)
 }
@@ -69,7 +69,7 @@ function routeNote(key: string): string {
   if (/address/.test(key))
     return 'Goes to HR. An address change also moves your Professional Tax state and HRA exemption from the next payroll month.'
   if (/marital|spouse/.test(key))
-    return 'Goes to HR. It opens the family, nominee and insurance steps behind it — a nomination must total exactly 100% before it can be filed.'
+    return 'Goes to HR. It opens the family, nominee and insurance steps behind it. A nomination must total exactly 100% before it can be filed.'
   if (/passport/.test(key))
     return 'Goes to HR. Passport details are readable only by HR and Payroll.'
   return 'Goes to HR. You will see the outcome in your change history.'
@@ -91,7 +91,7 @@ function Field({ f, payload, onAct }: {
   } else {
     const raw = emp[f.key]
     const text = /ctc|gross/.test(f.key) ? money(raw) : pretty(raw)
-    body = f.mask && !shown && text !== '—'
+    body = f.mask && !shown && text !== '-'
       ? <>
           <span className="msk">{'•'.repeat(Math.min(12, Math.max(4, text.length)))}</span>
           <button className="eye" onClick={e => { e.stopPropagation(); setShown(true) }}>Reveal</button>
@@ -206,7 +206,7 @@ function ChangeModal({ field, onClose, onDone }: {
       <div className="modal">
         <h3>{direct ? `Edit ${field.label}` : `Request a change to ${field.label}`}</h3>
         <div className="sub">{direct ? 'This saves straight away.'
-                                     : 'Nothing changes yet — somebody reviews this first.'}</div>
+                                     : 'Nothing changes yet. Somebody reviews this first.'}</div>
         {!direct && <div className="note warn" style={{ marginTop: 10 }}>{routeNote(field.key)}</div>}
 
         <label htmlFor="pv">New value</label>
@@ -280,7 +280,7 @@ export default function Profile360({ code, employeeId, initial }: {
   // attendance and leave balance; those live in other modules and are not
   // invented here.
   const kpis: { k: string; v: string; unit?: string; pc: number }[] = [
-    { k: 'Tenure', v: String(emp.tenure_years ?? '—'), unit: 'yrs',
+    { k: 'Tenure', v: String(emp.tenure_years ?? '-'), unit: 'yrs',
       pc: Math.min(100, (Number(emp.tenure_years) || 0) * 10) },
     { k: 'Profile score', v: String(payload.completeness.score), unit: '%',
       pc: payload.completeness.score },
@@ -467,10 +467,10 @@ export default function Profile360({ code, employeeId, initial }: {
           </div>
 
           <div className="legend">
-            <span><b className="direct">Direct</b> — change it yourself</span>
-            <span><b className="request">Request</b> — goes for approval</span>
-            <span><b className="locked">Locked</b> — HR maintains it</span>
-            <span><b className="event">Event</b> — starts another workflow</span>
+            <span><b className="direct">Direct</b>: change it yourself</span>
+            <span><b className="request">Request</b>: goes for approval</span>
+            <span><b className="locked">Locked</b>: HR maintains it</span>
+            <span><b className="event">Event</b>: starts another workflow</span>
           </div>
 
           {tab === 'overview' && (
@@ -497,7 +497,7 @@ export default function Profile360({ code, employeeId, initial }: {
                     <div className="g2">
                       {([['Employment type', val(emp.employment_type)],
                          ['Category', val(emp.employee_category)],
-                         ['Notice period', emp.notice_period_days ? `${val(emp.notice_period_days)} days` : '—'],
+                         ['Notice period', emp.notice_period_days ? `${val(emp.notice_period_days)} days` : '-'],
                          ['Weekly off', val(emp.weekly_off)]] as const).map(([k, v]) => (
                         <div className="fld" key={k}><div className="k">{k}</div><div className="v">{v}</div></div>
                       ))}
@@ -625,7 +625,7 @@ export default function Profile360({ code, employeeId, initial }: {
           {tab === 'statutory' && (
             <div className="note warn">
               Full PAN and passport are readable only by HR, Payroll and Admin. Everybody else
-              sees the last four digits — in reports and exports too, not just on this screen.
+              sees the last four digits, in reports and exports too, not just on this screen.
             </div>
           )}
 
@@ -640,8 +640,8 @@ export default function Profile360({ code, employeeId, initial }: {
                     <tbody>
                       {([['Basic', 'basic_monthly'], ['House rent allowance', 'hra_monthly'],
                          ['Conveyance', 'conveyance'], ['Gratuity', 'gratuity_monthly'],
-                         ['Provident fund — employee', 'employee_pf'],
-                         ['Provident fund — employer', 'employer_pf']] as const)
+                         ['Provident fund (employee)', 'employee_pf'],
+                         ['Provident fund (employer)', 'employer_pf']] as const)
                         .filter(([, k]) => payload.salary?.[k] !== null && payload.salary?.[k] !== undefined)
                         .map(([label, k]) => (
                           <tr key={k}>
@@ -697,7 +697,7 @@ export default function Profile360({ code, employeeId, initial }: {
                           <div className="ph">🏆</div>
                           <div style={{ minWidth: 0 }}>
                             <div className="n">{val(r.kind)}{r.cycle_label ? ` · ${val(r.cycle_label)}` : ''}</div>
-                            <div className="s">{String(r.message ?? '').slice(0, 110) || '—'}</div>
+                            <div className="s">{String(r.message ?? '').slice(0, 110) || '-'}</div>
                             <div className="pl">
                               <span className="pill">{pretty(r.created_at)}</span>
                               {r.badge_ref ? <span className="pill brand">{val(r.badge_ref)}</span> : null}

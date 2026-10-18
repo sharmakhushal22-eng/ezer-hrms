@@ -92,9 +92,9 @@ test('a name with no number still counts as having an emergency contact', () => 
 
 test('a missing join prints an em dash, never the word undefined', () => {
   const d = toIdCardData({ id: 'e1' });
-  assert.equal(d.name, '—');
-  assert.equal(d.code, '—');
-  assert.equal(d.company, '—');
+  assert.equal(d.name, '-');
+  assert.equal(d.code, '-');
+  assert.equal(d.company, '-');
   assert.equal(d.designation, null);
 });
 

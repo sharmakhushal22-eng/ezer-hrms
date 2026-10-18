@@ -344,7 +344,7 @@ export async function POST(req: NextRequest) {
     supporting_remark: text(body.supporting_remark, 500) || null,
     status: 'PENDING',
     ai_flag: aiFlag,
-    ai_notes: aiFlag === 'flag' ? 'Amount above ₹15,000 — manual review recommended' : null,
+    ai_notes: aiFlag === 'flag' ? 'Amount above ₹15,000: manual review recommended' : null,
   }).select('id, status').maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

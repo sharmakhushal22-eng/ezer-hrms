@@ -28,9 +28,9 @@ export default function Journey({ data, prefs }: { data: TodayPayload; prefs: Pr
         {[1, 3, 5].map(n => <div key={n}><b>{n} year{n > 1 ? 's' : ''}</b>{yrs >= n ? yearOf(n).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : toGo(n)}</div>)}
       </div>
       <div className="jgrid">
-        <div>Designation<b>{e.designation ?? '—'}</b></div>
-        <div>Reports to<b>{e.reports_to ?? '—'}</b></div>
-        <div>Department<b>{e.department ?? '—'}</b></div>
+        <div>Designation<b>{e.designation ?? '-'}</b></div>
+        <div>Reports to<b>{e.reports_to ?? '-'}</b></div>
+        <div>Department<b>{e.department ?? '-'}</b></div>
       </div>
     </section>
   );

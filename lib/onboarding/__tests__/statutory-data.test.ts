@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { statutoryData, maritalWord, ddmmyyyy } from '../statutory-data.ts'
+import { statutoryData, maritalWord, ddmmyyyy, ageOf } from '../statutory-data.ts'
 
 const oc = {
   full_name: 'Arjun Mehra', email: 'a@x.in', mobile: '9811000111', date_of_joining: '2026-10-23', submitted_at: '2026-10-16T10:00:00Z', employee_code: 'SSM0042', esic_applicable: false,
@@ -11,6 +11,7 @@ const oc = {
     step_7: {
       pan_number: 'abcpm1234k', has_uan: true, uan_number: '100123456789', prev_pf_id: 'DSNHP00123450000012345', bank_account: '502112345678', bank_ifsc: 'HDFC0000123',
       pf_nominees: [{ name: 'Neha Mehra', relation: 'Spouse', dob: '1997-08-02', share: '60', address: 'Gurugram' }, { name: 'Ramesh Mehra', relation: 'Father', dob: '1965-03-14', share: '40', address: 'Gurugram' }],
+      grat_nominees: [{ name: 'Neha Mehra', relation: 'Spouse', dob: '1997-08-02', share: '100', address: 'Gurugram' }],
       eps_family: [{ name: 'Neha Mehra', address: 'Gurugram', dob: '1997-08-02', relation: 'Spouse' }], eps_fallback: { name: 'Sunita Mehra', relation: 'Mother', address: 'Gurugram', dob: '1969-07-19' },
       insurance: { spouse_name: 'Neha Mehra', spouse_dob: '1997-08-02', spouse_residing: 'Yes', father_name: 'Ramesh Mehra', father_dob: '1965-03-14', father_residing: 'No', mother_name: 'Sunita Mehra', mother_dob: '1969-07-19', mother_residing: 'Yes' },
       esic_details: { prev_ip: '', dispensary: 'ESIC Dispensary Sector 9' },
@@ -34,6 +35,8 @@ test('the forms are filled from the onboarding record', () => {
   assert.equal(d.curr_pin, '122016')
   assert.equal(d.pf_nominees.length, 2); assert.equal(d.pf_nominees[0].share, '60%'); assert.equal(d.pf_nominees[0].dob, '02/08/1997')
   assert.equal(d.eps_fallback?.relation, 'Mother')
+  assert.equal(d.grat_nominees.length, 1); assert.equal(d.grat_nominees[0].age, '29'); assert.equal(d.grat_nominees[0].share, '100%')
+  assert.equal(d.perm_parts.thana, 'Sector 20 PS'); assert.equal(d.perm_parts.state, 'Haryana'); assert.equal(d.designation, '')
   assert.equal(d.family.length, 3)
   assert.deepEqual(d.family.map(f => f.relation), ['Wife', 'Father', 'Mother'])
   assert.equal(d.family[1].residing, false); assert.equal(d.family[1].town, 'Gurugram')
@@ -59,4 +62,5 @@ test('legacy flat nominee fields still print, and a blank record does not throw'
 test('wording helpers', () => {
   assert.equal(maritalWord('Single'), 'Unmarried'); assert.equal(maritalWord('Widowed'), 'Widow'); assert.equal(maritalWord('Divorced'), 'Divorce'); assert.equal(maritalWord(''), '')
   assert.equal(ddmmyyyy('2026-10-16T10:00:00Z'), '16/10/2026'); assert.equal(ddmmyyyy('12 Jan 2020'), '12 Jan 2020')
+  assert.equal(ageOf('1997-08-02', new Date('2026-08-01')), '28'); assert.equal(ageOf('1997-08-02', new Date('2026-08-02')), '29'); assert.equal(ageOf('', new Date()), '')
 })

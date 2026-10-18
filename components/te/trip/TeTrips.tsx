@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import type { Snapshot, TeTrip, TripScope, Uuid } from '@/lib/te/types'
 import { groupTrips, myTrips, scopeCounts, tripChip, tripMoney } from '@/lib/te/trips-list'
+import { isCoTraveller } from '@/lib/te/co-traveller'
 import { plural, rs } from '@/lib/te/format'
 import { routeText, tripDates } from '@/lib/te/entry-flow'
 import TeIcon from '../TeIcon'
@@ -36,7 +37,7 @@ export default function TeTrips({ snap, onOpen, onNew }: {
       <div className="ph">
         <div>
           <h1>Trips</h1>
-          <p>Every trip, local or abroad, holds its route, its legs with GPS and stops, and every bill you spent on it.</p>
+          <p>Every trip, local or abroad, holds its route, its journeys with GPS and stops, and every bill you spent on it.</p>
         </div>
       </div>
 
@@ -87,7 +88,13 @@ function TripRow({ trip, snap, placeName, onOpen }: {
 }) {
   const legs = snap.journeys.filter(j => j.tripId === trip.id)
   const chip = tripChip(trip)
+  // snap.claims and snap.expenses are the viewer's own, so a co-traveller's
+  // row shows what THEY have to claim, never the planner's total.
   const money = tripMoney(trip, snap.claims, snap.expenses)
+  // Somebody else planned this one and took me along. Worth saying on the row:
+  // the trip is in my list and most of its buttons will not be mine.
+  const taken = isCoTraveller(trip, snap.me)
+  const planner = taken ? snap.emp[trip.emp]?.name ?? '' : ''
   // The rides to and from an airport are legs of the trip but not how you
   // travelled on it, so they are left out of the summary chips.
   const modes = [...new Set(legs.filter(l => l.kind !== 'first' && l.kind !== 'last').map(l => l.mode))]
@@ -103,12 +110,16 @@ function TripRow({ trip, snap, placeName, onOpen }: {
         <div className="b">{trip.name || trip.to}</div>
         <div className="small muted">{routeText(trip, placeName)}</div>
         <div className="small muted">
-          {tripDates(trip)} · {plural(legs.length, 'leg')}{km ? ` · ${km} km by road` : ''}
+          {tripDates(trip)} · {plural(legs.length, 'journey')}{km ? ` · ${km} km by road` : ''}
         </div>
         <div className="row tight">
           <span className={`chip plain sc sc-${trip.scope}`}><TeIcon name={trip.scope} size="sm" />{SCOPE_WORD[trip.scope]}</span>
           <span className="chip plain">{PATTERN_WORD[trip.pattern] ?? trip.pattern}</span>
-          {trip.pax > 1 ? <span className="chip plain"><TeIcon name="people" size="sm" />{trip.pax} people</span> : null}
+          {taken ? (
+            <span className="chip t-info"><TeIcon name="people" size="sm" />{planner ? `On ${planner}’s trip` : 'You were taken on this trip'}</span>
+          ) : trip.pax > 1 ? (
+            <span className="chip plain"><TeIcon name="people" size="sm" />{trip.pax} people</span>
+          ) : null}
           {modes.map(m => (
             <span key={m} className="chip plain">
               <TeIcon name={MODE_ICON[m] ?? 'route'} size="sm" />{snap.cfg.modes.find(x => x.id === m)?.name ?? m}

@@ -99,7 +99,7 @@ export function detectGroups(bandRow: unknown[], headerRow: unknown[]): { groups
     if (under !== 'code') {
       issues.push({
         row: 2, emp_code: null, severity: 'warning', code: 'GROUP_LAYOUT',
-        message: `Block "${label}" starts at column ${i + 1} but the cell under it reads "${s(headerRow[i]) || '(blank)'}" rather than "Code" — the block was skipped.`,
+        message: `Block "${label}" starts at column ${i + 1} but the cell under it reads "${s(headerRow[i]) || '(blank)'}" rather than "Code", so the block was skipped.`,
       })
       continue
     }
