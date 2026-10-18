@@ -92,7 +92,7 @@ function Chips({ value, onPick, name, disabled }: {
         const band = bandFor(n)
         return (
           <button key={n} type="button" role="radio" aria-checked={on} disabled={disabled}
-                  title={band ? `${n} — ${band.label}` : String(n)}
+                  title={band ? `${n}: ${band.label}` : String(n)}
                   className={on ? 'chip sel' : 'chip'}
                   onClick={() => onPick(n)}>{n}</button>
         )
@@ -146,12 +146,12 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
         <Stat tone="accent" label="Owed from you" value={actionLabel} note={actionNote} />
         <Stat label="My KRAs" value={kraCount}
               note={setOk
-                ? `Totalling ${weightage} — the set is valid`
+                ? `Totalling ${weightage}. The set is valid`
                 : `Totalling ${weightage}. Needs ${DEFAULT_RULES.minKra}–${DEFAULT_RULES.maxKra} KRAs at exactly ${DEFAULT_RULES.totalWeightage}`}
               tone={setOk ? undefined : 'warn'} />
         <Stat label="How often" value={frequency} note={periodLabel} />
         <Stat label="Last time"
-              value={lastRating === null ? '—' : `${lastRating}${band ? ` · ${band.label}` : ''}`}
+              value={lastRating === null ? '-' : `${lastRating}${band ? ` · ${band.label}` : ''}`}
               note={lastScore === null ? 'No previous period on record' : `Weighted score ${lastScore}`} />
       </div>
 
@@ -159,7 +159,7 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
         <span aria-hidden="true">ℹ️</span>
         <div>
           This is a <b>developmental</b> review. The rating is not linked to any
-          increment, variable pay, bonus or CTC — it exists to give you feedback and
+          increment, variable pay, bonus or CTC. It exists to give you feedback and
           to decide what support you get next. Recognition here is a certificate, a
           nomination or an award, never a cash component.
         </div>
@@ -198,7 +198,7 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
         <div className="banner b-amber">
           <span aria-hidden="true">⚠️</span>
           <div>
-            You write your own KRAs and weightages — but a <b>one-to-one with your
+            You write your own KRAs and weightages, but a <b>one-to-one with your
             manager is required before they lock</b>. {lockGate.because}
           </div>
         </div>
@@ -316,7 +316,7 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
                     onClick={onSubmit}>
               {saving ? 'Saving…'
                 : check.canSubmit ? 'Send to my manager'
-                : `Cannot send yet — ${check.faults.length} to fix`}
+                : `Cannot send yet: ${check.faults.length} to fix`}
             </button>
             {check.total !== DEFAULT_RULES.totalWeightage && kras.length > 0 && (
               <button className="btn ghost" type="button"
@@ -356,7 +356,7 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
       </div>
 
       <Card title="One-to-one discussion log"
-            sub="Every discussion stays on record — KRA setting, mid-period, and the final review.">
+            sub="Every discussion stays on record: KRA setting, mid-period, and the final review.">
         <div className="tblwrap">
           <table>
             <thead>
@@ -371,7 +371,7 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
                 return (
                   <tr key={i}>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      {l.discussion_date ? humanDate(l.discussion_date) : '—'}
+                      {l.discussion_date ? humanDate(l.discussion_date) : '-'}
                     </td>
                     <td>
                       <span className={`pill ${l.discussion_type === 'KRA_SETTING' ? 'p-brand'
@@ -380,11 +380,11 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
                         {TYPE_LABEL[l.discussion_type]}
                       </span>
                     </td>
-                    <td>{managerName || '—'}</td>
+                    <td>{managerName || '-'}</td>
                     <td className={l.placeholder ? 'k' : undefined}>
                       {l.placeholder
                         ? TYPE_PURPOSE[l.discussion_type]
-                        : (l.discussion_points || '—')}
+                        : (l.discussion_points || '-')}
                     </td>
                     <td>{l.employee_ack
                       ? <span className="pill p-green">✓ acknowledged</span>
@@ -475,7 +475,7 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
       {submitted ? (
         <Locked>
           Your self rating is <b>submitted and locked</b>, and your manager&rsquo;s rating
-          is now open. It locks at submission on purpose — a self assessment edited after
+          is now open. It locks at submission on purpose: a self assessment edited after
           seeing a manager&rsquo;s number is not a self assessment.
         </Locked>
       ) : (
@@ -483,7 +483,7 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
           <span aria-hidden="true">ℹ️</span>
           <div>
             Rate your own delivery on each KRA. Once you submit, this <b>locks</b> and your
-            manager can rate — they cannot rate before you.
+            manager can rate. They cannot rate before you.
             {windowNote && <> {windowNote}</>}
           </div>
         </div>
@@ -493,10 +493,10 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
         <Stat label="KRAs rated" value={`${rows.length - unrated} of ${rows.length}`}
               note={unrated ? `${unrated} still to do` : 'All done'}
               tone={unrated ? 'warn' : 'good'} />
-        <Stat label="Your weighted score" value={mine === null ? '—' : mine.toFixed(2)}
+        <Stat label="Your weighted score" value={mine === null ? '-' : mine.toFixed(2)}
               note="Weighted by the weightage on each KRA" />
         <Stat label="That lands at"
-              value={bandForScore(mine)?.label ?? '—'}
+              value={bandForScore(mine)?.label ?? '-'}
               note={mine === null ? 'Rate every KRA to see this' : 'What your own ratings average to'} />
       </div>
 
@@ -543,7 +543,7 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
             <button className="btn" type="button" disabled={unrated > 0 || saving} onClick={onSubmit}>
               {saving ? 'Submitting…'
                 : unrated > 0 ? `${unrated} KRA${unrated === 1 ? '' : 's'} still unrated`
-                : 'Submit — this locks it'}
+                : 'Submit (this locks it)'}
             </button>
           </div>
         )}
@@ -575,7 +575,7 @@ export function ResultTab({ published, lines, finalRating, finalisedBy, finalise
     return (
       <Card title="Your result is not published yet">
         <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--ez-muted)', maxWidth: 640 }}>
-          Nothing is shown here until the result is published — no rating, no scores, no
+          Nothing is shown here until the result is published: no rating, no scores, no
           manager comments. That is deliberate: a rating that reaches you before the
           conversation does turns a review into a notification.
           {!publishGate.open && (
@@ -603,16 +603,16 @@ export function ResultTab({ published, lines, finalRating, finalisedBy, finalise
 
       <div className="grid g4" style={{ marginBottom: 16 }}>
         <Stat tone="accent" label="Final rating"
-              value={finalRating === null ? '—' : `${finalRating}${band ? ` · ${band.label}` : ''}`}
+              value={finalRating === null ? '-' : `${finalRating}${band ? ` · ${band.label}` : ''}`}
               note={finalScore === null ? '' : `Weighted score ${finalScore.toFixed(2)}`} />
-        <Stat label="Your own score" value={selfScore === null ? '—' : selfScore.toFixed(2)}
+        <Stat label="Your own score" value={selfScore === null ? '-' : selfScore.toFixed(2)}
               note={g.delta === null ? '' :
                 `${g.delta > 0 ? '+' : ''}${g.delta.toFixed(2)} against the final`} />
         <Stat label="Department average"
-              value={deptAverage === null ? '—' : deptAverage.toFixed(2)}
+              value={deptAverage === null ? '-' : deptAverage.toFixed(2)}
               note={deptAverage === null || finalScore === null ? 'Not available'
                 : finalScore >= deptAverage ? 'You are at or above it' : 'You are below it'} />
-        <Stat label="Finalised by" value={finalisedBy ?? '—'}
+        <Stat label="Finalised by" value={finalisedBy ?? '-'}
               note={finalisedOn ? humanDate(finalisedOn) : ''} />
       </div>
 
@@ -631,13 +631,13 @@ export function ResultTab({ published, lines, finalRating, finalisedBy, finalise
                 <tr key={l.goalId}>
                   <td style={{ fontWeight: 600 }}>{l.title}</td>
                   <td className="num">{l.weightage}</td>
-                  <td className="num">{l.self ?? '—'}</td>
-                  <td className="num">{l.rmL1 ?? '—'}</td>
-                  <td className="num">{l.rmL2 ?? '—'}</td>
-                  <td className="num"><b>{l.final ?? '—'}</b></td>
+                  <td className="num">{l.self ?? '-'}</td>
+                  <td className="num">{l.rmL1 ?? '-'}</td>
+                  <td className="num">{l.rmL2 ?? '-'}</td>
+                  <td className="num"><b>{l.final ?? '-'}</b></td>
                   <td className="num">
                     {l.final === null || l.final === undefined
-                      ? '—' : ((l.final * l.weightage) / 100).toFixed(2)}
+                      ? '-' : ((l.final * l.weightage) / 100).toFixed(2)}
                   </td>
                 </tr>
               ))}
@@ -664,10 +664,10 @@ export function ResultTab({ published, lines, finalRating, finalisedBy, finalise
           {benefits.length === 0
             ? <div className="k">Nothing recorded for this period.</div>
             : <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.8 }}>
-                {benefits.map((b, i) => <li key={i}><b>{b.type}</b> — {b.note}</li>)}
+                {benefits.map((b, i) => <li key={i}><b>{b.type}</b>: {b.note}</li>)}
               </ul>}
           <div className="k" style={{ marginTop: 8 }}>
-            Recognition only — a certificate, a nomination or an award. Never a cash component.
+            Recognition only: a certificate, a nomination or an award. Never a cash component.
           </div>
         </div>
       </div>
@@ -720,7 +720,7 @@ export function AnalyticsTab({ lines, trend, published }: {
                 <div className="m" style={{ width: `${((l.final ?? 0) / 5) * 100}%` }} />
               </div>
               <div className="vv">
-                {l.self ?? '—'} → {l.final ?? '—'}
+                {l.self ?? '-'} → {l.final ?? '-'}
                 {g.flag === 'MAJOR_GAP' ? ' ‼' : g.delta === 0 ? ' =' : ''}
               </div>
             </div>
@@ -746,7 +746,7 @@ export function AnalyticsTab({ lines, trend, published }: {
               <div className="m" style={{ width: `${((c.score ?? 0) / 5) * 100}%`, height: '100%',
                                           borderRadius: 5 }} />
             </div>
-            <div className="vv">{c.score === null ? '—' : c.score.toFixed(2)}</div>
+            <div className="vv">{c.score === null ? '-' : c.score.toFixed(2)}</div>
           </div>
         ))}
       </Card>
@@ -765,9 +765,9 @@ export function AnalyticsTab({ lines, trend, published }: {
                   return (
                     <tr key={t.period}>
                       <td>{t.period}</td>
-                      <td className="num">{t.score === null ? '—' : t.score.toFixed(2)}</td>
+                      <td className="num">{t.score === null ? '-' : t.score.toFixed(2)}</td>
                       <td className="num">
-                        {d === null ? '—'
+                        {d === null ? '-'
                           : <span className={d > 0 ? 'ok' : d < 0 ? 'bad' : undefined}>
                               {d > 0 ? '+' : ''}{d.toFixed(2)}
                             </span>}

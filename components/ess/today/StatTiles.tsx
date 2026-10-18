@@ -40,7 +40,7 @@ export default function StatTiles({ data }: { data: TodayPayload }) {
           other screens use them: .eye is Profile360's reveal button. Salary
           remains on Payroll → Salary Slip. */}
       <T i={3}>
-        <Ring to={(pct ?? 0) / 100} cls="pos" label={pct !== null ? `${pct}%` : '—'} />
+        <Ring to={(pct ?? 0) / 100} cls="pos" label={pct !== null ? `${pct}%` : '-'} />
         <div><div className="k">Attendance, {new Date().toLocaleDateString('en-IN', { month: 'long' })}</div>
           <div className="v"><span>{present}</span><span>of {am?.working_days ?? 0} days</span></div>
           <div className="s">{am?.late ? `${am.late} late mark${am.late > 1 ? 's' : ''}` : 'No late marks'}{delta !== null && delta !== 0 && <span className={'delta ' + (delta > 0 ? 'up' : 'warn')}>{delta > 0 ? '+' : ''}{delta}%</span>}</div></div>

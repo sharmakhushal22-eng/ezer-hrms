@@ -31,7 +31,7 @@ export const GAMES: GameDef[] = [
   { code: 'quiz', name: 'EZER Trivia',    live: true,  players: 2 },
   { code: 'mem',  name: 'Memory Match',   live: true,  players: 2 },
   { code: 'wheel', name: 'Spin the Wheel', live: false, players: 1,
-    soloReason: 'The wheel is a daily solo spin — there is nothing for a second player to do.' },
+    soloReason: 'The wheel is a daily solo spin. There is nothing for a second player to do.' },
 ]
 
 export const LIVE_GAMES = GAMES.filter(g => g.live)

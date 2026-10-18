@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const { data: account } = await sb.from('ess_accounts')
     .select('id, password_hash, password_salt, status').eq('employee_id', employee.id).maybeSingle()
   if (!account || !account.password_hash) return NextResponse.json({ error: 'No account to update' }, { status: 404 })
-  if (account.status !== 'ACTIVE') return NextResponse.json({ error: 'Account inactive — contact HR.' }, { status: 403 })
+  if (account.status !== 'ACTIVE') return NextResponse.json({ error: 'Account inactive. Contact HR.' }, { status: 403 })
   if (!verifyPassword(current, account.password_hash, account.password_salt)) return NextResponse.json({ error: 'Current password is incorrect' }, { status: 401 })
 
   const { hash, salt } = hashPassword(next)

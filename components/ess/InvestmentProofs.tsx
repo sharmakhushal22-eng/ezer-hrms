@@ -24,7 +24,7 @@ const FY = '2026-27'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const num = (v: any) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0)
 const fmtDate = (d: any) => {
-  if (!d) return '—'
+  if (!d) return '-'
   const x = new Date(d)
   return `${String(x.getDate()).padStart(2, '0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]} ${x.getFullYear()}`
 }
@@ -79,7 +79,7 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
 
       {!locked && shortfall > 0 && (
         <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>
-          Proof for {inr(shortfall)} is still pending — that much will not stay exempt.
+          Proof for {inr(shortfall)} is still pending. That much will not stay exempt.
         </div>
       )}
       {p.status === 'REJECTED' && p.rejection_reason && (
@@ -137,7 +137,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
     const { data, error } = await supabase.rpc('open_investment_proof_window', { p_employee_id: employeeId, p_fy: FY })
     setBusy('')
     if (error) { setErr(error.message); return }
-    if (!Number(data)) { setErr('No declared line found — fill in and submit the Investment Declaration first.'); return }
+    if (!Number(data)) { setErr('No declared line found. Fill in and submit the Investment Declaration first.'); return }
     setMsg(`Proof window opened for ${data} line${Number(data) === 1 ? '' : 's'}.`)
     load()
   }
@@ -151,7 +151,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
     }).eq('id', p.id)
     setBusy('')
     if (error) { setErr(error.message); return }
-    setMsg(`${p.section} proof submitted — HR will review it.`)
+    setMsg(`${p.section} proof submitted. HR will review it.`)
     load()
   }
 
@@ -166,14 +166,14 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
     <div style={{ fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13, color: C.navy, maxWidth: 780 }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 20, fontWeight: 800 }}>Investment Proofs</div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>FY {FY} — bills for what you declared</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>FY {FY}: bills for what you declared</div>
       </div>
 
       {leaving && (
         <div style={{ background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.amber }}>Your proof window is open now</div>
           <div style={{ fontSize: 12, color: C.amber, marginTop: 3, lineHeight: 1.55 }}>
-            Your last working day is <b>{fmtDate(leaving)}</b>, so the deadline is not the end of the year — it is <b>that day</b>.
+            Your last working day is <b>{fmtDate(leaving)}</b>, so the deadline is not the end of the year, it is <b>that day</b>.
             Anything not proved by then will not stay exempt and will be taxed in the final settlement.
           </div>
         </div>
@@ -181,11 +181,11 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
 
       {!hasDecl ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-          No <b>Investment Declaration</b> found for this FY. Proofs are submitted against it — fill in and submit the declaration first.
+          No <b>Investment Declaration</b> found for this FY. Proofs are submitted against it. Fill in and submit the declaration first.
         </div>
       ) : regime === 'NEW' ? (
         <div style={{ background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 14, padding: 20, fontSize: 13, color: C.green, lineHeight: 1.6 }}>
-          You are on the <b>New regime</b> — the 80C/80D/HRA exemptions do not apply, so no proof is needed.
+          You are on the <b>New regime</b>: the 80C/80D/HRA exemptions do not apply, so no proof is needed.
         </div>
       ) : (
         <>

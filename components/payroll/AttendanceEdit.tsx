@@ -77,7 +77,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
     setSaveMsg(''); setSaveErr(''); setArrMsg(''); setArrErr(''); setRecalcMsg('')
   }, [selCode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const empOpts: Opt[] = snap.map(r => ({ value: r.employee_code, label: `${r.employee_code} — ${r.full_name}` }))
+  const empOpts: Opt[] = snap.map(r => ({ value: r.employee_code, label: `${r.employee_code} · ${r.full_name}` }))
   const runOpts: Opt[] = runs.map(r => ({ value: r.id, label: `month master for ${r.company_name || 'company'} for ${r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}`}` }))
 
   async function save() {
@@ -89,8 +89,8 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
     })
     setSaveBusy(false)
     if (error) { setSaveErr(error); return }
-    setSaveMsg(`Saved — ${selCode} updated. Paid Days recalculated to ${paidDays ?? '—'}.`)
-    if (runStatusReset) setRecalcMsg('This month was already calculated — it has been reset to SYNCED. Payroll must be recalculated before approval.')
+    setSaveMsg(`Saved: ${selCode} updated. Paid Days recalculated to ${paidDays ?? '-'}.`)
+    if (runStatusReset) setRecalcMsg('This month was already calculated. It has been reset to SYNCED. Payroll must be recalculated before approval.')
     reloadRuns(); loadSnap()
   }
 
@@ -101,14 +101,14 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
     const { error } = await addArrearDays(runId, selCode, Number(arrDays), `${arrMonth}-01`, arrReason)
     setArrBusy(false)
     if (error) { setArrErr(error); return }
-    setArrMsg(`Arrear recorded — ${arrDays} day(s) from ${arrMonth} added to this run.`); loadSnap()
+    setArrMsg(`Arrear recorded: ${arrDays} day(s) from ${arrMonth} added to this run.`); loadSnap()
   }
 
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }
   const stat = (label: string, val: any) => (
     <div style={{ background: C.gray, borderRadius: 10, padding: '8px 11px', minWidth: 90 }}>
       <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{val ?? '—'}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{val ?? '-'}</div>
     </div>
   )
 
@@ -120,8 +120,8 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>{mode === 'arrear' ? 'Arrear Days' : 'Attendance Edit'}</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
             {mode === 'arrear'
-              ? 'Add days owed from a prior month into this run — the source month is never reopened'
-              : 'Correct one employee after upload — Paid Days is recalculated by the same rule as the upload'}
+              ? 'Add days owed from a prior month into this run. The source month is never reopened'
+              : 'Correct one employee after upload. Paid Days is recalculated by the same rule as the upload'}
           </div>
         </div>
       </div>
@@ -140,7 +140,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
         <>
           {/* context stats */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-            {stat('Department', cur.department || '—')}
+            {stat('Department', cur.department || '-')}
             {stat('Days in Month', cur.days_in_month)}
             {stat('Total Days', cur.total_days)}
             {stat('Paid Days', cur.paid_days)}
@@ -149,7 +149,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
           {/* edit form */}
           {mode === 'edit' && (
           <div style={card}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Edit attendance — {cur.employee_code} · {cur.full_name}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Edit attendance: {cur.employee_code} · {cur.full_name}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
               <NumField label="Earned Leave" value={f.earned_leave} onChange={v => setF({ ...f, earned_leave: v })} />
               <NumField label="Casual Leave" value={f.casual_leave} onChange={v => setF({ ...f, casual_leave: v })} />
@@ -188,7 +188,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
           {mode === 'arrear' && (
           <div style={{ ...card, borderColor: C.greenBd }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 4 }}>Arrear days</div>
-            <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>Days owed from a prior month land in THIS run — the source month is only recorded for audit and is never reopened.</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>Days owed from a prior month land in THIS run. The source month is only recorded for audit and is never reopened.</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
               <div><label style={lbl}>Arrear days</label><input type="number" step="0.5" value={arrDays} onChange={e => setArrDays(e.target.value)} style={ddInp} /></div>
               <div><label style={lbl}>Source period</label><input type="month" value={arrMonth} onChange={e => setArrMonth(e.target.value)} style={ddInp} /></div>

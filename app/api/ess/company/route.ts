@@ -75,6 +75,6 @@ export async function GET(req: NextRequest) {
       { regime: 'Old Regime', employees: regime.OLD.n, costlier: regime.OLD.costlier },
       { regime: 'New Regime', employees: regime.NEW.n, costlier: regime.NEW.costlier },
     ],
-    regime_note: (regime.OLD.costlier + regime.NEW.costlier) ? `${regime.OLD.costlier + regime.NEW.costlier} employees are on the costlier regime for their own numbers. The comparison is computed on every declaration — nudging them costs nothing to surface.` : null,
+    regime_note: (regime.OLD.costlier + regime.NEW.costlier) ? `${regime.OLD.costlier + regime.NEW.costlier} employees are on the costlier regime for their own numbers. The comparison is computed on every declaration, so nudging them costs nothing to surface.` : null,
   })
 }

@@ -71,7 +71,7 @@ const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en
 const num = (v: unknown) => Number(v) || 0
 const today = () => new Date().toISOString().slice(0, 10)
 const dmy = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+  d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
 // Survives an accidental refresh mid-journey — losing a drive because the
 // screen reloaded would mean the employee simply cannot claim it.
@@ -235,7 +235,7 @@ function useJourneyRecorder() {
           ...j,
           error: fatal
             ? 'Location permission is blocked. Allow location for this site, then start the journey again.'
-            : 'Waiting for a location fix — move somewhere with a clearer view of the sky.',
+            : 'Waiting for a location fix. Move somewhere with a clearer view of the sky.',
           ...(fatal ? { state: 'IDLE' as TrackState } : {}),
         }))
         if (fatal) stopWatch()
@@ -321,8 +321,8 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
                   background: tracking ? V.purpleBg : V.field }}>
       <div style={{ fontSize: 12, color: V.muted, marginBottom: 10, lineHeight: 1.55 }}>
         <b style={{ color: V.navy }}>{typeName}</b> has no bill to attach, so the journey is
-        recorded and paid on distance. Start before you set off and end when you arrive —
-        keep this screen open while you travel.
+        recorded and paid on distance. Start before you set off and end when you arrive,
+        and keep this screen open while you travel.
       </div>
 
       {journey.error && <Banner tone={journey.state === 'IDLE' ? 'err' : 'warn'}>{journey.error}</Banner>}
@@ -372,7 +372,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
         )}
         {recorded && (
           <>
-            <span style={{ fontSize: 12, color: V.green, fontWeight: 600, alignSelf: 'center' }}>Journey recorded — add the details below and save.
+            <span style={{ fontSize: 12, color: V.green, fontWeight: 600, alignSelf: 'center' }}>Journey recorded. Add the details below and save.
             </span>
             <button onClick={onReset}
                     style={{ padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.border}`,
@@ -492,7 +492,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
 
           {loaded && bills.length === 0 && needsBill !== false && (
             <span style={{ fontSize: 11, color: V.amber }}>
-              Needs a slip — {typeName} above {inr(needsBill)} must show a bill
+              Needs a slip: {typeName} above {inr(needsBill)} must show a bill
             </span>
           )}
         </div>
@@ -525,7 +525,7 @@ function ClaimRow({ claim }: { claim: Claim }) {
       </div>
       {settled && num(claim.total_approved) < num(claim.total_claimed) && (
         <div style={{ fontSize: 11, color: V.amber, marginTop: 6 }}>
-          {inr(num(claim.total_claimed) - num(claim.total_approved))} was not approved — open the
+          {inr(num(claim.total_claimed) - num(claim.total_approved))} was not approved. Open the
           claim with Finance if you need the reason.
         </div>
       )}
@@ -688,14 +688,14 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   const addExpense = async () => {
     if (preview) {
       setMsg({ tone: 'warn', text:
-        'You are previewing this portal as an admin, so you cannot file an expense here — ' +
-        'the employee has to log in and add it themselves.' })
+        'You are previewing this portal as an admin, so you cannot file an expense here. ' +
+        'The employee has to log in and add it themselves.' })
       return
     }
     if (!purpose.trim()) { setMsg({ tone: 'err', text: 'Say what the journey was for.' }); return }
     if (!typeCode) { setMsg({ tone: 'err', text: 'Pick an expense type.' }); return }
     if (needsGps && journey.state !== 'RECORDED') {
-      setMsg({ tone: 'err', text: 'Record the journey first — start before you set off and end when you arrive.' })
+      setMsg({ tone: 'err', text: 'Record the journey first. Start before you set off and end when you arrive.' })
       return
     }
     if (!needsGps && !num(amount)) { setMsg({ tone: 'err', text: 'Enter the amount you spent.' }); return }
@@ -891,7 +891,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
         {preview && (
           <Banner tone="warn">
             <b>Admin preview.</b> You are seeing this employee&apos;s portal from the dashboard,
-            so their claims are visible but nothing can be filed from here — an expense is
+            so their claims are visible but nothing can be filed from here. An expense is
             always entered by the employee themselves. To add one, sign in at{' '}
             <a href="/ess-login" style={{ color: 'inherit', textDecoration: 'underline' }}>/ess-login</a>{' '}
             as them.
@@ -913,7 +913,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                 <optgroup key={g.cat} label={CATEGORY_LABEL[g.cat] ?? g.cat}>
                   {g.items.map(t => (
                     <option key={t.type_code} value={t.type_code}>
-                      {t.type_name}{t.requires_gps ? ' — recorded' : ''}
+                      {t.type_name}{t.requires_gps ? ' (recorded)' : ''}
                     </option>
                   ))}
                 </optgroup>
@@ -946,7 +946,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
             {liveRate == null && !selectedType?.requires_vehicle && (
               <Banner tone="warn">
                 No rate per kilometre has been set for {selectedType?.type_name} yet.
-                You can still record the journey — ask HR to set the rate before you submit.
+                You can still record the journey. Ask HR to set the rate before you submit.
               </Banner>
             )}
 
@@ -989,7 +989,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                             color: V.navy, cursor: 'pointer', marginBottom: 12 }}>
               <input type="checkbox" checked={roundTrip} onChange={e => setRoundTrip(e.target.checked)}
                      style={{ width: 14, height: 14, accentColor: V.purple, cursor: 'pointer' }} />
-              Return journey — double the recorded distance
+              Return journey (double the recorded distance)
             </label>
           </>
         ) : (
@@ -1040,7 +1040,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
               {!pendingBill && num(selectedType?.bill_threshold) > 0
                 && num(amount) > num(selectedType?.bill_threshold) && (
                 <span style={{ fontSize: 12, color: V.amber }}>
-                  This amount needs a bill — attach it now or from the list below.
+                  This amount needs a bill. Attach it now or from the list below.
                 </span>
               )}
             </div>
@@ -1056,7 +1056,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                          background: saving || preview ? V.muted : V.purple, color: C.onAccent,
                          fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                          cursor: saving || preview ? 'not-allowed' : 'pointer' }}>
-          {saving ? 'Saving…' : preview ? 'Add expense — employee only' : 'Add expense'}
+          {saving ? 'Saving…' : preview ? 'Add expense (employee only)' : 'Add expense'}
         </button>
       </div>
 

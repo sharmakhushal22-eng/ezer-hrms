@@ -96,7 +96,7 @@ function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Prom
 
   if (!policies.length) {
     return <Card title="Policies" sub="Nothing to edit yet.">
-      <Note tone="warn">No policy exists. A policy is what decides frequency, KRA counts and the approval chain — every period is generated from one.</Note>
+      <Note tone="warn">No policy exists. A policy is what decides frequency, KRA counts and the approval chain. Every period is generated from one.</Note>
     </Card>
   }
 
@@ -157,7 +157,7 @@ function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Prom
           false with a CHECK constraint, so a control for it could only ever
           fail. Saying why beats an admin hunting for a switch that cannot exist. */}
       <Note tone="warn">
-        Performance is not linked to pay. That is fixed in the database, not a setting — the column is constrained to stay off.
+        Performance is not linked to pay. That is fixed in the database, not a setting: the column is constrained to stay off.
       </Note>
 
       <SaveRow busy={busy} error={error} saved={saved}
@@ -226,9 +226,9 @@ function KraPanel({ kras, companyId, reload }: {
             {kras.map(k => (
               <tr key={s(k.id)}>
                 <td>{s(k.kra_title)}</td>
-                <td className="k">{s(k.kpi_metric) || '—'}</td>
+                <td className="k">{s(k.kpi_metric) || '-'}</td>
                 <td>{s(k.category).toLowerCase()}</td>
-                <td className="num">{k.suggested_weightage === null ? '—' : s(k.suggested_weightage)}</td>
+                <td className="num">{k.suggested_weightage === null ? '-' : s(k.suggested_weightage)}</td>
                 <td><span className={`pill ${k.is_active ? 'p-green' : 'p-grey'}`}>{k.is_active ? 'active' : 'off'}</span></td>
                 <td>
                   <div className="btnrow">
@@ -393,7 +393,7 @@ function CyclePanel({ policies, periods, reload }: {
             <select value={periodId} onChange={e => { setPeriodId(e.target.value); setTyped('') }}>
               <option value="">Choose a period…</option>
               {openable.map(p => (
-                <option key={s(p.id)} value={s(p.id)}>{s(p.period_name)} — {s(p.status).toLowerCase()}</option>
+                <option key={s(p.id)} value={s(p.id)}>{s(p.period_name)} · {s(p.status).toLowerCase()}</option>
               ))}
             </select>
           </Field>

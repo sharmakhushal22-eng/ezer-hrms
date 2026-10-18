@@ -181,7 +181,7 @@ export default function LiveMemoryMatch({ sessionId, seed, meId, hostId, opponen
           ? result.draw ? `A draw, ${result.scores.HOST} each.`
             : result.winner === me ? `You won, ${state.scores[me]} pairs to ${state.scores[me === 'HOST' ? 'GUEST' : 'HOST']}.`
             : `${opponentName} won.`
-          : status === 'playing' ? (myTurn ? 'Your turn — turn over two.' : `${opponentName}'s turn.`)
+          : status === 'playing' ? (myTurn ? 'Your turn: turn over two.' : `${opponentName}'s turn.`)
           : ''}
       </div>
 

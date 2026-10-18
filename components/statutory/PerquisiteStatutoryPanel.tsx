@@ -73,7 +73,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
             <label style={lbl}>Employee</label>
             <select style={inp} value={empId} onChange={e => setEmpId(e.target.value)}>
               <option value="">Select employee</option>
-              {emps.map(e => <option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+              {emps.map(e => <option key={e.id} value={e.id}>{e.emp_code} · {e.full_name}</option>)}
             </select>
           </div>
           <div>
@@ -87,7 +87,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
       {empId && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, maxWidth: 560 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>This employee&apos;s perquisite amounts · FY {fy}</div>
-          {types.length === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No active perquisite types — configure them in Configuration → Perquisite (run sql63/sql64 first).</div> : (
+          {types.length === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No active perquisite types. Configure them in Configuration → Perquisite (run sql63/sql64 first).</div> : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: 8, alignItems: 'center' }}>
                 {types.map(t => (

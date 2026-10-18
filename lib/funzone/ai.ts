@@ -41,7 +41,7 @@ export const DIFFICULTY_LABEL: Record<Difficulty, string> = {
 export const DIFFICULTY_MEANING: Record<Difficulty, string> = {
   easy:   'Often just plays somewhere. You should win.',
   medium: 'Takes an obvious win and blocks yours, but does not see a fork coming.',
-  hard:   'Solved play. The best you can get is a draw — that is the game, not the bot.',
+  hard:   'Solved play. The best you can get is a draw. That is the game, not the bot.',
 }
 
 /** Chance the weaker levels bother to look for a win or a block at all. */

@@ -27,21 +27,28 @@
 .ezp { width: 100%; min-width: 0; color: var(--ez-ink); }
 
 /* ── cover + identity ─────────────────────────────────────────────────── */
+/* The portal's soft hero surface (see components/ess/portal.css .ess-soft-hero) — the
+   same quiet white-into-blue Home, Attendance and Leave open with, in place of a
+   saturated blue band. Tokens only, so dark follows. */
 .ezp .cover {
-  height: 132px; border-radius: 18px; position: relative;
-  background: linear-gradient(115deg, var(--ez-brand-deep), var(--ez-brand) 45%, var(--ez-brand-edge));
+  height: 120px; border-radius: 18px; position: relative;
+  background:
+    radial-gradient(520px 200px at 100% 0%, var(--ez-brand-edge) 0%, transparent 70%),
+    linear-gradient(115deg, var(--ez-brand-tint) 0%, var(--ez-surface) 100%);
+  border: 1px solid var(--ez-brand-edge);
 }
 .ezp .coveracts { position: absolute; top: 14px; right: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
 .ezp .coveracts button {
-  background: rgba(255,255,255,.16); color: var(--ez-on-accent);
-  border: 1px solid rgba(255,255,255,.28); border-radius: 20px;
+  background: var(--ez-surface); color: var(--ez-ink);
+  border: 1px solid var(--ez-line); border-radius: 20px;
   padding: 5px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer;
 }
-.ezp .coveracts button:hover { background: rgba(255,255,255,.26); }
+.ezp .coveracts button:hover { background: var(--ez-brand-tint); border-color: var(--ez-brand-edge); color: var(--ez-brand); }
 
 .ezp .idcard {
   background: var(--ez-surface); border: 1px solid var(--ez-line);
   border-radius: 16px; padding: 16px 18px; margin: -58px 14px 0; position: relative;
+  box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 10px 24px -16px rgba(16,24,40,.22);
   display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
 }
 .ezp .face {

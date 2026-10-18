@@ -29,9 +29,9 @@ export const P = {
   red: C.critical, redBg: tone('critical').bg, amber: C.warning, amberBg: tone('warning').bg,
 }
 
-export const fmt = (v: any) => (!v || v === '' ? '—' : String(v))
+export const fmt = (v: any) => (!v || v === '' ? '-' : String(v))
 export const fmtDate = (v: string) => {
-  if (!v) return '—'
+  if (!v) return '-'
   const d = new Date(v)
   return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, ' ')
 }
@@ -46,7 +46,7 @@ export function Field({ label, value, editMode, fieldKey, editForm, setEditForm,
       {editMode ? (
         opts ? (
           <select style={sel} value={editForm?.[fieldKey] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))}>
-            <option value="">— Select —</option>
+            <option value="">Select</option>
             {opts.map((o: string) => <option key={o}>{o}</option>)}
           </select>
         ) : (
@@ -55,7 +55,7 @@ export function Field({ label, value, editMode, fieldKey, editForm, setEditForm,
             onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))} />
         )
       ) : (
-        <div style={{ fontSize: '13px', color: value && value !== '—' ? P.text : P.muted }}>{value || '—'}</div>
+        <div style={{ fontSize: '13px', color: value && value !== '-' ? P.text : P.muted }}>{value || '-'}</div>
       )}
     </div>
   )
@@ -115,8 +115,8 @@ export function OtherInfoSection({ emp }: { emp: any }) {
       ;(byCodeRes.data || []).forEach((m: any) => { mByCode[m.emp_code] = m })
       // "Full Name (EMP_CODE) (Department)"
       const fmt = (e: any) => { const d = e?.departments?.dept_name; return `${e.full_name} (${e.emp_code})${d ? ` (${d})` : ''}` }
-      const nameById = (id: string | null) => (id && mById[id]) ? fmt(mById[id]) : '—'
-      const nameByCode = (c: string) => mByCode[c] ? fmt(mByCode[c]) : '—'
+      const nameById = (id: string | null) => (id && mById[id]) ? fmt(mById[id]) : '-'
+      const nameByCode = (c: string) => mByCode[c] ? fmt(mByCode[c]) : '-'
       // The hierarchy must never look empty: a missing RM1 / RM2 / HOD slot is filled
       // from whatever else the chain has, in the sensible order for that slot — even if
       // that repeats a name across two lines. (140 employees have no L2 set; their L2
@@ -137,7 +137,7 @@ export function OtherInfoSection({ emp }: { emp: any }) {
       // even for a brand-new record with no account or assigned roles yet.
       if (!ownRoles.some(r => r.toLowerCase() === 'employee')) ownRoles = ['Employee', ...ownRoles]
 
-      const dept = self.departments?.dept_name || emp.departments?.dept_name || emp.dept_name || '—'
+      const dept = self.departments?.dept_name || emp.departments?.dept_name || emp.dept_name || '-'
       if (live) setData({
         dept, ownRoles,
         rm1: nameById(rm1Id), rm2: nameById(rm2Id), hod: nameById(hodId),
@@ -151,7 +151,7 @@ export function OtherInfoSection({ emp }: { emp: any }) {
   const line = (label: string, value: React.ReactNode) => (
     <div style={{ padding: '8px 0', borderBottom: `1px solid ${P.border}`, fontSize: '13px', color: P.text }}>
       <span style={{ color: P.muted, fontWeight: 500 }}>{label} :- </span>
-      {value || '—'}
+      {value || '-'}
     </div>
   )
 
@@ -159,7 +159,7 @@ export function OtherInfoSection({ emp }: { emp: any }) {
     <Section title="Other Info" icon="🗂️">
       {!data ? <div style={{ fontSize: 13, color: P.muted }}>Loading…</div> : (
         <div>
-          {line('Role', data.ownRoles.length ? data.ownRoles.join(', ') : '—')}
+          {line('Role', data.ownRoles.length ? data.ownRoles.join(', ') : '-')}
           {line('Department', data.dept)}
           {line('Reporting Manager 1', data.rm1)}
           {line('Reporting Manager 2', data.rm2)}
@@ -225,15 +225,15 @@ export function ManagerEditor({ emp, editForm, setEditForm }: { emp: any; editFo
     <div style={{ padding: '8px 0', borderBottom: `1px solid ${P.border}` }}>
       <div style={fieldLabel}>{label}</div>
       <select style={sel} value={editForm?.[field] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [field]: e.target.value || null }))}>
-        <option value="">— None —</option>
-        {opts.map(o => <option key={o.id} value={o.id}>{o.full_name} ({o.emp_code}){o.designation ? ` — ${o.designation}` : ''}</option>)}
+        <option value="">None</option>
+        {opts.map(o => <option key={o.id} value={o.id}>{o.full_name} ({o.emp_code}){o.designation ? ` · ${o.designation}` : ''}</option>)}
       </select>
     </div>
   )
   return (
     <Section title="Reporting Managers" icon="🧭">
       <div style={{ fontSize: 11, color: P.muted, marginBottom: 8, lineHeight: 1.5 }}>
-        L1 / L2 / HOD set the reporting line — these drive approvals, team view, MRF routing and the org chart. (Same company only; save to apply.)
+        L1 / L2 / HOD set the reporting line: these drive approvals, team view, MRF routing and the org chart. (Same company only; save to apply.)
       </div>
       {row('Reporting Manager 1 (L1)', 'l1_manager_id')}
       {row('Reporting Manager 2 (L2)', 'l2_manager_id')}
@@ -249,7 +249,7 @@ export function ManagerEditor({ emp, editForm, setEditForm }: { emp: any; editFo
 // Save button handles). EMPLOYEE stays automatic; other functional roles are read-only
 // here (they live in ESS & Roles).
 const HIER_ROLE_META: { code: string; label: string; desc: string }[] = [
-  { code: 'L1_MANAGER', label: 'L1 Manager', desc: 'First-line manager — approves their team’s requests' },
+  { code: 'L1_MANAGER', label: 'L1 Manager', desc: 'First-line manager, approves their team’s requests' },
   { code: 'L2_MANAGER', label: 'L2 Manager', desc: 'Second-line / skip-level manager' },
   { code: 'HOD',        label: 'HOD',        desc: 'Head of Department' },
 ]
@@ -315,7 +315,7 @@ export function EmpRoleEditor({ emp }: { emp: any }) {
   return (
     <Section title="Roles" icon="🛡️">
       <div style={{ fontSize: 11, color: P.muted, marginBottom: 12, lineHeight: 1.5 }}>
-        Give or remove the manager roles for this employee — changes apply immediately. Other functional roles (HR Manager, Payroll, etc.) are set in <b>ESS &amp; Roles</b>.
+        Give or remove the manager roles for this employee. Changes apply immediately. Other functional roles (HR Manager, Payroll, etc.) are set in <b>ESS &amp; Roles</b>.
       </div>
       {loading ? <div style={{ fontSize: 13, color: P.muted }}>Loading roles…</div> : (
         <div>
@@ -393,9 +393,9 @@ export function RecordQuickStats({ emp }: { emp: any }) {
     { l: 'Group DOJ',     v: fmtDate(emp.group_doj) },
     { l: 'Company DOJ',   v: fmtDate(emp.company_doj) },
     { l: 'Confirmation',  v: fmt(emp.confirmation_status) },
-    { l: 'Department',    v: emp.departments?.dept_name || emp.dept_name || '—' },
-    { l: 'Location',      v: emp.locations?.location_name || emp.location_name || '—' },
-    { l: 'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
+    { l: 'Department',    v: emp.departments?.dept_name || emp.dept_name || '-' },
+    { l: 'Location',      v: emp.locations?.location_name || emp.location_name || '-' },
+    { l: 'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '-' },
   ]
   return (
     <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '10px 20px',
@@ -457,7 +457,7 @@ export default function EmployeeProfileSections({
           {F('Personal Email','personal_email')} {F('Office Email','office_email')}
           <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
             <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Aadhaar</div>
-            <div style={{ fontSize:'13px', color:P.text }}>XXXX-XXXX-{emp.aadhar_last4 || '—'}</div>
+            <div style={{ fontSize:'13px', color:P.text }}>XXXX-XXXX-{emp.aadhar_last4 || '-'}</div>
           </div>
           {F('PAN Number','pan_number')} {F('UAN Number','uan_number')}
         </Grid2>
@@ -512,15 +512,15 @@ export default function EmployeeProfileSections({
           {F('Confirmation Status','confirmation_status','text',['Probation','Confirmed'])}
           <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
             <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Company</div>
-            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).companies?.company_name || (emp as any).company_name || '—'}</div>
+            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).companies?.company_name || (emp as any).company_name || '-'}</div>
           </div>
           <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
             <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Location / Branch</div>
-            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).locations?.location_name || (emp as any).location_name || '—'}</div>
+            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).locations?.location_name || (emp as any).location_name || '-'}</div>
           </div>
           <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
             <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Department</div>
-            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).departments?.dept_name || (emp as any).dept_name || '—'}</div>
+            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).departments?.dept_name || (emp as any).dept_name || '-'}</div>
           </div>
         </Grid2>
       </Section>
@@ -563,7 +563,7 @@ export default function EmployeeProfileSections({
           {F('PAN Number','pan_number')}
           <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
             <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Aadhaar</div>
-            <div style={{ fontSize:'13px', fontFamily:'monospace', color:P.text }}>XXXX-XXXX-{emp.aadhar_last4 || '—'}</div>
+            <div style={{ fontSize:'13px', fontFamily:'monospace', color:P.text }}>XXXX-XXXX-{emp.aadhar_last4 || '-'}</div>
           </div>
         </Grid2>
       </Section>
@@ -584,12 +584,12 @@ export default function EmployeeProfileSections({
           {[
             ['Bank Name', emp.bank_name],
             ['Account Type', emp.account_type],
-            ['Account No.', emp.bank_account_last4 ? `XXXX XXXX XXXX ${emp.bank_account_last4}` : '—'],
+            ['Account No.', emp.bank_account_last4 ? `XXXX XXXX XXXX ${emp.bank_account_last4}` : '-'],
             ['IFSC Code', emp.ifsc_code],
           ].map(([l, v]) => (
             <div key={l as string} style={{ padding:'6px 0', borderBottom:`1px solid #DCFCE7` }}>
               <div style={{ fontSize:'10px', color:C.positive, marginBottom:'3px', fontWeight:500, textTransform:'uppercase', letterSpacing:'.4px' }}>{l}</div>
-              <div style={{ fontSize:'13px', color:P.text, fontFamily: l === 'Account No.' || l === 'IFSC Code' ? 'monospace' : 'inherit' }}>{v || '—'}</div>
+              <div style={{ fontSize:'13px', color:P.text, fontFamily: l === 'Account No.' || l === 'IFSC Code' ? 'monospace' : 'inherit' }}>{v || '-'}</div>
             </div>
           ))}
         </Grid2>

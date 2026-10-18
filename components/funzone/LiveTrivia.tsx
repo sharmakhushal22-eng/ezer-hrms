@@ -198,7 +198,7 @@ export default function LiveTrivia({ sessionId, seed, meId, hostId, opponentName
           <div style={{ fontSize: F.micro, color: C.muted, marginTop: 10, minHeight: 18 }}>
             {iAnswered && theyReady === null && `Locked in. Waiting for ${opponentName}…`}
             {!iAnswered && theyReady === state.at && `${opponentName} has answered. Your turn.`}
-            {iAnswered && theyReady === state.at && 'Both in — revealing…'}
+            {iAnswered && theyReady === state.at && 'Both in, revealing…'}
           </div>
         </div>
       ) : null}

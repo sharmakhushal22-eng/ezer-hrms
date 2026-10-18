@@ -128,9 +128,9 @@ export interface CardExtras {
 export function toIdCardData(row: EmployeeCardRow, extras: CardExtras = {}): IdCardData {
   const e = parseEmergency(row.emergency_contact_1)
   return {
-    name: String(row.full_name ?? '').trim() || '—',
-    code: String(row.emp_code ?? '').trim() || '—',
-    company: String(row.company_name ?? '').trim() || '—',
+    name: String(row.full_name ?? '').trim() || '-',
+    code: String(row.emp_code ?? '').trim() || '-',
+    company: String(row.company_name ?? '').trim() || '-',
     designation: row.designation ?? null,
     department: row.department_name ?? null,
     location: row.location_name ?? null,

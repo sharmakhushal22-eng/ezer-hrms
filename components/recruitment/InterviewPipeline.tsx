@@ -126,7 +126,7 @@ const clampWords = (s: string, max: number): string => {
   }
   return out
 }
-const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
+const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '-'
 
 // ════════════════════════════════════════════════════════════════════
 // SUB-COMPONENTS (all OUTSIDE the parent)
@@ -221,7 +221,7 @@ function PrevFeedbackBlock({ rounds }: { rounds: Round[] }) {
   return (
     <div style={{ ...C.card, background: TK.sunken }}>
       <div onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: TK.brandDeep }}>Previous rounds feedback ({done.length}) — read-only</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: TK.brandDeep }}>Previous rounds feedback ({done.length}) · read-only</span>
         <span style={{ fontSize: 12, color: TK.muted }}>{open ? 'Hide' : 'Show'}</span>
       </div>
       {open && (
@@ -234,11 +234,11 @@ function PrevFeedbackBlock({ rounds }: { rounds: Round[] }) {
                   <span style={C.pill(cfg.lightBg, cfg.color)}>{cfg.badge}</span>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>{r.round_type}</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color }}>{r.overall_score ?? 0}/100</span>
-                  <span style={{ fontSize: 11, color: TK.muted }}>by {r.interviewer_name || '—'}</span>
+                  <span style={{ fontSize: 11, color: TK.muted }}>by {r.interviewer_name || '-'}</span>
                 </div>
                 {(r.params || []).map(p => (
                   <div key={p.param_id} style={{ fontSize: 11, color: TK.inkSoft, marginBottom: 3 }}>
-                    <strong>{p.param_label}:</strong> {''.repeat(p.rating)}{''.repeat(5 - p.rating)} {p.text ? `— ${p.text}` : ''}
+                    <strong>{p.param_label}:</strong> {''.repeat(p.rating)}{''.repeat(5 - p.rating)} {p.text ? `· ${p.text}` : ''}
                   </div>
                 ))}
                 {r.notes_for_recruiter && <div style={{ fontSize: 11, color: TK.muted, marginTop: 4, fontStyle: 'italic' }}>Note: {r.notes_for_recruiter}</div>}
@@ -266,7 +266,7 @@ function ScheduleForm({ round, onCancel, onSave }: {
     <div style={C.card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
         <span style={C.pill(cfg.lightBg, cfg.color)}>{cfg.badge}</span>
-        <span style={{ fontSize: 14, fontWeight: 600 }}>Schedule — {round.round_type}</span>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>Schedule: {round.round_type}</span>
       </div>
       <div style={C.g2}>
         <div><label style={C.lbl}>Interviewer Name *</label><input style={C.inp} value={name} onChange={e => setName(e.target.value)} /></div>
@@ -318,7 +318,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={C.pill(cfg.lightBg, cfg.color)}>{cfg.badge}</span>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>{round.round_type} — Assessment</span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{round.round_type}: Assessment</span>
           </div>
           {liveScore > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>Score: {liveScore}/100</span>}
         </div>
@@ -394,7 +394,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
 
 function DetailView({ round, onBack }: { round: Round; onBack: () => void }) {
   const cfg = cfgFor(round.round_type)
-  const recLabel = round.recommendation === 'yes' ? 'Proceed' : round.recommendation === 'hold' ? 'On hold' : round.recommendation === 'no' ? 'Do not proceed' : '—'
+  const recLabel = round.recommendation === 'yes' ? 'Proceed' : round.recommendation === 'hold' ? 'On hold' : round.recommendation === 'no' ? 'Do not proceed' : '-'
   return (
     <div>
       <button onClick={onBack} style={{ ...C.btnO, marginBottom: 12 }}>Back to pipeline</button>
@@ -405,7 +405,7 @@ function DetailView({ round, onBack }: { round: Round; onBack: () => void }) {
           <span style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>{round.overall_score ?? 0}/100</span>
         </div>
         <div style={{ fontSize: 11, color: TK.muted, marginBottom: 12 }}>
-          {round.interviewer_name || '—'} · {fmtDate(round.scheduled_at)} · {round.interview_mode || '—'} · Recommendation: <strong>{recLabel}</strong>
+          {round.interviewer_name || '-'} · {fmtDate(round.scheduled_at)} · {round.interview_mode || '-'} · Recommendation: <strong>{recLabel}</strong>
         </div>
         {(round.params || []).map(p => (
           <div key={p.param_id} style={{ borderTop: `1px solid ${TK.brandEdge}`, paddingTop: 8, marginTop: 8 }}>
@@ -527,7 +527,7 @@ export default function InterviewPipeline({ candidate, initialRounds }: { candid
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{candidate.full_name}</div>
-              <div style={{ fontSize: 12, color: TK.muted, marginTop: 2 }}>{candidate.designation || '—'}{candidate.department ? ` · ${candidate.department}` : ''}</div>
+              <div style={{ fontSize: 12, color: TK.muted, marginTop: 2 }}>{candidate.designation || '-'}{candidate.department ? ` · ${candidate.department}` : ''}</div>
             </div>
             <div style={{ display: 'flex', gap: 16 }}>
               {candidate.ai_score != null && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, color: TK.faint }}>AI SCORE</div><div style={{ fontSize: 18, fontWeight: 700, color: TK.brand }}>{candidate.ai_score}</div></div>}

@@ -44,7 +44,7 @@ export function TeamRoster({ employeeId, isHod, isRm }: { employeeId: string; is
       <div className="tm-head">
         <span className="tm-ico" aria-hidden="true">{ROSTER_ICON}</span>
         <span className="tm-htext">
-          <span className="tm-h" style={{ display: 'block' }}>{dept ? 'My department' : 'My team — direct reports'}</span>
+          <span className="tm-h" style={{ display: 'block' }}>{dept ? 'My department' : 'My team: direct reports'}</span>
           <span className="tm-hsub" style={{ display: 'block' }}>
             {dept ? 'Everyone in the department you head' : 'People whose reporting line ends with you'}
           </span>
@@ -78,10 +78,10 @@ export function TeamRoster({ employeeId, isHod, isRm }: { employeeId: string; is
             <tbody>
               {rows.map(r => (
                 <tr key={r.id}>
-                  <td className="tm-code">{r.code || '—'}</td>
+                  <td className="tm-code">{r.code || '-'}</td>
                   <td className="tm-nm">{r.name}</td>
-                  <td>{r.designation || '—'}</td>
-                  {dept && <td>{r.direct ? 'Direct' : <span className="tm-dim">—</span>}</td>}
+                  <td>{r.designation || '-'}</td>
+                  {dept && <td>{r.direct ? 'Direct' : <span className="tm-dim">-</span>}</td>}
                   <td>
                     <span className={`tm-pill ${r.tone === 'warn' ? 'warn' : r.tone === 'info' ? 'info' : 'ok'}`}>{r.status}</span>
                   </td>
@@ -94,8 +94,8 @@ export function TeamRoster({ employeeId, isHod, isRm }: { employeeId: string; is
 
       <p className="tm-note">
         {dept
-          ? 'DEPT scope — everyone in the department(s) you head. Company-wide headcount is under the Company tab.'
-          : 'TEAM scope — your direct reports only. Your HOD sees this list plus every other team in the department.'}
+          ? 'DEPT scope: everyone in the department(s) you head. Company-wide headcount is under the Company tab.'
+          : 'TEAM scope: your direct reports only. Your HOD sees this list plus every other team in the department.'}
       </p>
     </div>
   )

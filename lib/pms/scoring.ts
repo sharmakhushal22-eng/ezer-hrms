@@ -63,7 +63,7 @@ export function gap(self: number | null | undefined, final: number | null | unde
   const size = Math.abs(delta)
   if (size >= 2) {
     return { delta, flag: 'MAJOR_GAP', says:
-      'You and your manager are reading this one very differently. Worth raising in the next one-to-one — bring the evidence you rated yourself on.' }
+      'You and your manager are reading this one very differently. Worth raising in the next one-to-one. Bring the evidence you rated yourself on.' }
   }
   if (size >= 1) {
     return { delta, flag: 'MINOR_GAP', says:
@@ -145,11 +145,11 @@ export function checkFeedback(
 
   const imp = (improvement ?? '').trim()
   if (band.improvementMandatory && !imp) {
-    faults.push(`Improvement feedback is required at ${band.value} — ${band.label.toLowerCase()}. This is the rating somebody may have to act on, and it needs to say what would change it.`)
+    faults.push(`Improvement feedback is required at ${band.value} (${band.label.toLowerCase()}). This is the rating somebody may have to act on, and it needs to say what would change it.`)
   }
   const written = imp.length >= (appreciation ?? '').trim().length ? imp : (appreciation ?? '').trim()
   if (written && written.length < band.minCommentChars) {
-    faults.push(`At least ${band.minCommentChars} characters of comment at this rating — there are ${written.length}.`)
+    faults.push(`At least ${band.minCommentChars} characters of comment at this rating. There are ${written.length}.`)
   }
   if (!written) {
     faults.push('Neither an appreciation remark nor improvement feedback has been written.')
@@ -171,7 +171,7 @@ export function canManagerRate(selfSubmitted: boolean): Gate {
   return selfSubmitted
     ? { open: true, because: '' }
     : { open: false, because:
-        'They have not submitted their self rating yet. Rating first would anchor their assessment to yours — and the database refuses it in any case.' }
+        'They have not submitted their self rating yet. Rating first would anchor their assessment to yours, and the database refuses it in any case.' }
 }
 
 export interface Gate { open: boolean; because: string }

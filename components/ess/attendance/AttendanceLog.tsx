@@ -90,7 +90,10 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
   onFiled?: () => void
 }) {
   const todayLocal = ymd(new Date())
-  const [preset, setPreset] = useState<Preset>('month')
+  // Collapsed until asked for, and the last 7 days when opened: the log is a long
+  // table, and the calendar above already answers "how is my month going".
+  const [open, setOpen] = useState(false)
+  const [preset, setPreset] = useState<Preset>('week')
   const [custom, setCustom] = useState<{ from: string; to: string }>({ from: addDays(todayLocal, -13), to: todayLocal })
   const range = useMemo(() => {
     if (preset === 'week') return { from: addDays(todayLocal, -6), to: todayLocal }
@@ -114,7 +117,7 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
   const [nonce, setNonce] = useState(0)
   const load = useCallback(() => setNonce(n => n + 1), [])
   useEffect(() => {
-    if (rangeError) return
+    if (rangeError || !open) return
     let alive = true
     loadAttendanceRange(empId, range.from, range.to).then(r => {
       if (!alive) return
@@ -123,7 +126,7 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
       setPicked(p => new Set([...p].filter(dt => r.days.some(d => d.date === dt && selectable(d, r.today).ok))))
     }).catch(e => { if (alive) setErr((e as Error).message || 'Could not load attendance') })
     return () => { alive = false }
-  }, [empId, range.from, range.to, rangeError, nonce])
+  }, [empId, range.from, range.to, rangeError, nonce, open])
   // Loading = what is on screen is not yet the range that was asked for.
   const loading = !rangeError && !err && (!data || data.from !== range.from || data.to !== range.to)
 
@@ -156,10 +159,11 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
   ]
 
   // ── styles ──
-  const card: React.CSSProperties = { background: C.surface, borderRadius: R.lg, border: `1px solid ${C.line}`, padding: '14px 16px', marginBottom: S.md, boxShadow: E.raised }
+  // Same card as the rest of ESS: 18px corners, a hairline, soft depth.
+  const card: React.CSSProperties = { background: C.surface, borderRadius: 18, border: `1px solid ${C.line}`, padding: '18px 20px', marginBottom: S.md, boxShadow: 'var(--ess-shadow, none)' }
   const seg = (on: boolean): React.CSSProperties => ({
     height: 32, padding: '0 12px', borderRadius: R.md, cursor: 'pointer', fontFamily: 'inherit', fontSize: F.tiny, fontWeight: W.semi,
-    border: `1px solid ${on ? C.brandDeep : C.line}`, background: on ? C.brand : C.surface, color: on ? C.onAccent : C.inkSoft,
+    border: `1px solid ${on ? 'transparent' : C.line}`, background: on ? 'var(--ess-grad, var(--ez-brand))' : C.surface, color: on ? C.onAccent : C.inkSoft, boxShadow: on ? '0 6px 14px -8px var(--ess-a2, transparent)' : 'none',
   })
   const chip = (on: boolean, tone?: KindMeta): React.CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', borderRadius: R.pill, cursor: 'pointer',
@@ -184,6 +188,31 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
 
   const pickedDays = days.filter(d => picked.has(d.date)).sort((a, b) => a.date.localeCompare(b.date))
 
+  const chevron = (
+    <svg width="14" height="14" viewBox="0 0 12 12" aria-hidden style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s ease' }}>
+      <path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+  const toggleBtn = (
+    <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+      style={{ ...seg(!open), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      {open ? 'Hide log' : 'View attendance log'}{chevron}
+    </button>
+  )
+  if (!open) {
+    return (
+      <div style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: S.md, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: F.lead, fontWeight: W.bold, color: C.ink }}>Attendance log</div>
+          <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2 }}>
+            Day-by-day punches, hours and status. Open it to review a range or correct several days at once.
+          </div>
+        </div>
+        {toggleBtn}
+      </div>
+    )
+  }
+
   return (
     <div style={card}>
       {/* ── header ── */}
@@ -198,6 +227,7 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
           {([['week', 'Last 7 days'], ['month', 'This month'], ['last', 'Last month'], ['custom', 'Custom']] as [Preset, string][]).map(([k, l]) => (
             <button key={k} type="button" style={seg(preset === k)} aria-pressed={preset === k} onClick={() => setPreset(k)}>{l}</button>
           ))}
+          {toggleBtn}
         </div>
       </div>
 
@@ -241,7 +271,7 @@ export default function AttendanceLog({ empId, isMobile, onFiled }: {
       )}
 
       {data && shown.length > 0 && !isMobile && (
-        <div style={{ overflowX: 'auto', border: `1px solid ${C.line}`, borderRadius: R.md, opacity: loading ? .6 : 1 }}>
+        <div style={{ overflowX: 'auto', border: `1px solid ${C.line}`, borderRadius: 14, opacity: loading ? .6 : 1 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
             <thead>
               <tr>
@@ -385,7 +415,7 @@ function ReviewPanel({ empId, days, isMobile, onCancel, onDone }: {
   const time: React.CSSProperties = { ...inputStyle(), width: 108, height: 32, padding: '0 8px' }
   const btn = (primary: boolean): React.CSSProperties => ({
     height: 36, padding: '0 16px', borderRadius: R.md, cursor: 'pointer', fontFamily: 'inherit', fontSize: F.small, fontWeight: W.semi,
-    border: `1px solid ${primary ? C.brandDeep : C.lineStrong}`, background: primary ? C.brand : C.surface, color: primary ? C.onAccent : C.ink,
+    border: `1px solid ${primary ? 'transparent' : C.lineStrong}`, background: primary ? 'var(--ess-grad, var(--ez-brand))' : C.surface, color: primary ? C.onAccent : C.ink,
   })
 
   return (

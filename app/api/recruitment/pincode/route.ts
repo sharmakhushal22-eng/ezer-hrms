@@ -41,6 +41,6 @@ export async function GET(req: NextRequest) {
     cache.set(pin, out)
     return NextResponse.json(out)
   } catch {
-    return NextResponse.json({ ok: false, pin, error: 'Lookup unavailable — fill the address manually' }, { status: 502 })
+    return NextResponse.json({ ok: false, pin, error: 'Lookup unavailable. Fill the address manually' }, { status: 502 })
   }
 }

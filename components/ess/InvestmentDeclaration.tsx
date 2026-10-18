@@ -282,8 +282,8 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
 
   async function save(submit: boolean) {
     setErr(''); setMsg('')
-    if (regimeBlocked) { setErr('Regime ab nahi badal sakta — ek baar badla ja chuka hai ya January nikal gayi.'); return }
-    if (regime === 'OLD' && panMissing) { setErr('Landlord PAN zaroori hai — saal ka rent ₹1,00,000 se zyada hai.'); return }
+    if (regimeBlocked) { setErr('Regime ab nahi badal sakta: ek baar badla ja chuka hai ya January nikal gayi.'); return }
+    if (regime === 'OLD' && panMissing) { setErr('Landlord PAN zaroori hai: saal ka rent ₹1,00,000 se zyada hai.'); return }
     setBusy(true)
     const isNew = regime === 'NEW'
     const { error } = await supabase.rpc('save_investment_declaration', {
@@ -371,7 +371,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 20, fontWeight: 800 }}>Investment Declaration</div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-          FY {FY} · {empName || '—'}{empCode ? ` · ${empCode}` : ''}
+          FY {FY} · {empName || '-'}{empCode ? ` · ${empCode}` : ''}
           {status && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: status === 'SUBMITTED' ? C.green : C.amber, background: status === 'SUBMITTED' ? C.greenBg : C.amberBg, borderRadius: 99, padding: '2px 9px' }}>{status}</span>}
         </div>
       </div>
@@ -379,7 +379,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       <div style={{ ...S.card, background: C.purpleBg, border: `1px solid ${TK.brandEdge}` }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.purpleD }}>Applies for the whole financial year.</div>
         <div style={{ ...S.sub, color: C.purpleD, marginTop: 3 }}>
-          Ye kisi ek payroll month se juda nahi hai — har month ka TDS seedha isi se calculate hota hai.
+          Ye kisi ek payroll month se juda nahi hai. Har month ka TDS seedha isi se calculate hota hai.
         </div>
       </div>
 
@@ -389,17 +389,17 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         <div style={S.sub}>
           {canSwitch
             ? <>January se pehle aap <b>ek baar aur</b> regime badal sakte hain. Uske baad poore FY {FY} ke liye yahi regime rahega.</>
-            : <b style={{ color: C.amber }}>Regime ab lock hai — {switches >= 1 ? 'ek baar badla ja chuka hai' : 'January nikal gayi'}. Poore FY {FY} ke liye {savedRegime || regime} hi rahega.</b>}
+            : <b style={{ color: C.amber }}>Regime ab lock hai: {switches >= 1 ? 'ek baar badla ja chuka hai' : 'January nikal gayi'}. Poore FY {FY} ke liye {savedRegime || regime} hi rahega.</b>}
         </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
           <RegimeCard code="NEW" title="New Regime" active={regime === 'NEW'} disabled={!canSwitch && savedRegime !== null && savedRegime !== 'NEW'} onPick={setRegime}
-            blurb="Kam slab rates. Na HRA exemption, na 80C/80D. Simple — neeche kuch declare nahi karna." />
+            blurb="Kam slab rates. Na HRA exemption, na 80C/80D. Simple: neeche kuch declare nahi karna." />
           <RegimeCard code="OLD" title="Old Regime" active={regime === 'OLD'} disabled={!canSwitch && savedRegime !== null && savedRegime !== 'OLD'} onPick={setRegime}
             blurb="HRA exemption aur Chapter VI-A deductions milti hain. Neeche apna planned investment declare karein." />
         </div>
         {regimeBlocked && (
           <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '9px 12px', marginTop: 10 }}>
-            Ye badlaav save nahi hoga — regime ka ek switch pehle hi use ho chuka hai.
+            Ye badlaav save nahi hoga: regime ka ek switch pehle hi use ho chuka hai.
           </div>
         )}
       </div>
@@ -407,23 +407,23 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       {/* ── Declared investments (Old regime only) ── */}
       {regime === 'OLD' && (
         <div style={S.card}>
-          <div style={S.h}>Declared investments — Old Regime</div>
-          <div style={S.sub}>Saal bhar mein jo invest karne ka plan hai woh likhein. Inke proof saal ke aakhir mein dene honge — ya usse pehle, agar aap resign karte hain.</div>
+          <div style={S.h}>Declared investments: Old Regime</div>
+          <div style={S.sub}>Saal bhar mein jo invest karne ka plan hai woh likhein. Inke proof saal ke aakhir mein dene honge, ya usse pehle, agar aap resign karte hain.</div>
 
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 16, marginBottom: 2 }}>
             Section 80C <span style={{ color: C.muted, fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>(cap {inr(CAP_80C)})</span>
           </div>
-          <AmountRow label="Provident Fund (auto)" hint="Aapke salary structure se — yahan edit nahi hota" value={pf ? String(pf) : '0'} readOnly />
+          <AmountRow label="Provident Fund (auto)" hint="Aapke salary structure se, yahan edit nahi hota" value={pf ? String(pf) : '0'} readOnly />
           <AmountRow label="LIC / Insurance premium" value={lic} onChange={setLic} />
           <AmountRow label="PPF / ELSS / other 80C" value={ppf} onChange={setPpf} />
           {over80c && (
             <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '9px 12px', marginTop: 10 }}>
-              80C ki legal limit {inr(CAP_80C)} hai — {inr(pf + typed80c)} likhne se exemption nahi badhegi. {inr(CAP_80C)} hi count hoga.
+              80C ki legal limit {inr(CAP_80C)} hai. {inr(pf + typed80c)} likhne se exemption nahi badhegi. {inr(CAP_80C)} hi count hoga.
             </div>
           )}
 
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 18, marginBottom: 2 }}>
-            Section 80D (health insurance) <span style={{ color: C.muted, fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>— self and parents are separate limits</span>
+            Section 80D (health insurance) <span style={{ color: C.muted, fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>· self and parents are separate limits</span>
           </div>
           <AmountRow label="Self + spouse + children" hint="Cap ₹25,000 · ₹50,000 if you are 60+" value={d80dSelf} onChange={setD80dSelf} />
           <AmountRow label="Parents' premium" hint="Cap ₹25,000 · ₹50,000 if a parent is 60+" value={d80dParents} onChange={setD80dParents} />
@@ -435,25 +435,25 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           </div>
           <AmountRow label="Preventive health check-up" hint="Within the limits above, cap ₹5,000" value={d80dPreventive} onChange={setD80dPreventive} />
 
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 18, marginBottom: 2 }}>Section 80E &amp; 24(b) — loan interest</div>
-          <AmountRow label="Education loan interest (80E)" hint="No cap — but only for 8 years from first repayment" value={d80e} onChange={setD80e} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 18, marginBottom: 2 }}>Section 80E &amp; 24(b): loan interest</div>
+          <AmountRow label="Education loan interest (80E)" hint="No cap, but only for 8 years from first repayment" value={d80e} onChange={setD80e} />
           {num(d80e) > 0 && (
-            <AmountRow label="First repayment year" hint="e.g. 2024 — the 8-year window is counted from here" value={d80eYear} onChange={setD80eYear} />
+            <AmountRow label="First repayment year" hint="e.g. 2024 (the 8-year window is counted from here)" value={d80eYear} onChange={setD80eYear} />
           )}
-          <AmountRow label="Home loan interest (24(b))" hint={hp.length ? 'Ignored — a House Property entry below is used instead' : 'Cap ₹2,00,000 — self-occupied only'} value={d24b} onChange={setD24b} readOnly={hp.length > 0} />
+          <AmountRow label="Home loan interest (24(b))" hint={hp.length ? 'Ignored: a House Property entry below is used instead' : 'Cap ₹2,00,000 (self-occupied only)'} value={d24b} onChange={setD24b} readOnly={hp.length > 0} />
 
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 18, marginBottom: 2 }}>The rest of Chapter VI-A</div>
-          <AmountRow label="80DD — disabled dependant" hint="₹75,000 · ₹1,25,000 if severe" value={d80dd} onChange={setD80dd} />
+          <AmountRow label="80DD: disabled dependant" hint="₹75,000 · ₹1,25,000 if severe" value={d80dd} onChange={setD80dd} />
           <div style={{ ...S.row, gridTemplateColumns: '1fr 200px' }}>
             <div style={{ fontSize: 12.5, color: C.navy }}>Severe disability (80DD)?</div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, justifySelf: 'end', fontSize: 12, color: C.muted }}>
               <input type="checkbox" checked={d80ddSevere} onChange={e => setD80ddSevere(e.target.checked)} /> Yes
             </label>
           </div>
-          <AmountRow label="80DDB — specified disease treatment" hint="₹40,000 · ₹1,00,000 if you are 60+" value={d80ddb} onChange={setD80ddb} />
-          <AmountRow label="80EEB — electric vehicle loan interest" hint="Cap ₹1,50,000" value={d80eeb} onChange={setD80eeb} />
-          <AmountRow label="80G — donations" hint="Only counted if HR has enabled donations in payroll" value={d80g} onChange={setD80g} />
-          <AmountRow label="80U — your own disability" hint="₹75,000 · ₹1,25,000 if severe" value={d80u} onChange={setD80u} />
+          <AmountRow label="80DDB: specified disease treatment" hint="₹40,000 · ₹1,00,000 if you are 60+" value={d80ddb} onChange={setD80ddb} />
+          <AmountRow label="80EEB: electric vehicle loan interest" hint="Cap ₹1,50,000" value={d80eeb} onChange={setD80eeb} />
+          <AmountRow label="80G: donations" hint="Only counted if HR has enabled donations in payroll" value={d80g} onChange={setD80g} />
+          <AmountRow label="80U: your own disability" hint="₹75,000 · ₹1,25,000 if severe" value={d80u} onChange={setD80u} />
           <div style={{ ...S.row, gridTemplateColumns: '1fr 200px' }}>
             <div style={{ fontSize: 12.5, color: C.navy }}>Severe disability (80U)?</div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, justifySelf: 'end', fontSize: 12, color: C.muted }}>
@@ -475,7 +475,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
             <div style={{ ...S.row, gridTemplateColumns: '1fr 200px' }}>
               <div>
                 <div style={{ fontSize: 12.5, color: C.navy }}>Rented house is in a metro city?</div>
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Mumbai, Delhi, Kolkata, Chennai — 50% of Basic counts instead of 40%</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Mumbai, Delhi, Kolkata, Chennai: 50% of Basic counts instead of 40%</div>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, justifySelf: 'end', fontSize: 12, color: C.muted }}>
                 <input type="checkbox" checked={isMetro} onChange={e => setIsMetro(e.target.checked)} /> Yes, metro
@@ -487,7 +487,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
               <div>
                 <div style={{ fontSize: 13, color: C.navy }}>Landlord PAN</div>
                 <div style={{ fontSize: 11, color: panMissing ? C.red : C.muted, marginTop: 2 }}>
-                  Zaroori hai — saal ka rent {inr(100000)} se zyada hai
+                  Zaroori hai: saal ka rent {inr(100000)} se zyada hai
                 </div>
               </div>
               <input style={{ ...S.inp, textTransform: 'uppercase', border: `1px solid ${panMissing ? C.red : TK.brandEdge}` }}
@@ -497,7 +497,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Total declared — Chapter VI-A</div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Total declared (Chapter VI-A)</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: C.purple }}>{inr(totalDeclared)}</div>
           </div>
         </div>
@@ -532,12 +532,12 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         <div style={S.sub}>Sirf tab bharein agar aap FY {FY} ke beech mein join hue hain aur pehle kahin aur kaam kar rahe the.</div>
         <AmountRow label="Taxable income there" value={prevIncome} onChange={setPrevIncome} />
         <AmountRow label="TDS already deducted" value={prevTds} onChange={setPrevTds} />
-        <AmountRow label="PF deducted" hint="Record only — transfers via your own PF account" value={prevPf} onChange={setPrevPf} />
+        <AmountRow label="PF deducted" hint="Record only (transfers via your own PF account)" value={prevPf} onChange={setPrevPf} />
         <AmountRow label="Professional tax paid" hint="Record only" value={prevPt} onChange={setPrevPt} />
         <button onClick={savePreviousEmployer} disabled={busy} style={{ ...S.btnO, marginTop: 10, opacity: busy ? 0.6 : 1 }}>Save previous employer details</button>
       </div>
 
-      <div style={{ fontSize: 12, color: C.muted, background: TK.sunken, borderRadius: 10, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
+      <div style={{ fontSize: 12, color: C.muted, background: TK.sunken, borderRadius: 10, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai, ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
       </div>
 
       {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}

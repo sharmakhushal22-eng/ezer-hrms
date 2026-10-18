@@ -42,7 +42,7 @@ const V = {
 const inr = (n: unknown) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const num = (v: unknown) => Number(v) || 0
 const dmy = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+  d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
 const S = {
   card: { background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
@@ -204,7 +204,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
                                    color: f.resolved_at ? V.muted
                                         : f.severity === 'BLOCK' ? V.red : V.amber,
                                    textDecoration: f.resolved_at ? 'line-through' : 'none' }}>
-            ⚑ {f.message}{f.resolved_at ? ' — resolved' : ''}
+            ⚑ {f.message}{f.resolved_at ? ' (resolved)' : ''}
           </div>
         ))}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingTop: 3 }}>
@@ -245,7 +245,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
                         borderColor: trimmed ? V.amber : C.brandEdge }} />
       ) : (
         <div style={{ width: 92, textAlign: 'right', fontSize: 13, color: V.muted, flexShrink: 0 }}>
-          {line.amount_approved != null ? inr(line.amount_approved) : '—'}
+          {line.amount_approved != null ? inr(line.amount_approved) : '-'}
         </div>
       )}
     </div>
@@ -255,7 +255,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
         {loading && <div style={{ fontSize: 12, color: V.muted, padding: '6px 0' }}>Loading the route…</div>}
         {noTrail && !loading && (
           <div style={{ fontSize: 12, color: V.muted, padding: '6px 0' }}>
-            No recorded trail for this expense — it was not a GPS-priced journey.
+            No recorded trail for this expense. It was not a GPS-priced journey.
           </div>
         )}
         {route && <RouteMap route={route} height={280} />}
@@ -324,8 +324,8 @@ function ClaimCard({ claim, stage, onAction, busy }: {
            style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', cursor: 'pointer' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>
-            {claim.full_name || '—'}
-            <span style={{ color: V.muted, fontWeight: 500, fontSize: 12 }}> · {claim.emp_code || '—'}</span>
+            {claim.full_name || '-'}
+            <span style={{ color: V.muted, fontWeight: 500, fontSize: 12 }}> · {claim.emp_code || '-'}</span>
           </div>
           <div style={{ fontSize: 12, color: V.muted, marginTop: 2 }}>
             {claim.claim_no} · {claim.line_count} {claim.line_count === 1 ? 'expense' : 'expenses'} ·
@@ -593,7 +593,7 @@ function PeriodRow({ p, onAct, busy }: {
               }}
               disabled={busy || p.claim_counts.pending > 0}
               title={p.claim_counts.pending > 0
-                ? 'Claims are still awaiting approval — settle them before locking.'
+                ? 'Claims are still awaiting approval. Settle them before locking.'
                 : 'Locking is permanent.'}
               style={{ ...S.btnR, opacity: p.claim_counts.pending > 0 ? 0.45 : 1 }}>
               Lock
@@ -601,7 +601,7 @@ function PeriodRow({ p, onAct, busy }: {
           </>
         )}
         {p.status === 'LOCKED' && (
-          <span style={{ fontSize: 12, color: V.muted }}>Paid through payroll — permanent</span>
+          <span style={{ fontSize: 12, color: V.muted }}>Paid through payroll (permanent)</span>
         )}
       </div>
 
@@ -949,7 +949,7 @@ export default function TravelClaimsAdmin() {
       {/* ---- body ---- */}
       {!companyId && (tab === 'RATES' || tab === 'PERIODS') ? (
         <div style={S.card}><div style={{ fontSize: 12, color: V.muted }}>
-          {tab === 'RATES' ? 'The rate card' : 'Expense months'} are set per company — pick one above to view or edit them.
+          {tab === 'RATES' ? 'The rate card' : 'Expense months'} are set per company. Pick one above to view or edit them.
         </div></div>
       ) : tab === 'RATES' ? (
         <>
@@ -960,7 +960,7 @@ export default function TravelClaimsAdmin() {
             <div style={{ fontSize: 12, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
               These modes leave no bill behind, so the journey is recorded from the employee&apos;s
               device and paid at the rate you set here. A new rate is a new version dated from
-              when it applies — claims already settled keep the rate they were paid at.
+              when it applies. Claims already settled keep the rate they were paid at.
             </div>
 
             {loading ? <Empty text="Loading…" />
@@ -1040,7 +1040,7 @@ export default function TravelClaimsAdmin() {
 
           {tab === 'FINANCE' && (
             <div style={S.card}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Approved — ready to pay</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Approved, ready to pay</div>
               <div style={{ fontSize: 12, color: V.muted, marginBottom: 12 }}>
                 Marking paid closes the claim and stamps the payout date.
               </div>

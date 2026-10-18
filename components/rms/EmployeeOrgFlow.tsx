@@ -69,9 +69,9 @@ function FlowBox({ n, emphasis, isReport }: { n: Row; emphasis?: boolean; isRepo
           fontSize: 13, fontWeight: 700, margin: '0 auto 6px', border: `1.5px solid ${(isReport ? REPORT_GREEN : t.bar)}33`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>{initials(n.fullName)}</div>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: P.text, lineHeight: 1.2, ...clamp2 }}>{n.fullName || '—'}</div>
-        <div style={{ fontSize: 10, color: P.muted, fontFamily: 'monospace', marginTop: 2 }}>{n.empCode || '—'}</div>
-        <div style={{ fontSize: 10, color: P.muted, marginTop: 3, lineHeight: 1.3, ...clamp2 }}>{n.designation || '—'}</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: P.text, lineHeight: 1.2, ...clamp2 }}>{n.fullName || '-'}</div>
+        <div style={{ fontSize: 10, color: P.muted, fontFamily: 'monospace', marginTop: 2 }}>{n.empCode || '-'}</div>
+        <div style={{ fontSize: 10, color: P.muted, marginTop: 3, lineHeight: 1.3, ...clamp2 }}>{n.designation || '-'}</div>
         <div style={{ marginTop: 7, display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap' }}>
           {emphasis
             ? <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.06em', color: '#fff', background: P.purple, padding: '2px 9px', borderRadius: 99 }}>YOU</span>
@@ -175,7 +175,7 @@ export default function EmployeeOrgFlow({ employeeId, companyId, employeeName }:
   return (
     <div style={{ fontFamily: font }}>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: 10.5, color: P.muted, marginBottom: 8 }}>
-        <span>Your reporting line — leadership on top, <b style={{ color: P.purple }}>you</b> in the middle, your direct reports below.</span>
+        <span>Your reporting line: leadership on top, <b style={{ color: P.purple }}>you</b> in the middle, your direct reports below.</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
           {chainLen > 0 && <span>{chainLen} level{chainLen > 1 ? 's' : ''} above you</span>}
           {teamCount > 0 && <span>{teamCount} direct report{teamCount > 1 ? 's' : ''}</span>}

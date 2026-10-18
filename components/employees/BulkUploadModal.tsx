@@ -180,11 +180,11 @@ export default function BulkUploadModal({ companies, departments, locations, onC
             <div>
               <label style={s.lbl}>Company *</label>
               <select style={{ ...s.inp, marginBottom:14 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-                <option value="">— Select company —</option>
+                <option value="">Select company</option>
                 {companies.map((c: any) => <option key={c.id} value={c.id}>{c.company_name}</option>)}
               </select>
 
-              <div style={{ background:TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:12, color: TK.brand, lineHeight:1.6 }}>Leave <b>emp_code</b> blank → auto-generated per type (e.g. {(company?.company_code || 'SSM')}0001, {(company?.company_code || 'SSM')}INT0001). Or fill in your existing codes for a first-time setup — duplicate rows are skipped.
+              <div style={{ background:TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:12, color: TK.brand, lineHeight:1.6 }}>Leave <b>emp_code</b> blank → auto-generated per type (e.g. {(company?.company_code || 'SSM')}0001, {(company?.company_code || 'SSM')}INT0001). Or fill in your existing codes for a first-time setup. Duplicate rows are skipped.
               </div>
 
               <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, marginBottom:16 }}>
@@ -199,7 +199,7 @@ export default function BulkUploadModal({ companies, departments, locations, onC
                   <input type="file" accept=".xlsx,.xls" style={{ display:'none' }} disabled={!companyId || busy} onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = '' }} />
                 </label>
               </div>
-              <div style={{ fontSize:11, color:TK.faint, marginTop:10 }}>The template carries Types / Departments / Locations reference sheets — copy the valid values from there.</div>
+              <div style={{ fontSize:11, color:TK.faint, marginTop:10 }}>The template carries Types / Departments / Locations reference sheets. Copy the valid values from there.</div>
             </div>
           )}
 
@@ -217,7 +217,7 @@ export default function BulkUploadModal({ companies, departments, locations, onC
               {result.errors + result.skipped > 0 && (
                 <div style={{ maxHeight:180, overflowY:'auto', background:TK.warningTint, borderRadius:10, padding:'8px 12px', marginBottom:14, fontSize:11 }}>
                   {result.rows.slice(1).filter(r => r[18] !== 'Added').map((r, i) => (
-                    <div key={i} style={{ padding:'2px 0', color:TK.warning }}>{r[18] || '—'} · {r[1]}: {r[20] || r[19]}</div>
+                    <div key={i} style={{ padding:'2px 0', color:TK.warning }}>{r[18] || '-'} · {r[1]}: {r[20] || r[19]}</div>
                   ))}
                 </div>
               )}

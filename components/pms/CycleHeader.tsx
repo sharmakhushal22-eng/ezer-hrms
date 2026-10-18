@@ -215,7 +215,7 @@ export default function CycleHeader({
       tone: wt === r.totalWeightage ? 'good' : wt > r.totalWeightage ? 'bad' : 'warn',
       fill: wt / r.totalWeightage,
       meaning: wt === r.totalWeightage ? 'Adds up exactly. Nothing to change.'
-             : wt > r.totalWeightage ? `${wt - r.totalWeightage}% too much — take some off a goal.`
+             : wt > r.totalWeightage ? `${wt - r.totalWeightage}% too much. Take some off a goal.`
              : `${r.totalWeightage - wt}% still to share out across your goals.`,
     },
     {
@@ -223,7 +223,7 @@ export default function CycleHeader({
       meaning: d.span ? `This one covers ${d.span}.` : 'Your HR team sets the dates.',
     },
     d.lastRating
-      ? { label: 'Your last result', value: d.lastRating.score ?? '—',
+      ? { label: 'Your last result', value: d.lastRating.score ?? '-',
           unit: d.lastRating.label ? `· ${d.lastRating.label}` : undefined, tone: 'brand',
           meaning: 'Published for the previous period.' }
       : { label: 'Your last result', value: 'Not yet', tone: 'neutral',

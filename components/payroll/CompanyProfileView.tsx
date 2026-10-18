@@ -17,7 +17,7 @@ const C = {
   sec:   { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
 const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF: TK.info, FACTORY:TK.critical }
-const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
 
 function StatusBadge({ status, days }: { status: string; days: number | null }) {
   const map: Record<string, [string, string, string]> = {
@@ -32,7 +32,7 @@ function StatusBadge({ status, days }: { status: string; days: number | null }) 
   return <span style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{label}{hint}</span>
 }
 function ROField({ label, value, fmtFn }: { label: string; value: any; fmtFn?: (v: any) => string }) {
-  return <div><div style={C.lbl}>{label}</div><div style={C.val}>{fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '—' : String(value))}</div></div>
+  return <div><div style={C.lbl}>{label}</div><div style={C.val}>{fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '-' : String(value))}</div></div>
 }
 
 function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
@@ -67,14 +67,14 @@ function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
                   <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:TK.sunken, color:TK.inkSoft }}>{b.location_type}</span>
                 </div>
                 <div style={{ ...C.lbl, textTransform:'none', fontWeight:400, color:TK.muted, marginBottom:8 }}>
-                  {[b.address_line1, b.city, b.pin_code].filter(Boolean).join(', ') || '—'}
+                  {[b.address_line1, b.city, b.pin_code].filter(Boolean).join(', ') || '-'}
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 12px', marginBottom:8 }}>
                   <ROField label="District" value={b.district} />
                   <ROField label="State" value={b.state} />
                 </div>
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
-                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '—'}</div></div>
+                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '-'}</div></div>
                   <ROField label="Max employees" value={b.max_employees} />
                 </div>
               </div>
@@ -89,8 +89,8 @@ function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
                 {co.registrations.map((r: Registration) => (
                   <tr key={r.id} style={{ borderBottom: `1px solid ${TK.line}` }}>
                     <td style={{ padding:'7px 8px', width:60 }}><span style={{ fontSize:10, fontWeight:700, color:REG_COLOR[r.reg_type] || TK.inkSoft }}>{r.reg_type}</span></td>
-                    <td style={{ padding:'7px 8px', color:TK.ink }}>{r.reg_number || '—'}</td>
-                    <td style={{ padding:'7px 8px', color:TK.muted }}>{[r.state, r.district].filter(Boolean).join(' · ') || '—'}</td>
+                    <td style={{ padding:'7px 8px', color:TK.ink }}>{r.reg_number || '-'}</td>
+                    <td style={{ padding:'7px 8px', color:TK.muted }}>{[r.state, r.district].filter(Boolean).join(' · ') || '-'}</td>
                   </tr>
                 ))}
                 {co.registrations.length === 0 && <tr><td style={{ padding:10, color:TK.faint }}>No registrations.</td></tr>}
@@ -116,7 +116,7 @@ function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', alignItems:'flex-end' }}>
               <ROField label="Plan" value={lic.plan_name} />
               <ROField label="Max employees" value={lic.max_employees} />
-              <div><div style={C.lbl}>Max locations</div><div style={C.val}>{lic.max_locations || '—'} <span style={{ color:TK.faint, fontSize:11 }}>({co.branches.length} used)</span></div></div>
+              <div><div style={C.lbl}>Max locations</div><div style={C.val}>{lic.max_locations || '-'} <span style={{ color:TK.faint, fontSize:11 }}>({co.branches.length} used)</span></div></div>
               <ROField label="Billing cycle" value={lic.billing_cycle || 'QUARTERLY'} />
               <ROField label="Paid till" value={lic.paid_till} fmtFn={fmt} />
               <ROField label="Grace" value={`${lic.grace_days ?? 30} days`} />
@@ -151,7 +151,7 @@ export default function CompanyProfileView() {
 
   return (
     <div>
-      <div style={{ fontSize:12, color:TK.muted, marginBottom:12 }}>Group, companies, branches, statutory registrations, bank &amp; license — view only. To edit, open Company Profile from Admin.</div>
+      <div style={{ fontSize:12, color:TK.muted, marginBottom:12 }}>Group, companies, branches, statutory registrations, bank &amp; license (view only). To edit, open Company Profile from Admin.</div>
       {groups.map(g => (
         <div key={g.id} style={{ marginBottom:18 }}>
           <GroupHeader g={g} card={C.card} />

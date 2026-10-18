@@ -41,8 +41,8 @@ export function fieldError(k: string, raw: any): string | null {
     const d = new Date(v)
     if (d > new Date()) return 'Cannot be in the future'
     const years = (Date.now() - d.getTime()) / 31557600000
-    if (years < 14) return 'Under 14 — check the year'
-    if (years > 100) return 'Over 100 — check the year'
+    if (years < 14) return 'Under 14. Check the year'
+    if (years > 100) return 'Over 100. Check the year'
   }
   if (k === 'spouse_dob' || k === 'marriage_date') {
     if (new Date(v) > new Date()) return 'Cannot be in the future'

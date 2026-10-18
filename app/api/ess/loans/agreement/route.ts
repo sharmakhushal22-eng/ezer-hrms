@@ -63,7 +63,7 @@ ${letterheadHeaderHtml(lh)}
 <div style="font-size:12px;color:#6B7280;margin:8px 0">Agreement No: <b>${esc(agr.agreement_number)}</b> · Status: ${esc(agr.status)}</div>
 <div class="kv">
   <div>Employee: <b>${esc(emp?.full_name)}</b> (${esc(emp?.emp_code)})</div>
-  <div>Loan Type: <b>${esc(lt?.name || '—')}</b></div>
+  <div>Loan Type: <b>${esc(lt?.name || '-')}</b></div>
   <div>Principal: <b>${inr(request?.requested_amount)}</b></div>
   <div>Tenure: <b>${esc(request?.requested_tenure_months)} months</b></div>
   <div>Indicative EMI: <b>${inr(request?.indicative_emi)}</b></div>

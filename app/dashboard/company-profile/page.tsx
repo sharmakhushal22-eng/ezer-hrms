@@ -49,7 +49,7 @@ const C = {
             marginBottom:12, marginTop:4 } as React.CSSProperties,
 }
 const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF: TK.info, FACTORY:TK.critical }
-const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
 
 // ── Helper components (OUTSIDE parent — no focus-loss) ──────────────
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -83,7 +83,7 @@ function EditField({ label, value, type, onSave, fmtFn }: {
       <div style={C.lbl}>{label}</div>
       {!editing ? (
         <div style={C.val}>
-          {fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '—' : String(value))}
+          {fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '-' : String(value))}
           {/* Was an empty span — an edit affordance with nothing in it, so nothing
               on the row said it could be changed. */}
           <span onClick={() => { setV(String(value ?? '')); setEditing(true) }}
@@ -174,8 +174,8 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
   if (!editing) {
     return (
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px 12px', marginBottom:8 }}>
-        <div><div style={C.lbl}>State</div><div style={C.val}>{state || '—'}</div></div>
-        <div><div style={C.lbl}>District</div><div style={C.val}>{district || '—'}
+        <div><div style={C.lbl}>State</div><div style={C.val}>{state || '-'}</div></div>
+        <div><div style={C.lbl}>District</div><div style={C.val}>{district || '-'}
           <span onClick={() => { setSt(String(state ?? '')); setDi(String(district ?? '')); setEditing(true) }} title="Edit" role="button" aria-label="Edit state and district"
             style={{ cursor:'pointer', color:TK.faint, marginLeft:7, display:'inline-flex', verticalAlign:'middle' }}>
             <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor"
@@ -227,7 +227,7 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg,
   const regsByType: Record<string, Registration[]> = {}
   for (const r of co.registrations) { (regsByType[r.reg_type] = regsByType[r.reg_type] || []).push(r) }
   const lic = co.license
-  const empUsed = '—' // headcount comes from employees module; shown as cap here
+  const empUsed = '-' // headcount comes from employees module; shown as cap here
 
   return (
     <div className="cp-card" style={{ ...C.card, padding:0, overflow:'hidden',
@@ -303,7 +303,7 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg,
                 <span style={{ color:TK.faint, fontWeight:400, fontSize:11 }}>
                   {(() => {
                     const byType: Record<string, number> = {}
-                    for (const b of co.branches) byType[b.location_type || '—'] = (byType[b.location_type || '—'] || 0) + 1
+                    for (const b of co.branches) byType[b.location_type || '-'] = (byType[b.location_type || '-'] || 0) + 1
                     const parts = Object.entries(byType).map(([t, n]) => `${n} ${t}`)
                     return parts.length ? ' · ' + parts.join(', ') : ''
                   })()}
@@ -315,7 +315,7 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg,
               <div style={C.val}>
                 {(() => {
                   const cities = Array.from(new Set(co.branches.map(b => b.city).filter(Boolean)))
-                  return cities.length ? cities.join(', ') : '—'
+                  return cities.length ? cities.join(', ') : '-'
                 })()}
               </div>
             </div>
@@ -392,7 +392,7 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg,
                   <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:TK.sunken, color:TK.inkSoft }}>{b.location_type}</span>
                 </div>
                 <div style={{ ...C.lbl, textTransform:'none', fontWeight:400, color:TK.muted, marginBottom:8 }}>
-                  {[b.address_line1, b.city, b.pin_code].filter(Boolean).join(', ') || '—'}
+                  {[b.address_line1, b.city, b.pin_code].filter(Boolean).join(', ') || '-'}
                 </div>
                 <StateDistrictEditor state={b.state} district={b.district}
                   onSaveState={v => save('LOCATION', b.id, 'state', v, co.id)}
@@ -405,7 +405,7 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg,
                 <BranchCertificate branch={b} regs={co.registrations}
                   onSave={(t, patch, loc) => saveReg(co.id, t, patch, loc)} />
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
-                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '—'}</div></div>
+                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '-'}</div></div>
                   <EditField label="Max employees" value={b.max_employees} type="number" onSave={v => save('LOCATION', b.id, 'max_employees', v, co.id)} />
                 </div>
               </div>
@@ -430,8 +430,8 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg,
           {lic ? (
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', alignItems:'flex-end' }}>
               <div><div style={C.lbl}>Plan</div><div style={C.val}>{lic.plan_name}</div></div>
-              <div><div style={C.lbl}>Max employees</div><div style={C.val}>{lic.max_employees || '—'}</div></div>
-              <div><div style={C.lbl}>Max locations</div><div style={C.val}>{lic.max_locations || '—'} <span style={{ color:TK.faint, fontSize:11 }}>({co.branches.length} used)</span></div></div>
+              <div><div style={C.lbl}>Max employees</div><div style={C.val}>{lic.max_employees || '-'}</div></div>
+              <div><div style={C.lbl}>Max locations</div><div style={C.val}>{lic.max_locations || '-'} <span style={{ color:TK.faint, fontSize:11 }}>({co.branches.length} used)</span></div></div>
               <div><div style={C.lbl}>Billing cycle</div><div style={C.val}>{lic.billing_cycle || 'QUARTERLY'}</div></div>
               <div><div style={C.lbl}>Paid till</div><div style={C.val}>{fmt(lic.paid_till)}</div></div>
               <div><div style={C.lbl}>Grace</div><div style={C.val}>{lic.grace_days ?? 30} days</div></div>
@@ -460,7 +460,7 @@ function PayModal({ co, onClose, onConfirm }: {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ ...C.card, maxWidth:460, width:'100%', marginBottom:0 }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Confirm payment — {co.company_name}</div>
+        <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Confirm payment: {co.company_name}</div>
         <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Advance by a quarter. Paid-till rolls forward and the account stays ACTIVE.</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <div><div style={C.lbl}>Period</div><input style={{ ...C.input, width:'100%', marginTop:3 }} value={period} onChange={e => setPeriod(e.target.value)} /></div>
@@ -559,7 +559,7 @@ export default function CompanyProfilePage() {
       valid_from: from, valid_till: till, confirmedBy: 'Super Admin',
     })
     if ((r as any).error) { notify('Failed: ' + (r as any).error.message, 'error'); setPay(null); return }
-    notify('Payment confirmed — account active.'); setPay(null); reload()
+    notify('Payment confirmed, account active.'); setPay(null); reload()
   }
 
   const totalCompanies = groups.reduce((s, g) => s + g.companies.length, 0)
@@ -573,7 +573,7 @@ export default function CompanyProfilePage() {
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
         <div className="ez-page-head">
         <div style={{ fontSize:22, fontWeight:800, letterSpacing:'-.02em', marginBottom:2 }}>Company Profile</div>
-        <div style={{ fontSize:12, color:TK.muted }}>Group, companies, branches, statutory registrations, bank &amp; license — view, edit, and audit. Every change is logged.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Group, companies, branches, statutory registrations, bank &amp; license: view, edit, and audit. Every change is logged.</div>
         </div>
 
         {loading ? (
@@ -598,13 +598,13 @@ export default function CompanyProfilePage() {
             ))}
 
             <div style={C.card}>
-              <div style={C.sec}>Audit log — recent changes</div>
+              <div style={C.sec}>Audit log: recent changes</div>
               {audit.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No changes yet.</div>}
               {audit.map(a => (
                 <div key={a.id} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}>
                   <span style={{ color:TK.brand }}>•</span>
                   <div>
-                    <div><b>{a.entity_type}</b> · {a.field}: <span style={{ color:TK.faint }}>{a.old_value || '—'}</span> → <span style={{ color:TK.ink }}>{a.new_value || '—'}</span></div>
+                    <div><b>{a.entity_type}</b> · {a.field}: <span style={{ color:TK.faint }}>{a.old_value || '-'}</span> → <span style={{ color:TK.ink }}>{a.new_value || '-'}</span></div>
                     <div style={{ fontSize:10, color:TK.faint }}>{a.changed_by || 'Admin'} · {new Date(a.changed_at).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
                   </div>
                 </div>

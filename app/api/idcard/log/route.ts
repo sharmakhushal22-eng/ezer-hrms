@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     // claim than an honest error.
     const missing = /relation .* does not exist|schema cache/i.test(error.message)
     return NextResponse.json(
-      { error: missing ? 'The download log table is not created yet — migration 131 has not been run.' : error.message },
+      { error: missing ? 'The download log table is not created yet: migration 131 has not been run.' : error.message },
       { status: missing ? 503 : 500 },
     )
   }

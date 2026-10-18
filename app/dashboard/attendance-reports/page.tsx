@@ -72,7 +72,7 @@ export default function AttendanceReportsPage() {
 
   async function generate() {
     setErr(''); setOut(null)
-    if (report.singleEmp && !employeeId) { setErr('This report needs a single employee — pick one.'); return }
+    if (report.singleEmp && !employeeId) { setErr('This report needs a single employee. Pick one.'); return }
     setBusy(true)
     try {
       const codes = codesText.split(/[\s,]+/).map(c => c.trim().toUpperCase()).filter(Boolean)
@@ -108,7 +108,7 @@ export default function AttendanceReportsPage() {
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
         <div className="ez-page-head">
         <div style={{ fontSize: 22, fontWeight: 700 }}>Attendance Reports</div>
-        <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>Daily punch, exceptions, leave & summary reports — filter and export to Excel.</div>
+        <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>Daily punch, exceptions, leave & summary reports: filter and export to Excel.</div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
@@ -137,7 +137,7 @@ export default function AttendanceReportsPage() {
           {/* Filters + results */}
           <div>
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>{report.label} — filters</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>{report.label} · filters</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                 <div>
                   <label style={lbl}>Company</label>
@@ -154,7 +154,7 @@ export default function AttendanceReportsPage() {
                 {report.singleEmp && (
                   <div style={{ gridColumn: 'span 3' }}>
                     <label style={lbl}>Employee *</label>
-                    <select style={inp} value={employeeId} onChange={e => setEmployeeId(e.target.value)}><option value="">Select employee</option>{emps.map(e => <option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}</select>
+                    <select style={inp} value={employeeId} onChange={e => setEmployeeId(e.target.value)}><option value="">Select employee</option>{emps.map(e => <option key={e.id} value={e.id}>{e.emp_code} · {e.full_name}</option>)}</select>
                   </div>
                 )}
                 {report.dateRange && (<>
@@ -163,7 +163,7 @@ export default function AttendanceReportsPage() {
                 </>)}
                 {!report.singleEmp && (
                   <div style={{ gridColumn: 'span 3' }}>
-                    <label style={lbl}>Employee codes <span style={{ fontWeight: 400, color: C.muted, textTransform: 'none', letterSpacing: 0 }}>(optional — leave blank for everyone; one per line or comma-separated for specific employees)</span></label>
+                    <label style={lbl}>Employee codes <span style={{ fontWeight: 400, color: C.muted, textTransform: 'none', letterSpacing: 0 }}>(optional: leave blank for everyone; one per line or comma-separated for specific employees)</span></label>
                     <textarea value={codesText} onChange={e => setCodesText(e.target.value)} placeholder={'SRS0001, SRS9007\nSRS9001'} style={{ ...inp, height: 64, fontFamily: 'monospace', resize: 'vertical' }} />
                   </div>
                 )}
@@ -179,7 +179,7 @@ export default function AttendanceReportsPage() {
                 <div style={{ width: 46, height: 46, borderRadius: 14, background: out.rows.length ? 'rgba(5,150,105,0.10)' : TK.sunken, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{out.rows.length ? '' : ''}</div>
                 <div style={{ flex: 1, minWidth: 180 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{out.rows.length ? `${report.label} ready` : 'No matching data'}</div>
-                  <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{out.rows.length ? <><b style={{ color: C.navy }}>{out.rows.length}</b> row{out.rows.length !== 1 ? 's' : ''}{out.note ? ` · ${out.note}` : ''} · {out.columns.length} columns</> : 'No records for these filters — try a wider date range or different filters.'}</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{out.rows.length ? <><b style={{ color: C.navy }}>{out.rows.length}</b> row{out.rows.length !== 1 ? 's' : ''}{out.note ? ` · ${out.note}` : ''} · {out.columns.length} columns</> : 'No records for these filters. Try a wider date range or different filters.'}</div>
                 </div>
                 {out.rows.length > 0 && (
                   <button onClick={exportXlsx} style={{ padding: '11px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.positive},${TK.positive})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(5,150,105,0.30)', whiteSpace: 'nowrap' }}>⬇ Export Excel</button>

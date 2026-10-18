@@ -150,7 +150,7 @@ export function Capacity({ used, cap, label }: { used: number; cap: number | nul
 /** A labelled value. The workhorse of the profile sections — used everywhere a
  *  field is read-only, so "not recorded" looks the same in all ten of them. */
 export function Field({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  const empty = value === null || value === undefined || value === '' || value === '—'
+  const empty = value === null || value === undefined || value === '' || value === '-'
   return (
     // Label and value were 11px faint over 13px ink — half a step apart, which
     // is why a grid of them read as undifferentiated grey. The label is now

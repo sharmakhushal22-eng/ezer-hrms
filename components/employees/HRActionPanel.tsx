@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 
-const money = (n?: number | null) => (n == null) ? '—' : '₹' + Number(n).toLocaleString('en-IN')
+const money = (n?: number | null) => (n == null) ? '-' : '₹' + Number(n).toLocaleString('en-IN')
 
 const C = {
   card:  { background:TK.surface, borderRadius:10, padding:'12px 14px', border: `1px solid ${TK.line}`, marginBottom:10 } as React.CSSProperties,
@@ -20,12 +20,12 @@ const C = {
   sec:   { fontSize:12, fontWeight:600, color:TK.inkSoft, marginBottom:8, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
   g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 } as React.CSSProperties,
 }
-const fmt = (s?: string | null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+const fmt = (s?: string | null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
 const addDays = (iso: string, n: number) => { if (!iso) return ''; const d = new Date(iso); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10) }
 const todayISO = () => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10) }
 
 function Row({ k, v }: { k: string; v: any }) {
-  return <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}><span style={{ color:TK.muted }}>{k}</span><span style={{ fontWeight:600, color:TK.ink, textAlign:'right' }}>{v ?? '—'}</span></div>
+  return <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}><span style={{ color:TK.muted }}>{k}</span><span style={{ fontWeight:600, color:TK.ink, textAlign:'right' }}>{v ?? '-'}</span></div>
 }
 function Banner({ color, bg, children }: { color: string; bg: string; children: React.ReactNode }) {
   return <div style={{ background:bg, border:`1px solid ${color}33`, borderLeft:`3px solid ${color}`, borderRadius:10, padding:'10px 12px', marginBottom:10, fontSize:13, color:TK.ink }}>{children}</div>
@@ -46,18 +46,18 @@ function OnboardingTab({ onb }: { onb: HR.OnboardingInfo | null }) {
       </div>
       <div style={C.card}>
         <div style={C.sec}>Personal (from onboarding)</div>
-        <Row k="Full Name" v={p.full_name} /><Row k="Date of Birth" v={p.dob ? fmt(p.dob) : '—'} />
+        <Row k="Full Name" v={p.full_name} /><Row k="Date of Birth" v={p.dob ? fmt(p.dob) : '-'} />
         <Row k="Gender" v={p.gender} /><Row k="Father's Name" v={p.father_name || p.fatherSpouseName} />
         <Row k="Mother's Name" v={p.mother_name} /><Row k="Blood Group" v={p.blood_group} /><Row k="Marital Status" v={p.marital_status} />
       </div>
       <div style={C.card}>
         <div style={C.sec}>Contact & Address</div>
-        <Row k="Mobile" v={ct.mobile} /><Row k="Personal Email" v={ct.personal_email} /><Row k="Permanent Address" v={perm || '—'} />
+        <Row k="Mobile" v={ct.mobile} /><Row k="Personal Email" v={ct.personal_email} /><Row k="Permanent Address" v={perm || '-'} />
       </div>
       <div style={C.card}>
         <div style={C.sec}>KYC & Bank</div>
         <Row k="PAN" v={st.pan_number} /><Row k="Bank" v={st.bank_name} />
-        <Row k="Account" v={st.bank_account ? `XXXX${String(st.bank_account).slice(-4)}` : '—'} /><Row k="IFSC" v={st.bank_ifsc} />
+        <Row k="Account" v={st.bank_account ? `XXXX${String(st.bank_account).slice(-4)}` : '-'} /><Row k="IFSC" v={st.bank_ifsc} />
       </div>
       <div style={C.card}>
         <div style={C.sec}>Documents ({onb.documents.length})</div>
@@ -137,7 +137,7 @@ function ResignationForm({ noticeDays, onSave }: { noticeDays: number; onSave: (
       </div>
       {empLwd && (shortfall > 0
         ? <Banner color={TK.critical} bg={TK.criticalTint}><b>Notice shortfall = {shortfall} day(s).</b> A recovery mail will be sent to Payroll.</Banner>
-        : <Banner color={TK.positive} bg={TK.positiveTint}>Full notice served — no recovery needed.</Banner>)}
+        : <Banner color={TK.positive} bg={TK.positiveTint}>Full notice served. No recovery needed.</Banner>)}
       <button style={C.pri} onClick={() => { if (!dor || !empLwd) return; onSave({ date_of_resignation: dor, notice_period_days: noticeDays || 0, lwd_as_per_policy: policyLwd, lwd_confirmed_by_emp: empLwd }) }}>Initiate Resignation</button>
     </div>
   )
@@ -192,7 +192,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
     if (!isMid || !toBranch) return null
     if (tb && fromBranch && tb.state !== fromBranch.state)
       return `Effective date is mid-month. For this month, statutory (PT/LWF/PF) will be per the PREVIOUS state (${fromBranch.state}). New state (${tb.state}) applies next month.`
-    return `Effective mid-month; statutory stays ${fromBranch?.state || tb?.state || '—'} this month.`
+    return `Effective mid-month; statutory stays ${fromBranch?.state || tb?.state || '-'} this month.`
   })()
 
   const lastDay = transferDate ? addDays(transferDate, -1) : ''
@@ -224,7 +224,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
           <div style={{ ...C.g2, marginBottom: 8 }}>
             <div><label style={C.label}>New Reporting Manager</label>
               <select style={C.input} value={mgr} onChange={e => setMgr(e.target.value)}>
-                <option value="">— unchanged —</option>
+                <option value="">unchanged</option>
                 {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}{m.emp_code ? ` (${m.emp_code})` : ''}</option>)}
               </select></div>
             <div><label style={C.label}>New Designation</label><input style={C.input} value={desig} onChange={e => setDesig(e.target.value)} placeholder="optional" /></div>
@@ -232,7 +232,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
           <div style={{ ...C.g2, marginBottom: 8 }}>
             <div><label style={C.label}>New Department</label>
               <select style={C.input} value={dept} onChange={e => setDept(e.target.value)}>
-                <option value="">— unchanged —</option>
+                <option value="">unchanged</option>
                 {compDepts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
               </select></div>
             <div><label style={C.label}>New Cost Centre</label><input style={C.input} value={cc} onChange={e => setCc(e.target.value)} placeholder="optional" /></div>
@@ -240,7 +240,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
           <div style={{ ...C.g2, marginBottom: 8 }}>
             <div><label style={C.label}>Shift</label>
               <select style={C.input} value={shift} onChange={e => setShift(e.target.value)}>
-                <option value="">— unchanged —</option>
+                <option value="">unchanged</option>
                 {compShifts.map(s => <option key={s.id} value={s.id}>{s.shift_code}</option>)}
               </select></div>
             <div><label style={C.label}>Benefit</label>
@@ -278,14 +278,14 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
           <div style={{ ...C.g2, marginBottom: 8 }}>
             <div><label style={C.label}>To Department</label>
               <select style={C.input} value={iDept} onChange={e => setIDept(e.target.value)}>
-                <option value="">— optional —</option>
+                <option value="">optional</option>
                 {interDepts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
               </select></div>
             <div><label style={C.label}>New Designation</label><input style={C.input} value={iDesig} onChange={e => setIDesig(e.target.value)} placeholder="optional" /></div>
           </div>
           <div style={{ ...C.g2, marginBottom: 8 }}>
             <div><label style={C.label}>Transfer Date</label><input type="date" style={C.input} value={transferDate} onChange={e => setTransferDate(e.target.value)} /></div>
-            <div><label style={C.label}>Last Working Day (old company)</label><input style={{ ...C.input, background: TK.sunken }} value={lastDay ? fmt(lastDay) : '—'} readOnly /></div>
+            <div><label style={C.label}>Last Working Day (old company)</label><input style={{ ...C.input, background: TK.sunken }} value={lastDay ? fmt(lastDay) : '-'} readOnly /></div>
           </div>
           <div style={{ marginBottom: 8 }}><label style={C.label}>Benefit Mode</label>
             <select style={{ ...C.input, maxWidth: 260 }} value={benefitMode} onChange={e => setBenefitMode(e.target.value as any)}>
@@ -321,7 +321,7 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
         <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontWeight:600 }}>{d.doc_code}</div>
-            <div style={{ fontSize:10, color:TK.faint }}>{d.file_name || '—'}</div>
+            <div style={{ fontSize:10, color:TK.faint }}>{d.file_name || '-'}</div>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
             <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: d.hr_verified ? TK.positiveTint : d.ai_status==='VERIFIED' ? TK.brandTint : TK.warningTint, color: d.hr_verified ? TK.positive : d.ai_status==='VERIFIED' ? TK.brand : TK.warning }}>
@@ -346,7 +346,7 @@ function BreakupRow({ label, monthly, annual, kind }: { label: string; monthly: 
     <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'7px 12px', background:bg, borderBottom: `1px solid ${TK.line}`, fontSize:13 }}>
       <span style={{ color: bold ? color : TK.inkSoft, fontWeight: bold ? 700 : 400 }}>{label}</span>
       <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : TK.ink, fontVariantNumeric:'tabular-nums' }}>{money(monthly)}</span>
-      <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : TK.muted, fontVariantNumeric:'tabular-nums' }}>{annual != null ? money(annual) : '—'}</span>
+      <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : TK.muted, fontVariantNumeric:'tabular-nums' }}>{annual != null ? money(annual) : '-'}</span>
     </div>
   )
 }
@@ -361,7 +361,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
         <div style={C.card}>
           <div style={C.sec}>CTC Summary</div>
           <Row k="Annual CTC" v={money(salary.offered_ctc)} />
-          <Row k="Variable %" v={salary.variable_pct != null ? `${salary.variable_pct}%` : '—'} />
+          <Row k="Variable %" v={salary.variable_pct != null ? `${salary.variable_pct}%` : '-'} />
           <Row k="Monthly In-hand (est.)" v={money(salary.net_monthly)} />
           {salary.basic_monthly != null && <Row k="Basic (monthly)" v={money(salary.basic_monthly)} />}
           {salary.hra_monthly != null && <Row k="HRA (monthly)" v={money(salary.hra_monthly)} />}
@@ -397,7 +397,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
           </div>
         </div>
         <div style={{ fontSize: 10, color: TK.faint, padding: '0 4px' }}>
-          {isConsultant ? 'Consultant professional fee. GST @18% and TDS u/s 194J apply where registered.' : 'Training stipend — no statutory deductions.'}
+          {isConsultant ? 'Consultant professional fee. GST @18% and TDS u/s 194J apply where registered.' : 'Training stipend. No statutory deductions.'}
         </div>
       </div>
     )
@@ -546,13 +546,13 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
       {/* Active banners + close actions */}
       {states.pip && <Banner color={TK.warning} bg={TK.warningTint}>📉 <b>PIP active</b> since {fmt(states.pip.start_date)}.
         <div style={{ marginTop:6, display:'flex', gap:6 }}>
-          <button style={{ ...C.out, borderColor: TK.positiveTint, color:TK.positive }} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'PASSED', by), 'PIP closed — Passed')}>Mark Passed</button>
-          <button style={{ ...C.out, borderColor: TK.criticalTint, color:TK.critical }} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'FAILED', by), 'PIP closed — Failed')}>Mark Failed</button>
+          <button style={{ ...C.out, borderColor: TK.positiveTint, color:TK.positive }} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'PASSED', by), 'PIP closed: Passed')}>Mark Passed</button>
+          <button style={{ ...C.out, borderColor: TK.criticalTint, color:TK.critical }} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'FAILED', by), 'PIP closed: Failed')}>Mark Failed</button>
         </div></Banner>}
       {states.sabbatical && <Banner color={TK.info} bg={TK.infoTint}>🌴 <b>On Sabbatical</b> {fmt(states.sabbatical.from_date)} → {fmt(states.sabbatical.to_date)}.
         <div style={{ marginTop:6 }}><button style={C.out} onClick={() => run(() => HR.markSabbaticalReturned(states.sabbatical.id, employee.id, todayISO(), by), 'Marked returned')}>Mark Returned (today)</button></div></Banner>}
       {states.abscond && <Banner color={TK.critical} bg={TK.criticalTint}>🚷 <b>Absconding</b> since {fmt(states.abscond.abscond_from)}.
-        <div style={{ marginTop:6 }}><button style={C.out} onClick={() => run(() => HR.closeAbscond(states.abscond.id, employee.id, todayISO(), by), 'Abscond closed — returned')}>Close (returned today)</button></div></Banner>}
+        <div style={{ marginTop:6 }}><button style={C.out} onClick={() => run(() => HR.closeAbscond(states.abscond.id, employee.id, todayISO(), by), 'Abscond closed: returned')}>Close (returned today)</button></div></Banner>}
       {states.resignation && <Banner color={TK.brand} bg={TK.brandTint}>🚪 <b>Resignation {states.resignation.status}</b> · LWD {fmt(states.resignation.lwd_confirmed_by_emp)} · shortfall {states.resignation.notice_shortfall_days}d
         <div style={{ marginTop:6 }}><button style={C.out} onClick={() => run(() => HR.withdrawResignation(states.resignation.id, employee.id, by), 'Resignation withdrawn')}>Withdraw</button></div></Banner>}
 

@@ -10,7 +10,7 @@ import EmployeePortal from '@/components/ess/EmployeePortal'
 import { loadAccessScope, AccessScope, ScopeEmployee } from '@/lib/ess-scope'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK, Z } from '@/lib/ui'
+import { C as TK, Z, IconEmployees } from '@/lib/ui'
 
 type Session = { employee_id: string; name?: string; email?: string }
 
@@ -55,22 +55,28 @@ export default function PortalPage() {
     )
   }
 
+  // "View a team member" lives in the portal's top bar now. It was a full-width banner above
+  // the whole portal that spelled out every role ("HR Manager, HR Head, Admin (Company),
+  // HOD, …") — five lines on a phone, on every screen. The roles are still one hover away
+  // (the button's tooltip) and are shown in full at the top of the picker.
+  const accessLine = scope ? `${scope.roleNames.join(', ')} access (${scope.scope.toLowerCase()}) · ${scope.employees.length} team member${scope.employees.length === 1 ? '' : 's'}` : ''
+  const viewOthers = canViewOthers ? (
+    <button type="button" onClick={() => { setPickerOpen(true); setQ('') }} title={accessLine}
+      style={{ display: 'flex', alignItems: 'center', gap: 7, height: 36, padding: '0 13px', borderRadius: 10, border: `1px solid ${TK.line}`, background: TK.surface, color: TK.ink, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
+      <span style={{ color: TK.brand, display: 'flex' }}><IconEmployees size={16} /></span>View team member
+    </button>
+  ) : null
+
   return (
     <div>
-      {canViewOthers && (
-        <div style={{ background: TK.brandTint, borderBottom: `1px solid ${TK.line}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13, color: TK.brandDeep }}>
-          <span>You have <b>{scope?.roleNames.join(', ')}</b> access ({scope?.scope.toLowerCase()}) — you can open {scope?.employees.length} team member{scope?.employees.length === 1 ? '' : 's'}&apos; portals.</span>
-          <button onClick={() => { setPickerOpen(true); setQ('') }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: 'none', background: TK.brand, color: TK.onAccent, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>View a team member →</button>
-        </div>
-      )}
-
       {/* urlSync: this portal — and only this one — owns the address bar */}
-      <EmployeePortal employeeId={session.employee_id} onExit={onExit} urlSync />
+      <EmployeePortal employeeId={session.employee_id} onExit={onExit} urlSync headerExtra={viewOthers} exitLabel="Sign out" />
 
       {pickerOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }} onClick={() => setPickerOpen(false)}>
           <div style={{ background: TK.surface, borderRadius: 14, padding: 18, maxWidth: 480, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: TK.ink, marginBottom: 8 }}>Open a team member&apos;s portal</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: TK.ink, marginBottom: 4 }}>Open a team member&apos;s portal</div>
+            <div style={{ fontSize: 12, color: TK.muted, marginBottom: 12, lineHeight: 1.5 }}>{accessLine}</div>
             <input autoFocus placeholder="Search name or code…" value={q} onChange={e => setQ(e.target.value)} style={{ padding: '9px 12px', border: `1px solid ${TK.line}`, borderRadius: 10, fontSize: 13, background: TK.sunken, outline: 'none', marginBottom: 10, fontFamily: 'inherit' }} />
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {list.map(e => (

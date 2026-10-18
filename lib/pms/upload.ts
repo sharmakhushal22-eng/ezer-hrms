@@ -135,7 +135,7 @@ export function summarise(p: Preview): string {
   if (!p.rows.length) return 'That file has no rows.'
   if (p.errorCount) {
     return `${p.errorCount} of ${p.rows.length} rows cannot be applied. `
-         + 'Fix them in the file and upload it again — nothing is committed until every row is clean.'
+         + 'Fix them in the file and upload it again. Nothing is committed until every row is clean.'
   }
   if (!p.changedCount) {
     return `${p.rows.length} rows, none of which change a rating. Committing this does nothing.`

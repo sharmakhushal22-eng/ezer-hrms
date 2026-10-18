@@ -74,10 +74,10 @@ function BreakupTable({ prev, next }: { prev: AppraisalBreakup | null; next: App
             return (
               <tr key={label}>
                 <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: C.navy }}>{label}</td>
-                <td style={{ ...td, color: C.muted }}>{p == null ? '—' : inr(p)}</td>
+                <td style={{ ...td, color: C.muted }}>{p == null ? '-' : inr(p)}</td>
                 <td style={{ ...td, fontWeight: 700, color: C.navy }}>{inr(n)}</td>
                 <td style={{ ...td, fontWeight: 700, color: d > 0 ? C.green : d < 0 ? C.red : C.muted }}>
-                  {p == null ? '—' : (d > 0 ? '+' : '') + inr(d)}
+                  {p == null ? '-' : (d > 0 ? '+' : '') + inr(d)}
                 </td>
               </tr>
             )
@@ -86,7 +86,7 @@ function BreakupTable({ prev, next }: { prev: AppraisalBreakup | null; next: App
       </table>
       {next.special_allowance_monthly < 0 && (
         <div style={{ fontSize: 12, color: C.red, background: C.redBg, padding: '9px 12px' }}>
-          Special Allowance is negative — Basic, HRA and Flexi together already exceed the fixed
+          Special Allowance is negative: Basic, HRA and Flexi together already exceed the fixed
           monthly. Raise the CTC or reduce the flexi declaration before saving.
         </div>
       )}
@@ -171,7 +171,7 @@ export default function Appraisal() {
     setMsg(
       `Saved for ${emp.emp_code}.`
       + (months.length ? ` ${months.length} month${months.length === 1 ? '' : 's'} of arrear (${months.join(', ')}) will be worked out when ${payOut.slice(0, 7)}'s payroll runs.` : '')
-      + (record?.requires_data_sync ? ' That month’s payroll is already calculated, so the designation was left unchanged — pull it in through Data Sync.' : ''))
+      + (record?.requires_data_sync ? ' That month’s payroll is already calculated, so the designation was left unchanged. Pull it in through Data Sync.' : ''))
   }
 
   async function loadReport() {
@@ -203,7 +203,7 @@ export default function Appraisal() {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>Appraisal &amp; Arrear</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
-            Revise CTC with an effective date — back months become head-wise arrear in the pay-out month
+            Revise CTC with an effective date. Back months become head-wise arrear in the pay-out month
           </div>
         </div>
       </div>
@@ -237,7 +237,7 @@ export default function Appraisal() {
               <div style={{ marginTop: 12, background: C.gray, borderRadius: 10, padding: '11px 13px', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
                 <span><b>{emp.full_name}</b> · {emp.emp_code}</span>
                 <span style={{ color: C.muted }}>{emp.company_name}</span>
-                <span style={{ color: C.muted }}>{emp.designation || '—'}</span>
+                <span style={{ color: C.muted }}>{emp.designation || '-'}</span>
                 <span style={{ marginLeft: 'auto' }}>Current CTC <b>{inr(emp.annual_ctc)}</b>/yr</span>
               </div>
             )}
@@ -271,12 +271,12 @@ export default function Appraisal() {
                   <br />All of those months were already paid at the old rate. The difference is
                   worked out head-wise (Basic / HRA / Special) and lands in the arrear columns of
                   the <b>{payOut.slice(0, 7)}</b> salary. The pay-out month itself is not in that
-                  list — it gets the new rate as regular salary.
+                  list: it gets the new rate as regular salary.
                 </div>
               )}
               {effFrom && payOut && months.length === 0 && (
                 <div style={{ marginTop: 12, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '11px 13px', fontSize: 12, color: TK.positive }}>
-                  No back months — the raise takes effect in the pay-out month itself, so there is no arrear.
+                  No back months: the raise takes effect in the pay-out month itself, so there is no arrear.
                 </div>
               )}
 
@@ -299,7 +299,7 @@ export default function Appraisal() {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Bulk Upload</div>
           <div style={{ fontSize: 12, color: C.muted, maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>
             Not built yet. One appraisal at a time goes through Employee Wise, which validates the
-            breakup and shows the back months before saving — a bulk sheet has to reproduce both of
+            breakup and shows the back months before saving. A bulk sheet has to reproduce both of
             those checks per row, and doing it without them would push arrear into payroll unseen.
           </div>
         </div>
@@ -337,11 +337,11 @@ export default function Appraisal() {
                         <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.employee_code}</td>
                         <td style={{ ...td, color: C.muted }}>{inr(r.previous_ctc)}</td>
                         <td style={{ ...td, fontWeight: 700 }}>{inr(r.new_ctc)}</td>
-                        <td style={{ ...td, color: C.green, fontWeight: 700 }}>{r.hike_percent != null ? `${r.hike_percent}%` : '—'}</td>
+                        <td style={{ ...td, color: C.green, fontWeight: 700 }}>{r.hike_percent != null ? `${r.hike_percent}%` : '-'}</td>
                         <td style={td}>{r.effective_from}</td>
                         <td style={td}>{r.pay_out_month}</td>
                         <td style={{ ...td, color: bm.length ? C.amber : C.muted, fontWeight: bm.length ? 700 : 400 }}>
-                          {bm.length ? bm.join(', ') : '—'}
+                          {bm.length ? bm.join(', ') : '-'}
                         </td>
                         <td style={td}>
                           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: r.status === 'ARREAR_PROCESSED' ? C.greenBg : C.purpleBg, color: r.status === 'ARREAR_PROCESSED' ? C.green : C.purpleD }}>
@@ -362,7 +362,7 @@ export default function Appraisal() {
       <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
         <b>The effective date and the pay-out month can differ.</b> The months in between were
         already paid at the old rate, so their difference becomes <b>head-wise arrear</b> and is
-        added to the pay-out month&apos;s salary — Basic, HRA and Special each in their own arrear column.
+        added to the pay-out month&apos;s salary: Basic, HRA and Special each in their own arrear column.
         <br />Every back month&apos;s difference is worked out from <b>that month&apos;s actual frozen figures</b>,
         not an estimate, and is pro-rated by <b>that month&apos;s paid days</b>.
       </div>

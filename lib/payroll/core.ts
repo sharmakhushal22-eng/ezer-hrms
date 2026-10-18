@@ -127,8 +127,8 @@ export async function checkMonthReadiness(
       attendanceDone,
       attendanceDetail: attendanceDone ? 'all employees processed'
         : (total || 0) === 0 ? 'month master is empty' : `${pending} of ${total} employees still not processed`,
-      frozen, frozenDetail: frozen ? 'frozen' : `status is ${run.status} — freeze the month first`,
-      locked, lockedDetail: locked ? 'locked' : `status is ${run.status} — payroll not locked yet`,
+      frozen, frozenDetail: frozen ? 'frozen' : `status is ${run.status}, freeze the month first`,
+      locked, lockedDetail: locked ? 'locked' : `status is ${run.status}, payroll not locked yet`,
       ok: attendanceDone && frozen && locked,
     })
   }

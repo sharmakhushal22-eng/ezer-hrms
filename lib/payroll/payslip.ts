@@ -96,12 +96,12 @@ export function calendarYear(fy: string, month: number): number {
 export function monthLabel(fy: string, month: number): string {
   return `${MONTHS[month - 1]} ${calendarYear(fy, month)}`
 }
-/** '2026-08-11' → '11 Aug 2026'. Anything unparseable comes back as '—'. */
+/** '2026-08-11' → '11 Aug 2026'. Anything unparseable comes back as '-'. */
 export function fmtDate(v: any): string {
-  if (blank(v)) return '—'
+  if (blank(v)) return '-'
   const s = String(v).slice(0, 10)
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
-  if (!m) return '—'
+  if (!m) return '-'
   return `${Number(m[3])} ${MON[Number(m[2]) - 1]} ${m[1]}`
 }
 /** Indian grouping, two decimals — 209867 → '2,09,867.00'. */
@@ -171,7 +171,7 @@ const SECTION_LABELS: Record<string, string> = {
   '80C_ELSS': 'ELSS', '80C_TUITION': 'Tuition Fees', '80C_PRINCIPAL': 'Home Loan Principal',
   '80C_NSC': 'NSC', '80C_FD': 'Tax-saver FD', '80C_SSY': 'Sukanya Samriddhi', '80C_ULIP': 'ULIP',
   '80C_STAMP': 'Stamp Duty', '80C_OTHER': 'Other 80C', '80CCC': 'Pension Fund (80CCC)',
-  '80CCD_1B': '80CCD(1B) Self NPS', '80D_SELF': '80D — Self & Family', '80D_PARENTS': '80D — Parents',
+  '80CCD_1B': '80CCD(1B) Self NPS', '80D_SELF': '80D Self & Family', '80D_PARENTS': '80D Parents',
   '80E': '80E Education Loan Interest', '24B_SELF': '24(b) Home Loan Interest', '80DD': '80DD', '80DDB': '80DDB',
   '80EEB': '80EEB', '80G': '80G', '80U': '80U', '80TTA': '80TTA', '80TTB': '80TTB',
 }
@@ -192,10 +192,10 @@ export function assemblePayslip(inp: AssembleInput): PayslipData {
   // ── Identity ───────────────────────────────────────────────────────────
   const cin = String(company?.cin ?? '').trim()
   const cinMissing = !cin || cin.toUpperCase() === 'N/A'
-  if (cinMissing) issues.push({ text: 'Company CIN is missing — a statutory identifier on the payslip header.', blocking: false })
+  if (cinMissing) issues.push({ text: 'Company CIN is missing: a statutory identifier on the payslip header.', blocking: false })
   if (blank(s.pan_number)) issues.push({ text: 'PAN missing.', blocking: false })
   if (s.pf_applicable !== false && blank(s.pf_account_number)) issues.push({ text: 'PF number awaited.', blocking: false })
-  if (s.esic_applicable === true && blank(s.esic_number)) issues.push({ text: 'ESI number awaited — employee is covered.', blocking: false })
+  if (s.esic_applicable === true && blank(s.esic_number)) issues.push({ text: 'ESI number awaited. Employee is covered.', blocking: false })
   if (blank(s.bank_account_number) || blank(s.ifsc_code)) issues.push({ text: 'Bank account or IFSC missing.', blocking: false })
 
   const groupDoj = fmtDate(s.group_doj), companyDoj = fmtDate(s.company_doj || s.date_of_joining)
@@ -230,7 +230,7 @@ export function assemblePayslip(inp: AssembleInput): PayslipData {
   const grossArrear = earnings.reduce((a, r) => a + r.arrear, 0)
   const rowsSum = earnings.reduce((a, r) => a + r.total, 0)
   if (Math.abs(rowsSum - grossEarnings) > 1) {
-    issues.push({ text: `Earnings rows add to ${inr0(rowsSum)} but the run paid ${inr0(grossEarnings)} — refusing to print a payslip that does not add up.`, blocking: true })
+    issues.push({ text: `Earnings rows add to ${inr0(rowsSum)} but the run paid ${inr0(grossEarnings)}. Refusing to print a payslip that does not add up.`, blocking: true })
   }
 
   // ── Deductions — reference order (B7): Income Tax first, then statutory, company, vouchers ──
@@ -270,17 +270,17 @@ export function assemblePayslip(inp: AssembleInput): PayslipData {
   const grossDeductions = num(l.total_deductions)
   const dedSum = deductions.reduce((a, r) => a + r.amount, 0)
   if (Math.abs(dedSum - grossDeductions) > 1) {
-    issues.push({ text: `Deduction rows add to ${inr0(dedSum)} but the run deducted ${inr0(grossDeductions)} — refusing to print a payslip that does not add up.`, blocking: true })
+    issues.push({ text: `Deduction rows add to ${inr0(dedSum)} but the run deducted ${inr0(grossDeductions)}. Refusing to print a payslip that does not add up.`, blocking: true })
   }
   const netPay = num(l.net_pay)
-  if (netPay < 0) issues.push({ text: 'Net pay is negative — the run should not have been approved.', blocking: true })
+  if (netPay < 0) issues.push({ text: 'Net pay is negative. The run should not have been approved.', blocking: true })
 
   // ── Income tax worksheet — read, never recomputed ─────────────────────
   const ws = (s.tds_worksheet && typeof s.tds_worksheet === 'object') ? s.tds_worksheet : null
   const worksheet: WorksheetRow[] = ws?.rows
     ? (ws.rows as any[]).map(r => ({ label: String(r.label), gross: num(r.gross), exempt: num(r.exempt), taxable: num(r.taxable) }))
     : []
-  if (!ws) issues.push({ text: 'Worksheet not stored on this run (engine older than migration 066) — re-run payroll before issuing payslips.', blocking: true })
+  if (!ws) issues.push({ text: 'Worksheet not stored on this run (engine older than migration 066). Re-run payroll before issuing payslips.', blocking: true })
 
   const netTax = num(s.tds_annual_liability)
   const paid = num(s.tds_paid_ytd)
@@ -290,8 +290,8 @@ export function assemblePayslip(inp: AssembleInput): PayslipData {
   const taxDue = Math.max(0, num(s.tds_slab_tax) - num(s.tds_rebate_87a))
 
   const regimeNote = regime === 'OLD'
-    ? '*You have opted for the Old Regime — exemptions and deductions applied'
-    : '*You are on the New Regime (default) — exemptions and deductions not applicable'
+    ? '*You have opted for the Old Regime: exemptions and deductions applied'
+    : '*You are on the New Regime (default): exemptions and deductions not applicable'
 
   // ── Chapter VI-A — itemised from declaration lines, totals from the engine ──
   let chapterVIA: PayslipData['chapterVIA'] = null
@@ -367,7 +367,7 @@ export function assemblePayslip(inp: AssembleInput): PayslipData {
       department: String(s.department || ''), subDepartment: String(s.sub_department || ''),
       designation: String(s.designation || ''),
       dob: fmtDate(s.date_of_birth), doj: companyDoj,
-      groupDoj: groupDoj !== '—' && groupDoj !== companyDoj ? groupDoj : null,
+      groupDoj: groupDoj !== '-' && groupDoj !== companyDoj ? groupDoj : null,
       dol: s.date_of_leaving ? fmtDate(s.date_of_leaving) : null,
       location: [s.location_city, s.location_state].filter(Boolean).join('-') || String(s.location || ''),
       unit: String(s.location_city || ''),                     // B1 — short term; an establishments master is the real fix

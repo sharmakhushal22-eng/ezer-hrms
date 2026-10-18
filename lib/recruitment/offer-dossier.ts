@@ -128,20 +128,20 @@ export const FIELDS: Field[] = [
   { key: 'proposed_doj', section: 'Position & joining', label: 'Date of joining', type: 'date', fmt: 'date', get: c => c.req.proposed_doj, edit: { table: 'request', column: 'proposed_doj' } },
   { key: 'notice_period_days', section: 'Position & joining', label: c => c.kind === 'EMPLOYMENT' ? 'Notice period to serve (days)' : 'Notice to end the engagement (days)', type: 'number', get: c => c.req.notice_period_days, edit: { table: 'request', column: 'notice_period_days' } },
   // Offered compensation — approved by the HR Head, locked
-  { key: 'offered_ctc', section: 'Offered compensation (approved — locked)', label: 'Annual CTC', fmt: 'money', get: c => c.neg?.is_stipend ? null : c.req.offered_ctc },
-  { key: 'stipend', section: 'Offered compensation (approved — locked)', label: 'Monthly stipend', fmt: 'money', when: c => !isFeesKind(c.kind), get: c => c.neg?.is_stipend ? c.neg.stipend_monthly : null },
-  { key: 'fees', section: 'Offered compensation (approved — locked)', label: 'Monthly fees', fmt: 'money', when: c => isFeesKind(c.kind), get: c => c.neg?.is_stipend ? c.neg.stipend_monthly : null },
-  { key: 'tds', section: 'Offered compensation (approved — locked)', label: c => isFeesKind(c.kind) ? 'TDS (s.194J)' : 'TDS', when: c => !!c.neg?.is_stipend,
+  { key: 'offered_ctc', section: 'Offered compensation (approved, locked)', label: 'Annual CTC', fmt: 'money', get: c => c.neg?.is_stipend ? null : c.req.offered_ctc },
+  { key: 'stipend', section: 'Offered compensation (approved, locked)', label: 'Monthly stipend', fmt: 'money', when: c => !isFeesKind(c.kind), get: c => c.neg?.is_stipend ? c.neg.stipend_monthly : null },
+  { key: 'fees', section: 'Offered compensation (approved, locked)', label: 'Monthly fees', fmt: 'money', when: c => isFeesKind(c.kind), get: c => c.neg?.is_stipend ? c.neg.stipend_monthly : null },
+  { key: 'tds', section: 'Offered compensation (approved, locked)', label: c => isFeesKind(c.kind) ? 'TDS (s.194J)' : 'TDS', when: c => !!c.neg?.is_stipend,
     get: c => c.neg?.tds_applicable && Number(c.neg?.tds_pct) > 0 ? `${Number(c.neg.tds_pct)}%` : 'Not applicable' },
-  { key: 'variable_pct', section: 'Offered compensation (approved — locked)', label: 'Variable', fmt: 'pct', when: c => !c.neg?.is_stipend, get: c => Number(c.req.offered_variable_pct ?? c.neg?.variable_pct) > 0 ? (c.req.offered_variable_pct ?? c.neg?.variable_pct) : null },
-  { key: 'monthly_inhand', section: 'Offered compensation (approved — locked)', label: c => c.neg?.is_stipend ? 'Net monthly payable' : 'Monthly in-hand (est.)', fmt: 'money', get: c => c.req.monthly_inhand ?? c.neg?.net_monthly },
-  { key: 'engagement_total', section: 'Offered compensation (approved — locked)', label: c => `Total ${isFeesKind(c.kind) ? 'fees' : 'stipend'} for the period`, fmt: 'money', when: c => !!c.neg?.is_stipend && !!monthsOf(c),
+  { key: 'variable_pct', section: 'Offered compensation (approved, locked)', label: 'Variable', fmt: 'pct', when: c => !c.neg?.is_stipend, get: c => Number(c.req.offered_variable_pct ?? c.neg?.variable_pct) > 0 ? (c.req.offered_variable_pct ?? c.neg?.variable_pct) : null },
+  { key: 'monthly_inhand', section: 'Offered compensation (approved, locked)', label: c => c.neg?.is_stipend ? 'Net monthly payable' : 'Monthly in-hand (est.)', fmt: 'money', get: c => c.req.monthly_inhand ?? c.neg?.net_monthly },
+  { key: 'engagement_total', section: 'Offered compensation (approved, locked)', label: c => `Total ${isFeesKind(c.kind) ? 'fees' : 'stipend'} for the period`, fmt: 'money', when: c => !!c.neg?.is_stipend && !!monthsOf(c),
     get: c => Number(c.neg?.stipend_monthly) > 0 && monthsOf(c) ? Number(c.neg.stipend_monthly) * (monthsOf(c) as number) : null },
-  { key: 'hike_pct', section: 'Offered compensation (approved — locked)', label: 'Hike', fmt: 'pct', get: c => c.req.hike_pct != null && !c.neg?.is_stipend ? Number(c.req.hike_pct).toFixed(1) : null },
-  { key: 'joining_bonus', section: 'Offered compensation (approved — locked)', label: 'Joining bonus', fmt: 'money', get: c => Number(c.req.joining_bonus) > 0 ? c.req.joining_bonus : null },
-  { key: 'retention_bonus', section: 'Offered compensation (approved — locked)', label: 'Retention bonus', fmt: 'money', get: c => Number(c.req.retention_bonus) > 0 ? c.req.retention_bonus : null },
-  { key: 'esop_value', section: 'Offered compensation (approved — locked)', label: 'ESOP', fmt: 'money', get: c => Number(c.req.esop_value) > 0 ? c.req.esop_value : null },
-  { key: 'notice_buyout', section: 'Offered compensation (approved — locked)', label: 'Notice buyout', get: c => c.req.notice_buyout ? (Number(c.req.notice_buyout_amount) > 0 ? `Yes · Rs. ${Math.round(Number(c.req.notice_buyout_amount)).toLocaleString('en-IN')}` : 'Yes') : null },
+  { key: 'hike_pct', section: 'Offered compensation (approved, locked)', label: 'Hike', fmt: 'pct', get: c => c.req.hike_pct != null && !c.neg?.is_stipend ? Number(c.req.hike_pct).toFixed(1) : null },
+  { key: 'joining_bonus', section: 'Offered compensation (approved, locked)', label: 'Joining bonus', fmt: 'money', get: c => Number(c.req.joining_bonus) > 0 ? c.req.joining_bonus : null },
+  { key: 'retention_bonus', section: 'Offered compensation (approved, locked)', label: 'Retention bonus', fmt: 'money', get: c => Number(c.req.retention_bonus) > 0 ? c.req.retention_bonus : null },
+  { key: 'esop_value', section: 'Offered compensation (approved, locked)', label: 'ESOP', fmt: 'money', get: c => Number(c.req.esop_value) > 0 ? c.req.esop_value : null },
+  { key: 'notice_buyout', section: 'Offered compensation (approved, locked)', label: 'Notice buyout', get: c => c.req.notice_buyout ? (Number(c.req.notice_buyout_amount) > 0 ? `Yes · Rs. ${Math.round(Number(c.req.notice_buyout_amount)).toLocaleString('en-IN')}` : 'Yes') : null },
   // Source
   { key: 'source', section: 'Source', label: 'Source', get: c => c.cand.source },
   { key: 'referrer', section: 'Source', label: 'Referred by', get: c => ad(c, 'source', 'referrer_name') },
@@ -251,11 +251,11 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
   const spec = specOf(kind)
   if (kind !== 'EMPLOYMENT' && neg && !neg.is_stipend) warnings.push(`This is a ${spec.label.toLowerCase()} engagement, but the negotiation saved a CTC structure. The ${spec.title} will quote a monthly ${spec.payNoun}; re-run it from the ${spec.payNoun} calculator if the figures look wrong.`)
   if (kind === 'EMPLOYMENT' && neg?.is_stipend) warnings.push('The MRF says Employee, but the negotiation saved a stipend. Check the employment type on the MRF before generating the letter.')
-  if (isFixedTerm(kind) && !months) warnings.push(`No ${kind === 'INTERNSHIP' ? 'internship duration' : isApprenticeship(kind) ? 'apprenticeship period' : 'engagement period'} is recorded — the letter needs one. Add it in Part 3 (Offer).`)
+  if (isFixedTerm(kind) && !months) warnings.push(`No ${kind === 'INTERNSHIP' ? 'internship duration' : isApprenticeship(kind) ? 'apprenticeship period' : 'engagement period'} is recorded. The letter needs one. Add it in Part 3 (Offer).`)
   if (isApprenticeship(kind) && band && engagement && engagement.monthly < band.amount)
-    warnings.push(`Stipend Rs. ${engagement.monthly.toLocaleString('en-IN')}/month is below the prescribed minimum of Rs. ${band.amount.toLocaleString('en-IN')} for a ${band.label.toLowerCase()} (Rule 11, Apprenticeship Rules, 1992 — ${APPRENTICE_MIN_STIPEND.notification}). Raise it before the contract is registered.`)
-  if (isApprenticeship(kind) && !appDetails?.requisition?.scheme_registration) warnings.push(`No ${SCHEMES[kind as 'NATS' | 'NAPS'].short} registration number yet — the Contract of Apprenticeship must be registered on ${SCHEMES[kind as 'NATS' | 'NAPS'].portal}; add the number in Part 3 once it is.`)
-  if (isStipendKind(kind) && !appDetails?.requisition?.mentor) warnings.push(`No ${isApprenticeship(kind) ? 'training supervisor' : 'mentor'} named — the letter will fall back to the reporting line.`)
+    warnings.push(`Stipend Rs. ${engagement.monthly.toLocaleString('en-IN')}/month is below the prescribed minimum of Rs. ${band.amount.toLocaleString('en-IN')} for a ${band.label.toLowerCase()} (Rule 11, Apprenticeship Rules, 1992, ${APPRENTICE_MIN_STIPEND.notification}). Raise it before the contract is registered.`)
+  if (isApprenticeship(kind) && !appDetails?.requisition?.scheme_registration) warnings.push(`No ${SCHEMES[kind as 'NATS' | 'NAPS'].short} registration number yet. The Contract of Apprenticeship must be registered on ${SCHEMES[kind as 'NATS' | 'NAPS'].portal}; add the number in Part 3 once it is.`)
+  if (isStipendKind(kind) && !appDetails?.requisition?.mentor) warnings.push(`No ${isApprenticeship(kind) ? 'training supervisor' : 'mentor'} named. The letter will fall back to the reporting line.`)
 
   // What the verification vouches for. Documents: the stored file, not its (expiring) signed URL.
   const fingerprints: Record<string, string> = {}

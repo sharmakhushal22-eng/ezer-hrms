@@ -36,7 +36,7 @@ function HistoryDrawer({ label, items, onClose }: { label: string; items: HistIt
       <div onClick={onClose} style={{ flex: 1, background: 'rgba(30,27,75,0.3)' }} />
       <div style={{ width: 380, maxWidth: '92vw', background: V.card, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', overflowY: 'auto', padding: '20px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: V.navy }}>{label} — Claim history</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: V.navy }}>{label}: Claim history</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: V.muted }}>×</button>
         </div>
         {items.length === 0 ? (
@@ -154,7 +154,7 @@ function BillFrame({ frame, index, options, remaining, canRemove, onChange, onFi
         {frame.files.length === 0 ? (
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 22, marginBottom: 4 }}>📎</div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: V.purpleDark }}>Upload bills — tap to choose photos or files</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: V.purpleDark }}>Upload bills: tap to choose photos or files</div>
             <div style={{ fontSize: 10.5, color: V.muted, marginTop: 2 }}>Multiple allowed · JPG PNG PDF WORD EXCEL ZIP</div>
           </div>
         ) : (
@@ -380,7 +380,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
             <div style={{ height: 5, background: V.border, borderRadius: 3, overflow: 'hidden' }}><div style={{ height: '100%', width: `${usedPct}%`, background: usedPct >= 100 ? V.red : usedPct >= 80 ? V.amber : V.purple, borderRadius: 3, transition: 'width .3s' }} /></div>
             {lim.rejected > 0 && <div style={{ fontSize: 10, color: V.amber, marginTop: 4 }}>⚠ {inr(lim.rejected)} rejected (not deducted from limit)</div>}
 
-            {noInv && <div style={{ marginTop: 10, fontSize: 11, color: V.muted, background: TK.sunken, borderRadius: 7, padding: '8px 10px' }}>Auto-claimed monthly — no bill submission required. Payroll processes this automatically.</div>}
+            {noInv && <div style={{ marginTop: 10, fontSize: 11, color: V.muted, background: TK.sunken, borderRadius: 7, padding: '8px 10px' }}>Auto-claimed monthly. No bill submission required. Payroll processes this automatically.</div>}
 
             {exhausted && !noInv && (
               <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', background: V.amberBg, border: `1px solid ${TK.warning}`, borderRadius: 10, padding: '8px 12px' }}>
@@ -397,7 +397,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
 
       {reqComp && (
         <div style={{ background: V.amberBg, border: `1px solid ${TK.warning}`, borderRadius: 14, padding: 16, marginTop: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: V.amber, marginBottom: 10 }}>Request limit increase — {limits.find(l => l.code === reqComp)?.name || reqComp}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: V.amber, marginBottom: 10 }}>Request limit increase: {limits.find(l => l.code === reqComp)?.name || reqComp}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
             <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Requested annual limit (₹)</label><input type="number" style={{ padding: '7px 8px', border: `1px solid ${TK.warning}`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqAmt} onChange={e => setReqAmt(e.target.value)} /></div>
             <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Reason (mandatory)</label><input type="text" placeholder="Official travel increased…" style={{ padding: '7px 8px', border: `1px solid ${TK.warning}`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqReason} onChange={e => setReqReason(e.target.value)} /></div>
