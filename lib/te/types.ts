@@ -163,6 +163,9 @@ export interface TeTripPoint {
   /** 'HH:MM' or '' for not recorded, which is not midnight. Migration 165. */
   leaveAt?: string; arriveAt?: string
   ret?: true
+  /** A place passed through rather than the place you are going to. Lets a
+   *  stop sit on either leg; see DraftPoint.stop. Migration 170. */
+  stop?: true
 }
 export interface TeTripSegment { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }
 export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; found?: boolean }
@@ -779,7 +782,7 @@ export interface TripDraft {
   origin?: TripOrigin
   purpose?: string
   project?: string
-  points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: boolean }[]
+  points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: boolean; stop?: boolean }[]
   segs: { mode: string; bookedBy?: string; vehicleId?: Uuid | null; xfer?: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
   pax?: number
   /** Co-travellers by employee code. */

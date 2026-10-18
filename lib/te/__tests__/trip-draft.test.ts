@@ -252,13 +252,52 @@ describe('what a route line is called', () => {
     assert.equal(pointLabel(d, 2).label, 'Back to')
   })
 
-  it('numbers the stops, and only the last place is the destination', () => {
-    const two = addStop(fresh(), 1, ctx())
-    assert.equal(pointLabel(two, 1).label, 'Stop 1')
-    assert.equal(pointLabel(two, 1).isStop, true)
-    assert.equal(pointLabel(two, 2).label, 'Destination')
-    assert.equal(pointLabel(two, 2).isStop, false)
-    assert.equal(pointLabel(two, 2).last, 2)
+  // A STOP SAYS SO, rather than being worked out from where it sits. It used
+  // to be "the last place that is not the return point is the destination,
+  // everything before it is a stop", which can only ever express stops on the
+  // way out: "after the destination" and "is the destination" are the same
+  // slot in the list. A point marked as a stop can sit on either leg.
+
+  it('a stop on the way home leaves the destination alone', () => {
+    // fresh() is [start, destination, back to]; the gap after point 1 is the
+    // journey home, so this is Mumbai, then a night in Pune before coming back.
+    const back = addStop(fresh(), 1, ctx())
+    assert.equal(back.points.length, 4)
+    assert.equal(pointLabel(back, 1).label, 'Destination')
+    assert.equal(pointLabel(back, 1).isStop, false)
+    assert.equal(pointLabel(back, 2).label, 'Stop 1')
+    assert.equal(pointLabel(back, 2).isStop, true)
+    assert.equal(pointLabel(back, 3).label, 'Back to')
+    // `last` is the destination's index, which the screen uses to decide what
+    // can be reordered — it must not drift onto the stop.
+    assert.equal(pointLabel(back, 1).last, 1)
+  })
+
+  it('a stop on the way out also leaves the destination alone', () => {
+    // The gap after the start: Jaipur on the way to Mumbai.
+    const out = addStop(fresh(), 0, ctx())
+    assert.equal(pointLabel(out, 1).label, 'Stop 1')
+    assert.equal(pointLabel(out, 1).isStop, true)
+    assert.equal(pointLabel(out, 2).label, 'Destination')
+    assert.equal(pointLabel(out, 2).isStop, false)
+    assert.equal(pointLabel(out, 2).last, 2)
+  })
+
+  it('stops are numbered in the order they are passed, across both legs', () => {
+    const both = addStop(addStop(fresh(), 0, ctx()), 2, ctx())
+    // start, stop, destination, stop, back to
+    assert.deepEqual(both.points.map((_, i) => pointLabel(both, i).label),
+      ['Start', 'Stop 1', 'Destination', 'Stop 2', 'Back to'])
+  })
+
+  it('a trip saved before stops were marked reads as it always did', () => {
+    // No point carries the flag, so the old rule stands: the last place that
+    // is not the return point is where you were going. Nothing renames itself.
+    const legacy = fresh()
+    legacy.points = [legacy.points[0], { ...legacy.points[1] }, { ...legacy.points[1] }, legacy.points[2]]
+    legacy.segs = [...legacy.segs, { ...legacy.segs[0] }]
+    assert.equal(pointLabel(legacy, 1).label, 'Stop 1')
+    assert.equal(pointLabel(legacy, 2).label, 'Destination')
   })
 })
 

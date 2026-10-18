@@ -159,3 +159,63 @@ test('moving the date closer IS asking again, and is blocked', () => {
   const pulledIn = tripIn(EZ, 1, 'domestic', { id: 'TRP-LEAD-2' })
   assert.ok(leadText(blockers(EZ, pulledIn)), 'pulling the date inside the notice must block')
 })
+
+// ── where the trip is TO ────────────────────────────────────────────────────
+// Not the lead time, but the same engine function and the same fixture, so it
+// lives here rather than in a file of its own.
+//
+// to_label used to come from the FIRST place after the start, so a trip with a
+// stop on the way out was named after the stop — and the trips list falls back
+// to it when a trip has no name. It also disagreed with the planner, which has
+// always called the last one the destination. Both now read the last point
+// that is neither the return nor a stop.
+
+function place2(EZ: Any, n: number) {
+  const P = EZ.S.places ?? EZ.S.masters?.places ?? []
+  const byCity: Record<string, Any[]> = {}
+  for (const p of P) (byCity[p.city] ??= []).push(p)
+  return byCity[Object.keys(byCity)[n]][0]
+}
+
+/** A round trip through the given places, each either a destination or a stop. */
+function roundVia(EZ: Any, legs: { id: string; stop?: true }[]) {
+  const home = place2(EZ, 0)
+  const pt = (place: string, extra: Record<string, unknown> = {}) =>
+    ({ place, pt: 'corp', what: '', leave: '2026-11-10', arrive: '', ...extra })
+  const points = [pt(home.id), ...legs.map(l => pt(l.id, l.stop ? { stop: true } : {})), pt(home.id, { ret: true })]
+  return EZ.derive({
+    id: '__draft__', emp: EZ.S.expenses[0].emp, co: [], status: 'DRAFT', origin: 'PRE_APPROVED',
+    name: '', scope: 'domestic', pattern: 'round', purpose: 'client', project: '',
+    pax: 1, people: [], advance: 0, stayBy: 'self',
+    points, segs: points.slice(1).map(() => ({ mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: {} })),
+  })
+}
+
+test('a stop on the way home does not become the destination', () => {
+  const EZ = engine()
+  const dest = place2(EZ, 2), stop = place2(EZ, 1)
+  const t = roundVia(EZ, [{ id: dest.id }, { id: stop.id, stop: true }])
+  assert.equal(t.to, dest.city, `expected ${dest.city}, got ${t.to}`)
+})
+
+test('a stop on the way out does not become the destination either', () => {
+  // This is the one that was wrong: the engine took the first place after the
+  // start, so the trip read as a trip to the stop.
+  const EZ = engine()
+  const stop = place2(EZ, 1), dest = place2(EZ, 2)
+  const t = roundVia(EZ, [{ id: stop.id, stop: true }, { id: dest.id }])
+  assert.equal(t.to, dest.city, `expected ${dest.city}, got ${t.to}`)
+})
+
+test('with nothing marked, the last place is still the destination', () => {
+  // A trip saved before points could say which they were.
+  const EZ = engine()
+  const a = place2(EZ, 1), b = place2(EZ, 2)
+  assert.equal(roundVia(EZ, [{ id: a.id }, { id: b.id }]).to, b.city)
+})
+
+test('the plain case is unchanged', () => {
+  const EZ = engine()
+  const dest = place2(EZ, 2)
+  assert.equal(roundVia(EZ, [{ id: dest.id }]).to, dest.city)
+})

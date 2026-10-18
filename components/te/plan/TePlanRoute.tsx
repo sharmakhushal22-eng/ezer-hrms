@@ -233,20 +233,30 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
                   {bad && issue ? <span className="jn-meta">{issue.t}</span> : null}
                 </button>
 
+                {/* The wrapper is NOT aria-hidden: it holds the add-a-stop
+                    button. Only the mode pill is, being a picture of what
+                    step 3 already says in words. */}
                 {i < draft.points.length - 1 ? (
-                  <span className="jlink" aria-hidden="true">
-                    <span className={`jlink-m ${segMode ? '' : 'todo'}`}>
+                  <span className="jlink">
+                    <span className={`jlink-m ${segMode ? '' : 'todo'}`} aria-hidden="true">
                       <TeIcon name={segMode ? MODE_ICON[segMode.id] ?? 'route' : 'route'} size="sm" />
                       {segMode ? segMode.name : 'Next step'}
                     </span>
-                    {/* A stop goes BEFORE the last place, which is the only
-                        gap where one makes sense: you do not stop after you
-                        have arrived. */}
-                    {i === L.last - 1 && L.last > 0 ? (
-                      <button type="button" className="jlink-add" aria-hidden="false" aria-label={`Add a stop before ${place(draft.points[L.last]?.place)?.s || 'the destination'}`} onClick={() => edit(d => addStop(d, L.last - 1, ctxOf(snap)))}>
-                        <TeIcon name="plus" size="sm" />Stop
-                      </button>
-                    ) : null}
+                    {/* A STOP GOES IN ANY GAP, both legs of a round trip.
+                        It used to be offered only in the gap before the
+                        destination, so a journey broken on the way HOME —
+                        Mumbai, then a night in Pune before coming back —
+                        could not be said at all. The new point is marked as
+                        a stop, so wherever it lands the destination stays
+                        the destination. */}
+                    <button
+                      type="button"
+                      className="jlink-add"
+                      aria-label={`Add a stop between ${place(p.place)?.s || L.label} and ${place(draft.points[i + 1]?.place)?.s || pointLabel(draft, i + 1).label}`}
+                      onClick={() => edit(d => addStop(d, i, ctxOf(snap)))}
+                    >
+                      <TeIcon name="plus" size="sm" />Stop
+                    </button>
                   </span>
                 ) : null}
               </Fragment>

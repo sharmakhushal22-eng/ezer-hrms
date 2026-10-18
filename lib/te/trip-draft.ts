@@ -58,6 +58,22 @@ export interface DraftPoint {
   what: string
   /** Only ever set on the one point you come back to. */
   ret?: true
+  /**
+   * A place you pass through rather than the place you are going to.
+   *
+   * WHY THIS IS STORED AND NOT WORKED OUT FROM THE ORDER. It used to be: the
+   * last place that was not the return point was the destination, and
+   * everything before it was a stop. That can only ever express stops on the
+   * way OUT. The moment you want one on the way back — go to Mumbai, break
+   * the journey at Pune coming home — position cannot tell the two apart,
+   * because "after the destination" and "is the destination" are the same
+   * slot in the list.
+   *
+   * So the point says which it is. Undefined means "work it out from the
+   * order", which keeps every trip saved before this column behaving exactly
+   * as it did.
+   */
+  stop?: true
 }
 
 /** How you travel between two consecutive points. */
@@ -218,7 +234,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
  */
 export function fromTrip(trip: {
   id: Uuid; name: string; scope: TripScope; origin: TripOrigin; purpose: string; project: string
-  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: true }[]
+  points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: true; stop?: true }[]
   segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
   pax: number; people: { id: string; name?: string }[]; stayBy: 'self' | 'desk'; advance: number
   stayWanted?: boolean | null; foodWanted?: boolean | null; stayOptions?: TeStayOption[]
@@ -253,6 +269,7 @@ export function fromTrip(trip: {
       // ask for. The return point is the one place the person typed it.
       ...(p.ret && p.arrive ? { arrive: p.arrive } : {}),
       ...(p.ret ? { ret: true as const } : {}),
+      ...(p.stop ? { stop: true as const } : {}),
     })),
     segs: (trip.segs ?? []).map(s => ({
       mode: s.mode,
@@ -383,10 +400,13 @@ export function setPattern(d: PlannerDraft, pattern: 'oneway' | 'round', c: Draf
 }
 
 /** A stop on the way, inserted after point `i`. */
+/** Put a stop in the gap after point `i`. Works on either leg: before the
+ *  destination (`i` = the point you leave) or after it, on the way home. The
+ *  new point is marked as a stop so the destination stays the destination. */
 export function addStop(d: PlannerDraft, i: number, c: DraftContext): PlannerDraft {
   const points = [...d.points]
   const segs = [...d.segs]
-  points.splice(i + 1, 0, blankPoint())
+  points.splice(i + 1, 0, { ...blankPoint(), stop: true as const })
   // The new place needs a way to reach it: copy how you were already travelling.
   if (segs[i]) segs.splice(i + 1, 0, { ...segs[i], xfer: { ...segs[i].xfer } })
   return syncDraft({ ...d, points, segs, open: `p${i + 1}` }, c)
@@ -419,11 +439,21 @@ export function movePoint(d: PlannerDraft, i: number, dir: -1 | 1, c: DraftConte
 export function pointLabel(d: PlannerDraft, i: number): { label: string; isStop: boolean; no: number; destinations: number[]; last: number } {
   const p = d.points[i] ?? ({} as DraftPoint)
   const destinations = d.points.map((q, k) => (k > 0 && !q.ret ? k : -1)).filter(k => k > 0)
-  const last = destinations[destinations.length - 1]
-  const isStop = i > 0 && !p.ret && i !== last
-  const no = destinations.indexOf(i) + 1
+  // THE DESTINATION IS THE ONE PLACE NOT MARKED AS A STOP. A point carries
+  // `stop` from the moment it is added as one, so a stop can sit on either
+  // side of the destination — which is the whole reason the flag exists.
+  //
+  // Nothing is marked on a trip saved before the flag, and then the old rule
+  // stands: the last place that is not the return point is where you were
+  // going. So old trips read exactly as they always did.
+  const named = destinations.filter(k => !d.points[k]?.stop)
+  const dest = named.length ? named[named.length - 1] : destinations[destinations.length - 1]
+  const isStop = i > 0 && !p.ret && i !== dest
+  // Stops are numbered in the order they are passed, which is the order they
+  // sit in, whether that is before the destination or after it.
+  const no = destinations.filter(k => k !== dest).indexOf(i) + 1
   const label = i === 0 ? 'Start' : p.ret ? 'Back to' : isStop ? `Stop ${no}` : 'Destination'
-  return { label, isStop, no, destinations, last }
+  return { label, isStop, no, destinations, last: dest }
 }
 
 // ── errors ──────────────────────────────────────────────────────────────────
