@@ -49,7 +49,7 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 import {
   C, F, W, R, E, S, Z, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
-  IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch,
+  IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch, IconReceipt,
   IconOrgChart, IconBuilding, IconPerformance, IconLogout, IconChevron, IconChevronDown,
   IconUser, IconHeart, IconAward, IconGame, IconMore, IconCheck, IconAlert,
 } from '@/lib/ui'
@@ -87,6 +87,10 @@ const FlexiClaims          = dynamic(() => import('@/components/ess/FlexiClaims'
 const InvestmentDeclaration= dynamic(() => import('@/components/ess/InvestmentDeclaration'), { ssr: false, loading: SectionLoading })
 const InvestmentProofs     = dynamic(() => import('@/components/ess/InvestmentProofs'), { ssr: false, loading: SectionLoading })
 const TravelClaims         = dynamic(() => import('@/components/ess/TravelClaims'), { ssr: false, loading: SectionLoading })
+// Travel & Expenses v2 is NOT imported here. It is a page of its own
+// (app/ess/travel), so the portal does not carry ~135 screens of module in its
+// bundle for the employees who never open it. It still sits beside the old
+// Travel Claims screen in the Payroll tabs until that one is retired.
 const Performance          = dynamic(() => import('@/components/ess/Performance'), { ssr: false, loading: SectionLoading })
 const Profile360           = dynamic(() => import('@/components/profile/Profile360'), { ssr: false, loading: SectionLoading })
 const MyTeam               = dynamic(() => import('@/components/ess/team/MyTeam'), { ssr: false, loading: SectionLoading })
@@ -3105,7 +3109,11 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
 // A tab that isn't built shows its feature grid — what is coming — instead of an empty
 // screen or a fake one.
 type Ready = 'ready' | 'partial' | 'soon'
-interface NavItem { k: string; label: string; phase?: number; needs?: string }
+/** `href` makes the tab leave the portal for a page of its own, instead of
+ *  rendering inside it. Travel & Expenses is the only one: it is roughly 135
+ *  screens with its own rail, and a module that size inside the portal's chrome
+ *  is a tab within a tab. See app/ess/travel/page.tsx. */
+interface NavItem { k: string; label: string; phase?: number; needs?: string; href?: string }
 interface Feature { icon: string; name: string; note: string }
 interface NavSection {
   k: string; label: string; short: string; icon: string
@@ -3133,6 +3141,9 @@ const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => R
   // sat out of line in the rail, and Social / RNR / Fun Zone shared two between them.
   orgchart: IconOrgChart, company: IconBuilding, reports: IconReports,
   social: IconHeart, rnr: IconAward, funzone: IconGame,
+  // The same glyph the dashboard rail gives this module, so the employee side
+  // and the back office are recognisably the same thing.
+  expenses: IconReceipt,
 }
 function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
   const I = ESS_ICON[k]
@@ -3174,6 +3185,9 @@ const SECTIONS: NavSection[] = [
       { k:'nps',         label:'Corporate NPS' },
       { k:'loans',       label:'Loans' },
       { k:'claims',      label:'Travel Claims' },
+      // 'expenses' (Travel & Expenses) moved OUT of Payroll to a section of its
+      // own above HRIS — see below. The legacy 'claims' tab above is a different
+      // thing and stays here.
       { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
     ]},
 
@@ -3191,6 +3205,17 @@ const SECTIONS: NavSection[] = [
   { k:'inbox', label:'Inbox', short:'Inbox', icon:'', status:'ready',
     desc:'Messages from colleagues and teams, and every notification in full',
     items:[{ k:'inbox', label:'Inbox' }] },
+
+  // Travel & Expenses, in the rail in its own right rather than under Payroll.
+  // It is a module of roughly 135 screens with its own navigation, and people
+  // open it to record a trip or send a claim, not to look at their salary.
+  //
+  // The section key and its single item key are BOTH 'expenses', deliberately:
+  // AWAY, go(), the ?tab=claims&ref= deep link and the render case below are all
+  // keyed on that, so moving the tab changes where it sits and nothing else.
+  { k:'expenses', label:'Travel & Expenses', short:'T&E', icon:'', status:'ready',
+    desc:'Trips, legs, bills and claims: travel from planning to payout',
+    items:[{ k:'expenses', label:'Travel & Expenses', href:'/ess/travel' }] },
 
   // Shown as "HR Services": "HRIS" is a term HR uses, not one an employee looks for.
   // The key stays 'hris' — routes, deep links and the HRIS shell all read it.
@@ -3253,7 +3278,19 @@ const SECTIONS: NavSection[] = [
 ]
 
 const VIEWS = SECTIONS.flatMap(s => s.items.map(i => ({ ...i, section: s.k })))
+/** The tabs that are pages of their own. go() sends the browser there rather than
+ *  switching `view`, so every route in — a sub-tab pill, the feature search, the
+ *  sidebar, a ?tab= deep link — lands on the page and none of them can render the
+ *  module inside the portal by accident. */
+const AWAY: Record<string, string> = Object.fromEntries(
+  VIEWS.filter(v => v.href).map(v => [v.k, v.href as string]),
+)
 const viewMeta = (k: string) => VIEWS.find(v => v.k === k) || VIEWS[0]
+/** The address a whole section leads to, when the section IS a page of its own.
+ *  Only a section with a single item can be one: a section with sub-tabs has to
+ *  land on one of them, and which one depends on where the person already is. */
+const awayOf = (s: NavSection): string | undefined =>
+  s.items.length === 1 ? AWAY[s.items[0].k] : undefined
 /** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
 const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 
@@ -3283,15 +3320,32 @@ function groupSections(list: NavSection[]): { label: string | null; items: NavSe
 }
 
 // ── Sidebar / sub-tab / feature-grid bits (outside the parent — no focus loss) ──
-function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
+function SectionButton({ s, active, href, onClick }: { s: NavSection; active: boolean; href?: string; onClick: () => void }) {
   // Hover and the active marker live in portal.css (.ess-item) — an inline style can't
   // express :hover or ::before. The rail follows the theme, so every colour there comes
   // from the rail token family, which is defined for both light and dark.
-  return (
-    <button onClick={onClick} className="ess-item" data-on={active ? '1' : '0'} aria-current={active ? 'page' : undefined}>
+  const inner = (
+    <>
       <span className="ess-item-ic" aria-hidden><EssIcon k={s.k} size={16} strokeWidth={1.8} /></span>
       <span className="ess-item-label">{s.label}</span>
       {s.status === 'soon' && <span className="ess-soon">Soon</span>}
+      {href && <span className="ess-ext" aria-hidden>↗</span>}
+    </>
+  )
+  // A section that is a page of its own is a real link, not a scripted popup:
+  // ctrl/cmd-click, middle click, "Open in new tab" and the address on hover all
+  // work. No onClick — the anchor's default opens the tab.
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="ess-item" data-on="0"
+        title={`${s.label} (opens in a new tab)`}>
+        {inner}
+      </a>
+    )
+  }
+  return (
+    <button onClick={onClick} className="ess-item" data-on={active ? '1' : '0'} aria-current={active ? 'page' : undefined}>
+      {inner}
     </button>
   )
 }
@@ -3632,6 +3686,21 @@ function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: 
   )
 }
 
+/**
+ * A tab whose module is a page of its own. go() redirects before `view` can reach
+ * it, so this should never be seen; it exists so that if some future path does set
+ * the view directly, the person is sent on rather than shown an empty panel.
+ */
+function GoneToItsOwnPage({ href, label }: { href: string; label: string }) {
+  useEffect(() => { window.location.replace(href) }, [href])
+  return (
+    <div style={{ padding: 28, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+      Opening {label}…{' '}
+      <a href={href} style={{ color: C.brand, fontWeight: 600 }}>Continue</a>
+    </div>
+  )
+}
+
 /** What a tab will hold once it's built. Shown instead of the module, never alongside. */
 function FeatureGrid({ features }: { features: Feature[] }) {
   return (
@@ -3770,6 +3839,22 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // and a refresh stays on this one. The sync is skipped when this portal is not at /ess.
   const sync = !!urlSync && atEss()
   const go = (k: string) => {
+    // A tab that is a page of its own leaves the portal instead of becoming a
+    // view, and it opens in a tab of its own so the portal stays where it was.
+    //
+    // The fallback is not defensive padding. window.open is only permitted
+    // during the click that asked for it, and go() is ALSO called from the
+    // ?tab= deep-link effect below — no gesture there, so the browser returns
+    // null and this tab is the right place to land: the intent of a deep link
+    // is to arrive at the module, not to spawn a second window. A popup
+    // blocker gets the same treatment.
+    const away = AWAY[k]
+    if (away) {
+      setBellOpen(false); setMoreOpen(false)
+      const opened = window.open(away, '_blank', 'noopener,noreferrer')
+      if (!opened) window.location.href = away
+      return
+    }
     setAdminKey(null); setBellOpen(false); setMoreOpen(false)
     startTransition(() => setView(k))
     if (sync) pushUrl(essPath({ kind: 'view', view: k, query: '' }))
@@ -3803,7 +3888,21 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   }
   useEffect(() => {
     if (typeof window === 'undefined') return
+    // Travel & Expenses v2 notifications are written by the DATABASE as
+    // "/ess?tab=claims&ref=<claim id>" (migration 147), and the module is its
+    // own page now. So that one pair is forwarded whole and we leave before
+    // any routing runs — TeHome's claimFromLink() reads both params off the
+    // address it lands on. Every other legacy ?tab= link is parseEssPath's
+    // job, which rewrites it to its canonical path.
+    const q = new URLSearchParams(window.location.search)
+    const ref = q.get('ref')
+    if (q.get('tab') === 'claims' && ref && !q.get('module')) {
+      window.location.replace(`${AWAY.expenses}?tab=claims&ref=${encodeURIComponent(ref)}`)
+      return
+    }
     const loc = parseEssPath(window.location.pathname, window.location.search, ESS_KEYS)
+    // A screen that is a page of its own (/ess/expenses → app/ess/travel) is never a view.
+    if (loc.kind === 'view' && AWAY[loc.view]) { window.location.replace(AWAY[loc.view]); return }
     if (!urlSync) {
       // Embedded portal: honour a deep link, never touch the address bar.
       if (loc.kind === 'module') setAdminKey(loc.module); else if (loc.view !== 'home') go(loc.view)
@@ -3844,7 +3943,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // Approvals is shown to everyone now — it carries the MRF / hiring block for
   // RMs and HODs, and an empty state for everyone else. Raise MRF is a raiser-only
   // section, so it drops out of the sub-tabs for anyone who cannot raise one.
-  const canRaiseMrf = essMenu.super_admin || essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals || essMenu.approval_types.length > 0
+  // Matches the server exactly — POST /api/ess/mrf action:'create' allows
+  // is_rm || is_hod || canApprovals and nothing else. This used to also admit
+  // super_admin and anyone holding an approval_type, so those logins were shown
+  // the tab, filled the whole form, and were refused at submit with "You do not
+  // have rights to raise an MRF". Offering a form the API will refuse is the bug;
+  // widening the server instead would hand out the right to raise, which is not
+  // a UI decision.
+  const canRaiseMrf = essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals
   const sectionItems = section.items.filter(i => i.k !== 'raise-mrf' || canRaiseMrf)
 
   // Everything the feature search may offer — only what this person can open.
@@ -3909,6 +4015,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       case 'proofs':        return <InvestmentProofs employeeId={emp.id} />
       case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
       case 'claims':        return <TravelClaims employeeId={emp.id} />
+      // Travel & Expenses is a page of its own (app/ess/travel). go() redirects
+      // before `view` can ever become 'expenses', so this is only the belt to
+      // that braces — and it is why the module is no longer imported here at all.
+      case 'expenses':      return <GoneToItsOwnPage href={AWAY.expenses} label="Travel and Expenses" />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
@@ -3932,6 +4042,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       case 'exit':          return <HrisShell employeeId={emp.id} tab={view} go={go}
                                               canApprove={essMenu.can.approvals}
                                               canRaiseMrf={canRaiseMrf}
+                                              adminMode={adminMode}
                                               notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
@@ -3991,7 +4102,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
               <div key={g.label ?? gi} className="ess-group">
                 {g.label && <div className="ess-group-label">{g.label}</div>}
                 {g.items.map(s => (
-                  <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
+                  <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} href={awayOf(s)} onClick={() => goSection(s)} />
                 ))}
               </div>
             ))}

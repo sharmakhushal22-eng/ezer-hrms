@@ -171,8 +171,10 @@ export default function LetterTemplates() {
     setGenerating(true)
     setGenResults(null)
     setGenError('')
+    // Awaited: an un-awaited authHeaders() promise is silently ignored by fetch and the
+    // guarded route answers 401 for everyone.
     const res = await fetch('/api/letters/generate', {
-      method: 'POST', headers: await authHeaders(),
+      method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
       body: JSON.stringify({ template_id: genTemplateId, company_id: genCompanyId, employee_codes: codes }),
     })
     const data = await res.json().catch(() => ({}))

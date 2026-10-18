@@ -145,7 +145,15 @@ export async function POST(req: NextRequest) {
   const r = await essRoute(req)
   if (r.error) return r.error
   const { ctx } = r
-  if (ctx.caller.viewAs) return forbidden('A request cannot be raised while viewing as somebody else.')
+  // See app/api/ess/mrf/route.ts — actorEmployeeId null is "no employee behind
+  // this session" (a lapsed ESS token included), not impersonation.
+  if (ctx.caller.viewAs) {
+    return forbidden(ctx.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active, so this request has nobody to raise it. '
+        + 'Sign in again with your own ESS account.'
+      : 'A request is raised in your own name, so it cannot be submitted while you are '
+        + 'viewing somebody else\'s portal. Open your own portal to raise one.')
+  }
 
   const me = ctx.caller.employeeId
   const body = await req.json().catch(() => ({})) as Record<string, unknown>

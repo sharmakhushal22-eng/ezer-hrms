@@ -29,11 +29,32 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'mrf', label: 'MRF' },
       { key: 'screening', label: 'AI Screening' },
       { key: 'pipeline', label: 'Pipeline' },
+      // The scheduler's list of every interview they have booked — join link,
+      // interviewer, and whether that interviewer has acknowledged or submitted
+      // feedback. Seeded for RECRUITER by migration 142. The INTERVIEWER's side
+      // of the same data is ESS -> Tasks & Approvals, which is why L1 / L2 / HOD
+      // are not granted this tab.
+      { key: 'interviews', label: 'Interviews Scheduled' },
       { key: 'negotiation', label: 'Negotiation' },
       { key: 'offerapproval', label: 'Offer Approval' },
-      { key: 'hrhead', label: 'HR Head' },
-      { key: 'sendoffer', label: 'Send Offers' },
-      { key: 'offers', label: 'Offers' },
+      // Label only — the key 'hrhead' is seeded in migration 123 and asserted in
+      // recruitment-authority.test.ts. This is what HR sees in the permission
+      // matrix, so it must read the same as the rail tab.
+      { key: 'hrhead', label: 'MRF & Offer Approvals' },
+      // ONE screen since the merge. Send Offers and Offer Letter rendered the
+      // same component with different props, so they are a single tab whose
+      // behaviour follows the viewer's role: read-only for a recruiter, full
+      // dispatch for the assigned HR Manager.
+      //
+      // 'sendoffer' is the key that survived because RECRUITER and HR_MANAGER
+      // both already held it live, so no grant had to move for the tab to stay
+      // visible. Migration 141 removes the now-orphaned recruitment.offerletter
+      // rows that migration 138 seeded.
+      { key: 'sendoffer', label: 'Offer Letters' },
+      // Reply tracking (Accepted / Revision / Backout). Its draft-and-send half
+      // was retired — it never emailed anything — so dispatch lives on the
+      // merged 'sendoffer' screen alone.
+      { key: 'offers', label: 'Offer Tracking' },
       { key: 'preonboarding', label: 'Pre-onboarding' },
       { key: 'jobstatus', label: 'Job Status' },
     ],
@@ -95,6 +116,12 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'FINANCE', label: 'Finance' },
       { key: 'RATES', label: 'Rate card' },
       { key: 'PERIODS', label: 'Expense months' },
+      // Travel & Expenses v2 (/dashboard/expenses). Granted by migration 152_te_rbac_grants.sql.
+      { key: 'TE_APPROVALS', label: 'Expenses: approvals' },
+      { key: 'TE_FINANCE', label: 'Expenses: Finance desk' },
+      { key: 'TE_DESK', label: 'Expenses: Travel Desk' },
+      { key: 'TE_ADMIN', label: 'Expenses: setup' },
+      { key: 'TE_REPORTS', label: 'Expenses: reports' },
     ],
   },
   {

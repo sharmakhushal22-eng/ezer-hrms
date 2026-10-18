@@ -5,7 +5,7 @@
 // directly, with Approve / Reject.
 import { useEffect, useState } from 'react'
 import { OfferApprovals } from '@/components/ess/RoleTabs'
-import { C } from '@/lib/ui'
+import { C, Z } from '@/lib/ui'
 
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -38,7 +38,7 @@ export default function OfferApproveClient({ id }: { id: string }) {
         <OfferApprovals employeeId={employeeId} notify={notify} focusId={id} onDone={goBack} />
       </div>
       {toast && (
-        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: toast.t === 'error' ? C.critical : C.positive, color: C.onAccent, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, fontFamily: font, boxShadow: '0 8px 24px rgba(30,27,75,.3)' }}>{toast.m}</div>
+        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: Z.toast, background: toast.t === 'error' ? C.critical : C.positive, color: C.onAccent, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, fontFamily: font, boxShadow: '0 8px 24px rgba(30,27,75,.3)' }}>{toast.m}</div>
       )}
     </div>
   )

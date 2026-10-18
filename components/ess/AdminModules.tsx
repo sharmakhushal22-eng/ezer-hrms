@@ -50,6 +50,7 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   finance:              lazy(() => import('@/app/dashboard/finance/page')),
   'flexi-claims':       lazy(() => import('@/app/dashboard/flexi-claims/page')),
   'travel-claims':      lazy(() => import('@/app/dashboard/travel-claims/page')),
+  expenses:             lazy(() => import('@/app/dashboard/expenses/page')),
   loans:                lazy(() => import('@/app/dashboard/loans/page')),
   // Compliance & Docs
   compliance:           lazy(() => import('@/app/dashboard/compliance/page')),

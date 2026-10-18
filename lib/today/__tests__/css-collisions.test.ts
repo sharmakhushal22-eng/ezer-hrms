@@ -52,10 +52,16 @@ test('the collision check can still see a collision', () => {
 //    or pill control in the Today tab has to re-assert its radius, or it
 //    renders as a 10px rounded rectangle — which is what made the punch dial
 //    "square" inside its own round ring.
-test('the punch dial re-asserts its radius over the global button rule', () => {
+//    The rule used to name .punch, a single round button that was both the dial
+//    and the control. That button no longer exists: the dial is .face and the
+//    two controls under it are .pbtn, so the test follows the markup rather
+//    than pinning a class nothing renders any more.
+test('the round controls re-assert their radius over the global button rule', () => {
   const css = readFileSync('components/ess/today/today.css', 'utf8')
-  assert.match(css, /\.ezt \.punch\s*\{[^}]*border-radius:\s*50%\s*!important/,
-    'the global button{border-radius:!important} will square the dial again')
+  assert.match(css, /\.ezt \.face\s*\{[^}]*border-radius:\s*50%\s*!important/,
+    'the global button{border-radius:!important} will square the dial face again')
+  assert.match(css, /\.ezt \.pbtn\s*\{[^}]*border-radius:\s*\d+px\s*!important/,
+    'the punch buttons lose their radius to the same global rule')
   const global = readFileSync('lib/ui/index.tsx', 'utf8')
   assert.match(global, /button\s*\{[^}]*border-radius:[^;]*!important/,
     'if this rule is gone, the !important above is no longer needed')

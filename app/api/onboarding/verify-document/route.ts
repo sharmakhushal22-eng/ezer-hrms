@@ -154,6 +154,11 @@ export async function POST(req: NextRequest) {
         ai_confidence:    aiConfidence,
         ai_flags:         aiFlags,
         ai_processed_at:  new Date().toISOString(),
+        // A new file answers a rejection: the HR verdict on the old one is cleared.
+        hr_verified:      null,
+        hr_notes:         null,
+        hr_reviewed_at:   null,
+        uploaded_at:      new Date().toISOString(),
       }, {
         onConflict: 'onboarding_id,doc_code',
         ignoreDuplicates: false,

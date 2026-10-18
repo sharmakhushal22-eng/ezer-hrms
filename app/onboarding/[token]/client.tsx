@@ -17,7 +17,10 @@ import './onboarding.css'
 
 // ── Types ────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
-interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: any; ai_confidence: number; ai_flags: string[]; file_name: string }
+interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: any; ai_confidence: number; ai_flags: string[]; file_name: string; hr_notes?: string | null; hr_verified?: boolean | null }
+/** HR rejected this file (the review on the onboarding card); a new upload clears it. */
+const isRejected = (d?: DocStatus | null) => !!d && d.hr_verified === false
+const rejectReason = (d?: DocStatus | null) => (d?.hr_notes || '').replace(/^Rejected:\s*/i, '')
 
 // ── EZER Theme ───────────────────────────────────────────────────
 // Inputs are white with a neutral edge and a blue focus ring (onboarding.css). An empty
@@ -221,15 +224,30 @@ function StepHeader({ step, extra }: { step: Step; extra?: React.ReactNode }) {
 // ── Document upload tile ──────────────────────────────────────────
 function DocUpload({
   docCode, docName, required, token,
-  status, onSuccess, compact,
+  status, onSuccess, onRemoved, compact,
 }: {
   docCode: string; docName: string; required: boolean; token: string
   status: DocStatus | null
   onSuccess: (code: string, data: any) => void
+  onRemoved: (code: string) => void
   /** inside an employer / qualification block: a single slim row */
   compact?: boolean
 }) {
   const [uploading, setUploading] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const fileUrl = (mode: 'view' | 'download') => `/api/onboarding/document?token=${encodeURIComponent(token)}&doc_code=${encodeURIComponent(docCode)}&mode=${mode}`
+  const remove = async () => {
+    if (!status || removing) return
+    if (!confirm(`Remove ${docName} from your form?`)) return
+    setRemoving(true)
+    try {
+      const r = await fetch('/api/onboarding/document', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, doc_code: docCode }) })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Could not remove')
+      onRemoved(docCode)
+    } catch (e: any) { alert(e.message) }
+    setRemoving(false)
+  }
   const [progress, setProgress] = useState('')
   const [err, setErr] = useState('')
   const [drag, setDrag] = useState(false)
@@ -273,18 +291,26 @@ function DocUpload({
   const aiStatus = status?.ai_status
   // The file is saved whenever a record exists. MISMATCH is the only real warning;
   // FAILED just means AI auto-check was skipped (no AI key) — the upload still succeeded.
-  const isMismatch = aiStatus === 'MISMATCH'
-  const isOk = !!status && !isMismatch
+  const rejected = isRejected(status)
+  const isMismatch = aiStatus === 'MISMATCH' && !rejected
+  const isOk = !!status && !isMismatch && !rejected
 
-  const tone = isMismatch ? { bg: TK.warningTint, edge: TK.warningEdge, fg: TK.warning } : isOk ? { bg: TK.positiveTint, edge: TK.positiveEdge, fg: TK.positive } : { bg: TK.brandTint, edge: TK.brandEdge, fg: TK.brand }
+  const tone = rejected ? { bg: TK.criticalTint, edge: TK.criticalEdge, fg: TK.critical }
+    : isMismatch ? { bg: TK.warningTint, edge: TK.warningEdge, fg: TK.warning }
+    : isOk ? { bg: TK.positiveTint, edge: TK.positiveEdge, fg: TK.positive }
+    : { bg: TK.brandTint, edge: TK.brandEdge, fg: TK.brand }
   const statusLine = uploading ? progress
     : err ? err
     : !status ? (required ? 'Required' : 'Optional')
+    : rejected ? `HR rejected this file${rejectReason(status) ? `: ${rejectReason(status)}` : ''}. Upload a new copy.`
+    : status.hr_verified === true ? 'Accepted by HR'
     : aiStatus === 'VERIFIED' ? `Verified · ${Math.round((status.ai_confidence || 0) * 100)}% match`
     : isMismatch ? 'Flagged for HR to review'
     : 'Uploaded · HR will verify'
+  const carried = !!status?.hr_notes && /carried over/i.test(status.hr_notes)
   const extracted = status?.ai_extracted_data && Object.keys(status.ai_extracted_data).length > 0
     ? Object.entries(status.ai_extracted_data).slice(0, 3).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' · ') : ''
+  const link: React.CSSProperties = { fontSize: 11.5, fontWeight: 650, color: TK.brandDeep, textDecoration: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }
 
   return (
     <div className={`ezo-doc${drag ? ' is-drag' : ''}`}
@@ -294,12 +320,20 @@ function DocUpload({
                border: `1px ${status ? 'solid' : 'dashed'} ${status ? tone.edge : TK.lineStrong}`, background: status ? tone.bg : TK.surface, marginTop: compact ? 6 : 0 }}>
       <span style={{ width: compact ? 34 : 42, height: compact ? 34 : 42, borderRadius: 12, flexShrink: 0, display: 'grid', placeItems: 'center',
                      background: status ? TK.surface : tone.bg, color: tone.fg, border: `1px solid ${tone.edge}` }}>
-        {uploading ? <IconClock size={18} /> : isMismatch ? <IconAlert size={18} strokeWidth={2} /> : isOk ? <IconCheck size={18} strokeWidth={2.4} /> : <IconLetters size={18} />}
+        {uploading ? <IconClock size={18} /> : (isMismatch || rejected) ? <IconAlert size={18} strokeWidth={2} /> : isOk ? <IconCheck size={18} strokeWidth={2.4} /> : <IconLetters size={18} />}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 650, lineHeight: 1.3 }}>{docName}{required && !status && <span style={{ color: TK.critical, marginLeft: 3 }}>*</span>}</div>
         <div style={{ fontSize: 12, marginTop: 2, color: err ? TK.critical : status ? tone.fg : TK.faint, fontWeight: status ? 600 : 500 }}>{statusLine}</div>
+        {carried && !rejected && <div style={{ fontSize: 11.5, color: TK.brandDeep, marginTop: 3 }}>Already with us, from the documents you sent before the offer. Replace it if you have a better copy.</div>}
         {extracted && !compact && <div style={{ fontSize: 11.5, color: TK.muted, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{extracted}</div>}
+        {status && (
+          <div style={{ display: 'flex', gap: 12, marginTop: 5 }}>
+            <a href={fileUrl('view')} target="_blank" rel="noreferrer" style={link}>View</a>
+            <a href={fileUrl('download')} style={link}>Download</a>
+            <button type="button" onClick={remove} disabled={removing} style={{ ...link, color: TK.critical, opacity: removing ? .6 : 1 }}>{removing ? 'Removing…' : 'Remove'}</button>
+          </div>
+        )}
       </div>
       <button className="ezo-btn" onClick={() => inputRef.current?.click()} disabled={uploading}
         style={{ height: 34, padding: '0 13px', borderRadius: 10, flexShrink: 0, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: 12.5, fontWeight: 650, fontFamily: 'inherit',
@@ -323,6 +357,17 @@ const DOC_LIST = (esic: boolean, isFresher: boolean, isForeign = false) => [
   { code: 'EXP_LETTER', name: 'Experience / Relieving Letter', required: !isFresher },
   { code: 'BANK_PROOF', name: 'Cancelled Cheque / Bank Passbook', required: true },
   { code: 'UAN_CARD', name: 'UAN Card (if you have PF already)', required: false },
+  // Optional: these arrive filled in when they were collected before the offer.
+  { code: 'MARKSHEET_10', name: '10th Mark Sheet', required: false },
+  { code: 'MARKSHEET_12', name: '12th Mark Sheet', required: false },
+  { code: 'MASTERS', name: 'Post-graduation / Masters Certificate', required: false },
+  { code: 'OTHER_CERT', name: 'Other Certificate', required: false },
+  { code: 'APPOINTMENT_LETTER', name: 'Previous Appointment Letter', required: false },
+  { code: 'APPRAISAL_LETTER', name: 'Previous Appraisal Letter', required: false },
+  { code: 'SALARY_SLIP_1', name: 'Salary Slip (latest month)', required: false },
+  { code: 'SALARY_SLIP_2', name: 'Salary Slip (2nd last month)', required: false },
+  { code: 'SALARY_SLIP_3', name: 'Salary Slip (3rd last month)', required: false },
+  { code: 'FORM_16', name: 'Form 16 (previous employer)', required: false },
   ...(isForeign ? [
     { code: 'PASSPORT', name: 'Passport (front page)', required: true },
     { code: 'VISA', name: 'Visa copy', required: true },
@@ -330,12 +375,15 @@ const DOC_LIST = (esic: boolean, isFresher: boolean, isForeign = false) => [
   ] : []),
 ]
 const REQUIRED_DOC_CODES = (esic: boolean) => ['AADHAAR_FRONT', 'AADHAAR_BACK', 'PAN', 'PHOTO', 'DEGREE', 'BANK_PROOF', ...(esic ? ['FAMILY_PHOTO'] : [])]
-function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, onUploaded }: {
-  docs: Record<string, DocStatus>; token: string; esicApplicable: boolean; isFresher: boolean; isForeign?: boolean; onUploaded: (code: string, data: any) => void
+function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, onUploaded, onRemoved }: {
+  docs: Record<string, DocStatus>; token: string; esicApplicable: boolean; isFresher: boolean; isForeign?: boolean; onUploaded: (code: string, data: any) => void; onRemoved: (code: string) => void
 }) {
   const list = DOC_LIST(esicApplicable, isFresher, isForeign)
   const req = list.filter(d => d.required)
-  const done = req.filter(d => docs[d.code]).length
+  const done = req.filter(d => docs[d.code] && !isRejected(docs[d.code])).length
+  const carried = Object.values(docs).filter(d => d.hr_notes && /carried over/i.test(d.hr_notes)).length
+  const rejected = list.filter(d => isRejected(docs[d.code]))
+  const optional = list.filter(d => !d.required && !docs[d.code])
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -344,11 +392,30 @@ function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, o
         </div>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: done === req.length ? TK.positive : TK.inkSoft, whiteSpace: 'nowrap' }}>{done} of {req.length} required uploaded</span>
       </div>
+      {rejected.length > 0 && (
+        <Note tone="warn">
+          <b>HR has rejected {rejected.length} document{rejected.length === 1 ? '' : 's'}.</b> Upload a new copy of each before you submit again:
+          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>{rejected.map(d => <li key={d.code}>{d.name}{rejectReason(docs[d.code]) ? `: ${rejectReason(docs[d.code])}` : ''}</li>)}</ul>
+        </Note>
+      )}
+      {carried > 0 && (
+        <Note>{carried} document{carried === 1 ? '' : 's'} you sent before the offer {carried === 1 ? 'is' : 'are'} already here. Check each one: view, download, replace or remove it.</Note>
+      )}
       <div className="ezo-docs">
-        {list.map(doc => (
-          <DocUpload key={doc.code} docCode={doc.code} docName={doc.name} required={doc.required} token={token} status={docs[doc.code] || null} onSuccess={onUploaded} />
+        {list.filter(d => d.required || docs[d.code]).map(doc => (
+          <DocUpload key={doc.code} docCode={doc.code} docName={doc.name} required={doc.required} token={token} status={docs[doc.code] || null} onSuccess={onUploaded} onRemoved={onRemoved} />
         ))}
       </div>
+      {optional.length > 0 && (
+        <details className="ezo-more-docs" style={{ marginTop: 14 }}>
+          <summary style={{ fontSize: 13, color: TK.brandDeep, cursor: 'pointer', fontWeight: 650 }}>More documents (optional) · {optional.length}</summary>
+          <div className="ezo-docs" style={{ marginTop: 10 }}>
+            {optional.map(doc => (
+              <DocUpload key={doc.code} docCode={doc.code} docName={doc.name} required={false} token={token} status={null} onSuccess={onUploaded} onRemoved={onRemoved} />
+            ))}
+          </div>
+        </details>
+      )}
       <div style={{ fontSize: 12, color: TK.faint, marginTop: 12 }}>Tip: you can drag a file straight onto a tile.</div>
     </>
   )
@@ -426,8 +493,31 @@ function StatutoryFormCard({ code, title, rows }: { code: string; title: string;
     </div>
   )
 }
-function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, candidate, esicApplicable, isForeign = false, epsFamily = [], epsFallback = {} }: {
-  personal: any; contact: any; statutory: any; insurance: any; esic: any; candidate: any; esicApplicable: boolean; isForeign?: boolean
+// The official form (EPF 11 / EPF 2 / ESIC 1) filled in by /api/onboarding/forms and shown as the
+// PDF itself; the candidate reads it and confirms. Phones that cannot show a PDF inline get the
+// Open button.
+function PdfFormCard({ code, title, token, form, note }: { code: string; title: string; token: string; form: 'form11' | 'form2' | 'esic1' | 'formf'; note: string }) {
+  const [ok, setOk] = useState(false)
+  const url = `/api/onboarding/forms?form=${form}&token=${encodeURIComponent(token)}`
+  return (
+    <div style={{ ...S.card, border: `1px solid ${ok ? TK.positiveEdge : TK.brandTint}`, background: ok ? TK.positiveTint : TK.surface }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 9, fontWeight: 700, color: TK.brand, background: TK.brandTint, padding: '2px 8px', borderRadius: 99 }}>{code}</span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{title}</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <a href={url} target="_blank" rel="noreferrer" style={{ ...S.btnO, fontSize: 11, padding: '5px 10px', textDecoration: 'none' }}>Open ↗</a>
+          <a href={`${url}&mode=download`} style={{ ...S.btnO, fontSize: 11, padding: '5px 10px', textDecoration: 'none' }}>Download</a>
+        </span>
+        {ok && <span style={{ fontSize: 11, fontWeight: 600, color: TK.positive }}>Looks correct</span>}
+      </div>
+      <div style={{ fontSize: 11.5, color: TK.muted, marginBottom: 8 }}>{note} If anything is wrong, go back to the step and correct it — the form updates by itself.</div>
+      <iframe title={title} src={`${url}#toolbar=0&navpanes=0&view=FitH`} style={{ width: '100%', height: 'min(70vh, 640px)', border: `1px solid ${TK.line}`, borderRadius: 8, background: TK.sunken }} />
+      {!ok && <button onClick={() => setOk(true)} style={{ ...S.btnO, marginTop: 10, fontSize: 12, padding: '6px 14px' }}>Looks correct</button>}
+    </div>
+  )
+}
+function StatutoryFormsPreview({ token, personal, contact, statutory, insurance, esic, candidate, esicApplicable, isForeign = false, epsFamily = [], epsFallback = {} }: {
+  token: string; personal: any; contact: any; statutory: any; insurance: any; esic: any; candidate: any; esicApplicable: boolean; isForeign?: boolean
   epsFamily?: any[]; epsFallback?: any
 }) {
   const doj = candidate.date_of_joining ? new Date(candidate.date_of_joining).toLocaleDateString('en-IN') : '—'
@@ -475,51 +565,20 @@ function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, 
       </div>
 
       {activeTab === 'form11' && (
-        <StatutoryFormCard code="EPF FORM 11" title="PF Declaration (new member)" rows={[
-          ['Name of member', personal.full_name],
-          ["Father's / Husband's name", personal.father_name],
-          ['Date of birth', personal.dob],
-          ['Gender', personal.gender],
-          ['Date of joining', doj],
-          ['PAN', statutory.pan_number],
-          ['Existing PF member', statutory.has_uan ? `Yes — UAN ${statutory.uan_number || '—'}` : 'No'],
-          ['International worker', isForeign ? 'Yes' : 'No'],
-        ]} />
+        <PdfFormCard code="EPF FORM 11" title="New Form 11 — Declaration" token={token} form="form11"
+          note="Filled from your details: name, father's / husband's name, date of birth, marital status, email, mobile, UAN and previous PF account (if any), bank account, Aadhaar and PAN." />
       )}
       {activeTab === 'form2' && (
-        <StatutoryFormCard code="EPF FORM 2" title="PF & Pension Nomination" rows={[
-          ['Nominee name', statutory.nominee_name],
-          ['Relationship', statutory.nominee_relation],
-          ['Nominee date of birth', statutory.nominee_dob],
-          ['Share of accumulation', statutory.nominee_share ? `${statutory.nominee_share}%` : '—'],
-          ['Nominee address', statutory.nominee_address],
-          ['Family members (Part B)', epsFamStr],
-          ['Fallback nominee (EPS)', epsFallbackStr],
-        ]} />
+        <PdfFormCard code="EPF FORM 2" title="Form 2 (Revised) — Nomination & Declaration" token={token} form="form2"
+          note="Part A lists your PF nominees with their shares; Part B (EPS) lists your family members for the pension and the fallback nominee." />
       )}
       {activeTab === 'form3' && (
-        <StatutoryFormCard code="FORM III" title="Gratuity Nomination (Form F)" rows={[
-          ['Employee name', personal.full_name],
-          ['Religion', personal.religion],
-          ['Department', candidate.department],
-          ['Designation', candidate.designation],
-          ['Date of appointment', doj],
-          ['Date of superannuation (DOB + 60)', superannuation],
-          ['Permanent address', permAddr],
-          ['Nominee name', statutory.grat_nominee_name || statutory.nominee_name],
-          ['Relationship', statutory.grat_nominee_relation || statutory.nominee_relation],
-          ['Nominee age', statutory.nominee_dob ? `${ageFromDob(statutory.nominee_dob)} yrs` : '—'],
-          ['Proportion', '100%'],
-        ]} />
+        <PdfFormCard code="FORM F" title="Gratuity Form F — Nomination" token={token} form="formf"
+          note="Your gratuity nominee(s) with relationship, age and share, and the statement: name, sex, religion, marital status, department, post, date of appointment and the permanent address split as the form asks." />
       )}
       {activeTab === 'esic1' && esicApplicable && (
-        <StatutoryFormCard code="ESIC FORM 1" title="ESIC Declaration & Family" rows={[
-          ['Insured person', personal.full_name],
-          ['Date of birth', personal.dob],
-          ['Family members', fam],
-          ['Previous ESIC IP no.', esic.prev_ip],
-          ['Nearest dispensary', esic.dispensary],
-        ]} />
+        <PdfFormCard code="ESIC FORM 1" title="Form 1 — Declaration Form" token={token} form="esic1"
+          note="Your particulars, present and permanent addresses, the nominee for the cash benefit, your family members and the temporary identity card with your photo." />
       )}
     </div>
   )
@@ -851,6 +910,51 @@ function CrossDocCheck({ docs, onResolve, onMismatchChange }: {
 }
 
 // ── EPS Family Member row (Form 2 Part B) ─────────────────────────
+type Nominee = { name: string; relation: string; dob: string; share: string; address: string }
+const EMPTY_NOMINEE: Nominee = { name: '', relation: '', dob: '', share: '', address: '' }
+const shareTotal = (rows: Nominee[]) => rows.reduce((a, r) => a + (parseFloat(r.share) || 0), 0)
+/** The first PF / gratuity nominee also fills the flat fields older code reads. */
+function withLegacyNominees<T extends { pf_nominees: Nominee[]; grat_nominees: Nominee[] }>(st: T): T {
+  const pf = st.pf_nominees[0] || EMPTY_NOMINEE, gr = st.grat_nominees[0] || EMPTY_NOMINEE
+  return { ...st, nominee_name: pf.name, nominee_relation: pf.relation, nominee_dob: pf.dob, nominee_share: pf.share, nominee_address: pf.address, grat_nominee_name: gr.name, grat_nominee_relation: gr.relation, grat_nominee_dob: gr.dob, grat_nominee_share: gr.share }
+}
+
+function NomineeRow({ row, index, kind, canRemove, onChange, onRemove }: {
+  row: Nominee; index: number; kind: 'pf' | 'grat'; canRemove: boolean
+  onChange: (patch: Partial<Nominee>) => void; onRemove: () => void
+}) {
+  const req = kind === 'pf'
+  return (
+    <div style={BLOCK}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={BLOCK_TITLE}><span style={BLOCK_NO}>{index + 1}</span>{row.name || `Nominee ${index + 1}`}</div>
+        {canRemove && (
+          <button onClick={onRemove} style={REMOVE_BTN}>Remove</button>
+        )}
+      </div>
+      <div className="ezo-g3">
+        <Fld label={req ? 'Nominee Name *' : 'Nominee Name'}><input style={S.inp(req && !row.name)} value={row.name || ''} onChange={e => onChange({ name: e.target.value })} /></Fld>
+        <Fld label={req ? 'Relation *' : 'Relation'}>
+          <select style={S.sel} value={row.relation || ''} onChange={e => onChange({ relation: e.target.value })}>
+            <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Other</option>
+          </select>
+        </Fld>
+        <Fld label={req ? 'Date of Birth *' : 'Date of Birth'}><input type="date" style={S.inp(req && !row.dob)} value={row.dob || ''} onChange={e => onChange({ dob: e.target.value })} /></Fld>
+        <Fld label="Share %"><input type="number" min={0} max={100} style={S.inp()} value={row.share || ''} onChange={e => onChange({ share: e.target.value })} /></Fld>
+        <div style={{ gridColumn: 'span 2' }}><Fld label={req ? 'Nominee Address *' : 'Nominee Address'}><input style={S.inp(req && !row.address)} value={row.address || ''} onChange={e => onChange({ address: e.target.value })} /></Fld></div>
+      </div>
+    </div>
+  )
+}
+
+const ADDR_PARTS = ['line1', 'village', 'po', 'thana', 'sub_division', 'district', 'city', 'state', 'pin']
+/** Current address = permanent address, field for field. */
+function copyPermToCurr<T extends Record<string, any>>(c: T): T {
+  const n: any = { ...c }
+  for (const k of ADDR_PARTS) n[`curr_${k}`] = c[`perm_${k}`] ?? ''
+  return n
+}
+
 function EpsFamilyRow({ row, index, canRemove, onChange, onRemove }: {
   row: any; index: number; canRemove: boolean
   onChange: (patch: any) => void; onRemove: () => void
@@ -947,6 +1051,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     nationality: (saved.step_3?.nationality) || 'Indian',
     religion: (saved.step_3?.religion) || '',
     country: (saved.step_3?.country) || 'India',
+    birth_place: (saved.step_3?.birth_place) || '',
   })
 
   // Contact step
@@ -965,10 +1070,20 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     perm_pin: (saved.step_4?.perm_pin) || '',
     same_address: (saved.step_4?.same_address) !== undefined ? saved.step_4.same_address : false,
     curr_line1: (saved.step_4?.curr_line1) || '',
+    curr_village: (saved.step_4?.curr_village) || '',
+    curr_po: (saved.step_4?.curr_po) || '',
+    curr_thana: (saved.step_4?.curr_thana) || '',
+    curr_sub_division: (saved.step_4?.curr_sub_division) || '',
+    curr_district: (saved.step_4?.curr_district) || '',
     curr_city: (saved.step_4?.curr_city) || '',
     curr_state: (saved.step_4?.curr_state) || '',
     curr_pin: (saved.step_4?.curr_pin) || '',
   })
+  // "Current address same as permanent": the current fields stay on screen and are filled from
+  // the permanent ones (and follow them while the box is ticked). Editing a current field by
+  // hand unticks the box.
+  const setPerm = (key: string, value: string) => setContact(c => { const n: any = { ...c, [key]: value }; return n.same_address ? copyPermToCurr(n) : n })
+  const setCurr = (key: string, value: string) => setContact(c => ({ ...c, [key]: value, same_address: false }))
 
   // Emergency + prev employment
   const [emergency, setEmergency] = useState({
@@ -994,13 +1109,21 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     uan_number: (saved.step_7?.uan_number) || '',
     prev_pf_id: (saved.step_7?.prev_pf_id) || '',
     pf_transfer: (saved.step_7?.pf_transfer) !== undefined ? saved.step_7.pf_transfer : false,
-    // PF Nominee
+    // PF nominees (EPF Form 2) and gratuity nominees (Form F): one or more each. The flat
+    // nominee_* / grat_nominee_* fields that older forms saved are kept filled from the first
+    // entry (withLegacyNominees), so the employee record and the form previews keep working.
+    pf_nominees: (saved.step_7?.pf_nominees?.length ? saved.step_7.pf_nominees : [{
+      name: (saved.step_7?.nominee_name) || '', relation: (saved.step_7?.nominee_relation) || '', dob: (saved.step_7?.nominee_dob) || '',
+      share: (saved.step_7?.nominee_share) || '100', address: (saved.step_7?.nominee_address) || '',
+    }]) as Nominee[],
+    grat_nominees: (saved.step_7?.grat_nominees?.length ? saved.step_7.grat_nominees : [{
+      name: (saved.step_7?.grat_nominee_name) || '', relation: (saved.step_7?.grat_nominee_relation) || '', dob: (saved.step_7?.grat_nominee_dob) || '', share: (saved.step_7?.grat_nominee_share) || '100', address: '',
+    }]) as Nominee[],
     nominee_name: (saved.step_7?.nominee_name) || '',
     nominee_relation: (saved.step_7?.nominee_relation) || '',
     nominee_dob: (saved.step_7?.nominee_dob) || '',
     nominee_share: (saved.step_7?.nominee_share) || '100',
     nominee_address: (saved.step_7?.nominee_address) || '',
-    // Gratuity nominee
     grat_nominee_name: (saved.step_7?.grat_nominee_name) || '',
     grat_nominee_relation: (saved.step_7?.grat_nominee_relation) || '',
     // Bank
@@ -1011,6 +1134,10 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     bank_branch: (saved.step_7?.bank_branch) || '',
     account_type: (saved.step_7?.account_type) || 'Savings',
     acc_holder: (saved.step_7?.acc_holder) || c.full_name || '',
+    // Other government IDs (shown on the employee record)
+    passport_no: (saved.step_7?.passport_no) || '',
+    voter_id: (saved.step_7?.voter_id) || '',
+    driving_licence: (saved.step_7?.driving_licence) || '',
     // Foreign employee fields
     fe_passport_number: (saved.step_7?.fe_passport_number) || '',
     fe_passport_country: (saved.step_7?.fe_passport_country) || '',
@@ -1037,8 +1164,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   // Documents can be skipped on Step 2; if skipped they become mandatory (non-skippable) before Policies.
   const [docsDeferred, setDocsDeferred] = useState(false)
   const docsComplete = REQUIRED_DOC_CODES(esicApplicable).every(d => docs[d])
+  const onDocRemoved = (code: string) => { setDocs(d => { const n = { ...d }; delete n[code]; return n }); showToast(`${code.replace(/_/g, ' ')} removed`) }
   const onDocUploaded = (code: string, data: any) => {
-    setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } }))
+    setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: data.file_name || 'uploaded' } }))
     if (code === 'PAN' && data.ai_extracted?.pan_number) {
       setStatutory(s => ({ ...s, pan_number: data.ai_extracted.pan_number, acc_holder: data.ai_extracted.name || s.acc_holder }))
     }
@@ -1173,7 +1301,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
       step_4: contact,
       step_5: { ...emergency, prev_employers: prevEmployers, education },
       step_7: {
-        ...statutory,
+        ...withLegacyNominees(statutory),
         gross_monthly: grossMonthly,
         esic_applicable: esicApplicable,
         esic_details: esic,
@@ -1272,6 +1400,17 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
       <JourneyRail current={step} candidate={c} company={co} esic={esicApplicable} saving={saving} />
       <main className="ezo-main">
       <div className="ezo-col" style={{ paddingTop: 0 }}>
+        {/* HR returned the form: what to fix, from the review on the onboarding card */}
+        {c.hr_review?.outcome === 'RETURNED' && (
+          <div style={{ marginBottom: 18 }}>
+            <Note tone="warn">
+              <div style={{ fontWeight: 700, color: TK.critical, marginBottom: 4 }}>HR has asked for corrections before your form can be approved</div>
+              {(c.hr_review.documents || []).length > 0 && <div><b>Documents to upload again:</b><ul style={{ margin: '2px 0 4px', paddingLeft: 18 }}>{c.hr_review.documents.map((d: any) => <li key={d.doc_code}>{d.label}{d.reason ? `: ${d.reason}` : ''}</li>)}</ul></div>}
+              {(c.hr_review.details || []).length > 0 && <div><b>Details to correct:</b><ul style={{ margin: '2px 0 4px', paddingLeft: 18 }}>{c.hr_review.details.map((d: any, i: number) => <li key={i}>{d.field}{d.section ? ` (${d.section})` : ''}{d.reason ? `: ${d.reason}` : ''}</li>)}</ul></div>}
+              {c.hr_review.note && <div><b>Note from HR:</b> {c.hr_review.note}</div>}
+            </Note>
+          </div>
+        )}
         <StepHeader step={step} />
         <div className="ezo-body" key={step}>
         {/* Global country list — shared by the Personal + KYC foreign-block selectors */}
@@ -1388,6 +1527,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                   <option value="">Select</option>{['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Parsi', 'Other'].map(r => <option key={r}>{r}</option>)}
                 </select>
               </Fld>
+              <Fld label="Place of Birth">
+                <input style={S.inp()} value={personal.birth_place} onChange={e => setPersonal(p => ({ ...p, birth_place: e.target.value }))} placeholder="City / town" />
+              </Fld>
               <div style={{ gridColumn: 'span 2' }}>
                 <Fld label="Country (Citizenship) *" hint="Type to search. Select a country other than India for foreign-employee onboarding.">
                   <input list="ezer-countries" style={S.inp(!personal.country)} value={personal.country} onChange={e => setPersonal(p => ({ ...p, country: e.target.value }))} placeholder="India" />
@@ -1421,41 +1563,42 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
 
             <Sec icon={<IconHome size={15} />}>Permanent address</Sec>
             <div className="ezo-g3">
-              <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1 *"><input style={S.inp(!contact.perm_line1)} value={contact.perm_line1} onChange={e => setContact(c => ({ ...c, perm_line1: e.target.value }))} /></Fld></div>
-              <Fld label="Village / Area" hint="For Gratuity Form III"><input style={S.inp()} value={contact.perm_village} onChange={e => setContact(c => ({ ...c, perm_village: e.target.value }))} /></Fld>
-              <Fld label="Post Office"><input style={S.inp()} value={contact.perm_po} onChange={e => setContact(c => ({ ...c, perm_po: e.target.value }))} /></Fld>
-              <Fld label="Thana / Police Station"><input style={S.inp()} value={contact.perm_thana} onChange={e => setContact(c => ({ ...c, perm_thana: e.target.value }))} /></Fld>
-              <Fld label="Sub-Division"><input style={S.inp()} value={contact.perm_sub_division} onChange={e => setContact(c => ({ ...c, perm_sub_division: e.target.value }))} /></Fld>
-              <Fld label="District"><input style={S.inp()} value={contact.perm_district} onChange={e => setContact(c => ({ ...c, perm_district: e.target.value }))} /></Fld>
-              <Fld label="City *"><input style={S.inp(!contact.perm_city)} value={contact.perm_city} onChange={e => setContact(c => ({ ...c, perm_city: e.target.value }))} /></Fld>
+              <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1 *"><input style={S.inp(!contact.perm_line1)} value={contact.perm_line1} onChange={e => setPerm('perm_line1', e.target.value)} /></Fld></div>
+              <Fld label="Village / Area" hint="For Gratuity Form III"><input style={S.inp()} value={contact.perm_village} onChange={e => setPerm('perm_village', e.target.value)} /></Fld>
+              <Fld label="Post Office"><input style={S.inp()} value={contact.perm_po} onChange={e => setPerm('perm_po', e.target.value)} /></Fld>
+              <Fld label="Thana / Police Station"><input style={S.inp()} value={contact.perm_thana} onChange={e => setPerm('perm_thana', e.target.value)} /></Fld>
+              <Fld label="Sub-Division"><input style={S.inp()} value={contact.perm_sub_division} onChange={e => setPerm('perm_sub_division', e.target.value)} /></Fld>
+              <Fld label="District"><input style={S.inp()} value={contact.perm_district} onChange={e => setPerm('perm_district', e.target.value)} /></Fld>
+              <Fld label="City *"><input style={S.inp(!contact.perm_city)} value={contact.perm_city} onChange={e => setPerm('perm_city', e.target.value)} /></Fld>
               <Fld label="State *">
-                <select style={S.sel} value={contact.perm_state} onChange={e => setContact(c => ({ ...c, perm_state: e.target.value }))}>
+                <select style={S.sel} value={contact.perm_state} onChange={e => setPerm('perm_state', e.target.value)}>
                   <option value="">Select State</option>{STATES.map(s => <option key={s}>{s}</option>)}
                 </select>
               </Fld>
-              <Fld label="PIN Code *"><input style={S.inp(!contact.perm_pin)} value={contact.perm_pin} onChange={e => setContact(c => ({ ...c, perm_pin: e.target.value }))} maxLength={6} /></Fld>
+              <Fld label="PIN Code *"><input style={S.inp(!contact.perm_pin)} value={contact.perm_pin} onChange={e => setPerm('perm_pin', e.target.value)} maxLength={6} /></Fld>
             </div>
 
             <label className="ezo-check" style={{ margin: '4px 0 14px', alignItems: 'center' }}>
-              <input type="checkbox" checked={contact.same_address} onChange={e => setContact(c => ({ ...c, same_address: e.target.checked }))} />
+              <input type="checkbox" checked={contact.same_address} onChange={e => setContact(c => e.target.checked ? { ...copyPermToCurr(c), same_address: true } : { ...c, same_address: false })} />
               Current address same as permanent address
             </label>
 
-            {!contact.same_address && (
-              <>
-                <Sec icon={<IconHome size={15} />}>Current address</Sec>
-                <div className="ezo-g3">
-                  <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1"><input style={S.inp()} value={contact.curr_line1} onChange={e => setContact(c => ({ ...c, curr_line1: e.target.value }))} /></Fld></div>
-                  <Fld label="City"><input style={S.inp()} value={contact.curr_city} onChange={e => setContact(c => ({ ...c, curr_city: e.target.value }))} /></Fld>
-                  <Fld label="State">
-                    <select style={S.sel} value={contact.curr_state} onChange={e => setContact(c => ({ ...c, curr_state: e.target.value }))}>
-                      <option value="">Select State</option>{STATES.map(s => <option key={s}>{s}</option>)}
-                    </select>
-                  </Fld>
-                  <Fld label="PIN Code"><input style={S.inp()} value={contact.curr_pin} onChange={e => setContact(c => ({ ...c, curr_pin: e.target.value }))} maxLength={6} /></Fld>
-                </div>
-              </>
-            )}
+            <Sec icon={<IconHome size={15} />}>Current address{contact.same_address && <span style={{ color: TK.faint, fontWeight: 500 }}> · filled from the permanent address, edit any field if it differs</span>}</Sec>
+            <div className="ezo-g3">
+              <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1"><input style={S.inp()} value={contact.curr_line1} onChange={e => setCurr('curr_line1', e.target.value)} /></Fld></div>
+              <Fld label="Village / Area"><input style={S.inp()} value={contact.curr_village} onChange={e => setCurr('curr_village', e.target.value)} /></Fld>
+              <Fld label="Post Office"><input style={S.inp()} value={contact.curr_po} onChange={e => setCurr('curr_po', e.target.value)} /></Fld>
+              <Fld label="Thana / Police Station"><input style={S.inp()} value={contact.curr_thana} onChange={e => setCurr('curr_thana', e.target.value)} /></Fld>
+              <Fld label="Sub-Division"><input style={S.inp()} value={contact.curr_sub_division} onChange={e => setCurr('curr_sub_division', e.target.value)} /></Fld>
+              <Fld label="District"><input style={S.inp()} value={contact.curr_district} onChange={e => setCurr('curr_district', e.target.value)} /></Fld>
+              <Fld label="City"><input style={S.inp()} value={contact.curr_city} onChange={e => setCurr('curr_city', e.target.value)} /></Fld>
+              <Fld label="State">
+                <select style={S.sel} value={contact.curr_state} onChange={e => setCurr('curr_state', e.target.value)}>
+                  <option value="">Select State</option>{STATES.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </Fld>
+              <Fld label="PIN Code"><input style={S.inp()} value={contact.curr_pin} onChange={e => setCurr('curr_pin', e.target.value)} maxLength={6} /></Fld>
+            </div>
 
             {/* PAN — auto-filled from AI */}
             <Sec icon={<IconCard size={15} />}>PAN</Sec>
@@ -1482,6 +1625,14 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                 </Fld>
               </div>
             )}
+
+            {/* Other government IDs — on the employee record; optional */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Other Government IDs (optional)</div>
+            <div style={S.g3}>
+              {!isForeign && <Fld label="Passport Number"><input style={S.inp()} value={statutory.passport_no} onChange={e => setStatutory(s => ({ ...s, passport_no: e.target.value.toUpperCase() }))} maxLength={12} /></Fld>}
+              <Fld label="Voter ID (EPIC)"><input style={S.inp()} value={statutory.voter_id} onChange={e => setStatutory(s => ({ ...s, voter_id: e.target.value.toUpperCase() }))} maxLength={12} /></Fld>
+              <Fld label="Driving Licence"><input style={S.inp()} value={statutory.driving_licence} onChange={e => setStatutory(s => ({ ...s, driving_licence: e.target.value.toUpperCase() }))} maxLength={20} /></Fld>
+            </div>
 
             {/* Bank Details */}
             <Sec icon={<IconPayroll size={15} />}>Bank account for salary</Sec>
@@ -1636,7 +1787,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                       <Fld label="Last CTC (Annual ₹)"><input type="number" style={S.inp()} value={emp.ctc} onChange={e => upEmp(i, { ctc: e.target.value })} /></Fld>
                       <Fld label="Reason for Leaving"><input style={S.inp()} value={emp.reason} onChange={e => upEmp(i, { reason: e.target.value })} /></Fld>
                     </div>
-                    <DocUpload docCode={`EXP_${i + 1}`} docName={`Experience / Relieving Letter — Employer ${i + 1}`} required={false} compact token={token} status={docs[`EXP_${i + 1}`] || null}
+                    <DocUpload docCode={`EXP_${i + 1}`} docName={`Experience / Relieving Letter, Employer ${i + 1}`} required={false} compact token={token} status={docs[`EXP_${i + 1}`] || null} onRemoved={onDocRemoved}
                       onSuccess={(code, data) => { setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } })); showToast('Experience letter uploaded ✓') }} />
                   </div>
                 ))}
@@ -1660,7 +1811,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                   <Fld label="School / University / Board"><input style={S.inp()} value={ed.institute} onChange={e => upEdu(i, { institute: e.target.value })} /></Fld>
                   <Fld label="Year of Passing"><input style={S.inp()} value={ed.year} onChange={e => upEdu(i, { year: e.target.value })} maxLength={4} /></Fld>
                 </div>
-                <DocUpload docCode={`EDU_${i + 1}`} docName={`Certificate / Marksheet — ${ed.qualification || `Qualification ${i + 1}`}`} required={false} compact token={token} status={docs[`EDU_${i + 1}`] || null}
+                <DocUpload docCode={`EDU_${i + 1}`} docName={`Certificate / Marksheet, ${ed.qualification || `Qualification ${i + 1}`}`} required={false} compact token={token} status={docs[`EDU_${i + 1}`] || null} onRemoved={onDocRemoved}
                   onSuccess={(code, data) => { setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } })); showToast('Certificate uploaded ✓') }} />
               </div>
             ))}
@@ -1681,7 +1832,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {/* ═══ STEP 3: DOCUMENT UPLOAD ════════════════════════════ */}
         {step === 2 && (
           <div style={S.card}>
-            <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} />
+            <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} onRemoved={onDocRemoved} />
 
             <div className="ezo-actions" style={{ marginTop: 20 }}>
               <button className="ezo-btn is-ghost" onClick={prevStep} style={S.btnO}>Back</button>
@@ -1724,30 +1875,23 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {/* ═══ STEP 7: NOMINEES (PF + Gratuity) ═══════════════════ */}
         {step === 6 && (
           <div style={S.card}>
-            {/* PF Nominee (Form 11/Form 2) */}
-            <Sec icon={<IconUser size={15} />}>PF nominee <span style={{ color: TK.faint, fontWeight: 500 }}>(EPF Form 2)</span></Sec>
-            <div className="ezo-g3">
-              <Fld label="Nominee Name *"><input style={S.inp(!statutory.nominee_name)} value={statutory.nominee_name} onChange={e => setStatutory(s => ({ ...s, nominee_name: e.target.value }))} /></Fld>
-              <Fld label="Relation *">
-                <select style={S.sel} value={statutory.nominee_relation} onChange={e => setStatutory(s => ({ ...s, nominee_relation: e.target.value }))}>
-                  <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Other</option>
-                </select>
-              </Fld>
-              <Fld label="Date of Birth *"><input type="date" style={S.inp(!statutory.nominee_dob)} value={statutory.nominee_dob} onChange={e => setStatutory(s => ({ ...s, nominee_dob: e.target.value }))} /></Fld>
-              <Fld label="Share %"><input type="number" style={S.inp()} value={statutory.nominee_share} onChange={e => setStatutory(s => ({ ...s, nominee_share: e.target.value }))} /></Fld>
-              <div style={{ gridColumn: 'span 2' }}><Fld label="Nominee Address *"><input style={S.inp(!statutory.nominee_address)} value={statutory.nominee_address} onChange={e => setStatutory(s => ({ ...s, nominee_address: e.target.value }))} /></Fld></div>
-            </div>
+            {/* PF nominees (EPF Form 2): one or more, shares totalling 100% */}
+            <Sec icon={<IconUser size={15} />}>PF nominees <span style={{ color: TK.faint, fontWeight: 500 }}>(EPF Form 2) · share total {shareTotal(statutory.pf_nominees)}%</span></Sec>
+            {statutory.pf_nominees.map((row, i) => (
+              <NomineeRow key={i} row={row} index={i} kind="pf" canRemove={statutory.pf_nominees.length > 1}
+                onChange={patch => setStatutory(s => ({ ...s, pf_nominees: s.pf_nominees.map((r, idx) => idx === i ? { ...r, ...patch } : r) }))}
+                onRemove={() => setStatutory(s => ({ ...s, pf_nominees: s.pf_nominees.filter((_, idx) => idx !== i) }))} />
+            ))}
+            <button className="ezo-btn is-ghost" onClick={() => setStatutory(s => ({ ...s, pf_nominees: [...s.pf_nominees, { ...EMPTY_NOMINEE, share: String(Math.max(0, 100 - shareTotal(s.pf_nominees))) }] }))} style={{ ...S.btnO, marginBottom: 4 }}>+ Add PF nominee</button>
 
-            {/* Gratuity nominee */}
-            <Sec icon={<IconUser size={15} />}>Gratuity nominee <span style={{ color: TK.faint, fontWeight: 500 }}>(Form F)</span></Sec>
-            <div className="ezo-g2">
-              <Fld label="Nominee Name"><input style={S.inp()} value={statutory.grat_nominee_name} onChange={e => setStatutory(s => ({ ...s, grat_nominee_name: e.target.value }))} /></Fld>
-              <Fld label="Relation">
-                <select style={S.sel} value={statutory.grat_nominee_relation} onChange={e => setStatutory(s => ({ ...s, grat_nominee_relation: e.target.value }))}>
-                  <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Son</option><option>Daughter</option><option>Other</option>
-                </select>
-              </Fld>
-            </div>
+            {/* Gratuity nominees (Form F): one or more */}
+            <Sec icon={<IconUser size={15} />}>Gratuity nominees <span style={{ color: TK.faint, fontWeight: 500 }}>(Form F) · share total {shareTotal(statutory.grat_nominees)}%</span></Sec>
+            {statutory.grat_nominees.map((row, i) => (
+              <NomineeRow key={i} row={row} index={i} kind="grat" canRemove={statutory.grat_nominees.length > 1}
+                onChange={patch => setStatutory(s => ({ ...s, grat_nominees: s.grat_nominees.map((r, idx) => idx === i ? { ...r, ...patch } : r) }))}
+                onRemove={() => setStatutory(s => ({ ...s, grat_nominees: s.grat_nominees.filter((_, idx) => idx !== i) }))} />
+            ))}
+            <button className="ezo-btn is-ghost" onClick={() => setStatutory(s => ({ ...s, grat_nominees: [...s.grat_nominees, { ...EMPTY_NOMINEE, share: String(Math.max(0, 100 - shareTotal(s.grat_nominees))) }] }))} style={{ ...S.btnO, marginBottom: 4 }}>+ Add gratuity nominee</button>
 
             {/* EPS Family Members (Form 2 Part B) */}
             <Sec icon={<IconEmployees size={15} />}>Pension family members <span style={{ color: TK.faint, fontWeight: 500 }}>(Form 2 Part B)</span></Sec>
@@ -1775,10 +1919,14 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div className="ezo-actions">
               <button className="ezo-btn is-ghost" onClick={prevStep} style={S.btnO}>Back</button>
               <button onClick={async () => {
-                if (!statutory.nominee_name || !statutory.nominee_dob || !statutory.nominee_address) {
-                  showToast('Please fill all required PF nominee fields', 'err'); return
-                }
-                await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
+                const bad = statutory.pf_nominees.findIndex(n => !n.name?.trim() || !n.dob || !n.address?.trim() || !n.relation)
+                if (bad >= 0) { showToast(`PF nominee ${bad + 1}: name, relation, date of birth and address are required`, 'err'); return }
+                if (statutory.pf_nominees.length > 1 && Math.round(shareTotal(statutory.pf_nominees)) !== 100) { showToast(`PF nominee shares add up to ${shareTotal(statutory.pf_nominees)}% — they must total 100%`, 'err'); return }
+                const gr = statutory.grat_nominees.filter(n => n.name?.trim())
+                if (gr.length > 1 && Math.round(shareTotal(gr)) !== 100) { showToast(`Gratuity nominee shares add up to ${shareTotal(gr)}% — they must total 100%`, 'err'); return }
+                const st = withLegacyNominees({ ...statutory, grat_nominees: gr.length ? gr : statutory.grat_nominees })
+                setStatutory(st)
+                await saveStep(7, { ...st, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
                 nextStep()
               }} className="ezo-btn" style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
             </div>
@@ -1857,7 +2005,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {step === 9 && (
           <div>
             {/* Phase 8 — read-only statutory form previews */}
-            <StatutoryFormsPreview personal={personal} contact={contact} statutory={statutory} insurance={insurance} esic={esic} candidate={c} esicApplicable={esicApplicable} isForeign={isForeign} epsFamily={epsFamily} epsFallback={epsFallback} />
+            <StatutoryFormsPreview token={token} personal={personal} contact={contact} statutory={statutory} insurance={insurance} esic={esic} candidate={c} esicApplicable={esicApplicable} isForeign={isForeign} epsFamily={epsFamily} epsFallback={epsFallback} />
             {/* Summary */}
             <div style={S.card}>
               <Sec icon={<IconUser size={15} />}>Your summary</Sec>
@@ -1906,7 +2054,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={S.card}>
               <Sec icon={<IconUpload size={15} />}>A few documents are still missing</Sec>
               <Note tone="warn">You skipped your documents earlier. Upload the required ones now to unlock the policies.</Note>
-              <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} />
+              <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} onRemoved={onDocRemoved} />
               <button className="ezo-btn is-ghost" onClick={prevStep} style={{ ...S.btnO, marginTop: 16 }}>Back</button>
             </div>
           ) : (

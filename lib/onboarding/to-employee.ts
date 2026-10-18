@@ -18,7 +18,7 @@ export interface SyncResult {
 
 export async function onboardingToEmployee(supa: any, onboardingId: string, employeeCode: string): Promise<SyncResult> {
   const { data: oc } = await supa.from('onboarding_candidates')
-    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type')
+    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, l2_manager_id, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type')
     .eq('id', onboardingId).maybeSingle()
   if (!oc) return { error: 'onboarding record not found' }
 
@@ -66,6 +66,8 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   }
 
   const bankAcc = st.bank_account ? String(st.bank_account) : ''
+  const edu: any[] = Array.isArray(em.education) ? em.education : []
+  const highest = [...edu].reverse().find(e => e && (e.institute || e.year))
 
   const row: any = {
     // identity / org
@@ -90,6 +92,19 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     spouse_name:     orNull(insr.spouse_name),
     spouse_dob:      orNull(insr.spouse_dob),
     aadhar_last4:    orNull(st.aadhaar_last4 || f.aadhaar_last4),
+    birth_place:     orNull(p.birth_place),
+    // other government IDs (optional on the form)
+    passport_no:     orNull(st.passport_no || st.fe_passport_number),
+    voter_id:        orNull(st.voter_id),
+    driving_licence: orNull(st.driving_licence),
+    // existing PF member: the UAN carried forward, and the ESIC IP number if they had one
+    pf_existing_member: st.has_uan === true ? true : null,
+    previous_uan:    st.has_uan ? orNull(st.uan_number) : null,
+    esic_number:     orNull(st.esic_details?.prev_ip),
+    esic_dispensary: orNull(st.esic_details?.dispensary),
+    // highest qualification: the last education row the candidate filled in
+    highest_qualification: highest?.qualification || null,
+    institution_name: highest?.institute || null,
     // employment (doj→company_doj + group_doj)
     designation:     oc.designation || null,
     employment_type: oc.employment_type || 'Employee',
@@ -132,6 +147,7 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     // ── HR activation wizard fields ──
     grade:                  oc.grade || null,
     l1_manager_id:          oc.l1_manager_id || null,   // employees.l1_manager_id (there is no reporting_manager_id column)
+    l2_manager_id:          oc.l2_manager_id || null,
     tds_regime:             oc.tds_regime || 'NEW',
     pf_wage_type:           oc.pf_wage_type || 'BASIC_DA',
     pf_applicable:          oc.pf_applicable ?? true,

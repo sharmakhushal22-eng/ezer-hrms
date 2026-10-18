@@ -6,12 +6,18 @@
 // The words of all four mails come from Configuration (Recruitment → "Offer follow-up —
 // candidate / HR", Onboarding → "Onboarding setup reminder" / "Stay in touch reminder"),
 // for each candidate's company and the branch of their MRF.
+// Then the hiring manager's "connect with your candidate" reminder every 4 days (every 2
+// once joining is within 6 days) and the joining-day mails (teams prepare, candidate
+// welcomed, HR Manager reminded to send the link) — lib/recruitment/joining-followup-run.ts
+// and lib/onboarding/joining-day-run.ts, which take a nodemailer transport.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { renderEmail, mrfScope } from '@/lib/config/store'
 import { mailConfigured, sendMail, type MailResult } from '@/lib/mail/send'
-import { daysLabel } from '@/lib/config/workflow-templates'
 import { runLeaveDaily } from '@/lib/leave/daily'
+import nodemailer from 'nodemailer'
+import { runJoiningFollowups } from '@/lib/recruitment/joining-followup-run'
+import { runPrepareMails, runWelcomeMails, runLinkReminders } from '@/lib/onboarding/joining-day-run'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -50,6 +56,9 @@ async function run(req: NextRequest) {
   try { leaveDaily = await runLeaveDaily() } catch (e) { console.error('leave-daily failed:', e) }
 
   if (!mailConfigured()) return NextResponse.json({ error: 'email not configured' }, { status: 502 })
+  // The joining runners below send through their own transport (same Gmail account).
+  const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD } })
+  const from = `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${process.env.GMAIL_USER}>`
 
   const cutoff = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
   const { data: due, error } = await supabase
@@ -75,7 +84,7 @@ async function run(req: NextRequest) {
     }
   }
 
-  // ── Onboarding reminders (3-day tasks + 10-day stay-in-touch) ──────────────
+  // ── Onboarding reminders (10-day stay-in-touch while joining is far off) ───────
   let onboardingEmails = 0
   const { data: obCands } = await supabase
     .from('candidates')
@@ -90,14 +99,9 @@ async function run(req: NextRequest) {
     const role = c.designation || ''
     const joining = new Date(c.onboarding_date as string).toLocaleDateString('en-IN')
     try {
-      // 3 days before joining → ask HR to complete the onboarding setup (once).
-      if (daysLeft >= 0 && daysLeft <= 3 && !c.onboarding_tasks_emailed) {
-        await send('onboarding.setup_reminder', c, c.hr_email, { candidate_name: c.full_name, role, joining_date: joining, days_left: daysLabel(daysLeft) })
-        await supabase.from('candidates').update({ onboarding_tasks_emailed: true }).eq('id', c.id)
-        onboardingEmails++
-      }
-      // Joining is >30 days away → nudge HR every 10 days to stay in touch.
-      else if (daysLeft > 30) {
+      // The pre-joining setup mail now goes to the teams two days before joining —
+      // runPrepareMails below. Only the long-range stay-in-touch nudge is left here.
+      if (daysLeft > 30) {
         const last = c.last_touch_reminder_at ? new Date(c.last_touch_reminder_at).getTime() : 0
         if (Date.now() - last >= 10 * DAY) {
           await send('onboarding.stay_in_touch', c, c.hr_email, { candidate_name: c.full_name, role, joining_date: joining, days_left: `${daysLeft} days` })
@@ -110,5 +114,17 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails, leaveDaily })
+  // ── Hiring manager: "connect with your candidate" until they join ───────────
+  const joining = await runJoiningFollowups(supabase, transporter, from)
+  if (joining.error) console.error('joining-followup skipped:', joining.error)
+
+  // ── Joining day: the teams prepare (2 days before), the candidate is welcomed (the day
+  //    before), the HR Manager is reminded to send the link (the day) ──
+  const ctx = { sb: supabase, mail: transporter, from, now: Date.now() }
+  const prepare = await runPrepareMails(ctx)
+  const welcome = await runWelcomeMails(ctx)
+  const linkReminder = await runLinkReminders(ctx)
+  for (const [k, v] of Object.entries({ prepare, welcome, linkReminder })) if (v.error) console.error(`${k} skipped:`, v.error)
+
+  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails, joining, prepare, welcome, linkReminder, leaveDaily })
 }

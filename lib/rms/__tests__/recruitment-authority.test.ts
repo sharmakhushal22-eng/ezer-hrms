@@ -36,7 +36,16 @@ const TAB_KEYS = [...afterTabs.slice(0, afterTabs.indexOf(']')).matchAll(/k:'([a
 const CATALOGUE = SCREEN_MODULES.find(m => m.moduleKey === 'recruitment')!
 const CATALOGUE_KEYS = CATALOGUE.screens.map(s => s.key)
 
-const SQL = readFileSync('supabase/migrations/123_role_screen_access.sql', 'utf8')
+// BOTH seed migrations. 123 is the original role → tab grid; later migrations add
+// a tab at a time (142: recruitment.interviews). Reading only 123 would make a
+// newly-seeded tab look ungranted — it would be in the page and the catalogue but
+// missing from SEEDED, and the "a recruiter should see every tab" assertion below
+// would fail on a correct codebase. Each file must use the same
+// ('ROLE','recruitment.key') tuple shape, which is what this regex parses.
+const SQL = [
+  'supabase/migrations/123_role_screen_access.sql',
+  'supabase/migrations/142_recruitment_interviews_screen.sql',
+].map(f => readFileSync(f, 'utf8')).join('\n')
 const SEEDED = [...SQL.matchAll(/\('([A-Z0-9_]+)','recruitment\.([a-z]+)'\)/g)]
   .map(m => ({ role: m[1], key: m[2] }))
 
@@ -63,11 +72,31 @@ const visibleFor = (code: string) =>
 // Every assertion below is worthless if the regexes silently matched nothing.
 
 test('all three sources were actually parsed', () => {
-  assert.equal(TAB_KEYS.length, 11,
-    `parsed ${TAB_KEYS.length} tab keys from page.tsx, expected 11 — the parse broke, not the tabs`)
+  // ELEVEN since Send Offers and Offer Letter merged back into one tab.
+  //
+  // They had been split so that recruiters kept a read-only view while dispatch
+  // moved to the assigned HR Manager — but both tabs rendered the SAME
+  // component with two different props, so the split expressed a permission
+  // fact as a screen fact. One tab ('sendoffer', labelled "Offer Letters") now
+  // decides from the viewer's role instead.
+  //
+  // 'sendoffer' is the key that survived because RECRUITER and HR_MANAGER both
+  // already held it live; keeping 'offerletter' would have hidden the screen
+  // from recruiters until a migration ran. Migration 141 deletes the orphaned
+  // recruitment.offerletter rows.
+  //
+  // These two counts are a tripwire for the regexes silently matching nothing —
+  // they are not the access assertions, which are the three "page, catalogue and
+  // migration agree" checks below and hold at any size.
+  // TWELVE since "Interviews Scheduled" (recruitment.interviews, migration 142)
+  // — the scheduler's read-only list of the interviews they booked.
+  assert.equal(TAB_KEYS.length, 12,
+    `parsed ${TAB_KEYS.length} tab keys from page.tsx, expected 12 — the parse broke, not the tabs`)
   assert.ok(TAB_KEYS.includes('hrhead') && TAB_KEYS.includes('negotiation'),
     `parsed keys look wrong: ${TAB_KEYS.join(',')}`)
-  assert.equal(CATALOGUE_KEYS.length, 11, 'the recruitment catalogue should list eleven screens')
+  assert.ok(!TAB_KEYS.includes('offerletter'),
+    'offerletter was merged into sendoffer — a tab rendering it again needs a catalogue entry and a grant')
+  assert.equal(CATALOGUE_KEYS.length, 12, 'the recruitment catalogue should list twelve screens')
   assert.ok(SEEDED.length >= 15, `parsed ${SEEDED.length} seeded rows from migration 123 — the parse broke`)
 })
 

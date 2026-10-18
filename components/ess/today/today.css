@@ -241,6 +241,8 @@
   .ezt .punchbar { display:flex; gap:10px; width:100%; max-width:310px; }
   .ezt .pbtn {
     flex:1 1 0; min-width:0; display:flex; align-items:center; gap:10px; padding:10px 12px 10px 10px;
+    /* lib/ui/index.tsx squares every <button> with !important; the capsule re-asserts its own radius. */
+    border-radius:16px !important;
     border:1px solid var(--pb-edge); background:var(--pb-bg); color:var(--pb-fg);
     text-align:left; cursor:pointer; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
     box-shadow: var(--pb-shadow);
@@ -541,10 +543,11 @@
 .ezt .tile .ez-ring .bg { stroke: color-mix(in srgb, var(--t-hue) 12%, transparent); }
 .ezt .tile .spark path { stroke: var(--t-hue); }
 .ezt .tile .spark .area { fill: color-mix(in srgb, var(--t-hue) 12%, transparent); }
+/* Three tiles since Net salary left Home: three columns, no empty slot. */
+@container ezt (min-width: 901px) { .ezt .stats { grid-template-columns: repeat(3, 1fr); } }
 .ezt .stats .tile:nth-child(1) { --t-hue: var(--ez-brand); }
-.ezt .stats .tile:nth-child(2) { --t-hue: #6366F1; }
-.ezt .stats .tile:nth-child(3) { --t-hue: var(--ez-positive); }
-.ezt .stats .tile:nth-child(4) { --t-hue: var(--ez-warning); }
+.ezt .stats .tile:nth-child(2) { --t-hue: var(--ez-positive); }
+.ezt .stats .tile:nth-child(3) { --t-hue: var(--ez-warning); }
 
 .ezt .card h2::before { content: ""; width: 4px; height: 14px; border-radius: 3px; background: var(--ez-brand); }
 .ezt .qa button { border-radius: 14px; border: 1px solid var(--ez-line); background: var(--ez-surface); }

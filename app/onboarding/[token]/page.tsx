@@ -42,7 +42,7 @@ export default async function OnboardingPage({ params }: { params: Promise<{ tok
       id, full_name, email, mobile, designation, department,
       employment_type, date_of_joining, offered_ctc, status,
       current_step, form_data, otp_verified, token_expires_at,
-      company_id, magic_link_token, esic_applicable
+      company_id, magic_link_token, esic_applicable, candidate_id, hr_review
     `)
     .eq('magic_link_token', token)
     .single()
@@ -70,10 +70,13 @@ export default async function OnboardingPage({ params }: { params: Promise<{ tok
     .eq('id', candidate.company_id)
     .maybeSingle()
 
+  // Documents from the pre-offer collection ride along (idempotent; a link sent before this existed).
+  try { const { importCollectedDocs } = await import('@/lib/onboarding/import-docs'); await importCollectedDocs(supa as any, candidate.id, (candidate as any).candidate_id || null) } catch { /* best effort */ }
+
   // Fetch uploaded documents
   const { data: documents } = await supa
     .from('onboarding_documents')
-    .select('doc_code, ai_status, ai_extracted_data, ai_confidence, ai_flags, file_name, uploaded_at')
+    .select('doc_code, ai_status, ai_extracted_data, ai_confidence, ai_flags, file_name, uploaded_at, hr_notes, hr_verified')
     .eq('onboarding_id', candidate.id)
 
   // Audit: page loaded (non-blocking — Supabase builder has no .catch)

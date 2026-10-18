@@ -16,10 +16,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '@/lib/ess/api'
-import { C as TK } from '@/lib/ui'
+import { C as TK, Z } from '@/lib/ui'
 import MrfForm, { mrfToForm } from './MrfForm'
 import InterviewFeedbackForm, { type Feedback as InterviewFeedback } from '@/components/recruitment/InterviewFeedbackForm'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+import OnboardingApprovals from './OnboardingApprovals'
 
 const C = {
   // Was a hex palette, and that was the bug: a literal cannot follow the
@@ -413,7 +414,7 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
         ]
         const wide = new Set(['Mandatory Skills', 'Good-to-have Skills', 'Reason for Hire'])
         return (
-          <div onClick={closeReview} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,.5)', backdropFilter: 'blur(2px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={closeReview} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,.5)', backdropFilter: 'blur(2px)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: C.card, borderRadius: 14, width: 'min(620px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,.4)', overflow: 'hidden' }}>
               {/* Header */}
               <div style={{ padding: '16px 22px 14px', background: `linear-gradient(135deg, ${C.purple}, ${C.purpleD})`, color: TK.onAccent }}>
@@ -521,10 +522,26 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
 }
 
 // ── Raise MRF — its own sidebar section (beside Tasks & Approvals) ───────────
-export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void; go?: (k: string) => void }) {
+export function RaiseMrfSection({ employeeId, notify, go, adminMode }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void; go?: (k: string) => void; adminMode?: boolean }) {
   const [canRaise, setCanRaise] = useState<boolean | null>(null)
   const [formKey, setFormKey] = useState(0)   // remount the form to raise another after a submit
-  useEffect(() => { api('/api/ess/mrf', employeeId).then(d => setCanRaise(!!d.canRaise)).catch(() => setCanRaise(true)) }, [employeeId])
+  useEffect(() => { if (!adminMode) api('/api/ess/mrf', employeeId).then(d => setCanRaise(!!d.canRaise)).catch(() => setCanRaise(true)) }, [employeeId, adminMode])
+  // Viewing somebody else's portal. POST /api/ess/mrf refuses this outright —
+  // essCaller sets viewAs whenever the id asked for is not the token's own, and
+  // the route checks it before anything else. Saying so HERE is the whole point:
+  // the refusal used to arrive after the form was filled, at submit.
+  if (adminMode) {
+    return (
+      <div>
+        <div style={{ ...S.section, fontSize: 14, marginBottom: 4 }}>Raise a Manpower Requisition (MRF)</div>
+        <div style={S.note()}>
+          You are viewing another employee&apos;s portal. An MRF is raised by the person themself, so it cannot be
+          submitted from here — the server refuses it. Leave this portal (&ldquo;Back to my portal&rdquo; / &ldquo;Exit Admin Mode&rdquo; above)
+          and raise it from your own.
+        </div>
+      </div>
+    )
+  }
   return (
     <div>
       <div style={{ ...S.section, fontSize: 14, marginBottom: 4 }}>Raise a Manpower Requisition (MRF)</div>
@@ -835,6 +852,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
       <MrfApprovals employeeId={employeeId} notify={notify} />
       <OfferApprovals employeeId={employeeId} notify={notify} />
       <InterviewInvites employeeId={employeeId} notify={notify} />
+      <OnboardingApprovals employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },
         { label: 'In your scope', value: items.length - mine },

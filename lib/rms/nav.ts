@@ -44,6 +44,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { key: 'finance',           label: 'Finance Department',      href: '/dashboard/finance',         module: 'Finance' },
     { key: 'flexi-claims',      label: 'Flexi Claims',            href: '/dashboard/flexi-claims',    module: 'Flexi Claims' },
     { key: 'travel-claims',     label: 'Travel Claims',           href: '/dashboard/travel-claims',   module: 'Travel Claims' },
+    { key: 'expenses',          label: 'Travel & Expenses',       href: '/dashboard/expenses',        module: 'Travel Claims' },
     { key: 'loans',             label: 'Loans',                   href: '/dashboard/loans',           module: 'Loans' },
   ]},
   { group: 'Compliance & Docs', items: [
@@ -85,6 +86,12 @@ export const MODULE_TABS: Record<string, ModuleTab[]> = {
     { key: 'mrf',           label: 'MRF',            screen: 'recruitment.mrf',           keywords: 'manpower requisition raise mrf hiring request' },
     { key: 'screening',     label: 'AI Screening',   screen: 'recruitment.screening',     keywords: 'resume cv screening ai shortlist' },
     { key: 'pipeline',      label: 'Pipeline',       screen: 'recruitment.pipeline',      keywords: 'candidates interviews add candidate' },
+    // The scheduler's own list of the interviews they booked: join link, interviewer,
+    // and whether that interviewer has acknowledged or given feedback. The INTERVIEWER's
+    // side of the same data is ESS -> Tasks & Approvals. Seeded for RECRUITER by
+    // migration 142; page.tsx derives its TABS from this list, so a tab missing here
+    // does not render at all.
+    { key: 'interviews',    label: 'Interviews Scheduled', screen: 'recruitment.interviews', keywords: 'scheduled interviews join link interviewer feedback acknowledged' },
     { key: 'negotiation',   label: 'Negotiation',    screen: 'recruitment.negotiation',   keywords: 'ctc salary calculator salary link documents' },
     { key: 'offerapproval', label: 'Offer Approval', screen: 'recruitment.offerapproval', keywords: 'offer approval request' },
     { key: 'hrhead',        label: 'HR Head',        screen: 'recruitment.hrhead',        keywords: 'hr head offer approvals revision' },

@@ -5,11 +5,9 @@
 // assigned follows who completes first, not planned joining date, and is never reused.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { onboardingToEmployee } from '@/lib/onboarding/to-employee'
-import { buildEmpCode, isValidEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
-import { sendAckEmail } from '@/lib/onboarding/ack-email'
-import { renderEmail, onboardingScope } from '@/lib/config/store'
-import { sendMail } from '@/lib/mail/send'
+import { buildEmpCode } from '@/lib/employee-code'
+import { createEmployeeFromOnboarding } from '@/lib/onboarding/create-employee'
+import { approvalsOf, TEAM_LABEL, type Team } from '@/lib/onboarding/approvals'
 
 export const runtime = 'nodejs' // nodemailer needs the Node.js runtime
 
@@ -53,117 +51,28 @@ export async function GET(req: NextRequest) {
 }
 
 // ── POST — generate + lock the code (atomic), bridge to employees master ──
+// The HR Manager's step after the three heads have approved and the role is assigned (Role
+// assignment on the card): it may type a custom code. The role assignment is required — it is
+// what gives the new employee their reporting line and ESS access (lib/onboarding/role-assignment.ts).
 export async function POST(req: NextRequest) {
   try {
-    const { onboarding_id, employee_code, hr_notes, approved_by } = await req.json()
+    const { onboarding_id, employee_code, hr_notes, approved_by, force } = await req.json()
     if (!onboarding_id) return NextResponse.json({ error: 'onboarding_id required' }, { status: 400 })
-
-    const { data: cand, error } = await supa
-      .from('onboarding_candidates')
-      .select('id, company_id, employment_type, full_name, email, designation, status')
-      .eq('id', onboarding_id).single()
-    if (error || !cand) return NextResponse.json({ error: 'Onboarding record not found' }, { status: 404 })
-    if (cand.status === 'EMPLOYEE_CREATED') return NextResponse.json({ error: 'Employee code already generated' }, { status: 409 })
-    // Gate: code only after the candidate has completed (submitted) onboarding.
-    if (!['SUBMITTED', 'HR_REVIEW'].includes(cand.status)) {
-      return NextResponse.json({ error: 'Form not yet submitted by candidate. Onboarding incomplete' }, { status: 400 })
+    const approvals = await approvalsOf(supa as any, onboarding_id)
+    const pending = approvals.filter(a => a.status !== 'APPROVED').map(a => TEAM_LABEL[a.team as Team])
+    if (pending.length && !force) {
+      return NextResponse.json({ error: `Waiting on ${pending.join(', ')} approval${pending.length > 1 ? 's' : ''} (ESS → Tasks & Approvals).`, pending }, { status: 409 })
     }
-
-    const { data: company } = await supa.from('companies').select('company_code').eq('id', cand.company_id).single()
-    const companyCode = (company?.company_code || 'EZ').toUpperCase()
-    const employmentType = cand.employment_type || 'Employee'
-    const suffix = TYPE_SUFFIX[employmentType] ?? ''
-    const autoPattern = new RegExp(`^${companyCode}${suffix}\\d{4}$`)
-
-    // Decide final code. If HR kept the auto pattern (or left it blank) → reserve a
-    // fresh number atomically (authoritative, race-proof). If HR typed a genuinely
-    // custom code → honour it. Either way numbers are never reused.
-    const submitted = (employee_code || '').trim().toUpperCase()
-    const isCustom = submitted.length > 0 && !autoPattern.test(submitted)
-
-    let finalCode: string
-    if (isCustom) {
-      finalCode = submitted
-    } else {
-      const { data: nextSeq, error: seqErr } = await supa.rpc('get_next_employee_code', {
-        p_company_id: cand.company_id, p_employment_type: employmentType,
-      })
-      if (seqErr) return NextResponse.json({ error: 'Sequence error: ' + seqErr.message }, { status: 500 })
-      finalCode = buildEmpCode(companyCode, employmentType, nextSeq as number)
+    const { data: ra } = await supa.from('onboarding_candidates').select('role_assignment').eq('id', onboarding_id).maybeSingle()
+    if (!ra?.role_assignment) {
+      return NextResponse.json({ error: 'Assign the role first — press Role assignment on the card and pick the L1, L2 and the ESS role. The employee code follows that.', needs_role: true }, { status: 400 })
     }
-
-    if (!isValidEmpCode(finalCode)) {
-      return NextResponse.json({ error: `Invalid format: "${finalCode}". Expected e.g. SSM0001 or SSMINT0001` }, { status: 400 })
-    }
-
-    // Uniqueness across BOTH tables (never reuse a code, even from ex-employees).
-    const [empCheck, candCheck] = await Promise.all([
-      supa.from('employees').select('id').eq('emp_code', finalCode).maybeSingle(),
-      supa.from('onboarding_candidates').select('id').eq('employee_code', finalCode).neq('id', onboarding_id).maybeSingle(),
-    ])
-    if (empCheck.data) return NextResponse.json({ error: `${finalCode} already exists in employees.` }, { status: 409 })
-    if (candCheck.data) return NextResponse.json({ error: `${finalCode} already assigned to another candidate.` }, { status: 409 })
-
-    const { error: updateErr } = await supa.from('onboarding_candidates').update({
-      status: 'EMPLOYEE_CREATED', employee_code: finalCode,
-      hr_reviewed_at: new Date().toISOString(), hr_reviewed_by: approved_by || null, hr_notes: hr_notes || null,
-    }).eq('id', onboarding_id)
-    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
-
-    // Bridge: create the master `employees` row. Non-fatal — status returned to HR.
-    let employeeSync: any = { ok: false }
-    try { employeeSync = await onboardingToEmployee(supa, onboarding_id, finalCode) }
-    catch (e: any) { employeeSync = { error: e?.message || 'sync failed' } }
-
-    // The employee row IS the outcome. If it could not be written, put the onboarding back
-    // in HR review (the reserved number is never reused) and tell HR why, instead of
-    // reporting success with no employee in the master.
-    if (!employeeSync.ok) {
-      const why = employeeSync.error || 'employee record could not be created'
-      await supa.from('onboarding_candidates').update({
-        status: 'HR_REVIEW', employee_code: null, hr_notes: `Employee creation failed (${finalCode}): ${why}`,
-      }).eq('id', onboarding_id)
-      await supa.from('onboarding_audit_log').insert({
-        onboarding_id, action: 'EMPLOYEE_SYNC_FAILED', actor_type: 'HR', actor_id: approved_by || null,
-        details: { employee_code: finalCode, error: why },
-      })
-      return NextResponse.json({ error: `Employee record could not be created: ${why}. The onboarding is back in HR review. Fix the data and generate the code again.`, employee_code: finalCode, employee_synced: false, sync_error: why }, { status: 500 })
-    }
-
-    await supa.from('onboarding_statutory_enrollment').update({
-      enrolled_at: new Date().toISOString(), enrolled_by: approved_by || null,
-    }).eq('onboarding_id', onboarding_id)
-
-    // "Welcome — your Employee ID" (Configuration → Onboarding). This used to be logged here
-    // as SENT without being emailed; it is now sent, and the log records what really happened.
-    const scope = await onboardingScope(onboarding_id)
-    const { data: co } = scope.companyId ? await supa.from('companies').select('company_name').eq('id', scope.companyId).maybeSingle() : { data: null }
-    const welcome = await renderEmail('onboarding.employee_id', scope, { candidate_name: cand.full_name, employee_code: finalCode, company_name: co?.company_name || '' })
-    const welcomeSent = cand.email
-      ? await sendMail({ to: cand.email, subject: welcome.subject, text: welcome.text, html: welcome.html })
-      : { sent: false, skipped: 'candidate has no email' }
-    await supa.from('onboarding_notifications').insert({
-      onboarding_id, recipient_type: 'CANDIDATE', channel: 'EMAIL',
-      subject: welcome.subject, body: welcome.text,
-      status: welcomeSent.sent ? 'SENT' : 'FAILED', sent_at: welcomeSent.sent ? new Date().toISOString() : null,
-    })
-
-    await supa.from('onboarding_audit_log').insert({
-      onboarding_id, action: 'EMPLOYEE_CODE_GENERATED', actor_type: 'HR', actor_id: approved_by || null,
-      details: { employee_code: finalCode, employment_type: employmentType, company_id: cand.company_id, employee_synced: !!employeeSync.ok, sync_error: employeeSync.error || null },
-    })
-
-    // Email the joiner their acknowledgement document + acknowledged policies (non-fatal).
-    let docsEmailed = false
-    try { const r = await sendAckEmail(supa, onboarding_id, finalCode); docsEmailed = !!r.ok } catch { /* never block code gen */ }
-
+    const r = await createEmployeeFromOnboarding(supa as any, { onboardingId: onboarding_id, customCode: employee_code, by: approved_by, notes: hr_notes, actorType: 'HR' })
+    if (!r.ok) return NextResponse.json({ error: r.error, employee_code: r.employee_code, employee_synced: r.employee_synced ?? false, sync_error: r.sync_error }, { status: r.status || 500 })
+    const { data: cand } = await supa.from('onboarding_candidates').select('full_name').eq('id', onboarding_id).maybeSingle()
     return NextResponse.json({
-      success: true, employee_code: finalCode, employee_synced: !!employeeSync.ok, docs_emailed: docsEmailed,
-      employee_id: employeeSync.employee_id || null, sync_error: employeeSync.error || null,
-      dept_matched: employeeSync.dept_matched ?? null,
-      message: employeeSync.ok
-        ? `Employee ID ${finalCode} generated for ${cand.full_name}. Master record created.`
-        : `Employee ID ${finalCode} generated for ${cand.full_name}. (Master sync issue: ${employeeSync.error || 'see logs'})`,
+      success: true, employee_code: r.employee_code, employee_synced: true, docs_emailed: r.docs_emailed, employee_id: r.employee_id, sync_error: null, dept_matched: r.dept_matched,
+      message: `Employee ID ${r.employee_code} generated for ${cand?.full_name || 'the candidate'}. Master record created.`,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

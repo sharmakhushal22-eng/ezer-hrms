@@ -1,0 +1,214 @@
+// lib/te/__tests__/finance-desk.test.ts — which button belongs on which row.
+//
+// Nearly every Finance-desk bug is the wrong button offered: a refund on an
+// advance that never went out, a lock on a month still in motion. The states
+// are the server's; which actions belong to them is here, and each is pinned
+// down because offering the wrong one invites somebody to try it.
+import { strict as assert } from 'node:assert'
+import { describe, it } from 'node:test'
+import {
+  adjustmentActions, adjustmentTotals, adjustmentWay, advanceActions, batchActions,
+  itemActions, payableTotal, periodActions, periodNeedsReason, whyAdjustmentNotReady,
+  whyPayoutNotReady, PAYOUT_ROUTES,
+} from '../finance-desk.ts'
+
+const names = (list: { action: string }[]) => list.map(a => a.action)
+
+describe('what can be done to an advance', () => {
+  it('offers paying or refusing one that has not gone out', () => {
+    assert.deepEqual(names(advanceActions('REQUESTED', 0)), ['pay', 'reject'])
+    assert.deepEqual(names(advanceActions('APPROVED', 0)), ['pay', 'reject'])
+  })
+
+  it('never offers a refund on money that was never paid', () => {
+    // The commonest shape of this bug, and the most confusing on a desk.
+    assert.equal(advanceActions('REQUESTED', 0).some(a => a.action === 'refund'), false)
+    assert.equal(advanceActions('APPROVED', 5000).some(a => a.action === 'refund'), false)
+  })
+
+  it('offers only ways back once the money has gone out', () => {
+    assert.deepEqual(names(advanceActions('PAID', 5000)), ['refund', 'payroll', 'carry'])
+    assert.deepEqual(names(advanceActions('PART_SETTLED', 2000)), ['refund', 'payroll', 'carry'])
+    assert.deepEqual(names(advanceActions('RECOVERY_DUE', 2000)), ['refund', 'payroll', 'carry'])
+  })
+
+  it('offers nothing to recover when nothing is outstanding', () => {
+    // The row may not be closed off yet, but there is no money to chase.
+    assert.deepEqual(advanceActions('PAID', 0), [])
+  })
+
+  it('offers nothing on one that is finished or refused', () => {
+    for (const st of ['SETTLED', 'REJECTED', 'CANCELLED', 'SOMETHING_ELSE']) {
+      assert.deepEqual(advanceActions(st, 5000), [], st)
+    }
+  })
+
+  it('says what paying and recovering actually do', () => {
+    const pay = advanceActions('APPROVED', 0).find(a => a.action === 'pay')!
+    assert.match(pay.effect, /Releases the money/)
+    assert.equal(pay.amount, true, 'paying needs an amount')
+    assert.equal(pay.reference, true, 'paying needs a reference')
+
+    const payroll = advanceActions('PAID', 100).find(a => a.action === 'payroll')!
+    assert.equal(payroll.grave, true, 'handing it to payroll should confirm first')
+  })
+})
+
+describe('what can be done to a month', () => {
+  it('offers only closing an open month', () => {
+    assert.deepEqual(names(periodActions('OPEN')), ['close'])
+  })
+
+  it('offers reopening, rolling and locking a closed one', () => {
+    assert.deepEqual(names(periodActions('CLOSED')), ['reopen', 'roll', 'lock'])
+  })
+
+  it('offers nothing on a locked month, which is the point of locking it', () => {
+    assert.deepEqual(periodActions('LOCKED'), [])
+  })
+
+  it('treats a state it does not know as offering nothing', () => {
+    assert.deepEqual(periodActions('WHATEVER'), [])
+  })
+
+  it('marks locking as the irreversible one', () => {
+    const lock = periodActions('CLOSED').find(a => a.action === 'lock')!
+    assert.equal(lock.grave, true)
+    assert.match(lock.effect, /cannot be undone/)
+  })
+
+  it('asks why for the two that leave a mark', () => {
+    assert.equal(periodNeedsReason('reopen'), true)
+    assert.equal(periodNeedsReason('lock'), true)
+    assert.equal(periodNeedsReason('close'), false)
+    assert.equal(periodNeedsReason('roll'), false)
+  })
+})
+
+describe('payout batches', () => {
+  it('lets a draft or a generated file be paid, cancelled or regenerated', () => {
+    assert.deepEqual(batchActions('DRAFT'), { file: true, paid: true, cancel: true })
+    assert.deepEqual(batchActions('FILE_GENERATED'), { file: true, paid: true, cancel: true })
+  })
+
+  it('locks a paid batch down', () => {
+    // The money has gone; regenerating a file or cancelling would be a lie.
+    assert.deepEqual(batchActions('PAID'), { file: false, paid: false, cancel: false })
+    assert.deepEqual(batchActions('CANCELLED'), { file: false, paid: false, cancel: false })
+  })
+
+  it('warns that the bank route produces a file with account numbers in it', () => {
+    const bank = PAYOUT_ROUTES.find(r => r.route === 'OFF_CYCLE')!
+    assert.match(bank.effect, /full account numbers/)
+    const payroll = PAYOUT_ROUTES.find(r => r.route === 'PAYROLL')!
+    assert.match(payroll.effect, /No bank file/)
+  })
+
+  it('adds up only what is ticked', () => {
+    const rows = [{ id: 'a', net_amount: 1000 }, { id: 'b', net_amount: 250.5 }, { id: 'c', net_amount: 99 }]
+    const id = (r: { id: string }) => r.id
+    assert.equal(payableTotal(rows, new Set(['a', 'b']), id), 1250.5)
+    assert.equal(payableTotal(rows, new Set(), id), 0)
+    assert.equal(payableTotal(rows, new Set(['a', 'b', 'c']), id), 1349.5)
+  })
+
+  it('ignores a tick for a row that is no longer in the list', () => {
+    // A stale page: the claim was batched by somebody else a moment ago.
+    const rows = [{ id: 'a', net_amount: 1000 }]
+    const id = (r: { id: string }) => r.id
+    assert.equal(payableTotal(rows, new Set(['a', 'gone']), id), 1000)
+  })
+})
+
+describe('one line of a batch', () => {
+  it('can be failed once the batch has gone to the bank', () => {
+    assert.equal(itemActions('FILE_GENERATED', 'PENDING').failed, true)
+    assert.equal(itemActions('PAID', 'PENDING').failed, true)
+  })
+
+  it('cannot be failed while the batch is still a draft', () => {
+    // Nothing has been sent, so nothing can have bounced. Cancel the batch.
+    assert.equal(itemActions('DRAFT', 'PENDING').failed, false)
+  })
+
+  it('cannot be failed twice', () => {
+    assert.equal(itemActions('PAID', 'FAILED').failed, false)
+  })
+
+  it('cannot be failed on a cancelled batch', () => {
+    assert.equal(itemActions('CANCELLED', 'PENDING').failed, false)
+  })
+
+  it('can be failed even after the batch was marked paid', () => {
+    // The whole point: the batch was paid, the bank bounced one line, and
+    // that claim has to go back to the payable list.
+    assert.equal(itemActions('PAID', 'PAID').failed, true)
+  })
+})
+
+describe('saying why a payout went wrong', () => {
+  it('insists on a reason', () => {
+    assert.match(whyPayoutNotReady(''), /Say what went wrong/)
+    assert.match(whyPayoutNotReady('   '), /Say what went wrong/)
+  })
+
+  it('says where the reason ends up, because that is why it is required', () => {
+    assert.match(whyPayoutNotReady(''), /goes back to be paid again/)
+  })
+
+  it('accepts a reason', () => {
+    assert.equal(whyPayoutNotReady('Account closed.'), '')
+  })
+})
+
+describe('corrections after a claim is paid', () => {
+  it('offers settling or cancelling an open one', () => {
+    assert.deepEqual(names(adjustmentActions('OPEN')), ['done', 'cancel'])
+  })
+
+  it('offers nothing once it is closed', () => {
+    assert.deepEqual(adjustmentActions('DONE'), [])
+    assert.deepEqual(adjustmentActions('CANCELLED'), [])
+    assert.deepEqual(adjustmentActions('WHAT'), [])
+  })
+
+  it('keeps a reference for money that moved, and not for one raised in error', () => {
+    const done = adjustmentActions('OPEN').find(a => a.action === 'done')!
+    assert.equal(done.reference, true)
+    const cancel = adjustmentActions('OPEN').find(a => a.action === 'cancel')!
+    assert.equal(cancel.reference, false)
+    assert.equal(cancel.grave, true)
+  })
+
+  it('says which way the money goes', () => {
+    assert.match(adjustmentWay('recover').who, /employee owes this back/)
+    assert.match(adjustmentWay('pay').who, /company owes the employee/)
+  })
+
+  it('will not raise one without a claim, an amount and a reason', () => {
+    assert.match(whyAdjustmentNotReady(100, 'Toll twice', ''), /Find the claim/)
+    assert.match(whyAdjustmentNotReady(0, 'Toll twice', 'c1'), /how much/)
+    assert.match(whyAdjustmentNotReady(-5, 'Toll twice', 'c1'), /how much/)
+    assert.match(whyAdjustmentNotReady(100, '   ', 'c1'), /what the correction is for/)
+    assert.equal(whyAdjustmentNotReady(100, 'Toll counted twice', 'c1'), '')
+  })
+
+  it('says the employee reads the reason, because they do', () => {
+    assert.match(whyAdjustmentNotReady(100, '', 'c1'), /employee sees it/)
+  })
+
+  it('totals only what is still open, by direction', () => {
+    const rows = [
+      { status: 'OPEN', direction: 'recover', amount: 100 },
+      { status: 'OPEN', direction: 'recover', amount: 20.5 },
+      { status: 'OPEN', direction: 'pay', amount: 300 },
+      { status: 'DONE', direction: 'recover', amount: 9999 },
+      { status: 'CANCELLED', direction: 'pay', amount: 7777 },
+    ]
+    assert.deepEqual(adjustmentTotals(rows), { recover: 120.5, pay: 300, open: 3 })
+  })
+
+  it('totals nothing when there is nothing open', () => {
+    assert.deepEqual(adjustmentTotals([{ status: 'DONE', direction: 'pay', amount: 50 }]), { recover: 0, pay: 0, open: 0 })
+  })
+})

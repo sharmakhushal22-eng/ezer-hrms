@@ -2,6 +2,8 @@
 // Final submission — validates, generates employee ID, moves to HR review
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { openApprovals } from '@/lib/onboarding/approvals'
+import { docLabel } from '@/lib/onboarding/corrections'
 import { renderEmail, onboardingScope, isUuid } from '@/lib/config/store'
 import { sendMail } from '@/lib/mail/send'
 
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     const { data: cand, error } = await supa
       .from('onboarding_candidates')
-      .select('id, company_id, full_name, email, designation, status, form_data, hr_spoc_id, created_by')
+      .select('id, company_id, full_name, email, designation, status, form_data, hr_spoc_id, created_by, hr_review')
       .eq('magic_link_token', token)
       .single()
 
@@ -46,8 +48,15 @@ export async function POST(req: NextRequest) {
     // Check mandatory documents
     const { data: docs } = await supa
       .from('onboarding_documents')
-      .select('doc_code, ai_status')
+      .select('doc_code, ai_status, hr_verified')
       .eq('onboarding_id', cand.id)
+
+    // A document HR rejected stays rejected until a new file replaces it (the upload clears
+    // hr_verified) — the form cannot come back with the same file.
+    const stillRejected = (docs || []).filter(d => d.hr_verified === false).map(d => docLabel(d.doc_code))
+    if (stillRejected.length) {
+      return NextResponse.json({ error: `Please upload a new copy of the rejected document${stillRejected.length > 1 ? 's' : ''} first: ${stillRejected.join(', ')}.`, rejected_docs: stillRejected }, { status: 400 })
+    }
 
     const mandatoryDocs = ['AADHAAR_FRONT', 'PAN', 'PHOTO']
     const uploadedCodes = (docs || []).map(d => d.doc_code)
@@ -66,6 +75,9 @@ export async function POST(req: NextRequest) {
       form_data:    fullData,
       submitted_at: new Date().toISOString(),
       current_step: 8,
+      hr_notes:     null,
+      // A return that stood is answered by this submission; the review history stays on the row.
+      hr_review:    cand.hr_review?.outcome === 'RETURNED' ? { ...cand.hr_review, outcome: 'RESUBMITTED', resubmitted_at: new Date().toISOString() } : cand.hr_review ?? null,
     }).eq('id', cand.id)
 
     // Create statutory enrollment record (PF/ESI)
@@ -91,6 +103,11 @@ export async function POST(req: NextRequest) {
         status:        'PENDING',
       }))
     )
+
+    // The sign-off chain starts with the HR Manager's review (Review form on the card); IT,
+    // Admin and Payroll are told only once the HR Manager has accepted the form
+    // (lib/onboarding/approvals.ts). A resubmission after a return resets every team to pending.
+    try { await openApprovals(supa as any, cand.id, { reset: true }) } catch (e) { console.error('onboarding approvals could not be opened', e) }
 
     // HR notification — "Joining form submitted — HR" (Configuration → Onboarding). This used to
     // be logged here as SENT without being emailed; it is now sent, to the onboarding's HR SPOC,
@@ -125,7 +142,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success:        true,
-      message:        'Form submitted successfully. HR will review and generate your Employee ID.',
+      message:        'Form submitted successfully. IT, Admin, Payroll and HR will review it; your Employee ID follows their approval.',
       onboarding_id:  cand.id,
     })
 

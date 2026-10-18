@@ -9,7 +9,9 @@ import { canSeeScreen } from '@/lib/rms/resolve'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 // send-magic-link / resend-link are guarded server-side now, so the session goes along.
 import { authHeaders } from '@/lib/auth-headers'
-import ActivationWizard from '@/components/onboarding/ActivationWizard'
+import RoleAssignmentModal from '@/components/onboarding/RoleAssignmentModal'
+import GenerateCodeModal from '@/components/onboarding/GenerateCodeModal'
+import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import {
@@ -24,6 +26,12 @@ type RiskLevel = 'LOW'|'MEDIUM'|'HIGH'
 type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
 
 interface Candidate {
+  approvals?: { team: string; status: string }[]
+  /** The HR Manager's Role assignment (after IT, Admin and Payroll approve): role, permissions snapshot, L1 / L2 / HOD. Required before Generate code. */
+  role_assignment?: { role_id: string; role_code: string; role_name: string; permissions?: { module: string; access_level: string }[]; l1_name?: string | null; l2_name?: string | null; hod_name?: string | null; by_name?: string | null; at?: string } | null
+  l1_manager_id?: string | null; l2_manager_id?: string | null
+  /** The HR Manager's last review (Review form on the card): ACCEPTED / RETURNED / RESUBMITTED with the rejected documents and flagged details. */
+  hr_review?: { outcome: string; by_name?: string | null; at?: string; documents?: { doc_code: string; label: string; reason: string }[]; details?: { field: string; reason: string }[]; note?: string | null } | null
   id: string; full_name: string; designation: string; department: string
   email: string; mobile: string; date_of_joining: string
   status: Stage; current_step: number; form_data: any
@@ -45,10 +53,11 @@ const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
   INVITED:          { label:'Link sent',        bg:TK.warningTint, color:TK.warning },
   IN_PROGRESS:      { label:'In progress',      bg: TK.brandTint, color: TK.brand },
   SUBMITTED:        { label:'Submitted',         bg:TK.brandTint, color:P        },
-  HR_REVIEW:        { label:'HR review',         bg:TK.infoTint, color:TK.info },
-  APPROVED:         { label:'Approved',          bg:TK.positiveTint, color:TK.positive },
+  HR_REVIEW:        { label:'HR accepted · with teams', bg:TK.infoTint, color:TK.info },
+  APPROVED:         { label:'Teams approved',    bg:TK.positiveTint, color:TK.positive },
   EMPLOYEE_CREATED: { label:'Employee created',  bg: TK.sunken, color: TK.positive },
 }
+const TEAM_SHORT: Record<string,string> = { IT:'IT', ADMIN:'Admin', PAYROLL:'Payroll', HR_MANAGER:'HR Mgr' }
 const STEP_LABELS = ['','Welcome','OTP','Personal','Contact','Emergency','Documents','Statutory','Declaration']
 const DOCS_REQ = ['AADHAAR_FRONT','AADHAAR_BACK','PAN','PHOTO','DEGREE','BANK_PROOF']
 
@@ -196,6 +205,8 @@ export default function OnboardingDashboard() {
   const [editEmail,    setEditEmail]  = useState('')
   const [editMobile,   setEditMobile] = useState('')
   const [resendingId,  setResendingId] = useState('')
+  const [reviewing,    setReviewing]  = useState<{ id: string; readOnly: boolean } | null>(null)
+  const [assigning,    setAssigning]  = useState<Candidate|null>(null)
   const [selIds,       setSelIds]     = useState<Set<string>>(new Set())
   // New link form
   const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
@@ -254,17 +265,18 @@ export default function OnboardingDashboard() {
       )
       return parts.flatMap(p => (p.data as any[]) || [])
     }
-    const [allDocs, allForms, allAssets] = await Promise.all([
+    const [allDocs, allForms, allAssets, allApprovals] = await Promise.all([
       fetchAll('onboarding_documents',       'onboarding_id,doc_code,ai_status'),
       fetchAll('onboarding_statutory_forms', 'onboarding_id,form_type'),
       fetchAll('onboarding_asset_requests',  'onboarding_id,asset_type,status'),
+      fetchAll('onboarding_approvals',       'onboarding_id,team,status'),
     ])
     const groupBy = (rows: any[]) => {
       const m = new Map<string, any[]>()
       rows.forEach(r => { const a = m.get(r.onboarding_id); a ? a.push(r) : m.set(r.onboarding_id, [r]) })
       return m
     }
-    const docsBy = groupBy(allDocs), formsBy = groupBy(allForms), assetsBy = groupBy(allAssets)
+    const docsBy = groupBy(allDocs), formsBy = groupBy(allForms), assetsBy = groupBy(allAssets), approvalsBy = groupBy(allApprovals)
 
     const enriched: Candidate[] = (cands || []).map((c) => {
       const docs = docsBy.get(c.id) || []
@@ -296,6 +308,7 @@ export default function OnboardingDashboard() {
         id_card_issued:  idCard?.status  === 'ISSUED',
         ai_risk:         risk,
         ai_risk_reason:  riskReason,
+        approvals:       ['IT','ADMIN','PAYROLL','HR_MANAGER'].map(team => ({ team, status: (approvalsBy.get(c.id) || []).find((a: any) => a.team === team)?.status || 'PENDING' })),
       } as Candidate
     })
 
@@ -471,7 +484,7 @@ export default function OnboardingDashboard() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed')
-      showToast(data.emailed ? `Onboarding link re-sent to ${c.email} ✉️` : `Link refreshed, email NOT sent (${data.email_error || 'no email'}). Copy it instead.`, data.emailed ? 'ok' : 'err')
+      showToast(data.emailed ? (data.corrections ? `Link re-sent to ${c.email} with the list of corrections ✉️` : `Onboarding link re-sent to ${c.email} ✉️`) : `Link refreshed, email NOT sent (${data.email_error || 'no email'}). Copy it instead.`, data.emailed ? 'ok' : 'err')
     } catch(e:any) { showToast('Resend failed: '+e.message, 'err') }
     setResendingId('')
   }
@@ -495,11 +508,17 @@ export default function OnboardingDashboard() {
     if (!codeModal || !genCode.trim()) { showToast('Code required','err'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/onboarding/generate-code', {
+      const post = (force: boolean) => fetch('/api/onboarding/generate-code', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ onboarding_id: codeModal.id, employee_code: genCode.trim() }),
+        body: JSON.stringify({ onboarding_id: codeModal.id, employee_code: genCode.trim(), force }),
       })
-      const data = await res.json()
+      let res = await post(false)
+      let data = await res.json()
+      // The other teams have not all approved yet (ESS → Tasks & Approvals). HR may still go ahead.
+      if (res.status === 409 && Array.isArray(data.pending) && data.pending.length) {
+        if (!window.confirm(`Still waiting on ${data.pending.join(', ')} approval${data.pending.length > 1 ? 's' : ''}.\n\nGenerate the employee code anyway?`)) { setSaving(false); return }
+        res = await post(true); data = await res.json()
+      }
       if (!res.ok) throw new Error(data.error||'Failed')
       const code = data.employee_code || genCode
       // Surface the master-sync result — earlier this was hidden, so a failed
@@ -559,7 +578,22 @@ export default function OnboardingDashboard() {
     const actions: {priority:'HIGH'|'MEDIUM'|'LOW'; label:string; candidate:string; action:string; cid:string}[] = []
     const days = daysLeft(c.date_of_joining)
 
-    if (c.status==='SUBMITTED') actions.push({priority:'HIGH',label:'Review & generate employee code',candidate:c.full_name,action:'generate',cid:c.id})
+    if (c.status==='SUBMITTED') {
+      actions.push({priority:'HIGH',label:'Form submitted: review the documents and details',candidate:c.full_name,action:'review',cid:c.id})
+    }
+    if (c.status==='HR_REVIEW') {
+      const waiting = (c.approvals||[]).filter(a=>a.status!=='APPROVED'&&a.team!=='HR_MANAGER').map(a=>TEAM_SHORT[a.team]||a.team)
+      actions.push({priority:'MEDIUM',label:`Accepted by HR, with ${waiting.join(', ') || 'the teams'} for their checklist (ESS → HRIS → Tasks & Approvals)`,candidate:c.full_name,action:'approvals',cid:c.id})
+    }
+    if (c.status==='APPROVED') {
+      actions.push(c.role_assignment
+        ? {priority:'HIGH',label:`Role assigned (${c.role_assignment.role_name}): generate the employee code`,candidate:c.full_name,action:'generate',cid:c.id}
+        : {priority:'HIGH',label:'IT, Admin and Payroll approved: assign the role (L1, L2, ESS role), then generate the code',candidate:c.full_name,action:'assign',cid:c.id})
+    }
+    if (c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED') {
+      const n = (c.hr_review.documents||[]).length, m = (c.hr_review.details||[]).length
+      actions.push({priority:'MEDIUM',label:`Returned to candidate: ${n} document${n===1?'':'s'} rejected, ${m} detail${m===1?'':'s'} flagged; resend the link if they have not acted`,candidate:c.full_name,action:'returned',cid:c.id})
+    }
     if (c.status==='INVITED' && days!==null && days<=5) actions.push({priority:'HIGH',label:'Link not opened, follow up candidate',candidate:c.full_name,action:'followup',cid:c.id})
     if (c.docs_ai_flagged && c.docs_ai_flagged>0) actions.push({priority:'MEDIUM',label:`${c.docs_ai_flagged} document(s) AI flagged, review`,candidate:c.full_name,action:'docs',cid:c.id})
     if (c.status==='APPROVED' && !c.laptop_issued) actions.push({priority:'MEDIUM',label:'Laptop not issued, contact IT',candidate:c.full_name,action:'laptop',cid:c.id})
@@ -670,6 +704,16 @@ export default function OnboardingDashboard() {
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:7,fontSize:12,color:TK.muted}}>
                     <span>{pct}% complete</span>
                     {c.status==='SUBMITTED' && (
+                      <button className="ezob-btn" onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={btnSm('primary')}>
+                        <Ti n="checklist" s={13}/>Review form
+                      </button>
+                    )}
+                    {c.status==='APPROVED' && !c.role_assignment && (
+                      <button className="ezob-btn" onClick={()=>setAssigning(c)} style={btnSm('primary')}>
+                        <Ti n="user-check" s={13}/>Assign role
+                      </button>
+                    )}
+                    {c.status==='APPROVED' && c.role_assignment && (
                       <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} style={btnSm('primary')}>
                         <Ti n="bolt" s={13}/>Generate code
                       </button>
@@ -763,7 +807,12 @@ export default function OnboardingDashboard() {
                         </div>
                       </div>
                     </td>
-                    <td style={{padding:'12px 14px',whiteSpace:'nowrap'}}><Badge {...sm} label={sm.label}/></td>
+                    <td style={{padding:'12px 14px',whiteSpace:'nowrap'}}>
+                      <Badge {...sm} label={sm.label}/>
+                      {c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED' && (
+                        <div title={[...(c.hr_review.documents||[]).map(d=>`${d.label}: ${d.reason}`), ...(c.hr_review.details||[]).map(d=>`${d.field}: ${d.reason}`)].join('\n')} style={{fontSize:11,fontWeight:650,color:TK.critical,marginTop:4}}>↩ Returned · {(c.hr_review.documents||[]).length} doc{(c.hr_review.documents||[]).length===1?'':'s'} rejected</div>
+                      )}
+                    </td>
                     <td style={{padding:'12px 14px',minWidth:120}}>
                       {notInvited ? <span style={{fontSize:11,color:TK.faint}}>-</span> : <>
                       <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,color:TK.muted,marginBottom:2,whiteSpace:'nowrap'}}>
@@ -794,6 +843,15 @@ export default function OnboardingDashboard() {
                           </span>
                         ))}
                       </div>
+                      {(c.status==='SUBMITTED'||c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
+                        <div style={{display:'flex',gap:3,marginTop:3}} title="HR Manager accepts the form; then IT, Admin and Payroll confirm their checklists (ESS → HRIS → Tasks & Approvals)">
+                          {(c.approvals||[]).map(a=>(
+                            <span key={a.team} style={{fontSize:9,padding:'1px 5px',borderRadius:99,fontWeight:600,background:a.status==='APPROVED'?TK.positiveTint:a.status==='RETURNED'?TK.criticalTint:TK.warningTint,color:a.status==='APPROVED'?TK.positive:a.status==='RETURNED'?TK.critical:TK.warning}}>
+                              {TEAM_SHORT[a.team]} {a.status==='APPROVED'?'✓':a.status==='RETURNED'?'↩':'○'}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       </>}
                     </td>
                     <td style={{padding:'12px 14px'}}>
@@ -811,9 +869,25 @@ export default function OnboardingDashboard() {
                           <button className="ezob-btn is-ghost" onClick={()=>openDateEdit(c)} style={btnSm('ghost')}>Edit</button>
                         )}
                         {c.status==='SUBMITTED' && (
-                          <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} style={btnSm('primary')}>
+                          <button className="ezob-btn" onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={btnSm('primary')}>
+                            <Ti n="checklist" s={11}/>Review
+                          </button>
+                        )}
+                        {c.status==='APPROVED' && !c.role_assignment && (
+                          <button className="ezob-btn" onClick={()=>setAssigning(c)} title="IT, Admin and Payroll have approved: assign the L1, L2 and the ESS role" style={btnSm('primary')}>
+                            <Ti n="user-cog" s={11}/>Assign role
+                          </button>
+                        )}
+                        {c.status==='APPROVED' && c.role_assignment && (
+                          <button onClick={()=>{openCodeModal(c)}} title={`Role ${c.role_assignment.role_name} · L1 ${c.role_assignment.l1_name||'-'}`} className="ezob-btn" style={btnSm('primary')}>
                             <Ti n="bolt" s={11}/>Code
                           </button>
+                        )}
+                        {c.status==='APPROVED' && c.role_assignment && (
+                          <button className="ezob-btn is-ghost" onClick={()=>setAssigning(c)} title="Change the role assignment" style={btnSm('ghost')}>Role ✓ {c.role_assignment.role_name}</button>
+                        )}
+                        {(c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
+                          <button className="ezob-btn is-ghost" onClick={()=>setReviewing({ id: c.id, readOnly: true })} style={btnSm('ghost')}>View form</button>
                         )}
                         {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
                           <button onClick={async()=>{
@@ -892,6 +966,11 @@ export default function OnboardingDashboard() {
                         {cand?.date_of_joining && <span style={{marginLeft:8}}>· DOJ: {fmt(cand.date_of_joining)}</span>}
                       </div>
                     </div>
+                    {a.action==='assign' && cand && (
+                      <button onClick={()=>setAssigning(cand)} style={{padding:'5px 12px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                        <i className="ti ti-user-cog" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Role assignment
+                      </button>
+                    )}
                     {a.action==='generate' && cand && (
                       <button className="ezob-btn" onClick={()=>{openCodeModal(cand)}} style={{...btnSm('primary'),height:34}}>
                         <Ti n="bolt" s={12}/>Generate code
@@ -954,6 +1033,12 @@ export default function OnboardingDashboard() {
                   </div>
                   <div style={{display:'flex',gap:6}}>
                     {c.status==='SUBMITTED' && (
+                      <button className="ezob-btn" onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={btnSm('primary')}>Review form</button>
+                    )}
+                    {c.status==='APPROVED' && !c.role_assignment && (
+                      <button className="ezob-btn" onClick={()=>setAssigning(c)} style={btnSm('primary')}>Assign role</button>
+                    )}
+                    {c.status==='APPROVED' && c.role_assignment && (
                       <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} style={btnSm('primary')}>Generate code</button>
                     )}
                   </div>
@@ -1258,15 +1343,29 @@ export default function OnboardingDashboard() {
         </div>
       )}
 
-      {/* ── HR ACTIVATION WIZARD ─────────────────────────────── */}
+      {/* ── GENERATE CODE (after the three heads approve and the role is assigned) ── */}
       {codeModal && (
-        <ActivationWizard
+        <GenerateCodeModal
           candidate={codeModal}
           genCode={genCode} setGenCode={setGenCode}
           codeType={codeType} codeLoading={codeLoading} saving={saving}
           onGenerate={generateCode}
           onClose={() => setCodeModal(null)}
         />
+      )}
+
+      {/* ── ROLE ASSIGNMENT (L1, L2, HOD and the ESS role) ── */}
+      {assigning && (
+        <RoleAssignmentModal onboardingId={assigning.id} name={assigning.full_name}
+          onClose={()=>setAssigning(null)}
+          onDone={(m,t)=>{ showToast(m,t); load() }} />
+      )}
+
+      {/* ── HR MANAGER REVIEW (Review form / View form on the card) ── */}
+      {reviewing && (
+        <ReviewDrawer onboardingId={reviewing.id} readOnly={reviewing.readOnly}
+          onClose={()=>setReviewing(null)}
+          onDone={(m,t)=>{ showToast(m, t); load() }} />
       )}
 
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}

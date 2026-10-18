@@ -24,8 +24,13 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
 async function me(req: NextRequest, write: boolean) {
   const c = await essCaller(req);
   if (c.error) return { error: c.error };
+  // Two situations, one refusal — see the note in app/api/ess/mrf/route.ts. actorEmployeeId
+  // null means no employee record behind the session (a lapsed ESS token included), not
+  // impersonation, and the person needs to sign in again rather than open their own portal.
   if (write && c.caller.viewAs)
-    return { error: NextResponse.json({ error: "You cannot punch while viewing somebody else's portal." }, { status: 403 }) };
+    return { error: NextResponse.json({ error: c.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active, so there is nobody to punch for. Sign in again with your own ESS account.'
+      : "A punch lands on your own day, so it cannot be made while you are viewing somebody else's portal. Open your own portal to punch." }, { status: 403 }) };
   const { data: emp } = await sb.from('employees').select('id, date_of_leaving').eq('id', c.caller.employeeId).maybeSingle();
   if (!emp) return { error: NextResponse.json({ error: 'unauthenticated' }, { status: 401 }) };
   if (emp.date_of_leaving && new Date(emp.date_of_leaving) < new Date())

@@ -329,8 +329,18 @@ export async function POST(req: NextRequest) {
   // Nothing is written while viewing somebody else's portal. The Wall route
   // holds the same line: recognition posted as another person is not
   // recognition, and a comment is no different.
+  // Two situations, not one — see app/api/ess/mrf/route.ts. actorEmployeeId null
+  // means no employee behind this session, which includes an ESS token that has
+  // merely expired; telling that person they are "viewing another portal" sends
+  // them looking for a problem that is not there.
   if (ctx.caller.viewAs) {
-    return NextResponse.json({ error: 'You are viewing another portal. Open your own to post.' }, { status: 403 })
+    return NextResponse.json({
+      error: ctx.caller.actorEmployeeId === null
+        ? 'Your ESS session is not active, so a post has nobody to attribute it to. '
+          + 'Sign in again with your own ESS account to post.'
+        : 'A post carries your own name, so it cannot be made while you are viewing '
+          + 'another portal. Open your own to post.',
+    }, { status: 403 })
   }
 
   const body = (await req.json().catch(() => null)) as PostBody | null

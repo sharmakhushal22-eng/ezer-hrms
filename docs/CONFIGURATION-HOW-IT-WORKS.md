@@ -2,7 +2,7 @@
 
 **For:** the EZER dev team
 **Date:** 11 October 2026
-**Covers:** migrations `136_config_templates.sql` and `137_config_branch_scope.sql`, `lib/config/*`,
+**Covers:** migrations `157_config_templates.sql` and `158_config_branch_scope.sql`, `lib/config/*`,
 `lib/mail/send.ts`, `/dashboard/configuration`, and every workflow that sends a letter, an email
 or a work notification
 
@@ -27,14 +27,14 @@ publish is live from the very next send, with no deploy.
 
 Run both in the Supabase SQL Editor. Both are idempotent.
 
-1. `supabase/migrations/136_config_templates.sql`. Applied already (it was first numbered 134,
+1. `supabase/migrations/157_config_templates.sql`. Applied already (it was first numbered 134,
    and renamed because upstream also shipped a 134). It creates:
    - `config_templates`: the edited text.
    - `config_template_versions`: the append-only history. A trigger refuses to update or
      delete it.
    - `config_publish_template()` / `config_reset_template()`.
    - RLS on, with no policies, so only the service role can use the tables.
-2. `supabase/migrations/137_config_branch_scope.sql`. **Still to be applied.** It adds
+2. `supabase/migrations/158_config_branch_scope.sql`. **Still to be applied.** It adds
    `location_id` (a branch = a row of `locations`) to both tables and enforces one live row per
    level: Global / company / branch. It replaces the two functions with versions that take
    `p_location_id`.
@@ -169,7 +169,7 @@ insert, and the joining portal (`/joining/[token]`), which sends no mail.
 
 | File | Purpose |
 |---|---|
-| `supabase/migrations/136_config_templates.sql`, `137_config_branch_scope.sql` | Tables, history, publish / reset; branch level |
+| `supabase/migrations/157_config_templates.sql`, `158_config_branch_scope.sql` | Tables, history, publish / reset; branch level |
 | `lib/config/registry.ts` | Template definitions: key, where used, recipient, variables with fictional samples |
 | `lib/config/offer-templates.ts` | Built-in text of the 6 offer letters and 6 offer emails |
 | `lib/config/offer-letter.ts` | Offer-letter values, structure parser (`letterFromTemplate`), validation |

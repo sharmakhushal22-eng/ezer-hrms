@@ -19,10 +19,16 @@ export async function GET(req: NextRequest) {
   if (error) return error
 
   // viewAs covers both the shared dashboard login and a real person looking
-  // at a colleague's portal. Neither may mint that colleague's gate code.
+  // at a colleague's portal. Neither may mint that colleague's gate code — but
+  // they are different situations and need different instructions, because
+  // actorEmployeeId null also catches an ESS token that has simply expired.
+  // See app/api/ess/mrf/route.ts.
   if (ctx.caller.viewAs) {
     return NextResponse.json({
-      error: 'A gate code can only be issued for your own card. Open your own portal.',
+      error: ctx.caller.actorEmployeeId === null
+        ? 'Your ESS session is not active, so there is no card to issue a code for. '
+          + 'Sign in again with your own ESS account.'
+        : 'A gate code can only be issued for your own card. Open your own portal.',
     }, { status: 403 })
   }
 

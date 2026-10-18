@@ -544,7 +544,7 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
         <input className="rx-input" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search skills: type e.g. 'py' then pick, or add custom"
           onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); if(matches[0]) add(matches[0]); else if(q.trim()&&!exact) addCustom() } }} />
         {q.trim() && (matches.length>0 || !exact) && (
-          <div style={{ position:'absolute' as const, top:'100%', left:0, right:0, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:7, marginTop:2, zIndex:20, maxHeight:200, overflowY:'auto' as const, boxShadow:'0 6px 18px rgba(0,0,0,.1)' }}>
+          <div style={{ position:'absolute' as const, top:'100%', left:0, right:0, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:7, marginTop:2, zIndex:Z.navMenu, maxHeight:200, overflowY:'auto' as const, boxShadow:'0 6px 18px rgba(0,0,0,.1)' }}>
             {matches.map(s=>(
               <div key={s} onClick={()=>add(s)} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:C.ink }}>{s}</div>
             ))}
@@ -799,7 +799,7 @@ function PersonSearchSelect({ people, value, onChange, placeholder }:{ people:an
           in an expression slot is not a comment at all but a second expression
           container, and that is only legal as a child of an element. */}
       {open && (
-        <div style={{ position:'absolute', zIndex:20, top:'calc(100% + 4px)', left:0, right:0, maxHeight:220, overflowY:'auto', background:C.surface, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, boxShadow:E.floating }}>
+        <div style={{ position:'absolute', zIndex:Z.navMenu, top:'calc(100% + 4px)', left:0, right:0, maxHeight:220, overflowY:'auto', background:C.surface, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, boxShadow:E.floating }}>
           {filtered.length===0 ? (
             <div style={{ padding:'10px 12px', fontSize:F.tiny, color:C.faint }}>No match</div>
           ) : filtered.map((p:any)=>(
@@ -1037,7 +1037,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
   return (
     <RxDialog open onClose={onClose} variant="drawer" label="Requisition detail" style={{ padding: 0 }}>
         {/* Header */}
-        <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'16px 20px', position:'sticky', top:0, zIndex:2 }}>
+        <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'16px 20px', position:'sticky', top:0, zIndex:Z.sticky }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
             <div style={{ minWidth:0 }}>
               <div style={{ fontSize:17, fontWeight:700, color:C.onAccent }}>{m.job_title||m.designation||m.position||'Untitled'}</div>
@@ -3760,7 +3760,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
 
       {/* Add Candidate — full form */}
       {showAdd&&(
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.modal, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}
           onMouseDown={e=>{ if(e.target===e.currentTarget && !saving) setShowAdd(false) }}>
           <div style={{ background:C.surface, borderRadius:16, width:'min(920px, 100%)', boxShadow:'0 24px 70px rgba(0,0,0,0.28)', overflow:'hidden', display:'flex', flexDirection:'column', maxHeight:'92vh' }}>
             {/* header */}
@@ -4089,7 +4089,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       {/* ── Interview Pipeline full-screen overlay ── */}
       {interviewCand && (
         <div style={{ position:'fixed', inset:0, background:C.canvas, zIndex:Z.overlay, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
-          <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'12px 20px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10 }}>
+          <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'12px 20px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:Z.sticky }}>
             <button onClick={()=>setInterviewCand(null)} style={{ padding:'6px 14px', borderRadius:7, border:'1px solid rgba(255,255,255,.3)', background:'transparent', color:C.onAccent, cursor:'pointer', fontSize:12, fontFamily:'inherit', fontWeight:500 }}>Back to Pipeline</button>
             <div style={{ fontSize:15, fontWeight:600, color:C.onAccent }}>Interview Pipeline: {interviewCand.full_name}</div>
             <div style={{ marginLeft:'auto', fontSize:12, color:C.onAccentDim }}>{interviewCand.designation || '-'} · {interviewCand.current_company || '-'}</div>
@@ -4110,7 +4110,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
           reachable exactly as the old "Rejected" stage pill did. Fixed overlay,
           the same pattern the add form and the interview modal already use. */}
       {showRejected && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.modal, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}
           onMouseDown={e=>{ if(e.target===e.currentTarget) setShowRejected(false) }}>
           <div style={{ background:C.surface, borderRadius:16, width:'min(900px, 100%)', boxShadow:'0 24px 70px rgba(0,0,0,0.28)', padding:20 }}>
             <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
@@ -4209,7 +4209,7 @@ function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?
   // calculator's own sticky header (an ancestor's stacking context capped its z-index).
   return createPortal(
     <div onMouseDown={e=>{ if (e.target===e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:1000, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'28px 16px' }}>
+      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.modal, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'28px 16px' }}>
       <div style={{ background:C.surface, borderRadius:14, width:'min(960px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.35)', padding:'16px 18px', color:C.ink }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' as const }}>
           <div>
@@ -4541,7 +4541,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
               <div style={{ position:'relative' }}>
                 <input className="rx-input" value={ccQ} onChange={e=>setCcQ(e.target.value)} placeholder="Type a name or emp code…" />
                 {ccHits.length>0 && (
-                  <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:C.surface, border:`1px solid ${C.line}`, borderRadius:8, marginTop:3, boxShadow:'0 8px 24px rgba(30,27,75,0.14)', maxHeight:220, overflowY:'auto' }}>
+                  <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:Z.navMenu, background:C.surface, border:`1px solid ${C.line}`, borderRadius:8, marginTop:3, boxShadow:'0 8px 24px rgba(30,27,75,0.14)', maxHeight:220, overflowY:'auto' }}>
                     {ccHits.map((e:any)=>(
                       <button key={e.id} onClick={()=>{ setCc([...cc,{id:e.id,name:`${e.full_name} (${e.emp_code})`,email:empEmail(e)}]); setCcQ('') }}
                         style={{ display:'block', width:'100%', textAlign:'left' as const, padding:'8px 11px', border:'none', borderBottom:`1px solid ${C.line}`, background:C.surface, cursor:'pointer', fontFamily:'inherit', fontSize:12.5, color:C.ink }}>
@@ -4600,7 +4600,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
               {/* Reject confirm */}
               {rejecting && (
-                <div onMouseDown={e=>{ if(e.target===e.currentTarget && !busyDoc) setRejecting(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:210, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+                <div onMouseDown={e=>{ if(e.target===e.currentTarget && !busyDoc) setRejecting(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.modal + 1, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
                   <div style={{ background:C.surface, borderRadius:14, width:'min(400px,100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.3)' }}>
                     <div style={{ fontSize:15, fontWeight:700, color:C.ink, marginBottom:8 }}>Reject this document?</div>
                     <div style={{ fontSize:12.5, color:C.faint, marginBottom:18, lineHeight:1.5 }}>“{rejecting.doc_label||rejecting.doc_type}” will be removed and the upload link reopened for 24h. Resend the link so the candidate re-uploads only this document.</div>
@@ -4614,7 +4614,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
               {/* View popup */}
               {viewDoc && (
-                <div onMouseDown={e=>{ if(e.target===e.currentTarget) setViewDoc(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.6)', zIndex:220, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'20px 16px' }}>
+                <div onMouseDown={e=>{ if(e.target===e.currentTarget) setViewDoc(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.6)', zIndex:Z.modal + 2, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'20px 16px' }}>
                   <div style={{ background:C.surface, borderRadius:12, width:'min(900px,100%)', height:'88vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 70px rgba(30,27,75,0.4)' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${C.line}` }}>
                       <div style={{ fontSize:13, fontWeight:600, color:C.ink, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{viewDoc.name}</div>
@@ -4976,7 +4976,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
       {calcOpen&&sel&&(
         <div key={sel.id} style={{ minWidth:0, animation:'ezSlideInRight .45s cubic-bezier(.4,0,.2,1)' }}>
           {/* header strip */}
-          <div style={{ ...T.card, display:'flex', alignItems:'center', gap:12, padding:'12px 16px', marginBottom:12, position:'sticky', top:0, zIndex:31 }}>
+          <div style={{ ...T.card, display:'flex', alignItems:'center', gap:12, padding:'12px 16px', marginBottom:12, position:'sticky', top:0, zIndex:Z.sticky + 1 }}>
             <div style={{ width:40, height:40, borderRadius:12, background:C.brand, color:C.onAccent, display:'grid', placeItems:'center', fontSize:17, fontWeight:800, flexShrink:0, boxShadow:'0 8px 20px rgba(124,58,237,.30)' }}>₹</div>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:15, fontWeight:700, color:C.ink, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
