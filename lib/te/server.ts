@@ -169,6 +169,17 @@ export interface TeCall {
    */
   onDesk(kind: 'finance' | 'travel'): Promise<boolean>
   /**
+   * true when the caller is on that desk with GROUP scope — one person who
+   * answers for every company in the group, which is what travel_desk's own
+   * comment says the flag is for: "one row instead of one per company".
+   *
+   * It was honoured at the door and nowhere else. te_on_desk let them in and
+   * then every query filtered to their own company and ?company_id= was
+   * refused, so the only group-scoped desk member in the data could serve
+   * exactly one of the three companies he was supposed to cover.
+   */
+  deskIsGroupWide(kind: 'finance' | 'travel'): Promise<boolean>
+  /**
    * 403 unless the caller is on the desk OR holds the module by role.
    *
    * WHY BOTH. Desk membership is the real rule and the SQL enforces it — a
@@ -242,6 +253,24 @@ function makeCall(req: NextRequest): TeCall {
       deskP.set(kind, p)
       return p
     },
+    async deskIsGroupWide(kind) {
+      const key = `group:${kind}`
+      const cached = deskP.get(key)
+      if (cached) return cached
+      const p = (async () => {
+        const id = (await t.actor()).employeeId
+        if (!id) return false
+        const table = kind === 'finance' ? 'finance_team' : 'travel_desk'
+        const { data, error } = await t.sb().from(table)
+          .select('id').eq('employee_id', id).eq('is_active', true).eq('is_group_scope', true).limit(1)
+        // No column, no table: migration 161 is not applied, and then nobody
+        // is group-scoped. Never a reason to fail the request.
+        if (error) return false
+        return (data?.length ?? 0) > 0
+      })()
+      deskP.set(key, p)
+      return p
+    },
     async permitDesk(kind, module, level = 'VIEW') {
       if (await t.onDesk(kind)) return
       if (await t.holds(module, level)) return
@@ -282,6 +311,19 @@ async function resolveCompany(t: TeCall): Promise<string> {
   // companyFilter() is the repo's single choke-point for this (lib/rms/resolve.ts).
   const allowed = companyFilter(await t.grant(), asked)
   if (allowed && (!asked || allowed === asked)) return allowed
+
+  // A GROUP-SCOPED DESK MEMBER may work in any company of their own group.
+  // That is what the flag means and it reached nothing before: the one
+  // group-scoped person in the data could be refused the other two companies
+  // he exists to serve. Still their own group only — this widens the reach of
+  // a deliberate flag, never of an ordinary desk row.
+  if (asked && own && (await t.deskIsGroupWide('travel') || await t.deskIsGroupWide('finance'))) {
+    const { data, error } = await t.sb().from('companies').select('id, group_id').in('id', [asked, own])
+    if (error) throw rpcError(error, 'companies')
+    const mine = data?.find(c => c.id === own)?.group_id ?? null
+    const theirs = data?.find(c => c.id === asked)?.group_id ?? null
+    if (mine && theirs && mine === theirs) return asked
+  }
   if (asked) throw new TeHttpError(403, 'TE_FORBIDDEN', 'You can only work with your own company.')
   throw new TeHttpError(400, 'TE_BAD_REQUEST', 'company_id is required for this sign-in.')
 }
@@ -388,7 +430,28 @@ export async function teStaffFor(
   const { data, error } = await t.sb().from(table).select('company_id').eq('id', id).maybeSingle()
   if (error) throw rpcError(error, table)
   if (!data) return false
-  return companyFilter(await t.grant(), data.company_id as string) === data.company_id
+  const recordCo = data.company_id as string
+  if (companyFilter(await t.grant(), recordCo) === recordCo) return true
+
+  // A GROUP-SCOPED DESK MEMBER reaches the rest of their own group. The same
+  // flag resolveCompany honours for reading: without this the Travel Desk
+  // could open another company's work list and then be refused every booking
+  // in it, which is worse than not seeing it at all. The company must still
+  // be in their group, and they must still hold the module.
+  if (await t.deskIsGroupWide('travel') || await t.deskIsGroupWide('finance')) {
+    const me = (await t.actor()).employeeId
+    if (!me) return false
+    const { data: mine, error: e1 } = await t.sb().from('employees').select('company_id').eq('id', me).maybeSingle()
+    if (e1) throw rpcError(e1, 'employees')
+    const ownCo = mine?.company_id as string | undefined
+    if (!ownCo) return false
+    const { data: cos, error: e2 } = await t.sb().from('companies').select('id, group_id').in('id', [ownCo, recordCo])
+    if (e2) throw rpcError(e2, 'companies')
+    const a = cos?.find(c => c.id === ownCo)?.group_id ?? null
+    const b = cos?.find(c => c.id === recordCo)?.group_id ?? null
+    if (a && b && a === b) return true
+  }
+  return false
 }
 
 /** 403 unless teStaffFor() says yes. */
