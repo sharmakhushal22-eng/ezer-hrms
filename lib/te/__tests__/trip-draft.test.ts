@@ -537,6 +537,30 @@ describe('what gets sent to the server', () => {
     assert.equal(sent.points[3].ret, true)
   })
 
+  // THE SAME BOUNDARY AGAIN. What the traveller asks the Travel Desk for is
+  // carried on the segment, and toTripDraft rebuilds segments field by field
+  // exactly as it does points — which is where the stop flag was lost. These
+  // are here so the next field added to a segment has a test watching it.
+  it('sends what the traveller asked the desk for', () => {
+    const d = fresh()
+    const withPref = { ...d, segs: d.segs.map((sg, i) => (i === 0 ? { ...sg, prefTime: '06:30', prefUrl: ' https://air.example/f/AI101 ', prefNote: 'Either the 6am or after 8pm' } : sg)) }
+    const sent = toTripDraft(withPref)
+    assert.equal(sent.segs[0].prefTime, '06:30')
+    // Trimmed: a pasted link usually arrives with a space on one end.
+    assert.equal(sent.segs[0].prefUrl, 'https://air.example/f/AI101')
+    assert.equal(sent.segs[0].prefNote, 'Either the 6am or after 8pm')
+  })
+
+  it('omits the preference keys when nothing was asked for', () => {
+    // A plan that says nothing to the desk must send exactly what it always
+    // sent, so the server's nullif() sees nothing rather than an empty string.
+    for (const sg of toTripDraft(fresh()).segs) {
+      for (const k of ['prefTime', 'prefUrl', 'prefNote']) {
+        assert.ok(!(k in sg), `unexpected ${k}: ${JSON.stringify(sg)}`)
+      }
+    }
+  })
+
   it('omits the flag entirely when nothing is a stop', () => {
     // A trip planned before stops could be marked must send exactly what it
     // always sent, so the server's defaults keep it reading as it did.

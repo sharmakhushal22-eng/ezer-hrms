@@ -21,8 +21,9 @@ import { Fragment, useState } from 'react'
 import type { Snapshot, TripIssue } from '@/lib/te/types'
 import { applyModeToAll, blockingOn, journeysUnlike, type PlannerDraft } from '@/lib/te/trip-draft'
 import { chainCount, commuteChain, hubKind, NO_XFER, sameHub, xferModes } from '@/lib/te/commute'
-import { plural } from '@/lib/te/format'
+import { day, plural } from '@/lib/te/format'
 import { vehicleSubtitle } from '@/lib/te/vehicle'
+import { badUrl } from '@/lib/te/trip-stay'
 import TeIcon from '../TeIcon'
 import TeVehicleAdd from '../vehicle/TeVehicleAdd'
 import type { PickTarget } from './TePlacePicker'
@@ -202,6 +203,12 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
   // The Travel Desk books tickets, but not for a local trip and not for one that
   // already happened — there is nothing left to book.
   const desk = !!md && md.basis === 'ticket' && draft.origin !== 'POST_FACTO' && draft.scope !== 'local'
+  /** Whether the desk is actually booking this one, which changes who the
+   *  preference is addressed to. */
+  const deskBooks = desk && s.bookedBy !== 'self'
+  /** The date this journey leaves, owned by the route. Shown, never re-asked:
+   *  two places to set one date is how they end up disagreeing. */
+  const legDate = draft.points[i]?.leave || draft.points[i + 1]?.arrive || ''
   const checkIn = md?.gps === 'checkin'
 
   const setSeg = (patch: Partial<typeof s>) => edit(d => ({ ...d, segs: d.segs.map((q, k) => (k === i ? { ...q, ...patch } : q)) }))
@@ -393,6 +400,56 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
                   </label>
                 )
               })}
+            </div>
+          ) : null}
+
+          {/* ── WHAT TO ASK THE DESK FOR ──
+              "Mumbai to Jaipur by flight on the 2nd" is not enough to buy a
+              ticket: there are a dozen flights that day, and the desk was
+              left guessing or writing to ask. These are the answers to the
+              questions it would have asked.
+
+              Not for your own vehicle — nothing is booked when you drive
+              yourself. Everything here is optional; a journey with none of it
+              is exactly the journey that was planned before. */}
+          {md && md.id !== 'own' ? (
+            <div className="prefbox">
+              <div className="pref-h">
+                <TeIcon name={deskBooks ? 'plane' : 'info'} size="sm" />
+                <b>{deskBooks ? 'What should the Travel Desk book?' : 'Anything to note about this journey?'}</b>
+                <span className="chip plain">Optional</span>
+              </div>
+              <p className="small muted">
+                {deskBooks
+                  ? `The desk books this one. The date comes from the route${legDate ? ` — ${day(legDate)}` : ''}; tell it when you would rather leave and point it at anything you have already found.`
+                  : `You are booking this yourself. Anything here is for your approver to see${legDate ? `, on ${day(legDate)}` : ''}.`}
+              </p>
+              <div className="jp-grid">
+                <label className="fld sm">
+                  <span>Preferred time</span>
+                  <input type="time" value={s.prefTime ?? ''} onChange={e => setSeg({ prefTime: e.target.value })} />
+                  <small>When you would like to leave.</small>
+                </label>
+                <label className="fld sm">
+                  <span>Link to what you found</span>
+                  <input
+                    value={s.prefUrl ?? ''}
+                    placeholder="https://…"
+                    onChange={e => setSeg({ prefUrl: e.target.value })}
+                  />
+                  {badUrl(s.prefUrl ?? '')
+                    ? <small className="bad">That does not look like a web address. Paste the whole link, starting with https://</small>
+                    : <small>A flight, train or fare. The desk can open it.</small>}
+                </label>
+              </div>
+              <label className="fld sm">
+                <span>Anything else</span>
+                <input
+                  value={s.prefNote ?? ''}
+                  placeholder="Either the 6am or after 8pm; same airline as the outbound"
+                  onChange={e => setSeg({ prefNote: e.target.value })}
+                />
+              </label>
             </div>
           ) : null}
 

@@ -1002,3 +1002,22 @@
 .te .jpanel{padding:12px;border-radius:14px}
 .te .bigmoney b{font-size:25px}
 }
+
+/* ── what the traveller asks the Travel Desk to book (step 3) ──
+   Set apart from the rest of the journey panel because it is a different kind
+   of thing: everything above it is what the trip IS, and this is a request
+   about it. Tinted rather than bordered so it reads as a note inside the
+   panel and not as another form. */
+.te .prefbox{border:1px dashed var(--ez-brand-edge);background:var(--ez-brand-tint);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.te .prefbox .pref-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.te .prefbox .pref-h b{font-size:13.5px;font-weight:650}
+.te .prefbox .pref-h .ic{color:var(--ez-brand);flex:none}
+.te .prefbox .pref-h .chip{margin-left:auto}
+.te .prefbox p{margin:0}
+.te .prefbox .fld small{display:block;margin-top:3px;font-size:11.5px;color:var(--ez-muted)}
+.te .prefbox .fld small.bad{color:var(--ez-critical)}
+/* The desk reads these back on its own screen, where they are facts rather
+   than fields. */
+.te .askrow{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:var(--ez-ink-soft);margin-top:4px}
+.te .askrow .ic{flex:none;color:var(--ez-brand);margin-top:2px}
+.te .askrow a{color:var(--ez-brand);overflow-wrap:anywhere}

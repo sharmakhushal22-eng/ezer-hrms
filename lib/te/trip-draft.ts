@@ -82,6 +82,27 @@ export interface DraftSeg {
   vehicleId: string
   bookedBy: 'desk' | 'self'
   xfer: { first: string; last: string; hubA?: string; hubB?: string }
+  /**
+   * WHAT THE TRAVEL DESK NEEDS TO ACTUALLY BOOK THIS.
+   *
+   * The plan says Mumbai to Jaipur by flight on the 2nd. That is not enough
+   * to buy a ticket: there are a dozen flights that day and the desk has been
+   * guessing, or writing to the traveller to ask. These are the answers to
+   * the questions it would have asked.
+   *
+   * All three are optional. A plan with none of them is exactly the plan that
+   * was sent before, and the desk books as it did.
+   *
+   * `prefTime` is the time of day the person wants to leave, 'HH:MM' or ''.
+   * Not a promise and nothing computes on it — the leg's own date and times
+   * stay on the route, where they belong.
+   */
+  prefTime?: string
+  /** A link to the flight, train or fare they found, for the desk to match. */
+  prefUrl?: string
+  /** Anything the two fields above cannot say: "either the 6am or after 8pm",
+   *  "same airline as the outbound", "aisle seat". */
+  prefNote?: string
 }
 
 export interface DraftPerson { id: string; name: string; autoName?: boolean }
@@ -235,7 +256,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
 export function fromTrip(trip: {
   id: Uuid; name: string; scope: TripScope; origin: TripOrigin; purpose: string; project: string
   points: { place: Uuid; pt: string; what: string; leave: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: true; stop?: true }[]
-  segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
+  segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid }; prefTime?: string; prefUrl?: string; prefNote?: string }[]
   pax: number; people: { id: string; name?: string }[]; stayBy: 'self' | 'desk'; advance: number
   stayWanted?: boolean | null; foodWanted?: boolean | null; stayOptions?: TeStayOption[]
   pfReason: string; pfNote: string; status: string
@@ -276,6 +297,9 @@ export function fromTrip(trip: {
       vehicleId: s.vehicleId ?? '',
       bookedBy: s.bookedBy === 'self' ? 'self' : 'desk',
       xfer: { first: s.xfer?.first ?? 'cab', last: s.xfer?.last ?? 'cab', hubA: s.xfer?.hubA, hubB: s.xfer?.hubB },
+      ...(s.prefTime ? { prefTime: s.prefTime } : {}),
+      ...(s.prefUrl ? { prefUrl: s.prefUrl } : {}),
+      ...(s.prefNote ? { prefNote: s.prefNote } : {}),
     })),
     // Whether the return mirrors the start is not stored on a saved trip, so it
     // is read back off the route: the same place means it still does.
@@ -569,7 +593,14 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
       // saved before migration 170 keeps sending exactly what it always did.
       ...(p.stop ? { stop: true } : {}),
     })),
-    segs: d.segs.map(s => ({ mode: s.mode, bookedBy: s.bookedBy, vehicleId: s.vehicleId || null, xfer: { ...s.xfer } })),
+    segs: d.segs.map(s => ({
+      mode: s.mode, bookedBy: s.bookedBy, vehicleId: s.vehicleId || null, xfer: { ...s.xfer },
+      // Omitted when blank, so a plan that says nothing to the desk sends
+      // exactly the keys it always sent.
+      ...(s.prefTime ? { prefTime: s.prefTime } : {}),
+      ...(s.prefUrl ? { prefUrl: s.prefUrl.trim() } : {}),
+      ...(s.prefNote ? { prefNote: s.prefNote.trim() } : {}),
+    })),
     pax: Number(d.pax) || 1,
     people,
     // A local trip used to be defined as one day out of the office with nowhere

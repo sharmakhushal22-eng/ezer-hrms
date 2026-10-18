@@ -150,7 +150,10 @@ export interface FinanceSummary {
   /** false = a row cap was reached, so the amounts above are a floor. */
   amountsComplete: boolean
 }
-export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null; kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null }
+export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null; kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null
+  /** What the traveller asked for, from te_trip_segments. Null on a hotel row
+   *  and on a leg added during the trip, which has no segment behind it. */
+  pref_time: string | null; pref_url: string | null; pref_note: string | null }
 /** A trip waiting for the desk to pick one of the hotels the employee named. */
 export interface DeskStay {
   id: Uuid; trip_no: string; name: string; employee_id: Uuid

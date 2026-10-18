@@ -167,7 +167,14 @@ export interface TeTripPoint {
    *  stop sit on either leg; see DraftPoint.stop. Migration 170. */
   stop?: true
 }
-export interface TeTripSegment { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }
+export interface TeTripSegment {
+  mode: string; bookedBy: string; vehicleId: Uuid | null
+  xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid }
+  /** What the traveller asked the Travel Desk for: the time of day they want
+   *  to leave, a link to the flight or train they found, and anything neither
+   *  can say. All optional. Migration 171. */
+  prefTime?: string; prefUrl?: string; prefNote?: string
+}
 export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; found?: boolean }
 /** One hotel the employee would accept. Stored whole on the trip; the link is
  *  rendered as a link out and never fetched. */
@@ -783,7 +790,7 @@ export interface TripDraft {
   purpose?: string
   project?: string
   points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: boolean; stop?: boolean }[]
-  segs: { mode: string; bookedBy?: string; vehicleId?: Uuid | null; xfer?: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
+  segs: { mode: string; bookedBy?: string; vehicleId?: Uuid | null; xfer?: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid }; prefTime?: string; prefUrl?: string; prefNote?: string }[]
   pax?: number
   /** Co-travellers by employee code. */
   people?: { id: string; name?: string }[]

@@ -197,6 +197,29 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
                   {b.full_name} <span className="mono">{b.emp_code}</span> · {b.trip_name}
                   {b.on_date ? ` · ${day(b.on_date)}` : ''}{b.mode ? ` · ${b.mode}` : ''}
                 </div>
+                {/* WHAT THEY ASKED FOR. The route and the date were never
+                    enough to buy a ticket — there are a dozen flights that
+                    day — so this desk was writing to travellers to ask. The
+                    answer arrives with the request now. */}
+                {b.pref_time || b.pref_url || b.pref_note ? (
+                  <div className="askrow">
+                    <TeIcon name="info" size="sm" />
+                    <span>
+                      <b>Asked for:</b>
+                      {b.pref_time ? ` around ${b.pref_time}` : ''}
+                      {b.pref_note ? `${b.pref_time ? '. ' : ' '}${b.pref_note}` : ''}
+                      {b.pref_url ? (
+                        <>
+                          {(b.pref_time || b.pref_note) ? ' · ' : ' '}
+                          {/* The traveller typed this. Opened in a new tab and
+                              never prefetched; rel stops the opened page
+                              reaching back through window.opener. */}
+                          <a href={b.pref_url} target="_blank" rel="noopener noreferrer nofollow">the option they found</a>
+                        </>
+                      ) : null}
+                    </span>
+                  </div>
+                ) : null}
                 {open ? (
                   <div className="form">
                     <label className="fld sm"><span>Booked with</span>
