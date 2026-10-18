@@ -3,6 +3,9 @@
 //   IT       the official email, the laptop, the system access
 //   ADMIN    the ID card, the access card, the seating
 //   PAYROLL  the salary structure (CTC, basic %, PF / PT / LWF, tax regime)
+// The heads only CONFIRM: the yes / no items are theirs to tick, and only those can be required.
+// The text / number / select items are facts shown on their form read-only (the email, the
+// seating, the CTC …), kept by HR — the heads' form never edits a detail.
 // The answers are kept on the team's onboarding_approvals row (checklist, migration 166) and
 // the ones that are also onboarding_candidates columns are written there too, so the employee
 // record created at code generation carries them (lib/onboarding/to-employee.ts).
@@ -25,7 +28,7 @@ export const CHECKLISTS: Record<HeadTeam, { title: string; intro: string; fields
     title: 'IT readiness',
     intro: 'Confirm what IT has set up for the joiner. Everything ticked here is what they walk in to on day one.',
     fields: [
-      { key: 'it_email', label: 'Official email ID', kind: 'text', required: true, column: true, hint: 'e.g. first.last@company.com' },
+      { key: 'it_email', label: 'Official email ID', kind: 'text', column: true, hint: 'e.g. first.last@company.com' },
       { key: 'it_email_created', label: 'Email ID is created', kind: 'bool', required: true, column: true },
       { key: 'it_laptop_issued', label: 'Laptop is ready', kind: 'bool', required: true, column: true },
       { key: 'it_laptop_tag', label: 'Laptop asset tag', kind: 'text', column: true },
@@ -38,7 +41,7 @@ export const CHECKLISTS: Record<HeadTeam, { title: string; intro: string; fields
     fields: [
       { key: 'admin_id_card', label: 'ID card is ready', kind: 'bool', required: true, column: true },
       { key: 'admin_access_card', label: 'Access card number', kind: 'text', column: true },
-      { key: 'admin_seating', label: 'Seating / desk allotted', kind: 'text', required: true, column: true, hint: 'e.g. 3rd floor, bay B, desk 14' },
+      { key: 'admin_seating', label: 'Seating / desk allotted', kind: 'text', column: true, hint: 'e.g. 3rd floor, bay B, desk 14' },
       { key: 'admin_welcome_kit', label: 'Welcome kit / stationery ready', kind: 'bool' },
     ],
   },
@@ -46,7 +49,7 @@ export const CHECKLISTS: Record<HeadTeam, { title: string; intro: string; fields
     title: 'Payroll setup',
     intro: 'Confirm the salary structure the joiner will be paid on. The CTC and the breakdown come from the negotiation / offer; correct the CTC here if it changed and the structure follows.',
     fields: [
-      { key: 'annual_ctc', label: 'Annual CTC (₹)', kind: 'number', required: true, column: true },
+      { key: 'annual_ctc', label: 'Annual CTC (₹)', kind: 'number', column: true },
       { key: 'basic_pct', label: 'Basic as % of CTC', kind: 'number', column: true, hint: 'from the breakdown' },
       { key: 'pf_applicable', label: 'PF applicable', kind: 'bool', column: true },
       { key: 'pf_wage_type', label: 'PF wage base', kind: 'select', column: true, options: [{ value: 'BASIC_DA', label: 'Basic + DA' }, { value: 'GROSS', label: 'Gross' }] },
@@ -58,6 +61,13 @@ export const CHECKLISTS: Record<HeadTeam, { title: string; intro: string; fields
   },
 }
 export const HEAD_TEAMS: HeadTeam[] = ['IT', 'ADMIN', 'PAYROLL']
+
+/** Only the yes / no items — what a head may actually change on the approval form. */
+export function confirmationsOnly(team: HeadTeam, values: Record<string, any> | null | undefined): Record<string, any> {
+  const out: Record<string, any> = {}
+  for (const f of CHECKLISTS[team].fields) if (f.kind === 'bool' && values && values[f.key] !== undefined) out[f.key] = values[f.key]
+  return out
+}
 export const isHeadTeam = (t: any): t is HeadTeam => t === 'IT' || t === 'ADMIN' || t === 'PAYROLL'
 
 const filled = (f: ChecklistField, v: any) =>

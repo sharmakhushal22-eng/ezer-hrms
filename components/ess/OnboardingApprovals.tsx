@@ -12,9 +12,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/ess/api'
 import { C as TK, Z } from '@/lib/ui'
-import { CHECKLISTS, missingItems, type ChecklistField, type HeadTeam } from '@/lib/onboarding/checklists'
+import { CHECKLISTS, missingItems, confirmationsOnly, type ChecklistField, type HeadTeam } from '@/lib/onboarding/checklists'
 import { rebuildFor, type SalaryBreakdown } from '@/lib/onboarding/salary-breakdown'
-import { SHEET_CSS, SectionView, DocCard, SCHEMA, TEAM, type Doc } from '@/components/onboarding/ReviewDrawer'
+import { SHEET_CSS, SectionView, SCHEMA, TEAM } from '@/components/onboarding/ReviewDrawer'
 
 type Approval = { team: string; status: 'PENDING' | 'APPROVED' | 'RETURNED'; acted_by_name: string | null; remark: string | null; acted_at: string | null }
 type Item = { id: string; full_name: string; designation: string | null; department: string | null; employment_type: string | null; date_of_joining: string | null; status: string; submitted_at: string | null; approvals: Approval[]; waiting_on_me: string[] }
@@ -32,9 +32,9 @@ const pill = (s: Approval['status']): React.CSSProperties => ({
   color: s === 'APPROVED' ? TK.positive : s === 'RETURNED' ? TK.critical : TK.warning,
 })
 const TEAM_BLURB: Record<HeadTeam, string> = {
-  IT: 'What the joiner walks in to on day one — tick each item once it is actually ready.',
-  ADMIN: 'What Admin has arranged for the joiner — tick each item once it is actually ready.',
-  PAYROLL: 'The structure the joiner will be paid on. Check the breakdown below; correct the CTC if the offer changed and the structure follows.',
+  IT: 'What the joiner walks in to on day one — tick each item once it is actually ready. The details shown are on record; only HR changes them.',
+  ADMIN: 'What Admin has arranged for the joiner — tick each item once it is actually ready. The details shown are on record; only HR changes them.',
+  PAYROLL: 'The structure the joiner will be paid on, as negotiated. Check the breakdown below and confirm it is entered in payroll; if the figures are wrong, return the form to HR with a remark instead.',
 }
 
 // ── Sub-components live OUTSIDE the parent so typing never remounts them ──────────────────
@@ -46,15 +46,14 @@ function Checklist({ team, values, onChange, readOnly }: { team: HeadTeam; value
   const bools = def.fields.filter(f => f.kind === 'bool'), inputs = def.fields.filter(f => f.kind !== 'bool')
   const done = def.fields.filter(f => f.required).length - def.fields.filter(f => f.required && missing.has(f.label)).length
   const total = def.fields.filter(f => f.required).length
-  const input = (f: ChecklistField) => {
+  // The typed details are facts on the record (kept by HR) — shown, never edited here.
+  const fact = (f: ChecklistField) => {
     const v = values[f.key]
-    const need = !readOnly && missing.has(f.label)
+    const shown = v == null || v === '' ? '' : f.kind === 'select' ? (f.options?.find(o => o.value === v)?.label || String(v)) : f.kind === 'number' ? `₹${Math.round(Number(v)).toLocaleString('en-IN')}` : String(v)
     return (
-      <div key={f.key}>
-        <div className="rv-lbl" style={{ marginBottom: 4 }}>{f.label}{f.required && <span style={{ color: TK.critical }}> *</span>}</div>
-        {f.kind === 'select'
-          ? <select value={v ?? ''} disabled={readOnly} onChange={e => onChange(f.key, e.target.value)} className="rv-in"><option value="">—</option>{f.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-          : <input value={v ?? ''} type={f.kind === 'number' ? 'number' : 'text'} disabled={readOnly} onChange={e => onChange(f.key, e.target.value)} placeholder={f.hint || ''} className="rv-in" style={need ? { borderColor: TK.warning } : undefined} />}
+      <div key={f.key} className="rv-cell">
+        <div className="rv-lbl">{f.label}</div>
+        <div className="rv-val" style={{ color: shown ? TK.ink : TK.faint }}>{shown || '—'}</div>
       </div>
     )
   }
@@ -65,7 +64,7 @@ function Checklist({ team, values, onChange, readOnly }: { team: HeadTeam; value
         <div style={{ fontSize: 11.5, fontWeight: 700, color: done === total ? TK.positive : TK.muted, whiteSpace: 'nowrap' }}>{done} of {total} confirmed</div>
       </div>
       <div className="rv-prog" style={{ marginBottom: 14 }}><i style={{ width: `${total ? (done / total) * 100 : 0}%` }} /></div>
-      {inputs.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px 16px', marginBottom: 14 }}>{inputs.map(input)}</div>}
+      {inputs.length > 0 && <div className="rv-grid" style={{ marginBottom: 14 }}>{inputs.map(fact)}</div>}
       <div className="rv-tiles">
         {bools.map(f => {
           const on = values[f.key] === true
@@ -150,7 +149,7 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
     if (action === 'approve') { const m = missingItems(team, check[team]); if (m.length) { say(`Confirm the checklist first: ${m.join(', ')}.`, 'error'); return } }
     setBusy(true)
     try {
-      const r = await api('/api/ess/onboarding-approvals', employeeId, { method: 'POST', body: JSON.stringify({ onboarding_id: open.item.id, team, action, remark, checklist: check[team] || {} }) })
+      const r = await api('/api/ess/onboarding-approvals', employeeId, { method: 'POST', body: JSON.stringify({ onboarding_id: open.item.id, team, action, remark, checklist: confirmationsOnly(team, check[team]) }) })
       if (action === 'save') { say('Checklist saved.'); setBusy(false); return }
       if (r.all_approved) say(`Approved for ${TEAM[team]} — IT, Admin and Payroll have all approved. The HR Manager now assigns the role and generates the employee code.`, 'success')
       else say(action === 'approve' ? `Approved for ${TEAM[team]}.` : 'Returned to the candidate with your remark.')
@@ -177,7 +176,6 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
   const mine: Approval | null = open ? open.approvals.find((a: Approval) => a.team === team) : null
   const decided = mine?.status === 'APPROVED'
   const missingNow = open ? missingItems(team, check[team]) : []
-  const docs: Doc[] = open?.documents || []
   const salary: SalaryBreakdown | null = open?.salary || null
   const n = (i: number) => String(i).padStart(2, '0')
   let sec = 0
@@ -231,18 +229,11 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
             {team === 'PAYROLL' && salary && (
               <section style={{ marginTop: 28 }}>
                 <h3 className="rv-h">{n(++sec)} <span>Salary structure</span></h3>
-                <div style={{ marginTop: 12 }}><SalaryTable s={salary} annual={Number(check.PAYROLL?.annual_ctc) || salary.annual_ctc} /></div>
+                <div style={{ marginTop: 12 }}><SalaryTable s={salary} annual={salary.annual_ctc} /></div>
               </section>
             )}
 
-            {/* ── Documents ── */}
-            <section style={{ marginTop: 28 }}>
-              <h3 className="rv-h">{n(++sec)} <span>Documents</span><span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: TK.muted, letterSpacing: 0, textTransform: 'none' }}>{docs.length} uploaded</span></h3>
-              {docs.length === 0 && <div style={{ fontSize: 12, color: TK.muted, marginTop: 8 }}>No documents uploaded.</div>}
-              <div className="rv-docs">{docs.map(doc => <DocCard key={doc.doc_code} doc={doc} on={false} pick={false} onPick={() => null} />)}</div>
-            </section>
-
-            {/* ── Details, section by section ── */}
+            {/* ── Details, section by section (read-only; the documents stay with the HR Manager's review) ── */}
             {SCHEMA.map(s => item.form_data?.[s.step] ? <SectionView key={s.step} n={++sec} sec={s} obj={item.form_data[s.step]} marks={NO_MARKS} pick={false} onToggle={() => null} /> : null)}
 
             {/* ── Foot: the decision ── */}
