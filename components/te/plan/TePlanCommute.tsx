@@ -17,7 +17,7 @@
 //
 // ONE LINE OPEN AT A TIME, the same as the route step, and for the same
 // reason: it is what keeps a long trip readable on a phone.
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import type { Snapshot, TripIssue } from '@/lib/te/types'
 import { applyModeToAll, blockingOn, journeysUnlike, type PlannerDraft } from '@/lib/te/trip-draft'
 import { chainCount, commuteChain, hubKind, NO_XFER, sameHub, xferModes } from '@/lib/te/commute'
@@ -70,17 +70,6 @@ export default function TePlanCommute({ snap, draft, issues, edit, onPick, onVeh
         {' '}Only what is allowed for {KIND_WORD[draft.scope] ?? 'this trip'} is offered.
       </p>
 
-      {legs > 1 ? (
-        <div className="fsteps" aria-label={`${done} of ${legs} journeys chosen`}>
-          {draft.segs.map((sg, i) => (
-            <span key={i} className={`fs ${open(i) ? 'on' : sg.mode ? 'done' : ''}`}>
-              <span className="fn">{sg.mode ? <TeIcon name="check" size="sm" /> : i + 1}</span>
-            </span>
-          ))}
-          <span className="small muted">{done} of {legs} chosen</span>
-        </div>
-      ) : null}
-
       {!legs ? (
         <div className="empty">
           <b>No journeys yet</b>
@@ -88,48 +77,57 @@ export default function TePlanCommute({ snap, draft, issues, edit, onPick, onVeh
         </div>
       ) : null}
 
-      <div className="rlist">
-        {draft.segs.map((s, i) => {
-          const a = place(draft.points[i]?.place ?? '')
-          const b = place(draft.points[i + 1]?.place ?? '')
-          const md = snap.cfg.modes.find(m => m.id === s.mode) ?? null
-          return (
-            /* .rrow wraps, .rline is the header's own flex row, and the open
-               panel is a SIBLING of .rline rather than a child. .rline is
-               display:flex with align-items:center, so a panel inside it sat
-               BESIDE the header and squeezed the place names into a column one
-               word wide. te.css has always expected this shape — `.rrow.open >
-               .rline .rhead` only resolves with the wrapper there. */
-            <div key={i} className={`rrow ${open(i) ? 'open' : ''}`}>
-              <div className="rline">
-                <button type="button" className="rhead" aria-expanded={open(i)} onClick={() => toggle(i)}>
-                  <span className="ico-b sm"><TeIcon name={MODE_ICON[s.mode] ?? 'route'} size="sm" /></span>
-                  {/* .rtx, not .grow: .grow is a plain flex child, so the
-                      title and the subtitle sat on one line and read as
-                      "Mumbai Head OfficeFlight · the Travel Desk books it".
-                      te.css already styles .rtx as the column a route row
-                      wants, with the title ellipsised rather than wrapped. */}
-                  <span className="rtx">
-                    <b>{a?.s ?? '—'} → {b?.s ?? '—'}</b>
-                    <span className="rsub">
-                      {md?.name ?? 'Choose how you travel'}
-                      {s.bookedBy === 'desk' ? ' · the Travel Desk books it' : ''}
+      {/* THE SAME SHAPE AS THE ROUTE STEP, on purpose. Step 2 draws the trip
+          left to right; arriving here and finding a vertical list of the same
+          journeys made them look like different things. The cards are the
+          journeys this time rather than the places, and selecting one opens
+          it in the panel below. */}
+      {legs ? (
+        <div className="jflow-wrap">
+          <div className="jflow" role="group" aria-label={`The journeys of this trip. ${done} of ${legs} chosen`}>
+            {draft.segs.map((s, i) => {
+              const a = place(draft.points[i]?.place ?? '')
+              const b = place(draft.points[i + 1]?.place ?? '')
+              const md = snap.cfg.modes.find(m => m.id === s.mode) ?? null
+              const bad = !!draft.tried && !s.mode
+              return (
+                <Fragment key={i}>
+                  {i > 0 ? <span className="jlink" aria-hidden="true"><span className="jlink-m todo"><TeIcon name="go" size="sm" />then</span></span> : null}
+                  <button
+                    type="button"
+                    className={`jnode ${open(i) ? 'on ' : ''}${bad ? 'bad ' : ''}${s.mode ? '' : 'empty'}`}
+                    aria-pressed={open(i)}
+                    aria-label={`Journey ${i + 1}: ${a?.s ?? 'start'} to ${b?.s ?? 'destination'}. ${md ? md.name : 'no mode chosen yet'}`}
+                    onClick={() => toggle(i)}
+                  >
+                    <span className="jn-top">
+                      <span className="mk b">{s.mode ? <TeIcon name="check" size="sm" /> : i + 1}</span>
+                      <span className="jn-k">Journey {i + 1}</span>
                     </span>
-                  </span>
-                  <TeIcon name={open(i) ? 'up' : 'down'} size="sm" />
-                </button>
-              </div>
-              {open(i) ? (
-                <SegRow
-                  snap={snap} draft={draft} issues={issues} i={i}
-                  open onToggle={() => toggle(i)} tried={!!draft.tried}
-                  edit={edit} onPick={onPick} onVehicleAdded={onVehicleAdded}
-                />
-              ) : null}
-            </div>
-          )
-        })}
-      </div>
+                    <span className="jn-name">{a?.s ?? '—'} → {b?.s ?? '—'}</span>
+                    <span className={`jn-meta ${md ? '' : 'ph0'}`}>
+                      {md ? md.name : 'Choose how you travel'}
+                      {md && s.bookedBy === 'desk' ? ' · Travel Desk books' : ''}
+                    </span>
+                  </button>
+                </Fragment>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {legs && openAt < 0 ? (
+        <p className="small muted">Tap a journey above to choose how you travel it.</p>
+      ) : null}
+
+      {openAt >= 0 ? (
+        <SegRow
+          snap={snap} draft={draft} issues={issues} i={openAt}
+          open onToggle={() => toggle(openAt)} tried={!!draft.tried}
+          edit={edit} onPick={onPick} onVehicleAdded={onVehicleAdded}
+        />
+      ) : null}
 
       {/* ONE TAP FOR A WHOLE ROUND TRIP. Two journeys is the common case and
           four is not rare; picking "flight" and then picking it again is the
@@ -214,32 +212,34 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
   ].filter(Boolean)
 
   return (
-    <div className={`rseg ${open ? 'open ' : ''}${err && tried ? 'bad' : ''}`}>
-      <button type="button" className="rshead" aria-expanded={open} onClick={onToggle}>
-        <TeIcon name={md ? MODE_ICON[md.id] ?? 'route' : 'route'} size="sm" />
-        <b>{md ? md.name : 'Choose how you travel'}</b>
-        {bits.length ? <span className="rsub">{bits.join(' · ')}</span> : null}
+    <div className={`jpanel ${err && tried ? 'bad' : ''}`}>
+      <div className="jpanel-h">
+        <span className="ico-b sm"><TeIcon name={md ? MODE_ICON[md.id] ?? 'route' : 'route'} size="sm" /></span>
+        <h5>{a?.s ?? '—'} → {b?.s ?? '—'}</h5>
+        {bits.length ? <span className="chip plain">{bits.join(' · ')}</span> : null}
         <span className="grow" />
         {md ? <span className="rtag"><TeIcon name={checkIn ? 'target' : 'route'} size="sm" />{checkIn ? 'Check-ins' : 'GPS'}</span> : null}
-        <TeIcon name={open ? 'up' : 'down'} size="sm" />
-      </button>
-
-      {!open && err && tried ? <div className="ferr"><TeIcon name="alert" size="sm" />{err.t}</div> : null}
+        <button type="button" className="btn sm pri" onClick={onToggle}><TeIcon name="check" size="sm" />Done</button>
+      </div>
 
       {open ? (
-        <div className="redit sg">
-          <div className="rs-modes" role="group" aria-label={a && b ? `How you travel from ${a.s} to ${b.s}` : 'How you travel'}>
+        <>
+          {/* TILES, NOT CHIPS. A mode is the one decision of this step, and it
+              was a row of small pills that read as filters. Each tile now says
+              what it is and how it is paid, which is the question people
+              actually have when choosing between their own car and a cab. */}
+          <div className="mtiles" role="group" aria-label={a && b ? `How you travel from ${a.s} to ${b.s}` : 'How you travel'}>
             {modes.map(m => (
               <button
                 key={m.id}
                 type="button"
-                className="mchip"
+                className="mtile"
                 aria-pressed={s.mode === m.id}
-                title={`${m.name}: ${PAY_WORDS[m.basis] ?? ''}`}
                 onClick={() => setSeg({ mode: m.id, vehicleId: m.id === 'own' ? (s.vehicleId || snap.vehicles[0]?.id || '') : '' })}
               >
-                <TeIcon name={MODE_ICON[m.id] ?? 'route'} size="sm" />
-                <span>{m.name}</span>
+                <TeIcon name={MODE_ICON[m.id] ?? 'route'} />
+                <b>{m.name}</b>
+                <small>{PAY_WORDS[m.basis] ?? ''}</small>
               </button>
             ))}
           </div>
@@ -401,12 +401,7 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
             {md ? ` ${PAY_WORDS[md.basis] ?? ''}. ${checkIn ? 'Check-in by GPS at both ends. No stops on the way.' : `GPS records the route.${md.stops ? ' Stops can be added on the way.' : ' Stops are the operator’s.'}`}` : ''}
           </div>
           {tried && err ? <div className="ferr"><TeIcon name="warn" size="sm" />{err.t}</div> : null}
-
-          <div className="rfoot">
-            <span className="grow" />
-            <button type="button" className="btn sm pri" onClick={onToggle}><TeIcon name="check" size="sm" />Done</button>
-          </div>
-        </div>
+        </>
       ) : null}
     </div>
   )

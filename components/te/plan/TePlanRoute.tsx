@@ -2,15 +2,23 @@
 // components/te/plan/TePlanRoute.tsx — step 2: where you go, and when.
 // Screens 12, 15, 16, 16b, 19, 22, 25, 26, 35, 37.
 //
-// ONE DECISION PER STEP. This used to ask for the route AND how you travel it:
-// a place, then a thin line asking for a mode, a vehicle, which airport and
-// who books the ticket, then the next place. How you travel is step 3 now, and
-// this step is only the shape of the trip — one way or round trip, where from,
-// where to, and the dates. The thin line between two places still shows what
-// was chosen, but it is read-only here.
+// ONE DECISION PER STEP. This used to ask for the route AND how you travel it.
+// How you travel is step 3 now, and this step is only the shape of the trip —
+// one way or round trip, where from, where to, and the dates.
 //
-// One line per place, tap a line to change it, only one open at a time, which
-// is what keeps a six-leg international trip readable on a phone.
+// THE SHAPE IS DRAWN, NOT LISTED. This was a vertical accordion: one row per
+// place, tap a row and it expanded in place. Two things were wrong with it. It
+// read as a column of form rows rather than as a journey, so the order — the
+// one thing a route actually is — had to be inferred from the order of the
+// rows. And on a trip with stops, expanding a row pushed it under the rows
+// above, so you lost sight of the trip exactly while editing it.
+//
+// Now the trip is drawn left to right the way a person sketches one: a card
+// per place, the journey between two cards as the link that joins them, and
+// ONE editor panel underneath. The strip does not move while you work, so the
+// shape stays on screen and the thing you are changing is always in the same
+// place. Selecting a card is the same `draft.open` the accordion used, so
+// nothing about the draft or its validation changed — only what you see.
 //
 // `arrive` is never stored on the draft — the server works out when you get
 // somewhere from when you left the place before. It is read off the preview's
@@ -24,6 +32,10 @@ import TeTripMap from './TeTripMap'
 import type { PickTarget } from './TePlacePicker'
 
 const PATTERN_WORD: Record<string, string> = { oneway: 'Single', round: 'Round trip', multi: 'Multi-city' }
+const MODE_ICON: Record<string, string> = {
+  own: 'car', company: 'car', cab: 'car', auto: 'car', rental: 'car',
+  public: 'bus', bus: 'bus', train: 'train', flight: 'plane',
+}
 
 export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick }: {
   snap: Snapshot
@@ -69,7 +81,11 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
     .sort()
     .pop() ?? ''
 
-  const toggle = (key: string) => edit(d => ({ ...d, open: d.open === key ? null : key }))
+  /** Which card the panel below is editing. Selecting is a toggle: tapping the
+   *  open card closes the panel, which is how somebody gets the whole strip
+   *  back without having to finish anything. */
+  const select = (key: string) => edit(d => ({ ...d, open: d.open === key ? null : key }))
+  const openIndex = draft.points.findIndex((_, i) => draft.open === `p${i}`)
 
   return (
     <div className="sec">
@@ -118,10 +134,10 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
             knows that. Left empty, the server works the end date out from the
             last place you left, exactly as it did before.
 
-            It sits HERE and not on the return point's own row because that row
-            collapses to "Same as the start" whenever the return mirrors the
-            start — which is the default — and its fields are not rendered at
-            all in that state.
+            It sits HERE and not on the return card's own panel because that
+            card collapses to "Same as the start" whenever the return mirrors
+            the start — which is the default — and its fields are not rendered
+            at all in that state.
 
             Shown for local trips too: a local trip can run over more than
             one day. What makes it local is staying inside the one state, not
@@ -150,17 +166,114 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
           </>
         ) : null}
         <p className="small muted">
-          {PATTERN_WORD[draft.pattern]}{stops > 0 ? `, ${plural(stops, 'stop')}` : ''}. Tap a line to change it.
+          {PATTERN_WORD[draft.pattern]}{stops > 0 ? `, ${plural(stops, 'stop')}` : ''}. Tap a place to change it.
         </p>
       </div>
       {err('d0') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('d0')}</div> : null}
+
+      {/* ── THE TRIP, LEFT TO RIGHT ──
+          A card per place and a link per journey. The links are read-only
+          here — how you travel is step 3 — but they are drawn, because a
+          route with nothing between its places does not look like a journey.
+          `aria-label` carries the order for a screen reader, which cannot see
+          that left-to-right means "then". */}
+      <div className="jflow-wrap">
+        {/* A group of toggles, not a list: each card selects itself for the
+            editor below, and `listitem` does not carry aria-pressed. */}
+        <div className="jflow" role="group" aria-label="The route, in order">
+          {draft.points.map((p, i) => {
+            const L = pointLabel(draft, i)
+            const key = `p${i}`
+            const on = draft.open === key
+            const lockRet = !!p.ret && draft.retSame
+            const pc = place(lockRet ? draft.points[0].place : p.place)
+            const arrive = arrivalAt(i)
+            const issue = issues.find(x => x.block && (x.k === key || (i > 0 && x.k === `d${i}`)))
+            const bad = !!issue && !!tried
+
+            const when = p.ret ? (p.arrive ? `Back ${day(p.arrive)}` : arrive ? `Back ${day(arrive)}` : '')
+              : local ? ''
+                : i > 0 ? [arrive ? day(arrive) : '', p.leave && p.leave !== arrive ? day(p.leave) : ''].filter(Boolean).join(' – ')
+                  : (p.leave ? day(p.leave) : '')
+            const meta = (lockRet ? ['Same as the start', when] : [pc && p.pt ? ptName(p.pt) : '', i > 0 && !p.ret ? p.what : '', when])
+              .filter(Boolean).join(' · ')
+            const placeholder = i === 0 ? 'Choose where you start' : p.ret ? 'Choose where you come back to' : L.isStop ? 'Choose the stop' : 'Choose where you go'
+            const seg = draft.segs[i]
+            const segMode = seg ? snap.cfg.modes.find(m => m.id === seg.mode) : null
+
+            return (
+              <Fragment key={key}>
+                <button
+                  type="button"
+                  className={`jnode ${on ? 'on ' : ''}${bad ? 'bad ' : ''}${pc ? '' : 'empty'}`}
+                  aria-pressed={on}
+                  aria-label={`${L.label}: ${pc ? pc.s : 'not chosen yet'}${meta ? `. ${meta}` : ''}`}
+                  onClick={() => select(key)}
+                >
+                  <span className="jn-top">
+                    {i === 0 || lockRet ? <span className="mk a">A</span>
+                      : L.isStop ? <span className="mk s">{L.no}</span>
+                        : <span className="mk b"><TeIcon name="flag" size="sm" /></span>}
+                    <span className="jn-k">{L.label}</span>
+                    {L.isStop ? (
+                      <span
+                        className="jn-x"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Remove ${L.label}`}
+                        onClick={e => { e.stopPropagation(); edit(d => removePoint(d, i, ctxOf(snap))) }}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); edit(d => removePoint(d, i, ctxOf(snap))) } }}
+                      >
+                        <TeIcon name="close" size="sm" />
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className={`jn-name ${pc ? '' : 'ph0'}`}>{pc ? pc.s : placeholder}</span>
+                  {meta ? <span className="jn-meta">{meta}</span> : null}
+                  {bad && issue ? <span className="jn-meta">{issue.t}</span> : null}
+                </button>
+
+                {i < draft.points.length - 1 ? (
+                  <span className="jlink" aria-hidden="true">
+                    <span className={`jlink-m ${segMode ? '' : 'todo'}`}>
+                      <TeIcon name={segMode ? MODE_ICON[segMode.id] ?? 'route' : 'route'} size="sm" />
+                      {segMode ? segMode.name : 'Next step'}
+                    </span>
+                    {/* A stop goes BEFORE the last place, which is the only
+                        gap where one makes sense: you do not stop after you
+                        have arrived. */}
+                    {i === L.last - 1 && L.last > 0 ? (
+                      <button type="button" className="jlink-add" aria-hidden="false" aria-label={`Add a stop before ${place(draft.points[L.last]?.place)?.s || 'the destination'}`} onClick={() => edit(d => addStop(d, L.last - 1, ctxOf(snap)))}>
+                        <TeIcon name="plus" size="sm" />Stop
+                      </button>
+                    ) : null}
+                  </span>
+                ) : null}
+              </Fragment>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── THE EDITOR, under the strip and never inside it ── */}
+      {openIndex >= 0 ? (
+        <PointPanel
+          snap={snap} draft={draft} issues={issues} i={openIndex} tried={!!tried}
+          preview={preview} local={local} edit={edit} onPick={onPick} onClose={() => edit({ open: null })}
+        />
+      ) : (
+        <p className="small muted">Tap a place above to set it, its type and its dates.</p>
+      )}
+
+      {err('pr') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('pr')}</div> : null}
 
       {/* THE MAP, WHILE THE ROUTE IS BEING BUILT, not only on Review. Seeing
           the shape of the trip appear as places are chosen is how somebody
           notices they picked the Pune in the wrong state — which is a money
           error, because every kilometre on the claim is measured between these
-          points. Real Google tiles when a browser key is configured; the same
-          to-scale schematic as before when there is none. */}
+          points. It sits under the editor rather than above the strip: the
+          strip is now the thing you read first, and a 190px map between the
+          dates and the route pushed the route itself off a laptop screen. */}
       {distinctPlaces > 1 ? (
         <TeTripMap
           points={mapPoints}
@@ -177,154 +290,120 @@ export default function TePlanRoute({ snap, draft, issues, preview, edit, onPick
           label={`Map of ${draft.name || 'the route so far'}`}
         />
       ) : null}
+    </div>
+  )
+}
 
-      <div className="rlist">
-        {draft.points.map((p, i) => {
-          const L = pointLabel(draft, i)
-          const key = `p${i}`
-          const open = draft.open === key
-          const lockRet = !!p.ret && draft.retSame
-          const pc = place(lockRet ? draft.points[0].place : p.place)
-          const arrive = arrivalAt(i)
-          const issue = issues.find(x => x.block && (x.k === key || (i > 0 && x.k === `d${i}`)))
-          const bad = !!issue && !!tried
+/** One place, opened for editing. Defined outside the parent, or it would
+ *  remount on every keystroke and drop focus out of the "what you will do
+ *  there" field. */
+function PointPanel({ snap, draft, issues, i, tried, preview, local, edit, onPick, onClose }: {
+  snap: Snapshot
+  draft: PlannerDraft
+  issues: TripIssue[]
+  i: number
+  tried: boolean
+  preview: TripPreview | null
+  local: boolean
+  edit: (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
+  onPick: (t: PickTarget) => void
+  onClose: () => void
+}) {
+  const p = draft.points[i]
+  if (!p) return null
+  const L = pointLabel(draft, i)
+  const key = `p${i}`
+  const place = (id: string) => snap.masters.places.find(q => q.id === id) ?? null
+  const lockRet = !!p.ret && draft.retSame
+  const pc = place(lockRet ? draft.points[0].place : p.place)
+  const err = (k: string) => errorFor(issues, k, tried)
+  const arrive = (() => {
+    const legs = preview?.legs ?? []
+    return p.place ? legs.find(l => l.to === p.place)?.date ?? '' : ''
+  })()
+  const placeholder = i === 0 ? 'Choose where you start' : p.ret ? 'Choose where you come back to' : L.isStop ? 'Choose the stop' : 'Choose where you go'
+  const title = pickTitle(i, p.ret, draft.pattern)
 
-          const when = p.ret ? (p.arrive ? `Back on ${day(p.arrive)}` : arrive ? `Back on ${day(arrive)}` : '')
-            : local ? ''
-              : i > 0 ? [arrive ? day(arrive) : '', p.leave && p.leave !== arrive ? day(p.leave) : ''].filter(Boolean).join(' to ')
-                : ''
-          const sub = (lockRet ? ['Same as the start', when] : [pc && p.pt ? ptName(p.pt) : '', i > 0 && !p.ret ? p.what : '', when])
-            .filter(Boolean).join(' · ')
-          const placeholder = i === 0 ? 'Choose where you start' : p.ret ? 'Choose where you come back to' : L.isStop ? 'Choose the stop' : 'Choose where you go'
-
-          return (
-            <Fragment key={key}>
-              {i === L.last && L.last > 0 ? (
-                <div className="radd">
-                  <button type="button" className="raddstop" onClick={() => edit(d => addStop(d, L.last - 1, ctxOf(snap)))}>
-                    <TeIcon name="plus" size="sm" />Add a stop
-                  </button>
-                  <span className="small muted">on the way to {place(draft.points[L.last]?.place)?.s || 'the destination'}</span>
-                </div>
-              ) : null}
-
-              <div className={`rrow ${L.isStop ? 'stop ' : ''}${p.ret ? 'ret ' : ''}${bad ? 'bad ' : ''}${open ? 'open' : ''}`}>
-                <div className="rline">
-                  {i === 0 || lockRet ? <span className="mk a">A</span>
-                    : L.isStop ? <span className="mk s">{L.no}</span>
-                      : <span className="mk b" title="Destination"><TeIcon name="flag" size="sm" /></span>}
-                  <button type="button" className="rhead" aria-expanded={open} onClick={() => toggle(key)}>
-                    <span className="rtx">
-                      <small>{L.label}</small>
-                      <b>{pc ? pc.s : <span className="ph0">{placeholder}</span>}</b>
-                      {sub ? <span className="rsub">{sub}</span> : null}
-                      {issue && !open && (pc || bad) ? <span className={`rsub ${bad ? 'bad' : 'todo'}`}><TeIcon name="alert" size="sm" />{issue.t}</span> : null}
-                    </span>
-                    <TeIcon name={open ? 'up' : 'down'} size="sm" />
-                  </button>
-                  {L.isStop ? (
-                    <button type="button" className="rx" aria-label={`Remove ${L.label}`} title={`Remove ${L.label}`} onClick={() => edit(d => removePoint(d, i, ctxOf(snap)))}>
-                      <TeIcon name="close" size="sm" />
-                    </button>
-                  ) : null}
-                </div>
-
-                {open ? (
-                  <div className="redit">
-                    {p.ret ? (
-                      <label className="check small">
-                        <input type="checkbox" checked={draft.retSame} onChange={e => edit({ retSame: e.target.checked })} />
-                        <span>Same as the start</span>
-                      </label>
-                    ) : null}
-
-                    {lockRet ? null : (
-                      <div className="loc">
-                        <button type="button" className="locb" onClick={() => onPick({ kind: 'point', index: i, title: pickTitle(i, p.ret, draft.pattern), intl: draft.scope === 'international' && i > 0 && !p.ret })}>
-                          <span className="mk b">{i === 0 ? 'A' : 'B'}</span>
-                          <span className="grow">
-                            <small>{locLabel(i, !!p.ret, L.isStop, draft.scope === 'international')}</small>
-                            {pc ? <><b>{pc.s}</b><span className="ad">{pc.addr || pc.name}</span></> : <b className="ph0">{placeholder}</b>}
-                          </span>
-                          <TeIcon name="rightc" size="sm" />
-                        </button>
-                        <div className="locx">
-                          <button type="button" className="link small" onClick={() => onPick({ kind: 'point', index: i, title: pickTitle(i, p.ret, draft.pattern), useGps: true })}>
-                            <TeIcon name="target" size="sm" />Use my current location
-                          </button>
-                          <button type="button" className="link small" onClick={() => onPick({ kind: 'point', index: i, title: pickTitle(i, p.ret, draft.pattern), address: true, intl: draft.scope === 'international' && i > 0 && !p.ret })}>
-                            <TeIcon name="pin" size="sm" />Enter the address
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {err(key) ? <div className="ferr"><TeIcon name="warn" size="sm" />{err(key)}</div> : null}
-
-                    {pc && !lockRet ? (
-                      <div className="rp-det">
-                        <label className="fld sm">
-                          <span>Type of place</span>
-                          <select value={p.pt} onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, pt: e.target.value } : q)) }))}>
-                            {p.pt ? null : <option value="">Choose</option>}
-                            {snap.cfg.ptypes.filter(t => t.on).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                          </select>
-                        </label>
-                        {i > 0 && !p.ret ? (
-                          <label className="fld sm">
-                            <span>{L.isStop ? 'Why you stop here' : 'What you will do there'}</span>
-                            <input
-                              value={p.what}
-                              placeholder={L.isStop ? 'Pick up samples, meet the dealer' : 'Meeting, audit, delivery'}
-                              onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, what: e.target.value } : q)) }))}
-                            />
-                          </label>
-                        ) : null}
-                        {i > 0 && !p.ret && !local ? (
-                          <label className="fld sm">
-                            <span>{i === L.last && draft.pattern === 'oneway' ? 'Stay until, if you stay' : 'Leave on'}</span>
-                            <input
-                              type="date"
-                              value={p.leave || ''}
-                              min={arrive || undefined}
-                              onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, leave: e.target.value } : q)) }))}
-                            />
-                            <small>{arrive ? `Arrive ${day(arrive)}` : ' '}</small>
-                          </label>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {i > 0 && err(`d${i}`) ? <div className="ferr"><TeIcon name="warn" size="sm" />{err(`d${i}`)}</div> : null}
-
-                    <div className="rfoot">
-                      {i > 0 && !p.ret && L.destinations.length > 1 ? (
-                        <>
-                          <button type="button" className="btn sm" disabled={i <= 1} aria-label={`Move ${L.label} earlier`} onClick={() => edit(d => movePoint(d, i, -1, ctxOf(snap)))}><TeIcon name="up" size="sm" />Earlier</button>
-                          <button type="button" className="btn sm" disabled={i >= L.last} aria-label={`Move ${L.label} later`} onClick={() => edit(d => movePoint(d, i, 1, ctxOf(snap)))}><TeIcon name="down" size="sm" />Later</button>
-                        </>
-                      ) : null}
-                      <span className="grow" />
-                      <button type="button" className="btn sm pri" onClick={() => toggle(key)}><TeIcon name="check" size="sm" />Done</button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              {/* How you travel between these two places used to sit here, as a
-                  thin line between every pair of points. It is step 3 now: one
-                  step for where you are going, the next for how. */}
-              {i < draft.points.length - 1 ? (
-                <div className="rline thin">
-                  <span className="ico-b sm"><TeIcon name="route" size="sm" /></span>
-                  <span className="small muted">
-                    {snap.cfg.modes.find(m => m.id === draft.segs[i]?.mode)?.name ?? 'How you travel — chosen next'}
-                  </span>
-                </div>
-              ) : null}
-            </Fragment>
-          )
-        })}
+  return (
+    <div className="jpanel">
+      <div className="jpanel-h">
+        {i === 0 ? <span className="mk a">A</span>
+          : L.isStop ? <span className="mk s">{L.no}</span>
+            : <span className="mk b"><TeIcon name="flag" size="sm" /></span>}
+        <h5>{L.label}</h5>
+        <span className="grow" />
+        {i > 0 && !p.ret && L.destinations.length > 1 ? (
+          <>
+            <button type="button" className="btn sm" disabled={i <= 1} aria-label={`Move ${L.label} earlier`} onClick={() => edit(d => movePoint(d, i, -1, ctxOf(snap)))}><TeIcon name="back" size="sm" />Earlier</button>
+            <button type="button" className="btn sm" disabled={i >= L.last} aria-label={`Move ${L.label} later`} onClick={() => edit(d => movePoint(d, i, 1, ctxOf(snap)))}><TeIcon name="go" size="sm" />Later</button>
+          </>
+        ) : null}
+        <button type="button" className="btn sm pri" onClick={onClose}><TeIcon name="check" size="sm" />Done</button>
       </div>
-      {err('pr') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('pr')}</div> : null}
+
+      {p.ret ? (
+        <label className="check small">
+          <input type="checkbox" checked={draft.retSame} onChange={e => edit({ retSame: e.target.checked })} />
+          <span>Same as the start</span>
+        </label>
+      ) : null}
+
+      {lockRet ? null : (
+        <div className="loc">
+          <button type="button" className="locb" onClick={() => onPick({ kind: 'point', index: i, title, intl: draft.scope === 'international' && i > 0 && !p.ret })}>
+            <span className="ico-b sm"><TeIcon name="pin" size="sm" /></span>
+            <span className="grow">
+              <small>{locLabel(i, !!p.ret, L.isStop, draft.scope === 'international')}</small>
+              {pc ? <><b>{pc.s}</b><span className="ad">{pc.addr || pc.name}</span></> : <b className="ph0">{placeholder}</b>}
+            </span>
+            <TeIcon name="rightc" size="sm" />
+          </button>
+          <div className="locx">
+            <button type="button" className="link small" onClick={() => onPick({ kind: 'point', index: i, title, useGps: true })}>
+              <TeIcon name="target" size="sm" />Use my current location
+            </button>
+            <button type="button" className="link small" onClick={() => onPick({ kind: 'point', index: i, title, address: true, intl: draft.scope === 'international' && i > 0 && !p.ret })}>
+              <TeIcon name="pin" size="sm" />Enter the address
+            </button>
+          </div>
+        </div>
+      )}
+      {err(key) ? <div className="ferr"><TeIcon name="warn" size="sm" />{err(key)}</div> : null}
+
+      {pc && !lockRet ? (
+        <div className="jp-grid">
+          <label className="fld sm">
+            <span>Type of place</span>
+            <select value={p.pt} onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, pt: e.target.value } : q)) }))}>
+              {p.pt ? null : <option value="">Choose</option>}
+              {snap.cfg.ptypes.filter(t => t.on).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+          {i > 0 && !p.ret ? (
+            <label className="fld sm">
+              <span>{L.isStop ? 'Why you stop here' : 'What you will do there'}</span>
+              <input
+                value={p.what}
+                placeholder={L.isStop ? 'Pick up samples, meet the dealer' : 'Meeting, audit, delivery'}
+                onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, what: e.target.value } : q)) }))}
+              />
+            </label>
+          ) : null}
+          {i > 0 && !p.ret && !local ? (
+            <label className="fld sm">
+              <span>{i === L.last && draft.pattern === 'oneway' ? 'Stay until, if you stay' : 'Leave on'}</span>
+              <input
+                type="date"
+                value={p.leave || ''}
+                min={arrive || undefined}
+                onChange={e => edit(d => ({ ...d, points: d.points.map((q, k) => (k === i ? { ...q, leave: e.target.value } : q)) }))}
+              />
+              <small>{arrive ? `Arrive ${day(arrive)}` : ' '}</small>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+      {i > 0 && err(`d${i}`) ? <div className="ferr"><TeIcon name="warn" size="sm" />{err(`d${i}`)}</div> : null}
     </div>
   )
 }

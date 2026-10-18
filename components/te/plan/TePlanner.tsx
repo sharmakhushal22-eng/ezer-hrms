@@ -288,7 +288,9 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
 
   return (
     <TeSheet
-      wide
+      // Wider than the other sheets: the route is drawn left to right now and
+      // a 760px drawer showed two places and half a third.
+      roomy
       title={title}
       lead={lead}
       // No entry-flow crumb on an edit: the person did not come through the
