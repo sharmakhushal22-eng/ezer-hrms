@@ -141,6 +141,18 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
   }
 
   const shown = ready ? preview : null
+  // Save is dead while anything blocks, the same rule the journey report
+  // already uses. Before this, the button stayed live: pressing it posted,
+  // took a 409 back from SQL and rendered the refusal into the CHECK block at
+  // the foot of the form — correct, and invisible on a short window.
+  const blocked = !!shown?.blocked
+  const blockedNote = !blocked ? ''
+    : (() => {
+        const n = shown ? shown.flags.filter(x => x.block).length : 0
+        // n can be 0 if the server blocked without naming a line flag; say so
+        // vaguely rather than claiming "0 things to fix".
+        return n ? `${plural(n, 'thing')} to fix below before this can be saved.` : 'Fix what is marked below before this can be saved.'
+      })()
   const askReason = !!shown && (shown.needsReason || shown.flags.length > 0 || !!f.reason)
   const canAskException = !!shown && shown.flags.some(x => x.action === 'cap')
 
@@ -156,9 +168,14 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
         : 'No travel. It is saved under Other expenses until you submit your claim.'}
       onClose={onClose}
       footer={<>
+        {/* The reason the button is dead, next to the button. The blocking
+            flags are in the CHECK block at the foot of a long form, so on a
+            short window they are below the fold: pressing Save used to post,
+            take a 409 back and look like it had done nothing at all. */}
+        {blockedNote ? <span className="small muted grow">{blockedNote}</span> : null}
         {line ? <button type="button" className="btn dan" disabled={!!busy} onClick={discard}>Remove</button> : null}
         <button type="button" className="btn" onClick={onClose}>Cancel</button>
-        <button type="button" className="btn pri" disabled={!ready || !!busy} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save expense'}</button>
+        <button type="button" className="btn pri" disabled={!ready || !!busy || blocked} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save expense'}</button>
       </>}
     >
       <div className="sec">

@@ -255,6 +255,15 @@
 .te .li:last-child{border-bottom:0}
 .te .li.click{cursor:pointer}
 .te .li.click:hover{background:var(--ez-brand-tint)}
+/* A row that is a real <button>: Approvals, the evidence lists, the trip log,
+   the desk picker and Finance's verification queue all build rows that way,
+   because a row you activate should be a button and not a div with a role.
+   A button sizes to its content though, so without this the row stopped
+   wherever its text stopped — a 473px row in an 1180px card — and brought the
+   UA's border, centred text and system font with it. Everything here is
+   undoing that; the look belongs to .li above. */
+.te button.li{width:100%;border:0;border-bottom:1px solid var(--ez-line);border-radius:0;background:none;font:inherit;color:inherit;text-align:left;appearance:none}
+.te button.li:last-child{border-bottom:0}
 /* a row that opens into a panel underneath it, rather than a single line */
 .te .li.col{flex-direction:column;align-items:stretch}
 /* one of several things to pick between: the whole row is the target, not the
