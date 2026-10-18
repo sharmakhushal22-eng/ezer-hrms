@@ -96,6 +96,11 @@ export async function GET(req: NextRequest) {
     const withName = <T extends { employee_id: unknown }>(r: T) => ({ ...r, ...(names.get(r.employee_id as string) ?? { emp_code: null, full_name: null }) })
     return {
       company_id: company,
+      // Whether this reader may actually spend. Migration 175 lets a desk
+      // member whose "May book" is unticked onto the desk — they verify
+      // vehicles and decide stays — so the screen has to stop offering them
+      // the one thing they cannot do, rather than let them find out from a 403.
+      may_book: await t.deskMayBook(),
       to_book: (book.data ?? []).map(withName),
       booked: booked.map(withName),
       vehicles: (veh.data ?? []).map(withName),

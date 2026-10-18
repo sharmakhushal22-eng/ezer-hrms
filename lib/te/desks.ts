@@ -18,6 +18,14 @@ import type { Uuid } from './types.ts'
 export type DeskKind = 'finance' | 'travel'
 export const DESK_KINDS: DeskKind[] = ['finance', 'travel']
 
+/**
+ * Said to somebody on the travel desk whose "May book" is unticked, by the two
+ * routes that spend money and by te_may_book underneath them (migration 175).
+ * One wording in one place, because the floor and the door must agree.
+ */
+export const MAY_NOT_BOOK =
+  'You are on the travel desk but not allowed to book. Ask an administrator to tick "May book" for you.'
+
 /** What each desk is called, and what the right it grants is called. */
 export const DESK_NAME: Record<DeskKind, { label: string; right: string; table: string }> = {
   finance: { label: 'Finance desk', right: 'can_approve', table: 'finance_team' },

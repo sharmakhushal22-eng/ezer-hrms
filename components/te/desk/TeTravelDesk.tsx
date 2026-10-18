@@ -52,6 +52,11 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   const [why, setWhy] = useState('')
   const [vehicles, setVehicles] = useState<DeskVehicle[]>([])
   const [stays, setStays] = useState<DeskStay[]>([])
+  // Whether this reader may spend. A desk member without "May book" belongs on
+  // the desk — vehicles and hotels are their work — so the screen stays whole
+  // and only the two controls that commit money go away. Starts true so the
+  // controls do not flicker out from under somebody who does have the right.
+  const [mayBook, setMayBook] = useState(true)
   const [error, setError] = useState('')
   const [booking, setBooking] = useState<DeskToBook | null>(null)
   const [form, setForm] = useState({ vendor: '', reference: '', amount: '' })
@@ -63,7 +68,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   useEffect(() => {
     let current = true
     te.desk.list()
-      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setError('') } })
+      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setMayBook(r.may_book !== false); setError('') } })
       .catch(e => { if (current) { setToBook([]); setError(errorText(e)) } })
     return () => { current = false }
   }, [tick])
@@ -180,6 +185,14 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
       {here === 'book' ? (
       <div className="card pad0">
         <div className="day"><span>To book</span><span>{bookings.length}</span></div>
+        {/* Said once, at the top, rather than leaving a list of work with no
+            button on it and no reason given. */}
+        {!mayBook ? (
+          <div className="note">
+            <TeIcon name="info" size="sm" />
+            <span>You can see what is waiting, but booking is not switched on for you. An administrator sets &ldquo;May book&rdquo; on the travel desk.</span>
+          </div>
+        ) : null}
         {toBook === null ? <div className="empty"><b>Loading…</b></div> : null}
         {toBook !== null && !bookings.length ? (
           <div className="empty"><b>Nothing to book</b>Approved trips with journeys marked &ldquo;Travel Desk books&rdquo; appear here.</div>
@@ -245,7 +258,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
                   </div>
                 ) : null}
               </div>
-              {!open ? (
+              {!open && mayBook ? (
                 <button type="button" className="btn sm pri" onClick={() => { setBooking(b); setForm({ vendor: '', reference: '', amount: '' }) }}>Record</button>
               ) : null}
             </div>
@@ -288,7 +301,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
                   </div>
                 ) : null}
               </div>
-              {cancelling !== b.id ? (
+              {cancelling !== b.id && mayBook ? (
                 <button type="button" className="btn sm dan" onClick={() => { setCancelling(b.id); setWhy(''); setError('') }}>Cancel</button>
               ) : null}
             </div>

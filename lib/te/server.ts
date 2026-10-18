@@ -180,6 +180,21 @@ export interface TeCall {
    */
   deskIsGroupWide(kind: 'finance' | 'travel'): Promise<boolean>
   /**
+   * Whether the caller may commit company money on the travel desk —
+   * travel_desk.can_book, the admin screen's "May book" checkbox.
+   *
+   * TRUE FOR ANYBODY WHO IS NOT ON THAT DESK AT ALL, because then the box does
+   * not apply to them and their dashboard role decides, as it always has. This
+   * only ever refuses a person who IS on the travel desk and has not been
+   * given the right. Mirrors te_may_book (migration 175), which is the floor;
+   * this is the early, legible refusal.
+   *
+   * It used to be the other way round and wrong in both directions: can_book
+   * gated te_on_desk — so unticking "May book" removed the person from the
+   * desk entirely — while no route consulted it, so ticking it bought nothing.
+   */
+  deskMayBook(): Promise<boolean>
+  /**
    * 403 unless the caller is on the desk OR holds the module by role.
    *
    * WHY BOTH. Desk membership is the real rule and the SQL enforces it — a
@@ -267,6 +282,24 @@ function makeCall(req: NextRequest): TeCall {
         // is group-scoped. Never a reason to fail the request.
         if (error) return false
         return (data?.length ?? 0) > 0
+      })()
+      deskP.set(key, p)
+      return p
+    },
+    async deskMayBook() {
+      const key = 'maybook:travel'
+      const cached = deskP.get(key)
+      if (cached) return cached
+      const p = (async () => {
+        const id = (await t.actor()).employeeId
+        if (!id) return false
+        const { data, error } = await t.sb().from('travel_desk')
+          .select('can_book').eq('employee_id', id).eq('is_active', true)
+        // No table, no column: migration 161 is not applied, so this right does
+        // not exist yet and refusing on it would invent a rule the database has
+        // never heard of. Same for somebody with no desk row at all.
+        if (error || !data?.length) return true
+        return data.some(r => r.can_book === true)
       })()
       deskP.set(key, p)
       return p
