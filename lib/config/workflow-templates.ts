@@ -387,6 +387,28 @@ Welcome to the team!`,
     },
   }),
   email({
+    key: 'onboarding.ess_credentials', module: OB,
+    label: 'Your EZER ESS login',
+    description: 'Sent to the new joiner with the employee code when HR generates it: the login ID, a temporary password (changed on first login) and the portal link.',
+    usedIn: 'Onboarding → Generate code',
+    recipient: 'New joiner',
+    variables: [CANDIDATE, v('employee_code', 'Employee code', 'SRS0042'), v('login_id', 'Login ID (the employee code)', 'SRS0042'), v('login_email', 'Email that also works as the login ID (may be empty)', 'priya.sharma@company.com'), v('temp_password', 'Temporary password', 'Kq7m-Xw2p-R9tz'), v('login_link', 'ESS login page', 'https://app.ezerhrms.com/ess-login'), COMPANY],
+    defaults: {
+      subject: 'Your EZER ESS login — {{employee_code}}',
+      body: `Dear {{candidate_name}},
+
+Welcome to {{company_name}}! Your employee code is {{employee_code}}, and your EZER ESS account is ready.
+
+Login: {{login_link}}
+Login ID: {{login_id}}{{#if login_email}} (or your email {{login_email}}){{/if}}
+Temporary password: {{temp_password}}
+
+You will be asked to set your own password the first time you sign in. Please do not share this password; if you did not expect this email, tell HR.
+
+Welcome to the team!`,
+    },
+  }),
+  email({
     key: 'onboarding.welcome_ack', module: OB,
     label: 'Policy acknowledgement — new joiner',
     description: 'The acknowledgement document emailed with the code. This text opens it; the details table, the policies and the declaration are added by the system.',

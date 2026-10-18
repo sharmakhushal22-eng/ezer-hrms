@@ -7,7 +7,7 @@
 // — the laptop, the email, the ID card, the salary structure — then, for Payroll, the salary
 // breakdown they are approving, then the documents and every detail the candidate filled in.
 // The checklist has to be complete to approve; the form can also be returned to the candidate
-// with a remark. When the third head approves, the HR Manager assigns the role and generates
+// with a remark. When the third head approves, the HR Manager generates
 // the employee code from the onboarding card.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/ess/api'
@@ -151,7 +151,7 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
     try {
       const r = await api('/api/ess/onboarding-approvals', employeeId, { method: 'POST', body: JSON.stringify({ onboarding_id: open.item.id, team, action, remark, checklist: confirmationsOnly(team, check[team]) }) })
       if (action === 'save') { say('Checklist saved.'); setBusy(false); return }
-      if (r.all_approved) say(`Approved for ${TEAM[team]} — IT, Admin and Payroll have all approved. The HR Manager now assigns the role and generates the employee code.`, 'success')
+      if (r.all_approved) say(`Approved for ${TEAM[team]} — IT, Admin and Payroll have all approved. The HR Manager now generates the employee code (team, roles and the code).`, 'success')
       else say(action === 'approve' ? `Approved for ${TEAM[team]}.` : 'Returned to the candidate with your remark.')
       setOpen(null); load()
     } catch (e: any) { say(e.message, 'error') } finally { setBusy(false) }
@@ -185,7 +185,7 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
       <div style={section}>Onboarding approvals · {d.teams.map(t => TEAM[t]).join(' / ')}{waiting.length ? ` · ${waiting.length} waiting on you` : ''}</div>
       {waiting.map(it => <Card key={it.id} it={it} />)}
       {others.map(it => <Card key={it.id} it={it} />)}
-      <div style={{ fontSize: 12, color: TK.muted, marginTop: 6 }}>These forms are accepted by the HR Manager. Confirm your team's checklist and approve; once IT, Admin and Payroll have all approved, the HR Manager assigns the role and generates the employee code. Returning the form reopens the candidate's link for 48 hours.</div>
+      <div style={{ fontSize: 12, color: TK.muted, marginTop: 6 }}>These forms are accepted by the HR Manager. Confirm your team's checklist and approve; once IT, Admin and Payroll have all approved, the HR Manager generates the employee code. Returning the form reopens the candidate's link for 48 hours.</div>
 
       {open && item && (
         <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) setOpen(null) }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: Z.modal, overflowY: 'auto', padding: '28px 12px 40px', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>

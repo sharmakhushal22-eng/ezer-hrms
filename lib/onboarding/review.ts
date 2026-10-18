@@ -11,6 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Transporter } from 'nodemailer'
 import { approvalsOf, decideApproval } from './approvals'
+import { managersOf } from './hr-assignment'
 import { docLabel, summarise, type Corrections, type DocVerdict, type DetailFlag, type HrReview } from './corrections'
 export { DOC_LABEL, docLabel, summarise, correctionsMail, type Corrections, type DocVerdict, type DetailFlag, type HrReview } from './corrections'
 
@@ -19,7 +20,7 @@ export { DOC_LABEL, docLabel, summarise, correctionsMail, type Corrections, type
  *  from teams that are not Payroll. */
 export async function reviewPayload(sb: SupabaseClient, onboardingId: string, o: { companyId?: string | null; maskBank?: boolean } = {}) {
   let q = sb.from('onboarding_candidates')
-    .select('id, full_name, email, mobile, designation, department, employment_type, date_of_joining, offered_ctc, status, submitted_at, form_data, company_id, hr_notes, hr_review, magic_link_token, token_expires_at, esic_applicable')
+    .select('id, full_name, email, mobile, designation, department, employment_type, date_of_joining, offered_ctc, status, submitted_at, form_data, company_id, hr_notes, hr_review, magic_link_token, token_expires_at, esic_applicable, l1_manager_id, l2_manager_id, hod_id')
     .eq('id', onboardingId)
   if (o.companyId) q = q.eq('company_id', o.companyId)
   const { data: oc } = await q.maybeSingle()
@@ -33,7 +34,9 @@ export async function reviewPayload(sb: SupabaseClient, onboardingId: string, o:
   const st = { ...(fd.step_7 || {}) }
   if (o.maskBank && st.bank_account) st.bank_account = `XXXX ${String(st.bank_account).slice(-4)}`
   const { magic_link_token: _t, ...item } = oc as any
-  return { item: { ...item, form_data: { ...fd, step_7: st } }, approvals: await approvalsOf(sb, onboardingId), documents, hr_review: (oc as any).hr_review || null }
+  // The joiner's managers (Assign managers on the sheet) — the form cannot be accepted without the L1.
+  const [approvals, managers] = await Promise.all([approvalsOf(sb, onboardingId), managersOf(sb, oc as any)])
+  return { item: { ...item, form_data: { ...fd, step_7: st } }, approvals, documents, hr_review: (oc as any).hr_review || null, managers }
 }
 
 export interface ReviewInput {
@@ -50,11 +53,13 @@ export interface ReviewInput {
 /** Record the HR Manager's review and act on it: ACCEPTED is the HR Manager's team approval
  *  (the fourth one generates the code); RETURNED reopens the link and mails the candidate the
  *  list of corrections. */
-export async function applyReview(sb: SupabaseClient, r: ReviewInput): Promise<{ ok: boolean; error?: string; status?: number; all_approved?: boolean; corrections?: Corrections; mailed?: boolean }> {
-  const { data: oc } = await sb.from('onboarding_candidates').select('id, status, full_name, email, company_id').eq('id', r.onboardingId).maybeSingle()
+export async function applyReview(sb: SupabaseClient, r: ReviewInput): Promise<{ ok: boolean; error?: string; status?: number; all_approved?: boolean; corrections?: Corrections; mailed?: boolean; needs_managers?: boolean }> {
+  const { data: oc } = await sb.from('onboarding_candidates').select('id, status, full_name, email, company_id, l1_manager_id').eq('id', r.onboardingId).maybeSingle()
   if (!oc) return { ok: false, error: 'Onboarding record not found', status: 404 }
   if (oc.status === 'EMPLOYEE_CREATED') return { ok: false, error: 'The employee code is already generated.', status: 409 }
   if (!['SUBMITTED', 'HR_REVIEW', 'APPROVED'].includes(oc.status)) return { ok: false, error: 'The candidate has not submitted the form yet.', status: 409 }
+  // Accepting needs the reporting line: Assign managers (L1, L2, HOD) comes before Accept form on the sheet.
+  if (r.outcome === 'ACCEPTED' && !oc.l1_manager_id) return { ok: false, error: 'Assign the managers first — press Assign managers on the sheet and pick the L1 (and L2, HOD). Accept form opens after that.', status: 409, needs_managers: true }
 
   const rejected = r.documents.filter(d => !d.ok)
   const details = (r.details || []).filter(d => d.field && d.field.trim()).map(d => ({ section: d.section || null, field: d.field.trim(), reason: String(d.reason || '').trim() }))

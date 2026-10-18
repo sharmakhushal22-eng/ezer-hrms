@@ -18,7 +18,7 @@ export interface SyncResult {
 
 export async function onboardingToEmployee(supa: any, onboardingId: string, employeeCode: string): Promise<SyncResult> {
   const { data: oc } = await supa.from('onboarding_candidates')
-    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, l2_manager_id, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type')
+    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, l2_manager_id, hod_id, it_email, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type')
     .eq('id', onboardingId).maybeSingle()
   if (!oc) return { error: 'onboarding record not found' }
 
@@ -148,6 +148,8 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     grade:                  oc.grade || null,
     l1_manager_id:          oc.l1_manager_id || null,   // employees.l1_manager_id (there is no reporting_manager_id column)
     l2_manager_id:          oc.l2_manager_id || null,
+    hod_id:                 oc.hod_id || null,           // Assign managers on the review sheet
+    office_email:           oc.it_email || null,         // the official email IT confirmed on their checklist
     tds_regime:             oc.tds_regime || 'NEW',
     pf_wage_type:           oc.pf_wage_type || 'BASIC_DA',
     pf_applicable:          oc.pf_applicable ?? true,

@@ -9,7 +9,6 @@ import { canSeeScreen } from '@/lib/rms/resolve'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 // send-magic-link / resend-link are guarded server-side now, so the session goes along.
 import { authHeaders } from '@/lib/auth-headers'
-import RoleAssignmentModal from '@/components/onboarding/RoleAssignmentModal'
 import GenerateCodeModal from '@/components/onboarding/GenerateCodeModal'
 import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
@@ -23,9 +22,9 @@ type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
 
 interface Candidate {
   approvals?: { team: string; status: string }[]
-  /** The HR Manager's Role assignment (after IT, Admin and Payroll approve): role, permissions snapshot, L1 / L2 / HOD. Required before Generate code. */
-  role_assignment?: { role_id: string; role_code: string; role_name: string; permissions?: { module: string; access_level: string }[]; l1_name?: string | null; l2_name?: string | null; hod_name?: string | null; by_name?: string | null; at?: string } | null
-  l1_manager_id?: string | null; l2_manager_id?: string | null
+  /** The HR Manager's assignments (lib/onboarding/hr-assignment.ts): managers from the review sheet (Assign managers), then the team + roles recorded at Generate code. */
+  role_assignment?: { managers?: { l1_name?: string | null; l2_name?: string | null; hod_name?: string | null }; roles?: { role_code: string; role_name: string }[]; team?: { summary?: string; count?: number }; by_name?: string | null; at?: string } | null
+  l1_manager_id?: string | null; l2_manager_id?: string | null; hod_id?: string | null
   /** The HR Manager's last review (Review form on the card): ACCEPTED / RETURNED / RESUBMITTED with the rejected documents and flagged details. */
   hr_review?: { outcome: string; by_name?: string | null; at?: string; documents?: { doc_code: string; label: string; reason: string }[]; details?: { field: string; reason: string }[]; note?: string | null } | null
   id: string; full_name: string; designation: string; department: string
@@ -120,10 +119,7 @@ export default function OnboardingDashboard() {
   const [searchQ,      setSearchQ]    = useState('')
   // Modal state
   const [linkModal,    setLinkModal]  = useState(false)
-  const [codeModal,    setCodeModal]  = useState<Candidate|null>(null)
-  const [genCode,      setGenCode]    = useState('')
-  const [codeLoading,  setCodeLoading] = useState(false)
-  const [codeType,     setCodeType]   = useState('')
+  const [codeModal,    setCodeModal]  = useState<Candidate|null>(null)   // Generate code — team, roles, code (GenerateCodeModal)
   const [saving,       setSaving]     = useState(false)
   const [dateModal,    setDateModal]  = useState<Candidate|null>(null)
   const [dateVal,      setDateVal]    = useState('')
@@ -131,7 +127,6 @@ export default function OnboardingDashboard() {
   const [editMobile,   setEditMobile] = useState('')
   const [resendingId,  setResendingId] = useState('')
   const [reviewing,    setReviewing]  = useState<{ id: string; readOnly: boolean } | null>(null)
-  const [assigning,    setAssigning]  = useState<Candidate|null>(null)
   const [selIds,       setSelIds]     = useState<Set<string>>(new Set())
   // New link form
   const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
@@ -414,50 +409,9 @@ export default function OnboardingDashboard() {
     setResendingId('')
   }
 
-  // ── Open code modal + auto-suggest the next type-wise code ────
-  const openCodeModal = async (candidate: Candidate) => {
-    setCodeModal(candidate); setGenCode(''); setCodeType(''); setCodeLoading(true)
-    try {
-      const res = await fetch(`/api/onboarding/generate-code?onboarding_id=${candidate.id}`)
-      if (res.ok) {
-        const data = await res.json()
-        setGenCode(data.suggested || '')
-        setCodeType(data.employment_type || '')
-      }
-    } catch { /* silent — HR can still type manually */ }
-    setCodeLoading(false)
-  }
-
-  // ── Generate employee code ────────────────────────────────────
-  const generateCode = async () => {
-    if (!codeModal || !genCode.trim()) { showToast('Code required','err'); return }
-    setSaving(true)
-    try {
-      const post = (force: boolean) => fetch('/api/onboarding/generate-code', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ onboarding_id: codeModal.id, employee_code: genCode.trim(), force }),
-      })
-      let res = await post(false)
-      let data = await res.json()
-      // The other teams have not all approved yet (ESS → Tasks & Approvals). HR may still go ahead.
-      if (res.status === 409 && Array.isArray(data.pending) && data.pending.length) {
-        if (!window.confirm(`Still waiting on ${data.pending.join(', ')} approval${data.pending.length > 1 ? 's' : ''}.\n\nGenerate the employee code anyway?`)) { setSaving(false); return }
-        res = await post(true); data = await res.json()
-      }
-      if (!res.ok) throw new Error(data.error||'Failed')
-      const code = data.employee_code || genCode
-      // Surface the master-sync result — earlier this was hidden, so a failed
-      // employees insert looked like success while the master stayed empty.
-      if (data.employee_synced === false) {
-        showToast(`Code ${code} generated, but Employee Master sync FAILED: ${data.sync_error || 'unknown error'}`, 'err')
-      } else {
-        showToast(`✓ ${code} generated — added to Employee Master + ESS unlocked.`)
-      }
-      setCodeModal(null); setGenCode('')
-      load()
-    } catch(e:any) { showToast(e.message,'err') }
-    setSaving(false)
-  }
+  // ── Generate code: the modal (components/onboarding/GenerateCodeModal) does the work —
+  //    the team, the roles, the code — and reports back through onDone. ──
+  const openCodeModal = (candidate: Candidate) => setCodeModal(candidate)
 
   // ── Issue asset ───────────────────────────────────────────────
   const issueAsset = async (candidateId: string, assetType: string) => {
@@ -511,9 +465,7 @@ export default function OnboardingDashboard() {
       actions.push({priority:'MEDIUM',label:`Accepted by HR — with ${waiting.join(', ') || 'the teams'} for their checklist (ESS → HRIS → Tasks & Approvals)`,candidate:c.full_name,action:'approvals',cid:c.id})
     }
     if (c.status==='APPROVED') {
-      actions.push(c.role_assignment
-        ? {priority:'HIGH',label:`Role assigned (${c.role_assignment.role_name}) — generate the employee code`,candidate:c.full_name,action:'generate',cid:c.id}
-        : {priority:'HIGH',label:'IT, Admin and Payroll approved — assign the role (L1, L2, ESS role), then generate the code',candidate:c.full_name,action:'assign',cid:c.id})
+      actions.push({priority:'HIGH',label:'IT, Admin and Payroll approved — generate the employee code (their team, ESS roles and the code; the login is mailed to them)',candidate:c.full_name,action:'generate',cid:c.id})
     }
     if (c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED') {
       const n = (c.hr_review.documents||[]).length, m = (c.hr_review.details||[]).length
@@ -634,12 +586,7 @@ export default function OnboardingDashboard() {
                         Review form
                       </button>
                     )}
-                    {c.status==='APPROVED' && !c.role_assignment && (
-                      <button onClick={()=>setAssigning(c)} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontFamily:'inherit'}}>
-                        Role assignment
-                      </button>
-                    )}
-                    {c.status==='APPROVED' && c.role_assignment && (
+                    {c.status==='APPROVED' && (
                       <button onClick={()=>{openCodeModal(c)}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontFamily:'inherit'}}>
                         Generate code
                       </button>
@@ -801,18 +748,13 @@ export default function OnboardingDashboard() {
                             <i className="ti ti-checklist" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Review form
                           </button>
                         )}
-                        {c.status==='APPROVED' && !c.role_assignment && (
-                          <button onClick={()=>setAssigning(c)} title="IT, Admin and Payroll have approved — assign the L1, L2 and the ESS role" style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
-                            <i className="ti ti-user-cog" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Role assignment
-                          </button>
-                        )}
-                        {c.status==='APPROVED' && c.role_assignment && (
-                          <button onClick={()=>{openCodeModal(c)}} title={`Role ${c.role_assignment.role_name} · L1 ${c.role_assignment.l1_name||'—'}`} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                        {c.status==='APPROVED' && (
+                          <button onClick={()=>{openCodeModal(c)}} title={`IT, Admin and Payroll have approved — their team, ESS roles and the employee code${c.role_assignment?.managers?.l1_name ? ` · reports to ${c.role_assignment.managers.l1_name}` : ''}`} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
                             <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Generate code
                           </button>
                         )}
-                        {c.status==='APPROVED' && c.role_assignment && (
-                          <button onClick={()=>setAssigning(c)} title="Change the role assignment" style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>Role ✓ {c.role_assignment.role_name}</button>
+                        {c.status==='APPROVED' && c.role_assignment?.managers?.l1_name && (
+                          <span title="Assigned on the review sheet (View form → Change)" style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>L1 ✓ {c.role_assignment.managers.l1_name}</span>
                         )}
                         {(c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
                           <button onClick={()=>setReviewing({ id: c.id, readOnly: true })} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>View form</button>
@@ -896,11 +838,6 @@ export default function OnboardingDashboard() {
                         {cand?.date_of_joining && <span style={{marginLeft:8}}>· DOJ: {fmt(cand.date_of_joining)}</span>}
                       </div>
                     </div>
-                    {a.action==='assign' && cand && (
-                      <button onClick={()=>setAssigning(cand)} style={{padding:'5px 12px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
-                        <i className="ti ti-user-cog" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Role assignment
-                      </button>
-                    )}
                     {a.action==='generate' && cand && (
                       <button onClick={()=>{openCodeModal(cand)}} style={{padding:'5px 12px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
                         <i className="ti ti-bolt" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Generate code
@@ -962,10 +899,7 @@ export default function OnboardingDashboard() {
                     {c.status==='SUBMITTED' && (
                       <button onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={{padding:'5px 10px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontFamily:'inherit'}}>Review form</button>
                     )}
-                    {c.status==='APPROVED' && !c.role_assignment && (
-                      <button onClick={()=>setAssigning(c)} style={{padding:'5px 10px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontFamily:'inherit'}}>Role assignment</button>
-                    )}
-                    {c.status==='APPROVED' && c.role_assignment && (
+                    {c.status==='APPROVED' && (
                       <button onClick={()=>{openCodeModal(c)}} style={{padding:'5px 10px',borderRadius:'10px',border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontSize:10,fontFamily:'inherit'}}>Generate code</button>
                     )}
                   </div>
@@ -1265,21 +1199,10 @@ export default function OnboardingDashboard() {
         </div>
       )}
 
-      {/* ── GENERATE CODE (after the three heads approve and the role is assigned) ── */}
+      {/* ── GENERATE CODE (after the three heads approve): the team, the ESS roles, the code ── */}
       {codeModal && (
-        <GenerateCodeModal
-          candidate={codeModal}
-          genCode={genCode} setGenCode={setGenCode}
-          codeType={codeType} codeLoading={codeLoading} saving={saving}
-          onGenerate={generateCode}
+        <GenerateCodeModal onboardingId={codeModal.id} candidate={codeModal}
           onClose={() => setCodeModal(null)}
-        />
-      )}
-
-      {/* ── ROLE ASSIGNMENT (L1, L2, HOD and the ESS role) ── */}
-      {assigning && (
-        <RoleAssignmentModal onboardingId={assigning.id} name={assigning.full_name}
-          onClose={()=>setAssigning(null)}
           onDone={(m,t)=>{ showToast(m,t); load() }} />
       )}
 

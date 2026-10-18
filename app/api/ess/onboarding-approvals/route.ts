@@ -11,7 +11,7 @@
 //
 // ESS → HRIS → Tasks & Approvals → Onboarding approvals. The HR Manager accepts the form from
 // the onboarding card (Review form), not here. When the third head approves, the HR Manager
-// assigns the role and generates the code (lib/onboarding/approvals.ts).
+// generates the code — team, roles, code (lib/onboarding/approvals.ts).
 
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
