@@ -20,14 +20,8 @@ export async function GET(req: NextRequest) {
     //
     // Falls back to the old test while migration 161 is unapplied: te_on_desk
     // does not exist yet then, and the desk must not go dark in between.
-    const actorId = (await t.actor()).employeeId
-    let onDesk = false
-    try {
-      onDesk = actorId ? await t.db().rpc<boolean>('te_on_desk', { p_kind: 'travel', p_actor: actorId }) === true : false
-    } catch {
-      onDesk = await t.holds('Travel Claims', 'EDIT')
-    }
-    if (!onDesk && !(await t.holds('Travel Claims', 'FULL'))) {
+    // The same rule the Finance routes use, in the same one place.
+    if (!(await t.onDesk('travel')) && !(await t.holds('Travel Claims', 'FULL'))) {
       await t.permit('Travel Claims', 'EDIT')
     }
     const company = await t.company()

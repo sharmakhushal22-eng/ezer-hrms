@@ -30,7 +30,12 @@ const asDate = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : n
 
 export async function GET(req: NextRequest) {
   return teRoute(req, async t => {
-    if (!(await t.holds('Travel Claims', 'FULL')) && !(await t.holds('Finance', 'VIEW'))) {
+    // Being ON the Finance desk counts as the Finance access this asks
+    // for. The role permission and desk membership had drifted apart: the
+    // Finance Controller, who holds no dashboard role at all, could open
+    // the Finance desk and was refused the reports that say they are open
+    // to Finance. Same population, same intent, so the same gate.
+    if (!(await t.holds('Travel Claims', 'FULL')) && !(await t.holds('Finance', 'VIEW')) && !(await t.onDesk('finance'))) {
       throw new TeHttpError(403, 'TE_FORBIDDEN',
         'The approver report needs full access to Travel Claims, or view access to Finance.')
     }
