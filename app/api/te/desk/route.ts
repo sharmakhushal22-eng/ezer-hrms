@@ -26,11 +26,18 @@ export async function GET(req: NextRequest) {
     }
     const company = await t.company()
     const sb = t.sb()
+    // NOT YOUR OWN VEHICLE. te_vehicle_verify refuses the actor's own row —
+    // "Nobody verifies their own vehicle" — so a desk member who declares a
+    // car used to see it in their own queue under a Confirm button that could
+    // only ever fail. A work list should hold work the reader can do; somebody
+    // else on the desk still sees it.
+    const employeeId = await t.employee()
     const [book, veh, done, stays] = await Promise.all([
       sb.from('v_te_to_book').select('*').eq('company_id', company).order('on_date', { ascending: true }).limit(500),
       sb.from('te_employee_vehicles')
         .select('id, employee_id, reg_no, vehicle_type_code, declared_type_code, ownership, rc_file_url, created_at')
-        .eq('company_id', company).eq('is_active', true).eq('is_verified', false).order('created_at', { ascending: true }).limit(500),
+        .eq('company_id', company).eq('is_active', true).eq('is_verified', false)
+        .neq('employee_id', employeeId).order('created_at', { ascending: true }).limit(500),
       // Only what is still standing: a cancelled booking is history, and the
       // only thing left to do with a live one is cancel it.
       sb.from('te_bookings')
