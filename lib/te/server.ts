@@ -162,6 +162,26 @@ export interface TeCall {
   /** 403 unless the caller holds the module at the level. */
   permit(module: Module, level?: AccessLevel): Promise<void>
   /**
+   * true when the caller sits on a desk (migration 161's finance_team /
+   * travel_desk), resolved once per request. Never throws: a project without
+   * 161 applied has no te_on_desk, and that must read as "not on the desk"
+   * rather than breaking the route.
+   */
+  onDesk(kind: 'finance' | 'travel'): Promise<boolean>
+  /**
+   * 403 unless the caller is on the desk OR holds the module by role.
+   *
+   * WHY BOTH. Desk membership is the real rule and the SQL enforces it — a
+   * payout refuses anyone without a finance_team row that may disburse. The
+   * route permission is the older, coarser one, and on this data the two had
+   * drifted apart in both directions: an HR Head with the Finance role and no
+   * finance_team row could read the whole company's money, while the Finance
+   * Controller herself, can_disburse and all, was refused at the door because
+   * nobody had granted her the dashboard role. Accepting either keeps the
+   * route from being stricter than the database it is guarding.
+   */
+  permitDesk(kind: 'finance' | 'travel', module: Module, level?: AccessLevel): Promise<void>
+  /**
    * The company this request is about. An employee's own company; another one
    * (?company_id=) only for a caller whose roles reach across companies. The
    * legacy shared login has no company of its own and must name one.
@@ -178,6 +198,7 @@ function makeCall(req: NextRequest): TeCall {
   let grantP: Promise<Grant> | null = null
   let companyP: Promise<string> | null = null
   let bodyP: Promise<unknown> | null = null
+  const deskP = new Map<string, Promise<boolean>>()
 
   const t: TeCall = {
     req,
@@ -205,6 +226,27 @@ function makeCall(req: NextRequest): TeCall {
       if (!(await t.holds(module, level))) {
         throw new TeHttpError(403, 'TE_FORBIDDEN', `${module} (${level.toLowerCase()} access) is not part of your role.`)
       }
+    },
+    async onDesk(kind) {
+      const cached = deskP.get(kind)
+      if (cached) return cached
+      const p = (async () => {
+        const id = (await t.actor()).employeeId
+        if (!id) return false
+        try {
+          return await teDb().rpc<boolean>('te_on_desk', { p_kind: kind, p_actor: id }) === true
+        } catch {
+          return false                                  // migration 161 not applied
+        }
+      })()
+      deskP.set(kind, p)
+      return p
+    },
+    async permitDesk(kind, module, level = 'VIEW') {
+      if (await t.onDesk(kind)) return
+      if (await t.holds(module, level)) return
+      throw new TeHttpError(403, 'TE_FORBIDDEN',
+        `This needs a place on the ${kind} desk, or ${module} (${level.toLowerCase()}) access.`)
     },
     company: () => (companyP ??= resolveCompany(t)),
     async body<T extends object>() {

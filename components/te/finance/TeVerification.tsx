@@ -38,7 +38,12 @@ export default function TeVerification({ onToast }: { onToast: (message: string)
 
   useEffect(() => {
     let current = true
-    te.finance.claims({ status: showing })
+    // ON_HOLD belongs in this queue, not outside it. te__enter_verification
+    // puts a High-risk or audit-sampled claim on hold FOR Finance to look at,
+    // and asking only for IN_VERIFICATION hid exactly those: the desk said
+    // "Nothing to verify" while the claimant's own screen said it was with
+    // Finance, and the only way back to it was the approvals list.
+    te.finance.claims({ status: showing === 'IN_VERIFICATION' ? 'IN_VERIFICATION,ON_HOLD' : showing })
       .then(p => { if (current) { setRows(p.rows ?? []); setError('') } })
       .catch(e => { if (current) { setRows([]); setError(errorText(e)) } })
     return () => { current = false }
@@ -69,7 +74,7 @@ export default function TeVerification({ onToast }: { onToast: (message: string)
   const list = rows ?? []
   // What a desk actually triages by: the risky and the already-flagged first,
   // the routine rest after. Oldest-first would bury the ones that matter.
-  const attention = list.filter(r => r.risk_band === 'High' || r.is_exception || r.open_flags > 0)
+  const attention = list.filter(r => r.status === 'ON_HOLD' || r.risk_band === 'High' || r.is_exception || r.open_flags > 0)
   const routine = list.filter(r => !attention.includes(r))
 
   return (
@@ -151,6 +156,8 @@ export default function TeVerification({ onToast }: { onToast: (message: string)
                     {[r.trip_name || 'Other expenses', r.grade, r.department, r.period_label].filter(Boolean).join(' · ')}
                   </div>
                   <div className="row tight">
+                    {/* Why it is held, so the desk knows it is not just waiting. */}
+                    {r.status === 'ON_HOLD' ? <span className="chip t-crit">On hold</span> : null}
                     <span className={`chip ${BAND_TONE[r.risk_band] ?? 'plain'}`}>{r.risk_band} risk</span>
                     {r.open_flags ? <span className="chip t-warn">{r.open_flags} flag{r.open_flags === 1 ? '' : 's'}</span> : null}
                     {r.is_exception ? <span className="chip t-crit">Exception</span> : null}
@@ -173,7 +180,7 @@ export default function TeVerification({ onToast }: { onToast: (message: string)
       {/* The Rejected list carries its own empty state, so this one is only
           for the verification queue. */}
       {showing === 'IN_VERIFICATION' && rows !== null && !list.length ? (
-        <div className="card"><div className="empty"><b>Nothing to verify</b>Claims appear here once a manager has approved them.</div></div>
+        <div className="card"><div className="empty"><b>Nothing to verify</b>Claims appear here once a manager has approved them, including the ones held for audit.</div></div>
       ) : null}
     </div>
   )

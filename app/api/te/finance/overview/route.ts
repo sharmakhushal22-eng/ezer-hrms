@@ -22,28 +22,25 @@ export const runtime = 'nodejs'
 const VIEWS = ['claims', 'payable', 'advances', 'batches', 'adjustments', 'periods', 'summary'] as const
 /** A status or stage is letters and underscores; anything else is not a value we store. */
 const word = (v: string | null): string | null => (v && /^[A-Za-z_]{1,40}$/.test(v) ? v : null)
+/** Several of those, comma separated: the verification queue wants the claims
+ *  Finance is holding as well as the ones merely waiting. Anything that is not
+ *  a plain word is dropped rather than passed to the filter. */
+const words = (v: string | null): string[] =>
+  (v ?? '').split(',').map(s => s.trim()).filter(s => /^[A-Za-z_]{1,40}$/.test(s)).slice(0, 10)
 const day = (v: string | null): string | null => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null)
 
 export async function GET(req: NextRequest) {
   return teRoute(req, async t => {
     // WHO MAY OPEN THE FINANCE DESK. Being on it, or holding full admin access
-    // to the module. It used to be the 'Finance' VIEW role permission alone,
-    // which in this data lets an HR Head with no finance_team row at all read
-    // the whole company's claims, advances and payouts — the Finance desk was
-    // meant to be visible to Finance people.
+    // to the module. Not the 'Finance' VIEW role permission alone, which in
+    // this data lets an HR Head with no finance_team row at all read the whole
+    // company's claims, advances and payouts.
     //
-    // Falls back to the permission alone while migration 161 is unapplied:
-    // te_on_desk does not exist then, and the desk must not go dark.
-    const actorId = (await t.actor()).employeeId
-    let onDesk = false
-    try {
-      onDesk = actorId ? await t.db().rpc<boolean>('te_on_desk', { p_kind: 'finance', p_actor: actorId }) === true : false
-    } catch {
-      onDesk = await t.holds('Finance', 'VIEW')
-    }
-    if (!onDesk && !(await t.holds('Travel Claims', 'FULL'))) {
-      // Still 403 through permit(), so the message and the code stay the ones
-      // every other Finance route gives.
+    // This check used to live here, inline, and nowhere else — so the desk was
+    // readable by its own members and actionable by none of them: every write
+    // route still asked for the role permission. t.permitDesk is that rule in
+    // one place, and all of them use it now.
+    if (!(await t.onDesk('finance')) && !(await t.holds('Travel Claims', 'FULL'))) {
       await t.permit('Finance', 'FULL')
     }
     const company = await t.company()
@@ -137,7 +134,11 @@ export async function GET(req: NextRequest) {
     let total = 0
     if (view === 'claims') {
       let r = sb.from('v_te_claim_summary').select('*', { count: 'exact' }).eq('company_id', company)
-      if (status) r = r.eq('status', status)
+      // One status, or several. `in` with a single value is the same query the
+      // `eq` was, so the old callers are unaffected.
+      const statuses = words(q.get('status'))
+      if (statuses.length > 1) r = r.in('status', statuses)
+      else if (status) r = r.eq('status', status)
       const stage = word(q.get('stage'))
       if (stage) r = r.eq('stage', stage)
       if (employee) r = r.eq('employee_id', employee)

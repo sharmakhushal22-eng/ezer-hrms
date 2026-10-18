@@ -13,7 +13,7 @@ export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
   return teRoute(req, async t => {
-    await t.permit('Finance', 'VIEW')
+    await t.permitDesk('finance', 'Finance', 'VIEW')
     const company = await t.company()
     const page = t.page()
     const status = req.nextUrl.searchParams.get('status')
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       }
       claimIds = body.claim_ids as string[]
     }
-    await t.permit('Finance', 'VIEW')
+    await t.permitDesk('finance', 'Finance', 'VIEW')
     return payoutCreate(await t.ctx(), await t.company(), route, claimIds)
   })
 }

@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (body.amount !== undefined && !(typeof body.amount === 'number' && Number.isFinite(body.amount) && body.amount >= 0)) {
       throw new TeHttpError(400, 'TE_BAD_REQUEST', 'amount must be a number.')
     }
-    await t.permit('Finance', 'VIEW')
+    await t.permitDesk('finance', 'Finance', 'VIEW')
     const o: { amount?: number; ref?: string } = {}
     if (body.amount !== undefined) o.amount = body.amount
     const ref = optText(body.ref)

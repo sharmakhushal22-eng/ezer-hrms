@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const m = /^(\d{4})-(0[1-9]|1[0-2])(-\d{2})?$/.exec(String(body.month ?? ''))
     if (!m) throw new TeHttpError(400, 'TE_BAD_REQUEST', 'month must look like 2026-11.')
     const action = needOneOf(body.action, ['close', 'reopen', 'roll', 'lock'] as const, 'action')
-    await t.permit('Finance', 'VIEW')
+    await t.permitDesk('finance', 'Finance', 'VIEW')
     return periodAct(await t.ctx(), await t.company(), `${m[1]}-${m[2]}-01`, action, optText(body.reason))
   })
 }
