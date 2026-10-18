@@ -5,7 +5,7 @@
 // The only thing this screen works out for itself is whether a typed employee
 // code is somebody: that is a lookup in the snapshot, not a rule. Whether the
 // roster is acceptable is the server's answer, and arrives as an issue on `pax`.
-import type { Snapshot, TripIssue, TripScope } from '@/lib/te/types'
+import type { Snapshot, TripIssue, TripPreview, TripScope } from '@/lib/te/types'
 import { errorFor, MAX_NAME, MAX_PEOPLE, PURPOSES, type PlannerDraft } from '@/lib/te/trip-draft'
 import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
@@ -22,21 +22,32 @@ const NAME_HINT: Record<string, string> = {
   international: 'Like Dubai distributor summit',
 }
 
-export default function TePlanTrip({ snap, draft, issues, edit, setScope }: {
+export default function TePlanTrip({ snap, draft, issues, edit, setScope, preview }: {
   snap: Snapshot
   draft: PlannerDraft
   issues: TripIssue[]
   edit: (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
   /** Changing the kind moves the dates with it, so the planner owns it. */
   setScope: (s: TripScope) => void
+  /** Carries who the co-traveller codes resolved to; see lookup below. */
+  preview: TripPreview | null
 }) {
   const k = KIND[draft.scope]
   const tried = draft.tried
   const err = (key: string) => errorFor(issues, key, tried)
 
-  /** Is this employee code somebody? Read from the snapshot the server sent. */
+  /** Is this employee code somebody?
+   *
+   *  The preview first. GET /api/te/me asks the snapshot to resolve no codes
+   *  at all, so snap.codes is empty for anybody not already on one of your
+   *  trips — and the field told everyone "Not found in EZER" about colleagues
+   *  who were found. The preview resolves exactly the codes in this draft,
+   *  because the server needs them to work out who may approve it. */
   const lookup = (code: string) => {
-    const id = snap.codes[code.trim().toUpperCase()]
+    const up = code.trim().toUpperCase()
+    const said = preview?.people?.find(q => (q.code || '').trim().toUpperCase() === up)
+    if (said) return said.id ? { name: said.name, grade: said.grade } : null
+    const id = snap.codes[up]
     return id ? snap.emp[id] ?? null : null
   }
 

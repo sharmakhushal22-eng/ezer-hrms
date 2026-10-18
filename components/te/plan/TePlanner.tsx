@@ -312,7 +312,7 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
       <div ref={bodyRef}>
         {step === 1 ? (
           <TePlanTrip
-            snap={snap} draft={draft} issues={issues} edit={edit}
+            snap={snap} draft={draft} issues={issues} edit={edit} preview={preview}
             setScope={s => setDraft(d => setScope(d, s, ctx, lastWorkday(snap.today)))}
           />
         ) : null}

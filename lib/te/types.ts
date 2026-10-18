@@ -825,6 +825,11 @@ export interface TripPreview {
   needsApproval: boolean
   chain: TeChainPreview[]
   entitlements: { tier: string; grade: string; hotel: number; meals: number; conv: number; air: string; train: string } | null
+  /** Who the co-traveller codes turned out to be. The server resolves these
+   *  to answer the preview anyway; the browser's own snapshot carries an
+   *  empty codes map, so this is the only place it can learn. `id` is null
+   *  when the code matches nobody in the company. */
+  people?: { code: string; id: Uuid | null; name: string; grade: string }[]
 }
 
 /** A GPS fix from the phone. */
