@@ -3306,7 +3306,7 @@ const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
  */
 const NAV_GROUPS: { label: string | null; keys: string[] }[] = [
   { label: null,              keys: ['home', 'inbox'] },
-  { label: 'Time & pay',      keys: ['attendance', 'leave', 'payroll'] },
+  { label: 'Time & pay',      keys: ['attendance', 'leave', 'payroll', 'expenses'] },
   { label: 'You & your team', keys: ['profile', 'team', 'orgchart', 'performance'] },
   { label: 'Workplace',       keys: ['hris', 'company', 'reports'] },
   { label: 'Community',       keys: ['social', 'rnr', 'funzone'] },
