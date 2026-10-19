@@ -25,7 +25,7 @@ export function fmtDate(d: Date, df: DateFormat): string {
   }
 }
 /** Dates inside cards never use the 'long' weekday form — it is too wide. */
-export const fmtDateCompact = (iso: string, df: DateFormat) => fmtDate(new Date(iso + (iso.length === 10 ? 'T00:00:00' : '')), df === 'long' ? 'short' : df);
+export const fmtDateCompact = (iso: string | null | undefined, df: DateFormat) => iso ? fmtDate(new Date(iso + (iso.length === 10 ? 'T00:00:00' : '')), df === 'long' ? 'short' : df) : '-';
 export const dayMonth = (iso: string) => { const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MON[d.getMonth()]}`; };
 export const weekday = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short' });
 
