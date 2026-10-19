@@ -357,14 +357,27 @@ export default function TeHome({ initialClaimId, onExit }: {
                 </div>
               </section>
 
-              {/* Unfinished work comes before the "start something new" tiles:
-                  somebody who left a plan half-done is usually here to finish
-                  it, not to begin another. Renders nothing when empty. */}
+              <div className="kinds" role="list">
+                {KINDS.map(k => (
+                  <button key={k.id} type="button" role="listitem" className={`kind k-${k.id}`} onClick={() => setSheet(k.id === 'other' ? { name: 'expense' } : { name: 'kind', kind: k.id, way: null })}>
+                    <span className="ki"><TeIcon name={k.id} size="lg" /></span>
+                    {live[k.id] ? <span className="kb live"><i />On the way</span> : todo[k.id] ? <span className="kb">{todo[k.id]}</span> : null}
+                    <span className="kt"><b>{k.title}</b><small>{k.text}</small></span>
+                    <span className="kf"><span className="kg">{k.foot}</span><TeIcon name="go" size="sm" /></span>
+                  </button>
+                ))}
+              </div>
+
+              {/* UNDER THE TILES, not above them. A draft is a trip somebody
+                  has already started, so it belongs with "start a trip" rather
+                  than in front of it — the tiles are the first thing somebody
+                  arriving to plan something new is looking for. Renders
+                  nothing at all when there are no drafts. */}
               <TeDrafts
+                kind="trip"
+                title="Trip drafts"
                 reloadKey={draftTick}
                 onResume={d => {
-                  if (d.kind === 'expense') { setSheet({ name: 'expense', resuming: d }); return }
-                  if (d.kind === 'claim') { if (d.claim_id) setView({ name: 'claim', id: d.claim_id, resuming: d }); return }
                   // The scope and "already travelled" live in the draft body,
                   // which is the planner's own form state.
                   const body = d.body as { scope?: TripScope; origin?: string }
@@ -376,17 +389,6 @@ export default function TeHome({ initialClaimId, onExit }: {
                   })
                 }}
               />
-
-              <div className="kinds" role="list">
-                {KINDS.map(k => (
-                  <button key={k.id} type="button" role="listitem" className={`kind k-${k.id}`} onClick={() => setSheet(k.id === 'other' ? { name: 'expense' } : { name: 'kind', kind: k.id, way: null })}>
-                    <span className="ki"><TeIcon name={k.id} size="lg" /></span>
-                    {live[k.id] ? <span className="kb live"><i />On the way</span> : todo[k.id] ? <span className="kb">{todo[k.id]}</span> : null}
-                    <span className="kt"><b>{k.title}</b><small>{k.text}</small></span>
-                    <span className="kf"><span className="kg">{k.foot}</span><TeIcon name="go" size="sm" /></span>
-                  </button>
-                ))}
-              </div>
 
               {unclaimed.length || sentBack.length || queue.length ? (
                 <div className="card pad0 needs">
@@ -422,6 +424,13 @@ export default function TeHome({ initialClaimId, onExit }: {
           ) : null}
 
           {view.name === 'expenses' ? (
+            <>
+            <TeDrafts
+              kind="expense"
+              title="Expense drafts"
+              reloadKey={draftTick}
+              onResume={d => setSheet({ name: 'expense', resuming: d })}
+            />
             <TeOtherExpenses
               snap={snap}
               onAdd={() => setSheet({ name: 'expense' })}
@@ -431,6 +440,7 @@ export default function TeHome({ initialClaimId, onExit }: {
               // trip, so the card that lists them goes to it.
               onOpenTrip={openTrip}
             />
+            </>
           ) : null}
           {view.name === 'claims' ? <TeClaimList snap={snap} onOpen={id => setView({ name: 'claim', id })} /> : null}
           {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}

@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import { errorText } from '@/lib/te/format'
 import { savedAgo } from '@/lib/te/autosave'
-import type { TeDraft } from '@/lib/te/types'
+import type { TeDraft, TeDraftKind } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 
 /** What kind of thing this draft is, in the words the rest of the screen uses. */
@@ -30,7 +30,13 @@ function kindLabel(d: TeDraft): string {
   return d.kind === 'expense' ? 'Expense' : 'Reply'
 }
 
-export default function TeDrafts({ reloadKey, onResume }: {
+export default function TeDrafts({ kind, title, reloadKey, onResume }: {
+  /** Which drafts this card is for. The card is named after them, so it has to
+   *  be told: a list headed "Trip drafts" that quietly also holds a half-typed
+   *  expense is a label that lies. Left out, it shows everything. */
+  kind?: TeDraftKind
+  /** What to call the card. */
+  title?: string
   /** Bump to refetch — a draft saved elsewhere on this screen. */
   reloadKey?: number
   onResume: (d: TeDraft) => void
@@ -43,13 +49,13 @@ export default function TeDrafts({ reloadKey, onResume }: {
 
   useEffect(() => {
     let current = true
-    te.drafts.list()
+    te.drafts.list(kind)
       .then(r => { if (current) { setDrafts(r.drafts ?? []); setError('') } })
       // Unfinished work that will not list is worth saying out loud: somebody
       // may be looking for a plan they know they left here.
       .catch(e => { if (current) setError(errorText(e)) })
     return () => { current = false }
-  }, [reloadKey, tick])
+  }, [reloadKey, tick, kind])
 
   const discard = useCallback(async (d: TeDraft) => {
     setBusy(d.id)
@@ -69,12 +75,12 @@ export default function TeDrafts({ reloadKey, onResume }: {
   return (
     <div className="card">
       <div className="ch">
-        <h3><TeIcon name="file" size="sm" />Unfinished</h3>
+        <h3><TeIcon name="file" size="sm" />{title ?? 'Drafts'}</h3>
         <span className="small muted">Only you can see these</span>
       </div>
       {error ? <p className="small warn">{error}</p> : null}
       {drafts.map(d => (
-        <div key={d.id} className="draftrow">
+        <div key={d.id} className="draftrow" data-kind={d.kind}>
           <span className="ico"><TeIcon name={d.kind === 'trip' ? 'route' : d.kind === 'expense' ? 'receipt' : 'claims'} /></span>
           <div className="grow">
             {d.title

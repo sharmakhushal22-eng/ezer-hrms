@@ -1030,12 +1030,81 @@
 .te .savedline span{display:inline-flex;align-items:center;gap:5px}
 .te .savedline .warn{color:var(--ez-warning)}
 
-/* One unfinished trip or expense in the Drafts list. Dashed, because it is
-   not a record yet: nothing here has a number, and nobody else can see it. */
-.te .draftrow{border:1px dashed var(--ez-line-strong);border-radius:10px;background:var(--ez-surface);padding:10px 12px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
+/* One unfinished trip in the Trip drafts list.
+   -------------------------------------------------------------------------
+   STILL DASHED, because it is still not a record: nothing here has a number
+   and nobody else can see it. The dash is the one thing that says "not real
+   yet", so the depth below is layered on top of it rather than replacing it.
+
+   THE DEPTH IS TWO SHADOWS, not one. A single soft shadow reads as blur; a
+   tight contact shadow under a wider ambient one reads as a card sitting
+   above the page, which is the whole point of lifting it on hover. The same
+   pair of rgba values the cards in this file already use, so the drafts do
+   not look like they came from another product. */
+.te .draftrow{
+  position:relative;
+  border:1px dashed var(--ez-line-strong);
+  border-radius:14px;
+  background:linear-gradient(180deg,var(--ez-surface),var(--ez-sunken));
+  padding:12px 14px;
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:10px;
+  box-shadow:0 1px 2px rgba(17,24,39,.05), 0 6px 14px -8px rgba(17,24,39,.18);
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  will-change:transform;
+}
+/* A quiet band of the brand colour down the left edge, so a stack of rows
+   reads as a list of one kind of thing rather than four loose boxes. */
+.te .draftrow:before{
+  content:"";position:absolute;left:0;top:12px;bottom:12px;width:4px;
+  border-radius:0 4px 4px 0;background:var(--ez-brand);opacity:.55;
+  transition:opacity .18s ease, top .18s ease, bottom .18s ease;
+}
+.te .draftrow:hover{
+  transform:translateY(-2px);
+  border-color:var(--ez-brand-edge);
+  box-shadow:0 2px 4px rgba(17,24,39,.06), 0 14px 28px -12px rgba(17,24,39,.28);
+}
+/* The band grows to the full height on hover: the row is "selected" by the
+   pointer without anything moving under the cursor. */
+.te .draftrow:hover:before{opacity:1;top:6px;bottom:6px}
+/* Pressed, it settles back onto the page. Without this a card that lifts on
+   hover feels unresponsive to the click that follows. */
+.te .draftrow:active{transform:translateY(0);box-shadow:0 1px 2px rgba(17,24,39,.05)}
 .te .draftrow .grow{min-width:0}
 .te .draftrow .dt{font-weight:600;color:var(--ez-ink);overflow-wrap:anywhere}
 .te .draftrow .dt.none{font-weight:500;color:var(--ez-muted);font-style:italic}
+/* The icon sits in a raised well of its own, which is what stops the row
+   reading as flat text with a picture next to it. */
+.te .draftrow .ico{
+  flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:11px;
+  background:var(--ez-surface);border:1px solid var(--ez-line);
+  box-shadow:inset 0 1px 0 var(--ez-surface), 0 1px 2px rgba(17,24,39,.06);
+  color:var(--ez-brand);
+  transition:transform .18s ease, border-color .18s ease;
+}
+.te .draftrow:hover .ico{transform:scale(1.06);border-color:var(--ez-brand-edge)}
+
+/* THEY ARRIVE RATHER THAN APPEAR. The list is fetched after the screen paints,
+   so without this the rows pop in fully formed and the eye reads it as a
+   layout shift. A short rise, staggered down the stack, reads as the list
+   settling into place. Capped at six: past that the last row would be waiting
+   on an animation nobody is watching. */
+@keyframes te-draft-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: no-preference){
+  .te .draftrow{animation:te-draft-in .26s ease both}
+  .te .draftrow:nth-child(2){animation-delay:.04s}
+  .te .draftrow:nth-child(3){animation-delay:.08s}
+  .te .draftrow:nth-child(4){animation-delay:.12s}
+  .te .draftrow:nth-child(5){animation-delay:.16s}
+  .te .draftrow:nth-child(n+6){animation-delay:.2s}
+}
+/* No transform transition for somebody who asked for less motion: the depth
+   and the colour still answer the pointer, nothing slides. */
+@media (prefers-reduced-motion: reduce){
+  .te .draftrow,.te .draftrow:hover,.te .draftrow:active{transform:none}
+}
 
 /* The plan as the traveller filled it in: places down the page, each journey
    hanging under the place it leaves from. One column on every width — this is
