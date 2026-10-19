@@ -49,6 +49,9 @@ const PATHS: Record<string, string> = {
   bike: 'M5.5 18.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18.5 18.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM5.5 15.5l4-6.5h4.5l4.5 6.5M14 9l-1.2-3H10M9.5 9l3 6.5',
   file: 'M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7zM14 3v4h4',
   receipt: 'M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4',
+  // Throwing something away. Drawn in the same stroke style as the rest: a lid,
+  // a body that tapers, and the two lines every bin has.
+  bin: 'M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
 }
 
 export default function TeIcon({ name, size }: { name: keyof typeof PATHS | string; size?: 'sm' | 'lg' }) {

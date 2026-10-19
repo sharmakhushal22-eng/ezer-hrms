@@ -89,12 +89,16 @@ export default function TeDrafts({ reloadKey, onResume }: {
               <div className="form">
                 <div className="flag crit">
                   <TeIcon name="alert" size="sm" />
-                  <span>This is the only copy of this work. Throwing it away cannot be undone.</span>
+                  <span>This is the only copy of this work. Discarding it cannot be undone.</span>
                 </div>
                 <div className="row tight">
                   <button type="button" className="btn" onClick={() => setConfirming(null)}>Keep it</button>
-                  <button type="button" className="btn dan" disabled={busy === d.id} onClick={() => discard(d)}>
-                    {busy === d.id ? 'Discarding…' : 'Throw it away'}
+                  {/* The verb names itself on the button that does it, and the
+                      glow is there because this is the one control on the screen
+                      that destroys the only copy of somebody's work. */}
+                  <button type="button" className="btn dan glow" disabled={busy === d.id} onClick={() => discard(d)}>
+                    <TeIcon name="bin" size="sm" />
+                    {busy === d.id ? 'Discarding…' : 'Discard'}
                   </button>
                 </div>
               </div>

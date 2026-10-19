@@ -1068,3 +1068,25 @@
 .te .askq .qh small{display:block;font-size:11.5px;color:var(--ez-muted);line-height:1.35;margin-top:2px}
 .te .askq .seg{width:100%}
 .te .askq .seg button{flex:1 1 0}
+
+/* A destructive button that has to be noticed: the one control that throws
+   away the only copy of somebody's work. Red it already was; the glow is what
+   makes it read as the end of the road rather than another grey choice.
+
+   Both halves of the shadow are the critical tokens, so it follows the theme —
+   the dark palette redefines them and the glow comes with it. The ring sits
+   inside the blur so the edge stays crisp at any zoom. */
+.te .btn.dan.glow{
+  border-color:var(--ez-critical);
+  box-shadow:0 0 0 1px var(--ez-critical-edge), 0 0 10px 1px var(--ez-critical-tint);
+}
+.te .btn.dan.glow:hover{
+  background:var(--ez-critical-tint);
+  box-shadow:0 0 0 1px var(--ez-critical), 0 0 14px 2px var(--ez-critical-edge);
+}
+/* The bin takes the button's red rather than the icon default. */
+.te .btn.dan.glow .ic{color:var(--ez-critical)}
+/* Nothing should pulse at somebody who has asked for less motion. */
+@media (prefers-reduced-motion: no-preference){
+  .te .btn.dan.glow{transition:box-shadow .18s ease, background .18s ease}
+}
