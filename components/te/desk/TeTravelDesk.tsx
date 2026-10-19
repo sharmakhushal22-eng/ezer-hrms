@@ -31,7 +31,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { te, type DeskBooked, type DeskStay, type DeskToBook, type DeskVehicle, type DeskWatch } from '@/lib/te/client'
 import { ratePerKm } from '@/lib/te/vehicle'
 import { errorText, day, rs } from '@/lib/te/format'
-import type { TeVehicleType } from '@/lib/te/types'
+import type { TeUploadedFile, TeVehicleType } from '@/lib/te/types'
 import type { ChainStep } from '@/lib/te/approval-chain'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
@@ -71,6 +71,12 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
   const [error, setError] = useState('')
   const [booking, setBooking] = useState<DeskToBook | null>(null)
   const [form, setForm] = useState({ vendor: '', reference: '', amount: '' })
+  // THE TICKET ITSELF. te_booking_record refuses a booking without one since
+  // migration 178: the traveller is sent this and Finance matches the bill to
+  // it, and the desk holds the file now rather than a week from now. Uploaded
+  // the moment it is chosen, so what is kept here is the stored file and not
+  // the bytes.
+  const [ticket, setTicket] = useState<TeUploadedFile | null>(null)
   const [chosenType, setChosenType] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState('')
   const [tick, setTick] = useState(0)
@@ -92,7 +98,9 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
    *  offered. Absent trip_status means 177 is unapplied, and then every row in
    *  this list was approved to get here. */
   const approved = (b: DeskToBook) => !b.trip_status || b.trip_status === 'APPROVED'
-  const ready = !!form.vendor.trim() && !!form.reference.trim() && Number(form.amount) > 0
+  // The ticket is part of being ready, because the floor refuses without it.
+  // Gating here means the desk is told before it presses, not after a 409.
+  const ready = !!form.vendor.trim() && !!form.reference.trim() && Number(form.amount) > 0 && !!ticket
 
   async function record() {
     if (!booking) return
@@ -105,9 +113,26 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
         vendor: form.vendor.trim(),
         reference: form.reference.trim(),
         amount: Number(form.amount),
+        // The stored path, not a signed link: a signed one expires and this is
+        // read back months later by Finance.
+        ...(ticket ? { ticket_url: ticket.storage_path } : {}),
       })
       onToast(`Booking ${r.booking_no} recorded against ${booking.trip_no}.`)
-      setBooking(null); setForm({ vendor: '', reference: '', amount: '' }); reload()
+      setBooking(null); setForm({ vendor: '', reference: '', amount: '' }); setTicket(null); reload()
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  /** Store the ticket the airline or hotel sent back. Uploaded on choosing,
+   *  so by the time Record is pressed there is a path to hand over and no
+   *  second thing that can fail. */
+  async function attach(picked: File) {
+    setBusy('ticket'); setError('')
+    try {
+      setTicket(await te.upload(picked, 'TICKET'))
     } catch (e) {
       setError(errorText(e))
     } finally {
@@ -176,6 +201,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
   const goRoom = (k: Room) => {
     setRoom(k)
     setBooking(null)
+    setTicket(null)
     setCancelling(null)
     setWhy('')
     setError('')
@@ -277,16 +303,36 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                     <label className="fld sm"><span>What it cost (₹)</span>
                       <input type="number" min={0} value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
                     </label>
+                    {/* REQUIRED, and said so. The floor refuses a booking with
+                        no ticket, so the form asks for it rather than letting
+                        somebody fill three fields and meet a refusal. */}
+                    <label className="fld sm">
+                      <span>{b.kind === 'hotel' ? 'The booking slip' : 'The ticket'}</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+                        disabled={busy === 'ticket'}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) void attach(f) }}
+                      />
+                      <small>
+                        {busy === 'ticket' ? 'Attaching…'
+                          : ticket ? `Attached: ${ticket.file_name}`
+                            : 'A PDF or a photo. The traveller is sent this, and Finance matches the bill to it.'}
+                      </small>
+                    </label>
                     <div className="note">
                       <TeIcon name="info" size="sm" />
                       {/* The point of the distinction, said out loud. */}
                       <span>This is recorded as paid by the company. It is added to the trip so the employee cannot claim it again.</span>
                     </div>
                     <div className="row tight">
-                      <button type="button" className="btn" onClick={() => setBooking(null)}>Cancel</button>
+                      <button type="button" className="btn" onClick={() => { setBooking(null); setTicket(null) }}>Cancel</button>
                       <button type="button" className="btn pri" disabled={!ready || busy === 'book'} onClick={record}>
                         {busy === 'book' ? 'Recording…' : 'Record the booking'}
                       </button>
+                      {!ticket && form.vendor.trim() && form.reference.trim() && Number(form.amount) > 0
+                        ? <span className="small muted">Attach the ticket to record this.</span>
+                        : null}
                     </div>
                   </div>
                 ) : null}
@@ -299,7 +345,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                 <button type="button" className="btn sm" onClick={() => onOpenTrip(b.trip_id)}>Details</button>
               ) : null}
               {!open && mayBook && approved(b) ? (
-                <button type="button" className="btn sm pri" onClick={() => { setBooking(b); setForm({ vendor: '', reference: '', amount: '' }) }}>Record</button>
+                <button type="button" className="btn sm pri" onClick={() => { setBooking(b); setForm({ vendor: '', reference: '', amount: '' }); setTicket(null) }}>Record</button>
               ) : null}
               {!open && mayBook && !approved(b) ? (
                 // Not a disabled Record button: there is nothing wrong with the
