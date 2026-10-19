@@ -290,9 +290,17 @@ export default function OnboardingDashboard() {
 
   // ── Send onboarding link ────────────────────────────────────────────
   const sendMagicLink = async () => {
-    const { company_id, full_name, mobile, date_of_joining } = newForm
+    const { company_id, full_name, mobile, date_of_joining, email, designation, employment_type } = newForm
     if (!company_id) { showToast('Please select a company','err'); return }
-    if (!full_name || !mobile || !date_of_joining) { showToast('Name, mobile, date of joining required','err'); return }
+    // Everything the link mail, the review sheet and the employee record need — never a blank here.
+    const need: string[] = []
+    if (!full_name?.trim()) need.push('name')
+    if (!/^[6-9]\d{9}$/.test(String(mobile || '').replace(/\D/g, ''))) need.push('a 10-digit mobile')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email || '').trim())) need.push('a valid email (the link and the login go there)')
+    if (!date_of_joining) need.push('date of joining')
+    if (!designation?.trim()) need.push('designation')
+    if (!employment_type) need.push('employment type')
+    if (need.length) { showToast(`Required: ${need.join(', ')}.`,'err'); return }
     setSaving(true)
     try {
       const res = await fetch('/api/onboarding/send-magic-link', {
@@ -317,6 +325,7 @@ export default function OnboardingDashboard() {
     if (!c.mobile) { if (!bulk) showToast('This candidate has no mobile number — add one in Recruitment first','err'); return false }
     // The joining date goes on the link mail, the sheet and the employee record; never send without it.
     if (!c.date_of_joining) { if (!bulk) { showToast(`Set ${c.full_name}'s date of joining first.`,'err'); openDateEdit(c) } return false }
+    if (!c.email) { if (!bulk) { showToast(`Add ${c.full_name}'s email first — the link and the ESS login go there.`,'err'); openDateEdit(c) } return false }
     // Resolve company: candidate's own → company chosen during negotiation → single company.
     let companyId: string | undefined = c.company_id
     if (!companyId && c.recruitment_id) {

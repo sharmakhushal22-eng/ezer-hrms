@@ -5,6 +5,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { missingFor, missingFields, describeMissing } from '@/lib/onboarding/required'
 
 // ── Types ────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
@@ -1137,6 +1138,18 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   // ── Final Submit ─────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!declaration) { showToast('Please accept the declaration', 'err'); return }
+    // Everything required, across every step, one last time before it reaches HR.
+    const missingAll = missingFields({
+      step_3: personal, step_4: contact, step_5: { ...emergency, prev_employers: prevEmployers, education },
+      step_7: { ...withLegacyNominees(statutory), gross_monthly: grossMonthly, esic_applicable: esicApplicable },
+    })
+    if (missingAll.length) {
+      showToast(`Some required details are missing: ${describeMissing(missingAll)}. Go back and fill them.`, 'err')
+      // PAN and bank live on the contact screen (4); only the nominees are on screen 7.
+      const first = missingAll[0]
+      setStep((first.step === 7 && first.key !== 'pf_nominees' ? 4 : first.step) as any)
+      return
+    }
     setSubmitting(true)
 
     const final = {
@@ -1338,9 +1351,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
               <button onClick={prevStep} style={S.btnO}>Back</button>
               <button onClick={async () => {
-                if (!personal.full_name || !personal.dob || !personal.gender || !personal.father_name || !personal.blood_group) {
-                  showToast('Please fill all required fields', 'err'); return
-                }
+                const miss3 = missingFor(3, personal)
+                if (miss3.length) { showToast(miss3.length === 1 ? miss3[0].message : `Please fill: ${miss3.map(m => m.label).join(', ')}`, 'err'); return }
                 await saveStep(3, personal)
                 nextStep()
               }} style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
@@ -1517,19 +1529,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
               <button onClick={prevStep} style={S.btnO}>Back</button>
               <button onClick={async () => {
-                const missing: string[] = []
-                if (!contact.mobile?.trim()) missing.push('Mobile')
-                if (!contact.personal_email?.trim()) missing.push('Email')
-                if (!contact.perm_line1?.trim()) missing.push('Address Line 1')
-                if (!contact.perm_city?.trim()) missing.push('City')
-                if (!contact.perm_state?.trim()) missing.push('State')
-                if (!contact.perm_pin?.trim()) missing.push('PIN Code')
-                if (missing.length) {
-                  showToast(`Please fill: ${missing.join(', ')}`, 'err'); return
-                }
-                if (!statutory.pan_number || !statutory.bank_account || !statutory.bank_ifsc) {
-                  showToast('Please fill PAN and bank details', 'err'); return
-                }
+                const miss4 = [...missingFor(4, contact), ...missingFor(7, statutory).filter(m => m.key !== 'pf_nominees')]
+                if (miss4.length) { showToast(miss4.length === 1 ? miss4[0].message : `Please fill: ${miss4.map(m => m.label).join(', ')}`, 'err'); return }
                 if (statutory.bank_account !== statutory.bank_confirm) { showToast('Account numbers do not match', 'err'); return }
                 await saveStep(4, contact)
                 await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
@@ -1623,9 +1624,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
               <button onClick={prevStep} style={S.btnO}>Back</button>
               <button onClick={async () => {
-                if (!emergency.emrg1_name || !emergency.emrg1_relation || !emergency.emrg1_mobile) {
-                  showToast('Please fill Emergency Contact 1 details', 'err'); return
-                }
+                const miss5 = missingFor(5, { ...emergency, prev_employers: prevEmployers, education })
+                if (miss5.length) { showToast(miss5.length === 1 ? miss5[0].message : `Please fill: ${miss5.map(m => m.label).join(', ')}`, 'err'); return }
                 await saveStep(5, { ...emergency, prev_employers: prevEmployers, education }); nextStep()
               }} style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
             </div>
@@ -1731,6 +1731,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               <button onClick={async () => {
                 const bad = statutory.pf_nominees.findIndex(n => !n.name?.trim() || !n.dob || !n.address?.trim() || !n.relation)
                 if (bad >= 0) { showToast(`PF nominee ${bad + 1}: name, relation, date of birth and address are required`, 'err'); return }
+                const miss7 = missingFor(7, statutory)
+                if (miss7.length) { showToast(miss7.length === 1 ? miss7[0].message : `Please fill: ${miss7.map(m => m.label).join(', ')}`, 'err'); return }
                 if (statutory.pf_nominees.length > 1 && Math.round(shareTotal(statutory.pf_nominees)) !== 100) { showToast(`PF nominee shares add up to ${shareTotal(statutory.pf_nominees)}% — they must total 100%`, 'err'); return }
                 const gr = statutory.grat_nominees.filter(n => n.name?.trim())
                 if (gr.length > 1 && Math.round(shareTotal(gr)) !== 100) { showToast(`Gratuity nominee shares add up to ${shareTotal(gr)}% — they must total 100%`, 'err'); return }

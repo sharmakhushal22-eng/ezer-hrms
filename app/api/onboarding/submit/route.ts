@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { openApprovals } from '@/lib/onboarding/approvals'
 import { docLabel } from '@/lib/onboarding/corrections'
+import { missingFields, describeMissing } from '@/lib/onboarding/required'
 import { renderEmail, onboardingScope, isUuid } from '@/lib/config/store'
 import { sendMail } from '@/lib/mail/send'
 
@@ -44,6 +45,13 @@ export async function POST(req: NextRequest) {
 
     // Merge final data
     const fullData = { ...(cand.form_data || {}), ...(final_form_data || {}), submitted_at: new Date().toISOString() }
+
+    // The required details (lib/onboarding/required.ts) — the portal checks them step by step,
+    // and this is the fence for anything that got past it.
+    const missing = missingFields(fullData)
+    if (missing.length) {
+      return NextResponse.json({ error: `Some required details are missing or invalid: ${describeMissing(missing)}.`, missing_fields: missing }, { status: 400 })
+    }
 
     // Check mandatory documents
     const { data: docs } = await supa

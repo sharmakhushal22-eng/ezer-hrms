@@ -39,6 +39,13 @@ export async function POST(req: NextRequest) {
     if (!date_of_joining || Number.isNaN(new Date(date_of_joining).getTime())) {
       return NextResponse.json({ error: 'Set the date of joining first (Edit on the card), then send the link.', needs_doj: true }, { status: 400 })
     }
+    // The link, the corrections and the ESS login are all emailed — no address, no link.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email || '').trim())) {
+      return NextResponse.json({ error: 'Add a valid email for the candidate first (Edit on the card) — the link and the login go there.', needs_email: true }, { status: 400 })
+    }
+    if (!/^[6-9]\d{9}$/.test(String(mobile).replace(/\D/g, ''))) {
+      return NextResponse.json({ error: 'The mobile number must be a 10-digit Indian number.' }, { status: 400 })
+    }
 
     // Insert a fresh onboarding candidate. (No upsert: candidate_id has no unique
     // constraint, so onConflict:'candidate_id' would error. The dashboard always
