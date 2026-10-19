@@ -144,7 +144,16 @@ export default function TeHome({ initialClaimId, onExit }: {
   /** Vehicle types for the Travel desk's rate note. Admin-only, so absent for
    *  an ordinary desk user — the screen degrades and says so. */
   const [cfg, setCfg] = useState<TeConfig | null>(null)
-  const reload = useCallback(() => setTick(n => n + 1), [])
+  // A SHEET CLOSING DOES NOT UNMOUNT THIS SCREEN. The planner and the expense
+  // form open over Home, so when one closes, Home is still the component it
+  // always was — and the Drafts list under it would go on showing whatever it
+  // fetched when the screen first loaded. That is usually nothing, which is
+  // how a plan could be saved, confirmed as "Saved just now", and then not
+  // appear in the list behind it. Views do not need this: moving to Trips and
+  // back unmounts the list and it refetches on its own.
+  const [draftTick, setDraftTick] = useState(0)
+  const draftsChanged = useCallback(() => setDraftTick(n => n + 1), [])
+  const reload = useCallback(() => { setTick(n => n + 1); setDraftTick(n => n + 1) }, [])
 
   useEffect(() => {
     let current = true
@@ -352,7 +361,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                   somebody who left a plan half-done is usually here to finish
                   it, not to begin another. Renders nothing when empty. */}
               <TeDrafts
-                reloadKey={tick}
+                reloadKey={draftTick}
                 onResume={d => {
                   if (d.kind === 'expense') { setSheet({ name: 'expense', resuming: d }); return }
                   if (d.kind === 'claim') { if (d.claim_id) setView({ name: 'claim', id: d.claim_id, resuming: d }); return }
@@ -672,7 +681,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           origin={sheet.past ? 'POST_FACTO' : 'PRE_APPROVED'}
           editing={sheet.editing}
           resuming={sheet.resuming}
-          onClose={() => setSheet(null)}
+          onClose={() => { setSheet(null); draftsChanged() }}
           // Screen 18: a plan you just sent lands on the trip itself, where the
           // approval chain and the next leg are. Going Home would hide the
           // thing that was just created behind a tile.
@@ -683,7 +692,7 @@ export default function TeHome({ initialClaimId, onExit }: {
         />
       ) : null}
       {sheet?.name === 'expense' ? (
-        <TeExpenseForm key={sheet.resuming?.id ?? sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} tripId={sheet.tripId} resuming={sheet.resuming} onClose={() => setSheet(null)} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
+        <TeExpenseForm key={sheet.resuming?.id ?? sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} tripId={sheet.tripId} resuming={sheet.resuming} onClose={() => { setSheet(null); draftsChanged() }} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
       ) : null}
 
       <div className="toasts" aria-live="polite">{toast ? <div className="toast">{toast}</div> : null}</div>
