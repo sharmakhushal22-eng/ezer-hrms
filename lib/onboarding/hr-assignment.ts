@@ -19,7 +19,7 @@
 import crypto from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hashPassword } from '@/lib/ess-auth'
-import { planTeam, withJoinerId, summarisePlan, type Chain, type TeamPerson, type PlannedMember, type Level } from './team-plan'
+import { planTeam, withJoinerId, summarisePlan, autoRoleCodes, MANAGER_ROLE_CODES, type Chain, type TeamPerson, type PlannedMember, type Level } from './team-plan'
 
 export interface RoleOption { id: string; role_code: string; role_name: string; scope: string | null; salary_visibility: string | null; permissions: { module: string; access_level: string }[] }
 export interface EmpOption extends Chain { id: string; emp_code: string; full_name: string; designation: string | null; department: string | null }
@@ -32,7 +32,8 @@ export interface Managers {
 /** onboarding_candidates.role_assignment — written in two steps (managers on the sheet, team + roles at the code). */
 export interface HrAssignment {
   managers?: Managers
-  roles?: { role_id: string; role_code: string; role_name: string }[]
+  /** `auto`: a manager role the team's depth decided (L1 / L2 / HOD), not ticked by hand. */
+  roles?: { role_id: string; role_code: string; role_name: string; auto?: boolean }[]
   /** The union of the roles' module permissions, as granted. */
   permissions?: { module: string; access_level: string }[]
   team?: { direct: string[]; exclude: string[]; summary: string; count: number }
@@ -197,21 +198,27 @@ export async function saveCodeAssignment(sb: SupabaseClient, i: CodeAssignmentIn
   if (!oc) return { ok: false, error: 'Onboarding record not found', status: 404 }
   if (oc.status === 'EMPLOYEE_CREATED') return { ok: false, error: 'The employee code is already generated.', status: 409 }
   if (!oc.l1_manager_id) return { ok: false, error: 'The managers are not assigned — open the form (View form) and press Assign managers first.', status: 400, code: 'needs_managers' }
-  const roleIds = [...new Set((i.roleIds || []).filter(Boolean))]
-  if (!roleIds.length) return { ok: false, error: 'Tick at least one role — it is what the joiner can open in ESS.', status: 400, code: 'needs_role' }
-  const { data: roles } = await sb.from('ess_roles').select('id, role_code, role_name').in('id', roleIds)
-  const found = ((roles || []) as any[]).filter(r => !HIDDEN_ROLES.has(r.role_code))
-  if (found.length !== roleIds.length) return { ok: false, error: 'A chosen role cannot be assigned from onboarding.', status: 400 }
+  const plan = await teamPlanFor(sb, i.onboardingId, i.team?.direct || [], i.team?.exclude || [])
+  if (plan?.problems.length) return { ok: false, error: plan.problems[0], status: 400 }
+  // The manager roles are the team's to decide (autoRoleCodes), never the form's: whatever it
+  // sent for L1 / L2 / HOD is dropped, and the ones the team's depth calls for are added.
+  const { data: allRoles } = await sb.from('ess_roles').select('id, role_code, role_name')
+  const byId = new Map<string, any>(((allRoles || []) as any[]).map(r => [r.id, r]))
+  const byCode = new Map<string, any>(((allRoles || []) as any[]).map(r => [r.role_code, r]))
+  const manual = [...new Set((i.roleIds || []).filter(Boolean))].map(id => byId.get(id)).filter(Boolean).filter(r => !(MANAGER_ROLE_CODES as readonly string[]).includes(r.role_code))
+  if (manual.some(r => HIDDEN_ROLES.has(r.role_code))) return { ok: false, error: 'A chosen role cannot be assigned from onboarding.', status: 400 }
+  const auto = autoRoleCodes(plan?.members || []).map(c => byCode.get(c)).filter(Boolean)
+  const found = [...manual, ...auto.filter(a => !manual.some(m => m.id === a.id))]
+  if (!found.length) return { ok: false, error: 'Tick at least one role — it is what the joiner can open in ESS.', status: 400, code: 'needs_role' }
+  const roleIds = found.map(r => r.id)
   const { data: perms } = await sb.from('role_permissions').select('role_id, module, access_level').in('role_id', roleIds).neq('access_level', 'NONE')
   const rank: Record<string, number> = { VIEW: 1, EDIT: 2, FULL: 3 }
   const union = new Map<string, string>()
   for (const p of (perms || []) as any[]) { const cur = union.get(p.module); if (!cur || (rank[p.access_level] || 0) > (rank[cur] || 0)) union.set(p.module, p.access_level) }
-  const plan = await teamPlanFor(sb, i.onboardingId, i.team?.direct || [], i.team?.exclude || [])
-  if (plan?.problems.length) return { ok: false, error: plan.problems[0], status: 400 }
   const prev = (oc.role_assignment || {}) as HrAssignment
   const assignment: HrAssignment = {
     managers: prev.managers,
-    roles: found.map(r => ({ role_id: r.id, role_code: r.role_code, role_name: r.role_name })),
+    roles: found.map(r => ({ role_id: r.id, role_code: r.role_code, role_name: r.role_name, auto: auto.some(a => a.id === r.id) || undefined })),
     permissions: [...union.entries()].map(([module, access_level]) => ({ module, access_level })).sort((a, b) => a.module.localeCompare(b.module)),
     team: { direct: plan?.direct.map(d => d.id) || [], exclude: i.team?.exclude || [], summary: plan?.summary || summarisePlan([]), count: plan?.members.length || 0 },
     by: i.actorId, by_name: i.actorName, at: new Date().toISOString(),

@@ -1,6 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { planTeam, chainUnder, withJoinerId, summarisePlan, parseCodes, NEW, type TeamPerson } from '../team-plan.ts'
+import { planTeam, chainUnder, withJoinerId, summarisePlan, parseCodes, autoRoleCodes, NEW, type TeamPerson } from '../team-plan.ts'
+
+test('the manager roles follow the depth of the team: reports → L1, their reports → L2 too, three levels → HOD as well', () => {
+  assert.deepEqual(autoRoleCodes([]), [])
+  assert.deepEqual(autoRoleCodes([{ level: 1 }]), ['L1_MANAGER'])
+  assert.deepEqual(autoRoleCodes([{ level: 1 }, { level: 2 }]), ['L1_MANAGER', 'L2_MANAGER'])
+  assert.deepEqual(autoRoleCodes([{ level: 1 }, { level: 2 }, { level: 3 }, { level: 4 }]), ['L1_MANAGER', 'L2_MANAGER', 'HOD'])
+})
 
 // The company: Arun (the joiner) will manage Bina and Chetan. Dev reports to Bina today, Esha to Dev.
 // Arun's managers (from Assign managers): L1 Meera, L2 Rajan, HOD Suresh.
