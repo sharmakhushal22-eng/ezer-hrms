@@ -10,7 +10,7 @@ export interface TodayPayload {
   employee: {
     id: string; code: string; name: string; first_name: string; initials: string;
     designation: string | null; department: string | null; location: string | null;
-    date_of_joining: string; reports_to: string | null;
+    date_of_joining: string | null; reports_to: string | null;
   };
   shift: { start: string; end: string };                 // 'HH:MM'
   prefs: Prefs;
