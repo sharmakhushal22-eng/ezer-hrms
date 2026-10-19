@@ -34,6 +34,11 @@ export async function POST(req: NextRequest) {
     if (!company_id || !full_name || !mobile) {
       return NextResponse.json({ error: 'company_id, full_name, mobile required' }, { status: 400 })
     }
+    // The joining date is on the link mail, the review sheet, the employee record (company_doj)
+    // and the ESS Today tab — a joiner without one once crashed the portal on first login.
+    if (!date_of_joining || Number.isNaN(new Date(date_of_joining).getTime())) {
+      return NextResponse.json({ error: 'Set the date of joining first (Edit on the card), then send the link.', needs_doj: true }, { status: 400 })
+    }
 
     // Insert a fresh onboarding candidate. (No upsert: candidate_id has no unique
     // constraint, so onConflict:'candidate_id' would error. The dashboard always

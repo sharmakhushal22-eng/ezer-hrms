@@ -390,6 +390,8 @@ export default function OnboardingDashboard() {
   const sendOnboardingFor = async (c: Candidate, opts?: { bulk?: boolean }): Promise<boolean> => {
     const bulk = !!opts?.bulk
     if (!c.mobile) { if (!bulk) showToast('This candidate has no mobile number. Add one in Recruitment first','err'); return false }
+    // The joining date goes on the link mail, the sheet and the employee record; never send without it.
+    if (!c.date_of_joining) { if (!bulk) { showToast(`Set ${c.full_name}'s date of joining first.`,'err'); openDateEdit(c) } return false }
     // Resolve company: candidate's own → company chosen during negotiation → single company.
     let companyId: string | undefined = c.company_id
     if (!companyId && c.recruitment_id) {

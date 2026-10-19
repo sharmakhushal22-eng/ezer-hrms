@@ -60,6 +60,16 @@ export async function POST(req: NextRequest) {
     }
     const { user } = gate
     const { data: me } = user.employeeId ? await sb.from('employees').select('full_name').eq('id', user.employeeId).maybeSingle() : { data: null as any }
+    // The joining date becomes employees.company_doj — the Today tab, tenure, payroll and the
+    // letters all read it. One typed on the wizard is saved first; without one, no code.
+    const { data: dojRow } = await sb.from('onboarding_candidates').select('date_of_joining').eq('id', onboarding_id).maybeSingle()
+    const typedDoj = body.date_of_joining ? String(body.date_of_joining).slice(0, 10) : ''
+    if (typedDoj && !/^\d{4}-\d{2}-\d{2}$/.test(typedDoj)) return NextResponse.json({ error: 'The date of joining must be a date (YYYY-MM-DD).' }, { status: 400 })
+    if (typedDoj && typedDoj !== (dojRow?.date_of_joining || '').slice(0, 10)) {
+      const { error } = await sb.from('onboarding_candidates').update({ date_of_joining: typedDoj }).eq('id', onboarding_id)
+      if (error) return NextResponse.json({ error: `Could not save the date of joining: ${error.message}` }, { status: 500 })
+    }
+    if (!typedDoj && !dojRow?.date_of_joining) return NextResponse.json({ error: 'Set the date of joining first — it is on the wizard\'s Code step.', needs_doj: true }, { status: 400 })
     const saved = await saveCodeAssignment(sb as any, {
       onboardingId: onboarding_id,
       roleIds: Array.isArray(body.role_ids) ? body.role_ids.map(String) : body.role_id ? [String(body.role_id)] : [],
