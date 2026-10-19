@@ -36,7 +36,7 @@ export interface DraftAutosave {
   savedAt: number | null
   /** The draft's id once it exists, so a resumed form keeps updating one row. */
   draftId: Uuid | null
-  /** Save immediately — the "Save and finish later" button. Resolves when stored. */
+  /** Save immediately — the "Save as draft" button. Resolves when stored. */
   saveNow: () => Promise<void>
   /** Throw the draft away. Call this after the real record is saved. */
   discard: () => Promise<void>

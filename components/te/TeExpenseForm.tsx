@@ -221,7 +221,7 @@ export default function TeExpenseForm({ snap, line, tripId, resuming, onClose, o
             here, so leaving and coming back is a normal way to use this form,
             not an escape hatch. Offered only once there is something to keep. */}
         {touched && !busy
-          ? <button type="button" className="btn" onClick={async () => { await autosave.saveNow(); onClose() }}>Finish later</button>
+          ? <button type="button" className="btn" onClick={async () => { await autosave.saveNow(); onClose() }}>Save as draft</button>
           : null}
         <button type="button" className="btn pri" disabled={!ready || !!busy || blocked} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save expense'}</button>
       </>}

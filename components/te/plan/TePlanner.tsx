@@ -328,7 +328,7 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
 
   /** Save the draft and leave. Not the same button as Send: this one makes no
    *  claim that the plan is finished or even valid, which is the point. */
-  async function keepForLater() {
+  async function saveAsDraft() {
     await autosave.saveNow()
     onClose()
   }
@@ -354,7 +354,7 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
         {/* Offered only once there is something to keep. On an untouched form
             it would promise to save work that does not exist. */}
         {touched && !saving
-          ? <button type="button" className="btn" onClick={keepForLater}>Finish later</button>
+          ? <button type="button" className="btn" onClick={saveAsDraft}>Save as draft</button>
           : null}
         {step < lastStep
           ? <button type="button" className="btn pri" onClick={next}>Next: {STEPS[(stepAfter(draft, step) ?? lastStep) - 1].title}<TeIcon name="go" size="sm" /></button>
