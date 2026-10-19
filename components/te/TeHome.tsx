@@ -22,7 +22,7 @@
 //     is fetched again; no screen keeps its own copy of server state.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeConfig, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail as TeTripDetailT, TripScope } from '@/lib/te/types'
+import type { Snapshot, TeConfig, TeDraft, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail as TeTripDetailT, TripScope } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeSheet from './TeSheet'
 import TeSteps from './TeSteps'
@@ -30,6 +30,7 @@ import TeExpenseForm from './TeExpenseForm'
 import TeOtherExpenses from './TeOtherExpenses'
 import TePickTrip from './trip/TePickTrip'
 import TePlanner from './plan/TePlanner'
+import TeDrafts from './TeDrafts'
 import TeLimitsAndRates from './vehicle/TeLimitsAndRates'
 import TeTrips from './trip/TeTrips'
 import TeTripDetail from './trip/TeTripDetail'
@@ -51,7 +52,7 @@ import './te.css'
 
 type View =
   | { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'trips' }
-  | { name: 'claim'; id: string } | { name: 'trip'; id: string } | { name: 'advances' } | { name: 'approvals' }
+  | { name: 'claim'; id: string; resuming?: TeDraft } | { name: 'trip'; id: string } | { name: 'advances' } | { name: 'approvals' }
   /** Tab 1 of the three: everybody's reports and dashboard. */
   | { name: 'dashboard' }
   /** Tabs 2 and 3. Offered here, in ESS, only to the people on each desk —
@@ -69,9 +70,10 @@ type Sheet =
   | null
   | { name: 'new' }
   | { name: 'kind'; kind: TripScope; way: WayId | null }
-  | { name: 'expense'; line?: TeExpense; tripId?: string }
-  /** The three-step planner. `past` is "I already travelled". */
-  | { name: 'plan'; kind: TripScope; past: boolean; editing?: TeTrip }
+  | { name: 'expense'; line?: TeExpense; tripId?: string; resuming?: TeDraft }
+  /** The three-step planner. `past` is "I already travelled".
+   *  `resuming` is an unfinished plan being picked up again. */
+  | { name: 'plan'; kind: TripScope; past: boolean; editing?: TeTrip; resuming?: TeDraft }
   /** Leaving now: one form that creates the trip and starts leg 1. */
   | { name: 'startNow' }
   /** A leg the plan did not have, added to a trip under way. */
@@ -346,6 +348,26 @@ export default function TeHome({ initialClaimId, onExit }: {
                 </div>
               </section>
 
+              {/* Unfinished work comes before the "start something new" tiles:
+                  somebody who left a plan half-done is usually here to finish
+                  it, not to begin another. Renders nothing when empty. */}
+              <TeDrafts
+                reloadKey={tick}
+                onResume={d => {
+                  if (d.kind === 'expense') { setSheet({ name: 'expense', resuming: d }); return }
+                  if (d.kind === 'claim') { if (d.claim_id) setView({ name: 'claim', id: d.claim_id, resuming: d }); return }
+                  // The scope and "already travelled" live in the draft body,
+                  // which is the planner's own form state.
+                  const body = d.body as { scope?: TripScope; origin?: string }
+                  setSheet({
+                    name: 'plan',
+                    kind: body.scope ?? 'domestic',
+                    past: body.origin === 'POST_FACTO',
+                    resuming: d,
+                  })
+                }}
+              />
+
               <div className="kinds" role="list">
                 {KINDS.map(k => (
                   <button key={k.id} type="button" role="listitem" className={`kind k-${k.id}`} onClick={() => setSheet(k.id === 'other' ? { name: 'expense' } : { name: 'kind', kind: k.id, way: null })}>
@@ -481,6 +503,7 @@ export default function TeHome({ initialClaimId, onExit }: {
             <TeClaimDetail
               claimId={view.id}
               catName={catName}
+              resuming={view.resuming}
               onBack={() => setView({ name: 'claims' })}
               onChanged={message => { setToast(message); reload() }}
               // Screen 83d: a line the approver marked opens in the expense
@@ -648,6 +671,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           scope={sheet.kind}
           origin={sheet.past ? 'POST_FACTO' : 'PRE_APPROVED'}
           editing={sheet.editing}
+          resuming={sheet.resuming}
           onClose={() => setSheet(null)}
           // Screen 18: a plan you just sent lands on the trip itself, where the
           // approval chain and the next leg are. Going Home would hide the
@@ -659,7 +683,7 @@ export default function TeHome({ initialClaimId, onExit }: {
         />
       ) : null}
       {sheet?.name === 'expense' ? (
-        <TeExpenseForm key={sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} tripId={sheet.tripId} onClose={() => setSheet(null)} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
+        <TeExpenseForm key={sheet.resuming?.id ?? sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} tripId={sheet.tripId} resuming={sheet.resuming} onClose={() => setSheet(null)} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
       ) : null}
 
       <div className="toasts" aria-live="polite">{toast ? <div className="toast">{toast}</div> : null}</div>

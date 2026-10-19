@@ -24,7 +24,7 @@ import type {
   TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput, LegPreview, TeLegStats, TeFlag,
   ExpenseInput, ExpensePreview, ClaimInput, ClaimPreview, ClaimStatus, ClaimStage, RiskBand, DecideInput, PayoutRoute,
   TeConfig, TeMasters, TeWorkflowLevel, TeChainRow, TeHealthRow, TeUploadedFile, RcChecked, TeStayOption, TeDashboard,
-  TeDesksPayload, TeApproverWatch,
+  TeDesksPayload, TeApproverWatch, TeDraft, TeDraftInput, TeDraftKind,
 } from './types'
 
 export class TeApiError extends Error {
@@ -212,6 +212,20 @@ export const te = {
   expensePreview: (input: ExpenseInput) => post<ExpensePreview>('expenses/preview', input),
   expenseSave: (input: ExpenseInput) => post<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>('expenses', input),
   expenseDiscard: (id: Uuid) => call<{ expense_id: Uuid; status: 'DISCARDED' }>('DELETE', `expenses/${id}`),
+
+  /**
+   * Unfinished work, kept so a half-planned trip or a half-typed expense can be
+   * picked up later — on another day or another device. `body` is the form's own
+   * state object, stored and returned verbatim; nothing on the server reads
+   * inside it. Drafts are private to the person who wrote them.
+   */
+  drafts: {
+    list: (kind?: TeDraftKind) => get<{ drafts: TeDraft[] }>('drafts', kind ? { kind } : undefined),
+    /** Create or update. Pass the id back to keep updating the same draft. */
+    save: (d: TeDraftInput) => post<{ draft_id: Uuid; updated_at: string }>('drafts', d),
+    /** Discard, and how a draft is cleared once the real record is saved. */
+    remove: (id: Uuid) => call<{ deleted: boolean }>('DELETE', `drafts/${id}`),
+  },
 
   /** Store a bill or an RC photo. Send the returned file back, unchanged, in `files: [file]`. */
   async upload(file: File, kind: 'BILL' | 'TICKET' | 'TOLL_SLIP' | 'FASTAG_STATEMENT' | 'OTHER' | 'RC' = 'BILL'): Promise<TeUploadedFile> {

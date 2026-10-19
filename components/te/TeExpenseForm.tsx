@@ -8,12 +8,14 @@
 // (after a short pause) to POST /api/te/expenses/preview, which runs the rules
 // engine on the server and answers the flags and the eligible amount. Saving
 // runs the same checks again. The form only shows what comes back.
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { te, TeApiError } from '@/lib/te/client'
-import type { ExpenseInput, ExpensePreview, Snapshot, TeExpense, TeUploadedFile, Uuid } from '@/lib/te/types'
+import type { ExpenseDraftBody, ExpenseInput, ExpensePreview, Snapshot, TeDraft, TeExpense, TeUploadedFile, Uuid } from '@/lib/te/types'
 import TeSheet from './TeSheet'
 import TeIcon from './TeIcon'
 import { errorText, flagClass, plural, rs } from '@/lib/te/format'
+import { draftTitle, savedAgo, worthSaving } from '@/lib/te/autosave'
+import { useDraftAutosave } from './useDraftAutosave'
 
 const PAY_MODES = ['UPI', 'Personal card', 'Cash']
 // The engine's own ladders (AIR and RAIL in te-engine.js). The order is the
@@ -43,10 +45,14 @@ function fromLine(x: TeExpense): ExpenseInput {
   }
 }
 
-export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: {
+export default function TeExpenseForm({ snap, line, tripId, resuming, onClose, onSaved }: {
   snap: Snapshot
   /** A saved line to change; left out = a new line. */
   line?: TeExpense
+  /** A half-typed line being picked up again. Its body holds the whole form,
+   *  the attached bill included — the bill is a storage path by then, so it
+   *  survives a draft without the file ever being held in it. */
+  resuming?: TeDraft
   /** The trip this bill belongs to. Changes which categories are offered:
    *  hotel and food only exist on a trip, and the form must not pretend
    *  otherwise on a loose monthly bill. */
@@ -67,11 +73,15 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
     () => (tripId ? snap.trips.find(t => t.id === tripId)?.name ?? 'This trip' : ''),
     [snap, tripId],
   )
+  // A resumed draft wins over everything: it IS the work in progress.
+  const draftBody = resuming?.body as ExpenseDraftBody | undefined
   const [f, setF] = useState<ExpenseInput>(() => (
-    line ? fromLine(line) : { cat: '', date: snap.today, bill: '', claimed: '', payMode: 'UPI', ...(tripId ? { tripId } : {}) }
+    draftBody?.f ? draftBody.f
+      : line ? fromLine(line)
+      : { cat: '', date: snap.today, bill: '', claimed: '', payMode: 'UPI', ...(tripId ? { tripId } : {}) }
   ))
-  const [file, setFile] = useState<TeUploadedFile | null>(null)
-  const [fileName, setFileName] = useState(line?.file?.name ?? '')
+  const [file, setFile] = useState<TeUploadedFile | null>(draftBody?.file ?? null)
+  const [fileName, setFileName] = useState(draftBody?.fileName ?? line?.file?.name ?? '')
   const [preview, setPreview] = useState<ExpensePreview | null>(null)
   const [busy, setBusy] = useState<'' | 'upload' | 'save' | 'delete'>('')
   const [error, setError] = useState<{ text: string; field: string | null } | null>(null)
@@ -88,6 +98,27 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
     const n = Math.round((new Date(f.checkOut).getTime() - new Date(f.checkIn).getTime()) / 864e5)
     return n > 0 ? n : 0
   }, [f.checkIn, f.checkOut])
+
+  // UNFINISHED WORK IS KEPT. An expense is often typed up without the bill to
+  // hand, and before this closing the form lost it. The draft holds the form
+  // plus the attached bill — by then a storage path, never the file itself.
+  const body = useMemo<Record<string, unknown>>(
+    () => ({ f, file, fileName }) as unknown as Record<string, unknown>,
+    [f, file, fileName],
+  )
+  const [pristineBody] = useState<Record<string, unknown>>(body)
+  const catName = useCallback((code: string) => cats.find(c => c.id === code)?.name ?? code, [cats])
+  const autosave = useDraftAutosave({
+    kind: 'expense',
+    body,
+    pristine: pristineBody,
+    title: draftTitle('expense', body, catName),
+    scope: f.cat || null,
+    tripId: tripId ?? null,
+    resumingId: resuming?.id ?? null,
+    enabled: busy !== 'save' && busy !== 'delete',
+  })
+  const touched = useMemo(() => worthSaving(body, pristineBody), [body, pristineBody])
 
   // The live check. State is set only when the answer arrives, and a late answer to an older question is dropped.
   useEffect(() => {
@@ -118,6 +149,9 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
     setBusy('save'); setError(null)
     try {
       const r = await te.expenseSave(input)
+      // The line exists now, so the half-typed copy of it has no reason to
+      // stay in the Unfinished list.
+      await autosave.discard()
       onSaved(`Saved ${r.expense_no}. ${rs(r.eligible)} is eligible.`)
     } catch (e) {
       if (e instanceof TeApiError && e.flags.length) setPreview(p => ({ ...(p ?? { eligible: 0, claimed: 0, mileage: null, needsReason: false }), flags: e.flags, blocked: true }))
@@ -173,8 +207,22 @@ export default function TeExpenseForm({ snap, line, tripId, onClose, onSaved }: 
             short window they are below the fold: pressing Save used to post,
             take a 409 back and look like it had done nothing at all. */}
         {blockedNote ? <span className="small muted grow">{blockedNote}</span> : null}
+        {/* Where somebody looks before deciding it is safe to close. */}
+        {autosave.state === 'saving' ? <span className="small muted">Saving…</span> : null}
+        {autosave.state === 'saved' && autosave.savedAt
+          ? <span className="small muted"><TeIcon name="check" size="sm" />{savedAgo(autosave.savedAt, Date.now())}</span>
+          : null}
+        {autosave.state === 'error'
+          ? <span className="small muted"><TeIcon name="warn" size="sm" />Not saved yet — we will keep trying.</span>
+          : null}
         {line ? <button type="button" className="btn dan" disabled={!!busy} onClick={discard}>Remove</button> : null}
         <button type="button" className="btn" onClick={onClose}>Cancel</button>
+        {/* A bill typed up without the receipt to hand is the ordinary case
+            here, so leaving and coming back is a normal way to use this form,
+            not an escape hatch. Offered only once there is something to keep. */}
+        {touched && !busy
+          ? <button type="button" className="btn" onClick={async () => { await autosave.saveNow(); onClose() }}>Finish later</button>
+          : null}
         <button type="button" className="btn pri" disabled={!ready || !!busy || blocked} onClick={save}>{busy === 'save' ? 'Saving…' : 'Save expense'}</button>
       </>}
     >

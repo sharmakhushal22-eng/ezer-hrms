@@ -1021,3 +1021,18 @@
 .te .askrow{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:var(--ez-ink-soft);margin-top:4px}
 .te .askrow .ic{flex:none;color:var(--ez-brand);margin-top:2px}
 .te .askrow a{color:var(--ez-brand);overflow-wrap:anywhere}
+
+/* "Your work is saved", beside the buttons that act on it — which is where
+   somebody looks before deciding whether it is safe to close the drawer.
+   Holds its height whether or not anything is showing, so the buttons under
+   it do not jump every time a save finishes. */
+.te .savedline{display:flex;align-items:center;min-height:18px;margin:0 0 6px}
+.te .savedline span{display:inline-flex;align-items:center;gap:5px}
+.te .savedline .warn{color:var(--ez-warning)}
+
+/* One unfinished trip or expense in the Drafts list. Dashed, because it is
+   not a record yet: nothing here has a number, and nobody else can see it. */
+.te .draftrow{border:1px dashed var(--ez-line-strong);border-radius:10px;background:var(--ez-surface);padding:10px 12px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.te .draftrow .grow{min-width:0}
+.te .draftrow .dt{font-weight:600;color:var(--ez-ink);overflow-wrap:anywhere}
+.te .draftrow .dt.none{font-weight:500;color:var(--ez-muted);font-style:italic}

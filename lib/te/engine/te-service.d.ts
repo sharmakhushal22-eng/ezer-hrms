@@ -12,7 +12,7 @@ import type {
   TripDraft, TripPreview, TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput,
   LegPreview, TeLegStats, TeFlag, ExpenseInput, ExpensePreview, ClaimInput, ClaimPreview, ClaimStatus, ClaimStage,
   RiskBand, DecideInput, PayoutRoute, TeConfig, TeWorkflowLevel, TeChainRow, TeStep,
-  TeDashboard,
+  TeDashboard, TeDraft, TeDraftInput,
 } from '../types'
 
 /** What te-service needs to reach the database: one call, named arguments in,
@@ -111,6 +111,13 @@ export function legAdd(ctx: TeCtx, tripId: Uuid, d: ExtraLegInput): Promise<{ le
 export function expensePreview(ctx: TeCtx, input: ExpenseInput): Promise<ExpensePreview>
 export function expenseSave(ctx: TeCtx, input: ExpenseInput): Promise<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>
 export function expenseDiscard(ctx: TeCtx, expenseId: Uuid): Promise<{ expense_id: Uuid; status: 'DISCARDED' }>
+
+// ── drafts ──────────────────────────────────────────────────────────────────
+// Unfinished work, stored verbatim and private to the person who wrote it.
+// These take no employee id: te_draft_* filter on the actor.
+export function draftSave(ctx: TeCtx, input: TeDraftInput): Promise<{ draft_id: Uuid; updated_at: string }>
+export function draftList(ctx: TeCtx, kind?: TeDraft['kind'] | null): Promise<TeDraft[]>
+export function draftDelete(ctx: TeCtx, draftId: Uuid): Promise<{ deleted: boolean }>
 
 // ── claims ──────────────────────────────────────────────────────────────────
 export interface ClaimResult { claim_id: Uuid; status: ClaimStatus; stage: ClaimStage; net_amount?: number | null; advance_adjusted?: number }

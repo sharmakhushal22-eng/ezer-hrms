@@ -881,6 +881,57 @@ export interface MileageView { rate: number; km: number; payKm: number; full: nu
 export interface ExpensePreview { flags: TeFlag[]; eligible: number; claimed: number; mileage: MileageView | null; blocked: boolean; needsReason: boolean }
 export type LegPreview = (ExpensePreview & { stats: TeLegStats | null }) | { none: true; stats: TeLegStats | null }
 
+/* ------------------------------------------------------------------ drafts --
+ * Unfinished work. A trip plan or an expense form that somebody stopped in the
+ * middle of, kept on the server so they can finish it another day or on another
+ * device. The server stores `body` verbatim and never reads inside it, so the
+ * shape of a draft is whatever the form that wrote it says it is:
+ *
+ *   trip      PlannerDraft (lib/te/trip-draft.ts), which already carries its
+ *             own `step` — all three scopes and both origins use the one shape
+ *   expense   ExpenseDraftBody below: the form state of TeExpenseForm
+ *   claim     a half-typed answer to a claim that was sent back
+ *
+ * Drafts are private: every function filters on the actor, and no route takes
+ * an employee id from the caller.
+ */
+export type TeDraftKind = 'trip' | 'expense' | 'claim'
+
+/** What TeExpenseForm needs back to look exactly as it was left. The amounts
+ *  are `number | string` because the form holds what was typed — '' for an
+ *  empty box — and turning that into 0 on the way back would invent a figure
+ *  the person never entered. */
+export interface ExpenseDraftBody { f: ExpenseInput; file: TeUploadedFile | null; fileName: string }
+
+export interface TeDraftInput {
+  /** Pass the id back to keep updating the same draft instead of making more. */
+  id?: Uuid | null
+  kind: TeDraftKind
+  /** What the Drafts list shows. Empty while the form has nothing to call itself. */
+  title?: string | null
+  /** 'local' | 'domestic' | 'international' for a trip; the category for an expense. */
+  scope?: string | null
+  /** Which step of the wizard to reopen at. */
+  step?: number
+  body: Record<string, unknown>
+  /** Set when the draft is an edit of something that already exists. */
+  trip_id?: Uuid | null
+  claim_id?: Uuid | null
+}
+
+export interface TeDraft {
+  id: Uuid
+  kind: TeDraftKind
+  title: string | null
+  scope: string | null
+  step: number
+  body: Record<string, unknown>
+  trip_id: Uuid | null
+  claim_id: Uuid | null
+  created_at: string
+  updated_at: string
+}
+
 export interface ClaimInput { tripId?: Uuid | null; lineIds?: Uuid[]; note?: string; declared?: boolean }
 export interface ClaimPreview {
   claimed: number

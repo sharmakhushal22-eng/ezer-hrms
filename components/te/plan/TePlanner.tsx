@@ -33,12 +33,14 @@
 // dropped, the same way TeExpenseForm does it.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeTrip, TripIssue, TripOrigin, TripPreview, TripScope, Uuid } from '@/lib/te/types'
+import type { Snapshot, TeDraft, TeTrip, TripIssue, TripOrigin, TripPreview, TripScope, Uuid } from '@/lib/te/types'
 import {
   blockingOn, firstOpenLine, fromTrip, LAST_STEP, newPlannerDraft, setScope, stepOfIssue, syncDraft, toTripDraft,
   type DraftContext, type PlanStep, type PlannerDraft,
 } from '@/lib/te/trip-draft'
 import { errorText, plural, rs } from '@/lib/te/format'
+import { draftTitle, savedAgo, worthSaving } from '@/lib/te/autosave'
+import { useDraftAutosave } from '../useDraftAutosave'
 import { nightsBetween } from '@/lib/te/trip-stay'
 import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
@@ -65,7 +67,7 @@ export function lastWorkday(today: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-export default function TePlanner({ snap, scope, origin, editing, onClose, onSaved, onVehicleAdded }: {
+export default function TePlanner({ snap, scope, origin, editing, resuming, onClose, onSaved, onVehicleAdded }: {
   snap: Snapshot
   scope: TripScope
   /** POST_FACTO is "I already travelled": no approval before, a reason required. */
@@ -73,6 +75,9 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
   /** A saved trip being changed. Screens 68b and 68c; `scope` and `origin` are
    *  then taken from the trip itself rather than from these props. */
   editing?: TeTrip
+  /** An unfinished plan being picked up again. Its body is the whole form,
+   *  `step` and all, so it decides where the planner opens. */
+  resuming?: TeDraft
   onClose: () => void
   onSaved: (tripId: Uuid, message: string) => void
   /** A vehicle was registered from inside the plan, so the snapshot is stale.
@@ -93,11 +98,22 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
 
   // Built once. An `edit` arriving later would throw away whatever has been
   // typed since, so the trip to edit is read on mount and not watched.
+  //
+  // A RESUMED DRAFT WINS over both: it IS the half-finished work, and it is
+  // put back through syncDraft rather than trusted, because it was written by
+  // an older build of this form and its shape may have moved on since.
   const [draft, setDraft] = useState<PlannerDraft>(() => (
-    editing
-      ? fromTrip(editing, ctx)
-      : { ...newPlannerDraft({ scope, origin, lastWorkday: lastWorkday(snap.today) }, ctx), lockScope: true }
+    resuming
+      ? syncDraft(resuming.body as unknown as PlannerDraft, ctx)
+      : editing
+        ? fromTrip(editing, ctx)
+        : { ...newPlannerDraft({ scope, origin, lastWorkday: lastWorkday(snap.today) }, ctx), lockScope: true }
   ))
+  // The form as it was opened. Autosave compares against this, so looking at a
+  // plan and closing it leaves nothing in the Drafts list. useState keeps the
+  // FIRST draft and ignores every later one — if this tracked `draft` it would
+  // always equal it and nothing would ever save.
+  const [pristine] = useState<PlannerDraft>(draft)
   const [preview, setPreview] = useState<TripPreview | null>(null)
   const [previewFailed, setPreviewFailed] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -111,6 +127,26 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
   }, [ctx])
 
   const payload = useMemo(() => toTripDraft(draft), [draft])
+
+  // UNFINISHED WORK IS KEPT. A plan takes real thought — a route, dates, who
+  // books each leg — and until now closing the drawer threw all of it away.
+  // The whole form is the draft, `step` included, so resuming reopens on the
+  // step they left. Suspended while submitting so the save and the delete
+  // cannot race each other.
+  const autosave = useDraftAutosave({
+    kind: 'trip',
+    body: draft as unknown as Record<string, unknown>,
+    pristine: pristine as unknown as Record<string, unknown>,
+    title: draftTitle('trip', draft),
+    scope: draft.scope,
+    step: draft.step,
+    tripId: draft.editId ?? editing?.id ?? null,
+    resumingId: resuming?.id ?? null,
+    enabled: !saving,
+  })
+  // Whether there is anything to keep. The same test autosave uses, so the
+  // button appears exactly when a draft would be written.
+  const touched = useMemo(() => worthSaving(draft, pristine), [draft, pristine])
 
   // The live preview, and the only validator. It runs on an empty draft too:
   // "Give the trip a name" and "Choose where you go" are the server's sentences,
@@ -186,6 +222,9 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
     setSaving(true)
     try {
       const r = await te.tripSave(payload)
+      // The plan is real now, so the half-finished copy of it has no reason to
+      // sit in the Drafts list. Awaited before onSaved, which unmounts this.
+      await autosave.discard()
       onSaved(r.trip_id, `${r.trip_no} saved.`)
     } catch (e) {
       setToast(errorText(e))
@@ -242,13 +281,36 @@ export default function TePlanner({ snap, scope, origin, editing, onClose, onSav
     </nav>
   )
 
+  /** Save the draft and leave. Not the same button as Send: this one makes no
+   *  claim that the plan is finished or even valid, which is the point. */
+  async function keepForLater() {
+    await autosave.saveNow()
+    onClose()
+  }
+
   const footer = (
     <>
       <div className="tw-bar">{summary(preview, draft.pax, planning)}</div>
+      {/* Said where the buttons are, because that is where somebody looks
+          before deciding whether it is safe to close the drawer. */}
+      <div className="savedline">
+        {autosave.state === 'saving' ? <span className="small muted">Saving…</span> : null}
+        {autosave.state === 'saved' && autosave.savedAt
+          ? <span className="small muted"><TeIcon name="check" size="sm" />{savedAgo(autosave.savedAt, Date.now())}</span>
+          : null}
+        {autosave.state === 'error'
+          ? <span className="small warn"><TeIcon name="warn" size="sm" />Not saved yet — we will keep trying.</span>
+          : null}
+      </div>
       <div className="row tight">
         {step > 1
           ? <button type="button" className="btn" onClick={() => goStep((step - 1) as PlanStep)}><TeIcon name="back" size="sm" />Back</button>
           : <button type="button" className="btn" onClick={onClose}>Cancel</button>}
+        {/* Offered only once there is something to keep. On an untouched form
+            it would promise to save work that does not exist. */}
+        {touched && !saving
+          ? <button type="button" className="btn" onClick={keepForLater}>Finish later</button>
+          : null}
         {step < LAST_STEP
           ? <button type="button" className="btn pri" onClick={next}>Next: {STEPS[step].title}<TeIcon name="go" size="sm" /></button>
           : <button type="button" className="btn pri" onClick={save} disabled={saving}>{saving ? 'Saving…' : sendLabel}</button>}
