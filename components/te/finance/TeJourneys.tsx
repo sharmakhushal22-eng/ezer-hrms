@@ -31,7 +31,10 @@ const FILTERS: { k: Filter; label: string }[] = [
   { k: 'done', label: 'Confirmed' },
 ]
 
-export default function TeJourneys({ onToast }: { onToast: (message: string) => void }) {
+export default function TeJourneys({ onToast, onOpenTrip }: {
+  onToast: (message: string) => void
+  onOpenTrip?: (tripId: string) => void
+}) {
   const [filter, setFilter] = useState<Filter>('waiting')
   const [rows, setRows] = useState<DeskJourney[] | null>(null)
   const [modes, setModes] = useState<TeConfig['modes']>([])
@@ -86,6 +89,7 @@ export default function TeJourneys({ onToast }: { onToast: (message: string) => 
           rows={rows}
           desk="finance"
           basisOf={m => modes.find(x => x.id === m)?.basis}
+          onOpenTrip={onOpenTrip}
           onDone={reload}
           onToast={message => { onToast(message); reload() }}
         />

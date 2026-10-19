@@ -56,10 +56,11 @@ const offBy = (m: number | null): string => {
   return n >= 1000 ? `${(n / 1000).toFixed(1)} km off` : `${Math.round(n)} m off`
 }
 
-function OneJourney({ j, desk, basisOf, onDone, onToast }: {
+function OneJourney({ j, desk, basisOf, onOpenTrip, onDone, onToast }: {
   j: DeskJourney
   desk: DeskKind
   basisOf: ModeBasis
+  onOpenTrip?: (tripId: string) => void
   onDone: () => void
   onToast: (s: string) => void
 }) {
@@ -119,7 +120,16 @@ function OneJourney({ j, desk, basisOf, onDone, onToast }: {
           </div>
           <div className="small muted">
             {j.full_name || 'Unknown'} {j.emp_code ? <span className="mono">{j.emp_code}</span> : null}
-            {' · '}{j.trip_no} · {whenOf(j.leg_date)} · {j.mode}
+            {' · '}
+            {/* The trip number is the trip's identity, so it is the way into
+                it: one journey is rarely the whole question a reviewer has. */}
+            {onOpenTrip ? (
+              <button type="button" className="link small" onClick={() => onOpenTrip(j.trip_id)}
+                title="Everything on this trip: the tickets, the stay, the food and every journey">
+                {j.trip_no}
+              </button>
+            ) : j.trip_no}
+            {' · '}{whenOf(j.leg_date)} · {j.mode}
           </div>
         </div>
         <span className={`chip ${tone.tone === 'ok' ? 't-ok' : tone.tone === 'bad' ? 't-bad' : tone.tone === 'warn' ? 't-warn' : 'plain'}`}>
@@ -218,12 +228,14 @@ function OneJourney({ j, desk, basisOf, onDone, onToast }: {
   )
 }
 
-export default function TeJourneyReview({ rows, desk, basisOf, onDone, onToast }: {
+export default function TeJourneyReview({ rows, desk, basisOf, onOpenTrip, onDone, onToast }: {
   rows: DeskJourney[]
   /** Which desk the reader is sitting at. Decides which confirmation the
    *  buttons offer, never what they can see: both desks read the same list. */
   desk: DeskKind
   basisOf: ModeBasis
+  /** Open the whole trip behind a journey. */
+  onOpenTrip?: (tripId: string) => void
   onDone: () => void
   onToast: (s: string) => void
 }) {
@@ -255,7 +267,7 @@ export default function TeJourneyReview({ rows, desk, basisOf, onDone, onToast }
         </span>
       </div>
       {sorted.map(j => (
-        <OneJourney key={j.leg_id} j={j} desk={desk} basisOf={basisOf} onDone={onDone} onToast={onToast} />
+        <OneJourney key={j.leg_id} j={j} desk={desk} basisOf={basisOf} onOpenTrip={onOpenTrip} onDone={onDone} onToast={onToast} />
       ))}
     </div>
   )

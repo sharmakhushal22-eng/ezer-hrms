@@ -469,6 +469,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
           rows={journeys}
           desk="travel"
           basisOf={m => modes.find(x => x.id === m)?.basis}
+          onOpenTrip={onOpenTrip}
           onDone={reload}
           onToast={onToast}
         />

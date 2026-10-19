@@ -11,7 +11,7 @@
 // which card that state gets and what the card says.
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { TeLeg, TeMasters, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
+import type { TeCategory, TeLeg, TeMasters, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
 import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
@@ -22,6 +22,7 @@ import TeFileLink from '../TeFileLink'
 import TeStayRequest from './TeStayRequest'
 import TeTripMap from '../plan/TeTripMap'
 import TeJourneyAnswer from '../leg/TeJourneyAnswer'
+import TeTripLedger from './TeTripLedger'
 import TeTripPlan from './TeTripPlan'
 import TeMapLinks from '../plan/TeMapLinks'
 import type { MapPlace } from '@/lib/te/trip-map'
@@ -56,7 +57,7 @@ const STEP_TONE: Record<string, string> = {
   rejected: 't-crit', sent_back: 't-warn', cancelled: 'plain',
 }
 
-export default function TeTripDetail({ tripId, me, today, masters, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
+export default function TeTripDetail({ tripId, me, today, masters, everyone, cats, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
   tripId: Uuid
   /** snap.masters — only so the plan can name the airport or station the
    *  company has configured for a city, when the traveller did not pick one.
@@ -78,6 +79,13 @@ export default function TeTripDetail({ tripId, me, today, masters, onBack, onCha
   onOpenLeg: (leg: TeLeg) => void
   /** Add a leg the plan did not have. Only while the trip is under way. */
   onAddLeg: (detail: TripDetail) => void
+  /** Whether this reader may see EVERY traveller's spend on the trip, not just
+   *  their own: a desk member, Finance, or an administrator. Off by default,
+   *  because the person reading a trip is usually the person on it, and what a
+   *  colleague was reimbursed is not theirs to see. */
+  everyone?: boolean
+  /** cfg.cats — the company's own category names and groups, for the ledger. */
+  cats?: TeCategory[]
   /** Open the bill form against this trip. Straight to the form rather than
    *  via the claim screen: a hotel or a meal is a trip-only category, and this
    *  is the only place in the product either can be entered. */
@@ -613,6 +621,12 @@ export default function TeTripDetail({ tripId, me, today, masters, onBack, onCha
           </dl>
         </div>
       ) : null}
+
+      {/* EVERYTHING THIS TRIP COST, in one place: the tickets the desk booked,
+          the hotel, the food, and every journey's fare including the sub-trips
+          added along the way. te_trip_detail has always returned all of it;
+          nothing on this screen ever listed a single line. */}
+      <TeTripLedger detail={detail} me={me} everyone={!!everyone} cats={cats} />
 
       {claims.length ? claims.map(c => (
         <div key={c.id} className="card">

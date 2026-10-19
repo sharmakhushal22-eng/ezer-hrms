@@ -446,7 +446,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}
           {view.name === 'advances' ? <TeAdvances snap={snap} onOpenTrip={id => setView({ name: 'trip', id })} /> : null}
           {view.name === 'approvals' ? <TeApprovals onToast={message => { setToast(message); reload() }} /> : null}
-          {view.name === 'dashboard' ? <TeDashboard /> : null}
+          {view.name === 'dashboard' ? <TeDashboard onOpenTrip={id => setView({ name: 'trip', id })} /> : null}
           {view.name === 'traveldesk' && onTravelDesk ? (
             <TeTravelDesk
               vehicleTypes={cfg?.vehicles ?? []}
@@ -460,8 +460,15 @@ export default function TeHome({ initialClaimId, onExit }: {
               onToast={message => { setToast(message); reload() }}
             />
           ) : null}
+          {/* Finance could not open a trip at all before this: every row in
+              every finance screen already carried trip_id and none of them
+              offered a way in, so the team settling a trip's money could not
+              read the trip. */}
           {view.name === 'financedesk' && onFinanceDesk ? (
-            <TeFinanceDesk onToast={message => { setToast(message); reload() }} />
+            <TeFinanceDesk
+              onToast={message => { setToast(message); reload() }}
+              onOpenTrip={id => setView({ name: 'trip', id })}
+            />
           ) : null}
           {view.name === 'tripClaim' ? (
             <TeOtherExpenses
@@ -515,6 +522,13 @@ export default function TeHome({ initialClaimId, onExit }: {
               masters={snap.masters}
               me={snap.me}
               today={snap.today}
+              // WHOSE MONEY THIS READER MAY SEE. A desk member, Finance or an
+              // administrator is looking at the trip to account for it and
+              // needs every traveller's lines; anybody else is looking at
+              // their own trip, and what a colleague was reimbursed is not
+              // theirs to read.
+              everyone={onTravelDesk || onFinanceDesk}
+              cats={cfg?.cats ?? []}
               onBack={() => setView({ name: 'trips' })}
               onChanged={message => { setToast(message); reload() }}
               onEdit={d => setSheet({ name: 'plan', kind: d.trip.scope, past: d.trip.origin === 'POST_FACTO', editing: d.trip })}

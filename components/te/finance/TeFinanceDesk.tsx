@@ -44,7 +44,13 @@ const ROOMS: { k: Room; label: string; icon: string }[] = [
   { k: 'periods', label: 'Months', icon: 'cal' },
 ]
 
-export default function TeFinanceDesk({ onToast }: { onToast: (message: string) => void }) {
+export default function TeFinanceDesk({ onToast, onOpenTrip }: {
+  onToast: (message: string) => void
+  /** Open the whole trip behind a row. Finance had no way into a trip at all
+   *  before this, although every row it reads already carries the trip id — so
+   *  the team settling a trip's money could not read the trip. */
+  onOpenTrip?: (tripId: string) => void
+}) {
   const [room, setRoom] = useState<Room>('verify')
 
   // No header of its own, deliberately. Each of the five screens below already
@@ -61,8 +67,8 @@ export default function TeFinanceDesk({ onToast }: { onToast: (message: string) 
         ))}
       </div>
 
-      {room === 'verify' ? <TeVerification onToast={onToast} /> : null}
-      {room === 'journeys' ? <TeJourneys onToast={onToast} /> : null}
+      {room === 'verify' ? <TeVerification onToast={onToast} onOpenTrip={onOpenTrip} /> : null}
+      {room === 'journeys' ? <TeJourneys onToast={onToast} onOpenTrip={onOpenTrip} /> : null}
       {room === 'advances' ? <TeAdvanceDesk onToast={onToast} /> : null}
       {room === 'payouts' ? <TePayouts onToast={onToast} /> : null}
       {room === 'corrections' ? <TeAdjustments onToast={onToast} /> : null}

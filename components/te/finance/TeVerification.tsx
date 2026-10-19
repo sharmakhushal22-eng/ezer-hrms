@@ -20,7 +20,13 @@ import TeClaimApproval from '../approve/TeClaimApproval'
 
 const BAND_TONE: Record<string, string> = { High: 't-crit', Medium: 't-warn', Low: 't-pos' }
 
-export default function TeVerification({ onToast }: { onToast: (message: string) => void }) {
+export default function TeVerification({ onToast, onOpenTrip }: {
+  onToast: (message: string) => void
+  /** Open the trip behind a claim. Every row here already carried trip_id and
+   *  trip_no and only printed the name as text, so Finance could read what a
+   *  trip cost only one claim at a time. */
+  onOpenTrip?: (tripId: string) => void
+}) {
   const [rows, setRows] = useState<ClaimSummaryRow[] | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -148,9 +154,16 @@ export default function TeVerification({ onToast }: { onToast: (message: string)
           <div key={group.title} className="card pad0">
             <div className="day"><span>{group.title}</span><span>{group.rows.length}</span></div>
             {group.rows.map(r => (
-              <button key={r.id} type="button" className="li click" onClick={() => setOpen(r.id)}>
+              <div key={r.id} className="li">
                 <span className="ico"><TeIcon name="other" /></span>
-                <div className="grow">
+                {/* The claim is still the row's main target; the trip sits
+                    beside it as its own control. A button cannot be nested
+                    inside a button, which is why this is a div with a role
+                    rather than the <button> it used to be. */}
+                <div className="grow click" role="button" tabIndex={0}
+                  onClick={() => setOpen(r.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(r.id) } }}
+                >
                   <div className="b">{r.claim_no} · {r.employee_name}</div>
                   <div className="small muted">
                     {[r.trip_name || 'Other expenses', r.grade, r.department, r.period_label].filter(Boolean).join(' · ')}
@@ -166,12 +179,19 @@ export default function TeVerification({ onToast }: { onToast: (message: string)
                     {r.waiting_role ? <span className="chip plain">{r.waiting_role}</span> : null}
                   </div>
                 </div>
+                {/* THE TRIP, by its number, which is now its identity. */}
+                {r.trip_id && onOpenTrip ? (
+                  <button type="button" className="btn sm" title="Everything on this trip: the tickets, the stay, the food and every journey"
+                    onClick={() => onOpenTrip(r.trip_id as string)}>
+                    <TeIcon name="route" size="sm" />{r.trip_no}
+                  </button>
+                ) : null}
                 <div className="amt">
                   <b>{rs(r.eligible_total)}</b>
                   <span className="small muted">eligible</span>
                   {r.claimed_total !== r.eligible_total ? <s>{rs(r.claimed_total)}</s> : null}
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         ) : null

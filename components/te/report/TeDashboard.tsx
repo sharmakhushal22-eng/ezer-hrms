@@ -25,7 +25,7 @@
 // What somebody was finally paid, once their own advance was settled against
 // it, is between them and Finance. te_dashboard does not even select it, so
 // it cannot leak through this file by accident.
-import { useEffect, useState } from 'react'
+import { type KeyboardEvent, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeDashboard as TeDashboardData } from '@/lib/te/types'
 import {
@@ -36,7 +36,12 @@ import TeIcon from '../TeIcon'
 
 const SCOPE_ICON: Record<string, string> = { local: 'local', domestic: 'domestic', international: 'international' }
 
-export default function TeDashboard() {
+export default function TeDashboard({ onOpenTrip }: {
+  /** Open the trip behind a row. Every row here already carried the trip id and
+   *  none of them was clickable, so the dashboard could show somebody their
+   *  trips and not let them look at one. */
+  onOpenTrip?: (tripId: string) => void
+} = {}) {
   const [data, setData] = useState<TeDashboardData | null>(null)
   const [error, setError] = useState('')
   /** null = "whatever month the company is in", which is what the function
@@ -175,7 +180,12 @@ export default function TeDashboard() {
             <div className="card pad0">
               <div className="day"><span>Your trips</span><span>{data.mine.trips.length}</span></div>
               {data.mine.trips.map(t => (
-                <div key={t.id} className="li">
+                <div key={t.id} className={`li${onOpenTrip ? ' click' : ''}`}
+                  {...(onOpenTrip ? {
+                    role: 'button', tabIndex: 0,
+                    onClick: () => onOpenTrip(t.id),
+                    onKeyDown: (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenTrip(t.id) } },
+                  } : {})}>
                   <span className="ico-b sm"><TeIcon name={SCOPE_ICON[t.scope] ?? 'route'} size="sm" /></span>
                   <div className="grow">
                     <div className="b">{t.name || t.no}</div>
