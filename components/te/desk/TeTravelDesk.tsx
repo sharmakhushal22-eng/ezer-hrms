@@ -259,7 +259,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
 
       {/* Choosing comes before booking, because it is what produces something
           to book. A trip sitting here has somebody waiting on an answer. */}
-      {here === 'stays' ? <TeStayChoice stays={stays} onDone={message => { onToast(message); reload() }} /> : null}
+      {here === 'stays' ? <TeStayChoice stays={stays} onDone={message => { onToast(message); reload() }} onOpenTrip={onOpenTrip} /> : null}
 
       {here === 'book' ? (
       <div className="card pad0">
