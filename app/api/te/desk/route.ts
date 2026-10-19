@@ -108,13 +108,36 @@ export async function GET(req: NextRequest) {
       ...stayRows.map(r => r.employee_id as string),
       ...watchRows.map(r => r.employee_id as string),
     ].filter(Boolean))]
-    const names = new Map<string, { emp_code: string | null; full_name: string | null }>()
+    // HOW TO REACH THEM, read fresh on every request rather than copied into
+    // the travel tables. The employee record is the ESS source of truth, so a
+    // number changed in the portal this morning is the number the desk dials
+    // this afternoon — there is no second copy to go stale.
+    //
+    // Both emails and both numbers come back: the desk rings the mobile and
+    // mails the work address, and falls back to the alternates when a record
+    // has not been filled in. The screen decides which to show.
+    const names = new Map<string, {
+      emp_code: string | null; full_name: string | null
+      mobile: string | null; alternate_mobile: string | null
+      office_email: string | null; personal_email: string | null
+    }>()
     if (ids.length) {
-      const { data, error } = await sb.from('employees').select('id, emp_code, full_name').in('id', ids)
+      const { data, error } = await sb.from('employees')
+        .select('id, emp_code, full_name, mobile, alternate_mobile, office_email, personal_email').in('id', ids)
       if (error) throw rpcError(error, 'employees')
-      for (const e of data ?? []) names.set(e.id as string, { emp_code: e.emp_code as string | null, full_name: e.full_name as string | null })
+      for (const e of data ?? []) {
+        names.set(e.id as string, {
+          emp_code: e.emp_code as string | null,
+          full_name: e.full_name as string | null,
+          mobile: (e.mobile as string | null) ?? null,
+          alternate_mobile: (e.alternate_mobile as string | null) ?? null,
+          office_email: (e.office_email as string | null) ?? null,
+          personal_email: (e.personal_email as string | null) ?? null,
+        })
+      }
     }
-    const withName = <T extends { employee_id: unknown }>(r: T) => ({ ...r, ...(names.get(r.employee_id as string) ?? { emp_code: null, full_name: null }) })
+    const BLANK = { emp_code: null, full_name: null, mobile: null, alternate_mobile: null, office_email: null, personal_email: null }
+    const withName = <T extends { employee_id: unknown }>(r: T) => ({ ...r, ...(names.get(r.employee_id as string) ?? BLANK) })
 
     // WHERE EACH REQUEST HAS GOT TO. The desk was told "waiting for approval"
     // and nothing else, which on a two-step chain is the difference between a

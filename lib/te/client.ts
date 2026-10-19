@@ -151,7 +151,7 @@ export interface FinanceSummary {
   /** false = a row cap was reached, so the amounts above are a floor. */
   amountsComplete: boolean
 }
-export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null;
+export interface DeskToBook extends DeskContact { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null;
   /** The trip's own status. Anything but APPROVED means the desk may look and
    *  plan but not book yet: te_booking_record refuses it. Absent until
    *  migration 177. */
@@ -161,25 +161,39 @@ export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; 
    *  and on a leg added during the trip, which has no segment behind it. */
   pref_time: string | null; pref_url: string | null; pref_note: string | null }
 /** A trip waiting for the desk to pick one of the hotels the employee named. */
-export interface DeskStay {
+export interface DeskStay extends DeskContact {
   id: Uuid; trip_no: string; name: string; employee_id: Uuid
   emp_code: string | null; full_name: string | null
   scope: string; start_date: string | null; end_date: string | null
   stay_by: 'self' | 'desk'
   stay_options: TeStayOption[]
 }
-export interface DeskVehicle { id: Uuid; employee_id: Uuid; emp_code: string | null; full_name: string | null; reg_no: string; vehicle_type_code: string; declared_type_code: string | null; ownership: string; rc_file_url: string | null; created_at: string }
+export interface DeskVehicle extends DeskContact { id: Uuid; employee_id: Uuid; emp_code: string | null; full_name: string | null; reg_no: string; vehicle_type_code: string; declared_type_code: string | null; ownership: string; rc_file_url: string | null; created_at: string }
 /** A booking the desk has already recorded. Live ones only — the one thing
  *  left to do with it is cancel it when the trip changes under it. */
+/**
+ * How to reach the traveller, joined onto every desk row from the employee
+ * record itself. Read live on each request, never copied into the travel
+ * tables, so a number changed in ESS is the number the desk sees next.
+ */
+export interface DeskContact {
+  emp_code: string | null
+  full_name: string | null
+  mobile: string | null
+  alternate_mobile: string | null
+  office_email: string | null
+  personal_email: string | null
+}
+
 /** Travel the desk is not booking anything for. Information, not work. */
-export interface DeskWatch {
+export interface DeskWatch extends DeskContact {
   company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string
   employee_id: Uuid; emp_code: string | null; full_name: string | null
   scope: string; trip_status: TripStatus; start_date: string; end_date: string
   stay_wanted: boolean | null; stay_by: string | null; leg_count: number
 }
 
-export interface DeskBooked {
+export interface DeskBooked extends DeskContact {
   id: Uuid; booking_no: string; trip_id: Uuid; trip_no: string; trip_name: string
   employee_id: Uuid; emp_code: string | null; full_name: string | null
   leg_id: Uuid | null; point_seq: number | null; kind: 'travel' | 'hotel' | string

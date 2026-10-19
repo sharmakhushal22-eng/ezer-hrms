@@ -36,6 +36,7 @@ import type { ChainStep } from '@/lib/te/approval-chain'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeChain from '../TeChain'
+import TeContact from '../TeContact'
 import TeStayChoice from './TeStayChoice'
 
 type Room = 'stays' | 'book' | 'booked' | 'vehicles' | 'watch'
@@ -240,6 +241,8 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                     today. Shown on an approved trip too: knowing who approved
                     it is the answer to "can I book this". */}
                 <TeChain steps={chains[b.trip_id] ?? []} />
+                {/* Straight from the employee record, every request. */}
+                <TeContact who={b} />
                 {/* WHAT THEY ASKED FOR. The route and the date were never
                     enough to buy a ticket — there are a dozen flights that
                     day — so this desk was writing to travellers to ask. The
@@ -326,6 +329,9 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                   {' · '}<span className="mono">{b.reference}</span> · {rs(b.amount)}
                   {b.booked_at ? ` · ${day(b.booked_at)}` : ''}
                 </div>
+                {/* A booked ticket is the most likely thing to need a call:
+                    a schedule change reaches the desk, not the traveller. */}
+                <TeContact who={b} />
                 {cancelling === b.id ? (
                   <div className="form">
                     <div className="flag crit">
@@ -385,6 +391,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                   {' · '}{day(w.start_date)}{w.end_date !== w.start_date ? ` to ${day(w.end_date)}` : ''}
                   {' · '}{w.leg_count} journey{w.leg_count === 1 ? '' : 's'}, all their own
                 </div>
+                <TeContact who={w} />
               </div>
               <TeChain steps={chains[w.trip_id] ?? []} compact />
             </div>
