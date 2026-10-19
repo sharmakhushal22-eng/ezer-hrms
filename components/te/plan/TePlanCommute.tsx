@@ -444,8 +444,19 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
               <div className="jp-grid">
                 <label className="fld sm">
                   <span>Preferred time</span>
-                  <input type="time" value={s.prefTime ?? ''} onChange={e => setSeg({ prefTime: e.target.value })} />
-                  <small>When you would like to leave.</small>
+                  {/* Starts as when they leave this place on the route, and
+                      follows it until they type their own — see
+                      prefTimeTouched. Typing is what stops the following, so
+                      the flag is set here and nowhere else. */}
+                  <input type="time" value={s.prefTime ?? ''}
+                    onChange={e => setSeg({ prefTime: e.target.value, prefTimeTouched: true })} />
+                  <small>
+                    {s.prefTimeTouched
+                      ? 'When you would like to leave.'
+                      : s.prefTime
+                        ? 'Taken from when you leave on the route. Change it to ask for something else.'
+                        : 'When you would like to leave. Fill in the leave time on the route and it comes here by itself.'}
+                  </small>
                 </label>
                 <label className="fld sm">
                   <span>Link to what you found</span>

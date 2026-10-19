@@ -104,6 +104,21 @@ export interface DraftSeg {
    * stay on the route, where they belong.
    */
   prefTime?: string
+  /**
+   * Set the moment somebody types in the preferred-time box, and never unset.
+   *
+   * WHY IT IS NEEDED. prefTime starts as a copy of when they leave this place
+   * on the route — they have already said "I leave Mumbai at 21:40", and making
+   * them say it again on the next step is asking the same question twice. So
+   * while it is untouched it FOLLOWS the route: change the leave time on step 2
+   * and the preference changes with it.
+   *
+   * Once they have typed their own, it stops following. Otherwise editing the
+   * route later would silently overwrite a preference they deliberately set,
+   * which is the one thing an autofill must never do. Same bargain as
+   * nameTouched on the trip name.
+   */
+  prefTimeTouched?: true
   /** A link to the flight, train or fare they found, for the desk to match. */
   prefUrl?: string
   /** Anything the two fields above cannot say: "either the 6am or after 8pm",
@@ -390,7 +405,11 @@ export function fromTrip(trip: {
       vehicleId: s.vehicleId ?? '',
       bookedBy: s.bookedBy === 'self' ? 'self' : 'desk',
       xfer: { first: s.xfer?.first ?? 'cab', last: s.xfer?.last ?? 'cab', hubA: s.xfer?.hubA, hubB: s.xfer?.hubB },
-      ...(s.prefTime ? { prefTime: s.prefTime } : {}),
+      // A TIME THAT WAS SAVED IS A TIME SOMEBODY SETTLED ON, so it counts as
+      // touched and stops following the route. Without this, reopening a trip
+      // whose route carries no leave time would quietly wipe the preference
+      // the desk was given — syncDraft runs on the way in.
+      ...(s.prefTime ? { prefTime: s.prefTime, prefTimeTouched: true as const } : {}),
       ...(s.prefUrl ? { prefUrl: s.prefUrl } : {}),
       ...(s.prefNote ? { prefNote: s.prefNote } : {}),
     })),
@@ -443,6 +462,13 @@ export function syncDraft(d: PlannerDraft, c: DraftContext): PlannerDraft {
   const segs: DraftSeg[] = points.slice(1).map((_, i) => {
     const kept = d.segs[i] ?? d.segs[i - 1] ?? fallback
     return { ...kept, xfer: { ...kept.xfer } }
+  })
+
+  // THE PREFERRED TIME FOLLOWS WHEN THEY LEAVE, until they say otherwise.
+  // segs[i] is the journey from points[i] to points[i+1], so the time it leaves
+  // is points[i].leaveAt — the field they filled in one step earlier.
+  segs.forEach((s, i) => {
+    if (!s.prefTimeTouched) s.prefTime = points[i]?.leaveAt || ''
   })
 
   for (const s of segs) {
