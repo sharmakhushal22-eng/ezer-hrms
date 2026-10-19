@@ -28,12 +28,24 @@
 --   draft stores the storage path it returns, the same string a real expense
 --   line stores. A draft is small and stays small.
 --
--- NO ROW LEVEL SECURITY, which is this module's convention and not an
--- oversight: none of the ~30 te_ tables has RLS. They are reached only by the
--- service-role client behind an authenticated route. The repo guide's
--- "allow_all to anon, authenticated" pattern belongs to the older anon-key
--- tables, and applying it here would do the opposite of what it sounds like —
--- it would publish everybody's unfinished drafts to the public anon key.
+-- ROW LEVEL SECURITY IS ON, WITH NO POLICY, and the browser keys are revoked.
+-- That is this module's security model, set out in 151_te_lockdown.sql: RLS on
+-- with no policy means the anon and authenticated keys read and write nothing,
+-- while the service role bypasses RLS and reaches it from the API routes — and
+-- the routes are what check who is calling.
+--
+-- AN EARLIER VERSION OF THIS FILE CLAIMED THE OPPOSITE: that no te_ table has
+-- RLS and that adding it would expose drafts. That was wrong. It was written
+-- after reading 144_te_tables.sql, which genuinely adds no RLS, and missing
+-- 151, which is where the module is locked down afterwards. A draft holds
+-- unfinished, unreviewed work its author has not chosen to show anybody, so
+-- getting this backwards would have published exactly the wrong table.
+--
+-- THIS FILE LOCKS ITSELF DOWN rather than relying on 151 being re-run. 151
+-- loops over the te_ tables and functions that exist WHEN IT RUNS, so anything
+-- added later is uncovered until somebody remembers — its own header says "RUN
+-- IT AGAIN after any later migration that adds a te_ function". A table of
+-- private drafts should not wait on that.
 -- ============================================================================
 
 create table if not exists te_drafts (
@@ -173,5 +185,55 @@ $$;
 
 comment on function te_draft_delete is
   'Discard one of the actor''s own drafts. Quiet when it has already gone.';
+
+-- ── locked down, the same way 151 locks the rest of the module ───────────────
+-- RLS on with NO POLICY: the anon and authenticated keys read and write
+-- nothing here. The service role bypasses RLS and is the only role granted
+-- anything, which is how the API routes reach it — and the routes are what
+-- decide who is calling.
+--
+-- The role guards are because `anon` and `authenticated` are Supabase roles
+-- and do not exist on a plain Postgres, which is what the engine tests run
+-- against. Revoking from a role that is not there would abort the migration.
+alter table te_drafts enable row level security;
+
+revoke all on table te_drafts from public;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on table te_drafts from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke all on table te_drafts from authenticated;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant all on table te_drafts to service_role;
+  end if;
+end $$;
+
+-- The three functions, too: a function in Supabase is callable over the REST
+-- API by whoever holds the key unless execute is taken away. te_draft_save
+-- takes p_actor, so an open one would let anybody write a draft as anybody.
+do $$
+declare
+  sig text;
+begin
+  for sig in
+    select format('%s(%s)', p.proname, pg_get_function_identity_arguments(p.oid))
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname in ('te_draft_save', 'te_draft_list', 'te_draft_delete')
+  loop
+    execute format('revoke all on function %s from public', sig);
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+      execute format('revoke all on function %s from anon', sig);
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+      execute format('revoke all on function %s from authenticated', sig);
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'service_role') then
+      execute format('grant execute on function %s to service_role', sig);
+    end if;
+  end loop;
+end $$;
 
 notify pgrst, 'reload schema';
