@@ -7,7 +7,7 @@
 // whether approval is needed at all come back from te.tripPreview. This file
 // chooses the words and the order.
 import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
-import { blockingOn, errorFor, type PlanStep, type PlannerDraft } from '@/lib/te/trip-draft'
+import { blockingOn, errorFor, LAST_STEP, visibleSteps, type PlanStep, type PlannerDraft } from '@/lib/te/trip-draft'
 import { day, dayAt, plural, rs } from '@/lib/te/format'
 import type { MapPlace } from '@/lib/te/trip-map'
 import { nightsBetween, STAY_OPTIONS_WANTED, usableStayOptions } from '@/lib/te/trip-stay'
@@ -121,7 +121,10 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
       </div>
 
       <div className="sec">
-        <h4>{planning ? 'Stay, money and approval' : 'Why it was not tracked'}</h4>
+        {/* The heading names what is actually under it. On a trip with no stay
+            there is no stay block, and a heading promising one reads as a
+            section that failed to load. */}
+        <h4>{!planning ? 'Why it was not tracked' : draft.stayWanted === true ? 'Stay, money and approval' : 'Money and approval'}</h4>
 
         {!planning ? (
           <>
@@ -176,7 +179,11 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
             arrives at expecting to read rather than to answer — so the hotel
             question was the easiest thing in the planner to miss. What is
             left here is what was decided, read-only, with a way back. */}
-        {planning && draft.stayWanted !== undefined ? (
+        {/* GONE, not answered with "Not needed". Saying no on step 1 took the
+            Stay step away; leaving its summary here to report two blanks puts
+            the question back in front of somebody who has already closed it,
+            and the Change button would point at a step that is not there. */}
+        {planning && draft.stayWanted === true ? (
           <div className="card flat tint">
             <div className="ch">
               <h3>Stay and food</h3>
@@ -292,7 +299,11 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
               <TeIcon name="claims" />
               <div className="tx">
                 <b>{draft.tried ? `${blocking.length} things to fix` : 'Still to fill'}</b>
-                {([1, 2, 3, 4] as const).map(n => {
+                {/* The steps this plan actually has. Nothing routes a blocker
+                    to step 4 today, so this changes nothing yet — but a list
+                    that offers "Stay" on a plan with no Stay step is a trap
+                    waiting for the first issue that does. */}
+                {visibleSteps(draft).filter(n => n !== LAST_STEP).map(n => {
                   const on = blockingOn(issues, n)
                   if (!on.length) return null
                   return (
