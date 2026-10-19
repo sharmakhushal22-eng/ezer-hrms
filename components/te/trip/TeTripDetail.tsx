@@ -599,7 +599,7 @@ export default function TeTripDetail({ tripId, me, today, masters, everyone, cat
                 {/* A journey a desk has queried says so here rather than only
                     inside it: this list is where the traveller looks when their
                     claim will not send. */}
-                {l.review?.backAt ? <span className="chip t-bad">Sent back</span> : null}
+                {l.review?.backAt ? <span className="chip t-crit">Sent back</span> : null}
                 <span className="chip plain">{LEG_STATE[l.status] ?? l.status}</span>
               </div>
               {mine && l.review?.backAt ? (

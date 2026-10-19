@@ -105,7 +105,7 @@ export default function TeTripLedger({ detail, me, everyone, cats }: {
               <div className="grow">
                 <div className="b">
                   {r.line.merchant || r.catName}
-                  {r.subTrip ? <span className="chip plain sm">Local sub-trip</span> : null}
+                  {r.subTrip ? <span className="chip plain">Local sub-trip</span> : null}
                 </div>
                 <div className="small muted">
                   {r.line.no ? <span className="mono">{r.line.no}</span> : null}

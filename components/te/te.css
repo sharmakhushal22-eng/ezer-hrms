@@ -154,6 +154,18 @@
 .te .card{background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--te-r);padding:18px;box-shadow:var(--ez-shadow-raised);min-width:0}
 .te .card.flat{box-shadow:none}
 .te .card.pad0{padding:0;overflow:hidden}
+/* Puts the padding back on one child of a pad0 card — a header or a totals list
+   that should line up with the padded rows above it, inside a card whose own
+   padding was removed so its day-strips can run edge to edge. */
+.te .pad{padding:12px 14px}
+/* YOU ARE ON A TRIP RIGHT NOW, on the home screen. The only way to log a local
+   hop used to be Home -> Trips -> the trip -> scroll to the Route card, which is
+   three steps too many for somebody standing on a pavement. Shown only while a
+   trip of theirs is under way, so it is never clutter for anybody who is not
+   travelling. Bordered in the live colour, like .card.live and .livebar, because
+   it means the same thing. */
+.te .ontrip{border-color:var(--ez-positive);background:var(--ez-positive-tint);display:grid;gap:9px}
+.te .ontrip .eyebrow{color:var(--ez-positive)}
 .te .card h3{font-size:15px}
 .te .card .ch{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .te .sunk{background:var(--ez-sunken);border-radius:var(--te-r-sm);padding:12px 14px}

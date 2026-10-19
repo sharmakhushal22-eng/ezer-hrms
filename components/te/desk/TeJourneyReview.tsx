@@ -132,7 +132,7 @@ function OneJourney({ j, desk, basisOf, onOpenTrip, onDone, onToast }: {
             {' · '}{whenOf(j.leg_date)} · {j.mode}
           </div>
         </div>
-        <span className={`chip ${tone.tone === 'ok' ? 't-ok' : tone.tone === 'bad' ? 't-bad' : tone.tone === 'warn' ? 't-warn' : 'plain'}`}>
+        <span className={`chip ${tone.tone === 'ok' ? 't-pos' : tone.tone === 'bad' ? 't-crit' : tone.tone === 'warn' ? 't-warn' : 'plain'}`}>
           {tone.text}
         </span>
       </div>
@@ -146,7 +146,7 @@ function OneJourney({ j, desk, basisOf, onOpenTrip, onDone, onToast }: {
           ? <span className="chip t-warn" title="The engine capped the payable distance">{j.payable_km} km payable</span>
           : null}
         {j.claimed != null && j.claimed > 0 ? <span className="chip plain">{rs(j.claimed)}</span> : null}
-        {j.file_count > 0 ? <span className="chip t-ok"><TeIcon name="file" size="sm" />{plural(j.file_count, 'bill')}</span> : null}
+        {j.file_count > 0 ? <span className="chip t-pos"><TeIcon name="file" size="sm" />{plural(j.file_count, 'bill')}</span> : null}
         {offBy(j.start_off_m) ? <span className="chip plain" title="Where the journey was started, against the place named">Start {offBy(j.start_off_m)}</span> : null}
         {offBy(j.end_off_m) ? <span className="chip plain" title="Where the journey was ended, against the place named">End {offBy(j.end_off_m)}</span> : null}
       </div>

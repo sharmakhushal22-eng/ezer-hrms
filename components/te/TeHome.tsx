@@ -208,6 +208,17 @@ export default function TeHome({ initialClaimId, onExit }: {
   const sentBack = snap.claims.filter(c => c.status === 'SENT_BACK')
   // A leg of mine that is running right now, if there is one.
   const liveLeg = snap.journeys.find(j => j.emp === snap.me && (j.status === 'ACTIVE' || j.status === 'PAUSED')) ?? null
+  // A TRIP OF MINE THAT IS UNDER WAY. te_leg_add accepts a journey only while
+  // te_trip_status is APPROVED/ONGOING/COMPLETED and today is inside the trip's
+  // dates, so offering it outside that window would be offering a refusal.
+  // ONGOING is the honest subset of that: travel has actually started.
+  //
+  // The newest first, for the vanishingly rare case of two at once — the
+  // database allows two approved trips to overlap, and somebody mid-trip is
+  // almost certainly thinking about the one they are on.
+  const onTrip = snap.trips
+    .filter(t => t.emp === snap.me && t.display === 'ONGOING')
+    .sort((a, b) => (b.start ?? '').localeCompare(a.start ?? ''))[0] ?? null
 
   // Everything the entry flow shows comes from the one snapshot. placeName and
   // modeName turn the ids the server sends into the words the prototype used.
@@ -236,6 +247,26 @@ export default function TeHome({ initialClaimId, onExit }: {
 
   /** Opening a trip closes whatever sheet asked for it. */
   const openTrip = (id: string) => { setSheet(null); setView({ name: 'trip', id }) }
+
+  /**
+   * Open the add-a-journey sheet for a trip the Home screen only knows by id.
+   *
+   * The sheet needs the trip's full detail — its places, its legs, where the
+   * last one ended — and the snapshot does not carry that. One fetch, then the
+   * sheet, so somebody standing on a pavement gets there in one tap instead of
+   * navigating to the trip and scrolling to find the button.
+   */
+  const openAddLeg = async (tripId: string) => {
+    try {
+      const detail = await te.trip(tripId)
+      setSheet({ name: 'addLeg', detail })
+    } catch (e) {
+      // Falling back to the trip rather than failing outright: the button is
+      // still there, one screen in.
+      setToast(errorText(e))
+      setView({ name: 'trip', id: tripId })
+    }
+  }
 
   /** The Continue list knows a leg by its id; the screen needs the leg itself,
    *  which is in the snapshot it was listed from. */
@@ -356,6 +387,40 @@ export default function TeHome({ initialClaimId, onExit }: {
                   <div className="kpi"><b className="num">{rs(advance)}</b><span>advance with you</span></div>
                 </div>
               </section>
+
+              {/* ON A TRIP RIGHT NOW. The only way to log a local hop used to be
+                  Home -> Trips -> find the trip -> scroll to the Route card ->
+                  "Add a journey", which is four steps too many for somebody
+                  standing on a pavement in Mumbai. Shown only while a trip of
+                  theirs is actually under way, so it is never clutter for
+                  anybody who is not travelling. */}
+              {onTrip ? (
+                <div className="card ontrip">
+                  <div className="row sp top">
+                    <div className="grow">
+                      <div className="eyebrow">You are on a trip</div>
+                      <b>{onTrip.name || onTrip.no}</b>
+                      <div className="small muted">
+                        <span className="mono">{onTrip.no}</span>
+                        {onTrip.to ? <> · {onTrip.to}</> : null}
+                      </div>
+                    </div>
+                    <span className="chip t-pos">On the way</span>
+                  </div>
+                  <p className="small muted">
+                    Hopping about at the destination? Add it as a journey and it is recorded on GPS and paid with the
+                    rest of the trip, instead of becoming a loose bill.
+                  </p>
+                  <div className="row tight">
+                    <button type="button" className="btn pri" onClick={() => void openAddLeg(onTrip.id)}>
+                      <TeIcon name="plus" size="sm" />Add a journey
+                    </button>
+                    <button type="button" className="btn" onClick={() => setView({ name: 'trip', id: onTrip.id })}>
+                      Open the trip
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="kinds" role="list">
                 {KINDS.map(k => (
@@ -688,7 +753,18 @@ export default function TeHome({ initialClaimId, onExit }: {
           detail={sheet.detail}
           onClose={() => setSheet(null)}
           onPlaceAdded={reload}
-          onAdded={(_legId, message) => done(message)}
+          onAdded={(legId, message, opts) => {
+            const tripId = sheet.detail.trip.id
+            done(message)
+            // RECORDING HAS BEGUN, so land on the journey rather than the trip:
+            // the screen that shows the distance climbing is the one somebody
+            // who just pressed "Add and start now" is expecting. The journey
+            // was created a moment ago and is not in the snapshot this screen
+            // holds, so the trip is the honest fallback — it loads its own.
+            if (!opts?.started) return
+            const leg = snap.journeys.find(j => j.id === legId)
+            setView(leg ? { name: 'leg', tripId, leg } : { name: 'trip', id: tripId })
+          }}
         />
       ) : null}
       {sheet?.name === 'startNow' ? (
