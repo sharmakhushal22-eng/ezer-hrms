@@ -420,6 +420,36 @@ export interface TeLeg {
   stops: TeLegStop[]
   checkin: { start?: TeFixPoint; end?: TeFixPoint }
   history: TeTimelineEntry[]
+  /** The route actually travelled, as an encoded polyline — the one record of
+   *  it that outlives the nightly purge of the raw pings. '' on a journey
+   *  recorded before migration 180, and on one that was never tracked.
+   *  Decode with decodePolyline from engine/polyline.js. */
+  routeLine: string
+  /** Who has looked at this journey, and what they asked for. */
+  review: TeLegReview
+}
+
+/** Where the two desks have got to on one journey. Deliberately not part of
+ *  `status`: that drives the recorder, the claim gate and the one-running-
+ *  journey index, and none of those should move to answer "has anybody looked
+ *  at this yet". */
+export interface TeLegReview {
+  deskAt: IsoTime | null
+  deskBy: Uuid | null
+  deskName: string | null
+  finAt: IsoTime | null
+  finBy: Uuid | null
+  finName: string | null
+  /** Set while a desk has asked the traveller for something. While this is set
+   *  the claim for the trip is held. */
+  backAt: IsoTime | null
+  backBy: Uuid | null
+  backName: string | null
+  /** 'travel_desk' | 'finance_team' | '' */
+  backDesk: string
+  backWhy: string
+  /** The question and the traveller's answer, kept together. */
+  answer: string
 }
 
 // ── expenses, flags, claims ─────────────────────────────────────────────────
@@ -626,6 +656,14 @@ export interface TeConfig {
   track: Record<string, number | boolean | string>
   /** Vehicle rules: rcCheck, ownership, insurance (te_settings.vehicle_rules). */
   vehx: Record<string, number | boolean | string>
+  /** te_settings.extra — where a setting added after the table was built lives,
+   *  merged key by key by PATCH /api/te/admin/settings. Known keys:
+   *    bookingMail    { subject, body }  the traveller's ticket email
+   *    journeyConfirm 'both'|'finance'|'desk'|'none'  who confirms a journey
+   *  Typed as unknown values on purpose: each reader validates its own key
+   *  (confirmPolicy(), renderBookingMail()) rather than trusting the shape of
+   *  a jsonb column an administrator can edit. */
+  extra?: Record<string, unknown>
   fuelPrice: Record<string, number>
   basis: Record<string, string>
   breach: Record<string, string>

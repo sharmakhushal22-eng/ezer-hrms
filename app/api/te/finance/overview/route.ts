@@ -7,6 +7,7 @@
 //   batches      te_payout_batches + items status
 //   adjustments  te_adjustments            status
 //   periods      travel_periods            —
+//   journeys     v_te_journey_review       employee_id, state (waiting | back | done)
 //   summary      counts for the desk's header tiles
 //
 // Paginated with ?limit= (50, at most 200) and ?offset=; the answer carries the
@@ -14,12 +15,12 @@
 // of views and tables: there is no rule to apply, so no service function.
 import { NextRequest } from 'next/server'
 import { teRoute } from '@/lib/te/server'
-import { TeHttpError, isUuid, needOneOf, rpcError } from '@/lib/te/errors'
+import { TeHttpError, isUuid, missingSchema, needOneOf, rpcError } from '@/lib/te/errors'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const VIEWS = ['claims', 'payable', 'advances', 'batches', 'adjustments', 'periods', 'summary'] as const
+const VIEWS = ['claims', 'payable', 'advances', 'batches', 'adjustments', 'periods', 'journeys', 'summary'] as const
 /** A status or stage is letters and underscores; anything else is not a value we store. */
 const word = (v: string | null): string | null => (v && /^[A-Za-z_]{1,40}$/.test(v) ? v : null)
 /** Several of those, comma separated: the verification queue wants the claims
@@ -201,6 +202,41 @@ export async function GET(req: NextRequest) {
       }
       rows = (data ?? []).map(a => ({ ...a, ...(names.get(a.employee_id as string) ?? { emp_code: null, full_name: null }) }))
       total = count ?? 0
+    } else if (view === 'journeys') {
+      // RECORDED JOURNEYS, including the GPS sub-trips added mid-trip. Finance
+      // had no sight of a journey at all before migration 180 — no finance view
+      // joined te_legs in any form, so the only journey evidence that ever
+      // reached this team arrived bundled inside a claim, after the fact.
+      //
+      // ?state= narrows it to what the reader is actually doing:
+      //   waiting  not yet confirmed by Finance, and not under query
+      //   back     sent back to the traveller by either desk — these hold claims
+      //   done     Finance has confirmed
+      // Anything else is the whole list.
+      let r = sb.from('v_te_journey_review').select('*', { count: 'exact' }).eq('company_id', company)
+      if (employee) r = r.eq('employee_id', employee)
+      const state = word(q.get('state'))
+      if (state === 'waiting') r = r.is('fin_confirmed_at', null).is('sent_back_at', null)
+      else if (state === 'back') r = r.not('sent_back_at', 'is', null)
+      else if (state === 'done') r = r.not('fin_confirmed_at', 'is', null)
+      const { data, count, error } = await r.order('leg_date', { ascending: false }).range(page.from, page.to)
+      // 180 may not be applied yet; the rest of the Finance desk must not go
+      // dark because this list is not there. Any other error is a real fault.
+      if (error && !missingSchema(error)) throw rpcError(error, 'v_te_journey_review')
+      const found = error ? [] : (data ?? [])
+      // te_legs links to employees once, but the view is flattened and the
+      // names are read the way every other list here reads them.
+      const who = [...new Set(found.map(j => j.employee_id as string).filter(Boolean))]
+      const jnames = new Map<string, { emp_code: string | null; full_name: string | null }>()
+      if (who.length) {
+        const e = await sb.from('employees').select('id, emp_code, full_name').in('id', who)
+        if (e.error) throw rpcError(e.error, 'employees')
+        for (const row of e.data ?? []) {
+          jnames.set(row.id as string, { emp_code: row.emp_code as string | null, full_name: row.full_name as string | null })
+        }
+      }
+      rows = found.map(j => ({ ...j, ...(jnames.get(j.employee_id as string) ?? { emp_code: null, full_name: null }) }))
+      total = error ? 0 : (count ?? 0)
     } else {
       const { data, count, error } = await sb.from('travel_periods')
         .select('id, period_month, period_label, status, closed_at, locked_at', { count: 'exact' })

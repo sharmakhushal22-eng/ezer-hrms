@@ -9,6 +9,12 @@
 //   vehicles   vehicles whose RC could not be checked automatically and wait for a person to look at the photo
 //   watch      travel the desk is NOT booking — every leg the traveller's own,
 //              no hotel asked for. For information only, never work.
+//   journeys   recorded journeys waiting for the desk to agree they happened
+//              (v_te_journey_review, migration 180). This is where a GPS
+//              sub-trip — a journey added mid-trip, kind='extra' — finally
+//              reaches a human: it can never appear in to_book, because an
+//              added journey is always self-booked and to_book only shows
+//              desk-booked legs that have not started.
 // Needs a place on the travel desk, or the dashboard Travel Claims permission.
 import { NextRequest } from 'next/server'
 import { teRoute } from '@/lib/te/server'
@@ -39,7 +45,7 @@ export async function GET(req: NextRequest) {
     // only ever fail. A work list should hold work the reader can do; somebody
     // else on the desk still sees it.
     const employeeId = await t.employee()
-    const [book, veh, done, stays, watch] = await Promise.all([
+    const [book, veh, done, stays, watch, jrny] = await Promise.all([
       sb.from('v_te_to_book').select('*').eq('company_id', company).order('on_date', { ascending: true }).limit(500),
       sb.from('te_employee_vehicles')
         .select('id, employee_id, reg_no, vehicle_type_code, declared_type_code, ownership, rc_file_url, created_at')
@@ -62,6 +68,15 @@ export async function GET(req: NextRequest) {
       // hotel was asked for. Shown for information, never as work.
       sb.from('v_te_desk_watch').select('*').eq('company_id', company)
         .order('start_date', { ascending: true }).limit(200),
+      // RECORDED JOURNEYS WAITING TO BE AGREED. A GPS sub-trip reaches a human
+      // here and nowhere else: v_te_to_book only ever shows a leg that is still
+      // PLANNED and desk-booked, and a journey added during a trip is always
+      // self-booked, so it could never appear there at all.
+      //
+      // Newest first, because the desk is agreeing to things that happened and
+      // the thing that happened this morning is the one somebody is waiting on.
+      sb.from('v_te_journey_review').select('*').eq('company_id', company)
+        .order('leg_date', { ascending: false }).limit(300),
     ])
     if (book.error) throw rpcError(book.error, 'v_te_to_book')
     if (veh.error) throw rpcError(veh.error, 'te_employee_vehicles')
@@ -82,6 +97,13 @@ export async function GET(req: NextRequest) {
     const noWatch = missingSchema(watch.error)
     if (watch.error && !noWatch) throw rpcError(watch.error, 'v_te_desk_watch')
     const watchRows = noWatch ? [] : (watch.data ?? [])
+
+    // v_te_journey_review arrives with migration 180. Same reasoning again: the
+    // desk's booking work must not go dark because the review list is not there
+    // yet, and any error that is not a missing object is still a real fault.
+    const noJourneys = missingSchema(jrny.error)
+    if (jrny.error && !noJourneys) throw rpcError(jrny.error, 'v_te_journey_review')
+    const journeyRows = noJourneys ? [] : (jrny.data ?? [])
 
     // A booking names its trip, not its traveller. The trip is read separately
     // for the same reason the names are below: te_trips links to employees more
@@ -107,6 +129,7 @@ export async function GET(req: NextRequest) {
       ...booked.map(r => r.employee_id),
       ...stayRows.map(r => r.employee_id as string),
       ...watchRows.map(r => r.employee_id as string),
+      ...journeyRows.map(r => r.employee_id as string),
     ].filter(Boolean))]
     // WHO THEY ARE, plus the ESS record's numbers — which are the FALLBACK
     // now, not the answer. The answer is on the trip; see tripContact below.
@@ -244,6 +267,9 @@ export async function GET(req: NextRequest) {
       vehicles: (veh.data ?? []).map(r => withName(r)),
       stays: stayRows.map(r => withName(r, r.id as string)),
       watch: watchRows.map(r => withName(r, r.trip_id as string)),
+      /** Recorded journeys, newest first. Each carries its own route as an
+       *  encoded polyline and where the two desks have got to on it. */
+      journeys: journeyRows.map(r => withName(r, r.trip_id as string)),
       /** Keyed by trip id. Every trip in to_book and watch has an entry, or
        *  none when it needed no approval at all. */
       chains,

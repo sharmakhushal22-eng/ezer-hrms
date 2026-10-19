@@ -451,6 +451,7 @@ export default function TeHome({ initialClaimId, onExit }: {
             <TeTravelDesk
               vehicleTypes={cfg?.vehicles ?? []}
               fuelPrice={cfg?.fuelPrice ?? {}}
+              modes={cfg?.modes ?? []}
               // A row on the desk is a line of a trip somebody planned. The
               // whole plan — the route, the times they asked for, the hotels
               // they suggested — is on the trip screen, so the desk opens it

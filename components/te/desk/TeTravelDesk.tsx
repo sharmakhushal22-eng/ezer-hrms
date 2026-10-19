@@ -28,23 +28,28 @@
 // employee called an SUV and the RC shows as a hatchback is paid as a
 // hatchback from here on. The screen says what the rate becomes.
 import { useCallback, useEffect, useState } from 'react'
-import { te, type DeskBooked, type DeskStay, type DeskToBook, type DeskVehicle, type DeskWatch } from '@/lib/te/client'
+import { te, type DeskBooked, type DeskJourney, type DeskStay, type DeskToBook, type DeskVehicle, type DeskWatch } from '@/lib/te/client'
 import { ratePerKm } from '@/lib/te/vehicle'
 import { errorText, day, rs } from '@/lib/te/format'
-import type { TeUploadedFile, TeVehicleType } from '@/lib/te/types'
+import type { TeMode, TeUploadedFile, TeVehicleType } from '@/lib/te/types'
 import type { ChainStep } from '@/lib/te/approval-chain'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeChain from '../TeChain'
 import TeContact from '../TeContact'
 import TeStayChoice from './TeStayChoice'
+import TeJourneyReview from './TeJourneyReview'
 
-type Room = 'stays' | 'book' | 'booked' | 'vehicles' | 'watch'
+type Room = 'stays' | 'book' | 'booked' | 'vehicles' | 'watch' | 'journeys'
 
-export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onToast }: {
+export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTrip, onToast }: {
   /** cfg.vehicles — the types a vehicle can be, and what each pays. */
   vehicleTypes: TeVehicleType[]
   fuelPrice: Record<string, number>
+  /** cfg.modes — needed only for `basis`, which decides whether a journey with
+   *  no bill attached is missing something. A cab is paid on its bill; own
+   *  vehicle is paid per km and is not missing anything. */
+  modes: TeMode[]
   /** Open the whole trip behind a row. A desk row is one line of somebody's
    *  plan; everything they filled in — the route, the times they asked for, the
    *  hotels they suggested, who else is going — is on the trip screen. */
@@ -61,6 +66,10 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
   const [stays, setStays] = useState<DeskStay[]>([])
   // Travel the desk is not booking anything for. Information, never work.
   const [watch, setWatch] = useState<DeskWatch[]>([])
+  // Recorded journeys waiting for the desk to agree they happened — including
+  // the local sub-trips a traveller adds while away, which reach a human here
+  // and nowhere else. Empty while migration 180 is unapplied.
+  const [journeys, setJourneys] = useState<DeskJourney[]>([])
   // Where each request has got to, keyed by trip id.
   const [chains, setChains] = useState<Record<string, ChainStep[]>>({})
   // Whether this reader may spend. A desk member without "May book" belongs on
@@ -85,7 +94,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
   useEffect(() => {
     let current = true
     te.desk.list()
-      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setWatch(r.watch ?? []); setChains(r.chains ?? {}); setMayBook(r.may_book !== false); setError('') } })
+      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setWatch(r.watch ?? []); setJourneys(r.journeys ?? []); setChains(r.chains ?? {}); setMayBook(r.may_book !== false); setError('') } })
       .catch(e => { if (current) { setToBook([]); setError(errorText(e)) } })
     return () => { current = false }
   }, [tick])
@@ -198,6 +207,10 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
     { k: 'stays', label: 'Hotels to choose', icon: 'home', n: stays.length },
     { k: 'book', label: 'To book', icon: 'plane', n: bookings.length },
     { k: 'booked', label: 'Booked', icon: 'check', n: booked.length },
+    // Journeys that have happened and are waiting to be agreed. After the
+    // booking rooms because it is work about the past, not about a ticket
+    // nobody has bought yet.
+    { k: 'journeys', label: 'Journeys', icon: 'route', n: journeys.filter(j => !j.desk_confirmed_at).length },
     // Last, and counted, because it is the only list here with nothing to do.
     { k: 'watch', label: 'For information', icon: 'people', n: watch.length },
     { k: 'vehicles', label: 'Vehicles', icon: 'car', n: vehicles.length },
@@ -444,6 +457,21 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
         ) : (
           <div className="empty"><b>Nothing is booked</b>Tickets and rooms the desk has recorded appear here, so one can be cancelled when a trip changes.</div>
         )
+      ) : null}
+
+      {/* JOURNEYS THAT HAVE HAPPENED. The desk agrees they did, or asks the
+          traveller about one. This is the only place a GPS sub-trip — a journey
+          added mid-trip — is ever seen by this team: it cannot appear in "To
+          book", because an added journey is always self-booked and that list
+          only shows desk-booked legs that have not started. */}
+      {here === 'journeys' ? (
+        <TeJourneyReview
+          rows={journeys}
+          desk="travel"
+          basisOf={m => modes.find(x => x.id === m)?.basis}
+          onDone={reload}
+          onToast={onToast}
+        />
       ) : null}
 
       {/* FOR INFORMATION. Travel the desk is not booking anything for, because

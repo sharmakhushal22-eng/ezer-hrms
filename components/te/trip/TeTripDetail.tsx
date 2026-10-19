@@ -21,6 +21,7 @@ import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeStayRequest from './TeStayRequest'
 import TeTripMap from '../plan/TeTripMap'
+import TeJourneyAnswer from '../leg/TeJourneyAnswer'
 import TeTripPlan from './TeTripPlan'
 import TeMapLinks from '../plan/TeMapLinks'
 import type { MapPlace } from '@/lib/te/trip-map'
@@ -566,24 +567,37 @@ export default function TeTripDetail({ tripId, me, today, masters, onBack, onCha
         />
         <div className="tw-legs">
           {legs.map(l => (
-            <div key={l.id} className="row tight tw-leg click" role="button" tabIndex={0}
-              onClick={() => onOpenLeg(l)}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLeg(l) } }}
-            >
-              <span className="ln">{l.n}</span>
-              <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
-              <div className="grow">
-                <b className="small">{pname(l.from)} → {pname(l.to)}</b>
-                <div className="small muted">
-                  {t.scope === 'local' ? '' : `${day(l.date)} · `}
-                  {l.mode}{l.bookedBy === 'desk' ? ', Travel Desk' : ''}
-                  {` · ${l.plannedKm} km`}
-                  {` · ${l.gps === 'checkin' ? 'check-ins' : 'GPS'}`}
-                  {LEG_KIND[l.kind] ? ` · ${LEG_KIND[l.kind]}` : ''}
+            // The row, and — only when a desk has asked something about this
+            // journey — the question and the box to answer it. A Fragment
+            // because the answer must sit OUTSIDE the clickable row: nesting a
+            // textarea inside a role="button" makes typing in it open the leg.
+            <Fragment key={l.id}>
+              <div className="row tight tw-leg click" role="button" tabIndex={0}
+                onClick={() => onOpenLeg(l)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLeg(l) } }}
+              >
+                <span className="ln">{l.n}</span>
+                <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
+                <div className="grow">
+                  <b className="small">{pname(l.from)} → {pname(l.to)}</b>
+                  <div className="small muted">
+                    {t.scope === 'local' ? '' : `${day(l.date)} · `}
+                    {l.mode}{l.bookedBy === 'desk' ? ', Travel Desk' : ''}
+                    {` · ${l.plannedKm} km`}
+                    {` · ${l.gps === 'checkin' ? 'check-ins' : 'GPS'}`}
+                    {LEG_KIND[l.kind] ? ` · ${LEG_KIND[l.kind]}` : ''}
+                  </div>
                 </div>
+                {/* A journey a desk has queried says so here rather than only
+                    inside it: this list is where the traveller looks when their
+                    claim will not send. */}
+                {l.review?.backAt ? <span className="chip t-bad">Sent back</span> : null}
+                <span className="chip plain">{LEG_STATE[l.status] ?? l.status}</span>
               </div>
-              <span className="chip plain">{LEG_STATE[l.status] ?? l.status}</span>
-            </div>
+              {mine && l.review?.backAt ? (
+                <TeJourneyAnswer legId={l.id} n={l.n} review={l.review} onDone={onChanged} />
+              ) : null}
+            </Fragment>
           ))}
         </div>
       </div>

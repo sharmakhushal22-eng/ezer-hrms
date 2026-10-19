@@ -6,6 +6,7 @@
 // gaps; a shorter gap threshold flags more journeys that were only a phone in
 // a pocket. So each says what it does rather than just carrying a label.
 import { useMemo, useState } from 'react'
+import { confirmPolicy, type ConfirmPolicy } from '@/lib/te/journey-review'
 import { te } from '@/lib/te/client'
 import type { TeConfig } from '@/lib/te/types'
 import { isDirty, whatChangingAffects } from '@/lib/te/admin-edit'
@@ -32,6 +33,20 @@ const SCOPES: { id: string; label: string; word: string }[] = [
   { id: 'international', label: 'International', word: 'international' },
 ]
 
+/** Who has to agree a recorded journey happened before its review is finished.
+ *  Stored in te_settings.extra.journeyConfirm; lib/te/journey-review.ts reads it
+ *  and te_leg_confirm (migration 180) enforces it. */
+const CONFIRM_CHOICES: { k: ConfirmPolicy; label: string; short: string; note: string }[] = [
+  { k: 'both', label: 'The travel desk, then Finance', short: 'Both',
+    note: 'Two people see every journey: the desk agrees it happened, then Finance agrees the money. In that order, because "should we pay for this" means nothing until "did it happen" has been answered.' },
+  { k: 'finance', label: 'Finance only', short: 'Finance',
+    note: 'The travel desk still sees every journey and can still ask the traveller a question; it is simply not a gate.' },
+  { k: 'desk', label: 'The travel desk only', short: 'Travel desk',
+    note: 'For a company whose desk owns the travel record and whose Finance team settles on the claim alone.' },
+  { k: 'none', label: 'Nobody has to', short: 'Nobody',
+    note: 'The list and the recorded routes stay as a record, and nothing waits on anyone. Either desk can still send a journey back.' },
+]
+
 const TOGGLES: { k: string; label: string; note: string }[] = [
   { k: 'manualAllowed', label: 'Allow local journeys without GPS', note: 'Off means a local trip is only ever paid on a recorded journey.' },
   { k: 'gpsRequired', label: 'Require GPS on a journey', note: 'Off lets a journey be filed with no recording at all.' },
@@ -49,12 +64,20 @@ export default function TeGpsRules({ cfg, onSaved, onToast }: {
   // The lead time's number lives in its own te_settings column rather than in
   // gps_rules, so it is held separately and sent in the same PATCH.
   const [noticeDays, setNoticeDays] = useState<number>(cfg.noticeDays ?? 0)
+  // WHO MUST CONFIRM A RECORDED JOURNEY. Lives in te_settings.extra, which is
+  // where a setting added after the table was built goes; read through
+  // confirmPolicy() so an unrecognised value falls back to the strictest answer
+  // rather than quietly switching the checks off.
+  const [confirm, setConfirm] = useState<ConfirmPolicy>(
+    () => confirmPolicy(cfg.extra?.journeyConfirm),
+  )
+  const savedConfirm = confirmPolicy(cfg.extra?.journeyConfirm)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const dirty = useMemo(
-    () => isDirty(cfg.track, track) || noticeDays !== (cfg.noticeDays ?? 0),
-    [cfg.track, track, noticeDays, cfg.noticeDays],
+    () => isDirty(cfg.track, track) || noticeDays !== (cfg.noticeDays ?? 0) || confirm !== savedConfirm,
+    [cfg.track, track, noticeDays, cfg.noticeDays, confirm, savedConfirm],
   )
   const numOf = (k: string) => (typeof track[k] === 'number' ? track[k] as number : 0)
   const boolOf = (k: string) => track[k] !== false
@@ -70,7 +93,7 @@ export default function TeGpsRules({ cfg, onSaved, onToast }: {
   async function save() {
     setBusy(true); setError('')
     try {
-      await te.admin.settingsSave({ gps_rules: track, notice_days: noticeDays })
+      await te.admin.settingsSave({ gps_rules: track, notice_days: noticeDays, extra: { journeyConfirm: confirm } })
       onToast('Trip rules saved.')
       onSaved()
     } catch (e) {
@@ -188,11 +211,40 @@ export default function TeGpsRules({ cfg, onSaved, onToast }: {
         ))}
       </div>
 
+      {/* ── who agrees a recorded journey happened ──
+          Its own card because it is the only rule on this screen that is about
+          a PERSON rather than a number, and because the four answers are not
+          interchangeable: each one hands the decision to somebody different.
+
+          A journey added during a trip -- the local sub-trips somebody records
+          hopping round Mumbai -- reaches a desk here and nowhere else. Before
+          migration 180 neither desk could see one at all. */}
+      <div className="card pad0">
+        <div className="day"><span>Who confirms a journey</span><span>{CONFIRM_CHOICES.find(c => c.k === confirm)?.short ?? ''}</span></div>
+        {CONFIRM_CHOICES.map(c => (
+          <label key={c.k} className="li pickrow">
+            <input type="radio" name="journeyConfirm" checked={confirm === c.k} onChange={() => setConfirm(c.k)} />
+            <div className="grow">
+              <div className="b">{c.label}</div>
+              <div className="small muted">{c.note}</div>
+            </div>
+          </label>
+        ))}
+        <div className="note">
+          <TeIcon name="info" size="sm" />
+          <span>
+            Confirming records that somebody looked and agreed — it pays nothing, and the amount is still settled on the
+            claim. Whatever is chosen here, either desk can always send a journey back to the traveller with a question,
+            which holds that trip&rsquo;s claim until they answer.
+          </span>
+        </div>
+      </div>
+
       {dirty ? (
         <div className="card">
           <div className="note"><TeIcon name="info" size="sm" /><span>{whatChangingAffects('gps')}</span></div>
           <div className="row tight">
-            <button type="button" className="btn" onClick={() => setTrack(cfg.track ?? {})}>Undo the changes</button>
+            <button type="button" className="btn" onClick={() => { setTrack(cfg.track ?? {}); setNoticeDays(cfg.noticeDays ?? 0); setConfirm(savedConfirm) }}>Undo the changes</button>
             <button type="button" className="btn pri" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save the rules'}</button>
           </div>
         </div>

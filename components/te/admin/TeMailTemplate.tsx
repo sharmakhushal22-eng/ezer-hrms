@@ -62,7 +62,7 @@ export default function TeMailTemplate({ cfg, onSaved, onToast }: {
 }) {
   // te_settings.extra is where a setting added after the table was built lives.
   const saved = useMemo(() => {
-    const extra = (cfg as unknown as { extra?: Record<string, unknown> } | null)?.extra ?? {}
+    const extra = cfg?.extra ?? {}
     const m = (extra.bookingMail ?? {}) as { subject?: string; body?: string }
     return { subject: m.subject ?? '', body: m.body ?? '' }
   }, [cfg])

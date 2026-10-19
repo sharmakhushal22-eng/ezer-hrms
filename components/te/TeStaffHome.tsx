@@ -123,7 +123,7 @@ export default function TeStaffHome() {
   const body = () => {
     if (desk === 'approvals') return <TeApprovals onToast={setToast} />
     if (desk === 'finance') return <TeFinanceDesk onToast={setToast} />
-    if (desk === 'deskwork') return <TeTravelDesk vehicleTypes={cfg?.vehicles ?? []} fuelPrice={cfg?.fuelPrice ?? {}} onToast={setToast} />
+    if (desk === 'deskwork') return <TeTravelDesk vehicleTypes={cfg?.vehicles ?? []} fuelPrice={cfg?.fuelPrice ?? {}} modes={cfg?.modes ?? []} onToast={setToast} />
     if (desk === 'workflow') return <TeWorkflow onToast={setToast} />
     if (desk === 'desks') return <TeDesks onToast={setToast} />
     if (desk === 'reports') return <TeReports onToast={setToast} />

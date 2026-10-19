@@ -279,6 +279,23 @@
    component so a caller can ask for a taller one; the rest is the frame the
    schematic panels already use, so the two look like the same thing. */
 .te .gmap{width:100%;border-radius:var(--te-r-sm);overflow:hidden;border:1px solid var(--ez-line);background:var(--ez-sunken)}
+/* THE ROUTE A JOURNEY ACTUALLY TOOK (TeRouteMap). Same frame as .gmap, because
+   it is the same kind of object; the footer underneath carries the point count
+   and the distance, so a reader is never left estimating the length by eye. */
+.te .routemap{margin-top:9px}
+.te .rm-canvas{width:100%;border-radius:var(--te-r-sm);overflow:hidden;border:1px solid var(--ez-line);background:var(--ez-sunken)}
+.te .rm-foot{margin-top:5px}
+/* One recorded journey as a desk reviews it: the facts, the map, then the two
+   things that can be done about it. */
+.te .jrev{border:1px solid var(--ez-line);border-radius:var(--te-r-md);padding:12px 13px;background:var(--ez-surface);display:grid;gap:9px}
+.te .jrev.back{border-color:var(--ez-critical-edge);background:var(--ez-critical-tint)}
+.te .jrev.done{border-color:var(--ez-positive-edge)}
+.te .jrev-head{display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap}
+.te .jrev-head .grow{min-width:0}
+.te .jrev-route{font-weight:600;color:var(--ez-ink)}
+.te .jrev-facts{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.te .jrev-ask{display:grid;gap:7px;padding-top:4px;border-top:1px dashed var(--ez-line)}
+.te .jrev-ask textarea{min-height:66px}
 .te .pickrow input{width:16px;height:16px;accent-color:var(--ez-brand);flex:0 0 auto}
 .te .li[aria-current="true"]{background:var(--ez-brand-tint);box-shadow:inset 3px 0 0 var(--ez-brand)}
 .te .li .ico{width:36px;height:36px;border-radius:10px;background:var(--ez-sunken);display:grid;place-items:center;color:var(--ez-ink-soft);flex:none}

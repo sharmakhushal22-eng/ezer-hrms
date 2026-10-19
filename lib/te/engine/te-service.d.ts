@@ -107,6 +107,18 @@ export function legSkip(ctx: TeCtx, legId: Uuid, reason: string): Promise<{ leg_
 export function legNoGps(ctx: TeCtx, legId: Uuid, reason: string, note?: string | null): Promise<{ leg_id: Uuid; status: 'ENDED' }>
 export function legAdd(ctx: TeCtx, tripId: Uuid, d: ExtraLegInput): Promise<{ leg_id: Uuid; leg_no: number }>
 
+// ── the two desks' review of a journey (180) ────────────────────────────────
+/** A desk agrees the journey happened as recorded. `desk` is which desk is
+ *  speaking; the caller must be a member of it, which SQL checks. */
+export function legConfirm(ctx: TeCtx, legId: Uuid, desk: 'travel' | 'finance'):
+  Promise<{ leg_id: Uuid; desk: string; policy: string }>
+/** A desk asks the traveller for something. Holds the trip's claim until
+ *  answered; the reason is required. */
+export function legSendBack(ctx: TeCtx, legId: Uuid, desk: 'travel' | 'finance', reason: string):
+  Promise<{ leg_id: Uuid; desk: string }>
+/** The traveller answers. Lifts the hold; does not restore the confirmation. */
+export function legAnswer(ctx: TeCtx, legId: Uuid, text: string): Promise<{ leg_id: Uuid }>
+
 // ── expenses ────────────────────────────────────────────────────────────────
 export function expensePreview(ctx: TeCtx, input: ExpenseInput): Promise<ExpensePreview>
 export function expenseSave(ctx: TeCtx, input: ExpenseInput): Promise<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>

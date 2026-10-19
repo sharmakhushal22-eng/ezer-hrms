@@ -23,15 +23,21 @@ import TeAdvanceDesk from './TeAdvanceDesk'
 import TePayouts from './TePayouts'
 import TeAdjustments from './TeAdjustments'
 import TePeriods from './TePeriods'
+import TeJourneys from './TeJourneys'
 import TeIcon from '../TeIcon'
 
-type Room = 'verify' | 'advances' | 'payouts' | 'corrections' | 'periods'
+type Room = 'verify' | 'journeys' | 'advances' | 'payouts' | 'corrections' | 'periods'
 
 /** In the order the money moves, not alphabetically: a claim is checked,
  *  advances against it are known, it is paid, a mistake is corrected, and the
  *  month it belongs to is eventually closed. */
 const ROOMS: { k: Room; label: string; icon: string }[] = [
   { k: 'verify', label: 'Verification', icon: 'verify' },
+  // Before Advances, because a journey is checked before the money that follows
+  // it. Finance had no sight of a journey at all until migration 180: no
+  // finance view joined te_legs, so 14 cab rides across Mumbai arrived here as
+  // 14 amounts and no journeys.
+  { k: 'journeys', label: 'Journeys', icon: 'route' },
   { k: 'advances', label: 'Advances', icon: 'advances' },
   { k: 'payouts', label: 'Payouts', icon: 'claims' },
   { k: 'corrections', label: 'Corrections', icon: 'swap' },
@@ -56,6 +62,7 @@ export default function TeFinanceDesk({ onToast }: { onToast: (message: string) 
       </div>
 
       {room === 'verify' ? <TeVerification onToast={onToast} /> : null}
+      {room === 'journeys' ? <TeJourneys onToast={onToast} /> : null}
       {room === 'advances' ? <TeAdvanceDesk onToast={onToast} /> : null}
       {room === 'payouts' ? <TePayouts onToast={onToast} /> : null}
       {room === 'corrections' ? <TeAdjustments onToast={onToast} /> : null}

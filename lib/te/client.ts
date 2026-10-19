@@ -160,6 +160,42 @@ export interface DeskToBook extends DeskContact { company_id: Uuid; trip_id: Uui
   /** What the traveller asked for, from te_trip_segments. Null on a hotel row
    *  and on a leg added during the trip, which has no segment behind it. */
   pref_time: string | null; pref_url: string | null; pref_note: string | null }
+/**
+ * One recorded journey as either desk reviews it (v_te_journey_review, 180).
+ *
+ * `is_subtrip` is the GPS sub-trip: a journey added during the trip, with no
+ * planned segment behind it. Those are what this list mostly holds, because
+ * they are the ones nobody saw before — a planned leg of the main route was at
+ * least visible in the booking queue while it was still unstarted.
+ */
+export interface DeskJourney extends DeskContact {
+  leg_id: Uuid; company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; scope: string
+  employee_id: Uuid; emp_code: string | null; full_name: string | null
+  leg_no: number; kind: string; is_subtrip: boolean; leg_date: string
+  mode: string; booked_by: string; gps_mode: string
+  /** true = no trail; the traveller entered the distance and gave a reason. */
+  is_manual: boolean; no_gps_reason: string
+  /** Why the journey was added mid-trip. */
+  added_reason: string
+  from_name: string | null; to_name: string | null
+  planned_km: number | null; gps_km: number | null; route_km: number | null; payable_km: number | null
+  /** The route actually travelled, encoded. '' on a journey recorded before
+   *  migration 180 and on one that was never tracked. */
+  route_polyline: string
+  start_lat: number | null; start_lng: number | null; end_lat: number | null; end_lng: number | null
+  /** Metres between the fix and the place that was named. */
+  start_off_m: number | null; end_off_m: number | null
+  gps_points: number | null
+  expense_id: Uuid | null; claimed: number | null; eligible: number | null; category: string | null
+  /** How many bills are attached. A cab is paid on the bill, so zero matters. */
+  file_count: number
+  desk_confirmed_at: string | null; desk_confirmed_by: Uuid | null
+  fin_confirmed_at: string | null; fin_confirmed_by: Uuid | null
+  sent_back_at: string | null; sent_back_by: Uuid | null; sent_back_desk: string
+  sent_back_reason: string; review_answer: string
+  /** 'both' | 'finance' | 'desk' | 'none' — the company's setting. */
+  confirm_policy: string
+}
 /** A trip waiting for the desk to pick one of the hotels the employee named. */
 export interface DeskStay extends DeskContact {
   id: Uuid; trip_no: string; name: string; employee_id: Uuid
@@ -257,6 +293,14 @@ export const te = {
   legFile: (id: Uuid, report: LegReportInput) => post<{ leg_id: Uuid; status: 'SUBMITTED'; expense_id: Uuid | null; trip_status: TripDisplayStatus; eligible: number; flags: TeFlag[] }>(`legs/${id}/action`, { action: 'file', report }),
   legSkip: (id: Uuid, reason: string) => post<{ leg_id: Uuid; status: 'SKIPPED'; trip_status: TripDisplayStatus }>(`legs/${id}/action`, { action: 'skip', reason }),
   legNoGps: (id: Uuid, reason: string, note?: string) => post<{ leg_id: Uuid; status: 'ENDED' }>(`legs/${id}/action`, { action: 'no-gps', reason, note }),
+  /** The traveller answers what a desk asked about a journey. Lifts the hold on
+   *  the trip's claim; does not restore the confirmation that was withdrawn. */
+  legAnswer: (id: Uuid, text: string) => post<{ leg_id: Uuid }>(`legs/${id}/action`, { action: 'answer', text }),
+  /** A desk agrees a journey happened as recorded. Separate endpoint from the
+   *  actions above because the caller is explicitly not the traveller. */
+  legConfirm: (id: Uuid, desk: DeskKind) => post<{ leg_id: Uuid; desk: string; policy: string }>(`legs/${id}/review`, { action: 'confirm', desk }),
+  /** A desk asks the traveller for something. Holds the trip's claim. */
+  legSendBack: (id: Uuid, desk: DeskKind, reason: string) => post<{ leg_id: Uuid; desk: string }>(`legs/${id}/review`, { action: 'send-back', desk, reason }),
 
   expensePreview: (input: ExpenseInput) => post<ExpensePreview>('expenses/preview', input),
   expenseSave: (input: ExpenseInput) => post<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>('expenses', input),
@@ -312,6 +356,11 @@ export const te = {
     advances: (q?: PageQuery & { status?: string }) => get<Page<Record<string, unknown>>>('finance/overview', { view: 'advances', ...q }),
     adjustments: (q?: PageQuery & { status?: string }) => get<Page<AdjustmentRow>>('finance/overview', { view: 'adjustments', ...q }),
     periods: (q?: PageQuery) => get<Page<{ id: Uuid; period_month: string; period_label: string; status: string; closed_at: string | null; locked_at: string | null }>>('finance/overview', { view: 'periods', ...q }),
+    /** Recorded journeys, including the GPS sub-trips added mid-trip.
+     *  `state`: waiting (not yet confirmed by Finance) | back (sent back to the
+     *  traveller — these hold claims) | done. Empty while 180 is unapplied. */
+    journeys: (q?: PageQuery & { state?: 'waiting' | 'back' | 'done'; employee_id?: string }) =>
+      get<Page<DeskJourney>>('finance/overview', { view: 'journeys', ...q }),
     advanceAct: (id: Uuid, action: 'pay' | 'reject' | 'refund' | 'payroll' | 'carry', o: { amount?: number; ref?: string } = {}) => post<{ advance_id: Uuid; status: string; outstanding_amount: number; carried_to: Uuid | null }>(`advances/${id}`, { action, ...o }),
     payouts: (q?: PageQuery & { status?: string }) => get<Page<PayoutBatch>>('payouts', q),
     payoutCreate: (route: PayoutRoute, claimIds?: Uuid[]) => post<{ batch_id: Uuid; batch_no: string; total_amount: number; items: number }>('payouts', { route, claim_ids: claimIds }),
@@ -341,6 +390,9 @@ export const te = {
     list: (q?: { company_id?: string }) => get<{
       company_id: Uuid; may_book: boolean
       to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[]; stays: DeskStay[]; watch: DeskWatch[]
+      /** Recorded journeys waiting to be agreed, newest first. Empty while
+       *  migration 180 is unapplied — the route degrades rather than failing. */
+      journeys: DeskJourney[]
       /** Where each request has got to, keyed by trip id. Absent for a trip
        *  that needed no approval. Feed to chainState() in lib/te/approval-chain. */
       chains: Record<Uuid, ChainStep[]>
