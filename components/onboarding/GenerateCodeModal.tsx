@@ -148,13 +148,15 @@ function TreeRows({ members, names, joiner, exclude, onToggle }: { members: Memb
 
 export default function GenerateCodeModal({ onboardingId, candidate, onClose, onDone }: {
   onboardingId: string
-  candidate: { full_name: string; designation?: string | null; department?: string | null; employment_type?: string | null; email?: string | null; approvals?: Approval[] }
+  candidate: { full_name: string; designation?: string | null; department?: string | null; employment_type?: string | null; email?: string | null; date_of_joining?: string | null; approvals?: Approval[] }
   onClose: () => void; onDone: (msg: string, type?: 'ok' | 'err') => void
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [opts, setOpts] = useState<Options | null>(null)
   const [err, setErr] = useState('')
   const [code, setCode] = useState(''); const [codeType, setCodeType] = useState(''); const [codeLoading, setCodeLoading] = useState(true)
+  // The joining date: required — it becomes company_doj on the employee record.
+  const [doj, setDoj] = useState(candidate.date_of_joining ? String(candidate.date_of_joining).slice(0, 10) : '')
   const [paste, setPaste] = useState('')
   const [codes, setCodes] = useState<string[]>([])         // pasted employee codes
   const [ids, setIds] = useState<string[]>([])             // picked by name
@@ -234,10 +236,11 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
 
   async function generate() {
     if (!code.trim()) { onDone('Type or accept the employee code.', 'err'); return }
+    if (!doj) { onDone('Set the date of joining — it goes on the employee record.', 'err'); return }
     if (!roleIds.size) { setStep(2); onDone('Tick at least one role.', 'err'); return }
     setBusy(true)
     try {
-      const body = { onboarding_id: onboardingId, employee_code: code.trim(), role_ids: [...roleIds], team: { direct: (plan?.direct || []).map(d => d.id), exclude: [...exclude] } }
+      const body = { onboarding_id: onboardingId, employee_code: code.trim(), date_of_joining: doj, role_ids: [...roleIds], team: { direct: (plan?.direct || []).map(d => d.id), exclude: [...exclude] } }
       const post = async (force: boolean) => { const r = await fetch('/api/onboarding/generate-code', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, force }) }); return { r, d: await r.json() } }
       let { r, d } = await post(false)
       if (r.status === 409 && Array.isArray(d.pending) && d.pending.length) {
@@ -371,6 +374,11 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
                   <div className="gc-sub">Employee code{codeType ? ` · ${codeType}` : ''}</div>
                   <input className="gc-code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder={codeLoading ? '…' : 'e.g. SSM0042'} spellCheck={false} />
                 </div>
+                <div>
+                  <div className="gc-sub">Date of joining <span style={{ color: TK.critical }}>*</span>{candidate.date_of_joining ? '' : ' · not set on the onboarding'}</div>
+                  <input type="date" className="gc-ta" style={{ minHeight: 0, padding: '10px 12px', maxWidth: 260, borderColor: doj ? TK.lineStrong : TK.warning }} value={doj} onChange={e => setDoj(e.target.value)} />
+                  <div className="gc-note" style={{ marginTop: 4 }}>Goes on the employee record as the company joining date — tenure, payroll and the letters read it.</div>
+                </div>
                 <div className="gc-will">
                   <div className="gc-w"><span className="i">1</span><div><b>Employee Master</b><div className="d">{name} is created as an Active employee with every detail from the form, the IT / Admin / Payroll checklists and the salary structure Payroll approved.</div></div></div>
                   <div className="gc-w"><span className={`i${hasL1 ? '' : ' warn'}`}>2</span><div><b>Reporting line</b><div className="d">{hasL1 ? <>L1 {managers!.l1!.name}{managers?.l2 ? ` · L2 ${managers.l2.name}` : ''}{managers?.hod ? ` · HOD ${managers.hod.name}` : ''}</> : 'Not assigned — Assign managers on the review sheet first.'}</div></div></div>
@@ -386,11 +394,11 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
           <div className="gc-foot">
             {step > 1 && <button type="button" className="gc-ghost" onClick={() => setStep(s => (s - 1) as 1 | 2 | 3)} disabled={busy}>← Back</button>}
             {step < 3 && <button type="button" className="gc-btn" onClick={() => setStep(s => (s + 1) as 1 | 2 | 3)} disabled={!opts || busy || (step === 2 && !roleIds.size)}>{step === 1 ? (included.length ? `Next · Roles` : 'Skip team · Roles') : 'Next · Code'} →</button>}
-            {step === 3 && <button type="button" className="gc-btn go" onClick={generate} disabled={!opts || busy || codeLoading || !code.trim() || !roleIds.size || !hasL1}>{busy ? 'Generating…' : '⚡ Generate code & create employee'}</button>}
+            {step === 3 && <button type="button" className="gc-btn go" onClick={generate} disabled={!opts || busy || codeLoading || !code.trim() || !doj || !roleIds.size || !hasL1} title={doj ? '' : 'Set the date of joining first'}>{busy ? 'Generating…' : '⚡ Generate code & create employee'}</button>}
             <span className="gc-note" style={{ marginLeft: 'auto' }}>
               {step === 1 && (included.length ? plan?.summary : 'The team is optional.')}
               {step === 2 && (roleIds.size ? `${roleIds.size} role${roleIds.size === 1 ? '' : 's'} ticked` : 'At least one role is required.')}
-              {step === 3 && 'Numbers are never reused.'}
+              {step === 3 && (doj ? 'Numbers are never reused.' : 'The date of joining is required.')}
             </span>
           </div>
         </div>
