@@ -1069,24 +1069,47 @@
 .te .askq .seg{width:100%}
 .te .askq .seg button{flex:1 1 0}
 
-/* A destructive button that has to be noticed: the one control that throws
-   away the only copy of somebody's work. Red it already was; the glow is what
-   makes it read as the end of the road rather than another grey choice.
+/* A BUTTON THAT HAS TO BE NOTICED. Used where a choice is consequential enough
+   that the pair should not read as two more grey outlines — the two buttons
+   that decide whether somebody's only copy of their work survives.
 
-   Both halves of the shadow are the critical tokens, so it follows the theme —
-   the dark palette redefines them and the glow comes with it. The ring sits
-   inside the blur so the edge stays crisp at any zoom. */
+   The glow takes its colour from the tone the button already carries, through
+   three variables, so this is one rule rather than one per colour. Every value
+   is a theme token: the dark palette redefines them and the glow follows.
+
+   The crisp 1px ring sits INSIDE the soft blur, so the edge stays sharp at any
+   zoom while the halo does the glowing. */
+.te .btn.glow{
+  --glow:      var(--ez-brand);
+  --glow-edge: var(--ez-brand-edge);
+  --glow-tint: var(--ez-brand-tint);
+  border-color:var(--glow);
+  box-shadow:0 0 0 1px var(--glow-edge), 0 0 10px 1px var(--glow-tint);
+}
+.te .btn.glow:hover{
+  background:var(--glow-tint);
+  box-shadow:0 0 0 1px var(--glow), 0 0 14px 2px var(--glow-edge);
+}
+/* An icon inside takes the button's tone rather than the icon default. */
+.te .btn.glow .ic{color:var(--glow)}
+
+/* Destroying something. */
 .te .btn.dan.glow{
-  border-color:var(--ez-critical);
-  box-shadow:0 0 0 1px var(--ez-critical-edge), 0 0 10px 1px var(--ez-critical-tint);
+  --glow:      var(--ez-critical);
+  --glow-edge: var(--ez-critical-edge);
+  --glow-tint: var(--ez-critical-tint);
 }
-.te .btn.dan.glow:hover{
-  background:var(--ez-critical-tint);
-  box-shadow:0 0 0 1px var(--ez-critical), 0 0 14px 2px var(--ez-critical-edge);
+/* Keeping it. Green rather than the same red, because the two buttons are not
+   the same kind of answer — one ends the work and one saves it, and a pair
+   glowing in one colour would make them look interchangeable. */
+.te .btn.ok.glow{
+  --glow:      var(--ez-positive);
+  --glow-edge: var(--ez-positive-edge);
+  --glow-tint: var(--ez-positive-tint);
+  color:var(--ez-positive);
 }
-/* The bin takes the button's red rather than the icon default. */
-.te .btn.dan.glow .ic{color:var(--ez-critical)}
+
 /* Nothing should pulse at somebody who has asked for less motion. */
 @media (prefers-reduced-motion: no-preference){
-  .te .btn.dan.glow{transition:box-shadow .18s ease, background .18s ease}
+  .te .btn.glow{transition:box-shadow .18s ease, background .18s ease}
 }

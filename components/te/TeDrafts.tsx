@@ -92,7 +92,7 @@ export default function TeDrafts({ reloadKey, onResume }: {
                   <span>This is the only copy of this work. Discarding it cannot be undone.</span>
                 </div>
                 <div className="row tight">
-                  <button type="button" className="btn" onClick={() => setConfirming(null)}>Keep it</button>
+                  <button type="button" className="btn ok glow" onClick={() => setConfirming(null)}>Keep it</button>
                   {/* The verb names itself on the button that does it, and the
                       glow is there because this is the one control on the screen
                       that destroys the only copy of somebody's work. */}
