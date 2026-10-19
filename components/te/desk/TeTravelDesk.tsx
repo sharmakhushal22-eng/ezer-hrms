@@ -38,10 +38,14 @@ import TeStayChoice from './TeStayChoice'
 
 type Room = 'stays' | 'book' | 'booked' | 'vehicles' | 'watch'
 
-export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
+export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onToast }: {
   /** cfg.vehicles — the types a vehicle can be, and what each pays. */
   vehicleTypes: TeVehicleType[]
   fuelPrice: Record<string, number>
+  /** Open the whole trip behind a row. A desk row is one line of somebody's
+   *  plan; everything they filled in — the route, the times they asked for, the
+   *  hotels they suggested, who else is going — is on the trip screen. */
+  onOpenTrip?: (tripId: string) => void
   onToast: (message: string) => void
 }) {
   /** null until somebody picks one: see firstWithWork in the body. */
@@ -281,6 +285,13 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
                   </div>
                 ) : null}
               </div>
+              {/* THE WHOLE PLAN, not the fragment of it on this row. A desk
+                  cannot judge a flight from "Delhi T3 to Pune, 15 Dec": the
+                  times the traveller asked for, the hotels they suggested, who
+                  else is going and why they are going are all on the trip. */}
+              {!open && onOpenTrip ? (
+                <button type="button" className="btn sm" onClick={() => onOpenTrip(b.trip_id)}>Details</button>
+              ) : null}
               {!open && mayBook && approved(b) ? (
                 <button type="button" className="btn sm pri" onClick={() => { setBooking(b); setForm({ vendor: '', reference: '', amount: '' }) }}>Record</button>
               ) : null}
@@ -330,6 +341,9 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
                   </div>
                 ) : null}
               </div>
+              {cancelling !== b.id && onOpenTrip ? (
+                <button type="button" className="btn sm" onClick={() => onOpenTrip(b.trip_id)}>Details</button>
+              ) : null}
               {cancelling !== b.id && mayBook ? (
                 <button type="button" className="btn sm dan" onClick={() => { setCancelling(b.id); setWhy(''); setError('') }}>Cancel</button>
               ) : null}
@@ -354,7 +368,12 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
             <span>Nothing here is yours to book — every journey is the traveller&rsquo;s own and no hotel was asked for. It is listed so you know what is travelling.</span>
           </div>
           {watch.map(w => (
-            <div key={w.trip_id} className="li">
+            // Nothing on this row competes for the click, so the row itself is
+            // the control. Rendered as a button, not a div with an onClick, so
+            // it is reachable by keyboard and announced as what it is.
+            <div key={w.trip_id} className={`li${onOpenTrip ? ' click' : ''}`}
+                 {...(onOpenTrip ? { role: 'button', tabIndex: 0, onClick: () => onOpenTrip(w.trip_id),
+                   onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenTrip(w.trip_id) } } } : {})}>
               <span className="ico"><TeIcon name={w.scope === 'local' ? 'local' : w.scope === 'international' ? 'international' : 'domestic'} /></span>
               <div className="grow">
                 <div className="b"><span className="mono">{w.trip_no}</span> · {w.trip_name}</div>

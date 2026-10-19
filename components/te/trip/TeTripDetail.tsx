@@ -11,7 +11,7 @@
 // which card that state gets and what the card says.
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
+import type { TeLeg, TeMasters, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
 import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
@@ -21,6 +21,7 @@ import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeStayRequest from './TeStayRequest'
 import TeTripMap from '../plan/TeTripMap'
+import TeTripPlan from './TeTripPlan'
 import TeMapLinks from '../plan/TeMapLinks'
 import type { MapPlace } from '@/lib/te/trip-map'
 
@@ -43,8 +44,12 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
+export default function TeTripDetail({ tripId, me, today, masters, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
   tripId: Uuid
+  /** snap.masters — only so the plan can name the airport or station the
+   *  company has configured for a city, when the traveller did not pick one.
+   *  "The company's airport" is not an answer a desk can buy a ticket from. */
+  masters?: TeMasters
   /** The viewer. A trip can now be opened by somebody who did not plan it, so
    *  "whose claim is this" and "whose trip is this" are no longer the same
    *  question and the screen has to be told which one it is looking at. */
@@ -505,6 +510,14 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
           </div>
         </div>
       ) : null}
+
+      {/* THE PLAN AS THEY FILLED IT IN, before the route the engine made of
+          it. Every time, stop, note and link the traveller entered lives here;
+          until this was added, t.segs was not referenced anywhere on this
+          screen and the preferences from migrations 171 and 172 reached the
+          desk's work list and no further. Not gated on `mine`: the travel desk
+          and Finance are the readers who need it most. */}
+      <TeTripPlan trip={t} places={detail.places} masters={masters} />
 
       {/* ── the route and its legs ── */}
       <div className="card">

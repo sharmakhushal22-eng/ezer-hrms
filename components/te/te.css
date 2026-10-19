@@ -1036,3 +1036,20 @@
 .te .draftrow .grow{min-width:0}
 .te .draftrow .dt{font-weight:600;color:var(--ez-ink);overflow-wrap:anywhere}
 .te .draftrow .dt.none{font-weight:500;color:var(--ez-muted);font-style:italic}
+
+/* The plan as the traveller filled it in: places down the page, each journey
+   hanging under the place it leaves from. One column on every width — this is
+   read top to bottom, like an itinerary, not scanned like a table. */
+.te .planlist{list-style:none;margin:0;padding:0}
+.te .planstep{position:relative}
+.te .planpt{display:flex;gap:10px;align-items:flex-start;padding:10px 0}
+.te .planpt .pn{flex:none;width:22px;height:22px;border-radius:50%;background:var(--ez-brand);color:var(--ez-on-accent);font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}
+/* A stop is passed through, not arrived at, so it is drawn lighter. */
+.te .planpt.stop .pn{background:var(--ez-sunken);color:var(--ez-ink-soft);border:1px dashed var(--ez-line-strong)}
+.te .planpt.ret .pn{background:var(--ez-positive)}
+.te .planpt .b{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.te .planpt .grow{min-width:0}
+/* The journey, indented under its starting place and joined to it by a rule. */
+.te .planseg{display:flex;gap:10px;align-items:flex-start;margin:0 0 4px 11px;padding:8px 0 8px 20px;border-left:2px solid var(--ez-line)}
+.te .planseg .grow{min-width:0}
+.te .planseg .pl{display:none}

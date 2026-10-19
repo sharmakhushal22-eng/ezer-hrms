@@ -441,6 +441,11 @@ export default function TeHome({ initialClaimId, onExit }: {
             <TeTravelDesk
               vehicleTypes={cfg?.vehicles ?? []}
               fuelPrice={cfg?.fuelPrice ?? {}}
+              // A row on the desk is a line of a trip somebody planned. The
+              // whole plan — the route, the times they asked for, the hotels
+              // they suggested — is on the trip screen, so the desk opens it
+              // rather than restating a fraction of it on the row.
+              onOpenTrip={id => setView({ name: 'trip', id })}
               onToast={message => { setToast(message); reload() }}
             />
           ) : null}
@@ -496,6 +501,7 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'trip' ? (
             <TeTripDetail
               tripId={view.id}
+              masters={snap.masters}
               me={snap.me}
               today={snap.today}
               onBack={() => setView({ name: 'trips' })}

@@ -507,13 +507,71 @@ export async function tePermitFor(
  * belongs to a company they may see; the SQL is then told p_admin = true.
  */
 export async function teOpen<T>(t: TeCall, kind: 'trip' | 'claim', id: string, read: (admin: boolean) => Promise<T>): Promise<T> {
+  const table = kind === 'trip' ? 'te_trips' : 'te_claims'
   try {
     return await read(false)
   } catch (e) {
     if (refusalCode(e) !== 'TE_FORBIDDEN') throw e
-    if (!(await teStaffFor(t, kind === 'trip' ? 'te_trips' : 'te_claims', id, ['Travel Claims', 'Finance']))) throw e
-    return read(true)
+    if (await teStaffFor(t, table, id, ['Travel Claims', 'Finance'])) return read(true)
+    // A DESK MEMBER MAY OPEN WHAT THEIR DESK IS WORKING ON. The test above is
+    // the dashboard role, which desk membership does not imply — so the five
+    // DESK-role people on this company's travel desk could be told to book a
+    // flight and then refused the trip it belongs to. That is the same drift
+    // between desk membership and dashboard roles that this module has had to
+    // correct three times already.
+    //
+    // READ ONLY, and no wider than the desk's own list: teOpen never grants an
+    // action, and the desk is already shown every trip of its company — the
+    // ones it books in v_te_to_book, the rest in v_te_desk_watch. Being able to
+    // open the detail of a row it can already see is not new knowledge; being
+    // unable to is just a dead end.
+    if (await deskCanOpen(t, table, id)) return read(true)
+    throw e
   }
+}
+
+/** The caller's own company, from their employee record. */
+async function ownCompany(t: TeCall): Promise<string | null> {
+  const me = (await t.actor()).employeeId
+  if (!me) return null
+  const { data, error } = await t.sb().from('employees').select('company_id').eq('id', me).maybeSingle()
+  if (error) throw rpcError(error, 'employees')
+  return (data?.company_id as string | undefined) ?? null
+}
+
+/** Whether two companies belong to one group. */
+async function sameGroup(t: TeCall, a: string, b: string): Promise<boolean> {
+  if (a === b) return true
+  const { data, error } = await t.sb().from('companies').select('id, group_id').in('id', [a, b])
+  if (error) throw rpcError(error, 'companies')
+  const ga = data?.find(c => c.id === a)?.group_id ?? null
+  const gb = data?.find(c => c.id === b)?.group_id ?? null
+  return !!ga && !!gb && ga === gb
+}
+
+/**
+ * Whether somebody on a desk may READ this record. True when they sit on the
+ * finance or travel desk and the record belongs to their own company — or to
+ * another company of their group, when their desk row is group-scoped.
+ *
+ * WHY NOT companyFilter, which teStaffFor uses. That answers "which companies
+ * do this person's ROLES reach", and a desk member need hold no role at all.
+ * For them the question is their own employee record's company, which is the
+ * company whose desk they sit on.
+ */
+async function deskCanOpen(t: TeCall, table: 'te_trips' | 'te_claims', id: string): Promise<boolean> {
+  if (!(await t.onDesk('travel')) && !(await t.onDesk('finance'))) return false
+  const { data, error } = await t.sb().from(table).select('company_id').eq('id', id).maybeSingle()
+  if (error) throw rpcError(error, table)
+  const recordCo = data?.company_id as string | undefined
+  if (!recordCo) return false
+  const ownCo = await ownCompany(t)
+  if (!ownCo) return false
+  if (ownCo === recordCo) return true
+  if (await t.deskIsGroupWide('travel') || await t.deskIsGroupWide('finance')) {
+    return sameGroup(t, ownCo, recordCo)
+  }
+  return false
 }
 
 /** A file download response. */
