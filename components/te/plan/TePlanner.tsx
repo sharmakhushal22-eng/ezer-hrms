@@ -35,7 +35,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { Snapshot, TeDraft, TeTrip, TripIssue, TripOrigin, TripPreview, TripScope, Uuid } from '@/lib/te/types'
 import {
-  blockingOn, firstOpenLine, fromTrip, LAST_STEP, newPlannerDraft, setScope, stepOfIssue, syncDraft, toTripDraft,
+  blockingOn, firstOpenLine, fromTrip, HUB_MODES, LAST_STEP, nearestStep, newPlannerDraft, setScope,
+  step1Gaps, stepAfter, stepBefore, stepOfIssue, syncDraft, toTripDraft, visibleSteps,
   type DraftContext, type PlanStep, type PlannerDraft,
 } from '@/lib/te/trip-draft'
 import { errorText, plural, rs } from '@/lib/te/format'
@@ -176,6 +177,26 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
   // that callback a new function every render too.
   const issues = useMemo<TripIssue[]>(() => preview?.issues ?? [], [preview])
   const step = draft.step
+  /** Can this kind of trip use a flight or a train at all? The company's own
+   *  configuration answers it (te_modes carries a flag per scope), so a local
+   *  trip with both switched off is never asked the question — and if an
+   *  administrator switches flight on for local, it is. */
+  const offersHub = useMemo(
+    () => snap.cfg.modes.some(m => m.on && m.scopes.includes(draft.scope) && HUB_MODES.includes(m.id)),
+    [snap.cfg.modes, draft.scope],
+  )
+  const steps = useMemo(() => visibleSteps(draft), [draft])
+  const lastStep = steps[steps.length - 1]
+
+  // THE STEP UNDERNEATH CAN DISAPPEAR. Answering "no stay" on step 1 removes
+  // step 4, and somebody who was standing on it has to be put somewhere real.
+  // Done in an effect rather than during render: the draft is state, and
+  // moving them is a change to it, not a thing to compute on the way past.
+  useEffect(() => {
+    if (steps.includes(step)) return
+    const to = nearestStep(draft, step)
+    setDraft(d => syncDraft({ ...d, step: to }, ctx))
+  }, [steps, step, draft, ctx])
 
   const goStep = useCallback((n: PlanStep) => {
     setDraft(d => {
@@ -203,7 +224,19 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
       setToast(blocking.length === 1 ? blocking[0].t : `${blocking.length} things to fill on this step. They are marked in red.`)
       return
     }
-    goStep(Math.min(LAST_STEP, step + 1) as PlanStep)
+    // The two questions step 1 owns. They are not the server's to refuse —
+    // both answers only decide what the rest of the form asks — so they are
+    // gated here, and said in the same words as any other refusal.
+    if (step === 1) {
+      const gaps = step1Gaps(draft, offersHub)
+      if (gaps.length) {
+        setDraft(d => ({ ...d, tried: true }))
+        setToast(gaps.length === 1 ? gaps[0] : `${gaps.length} things to answer on this step.`)
+        return
+      }
+    }
+    const to = stepAfter(draft, step)
+    if (to) goStep(to)
   }
 
   async function save() {
@@ -257,8 +290,10 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
 
   const bar = (
     <nav className="wsteps" aria-label="Steps">
-      {STEPS.map((s, i) => {
-        const n = (i + 1) as PlanStep
+      {/* Only the steps this plan has. A chip for a step that is not there
+          would be a promise the Next button does not keep. */}
+      {steps.map(n => {
+        const s = STEPS[n - 1]
         const done = step > n && !stepHasError(n)
         return (
           <button
@@ -270,7 +305,7 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
             // phone for every step but the current one — five titles do not fit
             // at 360px. Hiding it visually must not take the name away from a
             // screen reader, so it lives here too.
-            aria-label={`Step ${n} of ${STEPS.length}: ${s.title}. ${s.sub}`}
+            aria-label={`Step ${steps.indexOf(n) + 1} of ${steps.length}: ${s.title}. ${s.sub}`}
             onClick={() => goStep(n)}
           >
             <span className="wn">{done ? <TeIcon name="check" size="sm" /> : n}</span>
@@ -303,16 +338,16 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
           : null}
       </div>
       <div className="row tight">
-        {step > 1
-          ? <button type="button" className="btn" onClick={() => goStep((step - 1) as PlanStep)}><TeIcon name="back" size="sm" />Back</button>
+        {stepBefore(draft, step)
+          ? <button type="button" className="btn" onClick={() => goStep(stepBefore(draft, step) as PlanStep)}><TeIcon name="back" size="sm" />Back</button>
           : <button type="button" className="btn" onClick={onClose}>Cancel</button>}
         {/* Offered only once there is something to keep. On an untouched form
             it would promise to save work that does not exist. */}
         {touched && !saving
           ? <button type="button" className="btn" onClick={keepForLater}>Finish later</button>
           : null}
-        {step < LAST_STEP
-          ? <button type="button" className="btn pri" onClick={next}>Next: {STEPS[step].title}<TeIcon name="go" size="sm" /></button>
+        {step < lastStep
+          ? <button type="button" className="btn pri" onClick={next}>Next: {STEPS[(stepAfter(draft, step) ?? lastStep) - 1].title}<TeIcon name="go" size="sm" /></button>
           : <button type="button" className="btn pri" onClick={save} disabled={saving}>{saving ? 'Saving…' : sendLabel}</button>}
       </div>
     </>
@@ -374,7 +409,7 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
       <div ref={bodyRef}>
         {step === 1 ? (
           <TePlanTrip
-            snap={snap} draft={draft} issues={issues} edit={edit} preview={preview}
+            snap={snap} draft={draft} issues={issues} edit={edit} preview={preview} offersHub={offersHub}
             setScope={s => setDraft(d => setScope(d, s, ctx, lastWorkday(snap.today)))}
           />
         ) : null}

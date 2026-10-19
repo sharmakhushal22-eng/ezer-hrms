@@ -22,10 +22,13 @@ const NAME_HINT: Record<string, string> = {
   international: 'Like Dubai distributor summit',
 }
 
-export default function TePlanTrip({ snap, draft, issues, edit, setScope, preview }: {
+export default function TePlanTrip({ snap, draft, issues, offersHub, edit, setScope, preview }: {
   snap: Snapshot
   draft: PlannerDraft
   issues: TripIssue[]
+  /** Whether this kind of trip can use a flight or a train at all, from the
+   *  company's own mode configuration. Decides whether that question is asked. */
+  offersHub: boolean
   edit: (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
   /** Changing the kind moves the dates with it, so the planner owns it. */
   setScope: (s: TripScope) => void
@@ -210,6 +213,63 @@ export default function TePlanTrip({ snap, draft, issues, edit, setScope, previe
           </button>
         </div>
         {err('pax') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('pax')}</div> : null}
+      </div>
+
+      {/* TWO QUESTIONS THAT DECIDE WHAT THE REST OF THE FORM ASKS.
+          Both used to be answered later — the stay on step 4, the flight by
+          picking it on step 3 — which meant everybody walked through screens
+          that did not apply to them. Asked here, a same-day drive never sees
+          the Stay step and never sees a flight offered. */}
+      <div className="sec">
+        <div className="askqs">
+          <div className={`askq${draft.stayWanted === undefined && tried ? ' bad' : ''}`}>
+            <div className="qh">
+              <span className="ico-b"><TeIcon name="home" /></span>
+              <div className="grow">
+                <b>Do you need a hotel or a food allowance?</b>
+                <small>Say no for a trip out and back the same day. Saying yes adds a step for the hotels you would accept.</small>
+              </div>
+            </div>
+            <div className="seg" role="group" aria-label="Hotel or food allowance">
+              <button type="button" aria-pressed={draft.stayWanted === true}
+                onClick={() => edit({ stayWanted: true })}>Yes</button>
+              <button type="button" aria-pressed={draft.stayWanted === false}
+                // Saying no clears what was named: the hotels belong to the
+                // question, and leaving them behind would send a plan asking
+                // for a stay it has just said it does not need.
+                onClick={() => edit({ stayWanted: false, foodWanted: false })}>No</button>
+            </div>
+            {draft.stayWanted === undefined && tried
+              ? <div className="ferr"><TeIcon name="warn" size="sm" />Say whether you need a hotel or a food allowance.</div>
+              : null}
+          </div>
+
+          {/* Asked only when this kind of trip can actually use one. The
+              company decides that per mode and per kind of trip in Admin →
+              Modes, so a local trip with flight and train switched off is
+              never asked — and if an administrator switches flight on for
+              local, the question appears there too. */}
+          {offersHub ? (
+            <div className={`askq${draft.flightOrTrain === undefined && tried ? ' bad' : ''}`}>
+              <div className="qh">
+                <span className="ico-b"><TeIcon name="plane" /></span>
+                <div className="grow">
+                  <b>Is a flight or a train part of this trip?</b>
+                  <small>Saying no leaves them out of how you travel, so you are not offered a ticket you are not taking.</small>
+                </div>
+              </div>
+              <div className="seg" role="group" aria-label="Flight or train">
+                <button type="button" aria-pressed={draft.flightOrTrain === true}
+                  onClick={() => edit({ flightOrTrain: true })}>Yes</button>
+                <button type="button" aria-pressed={draft.flightOrTrain === false}
+                  onClick={() => edit({ flightOrTrain: false })}>No</button>
+              </div>
+              {draft.flightOrTrain === undefined && tried
+                ? <div className="ferr"><TeIcon name="warn" size="sm" />Say whether a flight or a train is part of this trip.</div>
+                : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     </>
   )

@@ -1053,3 +1053,18 @@
 .te .planseg{display:flex;gap:10px;align-items:flex-start;margin:0 0 4px 11px;padding:8px 0 8px 20px;border-left:2px solid var(--ez-line)}
 .te .planseg .grow{min-width:0}
 .te .planseg .pl{display:none}
+
+/* A question on step 1 whose answer changes what the rest of the form asks.
+   NOT .qcard, which is a button you press to choose a thing — this is a
+   container holding a question and a Yes/No beside it, and inheriting a
+   button's cursor and hover would promise a click the card does not take. */
+.te .askqs{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:10px}
+.te .askq{border:1.5px solid var(--ez-line);background:var(--ez-surface);border-radius:14px;padding:12px}
+/* Marked only after they have tried to move on, like every other field here. */
+.te .askq.bad{border-color:var(--ez-critical)}
+.te .askq .qh{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.te .askq .qh .grow{min-width:0}
+.te .askq .qh b{display:block;font-size:13.5px;font-weight:650}
+.te .askq .qh small{display:block;font-size:11.5px;color:var(--ez-muted);line-height:1.35;margin-top:2px}
+.te .askq .seg{width:100%}
+.te .askq .seg button{flex:1 1 0}

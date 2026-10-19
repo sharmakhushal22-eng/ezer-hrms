@@ -19,7 +19,7 @@
 // reason: it is what keeps a long trip readable on a phone.
 import { Fragment, useState } from 'react'
 import type { Snapshot, TripIssue } from '@/lib/te/types'
-import { applyModeToAll, blockingOn, journeysUnlike, type PlannerDraft } from '@/lib/te/trip-draft'
+import { applyModeToAll, blockingOn, HUB_MODES, journeysUnlike, type PlannerDraft } from '@/lib/te/trip-draft'
 import { chainCount, commuteChain, hubForCity, hubKind, NO_XFER, sameHub, xferModes } from '@/lib/te/commute'
 import { day, plural } from '@/lib/te/format'
 import { vehicleSubtitle } from '@/lib/te/vehicle'
@@ -56,7 +56,7 @@ export default function TePlanCommute({ snap, draft, issues, edit, onPick, onVeh
 }) {
   const place = (id: string) => snap.masters.places.find(p => p.id === id) ?? null
   const legs = draft.segs.length
-  const offered = snap.cfg.modes.filter(m => m.on && m.scopes.includes(draft.scope))
+  const offered = snap.cfg.modes.filter(m => m.on && m.scopes.includes(draft.scope) && (draft.flightOrTrain !== false || !HUB_MODES.includes(m.id)))
   const open = (i: number) => draft.open === `s${i}`
   const toggle = (i: number) => edit({ open: open(i) ? null : `s${i}` })
   const left = blockingOn(issues, 3).length
@@ -75,6 +75,9 @@ export default function TePlanCommute({ snap, draft, issues, edit, onPick, onVeh
           ? 'One journey to choose for.'
           : `${plural(legs, 'journey')} — choose how you travel each one.`}
         {' '}Only what is allowed for {KIND_WORD[draft.scope] ?? 'this trip'} is offered.
+        {draft.flightOrTrain === false
+          ? ' You said this trip has no flight or train, so those are not offered either.'
+          : ''}
       </p>
 
       {!legs ? (
@@ -190,7 +193,7 @@ function SegRow({ snap, draft, issues, i, open, tried, onToggle, edit, onPick, o
   const b = place(draft.points[i + 1]?.place ?? '')
   const err = issues.find(q => q.block && q.k === `m${i}`)
 
-  const modes = snap.cfg.modes.filter(m => m.on && m.scopes.includes(draft.scope))
+  const modes = snap.cfg.modes.filter(m => m.on && m.scopes.includes(draft.scope) && (draft.flightOrTrain !== false || !HUB_MODES.includes(m.id)))
   /** The door-to-door shape of this journey. Mirrors the engine's buildLegs so
    *  the person sees it before the preview answers; the engine stays the
    *  authority on what is actually estimated. */

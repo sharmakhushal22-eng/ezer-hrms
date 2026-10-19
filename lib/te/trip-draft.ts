@@ -127,6 +127,63 @@ export interface DraftPerson { id: string; name: string; autoName?: boolean }
 export type PlanStep = 1 | 2 | 3 | 4 | 5
 export const LAST_STEP: PlanStep = 5
 
+/** The modes that need a ticket and an airport or a station: the ones the
+ *  step-1 question is about. Matches HUB_OF in the engine. */
+export const HUB_MODES = ['flight', 'train']
+
+/**
+ * Which steps this draft actually shows, in order.
+ *
+ * The Stay step is dropped unless they said they need a hotel or food. A trip
+ * out and back in a day has nothing to answer there, and a step that exists
+ * only to be skipped teaches people to skip steps.
+ *
+ * Every other step is always shown: the route, how you travel and the review
+ * are not optional on any kind of trip.
+ */
+export function visibleSteps(d: { stayWanted?: boolean }): PlanStep[] {
+  return ([1, 2, 3, 4, 5] as PlanStep[]).filter(n => n !== 4 || d.stayWanted === true)
+}
+
+/** The step to land on when the one you are standing on disappears — the next
+ *  one that still exists, or the last if there is none after it. */
+export function nearestStep(d: { stayWanted?: boolean }, want: PlanStep): PlanStep {
+  const steps = visibleSteps(d)
+  return steps.includes(want) ? want : (steps.find(n => n > want) ?? steps[steps.length - 1])
+}
+
+/** The step after this one, or null at the end. */
+export function stepAfter(d: { stayWanted?: boolean }, from: PlanStep): PlanStep | null {
+  return visibleSteps(d).find(n => n > from) ?? null
+}
+
+/** The step before this one, or null at the start. */
+export function stepBefore(d: { stayWanted?: boolean }, from: PlanStep): PlanStep | null {
+  const before = visibleSteps(d).filter(n => n < from)
+  return before.length ? before[before.length - 1] : null
+}
+
+/**
+ * What step 1 is still waiting for, in the words the planner shows.
+ *
+ * Only the two new questions live here. Everything else on step 1 — the name,
+ * the purpose, who is travelling — is the server's to refuse, and arrives as a
+ * blocker with a field key. These two are the planner's own, because the
+ * engine has no opinion about them: both answers only decide what the form
+ * asks next.
+ *
+ * `offersHub` is whether this kind of trip can use a flight or a train at all,
+ * which is the company's configuration (te_modes.scope_local and friends). When
+ * it cannot — a local trip, by default — the question is not asked and not
+ * waited for.
+ */
+export function step1Gaps(d: { stayWanted?: boolean; flightOrTrain?: boolean }, offersHub: boolean): string[] {
+  const gaps: string[] = []
+  if (d.stayWanted === undefined) gaps.push('Say whether you need a hotel or a food allowance.')
+  if (offersHub && d.flightOrTrain === undefined) gaps.push('Say whether a flight or a train is part of this trip.')
+  return gaps
+}
+
 export interface PlannerDraft {
   step: PlanStep
   origin: TripOrigin
@@ -151,8 +208,20 @@ export interface PlannerDraft {
   stayBy: 'self' | 'desk'
   /** "Do you need a stay?" — undefined until the planner is answered, so an
    *  untouched draft can be told from a deliberate no. */
+  /** "Do you need a hotel or a food allowance?", asked on step 1. The Stay
+   *  step is shown only when this is true: a same-day trip has nothing to
+   *  answer there, and four empty questions are worse than none.
+   *  undefined = not asked yet, which is not the same as a deliberate no. */
   stayWanted?: boolean
   foodWanted?: boolean
+  /** "Will a flight or a train be part of this?", asked on step 1. When it is
+   *  false the commute step stops offering those modes, and with no flight or
+   *  train segment there is no airport or station to choose on the route.
+   *
+   *  NOT STORED ON THE TRIP, and it does not need to be: a saved trip answers
+   *  the question by itself — a flight or train segment means yes. fromTrip
+   *  derives it, which is why this needed no migration. */
+  flightOrTrain?: boolean
   /** Always three rows while planning, however many are filled in. */
   stayOptions: StayOption[]
   advance: number | ''
@@ -212,8 +281,14 @@ export function autoName(purpose: string, placeNames: string[]): string {
 const firstVehicle = (c: DraftContext) => c.vehicles[0]?.id ?? ''
 
 /** What a trip of this kind travels by unless told otherwise. */
-export function defaultMode(scope: TripScope, c: DraftContext): string {
-  return scope === 'local' ? (firstVehicle(c) ? 'own' : 'cab') : 'flight'
+export function defaultMode(scope: TripScope, c: DraftContext, flightOrTrain?: boolean): string {
+  if (scope === 'local') return firstVehicle(c) ? 'own' : 'cab'
+  // SAID NO TO A FLIGHT OR A TRAIN, so defaulting an outstation trip to
+  // 'flight' would put back the very thing they just ruled out, and syncDraft
+  // would then replace it again on the next edit. A cab is the honest default
+  // for a long trip somebody is driving.
+  if (flightOrTrain === false) return firstVehicle(c) ? 'own' : 'cab'
+  return 'flight'
 }
 
 export function newSeg(mode: string, vehicleId: string): DraftSeg {
@@ -319,6 +394,9 @@ export function fromTrip(trip: {
     stayBy: trip.stayBy ?? 'self',
     stayWanted: trip.stayWanted ?? undefined,
     foodWanted: trip.foodWanted ?? undefined,
+    // The trip answers this itself: a flight or train segment means yes. So
+    // reopening a saved plan never asks again, and no column was needed.
+    flightOrTrain: (trip.segs ?? []).some(s => HUB_MODES.includes(s.mode)),
     // Always three rows on screen, however many were saved.
     stayOptions: [0, 1, 2].map(i => trip.stayOptions?.[i]
       ? { ...trip.stayOptions[i], price: trip.stayOptions[i].price ?? '' }
@@ -355,7 +433,7 @@ export function syncDraft(d: PlannerDraft, c: DraftContext): PlannerDraft {
 
   // ONE SEGMENT BETWEEN EACH PAIR OF POINTS. A new one copies the one before it,
   // because a trip that flew out usually flies back.
-  const fallback = newSeg(defaultMode(d.scope, c), firstVehicle(c))
+  const fallback = newSeg(defaultMode(d.scope, c, d.flightOrTrain), firstVehicle(c))
   const segs: DraftSeg[] = points.slice(1).map((_, i) => {
     const kept = d.segs[i] ?? d.segs[i - 1] ?? fallback
     return { ...kept, xfer: { ...kept.xfer } }
@@ -365,8 +443,12 @@ export function syncDraft(d: PlannerDraft, c: DraftContext): PlannerDraft {
     // A mode switched off by an admin, or one that does not apply to this kind of
     // trip, is replaced rather than left to be refused at save.
     const md = c.modes.find(m => m.id === s.mode)
-    if (!md || !md.on || !md.scopes.includes(d.scope)) {
-      s.mode = defaultMode(d.scope, c)
+    // The last test is the step-1 answer: somebody who picked a flight and then
+    // said "no flight or train" must not keep the flight. Replaced here rather
+    // than refused at save, the same way a mode an admin switched off is.
+    if (!md || !md.on || !md.scopes.includes(d.scope)
+        || (d.flightOrTrain === false && HUB_MODES.includes(s.mode))) {
+      s.mode = defaultMode(d.scope, c, d.flightOrTrain)
       s.vehicleId = s.mode === 'own' ? firstVehicle(c) : ''
     }
     if (s.mode === 'own' && !s.vehicleId) s.vehicleId = firstVehicle(c)
