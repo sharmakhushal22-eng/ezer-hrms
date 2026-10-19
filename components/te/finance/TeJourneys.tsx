@@ -57,12 +57,18 @@ export default function TeJourneys({ onToast }: { onToast: (message: string) => 
 
   return (
     <div className="page">
+      {/* .ph is a flex row, so the heading and its sentence need one wrapper
+          between them and it — without this they become two flex items and the
+          sentence sits beside the title instead of under it. Every other screen
+          in the module nests it the same way. */}
       <div className="ph">
-        <h1>Journeys</h1>
-        <p>
-          Journeys travellers have recorded and reported, including the local sub-trips they add while they are away.
-          Confirming records that you looked and agreed; the money is settled on the claim, in Verification.
-        </p>
+        <div>
+          <h1>Journeys</h1>
+          <p>
+            Journeys travellers have recorded and reported, including the local sub-trips they add while they are away.
+            Confirming records that you looked and agreed; the money is settled on the claim, in Verification.
+          </p>
+        </div>
       </div>
 
       <div className="seg scopes" role="group" aria-label="Which journeys">
