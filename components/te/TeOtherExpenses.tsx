@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { te, TeApiError } from '@/lib/te/client'
 import type { ClaimPreview, Snapshot, TeExpense, TeFlag, TeTrip } from '@/lib/te/types'
 import TeIcon from './TeIcon'
+import TeContactFields, { type ContactValue } from './TeContactFields'
 import { errorText, flagClass, plural, rs } from '@/lib/te/format'
 import { linesWaitingInTrips } from '@/lib/te/trips-list'
 import { claimDateOf, periodFor } from '@/lib/te/period'
@@ -46,6 +47,21 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
   )
   const [preview, setPreview] = useState<ClaimPreview | null>(null)
   const [declared, setDeclared] = useState(false)
+  // HOW TO REACH THEM ABOUT THIS CLAIM, asked only on a claim with no trip:
+  // "Other expenses" never passes through the planner, so this screen is the
+  // only place the question can be put. A trip claim inherits what the trip
+  // already carries, so nobody is asked the same thing twice.
+  //
+  // Prefilled from their own EZER record and editable. What they leave is
+  // stored on the claim; the record is not written back to.
+  const [contact, setContact] = useState<ContactValue>(() => ({
+    contactMobile: snap.contact?.mobile ?? '',
+    contactAltMobile: snap.contact?.altMobile ?? '',
+    contactEmail: snap.contact?.email ?? '',
+  }))
+  /** Which contact field the server refused, if it was one. Cleared on the next
+   *  attempt, so a corrected field stops being red as soon as it is re-sent. */
+  const [contactField, setContactField] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ text: string; flags: TeFlag[] } | null>(null)
   // The preview is asked again whenever the set of lines, or one of their amounts, changes.
@@ -64,12 +80,15 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
   }, [signature, tripId])
 
   async function submit() {
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setContactField('')
     try {
-      const c = await te.claimSubmit(tripId ? { tripId, declared } : { declared })
+      const c = await te.claimSubmit(tripId ? { tripId, declared } : { declared, ...contact })
       onSubmitted(c.claim_id, `Claim ${c.claim_no} sent.`)
     } catch (e) {
       setError({ text: errorText(e), flags: e instanceof TeApiError ? e.flags : [] })
+      // The server names the field it refused, so the message can sit under it
+      // rather than only at the bottom of a long form.
+      if (e instanceof TeApiError && typeof e.field === 'string') setContactField(e.field)
     } finally {
       setBusy(false)
     }
@@ -203,6 +222,18 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
                   ))}
                   {review.stop.map(s => <div key={s} className="flag crit"><TeIcon name="warn" /><div className="tx"><b>{s}</b></div></div>)}
                 </div>
+                {/* ASKED ONLY WHERE THERE IS NOTHING TO INHERIT. A claim on a
+                    trip already carries the details that were given when the
+                    trip was planned. */}
+                {!tripId ? (
+                  <TeContactFields
+                    heading="How we reach you about this claim"
+                    value={contact}
+                    prefilled={snap.contact ? { mobile: snap.contact.mobile, altMobile: snap.contact.altMobile, email: snap.contact.email } : undefined}
+                    onChange={patch => { setContact(c => ({ ...c, ...patch })); setContactField('') }}
+                    error={k => (contactField === k ? error?.text ?? '' : '')}
+                  />
+                ) : null}
                 <label className="check small">
                   <input type="checkbox" checked={declared} onChange={e => setDeclared(e.target.checked)} />
                   <span>I confirm these expenses are genuine, were incurred for company work and have not been claimed elsewhere.</span>

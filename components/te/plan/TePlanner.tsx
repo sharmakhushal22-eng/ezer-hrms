@@ -100,6 +100,10 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
     vehicles: snap.vehicles.filter(v => v.verified || v.whose === 'self'),
     modes: snap.cfg.modes,
     placeName: (id: string) => snap.masters.places.find(p => p.id === id)?.s ?? '',
+    // What ESS has on file, for the contact fields on step 1 to open with. A
+    // prefill and nothing more: the traveller may change any of it, and what
+    // they leave is stored on the trip rather than written back to ESS.
+    contact: snap.contact,
   }), [snap])
 
   // Built once. An `edit` arriving later would throw away whatever has been

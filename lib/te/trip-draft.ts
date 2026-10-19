@@ -246,6 +246,16 @@ export interface PlannerDraft {
   /** Always three rows while planning, however many are filled in. */
   stayOptions: StayOption[]
   advance: number | ''
+  /** HOW THE TRAVEL DESK REACHES THEM ABOUT THIS TRIP. Prefilled from their
+   *  ESS record when the form opens (DraftContext.contact) and editable here;
+   *  what they leave is stored on the trip and never written back to ESS.
+   *
+   *  All three are required, because the desk's questions are always urgent and
+   *  the second number is for when the first cannot be reached — which, abroad,
+   *  is most of the time. */
+  contactMobile: string
+  contactAltMobile: string
+  contactEmail: string
   pfReason: string
   pfNote: string
   /** The route line showing its fields: 'p0', 's1', … undefined means "open the
@@ -271,6 +281,14 @@ export interface DraftContext {
   modes: TeMode[]
   /** Place id -> its short name, for the generated trip name. */
   placeName: (id: string) => string
+  /** The mobile and email on the employee's ESS record, read when the form
+   *  opened. The starting point of the contact fields and nothing more — the
+   *  form may be changed, and the change is never written back.
+   *
+   *  Optional because a caller with nothing to prefill (a test, an older build
+   *  of the screen) must still get a draft; the three fields are then blank and
+   *  the gate asks for them. */
+  contact?: { mobile: string; altMobile: string; email: string }
 }
 
 const PURPOSE_NOUN: Record<string, string> = {
@@ -318,6 +336,22 @@ export function newSeg(mode: string, vehicleId: string): DraftSeg {
 
 const blankPoint = (): DraftPoint => ({ place: '', pt: '', leave: '', what: '' })
 
+/**
+ * The contact fields as a new form opens them: whatever ESS has on record.
+ *
+ * A prefill, not a copy. The three fields belong to the trip from this moment
+ * on — the traveller may replace any of them, and what they leave is what the
+ * desk is given. Nothing goes back to ESS, so somebody who puts a hotel
+ * number here for one trip has not changed their HR record.
+ */
+function prefilledContact(c: DraftContext): { contactMobile: string; contactAltMobile: string; contactEmail: string } {
+  return {
+    contactMobile: c.contact?.mobile ?? '',
+    contactAltMobile: c.contact?.altMobile ?? '',
+    contactEmail: c.contact?.email ?? '',
+  }
+}
+
 /** A new plan: out of the office, somewhere yet to be chosen, and back again. */
 export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastWorkday: IsoDate }, c: DraftContext): PlannerDraft {
   const mode = defaultMode(o.scope, c)
@@ -340,6 +374,7 @@ export function newPlannerDraft(o: { scope: TripScope; origin: TripOrigin; lastW
     segs: [newSeg(mode, veh), newSeg(mode, veh)],
     retSame: true, stayBy: 'self', advance: '', pfReason: '', pfNote: '',
     stayOptions: [emptyStayOption(), emptyStayOption(), emptyStayOption()],
+    ...prefilledContact(c),
   }, c)
 }
 
@@ -361,6 +396,7 @@ export function fromTrip(trip: {
   segs: { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid }; prefTime?: string; prefUrl?: string; prefNote?: string }[]
   pax: number; people: { id: string; name?: string }[]; stayBy: 'self' | 'desk'; advance: number
   stayWanted?: boolean | null; foodWanted?: boolean | null; stayOptions?: TeStayOption[]
+  contactMobile?: string | null; contactAltMobile?: string | null; contactEmail?: string | null
   pfReason: string; pfNote: string; status: string
 }, c: DraftContext): PlannerDraft {
   const sentBack = trip.status === 'SENT_BACK'
@@ -427,6 +463,17 @@ export function fromTrip(trip: {
       ? { ...trip.stayOptions[i], price: trip.stayOptions[i].price ?? '' }
       : emptyStayOption()),
     advance: trip.advance || '',
+    // WHATEVER THE TRIP SAYS, falling back to ESS field by field where it says
+    // nothing. A trip saved before the form asked carries three empty strings,
+    // and showing those would make somebody retype what their own record
+    // already holds; a trip that carries a number keeps it, because that number
+    // was a decision about this trip and ESS is not where it was made.
+    //
+    // Field by field rather than all-or-nothing: a trip may well carry a
+    // mobile and no alternate, and the alternate should still be offered.
+    contactMobile: trip.contactMobile || c.contact?.mobile || '',
+    contactAltMobile: trip.contactAltMobile || c.contact?.altMobile || '',
+    contactEmail: trip.contactEmail || c.contact?.email || '',
     pfReason: trip.pfReason ?? '',
     pfNote: trip.pfNote ?? '',
     editId: trip.id,
@@ -612,7 +659,9 @@ export function pointLabel(d: PlannerDraft, i: number): { label: string; isStop:
  *  The keys are the server's (TripIssue.k), not the screen's. */
 export function stepOfIssue(k: string | undefined): PlanStep {
   const key = k ?? ''
-  if (/^(scope|purpose|name|pax)$/.test(key)) return 1
+  // The contact fields sit on step 1, under the trip's own details: they are
+  // about the person, not about the route or the money.
+  if (/^(scope|purpose|name|pax|contactMobile|contactAltMobile|contactEmail)$/.test(key)) return 1
   // Where you go and when: the points and their dates, and the shape of the
   // route. `pr` is the pattern — one way, round trip or multi-city.
   if (/^(p|d)\d+$|^pr$/.test(key)) return 2
@@ -745,6 +794,12 @@ export function toTripDraft(d: PlannerDraft): TripDraft {
     ...(d.foodWanted === undefined ? {} : { foodWanted: d.foodWanted }),
     stayOptions: d.stayWanted ? usableStayOptions(d.stayOptions) : [],
     advance: d.scope === 'local' ? 0 : Number(d.advance) || 0,
+    // Sent on every kind of trip, local included: a desk that has to ring
+    // somebody about a cab at six in the morning needs a number as much as one
+    // chasing an airline.
+    contactMobile: (d.contactMobile || '').trim(),
+    contactAltMobile: (d.contactAltMobile || '').trim(),
+    contactEmail: (d.contactEmail || '').trim(),
     pfReason: d.pfReason || '',
     pfNote: d.pfNote || '',
     ...(d.answer ? { answer: d.answer } : {}),

@@ -172,17 +172,32 @@ export interface DeskVehicle extends DeskContact { id: Uuid; employee_id: Uuid; 
 /** A booking the desk has already recorded. Live ones only — the one thing
  *  left to do with it is cancel it when the trip changes under it. */
 /**
- * How to reach the traveller, joined onto every desk row from the employee
- * record itself. Read live on each request, never copied into the travel
- * tables, so a number changed in ESS is the number the desk sees next.
+ * How to reach the traveller, joined onto every desk row.
+ *
+ * FROM THE FORM, NOT FROM THE HR RECORD. This used to read the employee record
+ * live on every request, which answers "what is on file for this person" and is
+ * the wrong answer to "how do I reach them about this trip": a traveller abroad
+ * is on a local SIM, one whose handset is in for repair is on a colleague's.
+ * They are asked on the trip or claim form, where the fields open prefilled
+ * from their ESS record and they may change any of them — and what they leave
+ * is what arrives here.
+ *
+ * `from` says which it is. A trip saved before the form asked carries nothing,
+ * so the desk falls back to the ESS record rather than showing a blank where a
+ * number should be; the screen says so, because an old number the traveller has
+ * never confirmed deserves to be read as one.
  */
 export interface DeskContact {
   emp_code: string | null
   full_name: string | null
-  mobile: string | null
-  alternate_mobile: string | null
-  office_email: string | null
-  personal_email: string | null
+  contact: DeskContactDetails
+}
+
+export interface DeskContactDetails {
+  mobile: string
+  altMobile: string
+  email: string
+  from: 'form' | 'record'
 }
 
 /** Travel the desk is not booking anything for. Information, not work. */

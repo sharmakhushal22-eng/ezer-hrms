@@ -342,6 +342,13 @@ export interface TeTrip {
   /** The desk's answer to those hotels. */
   stay: TeStayDecision
   advance: number
+  /** How to reach the traveller about THIS trip, as they left it on the form.
+   *  Prefilled from their ESS record and editable there; never written back.
+   *  '' on every trip saved before the form asked, which is what makes the
+   *  planner prefill from ESS again when one is reopened. */
+  contactMobile: string
+  contactAltMobile: string
+  contactEmail: string
   pfReason: string
   pfNote: string
   legIds: Uuid[]
@@ -681,6 +688,19 @@ export interface Snapshot {
   batches: unknown[]
   settlements: unknown[]
   audit: unknown[]
+  /** How to reach me, read live off my ESS record. The trip and claim forms
+   *  PREFILL from this and the traveller may change what it put there; what they
+   *  leave is stored on the trip. Never written back here. Added by the route,
+   *  not by te_snapshot. */
+  contact: TeContactDetails
+}
+
+/** The three ways the travel desk reaches somebody about a trip or a claim.
+ *  Empty strings rather than nulls: these are form fields. */
+export interface TeContactDetails {
+  mobile: string
+  altMobile: string
+  email: string
 }
 
 // ── one-screen reads ────────────────────────────────────────────────────────
@@ -801,6 +821,10 @@ export interface TripDraft {
   foodWanted?: boolean | null
   stayOptions?: TeStayOption[]
   advance?: number
+  /** All three are required. The server refuses a trip without them. */
+  contactMobile?: string
+  contactAltMobile?: string
+  contactEmail?: string
   pfReason?: string
   pfNote?: string
   /** "What I changed", needed when the plan was sent back. */
@@ -932,7 +956,16 @@ export interface TeDraft {
   updated_at: string
 }
 
-export interface ClaimInput { tripId?: Uuid | null; lineIds?: Uuid[]; note?: string; declared?: boolean }
+export interface ClaimInput {
+  tripId?: Uuid | null; lineIds?: Uuid[]; note?: string; declared?: boolean
+  /** How to reach them about this claim. REQUIRED on a claim with no trip —
+   *  "Other expenses" never passes through the planner, so the claim screen is
+   *  the only place it can be asked. A claim that belongs to a trip inherits
+   *  what the trip carries and these are ignored. */
+  contactMobile?: string
+  contactAltMobile?: string
+  contactEmail?: string
+}
 export interface ClaimPreview {
   claimed: number
   eligible: number

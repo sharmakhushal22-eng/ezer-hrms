@@ -9,6 +9,7 @@ import type { Snapshot, TripIssue, TripPreview, TripScope } from '@/lib/te/types
 import { errorFor, MAX_NAME, MAX_PEOPLE, PURPOSES, type PlannerDraft } from '@/lib/te/trip-draft'
 import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
+import TeContactFields, { type ContactValue } from '../TeContactFields'
 
 const KIND: Record<string, { name: string; tag: string; desc: string }> = {
   local: { name: 'Local trip', tag: 'Any travel except flight', desc: 'In the city or nearby, back the same day' },
@@ -214,6 +215,18 @@ export default function TePlanTrip({ snap, draft, issues, offersHub, edit, setSc
         </div>
         {err('pax') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('pax')}</div> : null}
       </div>
+
+      {/* HOW THE DESK REACHES THEM, asked here rather than looked up. Every
+          kind of trip asks, local included: a desk ringing somebody about a cab
+          at six in the morning needs a number as much as one chasing an
+          airline. Prefilled from the signed-in employee's own EZER record,
+          editable, and never written back — see TeContactFields. */}
+      <TeContactFields
+        value={draft}
+        prefilled={snap.contact ? { mobile: snap.contact.mobile, altMobile: snap.contact.altMobile, email: snap.contact.email } : undefined}
+        onChange={patch => edit(patch as Partial<PlannerDraft>)}
+        error={(k: keyof ContactValue) => err(k)}
+      />
 
       {/* TWO QUESTIONS THAT DECIDE WHAT THE REST OF THE FORM ASKS.
           Both used to be answered later — the stay on step 4, the flight by

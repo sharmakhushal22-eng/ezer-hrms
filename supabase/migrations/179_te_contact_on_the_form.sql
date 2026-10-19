@@ -1,6 +1,6 @@
 -- 179_te_contact_on_the_form.sql — how to reach the traveller, captured on the
 -- form rather than read from their HR record.
--- SAFE TO RUN TWICE. Adds six columns and replaces two functions.
+-- SAFE TO RUN TWICE. Adds six columns and replaces three functions.
 -- ----------------------------------------------------------------------------
 -- WHY THIS IS NOT JUST A JOIN. The travel desk was shown the mobile and email
 -- from the employee record, live, which is the right answer to "what is on file
@@ -25,6 +25,11 @@
 -- the planner, so the claim screen is the only place it can be asked. A claim
 -- that belongs to a trip inherits what the trip already carries, so nobody is
 -- asked the same question twice and one set of details answers for both.
+--
+-- te_trip_json GIVES THEM BACK, so reopening a trip shows what was typed
+-- instead of asking again. One helper serves both readers — the snapshot's
+-- trips array and te_trip_detail's single trip — so patching it is all that
+-- was needed for the planner's edit path.
 --
 -- EXISTING ROWS KEEP NULL. These are refusals inside the functions, not NOT
 -- NULL on the columns: every trip and claim already in the system stays exactly
@@ -202,6 +207,11 @@ begin
         stay_wanted = (p->>'stay_wanted')::boolean,
         food_wanted = (p->>'food_wanted')::boolean,
         stay_options = coalesce(p->'stay_options', '[]'::jsonb),
+        -- A number that changed before departure is exactly the case these
+        -- exist for, so an edit rewrites them like any other field.
+        contact_mobile = btrim(p->>'contact_mobile'),
+        contact_alt_mobile = btrim(p->>'contact_alt_mobile'),
+        contact_email = btrim(p->>'contact_email'),
         start_date = (p->>'start_date')::date, end_date = (p->>'end_date')::date,
         from_label = p->>'from_label', to_label = p->>'to_label', country = nullif(p->>'country', ''),
         estimate = coalesce(p->'estimate', '{}'::jsonb), estimate_total = v_total,
@@ -227,16 +237,6 @@ begin
             case when p->>'scope' = 'local' then 0 else coalesce((p->>'advance')::numeric, 0) end,
             nullif(btrim(p->>'post_facto_reason'), ''), nullif(btrim(p->>'post_facto_note'), ''), 'DRAFT')
     returning * into t;
-  end if;
-
-  -- An edit carries them as well: a number that changed before departure is
-  -- exactly the case this exists for.
-  if v_edit then
-    update te_trips
-       set contact_mobile     = btrim(p->>'contact_mobile'),
-           contact_alt_mobile = btrim(p->>'contact_alt_mobile'),
-           contact_email      = btrim(p->>'contact_email')
-     where id = t.id;
   end if;
 
   perform te__trip_write_parts(t, p);
@@ -481,6 +481,72 @@ begin
   return jsonb_build_object('claim_id', c.id, 'claim_no', c.claim_no, 'status', c.status, 'stage', c.stage,
                             'risk_band', c.risk_band, 'chain_notes', to_jsonb(c.chain_notes));
 end;
+$$;
+
+create or replace function te_trip_json(t te_trips)
+returns jsonb language sql stable as $$
+  select jsonb_build_object(
+    'id', t.id, 'no', t.trip_no, 'emp', t.employee_id, 'co', to_jsonb(te_trip_co(t.id)),
+    'status', t.status, 'display', te_trip_status(t.id), 'origin', t.origin,
+    'name', t.name, 'scope', t.scope, 'pattern', t.pattern, 'purpose', t.purpose, 'project', coalesce(t.project, ''),
+    'points', (select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+                 'place', p.place_id, 'pt', coalesce(p.place_type, ''), 'what', coalesce(p.what, ''),
+                 'arrive', coalesce(p.arrive_on::text, ''), 'leave', coalesce(p.leave_on::text, ''),
+                 -- HH:MM, not HH:MM:SS: it goes straight into <input type="time">,
+                 -- which rejects seconds.
+                 'leaveAt', coalesce(to_char(p.leave_at, 'HH24:MI'), ''),
+                 'arriveAt', coalesce(to_char(p.arrive_at, 'HH24:MI'), ''),
+                 'ret', case when p.is_return then true end,
+                 -- jsonb_strip_nulls drops it when false, so the draft sees
+                 -- the flag only where it is actually set.
+                 'stop', case when p.is_stop then true end,
+                 'prefNote', coalesce(p.pref_note, ''),
+                 'prefUrl', coalesce(p.pref_url, ''))) order by p.seq), '[]'::jsonb)
+                 from te_trip_points p where p.trip_id = t.id),
+    'segs', (select coalesce(jsonb_agg(jsonb_build_object(
+                 'mode', s.mode, 'bookedBy', s.booked_by, 'vehicleId', s.vehicle_id,
+                 'xfer', jsonb_strip_nulls(jsonb_build_object('first', s.first_mile_mode, 'last', s.last_mile_mode,
+                                                              'hubA', s.hub_from_place_id, 'hubB', s.hub_to_place_id)),
+                 -- HH:MM for <input type="time">, which rejects seconds.
+                 'prefTime', coalesce(to_char(s.pref_time, 'HH24:MI'), ''),
+                 'prefUrl', coalesce(s.pref_url, ''),
+                 'prefNote', coalesce(s.pref_note, '')) order by s.seq), '[]'::jsonb)
+               from te_trip_segments s where s.trip_id = t.id),
+    'pax', t.pax,
+    'people', (select coalesce(jsonb_agg(jsonb_build_object('id', q.emp_code_entered, 'name', q.name_entered,
+                                                            'emp', q.employee_id, 'found', q.found_in_ezer) order by q.seq), '[]'::jsonb)
+                 from te_trip_people q where q.trip_id = t.id),
+    'start', t.start_date, 'end', t.end_date,
+    'from', coalesce(t.from_label, ''), 'to', coalesce(t.to_label, ''),
+    'fromPlace', (select p.place_id from te_trip_points p where p.trip_id = t.id and p.seq = 0),
+    'type', case when t.scope = 'international' then 'international' else 'domestic' end,
+    'country', coalesce(t.country, ''),
+    'estimate', t.estimate, 'estimateTotal', t.estimate_total, 'selfEstimate', t.self_estimate, 'plannedKm', t.planned_km,
+    'stayBy', t.stay_by, 'advance', t.advance_requested,
+    -- Did they ask for a stay, did they ask for food, and which hotels would
+    -- they accept. stayWanted/foodWanted are null on a trip planned before the
+    -- question existed, so the screens can tell "no" from "never asked".
+    'stayWanted', t.stay_wanted, 'foodWanted', t.food_wanted,
+    'stayOptions', coalesce(t.stay_options, '[]'::jsonb),
+    -- What the desk decided about those hotels, if anything yet. 'NONE' is
+    -- "waiting", which is what the desk's own list is built from.
+    'stay', jsonb_build_object(
+       'status', coalesce(t.stay_status, 'NONE'), 'chosen', t.stay_chosen,
+       'name', coalesce(t.stay_chosen_name, ''), 'remark', coalesce(t.stay_remark, ''),
+       'by', t.stay_decided_by, 'at', t.stay_decided_at,
+       -- te_emp_name(null) answers 'EZER', which would make an undecided trip
+       -- look like somebody decided it. Undecided stays null.
+       'byName', case when t.stay_decided_by is not null then te_emp_name(t.stay_decided_by) end),
+    -- HOW TO REACH THEM ABOUT THIS TRIP, as they left it on the form. Empty
+    -- string on every trip saved before this existed, which is what makes the
+    -- planner fall back to their ESS record: see fromTrip in lib/te/trip-draft.
+    'contactMobile', coalesce(t.contact_mobile, ''),
+    'contactAltMobile', coalesce(t.contact_alt_mobile, ''),
+    'contactEmail', coalesce(t.contact_email, ''),
+    'pfReason', coalesce(t.post_facto_reason, ''), 'pfNote', coalesce(t.post_facto_note, ''),
+    'legIds', (select coalesce(jsonb_agg(l.id order by l.leg_no), '[]'::jsonb) from te_legs l where l.trip_id = t.id),
+    'chain', te_steps_json('trip', t.id), 'why', to_jsonb(t.chain_notes),
+    'createdAt', t.created_at, 'approvedAt', t.approved_at);
 $$;
 
 notify pgrst, 'reload schema';

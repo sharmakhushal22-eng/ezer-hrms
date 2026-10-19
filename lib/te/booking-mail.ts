@@ -93,14 +93,26 @@ export function renderBookingMail(template: Partial<MailTemplate> | null | undef
 }
 
 /**
- * Which address a booking should go to, and why.
+ * Which address a ticket should go to, and why.
  *
- * The work address first — this is company travel and the company's own
- * record of it. A personal address is a real fallback, not an error: on this
- * data most people have only that. Returns null when there is nowhere to send,
- * which the caller must refuse on rather than guess.
+ * THE TRIP'S OWN ADDRESS WINS. The traveller was asked for one on the form —
+ * prefilled from their ESS record and editable — so an address given there is a
+ * decision about this trip: the person who wants their itinerary on a personal
+ * inbox while they are away has already said so, and sending to the work
+ * address instead would ignore the answer and the question.
+ *
+ * Then the work address, this being company travel and the company's own record
+ * of it, then the personal one, which is a real fallback and not an error: on
+ * this data most people have only that. Returns null when there is nowhere to
+ * send, which the caller must refuse on rather than guess.
  */
-export function addressFor(who: { office_email?: string | null; personal_email?: string | null }): { to: string; kind: 'work' | 'personal' } | null {
+export function addressFor(who: {
+  trip_email?: string | null
+  office_email?: string | null
+  personal_email?: string | null
+}): { to: string; kind: 'form' | 'work' | 'personal' } | null {
+  const form = (who.trip_email ?? '').trim()
+  if (form) return { to: form, kind: 'form' }
   const work = (who.office_email ?? '').trim()
   if (work) return { to: work, kind: 'work' }
   const personal = (who.personal_email ?? '').trim()

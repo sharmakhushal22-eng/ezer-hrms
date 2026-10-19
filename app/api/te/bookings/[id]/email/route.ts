@@ -72,18 +72,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       throw new TeHttpError(409, 'TE_BOOKING', 'There is no ticket on this booking to send.')
     }
 
-    // The trip and the traveller. The addresses come from the employee record
-    // itself, every time — the same record ESS edits — so this goes where the
-    // person says to send things today, not where they said last month.
-    const trip = await sb.from('te_trips').select('id, trip_no, name, employee_id, company_id').eq('id', b.trip_id).maybeSingle()
+    // The trip and the traveller. THE TRIP'S OWN ADDRESS IS THE ONE TO USE:
+    // the traveller was asked for it on the form, prefilled from their ESS
+    // record and editable, so somebody who wants their itinerary somewhere
+    // other than their work inbox while they are away has already said so.
+    // The record is the fallback for trips planned before the form asked.
+    const trip = await sb.from('te_trips')
+      .select('id, trip_no, name, employee_id, company_id, contact_email')
+      .eq('id', b.trip_id).maybeSingle()
     if (trip.error) throw rpcError(trip.error, 'te_trips')
     if (!trip.data) throw new TeHttpError(404, 'TE_BOOKING', 'The trip behind this booking has gone.')
     const who = await sb.from('employees').select('full_name, office_email, personal_email')
       .eq('id', trip.data.employee_id as string).maybeSingle()
     if (who.error) throw rpcError(who.error, 'employees')
-    const addr = addressFor(who.data ?? {})
+    const addr = addressFor({ ...(who.data ?? {}), trip_email: trip.data.contact_email as string | null })
     if (!addr) {
-      throw new TeHttpError(409, 'TE_BOOKING', 'That employee has no email address on their record, so there is nowhere to send this. Add one in their ESS profile.')
+      throw new TeHttpError(409, 'TE_BOOKING', 'There is no email address on this trip or on that employee’s record, so there is nowhere to send this. Ask them to add one to the trip.')
     }
 
     // What the ticket is FOR, in the words a traveller recognises: the leg's

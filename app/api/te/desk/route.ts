@@ -108,14 +108,8 @@ export async function GET(req: NextRequest) {
       ...stayRows.map(r => r.employee_id as string),
       ...watchRows.map(r => r.employee_id as string),
     ].filter(Boolean))]
-    // HOW TO REACH THEM, read fresh on every request rather than copied into
-    // the travel tables. The employee record is the ESS source of truth, so a
-    // number changed in the portal this morning is the number the desk dials
-    // this afternoon — there is no second copy to go stale.
-    //
-    // Both emails and both numbers come back: the desk rings the mobile and
-    // mails the work address, and falls back to the alternates when a record
-    // has not been filled in. The screen decides which to show.
+    // WHO THEY ARE, plus the ESS record's numbers — which are the FALLBACK
+    // now, not the answer. The answer is on the trip; see tripContact below.
     const names = new Map<string, {
       emp_code: string | null; full_name: string | null
       mobile: string | null; alternate_mobile: string | null
@@ -136,8 +130,67 @@ export async function GET(req: NextRequest) {
         })
       }
     }
-    const BLANK = { emp_code: null, full_name: null, mobile: null, alternate_mobile: null, office_email: null, personal_email: null }
-    const withName = <T extends { employee_id: unknown }>(r: T) => ({ ...r, ...(names.get(r.employee_id as string) ?? BLANK) })
+
+    // HOW TO REACH THEM ABOUT THIS TRIP, as the traveller left it on the form.
+    //
+    // The desk used to read the employee record live, which is the right answer
+    // to "what is on file for this person" and the wrong one to "how do I reach
+    // them about this trip": somebody abroad is on a local SIM, somebody whose
+    // handset is in for repair is on a colleague's, and none of that belongs on
+    // a permanent HR record. The form asks, prefilled from ESS and editable,
+    // and migration 179 stores the answer on the trip. This reads that.
+    //
+    // THE RECORD IS THE FALLBACK, per field. A trip saved before the form asked
+    // carries nothing, and showing the desk a blank where a number should be
+    // would be a regression; `from` tells the screen which it got, so an
+    // unconfirmed number can be labelled as one.
+    // The stay list IS a list of trips, so its row id is the trip id; every
+    // other list names its trip in trip_id.
+    const contactTrips = [...new Set([
+      ...(book.data ?? []).map(r => r.trip_id as string),
+      ...booked.map(r => r.trip_id as string),
+      ...stayRows.map(r => r.id as string),
+      ...watchRows.map(r => r.trip_id as string),
+    ].filter(Boolean))]
+    const tripContact = new Map<string, { mobile: string; alt: string; email: string }>()
+    if (contactTrips.length) {
+      const { data, error } = await sb.from('te_trips')
+        .select('id, contact_mobile, contact_alt_mobile, contact_email').in('id', contactTrips)
+      // 179 is the only reason these columns would be missing. The desk's work
+      // list must not go down with the phone numbers beside it.
+      if (error && !missingSchema(error)) throw rpcError(error, 'te_trips')
+      for (const r of data ?? []) {
+        tripContact.set(r.id as string, {
+          mobile: ((r.contact_mobile as string | null) ?? '').trim(),
+          alt: ((r.contact_alt_mobile as string | null) ?? '').trim(),
+          email: ((r.contact_email as string | null) ?? '').trim(),
+        })
+      }
+    }
+
+    const BLANK = { emp_code: null, full_name: null }
+    /** The row with the traveller's name and the contact for THIS trip. Pass
+     *  the trip id; a row with no trip at all — a vehicle waiting to be
+     *  verified — passes none and gets the record, which is correct: there is
+     *  no trip to have asked. */
+    const withName = <T extends { employee_id: unknown }>(r: T, tripId?: string) => {
+      const e = names.get(r.employee_id as string)
+      const form = tripId ? tripContact.get(tripId) : undefined
+      // ALL FROM THE FORM, OR ALL FROM THE RECORD — never half of each. Mixing
+      // them would put a number the traveller deliberately replaced back on the
+      // screen next to the one that replaced it, and the desk would have no way
+      // to tell which to ring.
+      const answered = !!(form && (form.mobile || form.alt || form.email))
+      const contact = answered
+        ? { mobile: form!.mobile, altMobile: form!.alt, email: form!.email, from: 'form' as const }
+        : {
+            mobile: (e?.mobile ?? '').trim(),
+            altMobile: (e?.alternate_mobile ?? '').trim(),
+            email: ((e?.office_email ?? '') || (e?.personal_email ?? '')).trim(),
+            from: 'record' as const,
+          }
+      return { ...r, emp_code: e?.emp_code ?? BLANK.emp_code, full_name: e?.full_name ?? BLANK.full_name, contact }
+    }
 
     // WHERE EACH REQUEST HAS GOT TO. The desk was told "waiting for approval"
     // and nothing else, which on a two-step chain is the difference between a
@@ -185,11 +238,12 @@ export async function GET(req: NextRequest) {
       // vehicles and decide stays — so the screen has to stop offering them
       // the one thing they cannot do, rather than let them find out from a 403.
       may_book: await t.deskMayBook(),
-      to_book: (book.data ?? []).map(withName),
-      booked: booked.map(withName),
-      vehicles: (veh.data ?? []).map(withName),
-      stays: stayRows.map(withName),
-      watch: watchRows.map(withName),
+      to_book: (book.data ?? []).map(r => withName(r, r.trip_id as string)),
+      booked: booked.map(r => withName(r, r.trip_id as string)),
+      // No trip behind a vehicle: nobody was asked, so the record stands.
+      vehicles: (veh.data ?? []).map(r => withName(r)),
+      stays: stayRows.map(r => withName(r, r.id as string)),
+      watch: watchRows.map(r => withName(r, r.trip_id as string)),
       /** Keyed by trip id. Every trip in to_book and watch has an entry, or
        *  none when it needed no approval at all. */
       chains,
