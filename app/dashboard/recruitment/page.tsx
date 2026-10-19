@@ -3423,6 +3423,10 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     mrf_id:'', job_location:'', recruiter:'', employment_type:'Full time — permanent',
     // 2 personal
     first_name:'', middle_name:'', last_name:'', dob:'', gender:'', marital_status:'', nationality:'Indian', languages:'',
+    // international candidate (checkbox): passport, where they will work, visa — all required once ticked
+    international:false, intl_current_country:'', intl_work_location:'', intl_work_country:'', intl_currency:'',
+    intl_passport_number:'', intl_passport_country:'', intl_passport_expiry:'',
+    intl_visa_required:'', intl_visa_status:'', intl_visa_type:'', intl_visa_expiry:'', intl_work_authorization:'', intl_ssa_country:'', intl_notes:'',
     // identity — checked against the backout blacklist; only PAN and Aadhaar's last 4 are stored
     aadhaar:'', pan:'',
     // 3 contact
@@ -3537,7 +3541,18 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   const isEmail = (v:string)=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)
   const missing = {
     mrf_id: !cForm.mrf_id, first_name: !cForm.first_name.trim(), last_name: !cForm.last_name.trim(),
-    email: !isEmail(cForm.email.trim()), phone: !/^\d{10}$/.test(cForm.phone.trim()),
+    // An international candidate may have a non-Indian number (7–15 digits with the country code).
+    email: !isEmail(cForm.email.trim()), phone: cForm.international ? !/^\d{7,15}$/.test(cForm.phone.trim().replace(/\D/g,'')) : !/^\d{10}$/.test(cForm.phone.trim()),
+    // International candidate (checkbox in Personal details): passport, where they will work, visa.
+    intl_nationality: !!cForm.international && !String(cForm.nationality||'').trim(),
+    intl_current_country: !!cForm.international && !String(cForm.intl_current_country||'').trim(),
+    intl_work_location: !!cForm.international && !cForm.intl_work_location,
+    intl_passport_number: !!cForm.international && !String(cForm.intl_passport_number||'').trim(),
+    intl_passport_country: !!cForm.international && !String(cForm.intl_passport_country||'').trim(),
+    intl_passport_expiry: !!cForm.international && (!cForm.intl_passport_expiry || new Date(cForm.intl_passport_expiry).getTime() < Date.now()),
+    intl_visa_required: !!cForm.international && cForm.intl_work_location==='India' && !cForm.intl_visa_required,
+    intl_visa_status: !!cForm.international && cForm.intl_work_location==='India' && cForm.intl_visa_required==='Yes' && !cForm.intl_visa_status,
+    intl_work_authorization: !!cForm.international && cForm.intl_work_location==='Outside India' && !cForm.intl_work_authorization,
     current_city: !cForm.current_city.trim(), total_exp_years: cForm.total_exp_years==='',
     current_company: !String(cForm.current_company||'').trim(),
     qualification: !cForm.qualification, notice_period: !cForm.notice_period,
@@ -3546,7 +3561,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   } as Record<string,boolean>
   const bad = (k:string)=> touched && missing[k]
   const STEP_TITLES = ['Requisition & Personal', 'Contact & Professional', 'Compensation & Source', 'Documents & Screening']
-  const STEP_FIELDS: Record<number,string[]> = { 1:['mrf_id','first_name','last_name'], 2:['email','phone','current_city','total_exp_years','current_company','qualification','notice_period'], 3:['current_fixed','expected_ctc','source','source_remark'], 4:['consent'] }
+  const STEP_FIELDS: Record<number,string[]> = { 1:['mrf_id','first_name','last_name','intl_nationality','intl_current_country','intl_work_location','intl_passport_number','intl_passport_country','intl_passport_expiry','intl_visa_required','intl_visa_status','intl_work_authorization'], 2:['email','phone','current_city','total_exp_years','current_company','qualification','notice_period'], 3:['current_fixed','expected_ctc','source','source_remark'], 4:['consent'] }
   const stepMissing = (n:number) => STEP_FIELDS[n].filter(k=>missing[k]).length
   const goToStep = (n:number) => { setAddStep(Math.max(1, Math.min(4, n))); setTouched(false); addBodyRef.current?.scrollTo({ top:0, behavior:'smooth' }) }
   const goNext = () => {
@@ -3618,6 +3633,18 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       const details = {
         requisition:{ job_location:cForm.job_location||mrf?.location_name||null, recruiter:cForm.recruiter||null, employment_type:cForm.employment_type },
         personal:{ first_name:cForm.first_name, middle_name:cForm.middle_name, last_name:cForm.last_name, dob:cForm.dob||null, gender:cForm.gender||null, marital_status:cForm.marital_status||null, nationality:cForm.nationality||null, languages:cForm.languages||null },
+        // International candidate: passport, where they will work and the visa position. Read by
+        // Onboarding when the link is sent — the hiring track (lib/onboarding/hiring-track.ts)
+        // follows from it: in India → FOREIGN_IN_INDIA, outside India → OVERSEAS.
+        international: cForm.international ? {
+          is_international:true, nationality:cForm.nationality||null, current_country:cForm.intl_current_country||null,
+          work_location:cForm.intl_work_location||null, hiring_track: cForm.intl_work_location==='Outside India' ? 'OVERSEAS' : 'FOREIGN_IN_INDIA',
+          work_country: cForm.intl_work_location==='Outside India' ? (cForm.intl_work_country||cForm.intl_current_country||null) : 'India',
+          payroll_currency: cForm.intl_work_location==='Outside India' ? (String(cForm.intl_currency||'').trim().toUpperCase()||null) : 'INR',
+          passport_number:cForm.intl_passport_number||null, passport_country:cForm.intl_passport_country||null, passport_expiry:cForm.intl_passport_expiry||null,
+          visa_required:cForm.intl_visa_required||null, visa_status:cForm.intl_visa_status||null, visa_type:cForm.intl_visa_type||null, visa_expiry:cForm.intl_visa_expiry||null,
+          work_authorization:cForm.intl_work_authorization||null, ssa_country: cForm.intl_ssa_country||null, notes:cForm.intl_notes||null,
+        } : null,
         identity:{ pan:panNo||null, aadhaar_last4: aadhaarNo ? aadhaarNo.slice(-4) : null },
         contact:{ dial_code:cForm.dial_code, alt_mobile:cForm.alt_mobile||null, current_city:cForm.current_city, preferred_location:cForm.preferred_location||null,
           permanent_address:[cForm.perm_line1, cForm.perm_line2, cForm.perm_city, cForm.perm_state, cForm.perm_pincode, cForm.perm_country].map((x:string)=>(x||'').trim()).filter(Boolean).join(', ') || cForm.permanent_address || null,
@@ -3848,6 +3875,69 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <div style={{ gridColumn:'span 2' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input className="rx-input" value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
               </div>
 
+
+              {/* 2b · International candidate — passport, where they will work, visa. Everything here is
+                  required once the box is ticked; Onboarding reads it to pick the hiring track. */}
+              <SectionLine title="International candidate" />
+              <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', fontSize:13, marginBottom:12, userSelect:'none' as const }}>
+                <input type="checkbox" checked={!!cForm.international} onChange={e=>setCForm((f:any)=>({ ...f, international:e.target.checked, nationality: e.target.checked && f.nationality==='Indian' ? '' : f.nationality, dial_code: e.target.checked ? f.dial_code : '+91' }))} style={{ width:16, height:16 }} />
+                <span><b>International candidate</b> <span style={{ color:C.faint }}>— a foreign national, or someone who will work outside India</span></span>
+              </label>
+              {cForm.international && (
+                <div style={{ border:`1px solid ${C.brandEdge}`, background:C.brandTint, borderRadius:12, padding:'12px 14px', marginBottom:14 }}>
+                  <div style={{ ...T.g3, marginBottom:10 }}>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Nationality{reqMark}</label><input className="rx-input" style={inp('intl_nationality')} value={cForm.nationality} onChange={e=>CF('nationality',e.target.value)} placeholder="e.g. German" /></div>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Country currently in{reqMark}</label><input className="rx-input" style={inp('intl_current_country')} value={cForm.intl_current_country} onChange={e=>CF('intl_current_country',e.target.value)} placeholder="e.g. Germany" /></div>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Will work{reqMark}</label>
+                      <select className="rx-input" style={sel('intl_work_location')} value={cForm.intl_work_location} onChange={e=>CF('intl_work_location',e.target.value)}>
+                        <option value="">Select</option><option>India</option><option>Outside India</option>
+                      </select>
+                    </div>
+                    {cForm.intl_work_location==='Outside India' && (<>
+                      <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Work country</label><input className="rx-input" value={cForm.intl_work_country} onChange={e=>CF('intl_work_country',e.target.value)} placeholder={cForm.intl_current_country||'e.g. United Kingdom'} /></div>
+                      <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Salary currency</label><input className="rx-input" maxLength={3} value={cForm.intl_currency} onChange={e=>CF('intl_currency',e.target.value.toUpperCase())} placeholder="e.g. GBP" /></div>
+                      <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Right to work there{reqMark}</label>
+                        <select className="rx-input" style={sel('intl_work_authorization')} value={cForm.intl_work_authorization} onChange={e=>CF('intl_work_authorization',e.target.value)}>
+                          <option value="">Select</option><option>Citizen / permanent resident</option><option>Work permit held</option><option>Sponsorship needed</option>
+                        </select>
+                      </div>
+                    </>)}
+                  </div>
+                  <div style={{ fontSize:11.5, fontWeight:700, color:C.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', margin:'6px 0 8px' }}>Passport</div>
+                  <div style={{ ...T.g3, marginBottom:10 }}>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Passport number{reqMark}</label><input className="rx-input" style={inp('intl_passport_number')} value={cForm.intl_passport_number} onChange={e=>CF('intl_passport_number',e.target.value.toUpperCase())} /></div>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Issuing country{reqMark}</label><input className="rx-input" style={inp('intl_passport_country')} value={cForm.intl_passport_country} onChange={e=>CF('intl_passport_country',e.target.value)} /></div>
+                    <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Passport expiry{reqMark}</label><input className="rx-input" type="date" style={inp('intl_passport_expiry')} value={cForm.intl_passport_expiry} onChange={e=>CF('intl_passport_expiry',e.target.value)} />{bad('intl_passport_expiry') && cForm.intl_passport_expiry && <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>Already expired.</div>}</div>
+                  </div>
+                  {cForm.intl_work_location==='India' && (<>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:C.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', margin:'6px 0 8px' }}>Visa for India</div>
+                    <div style={{ ...T.g3, marginBottom:6 }}>
+                      <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Visa required?{reqMark}</label>
+                        <select className="rx-input" style={sel('intl_visa_required')} value={cForm.intl_visa_required} onChange={e=>CF('intl_visa_required',e.target.value)}>
+                          <option value="">Select</option><option>Yes</option><option value="No">No (OCI / PIO / already authorised)</option>
+                        </select>
+                      </div>
+                      {cForm.intl_visa_required==='Yes' && (<>
+                        <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Visa status{reqMark}</label>
+                          <select className="rx-input" style={sel('intl_visa_status')} value={cForm.intl_visa_status} onChange={e=>CF('intl_visa_status',e.target.value)}>
+                            <option value="">Select</option><option>Not applied yet</option><option>Applied</option><option>Granted</option>
+                          </select>
+                        </div>
+                        <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Visa type</label>
+                          <select className="rx-input" value={cForm.intl_visa_type} onChange={e=>CF('intl_visa_type',e.target.value)}>
+                            <option value="">Select</option><option>Employment</option><option>Business</option><option>Dependent</option><option>Other</option>
+                          </select>
+                        </div>
+                        <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Visa expiry <span style={{ color:C.faint, fontWeight:400 }}>(if granted)</span></label><input className="rx-input" type="date" value={cForm.intl_visa_expiry} onChange={e=>CF('intl_visa_expiry',e.target.value)} /></div>
+                      </>)}
+                      <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>SSA coverage certificate from <span style={{ color:C.faint, fontWeight:400 }}>(if any)</span></label><input className="rx-input" value={cForm.intl_ssa_country} onChange={e=>CF('intl_ssa_country',e.target.value)} placeholder="e.g. Germany — keeps them out of Indian PF" /></div>
+                    </div>
+                    <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:4 }}>They will join as a <b>foreign national in India</b>: Employment visa tied to this employer, FRRO within 14 days of arrival, PF as an International Worker unless an SSA certificate applies. Onboarding picks that track automatically.</div>
+                  </>)}
+                  {cForm.intl_work_location==='Outside India' && <div style={{ fontSize:11.5, color:C.inkSoft, marginTop:4 }}>They will join as an <b>overseas employee</b>: no Indian PF / ESIC / PT, paid outside the Indian payroll by the foreign entity or an EOR partner. Onboarding picks that track automatically.</div>}
+                  <div style={{ marginTop:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Notes <span style={{ color:C.faint, fontWeight:400 }}>(relocation, sponsorship, timelines)</span></label><input className="rx-input" value={cForm.intl_notes} onChange={e=>CF('intl_notes',e.target.value)} /></div>
+                </div>
+              )}
               </>)}
               {addStep===2 && (<>
               {/* 3 · Contact */}

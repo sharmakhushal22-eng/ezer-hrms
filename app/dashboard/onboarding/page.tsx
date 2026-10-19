@@ -383,7 +383,7 @@ export default function OnboardingDashboard() {
     const scopeCo = companyFilter(grant, null)
     let recQ = supabase
       .from('candidates')
-      .select('id, full_name, email, mobile, phone, designation, company_id, onboarding_date, blacklisted, offer_accepted, stage, created_at')
+      .select('id, full_name, email, mobile, phone, designation, company_id, onboarding_date, blacklisted, offer_accepted, stage, created_at, application_details')
       .or('onboarding_date.not.is.null,offer_accepted.is.true,stage.eq.Joined')
     if (scopeCo) recQ = recQ.eq('company_id', scopeCo)
     const { data: recJoiners } = await recQ
@@ -402,6 +402,11 @@ export default function OnboardingDashboard() {
           email:           r.email || '',
           mobile:          r.mobile || r.phone || '',
           date_of_joining: r.onboarding_date,
+          // An international candidate (Add candidate → International) arrives with their hiring track:
+          // in India → FOREIGN_IN_INDIA, outside India → OVERSEAS (lib/onboarding/hiring-track.ts).
+          hiring_track:    (r as any).application_details?.international?.hiring_track || 'DOMESTIC',
+          work_country:    (r as any).application_details?.international?.work_country || null,
+          payroll_currency: (r as any).application_details?.international?.payroll_currency || null,
           status:          'NOT_INVITED' as Stage,
           current_step:    0,
           form_data:       {},
