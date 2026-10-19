@@ -1,11 +1,18 @@
-// GET /api/te/desk — the Travel Desk's work list for the caller's company:
-//   to_book    tickets and hotel stays on approved trips that the desk still has to book (v_te_to_book)
+// GET /api/te/desk — the Travel Desk's work for the caller's company:
+//   to_book    tickets and hotel stays the desk still has to book (v_te_to_book).
+//              Includes trips still WAITING for approval, since migration 177:
+//              each row carries trip_status so the screen can show the wait and
+//              withhold the Record button. Seeing is not booking —
+//              te_booking_record still refuses anything but APPROVED.
 //   booked     what the desk has already recorded, so a booking can be cancelled when a trip changes
+//   stays      trips where hotels were suggested and nobody has chosen one yet
 //   vehicles   vehicles whose RC could not be checked automatically and wait for a person to look at the photo
-// Needs the dashboard Travel Claims permission (edit).
+//   watch      travel the desk is NOT booking — every leg the traveller's own,
+//              no hotel asked for. For information only, never work.
+// Needs a place on the travel desk, or the dashboard Travel Claims permission.
 import { NextRequest } from 'next/server'
 import { teRoute } from '@/lib/te/server'
-import { rpcError } from '@/lib/te/errors'
+import { missingSchema, rpcError } from '@/lib/te/errors'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -32,7 +39,7 @@ export async function GET(req: NextRequest) {
     // only ever fail. A work list should hold work the reader can do; somebody
     // else on the desk still sees it.
     const employeeId = await t.employee()
-    const [book, veh, done, stays] = await Promise.all([
+    const [book, veh, done, stays, watch] = await Promise.all([
       sb.from('v_te_to_book').select('*').eq('company_id', company).order('on_date', { ascending: true }).limit(500),
       sb.from('te_employee_vehicles')
         .select('id, employee_id, reg_no, vehicle_type_code, declared_type_code, ownership, rc_file_url, created_at')
@@ -51,6 +58,10 @@ export async function GET(req: NextRequest) {
         .eq('company_id', company).eq('stay_wanted', true).eq('stay_status', 'NONE')
         .not('status', 'in', '(CANCELLED,REJECTED)')
         .order('start_date', { ascending: true }).limit(200),
+      // Travel the desk is NOT booking: every leg is the traveller's own and no
+      // hotel was asked for. Shown for information, never as work.
+      sb.from('v_te_desk_watch').select('*').eq('company_id', company)
+        .order('start_date', { ascending: true }).limit(200),
     ])
     if (book.error) throw rpcError(book.error, 'v_te_to_book')
     if (veh.error) throw rpcError(veh.error, 'te_employee_vehicles')
@@ -62,6 +73,15 @@ export async function GET(req: NextRequest) {
     const notMigrated = stays.error?.code === '42703'
     if (stays.error && !notMigrated) throw rpcError(stays.error, 'te_trips')
     const stayRows = notMigrated ? [] : (stays.data ?? [])
+
+    // v_te_desk_watch arrives with migration 177. Same reasoning — the rest of
+    // the desk keeps working while that one is unapplied, and any other error is
+    // still a real fault. missingSchema covers PostgREST's PGRST205 as well as
+    // Postgres's 42P01: a view the API has never seen is reported as the former,
+    // which is how the first version of this check let the whole desk 503.
+    const noWatch = missingSchema(watch.error)
+    if (watch.error && !noWatch) throw rpcError(watch.error, 'v_te_desk_watch')
+    const watchRows = noWatch ? [] : (watch.data ?? [])
 
     // A booking names its trip, not its traveller. The trip is read separately
     // for the same reason the names are below: te_trips links to employees more
@@ -86,6 +106,7 @@ export async function GET(req: NextRequest) {
       ...(veh.data ?? []).map(r => r.employee_id as string),
       ...booked.map(r => r.employee_id),
       ...stayRows.map(r => r.employee_id as string),
+      ...watchRows.map(r => r.employee_id as string),
     ].filter(Boolean))]
     const names = new Map<string, { emp_code: string | null; full_name: string | null }>()
     if (ids.length) {
@@ -105,6 +126,7 @@ export async function GET(req: NextRequest) {
       booked: booked.map(withName),
       vehicles: (veh.data ?? []).map(withName),
       stays: stayRows.map(withName),
+      watch: watchRows.map(withName),
     }
   })
 }

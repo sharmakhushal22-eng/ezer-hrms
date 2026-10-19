@@ -28,7 +28,7 @@
 // employee called an SUV and the RC shows as a hatchback is paid as a
 // hatchback from here on. The screen says what the rate becomes.
 import { useCallback, useEffect, useState } from 'react'
-import { te, type DeskBooked, type DeskStay, type DeskToBook, type DeskVehicle } from '@/lib/te/client'
+import { te, type DeskBooked, type DeskStay, type DeskToBook, type DeskVehicle, type DeskWatch } from '@/lib/te/client'
 import { ratePerKm } from '@/lib/te/vehicle'
 import { errorText, day, rs } from '@/lib/te/format'
 import type { TeVehicleType } from '@/lib/te/types'
@@ -36,7 +36,7 @@ import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeStayChoice from './TeStayChoice'
 
-type Room = 'stays' | 'book' | 'booked' | 'vehicles'
+type Room = 'stays' | 'book' | 'booked' | 'vehicles' | 'watch'
 
 export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   /** cfg.vehicles — the types a vehicle can be, and what each pays. */
@@ -52,6 +52,8 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   const [why, setWhy] = useState('')
   const [vehicles, setVehicles] = useState<DeskVehicle[]>([])
   const [stays, setStays] = useState<DeskStay[]>([])
+  // Travel the desk is not booking anything for. Information, never work.
+  const [watch, setWatch] = useState<DeskWatch[]>([])
   // Whether this reader may spend. A desk member without "May book" belongs on
   // the desk — vehicles and hotels are their work — so the screen stays whole
   // and only the two controls that commit money go away. Starts true so the
@@ -68,12 +70,19 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
   useEffect(() => {
     let current = true
     te.desk.list()
-      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setMayBook(r.may_book !== false); setError('') } })
+      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setWatch(r.watch ?? []); setMayBook(r.may_book !== false); setError('') } })
       .catch(e => { if (current) { setToBook([]); setError(errorText(e)) } })
     return () => { current = false }
   }, [tick])
 
   const keyOf = (b: DeskToBook) => `${b.trip_id}:${b.leg_id ?? b.point_seq ?? b.kind}`
+  /** Whether this row can actually be booked yet. Since migration 177 the list
+   *  also carries trips still waiting for their approvers, so the desk gets the
+   *  lead time the notice rule promises it — but te_booking_record still
+   *  refuses anything but APPROVED, and a button that cannot work should not be
+   *  offered. Absent trip_status means 177 is unapplied, and then every row in
+   *  this list was approved to get here. */
+  const approved = (b: DeskToBook) => !b.trip_status || b.trip_status === 'APPROVED'
   const ready = !!form.vendor.trim() && !!form.reference.trim() && Number(form.amount) > 0
 
   async function record() {
@@ -138,12 +147,17 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
     { k: 'stays', label: 'Hotels to choose', icon: 'home', n: stays.length },
     { k: 'book', label: 'To book', icon: 'plane', n: bookings.length },
     { k: 'booked', label: 'Booked', icon: 'check', n: booked.length },
+    // Last, and counted, because it is the only list here with nothing to do.
+    { k: 'watch', label: 'For information', icon: 'people', n: watch.length },
     { k: 'vehicles', label: 'Vehicles', icon: 'car', n: vehicles.length },
   ]
   // Where the work is. Only used until somebody chooses for themselves —
   // after that `room` is set and this is ignored, so the tab does not jump
   // out from under a person who has just emptied the room they were in.
-  const firstWithWork = rooms.find(r => r.n)?.k ?? 'stays'
+  // "For information" is excluded on purpose: it is the one room with nothing
+  // to act on, so landing a desk person in it would be the exact failure the
+  // note above describes, in a new place.
+  const firstWithWork = rooms.find(r => r.n && r.k !== 'watch')?.k ?? 'stays'
   const here = room ?? firstWithWork
 
   /** Leaving a room abandons whatever was half-typed in it. Coming back to a
@@ -210,6 +224,15 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
                   {b.full_name} <span className="mono">{b.emp_code}</span> · {b.trip_name}
                   {b.on_date ? ` · ${day(b.on_date)}` : ''}{b.mode ? ` · ${b.mode}` : ''}
                 </div>
+                {/* The wait, said on the row rather than discovered by pressing
+                    a button and reading a refusal. */}
+                {!approved(b) ? (
+                  <div className="row tight" style={{ marginTop: 4 }}>
+                    <span className="chip t-warn">
+                      {b.trip_status === 'SENT_BACK' ? 'Sent back for a change' : 'Waiting for approval'}
+                    </span>
+                  </div>
+                ) : null}
                 {/* WHAT THEY ASKED FOR. The route and the date were never
                     enough to buy a ticket — there are a dozen flights that
                     day — so this desk was writing to travellers to ask. The
@@ -258,8 +281,14 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
                   </div>
                 ) : null}
               </div>
-              {!open && mayBook ? (
+              {!open && mayBook && approved(b) ? (
                 <button type="button" className="btn sm pri" onClick={() => { setBooking(b); setForm({ vendor: '', reference: '', amount: '' }) }}>Record</button>
+              ) : null}
+              {!open && mayBook && !approved(b) ? (
+                // Not a disabled Record button: there is nothing wrong with the
+                // row and nothing for the desk to fix. Look at fares, hold an
+                // option, then book it when the approval lands.
+                <span className="small muted">Book once approved</span>
               ) : null}
             </div>
           )
@@ -309,6 +338,40 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onToast }: {
         </div>
         ) : (
           <div className="empty"><b>Nothing is booked</b>Tickets and rooms the desk has recorded appear here, so one can be cancelled when a trip changes.</div>
+        )
+      ) : null}
+
+      {/* FOR INFORMATION. Travel the desk is not booking anything for, because
+          the traveller is arranging every leg themselves and asked for no
+          hotel. The desk wanted to know what is moving in its company; it is
+          kept out of "To book" so a work list stays work. */}
+      {here === 'watch' ? (
+        watch.length ? (
+        <div className="card pad0">
+          <div className="day"><span>For information</span><span>{watch.length}</span></div>
+          <div className="note">
+            <TeIcon name="info" size="sm" />
+            <span>Nothing here is yours to book — every journey is the traveller&rsquo;s own and no hotel was asked for. It is listed so you know what is travelling.</span>
+          </div>
+          {watch.map(w => (
+            <div key={w.trip_id} className="li">
+              <span className="ico"><TeIcon name={w.scope === 'local' ? 'local' : w.scope === 'international' ? 'international' : 'domestic'} /></span>
+              <div className="grow">
+                <div className="b"><span className="mono">{w.trip_no}</span> · {w.trip_name}</div>
+                <div className="small muted">
+                  {w.full_name} <span className="mono">{w.emp_code}</span>
+                  {' · '}{day(w.start_date)}{w.end_date !== w.start_date ? ` to ${day(w.end_date)}` : ''}
+                  {' · '}{w.leg_count} journey{w.leg_count === 1 ? '' : 's'}, all their own
+                </div>
+              </div>
+              {w.trip_status !== 'APPROVED' ? (
+                <span className="chip t-warn">{w.trip_status === 'SENT_BACK' ? 'Sent back' : 'Waiting for approval'}</span>
+              ) : <span className="chip t-pos">Approved</span>}
+            </div>
+          ))}
+        </div>
+        ) : (
+          <div className="empty"><b>Nothing else travelling</b>Trips the desk is not booking for appear here, so you can see what is moving without them crowding the work list.</div>
         )
       ) : null}
 

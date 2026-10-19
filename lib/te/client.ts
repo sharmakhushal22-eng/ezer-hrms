@@ -150,7 +150,12 @@ export interface FinanceSummary {
   /** false = a row cap was reached, so the amounts above are a floor. */
   amountsComplete: boolean
 }
-export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null; kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null
+export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null;
+  /** The trip's own status. Anything but APPROVED means the desk may look and
+   *  plan but not book yet: te_booking_record refuses it. Absent until
+   *  migration 177. */
+  trip_status?: TripStatus
+  kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null
   /** What the traveller asked for, from te_trip_segments. Null on a hotel row
    *  and on a leg added during the trip, which has no segment behind it. */
   pref_time: string | null; pref_url: string | null; pref_note: string | null }
@@ -165,6 +170,14 @@ export interface DeskStay {
 export interface DeskVehicle { id: Uuid; employee_id: Uuid; emp_code: string | null; full_name: string | null; reg_no: string; vehicle_type_code: string; declared_type_code: string | null; ownership: string; rc_file_url: string | null; created_at: string }
 /** A booking the desk has already recorded. Live ones only — the one thing
  *  left to do with it is cancel it when the trip changes under it. */
+/** Travel the desk is not booking anything for. Information, not work. */
+export interface DeskWatch {
+  company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string
+  employee_id: Uuid; emp_code: string | null; full_name: string | null
+  scope: string; trip_status: TripStatus; start_date: string; end_date: string
+  stay_wanted: boolean | null; stay_by: string | null; leg_count: number
+}
+
 export interface DeskBooked {
   id: Uuid; booking_no: string; trip_id: Uuid; trip_no: string; trip_name: string
   employee_id: Uuid; emp_code: string | null; full_name: string | null
@@ -289,7 +302,7 @@ export const te = {
     /** may_book: whether this reader may spend. A desk member without it still
      *  verifies vehicles and decides stays, so the screen keeps everything
      *  except the booking controls. */
-    list: (q?: { company_id?: string }) => get<{ company_id: Uuid; may_book: boolean; to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[]; stays: DeskStay[] }>('desk', q),
+    list: (q?: { company_id?: string }) => get<{ company_id: Uuid; may_book: boolean; to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[]; stays: DeskStay[]; watch: DeskWatch[] }>('desk', q),
     /** Pick one of the hotels the employee suggested, or turn them all down. */
     stayDecide: (input: { tripId: Uuid; action: 'choose' | 'reject'; choice?: number; remark?: string }) =>
       post<{ trip_id: Uuid; status: 'CHOSEN' | 'REJECTED'; chosen: number | null; name: string }>('stay', input),
