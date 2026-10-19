@@ -1210,3 +1210,12 @@
 .te .contactline .cx span{overflow-wrap:anywhere}
 .te .contactline .cx svg{flex:none;color:var(--ez-brand)}
 .te .contactline .cx:hover{border-color:var(--ez-brand);color:var(--ez-brand);background:var(--ez-brand-tint)}
+
+/* A preview of the mail the traveller will receive. Framed like a message
+   rather than a form field, so an administrator reads it as the thing it
+   becomes and not as more settings. */
+.te .mailprev{border:1px solid var(--ez-line);border-radius:var(--te-r-sm);background:var(--ez-surface);overflow:hidden}
+.te .mailprev .mp-subject{padding:10px 12px;border-bottom:1px solid var(--ez-line);background:var(--ez-sunken);font-weight:650;color:var(--ez-ink)}
+.te .mailprev .mp-body{padding:12px;white-space:pre-wrap;font-size:13px;line-height:1.6;color:var(--ez-ink-soft)}
+.te .mailprev .mp-attach{display:flex;align-items:center;gap:7px;padding:8px 12px;border-top:1px solid var(--ez-line);background:var(--ez-sunken);font-size:12px;color:var(--ez-muted)}
+.te .mailprev .mp-attach svg{color:var(--ez-brand)}

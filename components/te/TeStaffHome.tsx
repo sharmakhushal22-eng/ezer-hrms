@@ -32,6 +32,7 @@ import TeTravelDesk from './desk/TeTravelDesk'
 import TeModesVehicles from './admin/TeModesVehicles'
 import TePolicy from './admin/TePolicy'
 import TeGpsRules from './admin/TeGpsRules'
+import TeMailTemplate from './admin/TeMailTemplate'
 import TeChecks from './admin/TeChecks'
 import TeCategories from './admin/TeCategories'
 import TeWorkflow from './admin/TeWorkflow'
@@ -45,7 +46,7 @@ import './te.css'
 
 type Desk =
   | 'home' | 'approvals' | 'deskwork' | 'finance'
-  | 'rates' | 'policy' | 'gps' | 'checks' | 'categories' | 'workflow' | 'desks'
+  | 'rates' | 'policy' | 'gps' | 'checks' | 'categories' | 'workflow' | 'desks' | 'mail'
   | 'reports' | 'triplog' | 'audit'
 
 /** The desks, and what each needs before it is worth offering. A desk is shown
@@ -62,6 +63,9 @@ const DESKS: { k: Desk; label: string; icon: string; needsFinance?: boolean; nee
   { k: 'gps', label: 'GPS rules', icon: 'target', needsAdmin: true },
   { k: 'checks', label: 'Checks', icon: 'verify', needsAdmin: true },
   { k: 'categories', label: 'Categories', icon: 'other', needsAdmin: true },
+  // Next to the other things an administrator words for the whole company,
+  // rather than buried in a rules screen it has nothing to do with.
+  { k: 'mail', label: 'Traveller email', icon: 'mail', needsAdmin: true },
   { k: 'workflow', label: 'Who approves', icon: 'people', needsAdmin: true },
   // Who answers for which company and branch — the configuration behind the
   // Travel Desk and Finance desk tabs above.
@@ -133,6 +137,7 @@ export default function TeStaffHome() {
     if (desk === 'gps') return <TeGpsRules key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
     if (desk === 'checks') return <TeChecks key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
     if (desk === 'categories') return <TeCategories key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
+    if (desk === 'mail') return <TeMailTemplate key={tick} cfg={cfg} onSaved={reloadCfg} onToast={setToast} />
     return null
   }
 
