@@ -14,6 +14,17 @@
 // WHY DISCARD ASKS. It is the one irreversible button here — the draft is the
 // only copy of that work — so it is a two-tap confirm rather than a single
 // click next to Resume.
+//
+// CLEARING SEVERAL AT ONCE. Abandoned plans accumulate: open the planner, think
+// better of it, and a draft is left behind. Discarding eleven of them one at a
+// time, each with its own confirm, is eleven decisions to make the same choice.
+// "Select" turns the rows into checkboxes, with select-all, and the confirm is
+// asked once for the lot — but it is still asked, and it still names the number,
+// because the warning is the same warning.
+//
+// SELECTION IS OFF UNTIL ASKED FOR. Checkboxes on every row by default would
+// make the common case — resume the one I came back for — read like a list to
+// be processed.
 import { useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import { errorText } from '@/lib/te/format'
@@ -46,6 +57,10 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
   const [confirming, setConfirming] = useState<string | null>(null)
   const [busy, setBusy] = useState('')
   const [tick, setTick] = useState(0)
+  /** Selection mode, and what is ticked. Off until asked for. */
+  const [picking, setPicking] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [confirmingMany, setConfirmingMany] = useState(false)
 
   useEffect(() => {
     let current = true
@@ -56,6 +71,42 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
       .catch(e => { if (current) setError(errorText(e)) })
     return () => { current = false }
   }, [reloadKey, tick, kind])
+
+  /** Leaving selection mode forgets what was ticked, rather than keeping a
+   *  hidden set that a later "Select" would silently restore. */
+  const stopPicking = useCallback(() => {
+    setPicking(false); setPicked(new Set()); setConfirmingMany(false)
+  }, [])
+
+  const toggle = useCallback((id: string) => {
+    setPicked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+    setConfirmingMany(false)
+  }, [])
+
+  const discardMany = useCallback(async (ids: string[]) => {
+    setBusy('many')
+    try {
+      const r = await te.drafts.removeMany(ids)
+      stopPicking()
+      setTick(t => t + 1)
+      // The true number, not the number asked for: one may have gone already in
+      // another tab, and saying "11 discarded" when 9 went would be a lie the
+      // reader cannot check.
+      if (r.deleted < r.asked) {
+        setError(`${r.deleted} of ${r.asked} drafts were discarded. The rest had already gone.`)
+      } else {
+        setError('')
+      }
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setBusy('')
+    }
+  }, [stopPicking])
 
   const discard = useCallback(async (d: TeDraft) => {
     setBusy(d.id)
@@ -70,17 +121,89 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
     }
   }, [])
 
+  // Derived, not stored: a second copy of "are they all ticked" is a second
+  // thing that can be wrong. Guarded on length so an empty list does not read
+  // as "all selected".
+  const allPicked = drafts.length > 0 && picked.size === drafts.length
+  const somePicked = picked.size > 0
+
   if (!drafts.length && !error) return null
 
   return (
     <div className="card">
       <div className="ch">
         <h3><TeIcon name="file" size="sm" />{title ?? 'Drafts'}</h3>
-        <span className="small muted">Only you can see these</span>
+        {picking ? (
+          <div className="row tight">
+            <label className="check small">
+              <input
+                type="checkbox"
+                checked={allPicked}
+                // Half-ticked when some but not all are: the box says what the
+                // next tap will do rather than guessing.
+                ref={el => { if (el) el.indeterminate = somePicked && !allPicked }}
+                onChange={() => setPicked(allPicked ? new Set() : new Set(drafts.map(d => d.id)))}
+              />
+              <span>{allPicked ? 'Clear all' : 'Select all'}</span>
+            </label>
+            <span className="small muted">{picked.size} of {drafts.length}</span>
+            <button type="button" className="btn sm" onClick={stopPicking}>Done</button>
+          </div>
+        ) : (
+          <div className="row tight">
+            <span className="small muted">Only you can see these</span>
+            {/* Not offered for a single draft: its own Discard is one tap away
+                and already asks. */}
+            {drafts.length > 1 ? (
+              <button type="button" className="btn sm" onClick={() => { setPicking(true); setConfirming(null) }}>
+                Select
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
       {error ? <p className="small warn">{error}</p> : null}
+      {/* ASKED ONCE, FOR THE LOT, and it still names the number — the warning
+          is the same warning, and "Discard 9 drafts" is a different decision
+          from "Discard". */}
+      {picking && somePicked ? (
+        confirmingMany ? (
+          <div className="form">
+            <div className="flag crit">
+              <TeIcon name="alert" size="sm" />
+              <span>
+                {picked.size === 1
+                  ? 'This is the only copy of that work. Discarding it cannot be undone.'
+                  : `These are the only copies of that work. Discarding ${picked.size} drafts cannot be undone.`}
+              </span>
+            </div>
+            <div className="row tight">
+              <button type="button" className="btn ok glow" onClick={() => setConfirmingMany(false)}>Keep them</button>
+              <button type="button" className="btn dan glow" disabled={busy === 'many'}
+                onClick={() => void discardMany([...picked])}>
+                <TeIcon name="bin" size="sm" />
+                {busy === 'many' ? 'Discarding…' : `Discard ${picked.size}`}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="row tight">
+            <button type="button" className="btn dan" onClick={() => setConfirmingMany(true)}>
+              <TeIcon name="bin" size="sm" />
+              Discard {picked.size} {picked.size === 1 ? 'draft' : 'drafts'}
+            </button>
+          </div>
+        )
+      ) : null}
+
       {drafts.map(d => (
-        <div key={d.id} className="draftrow" data-kind={d.kind}>
+        <div key={d.id} className={`draftrow${picking && picked.has(d.id) ? ' picked' : ''}`} data-kind={d.kind}>
+          {picking ? (
+            <label className="check">
+              <input type="checkbox" checked={picked.has(d.id)} onChange={() => toggle(d.id)} />
+              <span className="vh">Select {d.title || 'this draft'}</span>
+            </label>
+          ) : null}
           <span className="ico"><TeIcon name={d.kind === 'trip' ? 'route' : d.kind === 'expense' ? 'receipt' : 'claims'} /></span>
           <div className="grow">
             {d.title
@@ -110,7 +233,10 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
               </div>
             ) : null}
           </div>
-          {confirming !== d.id ? (
+          {/* While selecting, the per-row buttons go away: two ways to discard
+              the same row, one of them a single tap, is how somebody loses work
+              they meant to keep. */}
+          {!picking && confirming !== d.id ? (
             <div className="row tight">
               <button type="button" className="btn sm" onClick={() => setConfirming(d.id)}>Discard</button>
               <button type="button" className="btn sm pri" onClick={() => onResume(d)}>Resume</button>

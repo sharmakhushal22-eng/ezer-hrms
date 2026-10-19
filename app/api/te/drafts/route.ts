@@ -1,5 +1,10 @@
-// GET  /api/te/drafts?kind=trip   — the caller's own unfinished work
-// POST /api/te/drafts              — save one: { id?, kind, title?, scope?, step?, body, trip_id?, claim_id? }
+// GET    /api/te/drafts?kind=trip   — the caller's own unfinished work
+// POST   /api/te/drafts              — save one: { id?, kind, title?, scope?, step?, body, trip_id?, claim_id? }
+// DELETE /api/te/drafts              — discard several: { ids: [...] }
+//
+// The bulk discard is on the COLLECTION, while discarding one stays on
+// /drafts/[id]. Deleting several is an operation on the set, and folding it
+// into the single-id route would have meant inventing a magic id.
 //
 // NO MODULE PERMISSION IS CHECKED, deliberately, and this is the same reasoning
 // as /api/te/bookings/request: every other travel route needs Travel Claims
@@ -13,13 +18,18 @@
 // allowed to be. The body is stored verbatim and read back verbatim.
 import { NextRequest } from 'next/server'
 import { teRoute } from '@/lib/te/server'
-import { needOneOf, TeHttpError } from '@/lib/te/errors'
-import { draftList, draftSave } from '@/lib/te/engine/te-service.js'
+import { needOneOf, needUuid, TeHttpError } from '@/lib/te/errors'
+import { draftDeleteMany, draftList, draftSave } from '@/lib/te/engine/te-service.js'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const KINDS = ['trip', 'expense', 'claim'] as const
+
+/** As many drafts as one person could plausibly have left behind, matching the
+ *  cap in te_draft_delete_many. Refused here too so the caller gets a sentence
+ *  rather than a database error. */
+const MAX_IDS = 200
 
 /** Matches the CHECK on te_drafts.body. Refused here too so the caller gets a
  *  sentence instead of a constraint violation, and so a runaway autosave is
@@ -64,5 +74,20 @@ export async function POST(req: NextRequest) {
       trip_id: body.trip_id || null,
       claim_id: body.claim_id || null,
     })
+  })
+}
+
+export async function DELETE(req: NextRequest) {
+  return teRoute(req, async t => {
+    const body = await t.body<{ ids?: unknown }>()
+    const ids = Array.isArray(body.ids) ? body.ids : null
+    if (!ids) throw new TeHttpError(400, 'TE_BAD_REQUEST', 'ids must be a list of draft ids.')
+    if (ids.length > MAX_IDS) {
+      throw new TeHttpError(400, 'TE_BAD_REQUEST', `Too many drafts at once. Discard up to ${MAX_IDS}.`)
+    }
+    // Every id is checked here so one malformed entry is a sentence naming the
+    // problem, not a cast error from inside Postgres. Ownership is still the
+    // filter in SQL: an id that is not the caller's matches nothing.
+    return draftDeleteMany(await t.ctx(), ids.map((id, i) => needUuid(String(id), `Draft ${i + 1}`)))
   })
 }

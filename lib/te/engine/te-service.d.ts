@@ -131,6 +131,10 @@ export function bookingEmailed(ctx: TeCtx, bookingId: Uuid, to: string): Promise
 export function draftSave(ctx: TeCtx, input: TeDraftInput): Promise<{ draft_id: Uuid; updated_at: string }>
 export function draftList(ctx: TeCtx, kind?: TeDraft['kind'] | null): Promise<TeDraft[]>
 export function draftDelete(ctx: TeCtx, draftId: Uuid): Promise<{ deleted: boolean }>
+/** Discard several of the actor's own drafts in one statement. `deleted` is how
+ *  many actually went, which can be fewer than `asked` when one had already
+ *  gone or was never theirs. */
+export function draftDeleteMany(ctx: TeCtx, ids: Uuid[]): Promise<{ deleted: number; asked: number }>
 
 // ── claims ──────────────────────────────────────────────────────────────────
 export interface ClaimResult { claim_id: Uuid; status: ClaimStatus; stage: ClaimStage; net_amount?: number | null; advance_adjusted?: number }

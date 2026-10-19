@@ -318,6 +318,9 @@ export const te = {
     save: (d: TeDraftInput) => post<{ draft_id: Uuid; updated_at: string }>('drafts', d),
     /** Discard, and how a draft is cleared once the real record is saved. */
     remove: (id: Uuid) => call<{ deleted: boolean }>('DELETE', `drafts/${id}`),
+    /** Discard several at once. `deleted` is how many actually went, which can
+     *  be fewer than were asked for when one had already gone. */
+    removeMany: (ids: Uuid[]) => call<{ deleted: number; asked: number }>('DELETE', 'drafts', { ids }),
   },
 
   /** Store a bill or an RC photo. Send the returned file back, unchanged, in `files: [file]`. */

@@ -166,6 +166,9 @@
    it means the same thing. */
 .te .ontrip{border-color:var(--ez-positive);background:var(--ez-positive-tint);display:grid;gap:9px}
 .te .ontrip .eyebrow{color:var(--ez-positive)}
+/* A draft row that is ticked for bulk discard. The same brand wash .row.picked
+   uses for the same meaning, on the draft list's own row element. */
+.te .draftrow.picked{background:var(--ez-brand-tint);box-shadow:inset 3px 0 0 var(--ez-brand)}
 .te .card h3{font-size:15px}
 .te .card .ch{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .te .sunk{background:var(--ez-sunken);border-radius:var(--te-r-sm);padding:12px 14px}
