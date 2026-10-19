@@ -19,6 +19,7 @@
 //     issues   every problem of a trip plan
 import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
 import type { DeskKind } from './desks'
+import type { ChainStep } from './approval-chain'
 import type {
   Uuid, Snapshot, TeQueueRow, TeTripDetail, TeClaimDetail, PlaceInput, VehicleInput, TripDraft, TripPreview, TripIssue,
   TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput, LegPreview, TeLegStats, TeFlag,
@@ -302,7 +303,13 @@ export const te = {
     /** may_book: whether this reader may spend. A desk member without it still
      *  verifies vehicles and decides stays, so the screen keeps everything
      *  except the booking controls. */
-    list: (q?: { company_id?: string }) => get<{ company_id: Uuid; may_book: boolean; to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[]; stays: DeskStay[]; watch: DeskWatch[] }>('desk', q),
+    list: (q?: { company_id?: string }) => get<{
+      company_id: Uuid; may_book: boolean
+      to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[]; stays: DeskStay[]; watch: DeskWatch[]
+      /** Where each request has got to, keyed by trip id. Absent for a trip
+       *  that needed no approval. Feed to chainState() in lib/te/approval-chain. */
+      chains: Record<Uuid, ChainStep[]>
+    }>('desk', q),
     /** Pick one of the hotels the employee suggested, or turn them all down. */
     stayDecide: (input: { tripId: Uuid; action: 'choose' | 'reject'; choice?: number; remark?: string }) =>
       post<{ trip_id: Uuid; status: 'CHOSEN' | 'REJECTED'; chosen: number | null; name: string }>('stay', input),

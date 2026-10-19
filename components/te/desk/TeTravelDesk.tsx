@@ -32,8 +32,10 @@ import { te, type DeskBooked, type DeskStay, type DeskToBook, type DeskVehicle, 
 import { ratePerKm } from '@/lib/te/vehicle'
 import { errorText, day, rs } from '@/lib/te/format'
 import type { TeVehicleType } from '@/lib/te/types'
+import type { ChainStep } from '@/lib/te/approval-chain'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
+import TeChain from '../TeChain'
 import TeStayChoice from './TeStayChoice'
 
 type Room = 'stays' | 'book' | 'booked' | 'vehicles' | 'watch'
@@ -58,6 +60,8 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
   const [stays, setStays] = useState<DeskStay[]>([])
   // Travel the desk is not booking anything for. Information, never work.
   const [watch, setWatch] = useState<DeskWatch[]>([])
+  // Where each request has got to, keyed by trip id.
+  const [chains, setChains] = useState<Record<string, ChainStep[]>>({})
   // Whether this reader may spend. A desk member without "May book" belongs on
   // the desk — vehicles and hotels are their work — so the screen stays whole
   // and only the two controls that commit money go away. Starts true so the
@@ -74,7 +78,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
   useEffect(() => {
     let current = true
     te.desk.list()
-      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setWatch(r.watch ?? []); setMayBook(r.may_book !== false); setError('') } })
+      .then(r => { if (current) { setToBook(r.to_book ?? []); setBooked(r.booked ?? []); setVehicles(r.vehicles ?? []); setStays(r.stays ?? []); setWatch(r.watch ?? []); setChains(r.chains ?? {}); setMayBook(r.may_book !== false); setError('') } })
       .catch(e => { if (current) { setToBook([]); setError(errorText(e)) } })
     return () => { current = false }
   }, [tick])
@@ -228,15 +232,14 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                   {b.full_name} <span className="mono">{b.emp_code}</span> · {b.trip_name}
                   {b.on_date ? ` · ${day(b.on_date)}` : ''}{b.mode ? ` · ${b.mode}` : ''}
                 </div>
-                {/* The wait, said on the row rather than discovered by pressing
-                    a button and reading a refusal. */}
-                {!approved(b) ? (
-                  <div className="row tight" style={{ marginTop: 4 }}>
-                    <span className="chip t-warn">
-                      {b.trip_status === 'SENT_BACK' ? 'Sent back for a change' : 'Waiting for approval'}
-                    </span>
-                  </div>
-                ) : null}
+                {/* WHERE IT HAS GOT TO, not merely that it is waiting. On a
+                    two-step chain "waiting for approval" covers both a trip
+                    nobody has opened and one where R1 has signed and only the
+                    Head of department is left — the same status, and very
+                    different news for a desk deciding whether to hold a fare
+                    today. Shown on an approved trip too: knowing who approved
+                    it is the answer to "can I book this". */}
+                <TeChain steps={chains[b.trip_id] ?? []} />
                 {/* WHAT THEY ASKED FOR. The route and the date were never
                     enough to buy a ticket — there are a dozen flights that
                     day — so this desk was writing to travellers to ask. The
@@ -383,9 +386,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                   {' · '}{w.leg_count} journey{w.leg_count === 1 ? '' : 's'}, all their own
                 </div>
               </div>
-              {w.trip_status !== 'APPROVED' ? (
-                <span className="chip t-warn">{w.trip_status === 'SENT_BACK' ? 'Sent back' : 'Waiting for approval'}</span>
-              ) : <span className="chip t-pos">Approved</span>}
+              <TeChain steps={chains[w.trip_id] ?? []} compact />
             </div>
           ))}
         </div>

@@ -44,6 +44,17 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
+/** What each approval step's status is called, and how it is coloured. An
+ *  'auto' step was passed by the workflow itself rather than by a person. */
+const STEP_WORD: Record<string, string> = {
+  approved: 'Approved', auto: 'Approved automatically', pending: 'Pending',
+  rejected: 'Rejected', sent_back: 'Sent back', cancelled: 'Cancelled',
+}
+const STEP_TONE: Record<string, string> = {
+  approved: 't-brand', auto: 't-brand', pending: 't-warn',
+  rejected: 't-crit', sent_back: 't-warn', cancelled: 'plain',
+}
+
 export default function TeTripDetail({ tripId, me, today, masters, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
   tripId: Uuid
   /** snap.masters — only so the plan can name the airport or station the
@@ -220,7 +231,13 @@ export default function TeTripDetail({ tripId, me, today, masters, onBack, onCha
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
       {/* ── waiting, or sent back with a question ── (53, 68) */}
-      {st === 'PENDING_APPROVAL' || st === 'SENT_BACK' ? (
+      {/* SHOWN AT ANY STATUS, not only while the trip is still waiting. It used
+          to be gated to PENDING_APPROVAL and SENT_BACK, which hid it at exactly
+          the moment the travel desk and Finance come looking: once a trip is
+          approved, "who approved it, and did anyone else have to" is the
+          question they are here to answer. The employee's own actions below
+          stay gated on their own states. */}
+      {(t.chain ?? []).length || st === 'PENDING_APPROVAL' || st === 'SENT_BACK' ? (
         <div className="card">
           <div className="ch"><h3>Approval</h3><span className={`chip ${chip.tone}`}>{chip.label}</span></div>
           <div className="stack sm">
@@ -228,7 +245,9 @@ export default function TeTripDetail({ tripId, me, today, masters, onBack, onCha
               <div key={i} className="row tight">
                 <span className="av sm">{initials(s.whoName || s.role)}</span>
                 <div className="grow"><b>{s.whoName || s.role}</b> <span className="muted small">{s.role}</span></div>
-                <span className={`chip ${s.status === 'approved' ? 't-brand' : 't-warn'}`}>{s.status === 'approved' ? 'Approved' : 'Pending'}</span>
+                {/* Four outcomes, not two. A rejected or sent-back step read
+                    as "Pending" here, which is the opposite of what happened. */}
+                <span className={`chip ${STEP_TONE[s.status] ?? 't-warn'}`}>{STEP_WORD[s.status] ?? 'Pending'}</span>
               </div>
             ))}
           </div>

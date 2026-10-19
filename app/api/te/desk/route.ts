@@ -115,6 +115,46 @@ export async function GET(req: NextRequest) {
       for (const e of data ?? []) names.set(e.id as string, { emp_code: e.emp_code as string | null, full_name: e.full_name as string | null })
     }
     const withName = <T extends { employee_id: unknown }>(r: T) => ({ ...r, ...(names.get(r.employee_id as string) ?? { emp_code: null, full_name: null }) })
+
+    // WHERE EACH REQUEST HAS GOT TO. The desk was told "waiting for approval"
+    // and nothing else, which on a two-step chain is the difference between a
+    // trip it can expect to book tomorrow and one nobody has opened. The steps
+    // are read for the trips already on this screen — never the whole table —
+    // and the names come from the map built above.
+    const chainTrips = [...new Set([
+      ...(book.data ?? []).map(r => r.trip_id as string),
+      ...watchRows.map(r => r.trip_id as string),
+    ].filter(Boolean))]
+    const chains: Record<string, unknown[]> = {}
+    if (chainTrips.length) {
+      const { data, error } = await sb.from('te_approval_steps')
+        .select('entity_id, step_no, role_label, status, approver_id, team_code, acted_by, acted_at')
+        .eq('entity_type', 'trip').in('entity_id', chainTrips)
+        .order('step_no', { ascending: true })
+      // A pending migration is the only reason this table would be missing, and
+      // the desk's work list must not go down with the chain beside it.
+      if (error && !missingSchema(error)) throw rpcError(error, 'te_approval_steps')
+      // The approvers are not in `names`: that map was built from the people
+      // TRAVELLING. One more read, for the handful of people who approve.
+      const approverIds = [...new Set((data ?? []).flatMap(r => [r.approver_id, r.acted_by]).filter(Boolean) as string[])]
+      const approvers = new Map<string, string>()
+      if (approverIds.length) {
+        const who = await sb.from('employees').select('id, full_name').in('id', approverIds)
+        if (who.error) throw rpcError(who.error, 'employees')
+        for (const e of who.data ?? []) approvers.set(e.id as string, (e.full_name as string | null) ?? '')
+      }
+      for (const r of data ?? []) {
+        const key = r.entity_id as string
+        ;(chains[key] ??= []).push({
+          stepNo: r.step_no,
+          roleLabel: r.role_label,
+          status: r.status,
+          who: approvers.get(r.approver_id as string) || (r.team_code as string | null) || null,
+          actedBy: approvers.get(r.acted_by as string) || null,
+          actedAt: r.acted_at,
+        })
+      }
+    }
     return {
       company_id: company,
       // Whether this reader may actually spend. Migration 175 lets a desk
@@ -127,6 +167,9 @@ export async function GET(req: NextRequest) {
       vehicles: (veh.data ?? []).map(withName),
       stays: stayRows.map(withName),
       watch: watchRows.map(withName),
+      /** Keyed by trip id. Every trip in to_book and watch has an entry, or
+       *  none when it needed no approval at all. */
+      chains,
     }
   })
 }

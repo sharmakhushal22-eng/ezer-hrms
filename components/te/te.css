@@ -1182,3 +1182,23 @@
 @media (prefers-reduced-motion: no-preference){
   .te .btn.glow{transition:box-shadow .18s ease, background .18s ease}
 }
+
+/* How far a request has got through its approvers, on a desk row.
+   The sentence carries the meaning; the steps under it are there so the desk
+   can see who is next by name without opening the trip. */
+.te .chain{margin-top:6px}
+.te .chain-say{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.te .chain-steps{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.te .chain-step{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 5px;border-radius:99px;background:var(--ez-sunken);border:1px solid var(--ez-line);font-size:11.5px;min-width:0}
+.te .chain-step .cs-m{display:inline-flex;flex:none}
+.te .chain-step .cs-t{display:inline-flex;align-items:baseline;gap:5px;min-width:0}
+.te .chain-step b{font-weight:650;color:var(--ez-ink)}
+.te .chain-step .cs-who{color:var(--ez-muted);overflow-wrap:anywhere}
+/* The state of each step, in the same colours the chips use. */
+.te .chain-step.ok{background:var(--ez-positive-tint);border-color:transparent}
+.te .chain-step.ok .cs-m{color:var(--ez-positive)}
+.te .chain-step.wait .cs-m{color:var(--ez-warning)}
+.te .chain-step.no{background:var(--ez-critical-tint);border-color:transparent}
+.te .chain-step.no .cs-m{color:var(--ez-critical)}
+.te .chain-step.back .cs-m{color:var(--ez-warning)}
+.te .chain-step.off{opacity:.55}
