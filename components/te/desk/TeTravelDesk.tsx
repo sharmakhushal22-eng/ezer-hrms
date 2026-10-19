@@ -126,6 +126,23 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
     }
   }
 
+  /** Send the traveller their ticket. Only ever pressed, never automatic: a
+   *  wrong attachment or a mistyped PNR is caught by the person who just typed
+   *  it rather than landing in somebody's inbox first. Safe to press again —
+   *  travellers lose emails. */
+  async function emailTicket(b: DeskBooked) {
+    setBusy(`mail:${b.id}`); setError('')
+    try {
+      const r = await te.desk.bookingEmail(b.id)
+      onToast(`${b.booking_no} sent to ${r.to}${r.address_kind === 'personal' ? ' (personal address)' : ''}.`)
+      reload()
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setBusy('')
+    }
+  }
+
   /** Store the ticket the airline or hotel sent back. Uploaded on choosing,
    *  so by the time Record is pressed there is a path to hand over and no
    *  second thing that can fail. */
@@ -375,6 +392,19 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                   {' · '}<span className="mono">{b.reference}</span> · {rs(b.amount)}
                   {b.booked_at ? ` · ${day(b.booked_at)}` : ''}
                 </div>
+                {/* WHETHER THE TRAVELLER HAS IT. A desk that cannot tell sent
+                    from unsent either sends twice or never — and "never" means
+                    somebody reaches an airport without a booking reference. */}
+                <div className="row tight" style={{ marginTop: 4 }}>
+                  {b.emailed_at
+                    ? <span className="chip t-pos">Sent to {b.emailed_to}</span>
+                    : b.ticket_url
+                      ? <span className="chip t-warn">Not sent yet</span>
+                      // Recorded before the ticket field existed, or a link
+                      // rather than a file. Say which, so the desk knows the
+                      // button is missing for a reason.
+                      : <span className="chip plain">No ticket attached</span>}
+                </div>
                 {/* A booked ticket is the most likely thing to need a call:
                     a schedule change reaches the desk, not the traveller. */}
                 <TeContact who={b} />
@@ -396,6 +426,12 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, onOpenTrip, onTo
                   </div>
                 ) : null}
               </div>
+              {cancelling !== b.id && b.ticket_url ? (
+                <button type="button" className="btn sm" disabled={busy === `mail:${b.id}`} onClick={() => emailTicket(b)}>
+                  <TeIcon name="mail" size="sm" />
+                  {busy === `mail:${b.id}` ? 'Sending…' : b.emailed_at ? 'Send again' : 'Email the ticket'}
+                </button>
+              ) : null}
               {cancelling !== b.id && onOpenTrip ? (
                 <button type="button" className="btn sm" onClick={() => onOpenTrip(b.trip_id)}>Details</button>
               ) : null}

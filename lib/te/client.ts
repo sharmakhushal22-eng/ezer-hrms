@@ -198,6 +198,12 @@ export interface DeskBooked extends DeskContact {
   employee_id: Uuid; emp_code: string | null; full_name: string | null
   leg_id: Uuid | null; point_seq: number | null; kind: 'travel' | 'hotel' | string
   vendor: string; reference: string; amount: number; paid_by: string; status: string; booked_at: string
+  /** The ticket the desk attached. A storage path, or an http link on bookings
+   *  recorded before there was a file field. */
+  ticket_url: string | null
+  /** When the traveller was last sent it, and where. Null = never sent. */
+  emailed_at: string | null
+  emailed_to: string | null
 }
 
 export const te = {
@@ -329,6 +335,9 @@ export const te = {
       post<{ trip_id: Uuid; status: 'CHOSEN' | 'REJECTED'; chosen: number | null; name: string }>('stay', input),
     bookingRecord: (input: BookingInput) => post<{ booking_id: Uuid; booking_no: string; expense_id: Uuid }>('bookings', input),
     bookingCancel: (id: Uuid, reason: string) => post<{ booking_id: Uuid; status: 'CANCELLED' }>(`bookings/${id}/cancel`, { reason }),
+    /** Send the traveller their ticket. Only once the booking is recorded and
+     *  standing; safe to call again when they lose the mail. */
+    bookingEmail: (id: Uuid) => post<{ sent: true; to: string; address_kind: 'work' | 'personal'; subject: string; attached: boolean }>(`bookings/${id}/email`),
     vehicleVerify: (id: Uuid, typeCode?: string) => post<{ vehicle_id: Uuid; vehicle_type_code: string }>(`vehicles/${id}/verify`, { type_code: typeCode }),
   },
 

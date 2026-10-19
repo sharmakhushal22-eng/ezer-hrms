@@ -115,6 +115,7 @@ export function expenseDiscard(ctx: TeCtx, expenseId: Uuid): Promise<{ expense_i
 // ── drafts ──────────────────────────────────────────────────────────────────
 // Unfinished work, stored verbatim and private to the person who wrote it.
 // These take no employee id: te_draft_* filter on the actor.
+export function bookingEmailed(ctx: TeCtx, bookingId: Uuid, to: string): Promise<{ booking_id: Uuid; emailed_to: string }>
 export function draftSave(ctx: TeCtx, input: TeDraftInput): Promise<{ draft_id: Uuid; updated_at: string }>
 export function draftList(ctx: TeCtx, kind?: TeDraft['kind'] | null): Promise<TeDraft[]>
 export function draftDelete(ctx: TeCtx, draftId: Uuid): Promise<{ deleted: boolean }>

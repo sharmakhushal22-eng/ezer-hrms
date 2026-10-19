@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       // Only what is still standing: a cancelled booking is history, and the
       // only thing left to do with a live one is cancel it.
       sb.from('te_bookings')
-        .select('id, booking_no, trip_id, leg_id, point_seq, kind, vendor, reference, amount, paid_by, status, booked_at')
+        .select('id, booking_no, trip_id, leg_id, point_seq, kind, vendor, reference, amount, paid_by, status, booked_at, ticket_url, emailed_at, emailed_to')
         .eq('company_id', company).eq('status', 'BOOKED').order('booked_at', { ascending: false }).limit(200),
       // Trips where somebody asked for a stay, named hotels, and nobody has
       // answered yet. stay_status = 'NONE' is exactly that, and there is a
