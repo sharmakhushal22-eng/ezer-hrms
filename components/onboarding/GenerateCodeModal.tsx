@@ -13,7 +13,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { authHeaders } from '@/lib/auth-headers'
 import { C as TK, Z, E } from '@/lib/ui'
 import { PersonPicker, Avatar, PICKER_CSS, describe, type Emp } from './PeoplePicker'
-import { parseCodes, NEW } from '@/lib/onboarding/team-plan'
+import { parseCodes, autoRoleCodes, MANAGER_ROLE_CODES, NEW } from '@/lib/onboarding/team-plan'
+
+const isManagerRole = (code: string) => (MANAGER_ROLE_CODES as readonly string[]).includes(code)
 
 type Ref = { id: string; name: string; emp_code: string | null; designation: string | null } | null
 type Role = { id: string; role_code: string; role_name: string; scope: string | null; salary_visibility: string | null; permissions: { module: string; access_level: string }[] }
@@ -182,7 +184,7 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
         if (Array.isArray(a.team?.direct)) setIds(a.team.direct)
         if (Array.isArray(a.team?.exclude)) setExclude(new Set(a.team.exclude))
         const prev: string[] = Array.isArray(a.roles) ? a.roles.map((r: any) => r.role_id) : a.role_id ? [a.role_id] : []
-        setRoleIds(new Set(prev.filter((id: string) => o.roles.some(r => r.id === id))))
+        setRoleIds(new Set(prev.filter((id: string) => o.roles.some(r => r.id === id && !isManagerRole(r.role_code)))))
         setCode(c.suggested || ''); setCodeType(c.employment_type || '')
       } catch (e: any) { if (alive) setErr(e.message) } finally { if (alive) setCodeLoading(false) }
     })()
@@ -215,10 +217,13 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
   const addPaste = () => { const c = parseCodes(paste); if (!c.length) return; setCodes(s => [...new Set([...s, ...c])]); setPaste('') }
   const removeDirect = (e: Emp) => { setCodes(s => s.filter(c => c !== e.emp_code.toUpperCase())); setIds(s => s.filter(i => i !== e.id)) }
   const toggleEx = (id: string) => setExclude(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  const toggleRole = (id: string) => setRoleIds(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
-
   const roles = opts?.roles || []
-  const chosenRoles = roles.filter(r => roleIds.has(r.id))
+  const toggleRole = (id: string) => { if (roles.some(r => r.id === id && isManagerRole(r.role_code))) return; setRoleIds(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n }) }
+  // The manager roles come from the team's depth (L1 → L2 → HOD), never from a tick.
+  const includedForRoles = (plan?.members || []).filter(m => !exclude.has(m.id))
+  const autoCodes = autoRoleCodes(includedForRoles)
+  const autoRoles = roles.filter(r => autoCodes.includes(r.role_code))
+  const chosenRoles = [...roles.filter(r => roleIds.has(r.id) && !isManagerRole(r.role_code)), ...autoRoles]
   const union = useMemo(() => {
     const rank: Record<string, number> = { VIEW: 1, EDIT: 2, FULL: 3 }
     const m = new Map<string, string>()
@@ -237,10 +242,10 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
   async function generate() {
     if (!code.trim()) { onDone('Type or accept the employee code.', 'err'); return }
     if (!doj) { onDone('Set the date of joining — it goes on the employee record.', 'err'); return }
-    if (!roleIds.size) { setStep(2); onDone('Tick at least one role.', 'err'); return }
+    if (!chosenRoles.length) { setStep(2); onDone('Tick at least one role.', 'err'); return }
     setBusy(true)
     try {
-      const body = { onboarding_id: onboardingId, employee_code: code.trim(), date_of_joining: doj, role_ids: [...roleIds], team: { direct: (plan?.direct || []).map(d => d.id), exclude: [...exclude] } }
+      const body = { onboarding_id: onboardingId, employee_code: code.trim(), date_of_joining: doj, role_ids: chosenRoles.map(r => r.id), team: { direct: (plan?.direct || []).map(d => d.id), exclude: [...exclude] } }
       const post = async (force: boolean) => { const r = await fetch('/api/onboarding/generate-code', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, force }) }); return { r, d: await r.json() } }
       let { r, d } = await post(false)
       if (r.status === 409 && Array.isArray(d.pending) && d.pending.length) {
@@ -257,7 +262,7 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
 
   const steps: { n: 1 | 2 | 3; t: string; d: string; done: boolean }[] = [
     { n: 1, t: 'Team', d: included.length ? plan?.summary || '' : `Who reports to ${fname}`, done: step > 1 },
-    { n: 2, t: 'Roles', d: chosenRoles.length ? chosenRoles.map(r => r.role_name).join(', ') : 'What they can open in ESS', done: step > 2 && roleIds.size > 0 },
+    { n: 2, t: 'Roles', d: chosenRoles.length ? chosenRoles.map(r => r.role_name).join(', ') : 'What they can open in ESS', done: step > 2 && chosenRoles.length > 0 },
     { n: 3, t: 'Code', d: code ? code : 'Generate & mail the login', done: false },
   ]
 
@@ -287,7 +292,7 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
           <div className="gc-top">
             <div style={{ minWidth: 0 }}>
               {step === 1 && <><div className="gc-h">Who reports to {fname}?</div><div className="gc-p">Paste the employee codes of their direct reports, or search by name. Everybody under them moves one step down: their reports get <b>{fname}</b> as L1, {managers?.l1 ? <b>{first(managers.l1.name)}</b> : 'the L1'} as L2 and {managers?.l2 ? <b>{first(managers.l2.name)}</b> : managers?.hod ? <b>{first(managers.hod.name)}</b> : 'the L2'} as HOD; the people under those reports get {fname} as L2 — and so on. Untick anybody who should stay as they are.</div></>}
-              {step === 2 && <><div className="gc-h">What can {fname} open in ESS?</div><div className="gc-p">Tick one or more roles. Every employee gets the employee portal; a role adds the modules below it. The permissions of all ticked roles add up.</div></>}
+              {step === 2 && <><div className="gc-h">What can {fname} open in ESS?</div><div className="gc-p">Tick one or more roles. Every employee gets the employee portal; a role adds the modules below it. The permissions of all ticked roles add up. <b>L1 Manager, L2 Manager and HOD are not ticked by hand</b> — they follow the team from step 1: people reporting to {fname} make them an L1 manager, people under those an L2 manager too, and a third level the HOD as well.</div></>}
               {step === 3 && <><div className="gc-h">The employee code</div><div className="gc-p">The next number for this type is suggested and reserved the moment you generate; a custom code is honoured as typed. Here is what happens when you press Generate.</div></>}
             </div>
             <button onClick={onClose} className="gc-ghost" aria-label="Close" disabled={busy}>✕ Close</button>
@@ -349,12 +354,15 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
             {opts && step === 2 && (
               <div style={{ display: 'grid', gap: 18 }}>
                 <div className="gc-roles">
-                  {roles.map(r => { const on = roleIds.has(r.id); return (
-                    <button key={r.id} type="button" className={`gc-role${on ? ' on' : ''}`} onClick={() => toggleRole(r.id)} aria-pressed={on}>
+                  {roles.map(r => {
+                    const mgr = isManagerRole(r.role_code), on = mgr ? autoCodes.includes(r.role_code) : roleIds.has(r.id)
+                    const why = r.role_code === 'L1_MANAGER' ? 'when somebody reports to them' : r.role_code === 'L2_MANAGER' ? 'when their reports have reports' : 'when the team is three levels deep'
+                    return (
+                    <button key={r.id} type="button" className={`gc-role${on ? ' on' : ''}`} onClick={() => toggleRole(r.id)} aria-pressed={on} disabled={mgr} style={mgr ? { cursor: 'not-allowed', opacity: on ? 1 : .6 } : undefined} title={mgr ? `Assigned automatically ${why} (step 1 · Team)` : undefined}>
                       <span className={`gc-tick${on ? ' on' : ''}`} style={{ marginTop: 1 }}>{on ? '✓' : ''}</span>
                       <span style={{ minWidth: 0 }}>
-                        <span className="t" style={{ display: 'block' }}>{r.role_name}</span>
-                        <span className="m" style={{ display: 'block' }}>{r.role_code}{r.scope ? ` · scope ${r.scope.toLowerCase()}` : ''}{r.salary_visibility && r.salary_visibility !== 'NONE' ? ` · salary ${r.salary_visibility.toLowerCase()}` : ''}<br />{r.permissions.length ? `${r.permissions.length} module${r.permissions.length === 1 ? '' : 's'}` : 'employee portal only'}</span>
+                        <span className="t" style={{ display: 'block' }}>{r.role_name}{mgr && <span className="gc-pill" style={{ marginLeft: 6, color: on ? TK.positive : TK.muted, background: on ? TK.positiveTint : TK.sunken, verticalAlign: 1 }}>{on ? 'auto · from the team' : 'auto'}</span>}</span>
+                        <span className="m" style={{ display: 'block' }}>{mgr ? <>Assigned {why}<br /></> : null}{r.role_code}{r.scope ? ` · scope ${r.scope.toLowerCase()}` : ''}{r.salary_visibility && r.salary_visibility !== 'NONE' ? ` · salary ${r.salary_visibility.toLowerCase()}` : ''}<br />{r.permissions.length ? `${r.permissions.length} module${r.permissions.length === 1 ? '' : 's'}` : 'employee portal only'}</span>
                       </span>
                     </button>) })}
                   {roles.length === 0 && <div className="gc-note">No roles are set up yet — add them under Roles & access.</div>}
@@ -383,7 +391,7 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
                   <div className="gc-w"><span className="i">1</span><div><b>Employee Master</b><div className="d">{name} is created as an Active employee with every detail from the form, the IT / Admin / Payroll checklists and the salary structure Payroll approved.</div></div></div>
                   <div className="gc-w"><span className={`i${hasL1 ? '' : ' warn'}`}>2</span><div><b>Reporting line</b><div className="d">{hasL1 ? <>L1 {managers!.l1!.name}{managers?.l2 ? ` · L2 ${managers.l2.name}` : ''}{managers?.hod ? ` · HOD ${managers.hod.name}` : ''}</> : 'Not assigned — Assign managers on the review sheet first.'}</div></div></div>
                   <div className="gc-w"><span className="i">3</span><div><b>Team</b><div className="d">{included.length ? `${plan?.summary} — ${included.filter(m => m.level === 1).map(m => first(m.full_name)).join(', ')}${included.some(m => m.level > 1) ? ' and their teams' : ''}.` : `Nobody reports to ${fname} yet.`}</div></div></div>
-                  <div className="gc-w"><span className={`i${roleIds.size ? '' : ' warn'}`}>4</span><div><b>ESS access</b><div className="d">{chosenRoles.length ? `${chosenRoles.map(r => r.role_name).join(' + ')} · ${union.length} module${union.length === 1 ? '' : 's'}` : 'No role ticked yet — go back to Roles.'}</div></div></div>
+                  <div className="gc-w"><span className={`i${chosenRoles.length ? '' : ' warn'}`}>4</span><div><b>ESS access</b><div className="d">{chosenRoles.length ? `${chosenRoles.map(r => autoRoles.includes(r) ? `${r.role_name} (auto, from the team)` : r.role_name).join(' + ')} · ${union.length} module${union.length === 1 ? '' : 's'}` : 'No role ticked yet — go back to Roles.'}</div></div></div>
                   <div className="gc-w"><span className={`i${candidate.email ? '' : ' warn'}`}>5</span><div><b>Login mailed</b><div className="d">{candidate.email ? <>The employee code and a temporary password go to <b>{candidate.email}</b>; they set their own password on first login.</> : 'The candidate has no email on file — the login will have to be shared from Roles & access.'}</div></div></div>
                 </div>
                 {pending.length > 0 && <div className="gc-warn">Still waiting on {pending.join(', ')} — you will be asked to confirm before the code is generated.</div>}
@@ -393,11 +401,11 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
 
           <div className="gc-foot">
             {step > 1 && <button type="button" className="gc-ghost" onClick={() => setStep(s => (s - 1) as 1 | 2 | 3)} disabled={busy}>← Back</button>}
-            {step < 3 && <button type="button" className="gc-btn" onClick={() => setStep(s => (s + 1) as 1 | 2 | 3)} disabled={!opts || busy || (step === 2 && !roleIds.size)}>{step === 1 ? (included.length ? `Next · Roles` : 'Skip team · Roles') : 'Next · Code'} →</button>}
-            {step === 3 && <button type="button" className="gc-btn go" onClick={generate} disabled={!opts || busy || codeLoading || !code.trim() || !doj || !roleIds.size || !hasL1} title={doj ? '' : 'Set the date of joining first'}>{busy ? 'Generating…' : '⚡ Generate code & create employee'}</button>}
+            {step < 3 && <button type="button" className="gc-btn" onClick={() => setStep(s => (s + 1) as 1 | 2 | 3)} disabled={!opts || busy || (step === 2 && !chosenRoles.length)}>{step === 1 ? (included.length ? `Next · Roles` : 'Skip team · Roles') : 'Next · Code'} →</button>}
+            {step === 3 && <button type="button" className="gc-btn go" onClick={generate} disabled={!opts || busy || codeLoading || !code.trim() || !doj || !chosenRoles.length || !hasL1} title={doj ? '' : 'Set the date of joining first'}>{busy ? 'Generating…' : '⚡ Generate code & create employee'}</button>}
             <span className="gc-note" style={{ marginLeft: 'auto' }}>
-              {step === 1 && (included.length ? plan?.summary : 'The team is optional.')}
-              {step === 2 && (roleIds.size ? `${roleIds.size} role${roleIds.size === 1 ? '' : 's'} ticked` : 'At least one role is required.')}
+              {step === 1 && (included.length ? `${plan?.summary}${autoCodes.length ? ` · roles: ${autoCodes.map(c => c.replace('_MANAGER', '').replace('L1', 'L1 Manager').replace('L2', 'L2 Manager')).join(', ')}` : ''}` : 'The team is optional.')}
+              {step === 2 && (chosenRoles.length ? `${chosenRoles.length} role${chosenRoles.length === 1 ? '' : 's'}${autoRoles.length ? ` (${autoRoles.length} from the team)` : ''}` : 'At least one role is required.')}
               {step === 3 && (doj ? 'Numbers are never reused.' : 'The date of joining is required.')}
             </span>
           </div>

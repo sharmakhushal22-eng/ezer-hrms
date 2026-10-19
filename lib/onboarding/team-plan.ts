@@ -106,6 +106,15 @@ export function summarisePlan(members: PlannedMember[]): string {
   return `${direct} direct report${direct === 1 ? '' : 's'}${deeper ? ` and ${deeper} ${deeper === 1 ? 'person' : 'people'} under them` : ''} · ${changes} reporting-line change${changes === 1 ? '' : 's'}`
 }
 
+/** The ESS roles the team itself decides — never ticked by hand on the Generate code wizard:
+ *  somebody with direct reports is an L1 manager; with people under those, an L2 manager too;
+ *  three levels down, the HOD as well. */
+export const MANAGER_ROLE_CODES = ['L1_MANAGER', 'L2_MANAGER', 'HOD'] as const
+export function autoRoleCodes(members: Pick<PlannedMember, 'level'>[]): string[] {
+  const depth = members.reduce((d, m) => Math.max(d, m.level), 0)
+  return MANAGER_ROLE_CODES.filter((_, i) => depth >= i + 1)
+}
+
 /** Pasted text → the ids / codes in it: commas, spaces, new lines, semicolons all separate. */
 export function parseCodes(text: string): string[] {
   return [...new Set(String(text || '').split(/[\s,;|]+/).map(s => s.trim().toUpperCase()).filter(Boolean))]
