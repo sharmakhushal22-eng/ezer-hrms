@@ -26,7 +26,7 @@ import TeIcon from '../TeIcon'
 /** What the placeholders stand for, in the words an administrator thinks in. */
 const MEANS: Record<string, string> = {
   name: 'who is travelling',
-  tripNo: 'the trip number, like TRP-2026-0004',
+  tripNo: 'the trip number, like SRS-TRP-2026-0004',
   tripName: 'what they called the trip',
   route: 'where this booking goes, like Delhi T3 → Pune',
   on: 'the date of this booking',
@@ -43,7 +43,7 @@ const MEANS: Record<string, string> = {
  *  that has never booked anything. */
 const EXAMPLE: BookingMailFacts = {
   name: 'Vikram Bose',
-  tripNo: 'TRP-2026-0004',
+  tripNo: 'SRS-TRP-2026-0004',
   tripName: 'Pune Branch client meeting',
   route: 'Delhi airport T3 → Pune airport',
   on: 'Mon 15 Dec 2026',
