@@ -139,6 +139,10 @@ export default function TeHome({ initialClaimId, onExit }: {
    *  A desk whose call fails is simply not offered. Hidden rather than greyed
    *  out: a disabled rail entry invites somebody to ask why, and the answer
    *  would be "you are not on that desk", which is not a problem to solve. */
+  // Declared up here with the other hooks, NOT beside openAddLeg below: there
+  // is an early return between the two, so a useState down there is skipped on
+  // the loading render and React refuses the changed hook order.
+  const [openingTrip, setOpeningTrip] = useState(false)
   const [onTravelDesk, setOnTravelDesk] = useState(false)
   const [onFinanceDesk, setOnFinanceDesk] = useState(false)
   /** Vehicle types for the Travel desk's rate note. Admin-only, so absent for
@@ -257,6 +261,12 @@ export default function TeHome({ initialClaimId, onExit }: {
    * navigating to the trip and scrolling to find the button.
    */
   const openAddLeg = async (tripId: string) => {
+    // THE BUTTON HAS TO SAY SOMETHING. The detail is fetched before the sheet
+    // can open, and with no busy state the first press looked like nothing had
+    // happened — in testing it took two presses before anything appeared, and
+    // the first press was doing the work all along.
+    if (openingTrip) return
+    setOpeningTrip(true)
     try {
       const detail = await te.trip(tripId)
       setSheet({ name: 'addLeg', detail })
@@ -265,6 +275,8 @@ export default function TeHome({ initialClaimId, onExit }: {
       // still there, one screen in.
       setToast(errorText(e))
       setView({ name: 'trip', id: tripId })
+    } finally {
+      setOpeningTrip(false)
     }
   }
 
@@ -412,8 +424,8 @@ export default function TeHome({ initialClaimId, onExit }: {
                     rest of the trip, instead of becoming a loose bill.
                   </p>
                   <div className="row tight">
-                    <button type="button" className="btn pri" onClick={() => void openAddLeg(onTrip.id)}>
-                      <TeIcon name="plus" size="sm" />Add a journey
+                    <button type="button" className="btn pri" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
+                      <TeIcon name="plus" size="sm" />{openingTrip ? 'Opening…' : 'Add a journey'}
                     </button>
                     <button type="button" className="btn" onClick={() => setView({ name: 'trip', id: onTrip.id })}>
                       Open the trip

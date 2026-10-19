@@ -25,6 +25,7 @@ import { useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { Snapshot, TeTripDetail, Uuid } from '@/lib/te/types'
 import { errorText } from '@/lib/te/format'
+import { deviceGeo, oneShotFix } from '@/lib/te/geo'
 import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
 import TePlacePicker, { type PickTarget } from '../plan/TePlacePicker'
@@ -73,21 +74,6 @@ export default function TeLegAdd({ snap, detail, onClose, onAdded, onPlaceAdded 
   // between a form that explains itself and one that 409s.
   const running = snap.journeys.find(j => j.emp === snap.me && (j.status === 'ACTIVE' || j.status === 'PAUSED')) ?? null
 
-  /** A fresh position, to start recording with. The same shape TeLegLive uses
-   *  to end a journey — one-shot, high accuracy, and it refuses rather than
-   *  guessing, because a journey that starts at the wrong place is a flag the
-   *  traveller then has to explain. */
-  function here(): Promise<{ lat: number; lng: number; accuracy_m?: number }> {
-    return new Promise((resolve, reject) => {
-      if (typeof navigator === 'undefined' || !('geolocation' in navigator)) { reject(new Error('This device cannot read its location.')); return }
-      navigator.geolocation.getCurrentPosition(
-        p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy_m: p.coords.accuracy }),
-        () => reject(new Error('Could not read your location. Check that location is on, then try again.')),
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-      )
-    })
-  }
-
   /**
    * Add it, and when `start` is set, begin recording in the same action.
    *
@@ -108,7 +94,7 @@ export default function TeLegAdd({ snap, detail, onClose, onAdded, onPlaceAdded 
     }
     if (!start) { onAdded(legId, `Journey ${legNo} added. Start it when you set off.`); return }
     try {
-      await te.legStart(legId, await here())
+      await te.legStart(legId, await oneShotFix(deviceGeo()))
       onAdded(legId, `Journey ${legNo} is recording.`, { started: true })
     } catch (e) {
       // Added, not started: say exactly that rather than reporting a failure

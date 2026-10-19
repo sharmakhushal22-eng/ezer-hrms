@@ -61,6 +61,14 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
   const [picking, setPicking] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [confirmingMany, setConfirmingMany] = useState(false)
+  /** What just happened, kept APART from `error`.
+   *
+   *  The refetch below clears `error` on every successful list — which is right
+   *  for "the drafts would not load", and wrong for "3 of 4 were discarded":
+   *  discarding triggers that very refetch, so the message was being wiped a
+   *  moment after it was set. Caught in the browser; nothing here could have
+   *  caught it, because both halves are correct on their own. */
+  const [notice, setNotice] = useState('')
 
   useEffect(() => {
     let current = true
@@ -92,15 +100,14 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
     try {
       const r = await te.drafts.removeMany(ids)
       stopPicking()
-      setTick(t => t + 1)
       // The true number, not the number asked for: one may have gone already in
-      // another tab, and saying "11 discarded" when 9 went would be a lie the
-      // reader cannot check.
-      if (r.deleted < r.asked) {
-        setError(`${r.deleted} of ${r.asked} drafts were discarded. The rest had already gone.`)
-      } else {
-        setError('')
-      }
+      // another tab, and saying "4 discarded" when 3 went would be a lie the
+      // reader cannot check. Set BEFORE the refetch and in its own state, so the
+      // refetch's own clearing of `error` cannot take it away.
+      setNotice(r.deleted < r.asked
+        ? `${r.deleted} of ${r.asked} drafts were discarded. The rest had already gone.`
+        : '')
+      setTick(t => t + 1)
     } catch (e) {
       setError(errorText(e))
     } finally {
@@ -109,7 +116,7 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
   }, [stopPicking])
 
   const discard = useCallback(async (d: TeDraft) => {
-    setBusy(d.id)
+    setBusy(d.id); setNotice('')
     try {
       await te.drafts.remove(d.id)
       setConfirming(null)
@@ -127,7 +134,10 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
   const allPicked = drafts.length > 0 && picked.size === drafts.length
   const somePicked = picked.size > 0
 
-  if (!drafts.length && !error) return null
+  // Nothing left, nothing wrong and nothing to report: the card goes away, as
+  // it always has. But it stays for a notice — discarding the last draft is
+  // exactly when there are none left and exactly when the count matters.
+  if (!drafts.length && !error && !notice) return null
 
   return (
     <div className="card">
@@ -163,6 +173,13 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
         )}
       </div>
       {error ? <p className="small warn">{error}</p> : null}
+      {notice ? (
+        <div className="note">
+          <TeIcon name="info" size="sm" />
+          <span>{notice}</span>
+          <button type="button" className="btn sm" onClick={() => setNotice('')}>Dismiss</button>
+        </div>
+      ) : null}
       {/* ASKED ONCE, FOR THE LOT, and it still names the number — the warning
           is the same warning, and "Discard 9 drafts" is a different decision
           from "Discard". */}
