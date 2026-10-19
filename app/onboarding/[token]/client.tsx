@@ -15,6 +15,7 @@ import {
 } from '@/lib/ui'
 import './onboarding.css'
 import { missingFor, missingFields, describeMissing } from '@/lib/onboarding/required'
+import { trackOf, trackFlags, requiredDocCodes, SSA_COUNTRIES, type HiringTrack } from '@/lib/onboarding/hiring-track'
 
 // ── Types ────────────────────────────────────────────────────────
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
@@ -348,10 +349,13 @@ function DocUpload({
 }
 
 // ── Document list + reusable upload grid (used in Step 2 AND the pre-Policies gate) ──
-const DOC_LIST = (esic: boolean, isFresher: boolean, isForeign = false) => [
-  { code: 'AADHAAR_FRONT', name: 'Aadhaar Card (Front)', required: true },
-  { code: 'AADHAAR_BACK', name: 'Aadhaar Card (Back)', required: true },
-  { code: 'PAN', name: 'PAN Card', required: true },
+// Per hiring track (lib/onboarding/hiring-track.ts): Aadhaar only for Indian citizens (a foreign
+// national cannot have one on arrival), PAN unless overseas, passport + visa for a foreign
+// national in India, passport for an overseas employee.
+const DOC_LIST = (esic: boolean, isFresher: boolean, isForeign = false, isOverseas = false) => [
+  { code: 'AADHAAR_FRONT', name: 'Aadhaar Card (Front)', required: !isForeign && !isOverseas },
+  { code: 'AADHAAR_BACK', name: 'Aadhaar Card (Back)', required: !isForeign && !isOverseas },
+  { code: 'PAN', name: isForeign ? 'PAN Card (or the PAN application acknowledgement)' : 'PAN Card', required: !isOverseas },
   { code: 'PHOTO', name: 'Passport Size Photo', required: true },
   ...(esic ? [{ code: 'FAMILY_PHOTO', name: 'Family Photo (for ESIC e-Pehchan card)', required: true }] : []),
   { code: 'DEGREE', name: 'Highest Degree Certificate', required: true },
@@ -369,17 +373,18 @@ const DOC_LIST = (esic: boolean, isFresher: boolean, isForeign = false) => [
   { code: 'SALARY_SLIP_2', name: 'Salary Slip (2nd last month)', required: false },
   { code: 'SALARY_SLIP_3', name: 'Salary Slip (3rd last month)', required: false },
   { code: 'FORM_16', name: 'Form 16 (previous employer)', required: false },
-  ...(isForeign ? [
+  ...(isForeign || isOverseas ? [
     { code: 'PASSPORT', name: 'Passport (front page)', required: true },
-    { code: 'VISA', name: 'Visa copy', required: true },
-    { code: 'WORK_PERMIT', name: 'Work Permit', required: false },
+    ...(isForeign ? [{ code: 'VISA', name: 'Visa copy (Employment visa)', required: true }, { code: 'WORK_PERMIT', name: 'Work Permit / FRRO registration', required: false }] : []),
+    ...(isOverseas ? [{ code: 'NATIONAL_ID', name: 'National ID / residence permit of the work country', required: false }, { code: 'LOCAL_TAX_ID', name: 'Local tax ID document', required: false }] : []),
   ] : []),
 ]
-const REQUIRED_DOC_CODES = (esic: boolean) => ['AADHAAR_FRONT', 'AADHAAR_BACK', 'PAN', 'PHOTO', 'DEGREE', 'BANK_PROOF', ...(esic ? ['FAMILY_PHOTO'] : [])]
-function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, onUploaded, onRemoved }: {
-  docs: Record<string, DocStatus>; token: string; esicApplicable: boolean; isFresher: boolean; isForeign?: boolean; onUploaded: (code: string, data: any) => void; onRemoved: (code: string) => void
+/** The documents that must be uploaded before the form can be submitted — per hiring track (lib/onboarding/hiring-track.ts). */
+const REQUIRED_DOC_CODES = (esic: boolean, track: HiringTrack = 'DOMESTIC') => requiredDocCodes(track, { esic })
+function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, isOverseas = false, onUploaded, onRemoved }: {
+  docs: Record<string, DocStatus>; token: string; esicApplicable: boolean; isFresher: boolean; isForeign?: boolean; isOverseas?: boolean; onUploaded: (code: string, data: any) => void; onRemoved: (code: string) => void
 }) {
-  const list = DOC_LIST(esicApplicable, isFresher, isForeign)
+  const list = DOC_LIST(esicApplicable, isFresher, isForeign, isOverseas)
   const req = list.filter(d => d.required)
   const done = req.filter(d => docs[d.code] && !isRejected(docs[d.code])).length
   const carried = Object.values(docs).filter(d => d.hr_notes && /carried over/i.test(d.hr_notes)).length
@@ -1155,16 +1160,35 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     fe_overseas_line: (saved.step_7?.fe_overseas_line) || '',
     fe_overseas_city: (saved.step_7?.fe_overseas_city) || '',
     fe_overseas_country: (saved.step_7?.fe_overseas_country) || '',
+    // Hiring-track extras (lib/onboarding/hiring-track.ts): a foreign national's arrival, SSA
+    // exemption and "PAN applied for"; an overseas employee's bank and local tax id.
+    fe_india_entry_date: (saved.step_7?.fe_india_entry_date) || '',
+    fe_ssa_exempt: (saved.step_7?.fe_ssa_exempt) === true,
+    fe_ssa_country: (saved.step_7?.fe_ssa_country) || '',
+    fe_ssa_coc_expiry: (saved.step_7?.fe_ssa_coc_expiry) || '',
+    fe_work_permit_expiry: (saved.step_7?.fe_work_permit_expiry) || '',
+    fe_frro_date: (saved.step_7?.fe_frro_date) || '',
+    pan_applied: (saved.step_7?.pan_applied) === true,
+    bank_iban: (saved.step_7?.bank_iban) || '',
+    bank_swift: (saved.step_7?.bank_swift) || '',
+    bank_country: (saved.step_7?.bank_country) || '',
+    local_tax_id: (saved.step_7?.local_tax_id) || '',
   })
 
   // ── ESIC applicability — from offered CTC (gross ≈ CTC/12), HR can override ──
   const grossMonthly = c.offered_ctc ? Number(c.offered_ctc) / 12 : 0
-  const esicApplicable = c.esic_applicable === true || (grossMonthly > 0 && grossMonthly <= 21000)
+  // The hiring track HR picked when sending the link (lib/onboarding/hiring-track.ts): which
+  // steps, documents and statutory sections this form has.
+  const track: HiringTrack = trackOf(c.hiring_track)
+  const flags = trackFlags(track)
+  const isOverseas = track === 'OVERSEAS'
+  const esicApplicable = flags.indianStatutory && (c.esic_applicable === true || (grossMonthly > 0 && grossMonthly <= 21000))
   // Foreign employee — citizenship country other than India triggers extra KYC + docs.
-  const isForeign = (personal.country || 'India').trim().toLowerCase() !== 'india'
+  // A foreign national working in India: the track says so, or the citizenship country does.
+  const isForeign = track === 'FOREIGN_IN_INDIA' || (!isOverseas && (personal.country || 'India').trim().toLowerCase() !== 'india')
   // Documents can be skipped on Step 2; if skipped they become mandatory (non-skippable) before Policies.
   const [docsDeferred, setDocsDeferred] = useState(false)
-  const docsComplete = REQUIRED_DOC_CODES(esicApplicable).every(d => docs[d])
+  const docsComplete = REQUIRED_DOC_CODES(esicApplicable, track).every(d => docs[d])
   const onDocRemoved = (code: string) => { setDocs(d => { const n = { ...d }; delete n[code]; return n }); showToast(`${code.replace(/_/g, ' ')} removed`) }
   const onDocUploaded = (code: string, data: any) => {
     setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: data.file_name || 'uploaded' } }))
@@ -1281,14 +1305,17 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   // ── Navigate steps ───────────────────────────────────────────────
   // ESIC & Family (step 7) only applies when esicApplicable — skip it otherwise,
   // both forward (6 → 8) and backward (8 → 6).
+  // An overseas employee has no PF / gratuity nominees (step 6) and no ESIC (step 7) either.
   const nextStep = () => setStep(s => {
     let n = Math.min(12, s + 1)
+    if (n === 6 && isOverseas) n = 8
     if (n === 7 && !esicApplicable) n = 8
     return n as Step
   })
   const prevStep = () => setStep(s => {
     let n = Math.max(1, s - 1)
     if (n === 7 && !esicApplicable) n = 6
+    if (n === 6 && isOverseas) n = 5
     return n as Step
   })
 
@@ -1299,7 +1326,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     const missingAll = missingFields({
       step_3: personal, step_4: contact, step_5: { ...emergency, prev_employers: prevEmployers, education },
       step_7: { ...withLegacyNominees(statutory), gross_monthly: grossMonthly, esic_applicable: esicApplicable },
-    })
+    }, { track })
     if (missingAll.length) {
       showToast(`Some required details are missing: ${describeMissing(missingAll)}. Go back and fill them.`, 'err')
       // PAN and bank live on the contact screen (4); only the nominees are on screen 7.
@@ -1555,7 +1582,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div className="ezo-actions">
               <button className="ezo-btn is-ghost" onClick={prevStep} style={S.btnO}>Back</button>
               <button onClick={async () => {
-                const miss3 = missingFor(3, personal)
+                const miss3 = missingFor(3, personal, { track })
                 if (miss3.length) { showToast(miss3.length === 1 ? miss3[0].message : `Please fill: ${miss3.map(m => m.label).join(', ')}`, 'err'); return }
                 await saveStep(3, personal)
                 nextStep()
@@ -1612,8 +1639,15 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               <Fld label="PIN Code"><input style={S.inp()} value={contact.curr_pin} onChange={e => setCurr('curr_pin', e.target.value)} maxLength={6} /></Fld>
             </div>
 
-            {/* PAN — auto-filled from AI */}
+            {/* PAN — auto-filled from AI. Not asked of an overseas employee; a foreign national may have applied for it. */}
+            <div style={{ display: flags.needsPan ? undefined : 'none' }}>
             <Sec icon={<IconCard size={15} />}>PAN</Sec>
+            {isForeign && (
+              <label className="ezo-check" style={{ margin: '4px 0 10px', alignItems: 'center' }}>
+                <input type="checkbox" checked={statutory.pan_applied} onChange={e => setStatutory(s => ({ ...s, pan_applied: e.target.checked }))} />
+                I have applied for a PAN and am waiting for it (tax is deducted at 20% until it arrives)
+              </label>
+            )}
             {aiPan && <Note tone="ok">We filled your PAN in from your PAN card. Please check it.</Note>}
             <div className="ezo-g2">
               <Fld label="PAN Number *" hint="Auto-extracted from PAN card">
@@ -1621,8 +1655,12 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               </Fld>
             </div>
 
-            {/* PF Section */}
+            </div>
+
+            {/* PF Section — Indian statutory only (an overseas employee is outside PF) */}
+            <div style={{ display: flags.indianStatutory ? undefined : 'none' }}>
             <Sec icon={<IconPayroll size={15} />}>Provident Fund (PF)</Sec>
+            {isForeign && <Note>As a foreign national you join PF as an <b>International Worker</b> (contribution on your full basic pay), unless your home country has a Social Security Agreement with India and you hold a coverage certificate — tell us below.</Note>}
             <label className="ezo-check" style={{ margin: '4px 0 14px', alignItems: 'center' }}>
               <input type="checkbox" checked={statutory.has_uan} onChange={e => setStatutory(s => ({ ...s, has_uan: e.target.checked }))} />
               I have an existing UAN (from previous employer)
@@ -1638,6 +1676,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               </div>
             )}
 
+            </div>
+
             {/* Other government IDs — on the employee record; optional */}
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Other Government IDs (optional)</div>
             <div style={S.g3}>
@@ -1646,8 +1686,10 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               <Fld label="Driving Licence"><input style={S.inp()} value={statutory.driving_licence} onChange={e => setStatutory(s => ({ ...s, driving_licence: e.target.value.toUpperCase() }))} maxLength={20} /></Fld>
             </div>
 
-            {/* Bank Details */}
+            {/* Bank Details — an Indian account (account + IFSC) unless overseas, which has IBAN / SWIFT below */}
+            <div style={{ display: flags.indianBank ? undefined : 'none' }}>
             <Sec icon={<IconPayroll size={15} />}>Bank account for salary</Sec>
+            {isForeign && <Note>An NRO, NRE or ordinary savings account in India — salary is paid in rupees.</Note>}
             <Note>Bank details are encrypted. Only the Payroll team can see them.</Note>
             <div className="ezo-g2">
               <Fld label="Account Number *"><input type="password" style={S.inp(!statutory.bank_account)} value={statutory.bank_account} onChange={e => setStatutory(s => ({ ...s, bank_account: e.target.value }))} /></Fld>
@@ -1674,52 +1716,92 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               <Note tone="bad">The two account numbers don’t match.</Note>
             )}
 
-            {isForeign && (
-              <>
-                <div style={{ marginTop: 18 }}><Note>As a foreign national, please also fill in the details below.</Note></div>
+            </div>
 
-                <Sec>Foreign Employee — Passport</Sec>
+            {/* Overseas employee — the account salary is paid into, in the work country */}
+            {isOverseas && (
+              <>
+                <Sec icon={<IconPayroll size={15} />}>Bank account for salary <span style={{ color: TK.faint, fontWeight: 500 }}>· {c.work_country || 'your work country'}{c.payroll_currency ? ` · paid in ${c.payroll_currency}` : ''}</span></Sec>
+                <Note>Bank details are encrypted. Only the Payroll team can see them.{c.employing_entity ? ` Salary is paid by ${c.employing_entity}.` : ''}</Note>
+                <div className="ezo-g2">
+                  <Fld label="IBAN / Account Number *"><input style={S.inp(!statutory.bank_iban)} value={statutory.bank_iban} onChange={e => setStatutory(s => ({ ...s, bank_iban: e.target.value.toUpperCase() }))} /></Fld>
+                  <Fld label="SWIFT / BIC *"><input style={S.inp(!statutory.bank_swift)} value={statutory.bank_swift} onChange={e => setStatutory(s => ({ ...s, bank_swift: e.target.value.toUpperCase() }))} maxLength={11} /></Fld>
+                  <Fld label="Bank Name *"><input style={S.inp(!statutory.bank_name)} value={statutory.bank_name} onChange={e => setStatutory(s => ({ ...s, bank_name: e.target.value }))} /></Fld>
+                  <Fld label="Bank Country *"><input list="ezer-countries" style={S.inp(!statutory.bank_country)} value={statutory.bank_country} onChange={e => setStatutory(s => ({ ...s, bank_country: e.target.value }))} /></Fld>
+                  <Fld label="Account Holder Name (as per bank) *"><input style={S.inp(!statutory.acc_holder)} value={statutory.acc_holder} onChange={e => setStatutory(s => ({ ...s, acc_holder: e.target.value }))} /></Fld>
+                  <Fld label="Local Tax ID" hint="your tax number in the work country (e.g. NI number, SSN, TFN)"><input style={S.inp()} value={statutory.local_tax_id} onChange={e => setStatutory(s => ({ ...s, local_tax_id: e.target.value }))} /></Fld>
+                </div>
+              </>
+            )}
+
+            {(isForeign || isOverseas) && (
+              <>
+                <div style={{ marginTop: 18 }}><Note>{isOverseas ? 'As you are joining outside India, we need your passport and your home address.' : 'As a foreign national, please also fill in the details below.'}</Note></div>
+
+                <Sec>Passport</Sec>
                 <div className="ezo-g3">
                   <Fld label="Passport Number *"><input style={S.inp(!statutory.fe_passport_number)} value={statutory.fe_passport_number} onChange={e => setStatutory(s => ({ ...s, fe_passport_number: e.target.value.toUpperCase() }))} /></Fld>
-                  <Fld label="Passport Issuing Country">
-                    <input list="ezer-countries" style={S.inp()} value={statutory.fe_passport_country} onChange={e => setStatutory(s => ({ ...s, fe_passport_country: e.target.value }))} />
+                  <Fld label="Passport Issuing Country *">
+                    <input list="ezer-countries" style={S.inp(!statutory.fe_passport_country)} value={statutory.fe_passport_country} onChange={e => setStatutory(s => ({ ...s, fe_passport_country: e.target.value }))} />
                   </Fld>
                   <Fld label="Passport Expiry *"><input type="date" style={S.inp(!statutory.fe_passport_expiry)} value={statutory.fe_passport_expiry} onChange={e => setStatutory(s => ({ ...s, fe_passport_expiry: e.target.value }))} /></Fld>
                 </div>
 
-                <Sec>Visa &amp; Work Authorization</Sec>
-                <div className="ezo-g3">
-                  <Fld label="Visa Type">
-                    <select style={S.sel} value={statutory.fe_visa_type} onChange={e => setStatutory(s => ({ ...s, fe_visa_type: e.target.value }))}>
-                      <option value="">Select</option><option>Employment</option><option>Business</option><option>OCI</option><option>PIO</option>
-                    </select>
-                  </Fld>
-                  <Fld label="Visa Number *"><input style={S.inp(!statutory.fe_visa_number)} value={statutory.fe_visa_number} onChange={e => setStatutory(s => ({ ...s, fe_visa_number: e.target.value }))} /></Fld>
-                  <Fld label="Visa Expiry"><input type="date" style={S.inp()} value={statutory.fe_visa_expiry} onChange={e => setStatutory(s => ({ ...s, fe_visa_expiry: e.target.value }))} /></Fld>
-                  <Fld label="Work Permit Number"><input style={S.inp()} value={statutory.fe_work_permit_number} onChange={e => setStatutory(s => ({ ...s, fe_work_permit_number: e.target.value }))} /></Fld>
-                  <Fld label="FRRO Registration Number" hint="if stay > 180 days"><input style={S.inp()} value={statutory.fe_frro_number} onChange={e => setStatutory(s => ({ ...s, fe_frro_number: e.target.value }))} /></Fld>
-                </div>
+                {isForeign && (
+                  <>
+                    <Sec>Visa &amp; Work Authorization</Sec>
+                    <Note>Your Employment Visa is tied to this employer. If you stay more than 180 days, you must register with the FRRO within 14 days of arrival — HR will help.</Note>
+                    <div className="ezo-g3">
+                      <Fld label="Visa Type *">
+                        <select style={S.sel} value={statutory.fe_visa_type} onChange={e => setStatutory(s => ({ ...s, fe_visa_type: e.target.value }))}>
+                          <option value="">Select</option><option>Employment</option><option>Business</option><option>OCI</option><option>PIO</option><option>Dependent</option>
+                        </select>
+                      </Fld>
+                      <Fld label="Visa Number *"><input style={S.inp(!statutory.fe_visa_number)} value={statutory.fe_visa_number} onChange={e => setStatutory(s => ({ ...s, fe_visa_number: e.target.value }))} /></Fld>
+                      <Fld label="Visa Expiry *"><input type="date" style={S.inp(!statutory.fe_visa_expiry)} value={statutory.fe_visa_expiry} onChange={e => setStatutory(s => ({ ...s, fe_visa_expiry: e.target.value }))} /></Fld>
+                      <Fld label="Date of Arrival in India *" hint="FRRO registration is due 14 days after this"><input type="date" style={S.inp(!statutory.fe_india_entry_date)} value={statutory.fe_india_entry_date} onChange={e => setStatutory(s => ({ ...s, fe_india_entry_date: e.target.value }))} /></Fld>
+                      <Fld label="Work Permit Number"><input style={S.inp()} value={statutory.fe_work_permit_number} onChange={e => setStatutory(s => ({ ...s, fe_work_permit_number: e.target.value }))} /></Fld>
+                      <Fld label="Work Permit Expiry"><input type="date" style={S.inp()} value={statutory.fe_work_permit_expiry} onChange={e => setStatutory(s => ({ ...s, fe_work_permit_expiry: e.target.value }))} /></Fld>
+                      <Fld label="FRRO Registration Number" hint="if already registered"><input style={S.inp()} value={statutory.fe_frro_number} onChange={e => setStatutory(s => ({ ...s, fe_frro_number: e.target.value }))} /></Fld>
+                      <Fld label="FRRO Registration Date"><input type="date" style={S.inp()} value={statutory.fe_frro_date} onChange={e => setStatutory(s => ({ ...s, fe_frro_date: e.target.value }))} /></Fld>
+                    </div>
 
-                <Sec>Tax &amp; Social Security</Sec>
-                <div className="ezo-g2">
-                  <Fld label="India Tax Residency Status">
-                    <select style={S.sel} value={statutory.fe_tax_residency} onChange={e => setStatutory(s => ({ ...s, fe_tax_residency: e.target.value }))}>
-                      <option value="">Select</option><option>Resident</option><option>Non-Resident</option><option>Not Ordinarily Resident</option>
-                    </select>
-                  </Fld>
-                  <Fld label="Country of Tax Residency">
-                    <input list="ezer-countries" style={S.inp()} value={statutory.fe_tax_country} onChange={e => setStatutory(s => ({ ...s, fe_tax_country: e.target.value }))} />
-                  </Fld>
-                  <Fld label="Foreign Tax ID / TIN"><input style={S.inp()} value={statutory.fe_foreign_tin} onChange={e => setStatutory(s => ({ ...s, fe_foreign_tin: e.target.value }))} /></Fld>
-                  <Fld label="SSA Certificate of Coverage No." hint="if home country has a Social Security Agreement with India"><input style={S.inp()} value={statutory.fe_ssa_coc} onChange={e => setStatutory(s => ({ ...s, fe_ssa_coc: e.target.value }))} /></Fld>
-                </div>
+                    <Sec>Tax &amp; Social Security</Sec>
+                    <div className="ezo-g2">
+                      <Fld label="India Tax Residency Status *" hint="depends on your days in India this financial year">
+                        <select style={S.sel} value={statutory.fe_tax_residency} onChange={e => setStatutory(s => ({ ...s, fe_tax_residency: e.target.value }))}>
+                          <option value="">Select</option><option>Resident</option><option>Non-Resident</option><option>Not Ordinarily Resident</option>
+                        </select>
+                      </Fld>
+                      <Fld label="Country of Tax Residency">
+                        <input list="ezer-countries" style={S.inp()} value={statutory.fe_tax_country} onChange={e => setStatutory(s => ({ ...s, fe_tax_country: e.target.value }))} />
+                      </Fld>
+                      <Fld label="Foreign Tax ID / TIN"><input style={S.inp()} value={statutory.fe_foreign_tin} onChange={e => setStatutory(s => ({ ...s, fe_foreign_tin: e.target.value }))} /></Fld>
+                    </div>
+                    <label className="ezo-check" style={{ margin: '8px 0 10px', alignItems: 'center' }}>
+                      <input type="checkbox" checked={statutory.fe_ssa_exempt} onChange={e => setStatutory(s => ({ ...s, fe_ssa_exempt: e.target.checked }))} />
+                      My home country has a Social Security Agreement with India and I hold a Certificate of Coverage / Detachment Certificate (exempt from Indian PF)
+                    </label>
+                    {statutory.fe_ssa_exempt && (
+                      <div className="ezo-g3">
+                        <Fld label="SSA Country *">
+                          <select style={S.sel} value={statutory.fe_ssa_country} onChange={e => setStatutory(s => ({ ...s, fe_ssa_country: e.target.value }))}>
+                            <option value="">Select</option>{SSA_COUNTRIES.map(x => <option key={x}>{x}</option>)}
+                          </select>
+                        </Fld>
+                        <Fld label="Certificate Number"><input style={S.inp()} value={statutory.fe_ssa_coc} onChange={e => setStatutory(s => ({ ...s, fe_ssa_coc: e.target.value }))} /></Fld>
+                        <Fld label="Certificate Valid Till"><input type="date" style={S.inp()} value={statutory.fe_ssa_coc_expiry} onChange={e => setStatutory(s => ({ ...s, fe_ssa_coc_expiry: e.target.value }))} /></Fld>
+                      </div>
+                    )}
+                  </>
+                )}
 
-                <Sec>Permanent Overseas Address</Sec>
+                <Sec>{isOverseas ? 'Home address' : 'Permanent Overseas Address'}</Sec>
                 <div className="ezo-g3">
-                  <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line"><input style={S.inp()} value={statutory.fe_overseas_line} onChange={e => setStatutory(s => ({ ...s, fe_overseas_line: e.target.value }))} /></Fld></div>
-                  <Fld label="City"><input style={S.inp()} value={statutory.fe_overseas_city} onChange={e => setStatutory(s => ({ ...s, fe_overseas_city: e.target.value }))} /></Fld>
-                  <Fld label="Country">
-                    <input list="ezer-countries" style={S.inp()} value={statutory.fe_overseas_country} onChange={e => setStatutory(s => ({ ...s, fe_overseas_country: e.target.value }))} />
+                  <div style={{ gridColumn: 'span 3' }}><Fld label={isOverseas ? 'Address Line *' : 'Address Line'}><input style={S.inp(isOverseas && !statutory.fe_overseas_line)} value={statutory.fe_overseas_line} onChange={e => setStatutory(s => ({ ...s, fe_overseas_line: e.target.value }))} /></Fld></div>
+                  <Fld label={isOverseas ? 'City *' : 'City'}><input style={S.inp(isOverseas && !statutory.fe_overseas_city)} value={statutory.fe_overseas_city} onChange={e => setStatutory(s => ({ ...s, fe_overseas_city: e.target.value }))} /></Fld>
+                  <Fld label={isOverseas ? 'Country *' : 'Country'}>
+                    <input list="ezer-countries" style={S.inp(isOverseas && !statutory.fe_overseas_country)} value={statutory.fe_overseas_country} onChange={e => setStatutory(s => ({ ...s, fe_overseas_country: e.target.value }))} />
                   </Fld>
                 </div>
               </>
@@ -1728,9 +1810,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div className="ezo-actions">
               <button className="ezo-btn is-ghost" onClick={prevStep} style={S.btnO}>Back</button>
               <button onClick={async () => {
-                const miss4 = [...missingFor(4, contact), ...missingFor(7, statutory).filter(m => m.key !== 'pf_nominees')]
+                const miss4 = [...missingFor(4, contact, { track }), ...missingFor(7, statutory, { track }).filter(m => m.key !== 'pf_nominees')]
                 if (miss4.length) { showToast(miss4.length === 1 ? miss4[0].message : `Please fill: ${miss4.map(m => m.label).join(', ')}`, 'err'); return }
-                if (statutory.bank_account !== statutory.bank_confirm) { showToast('Account numbers do not match', 'err'); return }
+                if (flags.indianBank && statutory.bank_account !== statutory.bank_confirm) { showToast('Account numbers do not match', 'err'); return }
                 await saveStep(4, contact)
                 await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
                 nextStep()
@@ -1821,7 +1903,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div className="ezo-actions">
               <button className="ezo-btn is-ghost" onClick={prevStep} style={S.btnO}>Back</button>
               <button onClick={async () => {
-                const miss5 = missingFor(5, { ...emergency, prev_employers: prevEmployers, education })
+                const miss5 = missingFor(5, { ...emergency, prev_employers: prevEmployers, education }, { track })
                 if (miss5.length) { showToast(miss5.length === 1 ? miss5[0].message : `Please fill: ${miss5.map(m => m.label).join(', ')}`, 'err'); return }
                 await saveStep(5, { ...emergency, prev_employers: prevEmployers, education }); nextStep()
               }} className="ezo-btn" style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
@@ -1832,14 +1914,14 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {/* ═══ STEP 3: DOCUMENT UPLOAD ════════════════════════════ */}
         {step === 2 && (
           <div style={S.card}>
-            <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} onRemoved={onDocRemoved} />
+            <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} isOverseas={isOverseas} onUploaded={onDocUploaded} onRemoved={onDocRemoved} />
 
             <div className="ezo-actions" style={{ marginTop: 20 }}>
               <button className="ezo-btn is-ghost" onClick={prevStep} style={S.btnO}>Back</button>
               <button className="ezo-btn is-ghost" onClick={() => { setDocsDeferred(true); showToast('Skipped for now. You’ll need to upload them before the Policies step.'); nextStep() }}
                 style={S.btnO}>Do this later</button>
               <button onClick={async () => {
-                const notUploaded = REQUIRED_DOC_CODES(esicApplicable).filter(d => !docs[d])
+                const notUploaded = REQUIRED_DOC_CODES(esicApplicable, track).filter(d => !docs[d])
                 if (notUploaded.length > 0) {
                   showToast(`Please upload: ${notUploaded.join(', ')}`, 'err'); return
                 }
@@ -1921,7 +2003,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               <button onClick={async () => {
                 const bad = statutory.pf_nominees.findIndex(n => !n.name?.trim() || !n.dob || !n.address?.trim() || !n.relation)
                 if (bad >= 0) { showToast(`PF nominee ${bad + 1}: name, relation, date of birth and address are required`, 'err'); return }
-                const miss7 = missingFor(7, statutory)
+                const miss7 = missingFor(7, statutory, { track })
                 if (miss7.length) { showToast(miss7.length === 1 ? miss7[0].message : `Please fill: ${miss7.map(m => m.label).join(', ')}`, 'err'); return }
                 if (statutory.pf_nominees.length > 1 && Math.round(shareTotal(statutory.pf_nominees)) !== 100) { showToast(`PF nominee shares add up to ${shareTotal(statutory.pf_nominees)}% — they must total 100%`, 'err'); return }
                 const gr = statutory.grat_nominees.filter(n => n.name?.trim())
@@ -2007,7 +2089,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {step === 9 && (
           <div>
             {/* Phase 8 — read-only statutory form previews */}
-            <StatutoryFormsPreview token={token} personal={personal} contact={contact} statutory={statutory} insurance={insurance} esic={esic} candidate={c} esicApplicable={esicApplicable} isForeign={isForeign} epsFamily={epsFamily} epsFallback={epsFallback} />
+            {isOverseas
+              ? <Note>You are joining outside India, so there are no Indian EPF, gratuity or ESIC forms to review. Your employment contract comes from {c.employing_entity || 'the employing entity'} separately.</Note>
+              : <StatutoryFormsPreview token={token} personal={personal} contact={contact} statutory={statutory} insurance={insurance} esic={esic} candidate={c} esicApplicable={esicApplicable} isForeign={isForeign} epsFamily={epsFamily} epsFallback={epsFallback} />}
             {/* Summary */}
             <div style={S.card}>
               <Sec icon={<IconUser size={15} />}>Your summary</Sec>
@@ -2056,7 +2140,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={S.card}>
               <Sec icon={<IconUpload size={15} />}>A few documents are still missing</Sec>
               <Note tone="warn">You skipped your documents earlier. Upload the required ones now to unlock the policies.</Note>
-              <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} onRemoved={onDocRemoved} />
+              <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} isOverseas={isOverseas} onUploaded={onDocUploaded} onRemoved={onDocRemoved} />
               <button className="ezo-btn is-ghost" onClick={prevStep} style={{ ...S.btnO, marginTop: 16 }}>Back</button>
             </div>
           ) : (

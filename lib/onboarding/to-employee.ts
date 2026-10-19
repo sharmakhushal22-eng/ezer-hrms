@@ -8,6 +8,8 @@
 //
 // Pass a Supabase client (the API route passes its service-role/anon client).
 
+import { trackOf, frroDueDate } from './hiring-track'
+
 export interface SyncResult {
   ok?: boolean
   skipped?: boolean
@@ -18,7 +20,7 @@ export interface SyncResult {
 
 export async function onboardingToEmployee(supa: any, onboardingId: string, employeeCode: string): Promise<SyncResult> {
   const { data: oc } = await supa.from('onboarding_candidates')
-    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, l2_manager_id, hod_id, it_email, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type')
+    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, l2_manager_id, hod_id, it_email, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type, hiring_track, work_country, payroll_currency, employing_entity, pf_international_worker, ssa_exempt, pan_pending, paid_outside_india, frro_done, visa_checked, contract_signed')
     .eq('id', onboardingId).maybeSingle()
   if (!oc) return { error: 'onboarding record not found' }
 
@@ -30,6 +32,7 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   }
 
   const f = oc.form_data || {}
+  const track = trackOf(oc.hiring_track)
   // Inter-company transfer: carry the group DOJ forward from the 1st company (seniority/gratuity).
   const isTransfer = f.is_transfer === true
   const groupDoj = (isTransfer && f.group_doj_carry) ? f.group_doj_carry : (oc.date_of_joining || null)
@@ -139,7 +142,7 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     // statutory / bank (bank_ifsc→ifsc_code; bank_account→last4 only, no plaintext)
     pan_number:      st.pan_number || null,
     uan_number:      st.uan_number || null,
-    esic_applicable: oc.esic_applicable ?? null,
+    esic_applicable: track === 'OVERSEAS' ? false : (oc.esic_applicable ?? null),
     bank_name:       st.bank_name || null,
     bank_account_last4: bankAcc ? bankAcc.slice(-4) : null,
     ifsc_code:       st.bank_ifsc || null,
@@ -150,11 +153,42 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     l2_manager_id:          oc.l2_manager_id || null,
     hod_id:                 oc.hod_id || null,           // Assign managers on the review sheet
     office_email:           oc.it_email || null,         // the official email IT confirmed on their checklist
-    tds_regime:             oc.tds_regime || 'NEW',
+    // ── Hiring track (lib/onboarding/hiring-track.ts): the immigration facts the candidate typed and what the heads confirmed ──
+    hiring_track:           track,
+    work_country:           oc.work_country || (track === 'OVERSEAS' ? null : 'India'),
+    payroll_currency:       oc.payroll_currency || (track === 'OVERSEAS' ? null : 'INR'),
+    employing_entity:       oc.employing_entity || null,
+    paid_outside_india:     track === 'OVERSEAS' ? oc.paid_outside_india !== false : false,
+    passport_country:       orNull(st.fe_passport_country),
+    passport_expiry:        orNull(st.fe_passport_expiry),
+    visa_type:              orNull(st.fe_visa_type),
+    visa_number:            orNull(st.fe_visa_number),
+    visa_expiry:            orNull(st.fe_visa_expiry),
+    work_permit_number:     orNull(st.fe_work_permit_number),
+    work_permit_expiry:     orNull(st.fe_work_permit_expiry),
+    india_entry_date:       orNull(st.fe_india_entry_date),
+    frro_number:            orNull(st.fe_frro_number),
+    frro_date:              orNull(st.fe_frro_date) || (oc.frro_done === true ? (oc.date_of_joining || null) : null),
+    frro_due_date:          track === 'FOREIGN_IN_INDIA' ? frroDueDate(st.fe_india_entry_date || oc.date_of_joining) : null,
+    tax_residency_status:   orNull(st.fe_tax_residency),
+    tax_residency_country:  orNull(st.fe_tax_country),
+    foreign_tin:            orNull(st.fe_foreign_tin),
+    local_tax_id:           orNull(st.local_tax_id),
+    pan_pending:            oc.pan_pending === true || st.pan_applied === true,
+    international_employee: track === 'FOREIGN_IN_INDIA' ? (oc.pf_international_worker === true || oc.ssa_exempt !== true) : (track === 'OVERSEAS' ? null : false),
+    certificate_of_coverage: orNull(st.fe_ssa_coc),
+    ssa_country:            orNull(st.fe_ssa_country),
+    ssa_coc_expiry:         orNull(st.fe_ssa_coc_expiry),
+    bank_iban:              orNull(st.bank_iban),
+    bank_swift:             orNull(st.bank_swift),
+    bank_country:           orNull(st.bank_country),
+    // An overseas employee is outside Indian statutory altogether; a foreign national in India is
+    // in PF (as an International Worker) unless the SSA certificate exempts them.
+    tds_regime:             track === 'OVERSEAS' ? null : (oc.tds_regime || 'NEW'),
     pf_wage_type:           oc.pf_wage_type || 'BASIC_DA',
-    pf_applicable:          oc.pf_applicable ?? true,
-    professional_tax_state: oc.pt_state || null,
-    lwf_applicable:         oc.lwf_applicable ?? false,
+    pf_applicable:          track === 'OVERSEAS' ? false : track === 'FOREIGN_IN_INDIA' ? oc.ssa_exempt !== true : (oc.pf_applicable ?? true),
+    professional_tax_state: track === 'OVERSEAS' ? null : (oc.pt_state || null),
+    lwf_applicable:         track === 'OVERSEAS' ? false : (oc.lwf_applicable ?? false),
     cost_centre:            oc.cost_centre || null,
     induction_date:         oc.induction_date || null,
     team_name:              oc.team_name || null,

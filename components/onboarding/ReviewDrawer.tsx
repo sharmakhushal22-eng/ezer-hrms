@@ -352,7 +352,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
           <>
             {/* ── Letterhead ── */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: TK.muted }}>Onboarding form · {item.employment_type || 'Employee'}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: TK.muted }}>Onboarding form · {item.employment_type || 'Employee'}{item.hiring_track === 'FOREIGN_IN_INDIA' ? <span style={{ marginLeft: 10, color: TK.brand }}>· Foreign national in India</span> : item.hiring_track === 'OVERSEAS' ? <span style={{ marginLeft: 10, color: TK.brand }}>· Overseas · {item.work_country || '—'}{item.payroll_currency ? ` · ${item.payroll_currency}` : ''}{item.employing_entity ? ` · ${item.employing_entity}` : ''}</span> : null}</div>
               <button onClick={onClose} className="rv-ghost" aria-label="Close">✕ Close</button>
             </div>
             <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
@@ -393,12 +393,13 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               {docs.length === 0 && <div style={{ fontSize: 12, color: TK.muted, marginTop: 8 }}>No documents uploaded.</div>}
               <div className="rv-docs">{docs.map(doc => <DocCard key={doc.doc_code} doc={doc} on={!!marks[`doc:${doc.doc_code}`]} pick={canDecide} onPick={() => toggle({ key: `doc:${doc.doc_code}`, kind: 'doc', label: doc.label, doc_code: doc.doc_code })} />)}</div>
               {/* The official forms, filled from this sheet — opened in a new tab (the call needs the session header). */}
+              {item.hiring_track === 'OVERSEAS' ? <div style={{ fontSize: 12, color: TK.muted, marginTop: 14 }}>Overseas employee — no Indian statutory forms (PF, gratuity, ESIC) apply.</div> : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
                 <span className="rv-sub" style={{ marginBottom: 0 }}>Statutory forms, filled</span>
                 {([['form11', 'EPF Form 11'], ['form2', 'EPF Form 2'], ['formf', 'Gratuity Form F'], ...(item.esic_applicable ? [['esic1', 'ESIC Form 1']] : [])] as [string, string][]).map(([k, l]) => (
                   <button key={k} type="button" className="rv-view" disabled={!!opening} onClick={() => openForm(k, l)} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{opening === k ? 'Opening…' : `${l} ↗`}</button>
                 ))}
-              </div>
+              </div>)}
             </section>
 
             {/* ── Details, section by section ── */}

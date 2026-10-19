@@ -10,6 +10,7 @@ import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/reso
 // send-magic-link / resend-link are guarded server-side now, so the session goes along.
 import { authHeaders } from '@/lib/auth-headers'
 import GenerateCodeModal from '@/components/onboarding/GenerateCodeModal'
+import { TRACKS } from '@/lib/onboarding/hiring-track'
 import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -29,6 +30,8 @@ interface Candidate {
   /** The HR Manager's assignments (lib/onboarding/hr-assignment.ts): managers from the review sheet (Assign managers), then the team + roles recorded at Generate code. */
   role_assignment?: { managers?: { l1_name?: string | null; l2_name?: string | null; hod_name?: string | null }; roles?: { role_code: string; role_name: string }[]; team?: { summary?: string; count?: number }; by_name?: string | null; at?: string } | null
   l1_manager_id?: string | null; l2_manager_id?: string | null; hod_id?: string | null
+  /** The hiring track (lib/onboarding/hiring-track.ts): DOMESTIC | FOREIGN_IN_INDIA | OVERSEAS, with the work country, payroll currency and employing entity. */
+  hiring_track?: string | null; work_country?: string | null; payroll_currency?: string | null; employing_entity?: string | null
   /** The HR Manager's last review (Review form on the card): ACCEPTED / RETURNED / RESUBMITTED with the rejected documents and flagged details. */
   hr_review?: { outcome: string; by_name?: string | null; at?: string; documents?: { doc_code: string; label: string; reason: string }[]; details?: { field: string; reason: string }[]; note?: string | null } | null
   id: string; full_name: string; designation: string; department: string
@@ -177,6 +180,67 @@ function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
 // ══════════════════════════════════════════════════════════════════
 // MAIN DASHBOARD
 // ══════════════════════════════════════════════════════════════════
+// ── Immigration tracker (Compliance tab): foreign nationals in India and overseas employees with
+//    their passport / visa / work permit / FRRO / SSA dates — lib/onboarding/immigration.ts. ──
+type Tracked = { id:string; emp_code:string; full_name:string; designation:string|null; track_label:string; work_country:string|null; employing_entity:string|null; international_employee:boolean|null; pan_pending:boolean; items:{ kind:string; label:string; date:string; days_left:number }[]; next:{ kind:string; label:string; date:string; days_left:number }|null }
+function ImmigrationTracker() {
+  const [people, setPeople] = useState<Tracked[]|null>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/onboarding/immigration', { headers: await authHeaders() })
+        const d = await res.json()
+        if (!res.ok) throw new Error(d.error || 'Could not load')
+        if (alive) setPeople(d.people || [])
+      } catch (e:any) { if (alive) setErr(e.message) }
+    })()
+    return () => { alive = false }
+  }, [])
+  const tone = (d:number) => d < 0 ? { c:TK.critical, bg:TK.criticalTint, t:'lapsed' } : d <= 7 ? { c:TK.critical, bg:TK.criticalTint, t:`${d} d` } : d <= 30 ? { c:TK.warning, bg:TK.warningTint, t:`${d} d` } : d <= 60 ? { c:TK.info, bg:TK.infoTint, t:`${d} d` } : { c:TK.positive, bg:TK.positiveTint, t:`${d} d` }
+  const urgent = (people||[]).filter(p => p.next && p.next.days_left <= 30).length
+  return (
+    <div style={{border:`1px solid ${TK.line}`,borderRadius:16,overflow:'hidden',background:TK.surface,boxShadow:'0 1px 2px rgba(16,24,40,.04)',marginBottom:18}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'12px 16px',borderBottom:`1px solid ${TK.line}`,background:TK.sunken}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:700}}>Immigration & overseas tracker</div>
+          <div style={{fontSize:11.5,color:TK.muted}}>Foreign nationals in India and overseas employees · passport, visa, work permit, FRRO and SSA dates · reminders go out at 60, 30 and 7 days and on the day</div>
+        </div>
+        {people && <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:99,background:urgent?TK.warningTint:TK.positiveTint,color:urgent?TK.warning:TK.positive}}>{urgent ? `${urgent} due within 30 days` : `${people.length} tracked · nothing due soon`}</span>}
+      </div>
+      {err && <div style={{padding:14,color:TK.critical,fontSize:12.5}}>{err}</div>}
+      {!err && !people && <div style={{padding:14,color:TK.muted,fontSize:12.5}}>Loading…</div>}
+      {people && people.length === 0 && <div style={{padding:14,color:TK.muted,fontSize:12.5}}>No foreign national or overseas employee on record yet. Pick the hiring track when sending an onboarding link.</div>}
+      {people && people.length > 0 && (
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5}}>
+            <thead><tr style={{background:TK.sunken}}>{['Employee','Track','Next due','Passport','Visa','Work permit','FRRO','SSA / PF'].map(h=><th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:10.5,fontWeight:700,color:TK.faint,textTransform:'uppercase',letterSpacing:'.06em',borderBottom:`1px solid ${TK.line}`,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+            <tbody>
+              {people.map(p => {
+                const by = (k:string) => p.items.find(i => i.kind === k)
+                const cell = (k:string, empty = '—') => { const i = by(k); if (!i) return <span style={{color:TK.faint}}>{empty}</span>; const t = tone(i.days_left); return <span title={i.label} style={{fontSize:11.5,fontWeight:600,padding:'2px 8px',borderRadius:99,background:t.bg,color:t.c,whiteSpace:'nowrap'}}>{i.date} · {t.t}</span> }
+                return (
+                  <tr key={p.id} style={{borderBottom:`1px solid ${TK.line}`}}>
+                    <td style={{padding:'9px 12px'}}><div style={{fontWeight:600}}>{p.full_name}</div><div style={{fontSize:11,color:TK.muted}}>{[p.emp_code,p.designation].filter(Boolean).join(' · ')}</div></td>
+                    <td style={{padding:'9px 12px',fontSize:12}}>{p.track_label}{p.work_country ? <div style={{fontSize:11,color:TK.muted}}>{p.work_country}{p.employing_entity ? ` · ${p.employing_entity}` : ''}</div> : null}</td>
+                    <td style={{padding:'9px 12px'}}>{p.next ? (()=>{ const t = tone(p.next.days_left); return <span style={{fontSize:11.5,fontWeight:700,color:t.c}}>{p.next.label} · {p.next.days_left < 0 ? 'lapsed' : p.next.days_left === 0 ? 'today' : `${p.next.days_left} days`}</span> })() : <span style={{color:TK.faint}}>nothing dated</span>}</td>
+                    <td style={{padding:'9px 12px'}}>{cell('passport')}</td>
+                    <td style={{padding:'9px 12px'}}>{cell('visa')}</td>
+                    <td style={{padding:'9px 12px'}}>{cell('work_permit')}</td>
+                    <td style={{padding:'9px 12px'}}>{by('frro') ? cell('frro') : <span style={{color:p.track_label==='Overseas'?TK.faint:TK.positive,fontSize:11.5}}>{p.track_label==='Overseas' ? 'n/a' : 'registered'}</span>}</td>
+                    <td style={{padding:'9px 12px',fontSize:11.5}}>{by('ssa_coc') ? cell('ssa_coc') : p.international_employee === true ? <span style={{color:TK.inkSoft}}>PF · International Worker</span> : p.international_employee === false ? <span style={{color:TK.inkSoft}}>SSA exempt</span> : <span style={{color:TK.faint}}>n/a</span>}{p.pan_pending && <div style={{color:TK.warning,fontSize:11}}>PAN pending · TDS 20%</div>}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function OnboardingDashboard() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab,          setTab]        = useState<Tab>('overview')
@@ -200,6 +264,9 @@ export default function OnboardingDashboard() {
   const [dateVal,      setDateVal]    = useState('')
   const [editEmail,    setEditEmail]  = useState('')
   const [editMobile,   setEditMobile] = useState('')
+  // The hiring track edited on the card (lib/onboarding/hiring-track.ts). A recruitment joiner has no onboarding row yet, so their pick waits in trackPick until the link is sent.
+  const [editTrack,    setEditTrack]  = useState({ hiring_track: 'DOMESTIC', work_country: '', payroll_currency: 'INR', employing_entity: '' })
+  const [trackPick,    setTrackPick]  = useState<Record<string, { hiring_track: string; work_country: string | null; payroll_currency: string | null; employing_entity: string | null }>>({})
   const [resendingId,  setResendingId] = useState('')
   const [reviewing,    setReviewing]  = useState<{ id: string; readOnly: boolean } | null>(null)
   const [selIds,       setSelIds]     = useState<Set<string>>(new Set())
@@ -209,6 +276,7 @@ export default function OnboardingDashboard() {
   const [newForm, setNewForm] = useState({
     company_id:'', full_name:'', designation:'', department:'', department_id:'', email:'', mobile:'',
     date_of_joining:'', offered_ctc:'', employment_type:'Employee',
+    hiring_track:'DOMESTIC', work_country:'', payroll_currency:'INR', employing_entity:'',
   })
 
   // Load companies + departments for the link modal (auto-select if there's only one).
@@ -375,6 +443,7 @@ export default function OnboardingDashboard() {
     if (!date_of_joining) need.push('date of joining')
     if (!designation?.trim()) need.push('designation')
     if (!employment_type) need.push('employment type')
+    if (newForm.hiring_track === 'OVERSEAS' && !newForm.work_country?.trim()) need.push('work country (overseas employee)')
     if (need.length) { showToast(`Required: ${need.join(', ')}.`,'err'); return }
     setSaving(true)
     try {
@@ -386,7 +455,7 @@ export default function OnboardingDashboard() {
       if (!res.ok) throw new Error(data.error||'Failed')
       showToast(data.emailed ? `Onboarding link emailed for ${full_name}! ✉️` : `Link created (email NOT sent: ${data.email_error || '-'}). Share manually: ${data.magic_link}`, data.emailed ? 'ok' : 'err')
       setLinkModal(false)
-      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee'}))
+      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee',hiring_track:'DOMESTIC',work_country:'',payroll_currency:'INR',employing_entity:''}))
       load()
     } catch(e:any) { showToast(e.message,'err') }
     setSaving(false)
@@ -424,6 +493,8 @@ export default function OnboardingDashboard() {
           designation:     c.designation,
           department:      c.department,
           date_of_joining: c.date_of_joining,
+          // The hiring track picked in Edit (a recruitment joiner keeps it in trackPick until the link exists).
+          ...(trackPick[c.id] || { hiring_track: c.hiring_track || 'DOMESTIC', work_country: c.work_country || null, payroll_currency: c.payroll_currency || null, employing_entity: c.employing_entity || null }),
         }),
       })
       const data = await res.json()
@@ -439,17 +510,24 @@ export default function OnboardingDashboard() {
   }
 
   // ── Edit candidate (DOJ + email + mobile) — HR Manager ─────────
-  const openDateEdit = (c: Candidate) => { setDateModal(c); setDateVal(c.date_of_joining ? c.date_of_joining.slice(0,10) : ''); setEditEmail(c.email || ''); setEditMobile(c.mobile || '') }
+  const openDateEdit = (c: Candidate) => {
+    setDateModal(c); setDateVal(c.date_of_joining ? c.date_of_joining.slice(0,10) : ''); setEditEmail(c.email || ''); setEditMobile(c.mobile || '')
+    const t = trackPick[c.id] || { hiring_track: c.hiring_track || 'DOMESTIC', work_country: c.work_country || '', payroll_currency: c.payroll_currency || 'INR', employing_entity: c.employing_entity || '' }
+    setEditTrack({ hiring_track: t.hiring_track || 'DOMESTIC', work_country: t.work_country || '', payroll_currency: t.payroll_currency || 'INR', employing_entity: t.employing_entity || '' })
+  }
   const saveDate = async () => {
     if (!dateModal) return
+    if (editTrack.hiring_track === 'OVERSEAS' && !editTrack.work_country.trim()) { showToast('Pick the work country for an overseas employee.', 'err'); return }
     setSaving(true)
     const c = dateModal
-    // Recruitment joiner (not yet invited) → candidates. Already-invited → onboarding_candidates.
+    const track = { hiring_track: editTrack.hiring_track, work_country: editTrack.hiring_track === 'OVERSEAS' ? editTrack.work_country.trim() : 'India', payroll_currency: editTrack.hiring_track === 'OVERSEAS' ? (editTrack.payroll_currency.trim().toUpperCase() || null) : 'INR', employing_entity: editTrack.employing_entity.trim() || null }
+    // Recruitment joiner (not yet invited) → candidates (the track rides along until the link is sent). Already-invited → onboarding_candidates.
     const { error } = c.recruitment_id
       ? await supabase.from('candidates').update({ onboarding_date: dateVal || null, email: editEmail || null, phone: editMobile || null, mobile: editMobile || null }).eq('id', c.recruitment_id)
-      : await supabase.from('onboarding_candidates').update({ date_of_joining: dateVal || null, email: editEmail || null, mobile: editMobile || null }).eq('id', c.id)
+      : await supabase.from('onboarding_candidates').update({ date_of_joining: dateVal || null, email: editEmail || null, mobile: editMobile || null, ...track }).eq('id', c.id)
     setSaving(false)
     if (error) { showToast('Error: '+error.message, 'err'); return }
+    if (c.recruitment_id) setTrackPick(p => ({ ...p, [c.id]: track }))
     showToast(`Updated ${c.full_name}.`); setDateModal(null); load()
   }
 
@@ -1064,6 +1142,9 @@ export default function OnboardingDashboard() {
           ))}
         </div>
 
+        {/* Immigration & overseas: foreign nationals in India and overseas employees, with their dated items */}
+        <ImmigrationTracker/>
+
         {/* Compliance grid */}
         <div style={{border:`1px solid ${TK.line}`,borderRadius:16,overflow:'hidden',background:TK.surface,boxShadow:'0 1px 2px rgba(16,24,40,.04)'}}>
           <div style={{overflowX:'auto'}}>
@@ -1248,6 +1329,31 @@ export default function OnboardingDashboard() {
                   <option>Employee</option><option>Intern</option><option>Consultant</option><option>Contract</option><option>NAPS</option><option>NATS</option>
                 </select>
               </div>
+              {/* The hiring track (lib/onboarding/hiring-track.ts): decides the portal's steps and documents, the statutory treatment and the payroll. */}
+              <div style={{marginBottom:8,gridColumn:'1 / -1'}}>
+                <div style={labelCss}>Hiring track *</div>
+                <select value={newForm.hiring_track} onChange={e=>setNewForm(f=>({...f,hiring_track:e.target.value, work_country: e.target.value==='OVERSEAS' ? f.work_country : 'India', payroll_currency: e.target.value==='OVERSEAS' ? (f.payroll_currency==='INR' ? '' : f.payroll_currency) : 'INR'}))}
+                  style={{...inputCss,width:'100%'}}>
+                  {TRACKS.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <div style={{fontSize:11.5,color:TK.muted,marginTop:4}}>{TRACKS.find(t=>t.value===newForm.hiring_track)?.hint}</div>
+              </div>
+              {newForm.hiring_track==='OVERSEAS' && (
+                <>
+                  <div style={{marginBottom:8}}>
+                    <div style={labelCss}>Work country *</div>
+                    <input type="text" placeholder="e.g. United Kingdom" value={newForm.work_country} onChange={e=>setNewForm(f=>({...f,work_country:e.target.value}))} style={{...inputCss,width:'100%'}}/>
+                  </div>
+                  <div style={{marginBottom:8}}>
+                    <div style={labelCss}>Payroll currency</div>
+                    <input type="text" placeholder="e.g. GBP" maxLength={3} value={newForm.payroll_currency} onChange={e=>setNewForm(f=>({...f,payroll_currency:e.target.value.toUpperCase()}))} style={{...inputCss,width:'100%'}}/>
+                  </div>
+                  <div style={{marginBottom:8,gridColumn:'1 / -1'}}>
+                    <div style={labelCss}>Employing entity / EOR partner</div>
+                    <input type="text" placeholder="e.g. EZER UK Ltd, or Deel / Remote" value={newForm.employing_entity} onChange={e=>setNewForm(f=>({...f,employing_entity:e.target.value}))} style={{...inputCss,width:'100%'}}/>
+                  </div>
+                </>
+              )}
             </div>
             <div style={{background:TK.brandTint,border:`1px solid ${TK.brandEdge}`,borderRadius:12,padding:'11px 14px',marginTop:6,fontSize:12.5,color: TK.brandDeep,lineHeight:1.6,display:'flex',gap:9}}>
               <span style={{flexShrink:0,marginTop:1}}><Ti n="info-circle" s={14}/></span>
@@ -1279,7 +1385,22 @@ export default function OnboardingDashboard() {
               style={{...inputCss,width:'100%',marginBottom:12}}/>
             <div style={labelCss}>Mobile</div>
             <input type="tel" value={editMobile} onChange={e=>setEditMobile(e.target.value)} placeholder="+91 XXXXXXXXXX"
-              style={{...inputCss,width:'100%'}}/>
+              style={{...inputCss,width:'100%',marginBottom:12}}/>
+            <div style={labelCss}>Hiring track</div>
+            <select value={editTrack.hiring_track} disabled={dateModal.status!=='NOT_INVITED'&&dateModal.status!=='INVITED'} onChange={e=>setEditTrack(t=>({...t,hiring_track:e.target.value}))} style={{...inputCss,width:'100%',marginBottom:4}}>
+              {TRACKS.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            <div style={{fontSize:11.5,color:TK.muted,marginBottom:12}}>{dateModal.status!=='NOT_INVITED'&&dateModal.status!=='INVITED' ? 'The track is fixed once the candidate has started the form.' : TRACKS.find(t=>t.value===editTrack.hiring_track)?.hint}</div>
+            {editTrack.hiring_track==='OVERSEAS' && (
+              <>
+                <div style={labelCss}>Work country *</div>
+                <input type="text" value={editTrack.work_country} onChange={e=>setEditTrack(t=>({...t,work_country:e.target.value}))} placeholder="e.g. United Kingdom" style={{...inputCss,width:'100%',marginBottom:12}}/>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:10}}>
+                  <div><div style={labelCss}>Currency</div><input type="text" maxLength={3} value={editTrack.payroll_currency} onChange={e=>setEditTrack(t=>({...t,payroll_currency:e.target.value.toUpperCase()}))} placeholder="GBP" style={{...inputCss,width:'100%'}}/></div>
+                  <div><div style={labelCss}>Employing entity / EOR</div><input type="text" value={editTrack.employing_entity} onChange={e=>setEditTrack(t=>({...t,employing_entity:e.target.value}))} placeholder="EZER UK Ltd / Deel" style={{...inputCss,width:'100%'}}/></div>
+                </div>
+              </>
+            )}
             <div style={{display:'flex',gap:10,marginTop:16}}>
               <button onClick={()=>setDateModal(null)} style={{...btnSm('ghost'),height:42,padding:'0 18px',fontSize:13}}>Cancel</button>
               <button onClick={saveDate} disabled={saving} style={{...btnSm('primary'),flex:1,justifyContent:'center',height:42,fontSize:13.5,opacity:saving?.6:1}}>{saving?'Saving…':'Save'}</button>

@@ -103,7 +103,7 @@ export interface DecisionResult {
 
 /** A team's decision (or a checklist save). */
 export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<DecisionResult> {
-  const { data: oc } = await sb.from('onboarding_candidates').select('id, status, full_name, email, designation, company_id, magic_link_token, candidate_id').eq('id', d.onboardingId).maybeSingle()
+  const { data: oc } = await sb.from('onboarding_candidates').select('id, status, full_name, email, designation, company_id, magic_link_token, candidate_id, hiring_track').eq('id', d.onboardingId).maybeSingle()
   if (!oc) return { ok: false, error: 'Onboarding record not found', status: 404 }
   if (oc.status === 'EMPLOYEE_CREATED') return { ok: false, error: 'The employee code is already generated.', status: 409 }
   if (!['SUBMITTED', 'HR_REVIEW', 'APPROVED'].includes(oc.status)) return { ok: false, error: 'The candidate has not submitted the form yet.', status: 409 }
@@ -132,7 +132,7 @@ export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<D
   }
   if (d.action === 'approve' && isHeadTeam(d.team)) {
     const have = checklist ?? all.find(a => a.team === d.team)?.checklist ?? null
-    const missing = missingItems(d.team, have)
+    const missing = missingItems(d.team, have, oc.hiring_track)
     if (missing.length) return { ok: false, error: `Confirm the ${CHECKLISTS[d.team].title.toLowerCase()} first: ${missing.join(', ')}.`, status: 400, missing }
     if (!checklist) checklist = have
   }

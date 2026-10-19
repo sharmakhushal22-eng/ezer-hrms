@@ -10,6 +10,8 @@
 // the ones that are also onboarding_candidates columns are written there too, so the employee
 // record created at code generation carries them (lib/onboarding/to-employee.ts).
 
+import { trackOf, type HiringTrack } from './hiring-track'
+
 export type HeadTeam = 'IT' | 'ADMIN' | 'PAYROLL'
 export interface ChecklistField {
   key: string
@@ -21,7 +23,10 @@ export interface ChecklistField {
   hint?: string
   /** True when the key is also an onboarding_candidates column. */
   column?: boolean
+  /** Only on these hiring tracks (lib/onboarding/hiring-track.ts); every track when absent. */
+  tracks?: HiringTrack[]
 }
+const FOREIGN: HiringTrack[] = ['FOREIGN_IN_INDIA'], OVERSEAS: HiringTrack[] = ['OVERSEAS'], INDIA: HiringTrack[] = ['DOMESTIC', 'FOREIGN_IN_INDIA']
 
 export const CHECKLISTS: Record<HeadTeam, { title: string; intro: string; fields: ChecklistField[] }> = {
   IT: {
@@ -43,6 +48,10 @@ export const CHECKLISTS: Record<HeadTeam, { title: string; intro: string; fields
       { key: 'admin_access_card', label: 'Access card number', kind: 'text', column: true },
       { key: 'admin_seating', label: 'Seating / desk allotted', kind: 'text', column: true, hint: 'e.g. 3rd floor, bay B, desk 14' },
       { key: 'admin_welcome_kit', label: 'Welcome kit / stationery ready', kind: 'bool' },
+      // Foreign national in India — immigration (Admin / HR ops)
+      { key: 'visa_checked', label: 'Employment visa checked: valid, employer-specific, dates noted', kind: 'bool', required: true, column: true, tracks: FOREIGN },
+      { key: 'frro_done', label: 'FRRO registration done (or booked within 14 days of arrival)', kind: 'bool', required: true, column: true, tracks: FOREIGN },
+      { key: 'contract_signed', label: 'Employment contract for the work country signed (foreign entity / EOR)', kind: 'bool', required: true, column: true, tracks: OVERSEAS },
     ],
   },
   PAYROLL: {
@@ -51,16 +60,28 @@ export const CHECKLISTS: Record<HeadTeam, { title: string; intro: string; fields
     fields: [
       { key: 'annual_ctc', label: 'Annual CTC (₹)', kind: 'number', column: true },
       { key: 'basic_pct', label: 'Basic as % of CTC', kind: 'number', column: true, hint: 'from the breakdown' },
-      { key: 'pf_applicable', label: 'PF applicable', kind: 'bool', column: true },
-      { key: 'pf_wage_type', label: 'PF wage base', kind: 'select', column: true, options: [{ value: 'BASIC_DA', label: 'Basic + DA' }, { value: 'GROSS', label: 'Gross' }] },
-      { key: 'tds_regime', label: 'Tax regime', kind: 'select', column: true, options: [{ value: 'NEW', label: 'New regime' }, { value: 'OLD', label: 'Old regime' }] },
-      { key: 'pt_state', label: 'Professional tax state', kind: 'text', column: true },
-      { key: 'lwf_applicable', label: 'LWF applicable', kind: 'bool', column: true },
+      { key: 'pf_applicable', label: 'PF applicable', kind: 'bool', column: true, tracks: INDIA },
+      { key: 'pf_wage_type', label: 'PF wage base', kind: 'select', column: true, options: [{ value: 'BASIC_DA', label: 'Basic + DA' }, { value: 'GROSS', label: 'Gross' }], tracks: INDIA },
+      { key: 'tds_regime', label: 'Tax regime', kind: 'select', column: true, options: [{ value: 'NEW', label: 'New regime' }, { value: 'OLD', label: 'Old regime' }], tracks: INDIA },
+      { key: 'pt_state', label: 'Professional tax state', kind: 'text', column: true, tracks: INDIA },
+      { key: 'lwf_applicable', label: 'LWF applicable', kind: 'bool', column: true, tracks: INDIA },
+      // Foreign national in India — PF as an International Worker (no wage ceiling) unless an SSA certificate exempts them; TDS at 20% until the PAN arrives
+      { key: 'pf_international_worker', label: 'PF set up as International Worker (no wage ceiling)', kind: 'bool', required: true, column: true, tracks: FOREIGN },
+      { key: 'ssa_exempt', label: 'SSA coverage certificate on file: exempt from Indian PF', kind: 'bool', column: true, tracks: FOREIGN },
+      { key: 'pan_pending', label: 'PAN applied for: TDS at 20% until it arrives', kind: 'bool', column: true, tracks: FOREIGN },
+      // Overseas — paid outside the Indian payroll
+      { key: 'paid_outside_india', label: 'Paid outside India (foreign entity / EOR payroll), not in the Indian run', kind: 'bool', required: true, column: true, tracks: OVERSEAS },
       { key: 'payroll_setup_done', label: 'Salary structure entered in payroll', kind: 'bool', required: true },
     ],
   },
 }
 export const HEAD_TEAMS: HeadTeam[] = ['IT', 'ADMIN', 'PAYROLL']
+
+/** The checklist fields that apply on a hiring track. */
+export function fieldsFor(team: HeadTeam, track?: HiringTrack | string | null): ChecklistField[] {
+  const t = trackOf(track)
+  return CHECKLISTS[team].fields.filter(f => !f.tracks || f.tracks.includes(t))
+}
 
 /** Only the yes / no items — what a head may actually change on the approval form. */
 export function confirmationsOnly(team: HeadTeam, values: Record<string, any> | null | undefined): Record<string, any> {
@@ -73,9 +94,10 @@ export const isHeadTeam = (t: any): t is HeadTeam => t === 'IT' || t === 'ADMIN'
 const filled = (f: ChecklistField, v: any) =>
   f.kind === 'bool' ? v === true : f.kind === 'number' ? v !== '' && v != null && !Number.isNaN(Number(v)) && Number(v) > 0 : String(v ?? '').trim() !== ''
 
-/** The labels of the required items that are not done yet. Empty means the team may approve. */
-export function missingItems(team: HeadTeam, values: Record<string, any> | null | undefined): string[] {
-  return CHECKLISTS[team].fields.filter(f => f.required && !filled(f, values?.[f.key])).map(f => f.label)
+/** The labels of the required items that are not done yet. Empty means the team may approve.
+ *  Pass the hiring track so a domestic joiner is not asked about FRRO. */
+export function missingItems(team: HeadTeam, values: Record<string, any> | null | undefined, track?: HiringTrack | string | null): string[] {
+  return fieldsFor(team, track).filter(f => f.required && !filled(f, values?.[f.key])).map(f => f.label)
 }
 
 /** Only the known keys, typed: booleans as booleans, numbers as numbers, text trimmed. */

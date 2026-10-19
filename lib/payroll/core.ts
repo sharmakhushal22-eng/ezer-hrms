@@ -746,7 +746,10 @@ export interface PayrollEmployee {
 export async function loadPayrollEmployees(companyId: string): Promise<PayrollEmployee[]> {
   let q = supabase.from('employees')
     .select('id, emp_code, full_name, designation, tds_regime, pf_applicable, esic_applicable, pt_applicable, lwf_applicable, bank_name, ifsc_code, bank_account_last4, companies!employees_company_id_fkey(company_name), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
-    .eq('employment_status', 'Active').order('emp_code')
+    .eq('employment_status', 'Active')
+    // Overseas employees are paid by the foreign entity / EOR — never in the Indian run.
+    .or('paid_outside_india.is.null,paid_outside_india.eq.false')
+    .order('emp_code')
   if (companyId) q = q.eq('company_id', companyId)   // '' = all companies (Group Companies mode)
   const { data: emps } = await q
   const list = (emps as any[]) || []
