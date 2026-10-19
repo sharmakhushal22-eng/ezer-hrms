@@ -121,8 +121,14 @@ export interface DraftPerson { id: string; name: string; autoName?: boolean }
  *    1 Trip      what it is, why, who is going
  *    2 Route     one way or round trip, where from, where to, when
  *    3 Commute   how you travel each leg  (offered per trip kind)
- *    4 Stay      a hotel, and the food budget
+ *    4 Stay      a hotel, and the food budget   (only when one is wanted)
  *    5 Review    the whole plan, the map, the money, then send
+ *
+ *  THESE NUMBERS ARE IDENTITIES, NOT POSITIONS. Step 4 is dropped for a trip
+ *  that needs no stay, and Review is then the fourth screen while still being
+ *  PlanStep 5. visibleSteps() gives the sequence; the planner numbers the chips
+ *  from their place in it, so the reader counts 1, 2, 3, 4 and never wonders
+ *  what happened to one of them.
  */
 export type PlanStep = 1 | 2 | 3 | 4 | 5
 export const LAST_STEP: PlanStep = 5

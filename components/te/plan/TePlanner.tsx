@@ -52,6 +52,11 @@ import TePlanStay from './TePlanStay'
 import TePlanReview from './TePlanReview'
 import TePlacePicker, { type PickTarget } from './TePlacePicker'
 
+/** Spelled out, because "4 short steps" reads like a form field and "Four
+ *  short steps" reads like a sentence. Only the lengths this planner can
+ *  actually have need an entry. */
+const STEP_COUNT_WORD: Record<number, string> = { 3: 'Three', 4: 'Four', 5: 'Five' }
+
 const STEPS: { title: string; sub: string }[] = [
   { title: 'Trip', sub: 'What and why' },
   { title: 'Route', sub: 'Where and when' },
@@ -276,7 +281,7 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
       : 'Record a trip you already did'
   const lead = editingThis
     ? (draft.answerNeeded ? 'Change what your approver asked about, then send it again.' : 'Change the plan.')
-    : planning ? 'Five short steps, one question each. Every journey, stop and bill stays inside this trip.'
+    : planning ? `${STEP_COUNT_WORD[steps.length] ?? steps.length} short steps, one question each. Every journey, stop and bill stays inside this trip.`
       : 'For a trip that was not tracked. The journeys are added without GPS and your approver sees why.'
 
   // The send button says what will actually happen, which the server has already
@@ -292,9 +297,14 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
     <nav className="wsteps" aria-label="Steps">
       {/* Only the steps this plan has. A chip for a step that is not there
           would be a promise the Next button does not keep. */}
-      {steps.map(n => {
+      {steps.map((n, i) => {
         const s = STEPS[n - 1]
         const done = step > n && !stepHasError(n)
+        // WHAT THE CHIP COUNTS IS ITS PLACE IN THE LINE, not which of the five
+        // screens it is. With the Stay step hidden, Review stands fourth and
+        // has to say 4 — a sequence that reads 1, 2, 3, 5 asks the reader to
+        // wonder what they missed.
+        const shown = i + 1
         return (
           <button
             key={s.title}
@@ -305,10 +315,10 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
             // phone for every step but the current one — five titles do not fit
             // at 360px. Hiding it visually must not take the name away from a
             // screen reader, so it lives here too.
-            aria-label={`Step ${steps.indexOf(n) + 1} of ${steps.length}: ${s.title}. ${s.sub}`}
+            aria-label={`Step ${shown} of ${steps.length}: ${s.title}. ${s.sub}`}
             onClick={() => goStep(n)}
           >
-            <span className="wn">{done ? <TeIcon name="check" size="sm" /> : n}</span>
+            <span className="wn">{done ? <TeIcon name="check" size="sm" /> : shown}</span>
             <span className="wt"><b>{s.title}</b><small>{s.sub}</small></span>
           </button>
         )
