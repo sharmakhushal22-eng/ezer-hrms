@@ -140,7 +140,7 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
           onChange={e => setRemarks(e.target.value)} />
       </div>
       <div className="hx-note w" style={{ marginTop: 12 }}>
-        Notice period on record: <b>{d.notice_period_days ?? '-'} days</b>. Submitting starts the acknowledgement
+        Your notice period: <b>{d.notice_period_days ?? '-'} days</b>{(d as any).on_probation ? ' (on probation)' : ' (confirmed)'}. Submitting starts the acknowledgement
         chain: your reporting manager first, then L2 / HOD, then HR sets the final last working day.
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>

@@ -7,6 +7,7 @@ import { essCaller, audit, forbidden } from '@/lib/ess/session'
 import { employeeScope } from '@/lib/config/store'
 import { notifyFromTemplate } from '@/lib/config/notify'
 import { mailResignationStep } from '@/lib/exit/mail'
+import { effectiveNoticeDays, onProbation } from '@/lib/exit/notice'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   const [{ data: rows }, { data: reasons }, { data: emp }] = await Promise.all([
     sb.from('employee_resignation').select('*, exit_reason_master(label, category)').eq('employee_id', me).order('created_at', { ascending: false }).limit(3),
     sb.from('exit_reason_master').select('code, category, label').eq('is_active', true).order('sort_order'),
-    sb.from('employees').select('notice_period_days, l1_manager_id, l2_manager_id, hod_id, hr_manager_id, department_id').eq('id', me).maybeSingle(),
+    sb.from('employees').select('notice_period_days, l1_manager_id, l2_manager_id, hod_id, hr_manager_id, department_id, confirmation_status, confirmation_date, company_doj, group_doj, probation_months').eq('id', me).maybeSingle(),
   ])
   const current = (rows || []).find((r: any) => OPEN.includes(r.status)) || (rows || [])[0] || null
   let chain: any[] = []
@@ -41,7 +42,9 @@ export async function GET(req: NextRequest) {
     const by = new Map<string, any>(((people || []) as any[]).map(p => [p.id, p]))
     for (const [stage, id] of ids) approvers[stage] = id && by.get(id) ? { id, full_name: by.get(id).full_name, emp_code: by.get(id).emp_code ?? null, designation: by.get(id).designation ?? null } : null
   }
-  return NextResponse.json({ current, chain, approvers, reasons: reasons || [], notice_period_days: emp?.notice_period_days ?? 30 })
+  // Notice by probation (lib/exit/notice.ts): 30 days on probation, 60 once confirmed.
+  const notice = emp ? effectiveNoticeDays(emp as any) : 60
+  return NextResponse.json({ current, chain, approvers, reasons: reasons || [], notice_period_days: notice, on_probation: emp ? onProbation(emp as any) : false })
 }
 
 export async function POST(req: NextRequest) {

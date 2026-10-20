@@ -9,6 +9,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { notify } from '@/lib/ess/session'
 import { roleHolders } from '@/lib/recruitment/offer-approval-notify'
+import { effectiveNoticeDays } from '@/lib/exit/notice'
 
 export interface Revoked { employee_id: string; emp_code: string; full_name: string; roles_off: number; lines_closed: number; reports: number; warnings: string[] }
 
@@ -67,7 +68,23 @@ export async function revokeAccess(sb: SupabaseClient, employeeId: string, o: { 
   return out
 }
 
-export interface OffboardingRun { checked: number; revoked: Revoked[]; errors: string[] }
+export interface OffboardingRun { checked: number; revoked: Revoked[]; errors: string[]; notice_updated?: number }
+
+/** Notice by probation: 30 days on probation, 60 once confirmed (lib/exit/notice.ts). Keeps
+ *  employees.notice_period_days current as people finish probation. */
+export async function syncNoticeDays(sb: SupabaseClient, now = new Date()): Promise<number> {
+  let n = 0
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from('employees').select('id, notice_period_days, confirmation_status, confirmation_date, company_doj, group_doj, probation_months').eq('employment_status', 'Active').range(from, from + 999)
+    const rows = (data || []) as any[]
+    for (const e of rows) {
+      const want = effectiveNoticeDays(e, now)
+      if (Number(e.notice_period_days) !== want) { const { error } = await sb.from('employees').update({ notice_period_days: want }).eq('id', e.id); if (!error) n++ }
+    }
+    if (rows.length < 1000) break
+  }
+  return n
+}
 
 /** Everybody whose last working day is today or earlier and who still has access. */
 export async function runOffboardingDaily(sb: SupabaseClient, now = new Date()): Promise<OffboardingRun> {
@@ -88,5 +105,6 @@ export async function runOffboardingDaily(sb: SupabaseClient, now = new Date()):
     try { run.revoked.push(await revokeAccess(sb, id, { reason: `Last working day ${lwd}`, byName: 'Offboarding (daily)', lastWorkingDay: lwd })) }
     catch (err: any) { run.errors.push(`${id}: ${err?.message || err}`) }
   }
+  try { run.notice_updated = await syncNoticeDays(sb, now) } catch (e: any) { run.errors.push(`notice sync: ${e?.message || e}`) }
   return run
 }

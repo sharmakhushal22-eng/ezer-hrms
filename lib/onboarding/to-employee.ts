@@ -9,6 +9,7 @@
 // Pass a Supabase client (the API route passes its service-role/anon client).
 
 import { trackOf, frroDueDate } from './hiring-track'
+import { PROBATION_NOTICE_DAYS, PROBATION_MONTHS } from '@/lib/exit/notice'
 
 export interface SyncResult {
   ok?: boolean
@@ -196,7 +197,10 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     work_location_type:     oc.work_location_type || 'Office',
     // The notice period from the offer / the link form (else the company default, else 30) —
     // what the resignation chain turns into the policy last working day.
-    notice_period_days:     Number(oc.notice_period_days) > 0 ? Number(oc.notice_period_days) : (Number(coRow?.notice_period_days) > 0 ? Number(coRow!.notice_period_days) : 30),
+    // A new joiner starts on probation: 30 days' notice (60 once confirmed — lib/exit/notice.ts,
+    // kept current by the daily offboarding run).
+    notice_period_days:     PROBATION_NOTICE_DAYS,
+    probation_months:       PROBATION_MONTHS,
     // previous employer: employees has no previous_company column — it lives in employee_experience (below)
   }
 

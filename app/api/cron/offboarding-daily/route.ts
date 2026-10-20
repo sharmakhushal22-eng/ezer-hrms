@@ -21,7 +21,7 @@ async function run(req: NextRequest) {
   }
   try {
     const out = await runOffboardingDaily(supabase as any)
-    return NextResponse.json({ ok: true, checked: out.checked, revoked: out.revoked.map(r => ({ emp_code: r.emp_code, roles_off: r.roles_off, lines_closed: r.lines_closed, reports: r.reports, warnings: r.warnings })), errors: out.errors, ran_at: new Date().toISOString() })
+    return NextResponse.json({ ok: true, checked: out.checked, revoked: out.revoked.map(r => ({ emp_code: r.emp_code, roles_off: r.roles_off, lines_closed: r.lines_closed, reports: r.reports, warnings: r.warnings })), errors: out.errors, notice_updated: out.notice_updated, ran_at: new Date().toISOString() })
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
   }
