@@ -584,6 +584,13 @@ export default function OnboardingDashboard() {
   // ── Generate code: the modal (components/onboarding/GenerateCodeModal) does the work —
   //    the team, the roles, the code — and reports back through onDone. ──
   const openCodeModal = (candidate: Candidate) => setCodeModal(candidate)
+  // FIFO (lib/onboarding/code-series.ts): codes go out in the order candidates came into
+  // Onboarding. Earlier arrivals of the same company still without a code block this one.
+  const aheadOf = (c: Candidate) => candidates
+    .filter(o => !o.id.startsWith('rec_') && o.id !== c.id && o.company_id === c.company_id && o.status !== 'EMPLOYEE_CREATED' && !o.employee_code)
+    .filter(o => o.created_at < c.created_at || (o.created_at === c.created_at && o.id < c.id))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const fifoTitle = (c: Candidate) => { const a = aheadOf(c); return a.length ? `Waiting: ${a[0].full_name} came into Onboarding first and has no code yet${a.length > 1 ? ` (+${a.length - 1} more)` : ''} — codes go out in order` : '' }
 
   // ── Issue asset ───────────────────────────────────────────────
   const issueAsset = async (candidateId: string, assetType: string) => {
@@ -637,7 +644,9 @@ export default function OnboardingDashboard() {
       actions.push({priority:'MEDIUM',label:`Accepted by HR, with ${waiting.join(', ') || 'the teams'} for their checklist (ESS → HRIS → Tasks & Approvals)`,candidate:c.full_name,action:'approvals',cid:c.id})
     }
     if (c.status==='APPROVED') {
-      actions.push({priority:'HIGH',label:'IT, Admin and Payroll approved — generate the employee code (their team, ESS roles and the code; the login is mailed to them)',candidate:c.full_name,action:'generate',cid:c.id})
+      actions.push(aheadOf(c).length
+        ? {priority:'MEDIUM',label:`Approved by all three teams — in the code queue behind ${aheadOf(c)[0].full_name} (codes go out in order of arrival)`,candidate:c.full_name,action:'generate',cid:c.id}
+        : {priority:'HIGH',label:'IT, Admin and Payroll approved — generate the employee code (their team, ESS roles and the code; the login is mailed to them)',candidate:c.full_name,action:'generate',cid:c.id})
     }
     if (c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED') {
       const n = (c.hr_review.documents||[]).length, m = (c.hr_review.details||[]).length
@@ -758,8 +767,8 @@ export default function OnboardingDashboard() {
                       </button>
                     )}
                     {c.status==='APPROVED' && (
-                      <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} style={btnSm('primary')}>
-                        <Ti n="bolt" s={13}/>Generate code
+                      <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} disabled={aheadOf(c).length>0} title={fifoTitle(c)} style={{...btnSm('primary'),opacity:aheadOf(c).length?.5:1,cursor:aheadOf(c).length?'not-allowed':'pointer'}}>
+                        <Ti n="bolt" s={13}/>{aheadOf(c).length ? 'In queue' : 'Generate code'}
                       </button>
                     )}
                   </div>
@@ -918,8 +927,8 @@ export default function OnboardingDashboard() {
                           </button>
                         )}
                         {c.status==='APPROVED' && (
-                          <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} title={`IT, Admin and Payroll have approved: their team, ESS roles and the employee code${c.role_assignment?.managers?.l1_name ? ` · reports to ${c.role_assignment.managers.l1_name}` : ''}`} style={btnSm('primary')}>
-                            <Ti n="bolt" s={11}/>Generate code
+                          <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} disabled={aheadOf(c).length>0} title={aheadOf(c).length ? fifoTitle(c) : `IT, Admin and Payroll have approved: their team, ESS roles and the employee code${c.role_assignment?.managers?.l1_name ? ` · reports to ${c.role_assignment.managers.l1_name}` : ''}`} style={{...btnSm('primary'),opacity:aheadOf(c).length?.5:1,cursor:aheadOf(c).length?'not-allowed':'pointer'}}>
+                            <Ti n="bolt" s={11}/>{aheadOf(c).length ? `In queue · after ${aheadOf(c)[0].full_name.split(' ')[0]}` : 'Generate code'}
                           </button>
                         )}
                         {c.status==='APPROVED' && c.role_assignment?.managers?.l1_name && (
@@ -1006,8 +1015,8 @@ export default function OnboardingDashboard() {
                       </div>
                     </div>
                     {a.action==='generate' && cand && (
-                      <button className="ezob-btn" onClick={()=>{openCodeModal(cand)}} style={{...btnSm('primary'),height:34}}>
-                        <Ti n="bolt" s={12}/>Generate code
+                      <button className="ezob-btn" onClick={()=>{openCodeModal(cand)}} disabled={aheadOf(cand).length>0} title={fifoTitle(cand)} style={{...btnSm('primary'),height:34,opacity:aheadOf(cand).length?.5:1,cursor:aheadOf(cand).length?'not-allowed':'pointer'}}>
+                        <Ti n="bolt" s={12}/>{aheadOf(cand).length ? 'In queue' : 'Generate code'}
                       </button>
                     )}
                     {a.action==='followup' && cand && (
@@ -1070,7 +1079,7 @@ export default function OnboardingDashboard() {
                       <button className="ezob-btn" onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={btnSm('primary')}>Review form</button>
                     )}
                     {c.status==='APPROVED' && (
-                      <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} style={btnSm('primary')}>Generate code</button>
+                      <button className="ezob-btn" onClick={()=>{openCodeModal(c)}} disabled={aheadOf(c).length>0} title={fifoTitle(c)} style={{...btnSm('primary'),opacity:aheadOf(c).length?.5:1,cursor:aheadOf(c).length?'not-allowed':'pointer'}}>{aheadOf(c).length ? 'In queue' : 'Generate code'}</button>
                     )}
                   </div>
                 </div>
