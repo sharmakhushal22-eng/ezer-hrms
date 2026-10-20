@@ -518,6 +518,71 @@ Please acknowledge your acceptance in the EZER ESS portal.
     },
   }),
   email({
+    key: 'resignation.step_employee', module: LC,
+    label: 'Resignation — a step in the chain (to the employee)',
+    description: 'Sent to the employee at every step of their resignation: when it is submitted, and each time a manager / HR acts on it.',
+    usedIn: 'ESS → Exit process; ESS → Tasks & Approvals → Resignation',
+    recipient: 'Employee',
+    variables: [EMPLOYEE, EMP_CODE, v('stage', 'Stage that acted', 'Reporting manager'), v('actor_name', 'Who acted', 'Aditya Iyer'), v('action', 'What they did', 'acknowledged and forwarded'), v('note', 'Their note (may be empty)', 'All the best'), v('proposed_lwd', 'Proposed last working day (may be empty)', '18 Nov 2026'), v('policy_lwd', 'Last working day as per notice', '19 Nov 2026'), v('next_stage', 'Next stage (may be empty)', 'L2 manager'), v('next_approver', 'Next approver (may be empty)', 'Sneha Bhat'), v('headline', 'Subject line summary', 'acknowledged by your reporting manager'), v('action_line', 'What just happened, as a sentence (may be empty)', 'Your reporting manager, Aditya Iyer, acknowledged and forwarded.'), v('next_line', 'Where it goes next, as a sentence (may be empty)', 'It is now with your L2 manager (Sneha Bhat).'), v('is_stamp', '"yes" when this is the submission itself', ''), v('is_hold', '"yes" when the chain is on retention hold', ''), v('has_note', '"yes" when there is a note', ''), v('portal_link', 'ESS link', 'https://app.ezerhrms.com/ess')],
+    defaults: {
+      subject: 'Your resignation: {{headline}}',
+      body: `Dear {{employee_name}},
+
+{{#if is_stamp}}Your resignation has been received and is now with your {{next_stage}} ({{next_approver}}) for acknowledgement. Your last working day as per the notice period is {{policy_lwd}}.{{/if}}
+{{#if action_line}}{{action_line}}{{/if}}
+{{#if has_note}}Note: "{{note}}"{{/if}}
+{{#if next_line}}{{next_line}}{{/if}}{{#if is_hold}}The chain is paused until you and your manager have talked; only you can withdraw it.{{/if}}
+
+You can follow every step in ESS → HRIS → Exit process: {{portal_link}}
+
+— EZER HR`,
+    },
+  }),
+  email({
+    key: 'resignation.step_approver', module: LC,
+    label: 'Resignation — your action is recorded (to the approver)',
+    description: 'Confirmation to the manager / HR who just acted on a resignation; on submission, tells the first approver it is with them.',
+    usedIn: 'ESS → Tasks & Approvals → Resignation',
+    recipient: 'Approver',
+    variables: [EMPLOYEE, EMP_CODE, v('stage', 'Your stage', 'Reporting manager'), v('action', 'What you did', 'acknowledged and forwarded'), v('note', 'Your note (may be empty)', ''), v('proposed_lwd', 'Proposed last working day (may be empty)', ''), v('policy_lwd', 'Last working day as per notice', '19 Nov 2026'), v('next_stage', 'Next stage (may be empty)', 'L2 manager'), v('next_approver', 'Next approver (may be empty)', 'Sneha Bhat'), v('headline', 'Subject line summary', 'your action is recorded'), v('action_line', 'Your action, as a sentence (may be empty)', 'Your action on Flowtest Data Engineer\'s (STC0003) resignation is recorded: you acknowledged and forwarded.'), v('next_line', 'Where it goes next, as a sentence (may be empty)', 'It has moved to the L2 manager (Sneha Bhat).'), v('is_stamp', '"yes" when it has just been submitted to you', ''), v('portal_link', 'ESS link', 'https://app.ezerhrms.com/ess?tab=approvals')],
+    defaults: {
+      subject: 'Resignation of {{employee_name}} ({{emp_code}}): {{headline}}',
+      body: `Hi,
+
+{{#if is_stamp}}{{employee_name}} ({{emp_code}}) has submitted their resignation and it is waiting on you as {{next_stage}}. Last working day as per the notice period: {{policy_lwd}}. Please acknowledge, accept with a date, or ask to talk, in ESS → Tasks & Approvals.{{/if}}
+{{#if action_line}}{{action_line}}{{/if}}
+{{#if next_line}}{{next_line}}{{/if}}
+
+{{portal_link}}
+
+— EZER HR`,
+    },
+  }),
+  email({
+    key: 'resignation.approved', module: LC,
+    label: 'Resignation approved — download your documents',
+    description: 'Sent to the employee when HR sets the final last working day: the chain is complete and the ESS portal closes on that day.',
+    usedIn: 'ESS → Tasks & Approvals → Resignation → HR sets final LWD',
+    recipient: 'Employee',
+    variables: [EMPLOYEE, EMP_CODE, v('last_working_day', 'Final last working day', '19 Nov 2026'), v('resignation_date', 'Date of resignation', '20 Oct 2026'), v('shortfall_note', 'Notice-shortfall line (may be empty)', ''), v('portal_link', 'ESS link', 'https://app.ezerhrms.com/ess')],
+    defaults: {
+      subject: 'Your resignation is approved: last working day {{last_working_day}}',
+      body: `Dear {{employee_name}},
+
+Your resignation dated {{resignation_date}} has been approved. Your last working day is {{last_working_day}}.
+
+Please download all your important documents before that day: payslips, Form 16 and tax documents, your letters (offer, appointment, any others), your attendance and leave records, and anything else you need from the portal. Your ESS portal and all access will be deactivated at the end of your last working day.
+{{#if shortfall_note}}
+{{shortfall_note}}{{/if}}
+
+Please complete your handover and return company assets to Admin / IT before you leave. Thank you for your time with us, and all the best.
+
+{{portal_link}}
+
+— EZER HR`,
+    },
+  }),
+  email({
     key: 'resignation.recovery_payroll', module: LC,
     label: 'Notice-period recovery — Payroll',
     description: 'Sent to Payroll when a resignation is processed with a notice-period shortfall.',

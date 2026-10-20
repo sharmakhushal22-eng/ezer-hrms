@@ -6,6 +6,7 @@ import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essCaller, audit, forbidden } from '@/lib/ess/session'
 import { employeeScope } from '@/lib/config/store'
 import { notifyFromTemplate } from '@/lib/config/notify'
+import { mailResignationStep } from '@/lib/exit/mail'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,6 +80,8 @@ export async function POST(req: NextRequest) {
       { employee_name: meRow?.full_name || 'An employee', emp_code: meRow?.emp_code || '', stage: res.current_stage },
       { scope: await employeeScope(me), link: '/ess?tab=approvals' })
   }
+  // Mail: the employee gets the acknowledgement of receipt, the first approver hears it is with them.
+  await mailResignationStep(sb as any, { resignationId: id, stage: 'EMPLOYEE', action: 'STAMPED', actorId: res?.current_approver_id || null, baseUrl: process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin }).catch(e => console.warn('resignation submit mail failed', e))
   await audit(c.caller, 'RESIGNATION_SUBMITTED', me, { resignation_id: id, reason_code: body.reason_code })
   return NextResponse.json({ ok: true, id, status: res?.status, stage: res?.current_stage })
 }
