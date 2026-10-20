@@ -32,6 +32,8 @@ interface Candidate {
   l1_manager_id?: string | null; l2_manager_id?: string | null; hod_id?: string | null
   /** The hiring track (lib/onboarding/hiring-track.ts): DOMESTIC | FOREIGN_IN_INDIA | OVERSEAS, with the work country, payroll currency and employing entity. */
   hiring_track?: string | null; work_country?: string | null; payroll_currency?: string | null; employing_entity?: string | null
+  /** Notice period the joiner will serve (from the offer / typed here) — becomes employees.notice_period_days. */
+  notice_period_days?: number | null
   /** The HR Manager's last review (Review form on the card): ACCEPTED / RETURNED / RESUBMITTED with the rejected documents and flagged details. */
   hr_review?: { outcome: string; by_name?: string | null; at?: string; documents?: { doc_code: string; label: string; reason: string }[]; details?: { field: string; reason: string }[]; note?: string | null } | null
   id: string; full_name: string; designation: string; department: string
@@ -265,8 +267,8 @@ export default function OnboardingDashboard() {
   const [editEmail,    setEditEmail]  = useState('')
   const [editMobile,   setEditMobile] = useState('')
   // The hiring track edited on the card (lib/onboarding/hiring-track.ts). A recruitment joiner has no onboarding row yet, so their pick waits in trackPick until the link is sent.
-  const [editTrack,    setEditTrack]  = useState({ hiring_track: 'DOMESTIC', work_country: '', payroll_currency: 'INR', employing_entity: '' })
-  const [trackPick,    setTrackPick]  = useState<Record<string, { hiring_track: string; work_country: string | null; payroll_currency: string | null; employing_entity: string | null }>>({})
+  const [editTrack,    setEditTrack]  = useState({ hiring_track: 'DOMESTIC', work_country: '', payroll_currency: 'INR', employing_entity: '', notice_period_days: '' })
+  const [trackPick,    setTrackPick]  = useState<Record<string, { hiring_track: string; work_country: string | null; payroll_currency: string | null; employing_entity: string | null; notice_period_days?: number | null }>>({})
   const [resendingId,  setResendingId] = useState('')
   const [reviewing,    setReviewing]  = useState<{ id: string; readOnly: boolean } | null>(null)
   const [selIds,       setSelIds]     = useState<Set<string>>(new Set())
@@ -276,7 +278,7 @@ export default function OnboardingDashboard() {
   const [newForm, setNewForm] = useState({
     company_id:'', full_name:'', designation:'', department:'', department_id:'', email:'', mobile:'',
     date_of_joining:'', offered_ctc:'', employment_type:'Employee',
-    hiring_track:'DOMESTIC', work_country:'', payroll_currency:'INR', employing_entity:'',
+    hiring_track:'DOMESTIC', work_country:'', payroll_currency:'INR', employing_entity:'', notice_period_days:'',
   })
 
   // Load companies + departments for the link modal (auto-select if there's only one).
@@ -460,7 +462,7 @@ export default function OnboardingDashboard() {
       if (!res.ok) throw new Error(data.error||'Failed')
       showToast(data.emailed ? `Onboarding link emailed for ${full_name}! ✉️` : `Link created (email NOT sent: ${data.email_error || '-'}). Share manually: ${data.magic_link}`, data.emailed ? 'ok' : 'err')
       setLinkModal(false)
-      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee',hiring_track:'DOMESTIC',work_country:'',payroll_currency:'INR',employing_entity:''}))
+      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee',hiring_track:'DOMESTIC',work_country:'',payroll_currency:'INR',employing_entity:'',notice_period_days:''}))
       load()
     } catch(e:any) { showToast(e.message,'err') }
     setSaving(false)
@@ -500,6 +502,7 @@ export default function OnboardingDashboard() {
           date_of_joining: c.date_of_joining,
           // The hiring track picked in Edit (a recruitment joiner keeps it in trackPick until the link exists).
           ...(trackPick[c.id] || { hiring_track: c.hiring_track || 'DOMESTIC', work_country: c.work_country || null, payroll_currency: c.payroll_currency || null, employing_entity: c.employing_entity || null }),
+          notice_period_days: trackPick[c.id]?.notice_period_days ?? c.notice_period_days ?? null,
         }),
       })
       const data = await res.json()
@@ -517,15 +520,15 @@ export default function OnboardingDashboard() {
   // ── Edit candidate (DOJ + email + mobile) — HR Manager ─────────
   const openDateEdit = (c: Candidate) => {
     setDateModal(c); setDateVal(c.date_of_joining ? c.date_of_joining.slice(0,10) : ''); setEditEmail(c.email || ''); setEditMobile(c.mobile || '')
-    const t = trackPick[c.id] || { hiring_track: c.hiring_track || 'DOMESTIC', work_country: c.work_country || '', payroll_currency: c.payroll_currency || 'INR', employing_entity: c.employing_entity || '' }
-    setEditTrack({ hiring_track: t.hiring_track || 'DOMESTIC', work_country: t.work_country || '', payroll_currency: t.payroll_currency || 'INR', employing_entity: t.employing_entity || '' })
+    const t = trackPick[c.id] || { hiring_track: c.hiring_track || 'DOMESTIC', work_country: c.work_country || '', payroll_currency: c.payroll_currency || 'INR', employing_entity: c.employing_entity || '', notice_period_days: c.notice_period_days ?? null }
+    setEditTrack({ hiring_track: t.hiring_track || 'DOMESTIC', work_country: t.work_country || '', payroll_currency: t.payroll_currency || 'INR', employing_entity: t.employing_entity || '', notice_period_days: t.notice_period_days != null ? String(t.notice_period_days) : '' })
   }
   const saveDate = async () => {
     if (!dateModal) return
     if (editTrack.hiring_track === 'OVERSEAS' && !editTrack.work_country.trim()) { showToast('Pick the work country for an overseas employee.', 'err'); return }
     setSaving(true)
     const c = dateModal
-    const track = { hiring_track: editTrack.hiring_track, work_country: editTrack.hiring_track === 'OVERSEAS' ? editTrack.work_country.trim() : 'India', payroll_currency: editTrack.hiring_track === 'OVERSEAS' ? (editTrack.payroll_currency.trim().toUpperCase() || null) : 'INR', employing_entity: editTrack.employing_entity.trim() || null }
+    const track = { hiring_track: editTrack.hiring_track, work_country: editTrack.hiring_track === 'OVERSEAS' ? editTrack.work_country.trim() : 'India', payroll_currency: editTrack.hiring_track === 'OVERSEAS' ? (editTrack.payroll_currency.trim().toUpperCase() || null) : 'INR', employing_entity: editTrack.employing_entity.trim() || null, notice_period_days: Number(editTrack.notice_period_days) > 0 ? Math.round(Number(editTrack.notice_period_days)) : null }
     // Recruitment joiner (not yet invited) → candidates (the track rides along until the link is sent). Already-invited → onboarding_candidates.
     const { error } = c.recruitment_id
       ? await supabase.from('candidates').update({ onboarding_date: dateVal || null, email: editEmail || null, phone: editMobile || null, mobile: editMobile || null }).eq('id', c.recruitment_id)
@@ -1312,6 +1315,7 @@ export default function OnboardingDashboard() {
                 {label:'Designation',       key:'designation',    type:'text', placeholder:'e.g. Software Engineer'},
                 {label:'Date of Joining *', key:'date_of_joining',type:'date', placeholder:''},
                 {label:'Offered CTC (₹)',   key:'offered_ctc',    type:'number',placeholder:'e.g. 800000'},
+                {label:'Notice period (days)', key:'notice_period_days', type:'number', placeholder:'blank = offer / company default'},
               ].map(({label,key,type,placeholder})=>(
                 <div key={key} style={{marginBottom:8}}>
                   <div style={labelCss}>{label}</div>
@@ -1390,6 +1394,9 @@ export default function OnboardingDashboard() {
               style={{...inputCss,width:'100%',marginBottom:12}}/>
             <div style={labelCss}>Mobile</div>
             <input type="tel" value={editMobile} onChange={e=>setEditMobile(e.target.value)} placeholder="+91 XXXXXXXXXX"
+              style={{...inputCss,width:'100%',marginBottom:12}}/>
+            <div style={labelCss}>Notice period (days)</div>
+            <input type="number" min={0} value={editTrack.notice_period_days} onChange={e=>setEditTrack(t=>({...t,notice_period_days:e.target.value}))} placeholder="blank = from the offer, else company default"
               style={{...inputCss,width:'100%',marginBottom:12}}/>
             <div style={labelCss}>Hiring track</div>
             <select value={editTrack.hiring_track} disabled={dateModal.status!=='NOT_INVITED'&&dateModal.status!=='INVITED'} onChange={e=>setEditTrack(t=>({...t,hiring_track:e.target.value}))} style={{...inputCss,width:'100%',marginBottom:4}}>

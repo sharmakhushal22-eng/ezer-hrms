@@ -20,7 +20,7 @@ export interface SyncResult {
 
 export async function onboardingToEmployee(supa: any, onboardingId: string, employeeCode: string): Promise<SyncResult> {
   const { data: oc } = await supa.from('onboarding_candidates')
-    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, l2_manager_id, hod_id, it_email, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type, hiring_track, work_country, payroll_currency, employing_entity, pf_international_worker, ssa_exempt, pan_pending, paid_outside_india, frro_done, visa_checked, contract_signed')
+    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, l2_manager_id, hod_id, it_email, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type, notice_period_days, hiring_track, work_country, payroll_currency, employing_entity, pf_international_worker, ssa_exempt, pan_pending, paid_outside_india, frro_done, visa_checked, contract_signed')
     .eq('id', onboardingId).maybeSingle()
   if (!oc) return { error: 'onboarding record not found' }
 
@@ -33,6 +33,7 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
 
   const f = oc.form_data || {}
   const track = trackOf(oc.hiring_track)
+  const { data: coRow } = await supa.from('companies').select('notice_period_days').eq('id', oc.company_id).maybeSingle()
   // Inter-company transfer: carry the group DOJ forward from the 1st company (seniority/gratuity).
   const isTransfer = f.is_transfer === true
   const groupDoj = (isTransfer && f.group_doj_carry) ? f.group_doj_carry : (oc.date_of_joining || null)
@@ -193,6 +194,9 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     induction_date:         oc.induction_date || null,
     team_name:              oc.team_name || null,
     work_location_type:     oc.work_location_type || 'Office',
+    // The notice period from the offer / the link form (else the company default, else 30) —
+    // what the resignation chain turns into the policy last working day.
+    notice_period_days:     Number(oc.notice_period_days) > 0 ? Number(oc.notice_period_days) : (Number(coRow?.notice_period_days) > 0 ? Number(coRow!.notice_period_days) : 30),
     // previous employer: employees has no previous_company column — it lives in employee_experience (below)
   }
 

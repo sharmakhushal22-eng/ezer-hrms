@@ -147,7 +147,11 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
       catch (e) { setErr((e as Error).message) }
       return
     }
-    if (needsInput(a) && ask !== a) { setAsk(a); return }
+    if (needsInput(a) && ask !== a) {
+      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
+      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      setAsk(a); return
+    }
     if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
     setBusy(true)
     try {
@@ -200,6 +204,11 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
             <div>
               <label className="hx-label">{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label>
               <input type="date" className="hx-input" value={lwd} onChange={e => setLwd(e.target.value)} />
+              <div style={{ fontSize: 11.5, color: 'var(--ez-muted)', marginTop: 4 }}>
+                {item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.`
+                  : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.`
+                  : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''}
+              </div>
             </div>
           )}
           {ask === 'Set final LWD' && (

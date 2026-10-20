@@ -110,7 +110,7 @@ function Kpis({ items }: { items: { label: string; value: string | number; note?
 interface PendingItem {
   kind: 'LEAVE' | 'LEAVE_CANCEL' | 'REGULARISATION' | 'TRAVEL' | 'RESIGNATION'; id: string; employee_id: string; who: string; what: string; meta: string; stage: string
   raised_at: string | null; surfaced_via: string; mine: boolean; actions: string[]; tone?: 'w' | 'd'; link?: string
-  facts?: string[]; alert?: string | null
+  facts?: string[]; alert?: string | null; lwd_policy?: string | null; lwd_proposed?: string | null; notice_days?: number | null
 }
 
 /** One pending item with its actions. Resignation actions that need input (a date,
@@ -133,7 +133,11 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
       try { const r = await api(`/api/ess/approvals?resignation_id=${item.id}`, employeeId); setChain(r.chain || []) } catch (e: any) { setErr(e.message) }
       return
     }
-    if (needsInput(a) && ask !== a) { setAsk(a); return }
+    if (needsInput(a) && ask !== a) {
+      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
+      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      setAsk(a); return
+    }
     if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
     setBusy(true)
     try {
@@ -167,7 +171,9 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
       {ask && (
         <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: C.bg, display: 'grid', gap: 8 }}>
           {(ask === 'Accept with my date' || ask === 'Set final LWD') && (
-            <div><label style={S.label}>{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label><input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} /></div>
+            <div><label style={S.label}>{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label><input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} />
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>{item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.` : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.` : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''}</div>
+            </div>
           )}
           {ask === 'Set final LWD' && (
             <div><label style={S.label}>Regrettable exit?</label>
