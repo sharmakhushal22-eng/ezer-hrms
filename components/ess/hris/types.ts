@@ -57,7 +57,7 @@ export interface PendingItem {
 export interface ChainRow {
   stage: string
   action: string
-  approver?: { full_name?: string | null } | null
+  approver?: { full_name?: string | null; emp_code?: string | null; designation?: string | null } | null
   actioned_at: string
   note?: string | null
   proposed_lwd?: string | null
@@ -78,9 +78,12 @@ export interface ResignationRecord {
   submitted_by_employee?: boolean | null
 }
 
+export interface StageApprover { id: string; full_name: string; emp_code: string | null; designation: string | null }
 export interface ResignationState {
   current: ResignationRecord | null
   chain: ChainRow[]
+  /** Who each stage goes to (RM_L1 / RM_L2 / HOD / HR_MANAGER), resolved from the record; null = stage skipped. */
+  approvers?: Record<string, StageApprover | null>
   reasons: { code: string; label: string }[]
   notice_period_days: number | null
 }
