@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { resolveEmployee, hashPassword } from '@/lib/ess-auth'
+import { issueEssToken } from '@/lib/ess-session'
 
 export const runtime = 'nodejs'
 
@@ -31,5 +32,10 @@ export async function POST(req: NextRequest) {
     const { error } = await sb.from('ess_accounts').insert({ employee_id: employee.id, password_hash: hash, password_salt: salt, status: 'ACTIVE', must_change_password: false, first_login_at: new Date().toISOString() })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  return NextResponse.json({ ok: true, employee_id: employee.id, name: employee.full_name })
+  // Setting the first password IS signing in: ess-login stores the session from this
+  // response. Without a token the employee landed in the portal with no session and every
+  // tab answered "unauthenticated" (login and change-password already return one).
+  const token = issueEssToken(employee.id)
+  await sb.from('ess_accounts').update({ last_login_at: new Date().toISOString(), login_count: 1 }).eq('employee_id', employee.id)
+  return NextResponse.json({ ok: true, employee_id: employee.id, name: employee.full_name, token, session_available: !!token })
 }
