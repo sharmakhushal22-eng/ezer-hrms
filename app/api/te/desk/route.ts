@@ -174,6 +174,11 @@ export async function GET(req: NextRequest) {
       ...booked.map(r => r.trip_id as string),
       ...stayRows.map(r => r.id as string),
       ...watchRows.map(r => r.trip_id as string),
+      // The journeys list was added to the NAMES lookup below when it arrived
+      // with 180 and forgotten here, so every journey row fell back to the ESS
+      // record and was labelled "not confirmed" — on the one screen where the
+      // desk is deciding whether to trust the number in front of it.
+      ...journeyRows.map(r => r.trip_id as string),
     ].filter(Boolean))]
     const tripContact = new Map<string, { mobile: string; alt: string; email: string }>()
     if (contactTrips.length) {
