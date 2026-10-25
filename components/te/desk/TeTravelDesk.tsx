@@ -37,10 +37,11 @@ import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeChain from '../TeChain'
 import TeContact from '../TeContact'
+import TeDeskByTrip from './TeDeskByTrip'
 import TeStayChoice from './TeStayChoice'
 import TeJourneyReview from './TeJourneyReview'
 
-type Room = 'stays' | 'book' | 'booked' | 'vehicles' | 'watch' | 'journeys'
+type Room = 'trips' | 'stays' | 'book' | 'booked' | 'vehicles' | 'watch' | 'journeys'
 
 export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTrip, onToast }: {
   /** cfg.vehicles — the types a vehicle can be, and what each pays. */
@@ -204,6 +205,10 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
   // booked, then what was booked can be undone. Vehicles are their own thing
   // and sit last.
   const rooms: { k: Room; label: string; icon: string; n: number }[] = [
+    // FIRST, because "where are we on this trip" is the question the desk is
+    // asked most and the rooms answer it worst: the same work, gathered under
+    // the trip it belongs to. The rooms below are unchanged.
+    { k: 'trips', label: 'By trip', icon: 'route', n: 0 },
     { k: 'stays', label: 'Hotels to choose', icon: 'home', n: stays.length },
     { k: 'book', label: 'To book', icon: 'plane', n: bookings.length },
     { k: 'booked', label: 'Booked', icon: 'check', n: booked.length },
@@ -221,7 +226,10 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
   // "For information" is excluded on purpose: it is the one room with nothing
   // to act on, so landing a desk person in it would be the exact failure the
   // note above describes, in a new place.
-  const firstWithWork = rooms.find(r => r.n && r.k !== 'watch')?.k ?? 'stays'
+  // 'trips' carries no count of its own (it is a view OF the others), so it is
+  // never the room somebody is dropped into — the same reasoning that keeps
+  // 'watch' out of this.
+  const firstWithWork = rooms.find(r => r.n && r.k !== 'watch' && r.k !== 'trips')?.k ?? 'trips'
   const here = room ?? firstWithWork
 
   /** Leaving a room abandons whatever was half-typed in it. Coming back to a
@@ -259,6 +267,18 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
 
       {/* Choosing comes before booking, because it is what produces something
           to book. A trip sitting here has somebody waiting on an answer. */}
+      {here === 'trips' ? (
+        <TeDeskByTrip
+          stays={stays}
+          toBook={bookings}
+          booked={booked}
+          journeys={journeys}
+          watch={watch}
+          onGoRoom={goRoom}
+          onOpenTrip={onOpenTrip}
+        />
+      ) : null}
+
       {here === 'stays' ? <TeStayChoice stays={stays} onDone={message => { onToast(message); reload() }} onOpenTrip={onOpenTrip} /> : null}
 
       {here === 'book' ? (

@@ -230,6 +230,21 @@
 @media (max-width:640px){.te .kinds.triphero{grid-template-columns:minmax(0,1fr)}}
 .te .hero-end{height:0;margin:0}
 
+/* A trip's card on the Travel Desk's "By trip" view
+   (components/te/desk/TeDeskByTrip.tsx).
+
+   The accent edge is the same device .ontrip uses, for the same reason: a card
+   that needs somebody says so at its edge rather than by tinting everything
+   inside it, which is what put a button with no contrast on the Home card. */
+.te .tripbucket{padding:0}
+.te .tripbucket .ch{margin:0;padding:14px 16px 12px;align-items:flex-start}
+.te .tripbucket.needs{box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-warning)}
+/* Nothing outstanding is still worth showing — it is the answer to "where are
+   we on this trip" — so it keeps a quieter edge rather than none. */
+.te .tripbucket:not(.needs){box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-line-strong,var(--ez-line))}
+.te .tripbucket .li{padding-left:16px;padding-right:16px}
+.te .tripbucket .li .b{display:flex;align-items:center;gap:8px}
+
 /* The on-a-trip card's two actions, on Home.
 
    A PAIR OF WIDE TARGETS, not a row of three buttons. On a phone three in a
