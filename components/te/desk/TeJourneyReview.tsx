@@ -31,6 +31,7 @@ import type { DeskKind } from '@/lib/te/desks'
 import {
   canConfirm, canSendBack, confirmPolicy, evidenceNotes, reviewState, reviewTone,
 } from '@/lib/te/journey-review'
+import { journeyBuckets } from '@/lib/te/desk-buckets'
 import { errorText, plural, rs } from '@/lib/te/format'
 import TeContact from '../TeContact'
 import TeIcon from '../TeIcon'
@@ -239,13 +240,18 @@ export default function TeJourneyReview({ rows, desk, basisOf, onOpenTrip, onDon
   onDone: () => void
   onToast: (s: string) => void
 }) {
-  // Sent-back first — those are holding somebody's claim and are the only rows
-  // here with a clock running. Then what nobody has looked at, then the rest.
-  const sorted = useMemo(() => {
-    const rank = (j: DeskJourney) => (j.sent_back_at ? 0
-      : (desk === 'travel' ? !j.desk_confirmed_at : !j.fin_confirmed_at) ? 1 : 2)
-    return [...rows].sort((a, b) => rank(a) - rank(b) || (b.leg_date || '').localeCompare(a.leg_date || ''))
-  }, [rows, desk])
+  // GATHERED UNDER THE TRIP THEY BELONG TO. A trip's journeys are the trip —
+  // leg 1 out, a sub-trip across the city, leg 2 home — and flat they were
+  // scattered: sorted by urgency across every trip, two sub-trips of the same
+  // trip could sit ten rows apart with other people's journeys between them,
+  // and a reviewer asking "does this trip hang together" had to reassemble it
+  // by eye from the trip number on each row.
+  //
+  // The ordering rule lives in lib/te/desk-buckets so that the order of the
+  // buckets and the order of the rows inside one cannot drift apart: sent back
+  // first (it is holding a claim), then unlooked-at, then agreed; and within a
+  // trip, journey order once urgency ties, because a trip reads as a sequence.
+  const buckets = useMemo(() => journeyBuckets(rows, desk), [rows, desk])
 
   if (!rows.length) {
     return (
@@ -266,8 +272,42 @@ export default function TeJourneyReview({ rows, desk, basisOf, onOpenTrip, onDon
           trip&rsquo;s claim until they answer.
         </span>
       </div>
-      {sorted.map(j => (
-        <OneJourney key={j.leg_id} j={j} desk={desk} basisOf={basisOf} onOpenTrip={onOpenTrip} onDone={onDone} onToast={onToast} />
+      {buckets.map(b => (
+        <div key={b.tripId} className="jbucket">
+          <div className="jb-head">
+            <div className="grow">
+              {/* The number is the bucket: everything under it belongs to this
+                  trip, and it opens the whole record. */}
+              {onOpenTrip ? (
+                <button
+                  type="button"
+                  className="tripno"
+                  onClick={() => onOpenTrip(b.tripId)}
+                  title={`Open ${b.tripNo} — every journey, bill, stay and what it has cost`}
+                >
+                  {b.tripNo}
+                </button>
+              ) : <span className="mono">{b.tripNo}</span>}
+              <div className="b">{b.tripName || 'A trip'}</div>
+              <div className="small muted">
+                {b.who || 'A traveller'}{b.empCode ? <> · <span className="mono">{b.empCode}</span></> : null}
+                {' · '}{plural(b.journeys.length, 'journey')}
+                {b.subTrips ? <> · {b.subTrips === 1 ? 'one a sub-trip' : `${b.subTrips} sub-trips`}</> : null}
+              </div>
+            </div>
+            {/* The two facts a reviewer sorts by, said on the bucket so the
+                trip can be triaged without opening every journey in it. */}
+            {b.sentBack ? <span className="chip t-crit">{b.sentBack} sent back</span> : null}
+            {b.waiting
+              ? <span className="chip t-warn">{b.waiting} to confirm</span>
+              : <span className="chip plain t-pos">All confirmed</span>}
+          </div>
+          <div className="stack">
+            {b.journeys.map(j => (
+              <OneJourney key={j.leg_id} j={j} desk={desk} basisOf={basisOf} onOpenTrip={onOpenTrip} onDone={onDone} onToast={onToast} />
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   )

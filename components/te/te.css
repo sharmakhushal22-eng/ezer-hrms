@@ -245,6 +245,21 @@
 .te .tripbucket .li{padding-left:16px;padding-right:16px}
 .te .tripbucket .li .b{display:flex;align-items:center;gap:8px}
 
+/* A trip's journeys, gathered (components/te/desk/TeJourneyReview.tsx).
+
+   The bucket is a frame around the journey cards rather than a card itself:
+   .jrev already carries its own border and background, and a card inside a card
+   reads as two boxes arguing. A heading, a hairline and the trip's own accent
+   edge are enough to say "these belong together". */
+.te .jbucket{display:grid;gap:12px;padding:0 0 4px;border-left:3px solid var(--ez-line-strong,var(--ez-line));padding-left:13px}
+/* A trip holding somebody's claim earns the loud edge; one merely waiting the
+   quiet one. Same device .ontrip and .tripbucket use, same meaning. */
+.te .jbucket:has(.chip.t-crit){border-left-color:var(--ez-critical)}
+.te .jbucket:has(.chip.t-warn):not(:has(.chip.t-crit)){border-left-color:var(--ez-warning)}
+.te .jbucket .jb-head{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.te .jbucket .jb-head .grow{min-width:0}
+.te .jbucket .stack{gap:12px}
+
 /* The on-a-trip card's two actions, on Home.
 
    A PAIR OF WIDE TARGETS, not a row of three buttons. On a phone three in a

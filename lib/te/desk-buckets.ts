@@ -195,3 +195,77 @@ export function focusDeskRows<T>(kind: WorkKind, rows: T[], tripId: string | nul
   if (kind === 'stays') return rows.filter(r => (r as { id?: string }).id === tripId)
   return rows.filter(r => (r as { trip_id?: string }).trip_id === tripId)
 }
+
+// ── journeys, gathered under the trip they belong to ────────────────────────
+// A trip's journeys are the trip: leg 1 out, a sub-trip across the city, leg 2
+// home. The desk's Journeys room listed them flat across every trip, sorted by
+// urgency, so two sub-trips of the same trip could sit ten rows apart with
+// other people's journeys between them — and a reviewer asking "does this trip
+// hang together" had to reassemble it by eye from the trip number on each row.
+
+/** How urgent one journey is for this desk. Lower sorts first.
+ *
+ *  0  sent back — it is holding somebody's claim and has a clock running
+ *  1  nobody on this desk has looked at it yet
+ *  2  already confirmed here; a record rather than work
+ *
+ *  Exported because the bucket order and the order WITHIN a bucket must be the
+ *  same rule. Two copies of "what is urgent" is two things to keep in step.
+ */
+export function journeyRank(j: DeskJourney, desk: 'travel' | 'finance'): number {
+  if (j.sent_back_at) return 0
+  return (desk === 'travel' ? !j.desk_confirmed_at : !j.fin_confirmed_at) ? 1 : 2
+}
+
+export interface JourneyBucket {
+  tripId: string
+  tripNo: string
+  tripName: string
+  who: string
+  empCode: string
+  /** This trip's journeys, most urgent first. */
+  journeys: DeskJourney[]
+  /** How many this desk has not confirmed. */
+  waiting: number
+  /** How many are sent back and holding the claim. */
+  sentBack: number
+  /** How many were added during the trip. */
+  subTrips: number
+}
+
+/**
+ * The Journeys room, grouped by trip.
+ *
+ * Trips are ordered by their most urgent journey, so a trip holding a claim
+ * comes before one merely unlooked-at, which comes before one already agreed.
+ * Within a trip, journeys run in the same order — and a tie falls back to the
+ * journey number, because a trip reads as a sequence and 1, 2, 3 is how a
+ * reviewer expects to walk it.
+ */
+export function journeyBuckets(rows: DeskJourney[], desk: 'travel' | 'finance'): JourneyBucket[] {
+  const by = new Map<string, JourneyBucket>()
+  for (const j of rows) {
+    if (!j.trip_id) continue
+    const b = by.get(j.trip_id) ?? {
+      tripId: j.trip_id, tripNo: j.trip_no, tripName: j.trip_name || '',
+      who: j.full_name || '', empCode: j.emp_code || '',
+      journeys: [], waiting: 0, sentBack: 0, subTrips: 0,
+    }
+    if (!b.who && j.full_name) b.who = j.full_name
+    if (!b.empCode && j.emp_code) b.empCode = j.emp_code
+    b.journeys.push(j)
+    by.set(j.trip_id, b)
+  }
+  for (const b of by.values()) {
+    b.journeys.sort((x, y) =>
+      journeyRank(x, desk) - journeyRank(y, desk) || (x.leg_no ?? 0) - (y.leg_no ?? 0))
+    b.waiting = b.journeys.filter(j => journeyRank(j, desk) <= 1).length
+    b.sentBack = b.journeys.filter(j => !!j.sent_back_at).length
+    b.subTrips = b.journeys.filter(j => j.is_subtrip).length
+  }
+  return [...by.values()].sort((a, b) => {
+    const ra = Math.min(...a.journeys.map(j => journeyRank(j, desk)))
+    const rb = Math.min(...b.journeys.map(j => journeyRank(j, desk)))
+    return ra - rb || a.tripNo.localeCompare(b.tripNo)
+  })
+}

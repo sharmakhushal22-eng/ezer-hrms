@@ -8,7 +8,7 @@
 // room whose work is most time-sensitive looks empty.
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { deskBuckets, focusDeskRows } from '../desk-buckets.ts'
+import { deskBuckets, focusDeskRows, journeyBuckets, journeyRank } from '../desk-buckets.ts'
 import type { DeskBooked, DeskJourney, DeskStay, DeskToBook, DeskWatch } from '../client.ts'
 
 const stay = (over: Partial<DeskStay>): DeskStay => ({
@@ -206,5 +206,87 @@ describe('narrowing a room to one trip', () => {
 
   it('a focus on a trip the room has nothing for is empty, not everything', () => {
     assert.deepEqual(focusDeskRows('book', [toBook({ trip_id: 'a' })], 'zzz'), [])
+  })
+})
+
+describe('the Journeys room, gathered under each trip', () => {
+  // A trip's journeys ARE the trip: leg 1 out, a sub-trip across the city, leg
+  // 2 home. Flat and sorted by urgency, two sub-trips of one trip could sit ten
+  // rows apart with other people's journeys between them.
+  const j = (over: Partial<DeskJourney>) => journey({ ...over })
+
+  it('journeys of one trip come back as one bucket', () => {
+    const b = journeyBuckets([
+      j({ leg_id: 'a', leg_no: 1 }), j({ leg_id: 'b', leg_no: 2, is_subtrip: true }),
+    ] as DeskJourney[], 'travel')
+    assert.equal(b.length, 1)
+    assert.equal(b[0].journeys.length, 2)
+    assert.equal(b[0].subTrips, 1)
+  })
+
+  it('different trips stay apart, each keeping its own number', () => {
+    const b = journeyBuckets([
+      j({ leg_id: 'a', trip_id: 't1', trip_no: 'TRP-A' }),
+      j({ leg_id: 'b', trip_id: 't2', trip_no: 'TRP-B' }),
+    ] as DeskJourney[], 'travel')
+    assert.deepEqual(b.map(x => x.tripNo), ['TRP-A', 'TRP-B'])
+  })
+
+  it('within a trip, journeys run in journey order once urgency ties', () => {
+    // A trip reads as a sequence; 3, 1, 2 is not how anybody walks it.
+    const b = journeyBuckets([
+      j({ leg_id: 'c', leg_no: 3 }), j({ leg_id: 'a', leg_no: 1 }), j({ leg_id: 'b', leg_no: 2 }),
+    ] as DeskJourney[], 'travel')
+    assert.deepEqual(b[0].journeys.map(x => x.leg_no), [1, 2, 3])
+  })
+
+  it('a sent-back journey comes first inside its trip', () => {
+    const b = journeyBuckets([
+      j({ leg_id: 'a', leg_no: 1 }),
+      j({ leg_id: 'b', leg_no: 2, sent_back_at: '2026-10-20T00:00:00Z' }),
+    ] as DeskJourney[], 'travel')
+    assert.equal(b[0].journeys[0].leg_no, 2, 'it is holding the claim')
+    assert.equal(b[0].sentBack, 1)
+  })
+
+  it('the trip holding a claim sorts above one merely unlooked-at', () => {
+    const b = journeyBuckets([
+      j({ leg_id: 'a', trip_id: 'quiet', trip_no: 'TRP-A' }),
+      j({ leg_id: 'b', trip_id: 'urgent', trip_no: 'TRP-Z', sent_back_at: '2026-10-20T00:00:00Z' }),
+    ] as DeskJourney[], 'travel')
+    assert.deepEqual(b.map(x => x.tripNo), ['TRP-Z', 'TRP-A'], 'urgency beats the number')
+  })
+
+  it('a trip whose journeys are all agreed sorts last', () => {
+    const b = journeyBuckets([
+      j({ leg_id: 'a', trip_id: 'done', trip_no: 'TRP-A', desk_confirmed_at: '2026-10-20T00:00:00Z' }),
+      j({ leg_id: 'b', trip_id: 'open', trip_no: 'TRP-Z' }),
+    ] as DeskJourney[], 'travel')
+    assert.deepEqual(b.map(x => x.tripNo), ['TRP-Z', 'TRP-A'])
+    assert.equal(b[1].waiting, 0)
+  })
+
+  it('each desk counts what IT has not confirmed, not what the other has', () => {
+    const rows = [j({ leg_id: 'a', desk_confirmed_at: '2026-10-20T00:00:00Z', fin_confirmed_at: null })] as DeskJourney[]
+    assert.equal(journeyBuckets(rows, 'travel')[0].waiting, 0, 'the travel desk is done')
+    assert.equal(journeyBuckets(rows, 'finance')[0].waiting, 1, 'Finance is not')
+  })
+
+  it('the rank is one rule, so the bucket order and the rows inside agree', () => {
+    const back = j({ leg_id: 'a', sent_back_at: 'x' }) as DeskJourney
+    const fresh = j({ leg_id: 'b' }) as DeskJourney
+    const done = j({ leg_id: 'c', desk_confirmed_at: 'x' }) as DeskJourney
+    assert.deepEqual(
+      [journeyRank(back, 'travel'), journeyRank(fresh, 'travel'), journeyRank(done, 'travel')],
+      [0, 1, 2],
+    )
+  })
+
+  it('a journey with no trip id is dropped rather than bucketed under nothing', () => {
+    assert.deepEqual(journeyBuckets([j({ trip_id: undefined as never })] as DeskJourney[], 'travel'), [])
+  })
+
+  it('nothing to review is an empty list, not a crash', () => {
+    assert.deepEqual(journeyBuckets([], 'travel'), [])
   })
 })
