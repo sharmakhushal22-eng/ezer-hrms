@@ -209,6 +209,31 @@
 .te .acts2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .te .btn.big{flex-direction:column;gap:6px;padding:14px 12px;min-height:84px;font-size:14px;border-radius:var(--te-r-sm);line-height:1.25}
 .te .btn.big svg{width:24px;height:24px}
+/* THE LABEL ON A HERO BUTTON NEEDS MORE ROOM THAN THE TOKENS GIVE.
+   14px semibold on a filled background is NORMAL text to WCAG, not large — so
+   AA is 4.5 and AAA is 7.0. The base tokens deliver 5.17 (brand) and 5.48
+   (positive) in light: passing, but by two thirds of a point, and on a target
+   this size that margin is exactly what "the button text contrast is bad"
+   looks like. Reported twice before it was measured.
+
+   Mixing 24% toward --ez-ink puts every state past AAA in both themes:
+
+                     light rest / hover      dark rest / hover
+     bill   brand      7.08 / 8.34            9.18 / 10.16
+     journey positive  7.45 / 8.75           11.06 / 11.78
+
+   It works in both directions because ink is near-black in light, so the fill
+   deepens, and near-white in dark, so it lifts — and the dark label is
+   near-black, which wants a lighter fill anyway.
+
+   SCOPED TO .big DELIBERATELY. The module's ordinary .btn.pri is unchanged at
+   5.17; deepening every primary button in the product is a far larger change
+   than was asked for, and a bigger button carrying a slightly deeper fill
+   reads as emphasis rather than as a second shade of the same thing. */
+.te .btn.pri.big{background:color-mix(in srgb,var(--ez-brand) 76%,var(--ez-ink));border-color:transparent}
+.te .btn.pri.big:hover{background:color-mix(in srgb,var(--ez-brand) 64%,var(--ez-ink))}
+.te .btn.pos.big{background:color-mix(in srgb,var(--ez-positive) 76%,var(--ez-ink));border-color:transparent}
+.te .btn.pos.big:hover{background:color-mix(in srgb,var(--ez-positive) 64%,var(--ez-ink))}
 /* NO .btn.ok RULE HERE, deliberately. Adding one gave the pair two different
    button species — a filled blue beside a green ghost on a green card — and it
    reached further than intended: TeDrafts' "Keep them" is `btn ok glow`, which
