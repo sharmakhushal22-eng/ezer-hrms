@@ -208,6 +208,36 @@ export interface TeCall {
    */
   permitDesk(kind: 'finance' | 'travel', module: Module, level?: AccessLevel): Promise<void>
   /**
+   * 403 unless the caller may open the Finance desk: a place on it, or full
+   * admin access to the module.
+   *
+   * ONE RULE, BECAUSE THERE WERE TWO AND THEY POINTED OPPOSITE WAYS.
+   * /finance/overview had this test inline, with a comment explaining that the
+   * Finance VIEW role must NOT be enough — on this data it lets an HR Head
+   * with no finance_team row read the whole company's claims. Every other
+   * Finance route asked permitDesk(..., 'Finance', 'VIEW') instead. So the
+   * strict gate sat on the read-only summary and the loose one on the routes
+   * that move money, which is backwards:
+   *
+   *   Finance VIEW, no desk row (6 roles, 7 holders, three of them real
+   *   people) → refused /finance/overview, but GET /payouts answered 200 with
+   *   every batch and its items: claim, employee, amount, bank reference. That
+   *   route is a direct table read, so unlike the writes it has no SQL floor
+   *   underneath to catch it.
+   *
+   *   Travel Claims FULL, no desk row → the opposite: allowed to read the
+   *   whole Finance desk through the overview, refused by every room inside
+   *   it. The Payouts room swallowed the 403 and rendered "no batches", so a
+   *   module administrator was quietly shown an empty list rather than told.
+   *
+   * The writes were never exposed: te_assert_finance guards te_payout_create,
+   * te_adjustment_add, te_adjustment_close, te_advance_act and te_period_act.
+   * This closes the read and makes the UI honest, and it is deliberately the
+   * overview's wording that wins, because that is the one with the reasoning
+   * written next to it.
+   */
+  permitFinanceDesk(): Promise<void>
+  /**
    * The company this request is about. An employee's own company; another one
    * (?company_id=) only for a caller whose roles reach across companies. The
    * legacy shared login has no company of its own and must name one.
@@ -309,6 +339,16 @@ function makeCall(req: NextRequest): TeCall {
       if (await t.holds(module, level)) return
       throw new TeHttpError(403, 'TE_FORBIDDEN',
         `This needs a place on the ${kind} desk, or ${module} (${level.toLowerCase()}) access.`)
+    },
+    async permitFinanceDesk() {
+      if (await t.onDesk('finance')) return
+      // Full admin of the module, which is what the admin console grants, and
+      // what /finance/overview has always accepted. NOT the Finance VIEW role
+      // on its own — see the note on the interface for why.
+      if (await t.holds('Travel Claims', 'FULL')) return
+      if (await t.holds('Finance', 'FULL')) return
+      throw new TeHttpError(403, 'TE_FORBIDDEN',
+        'This needs a place on the finance desk, or full access to Travel and Expenses.')
     },
     company: () => (companyP ??= resolveCompany(t)),
     async body<T extends object>() {

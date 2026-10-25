@@ -37,13 +37,13 @@ export async function GET(req: NextRequest) {
     // this data lets an HR Head with no finance_team row at all read the whole
     // company's claims, advances and payouts.
     //
-    // This check used to live here, inline, and nowhere else — so the desk was
-    // readable by its own members and actionable by none of them: every write
-    // route still asked for the role permission. t.permitDesk is that rule in
-    // one place, and all of them use it now.
-    if (!(await t.onDesk('finance')) && !(await t.holds('Travel Claims', 'FULL'))) {
-      await t.permit('Finance', 'FULL')
-    }
+    // This reasoning is now t.permitFinanceDesk and every Finance route uses
+    // it. It had been inline here and nowhere else, so the rule written down
+    // with its reasoning guarded only this read, while payouts, adjustments,
+    // advances and periods asked for 'Finance' VIEW — the very grant the
+    // paragraph above rejects. Same rule in one place, so they cannot drift
+    // apart again.
+    await t.permitFinanceDesk()
     const company = await t.company()
     const q = req.nextUrl.searchParams
     const view = needOneOf(q.get('view') ?? 'claims', VIEWS, 'view')

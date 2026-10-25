@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const batchId = needUuid(id, 'Batch')
     const body = await t.body<{ action?: string; ref?: string; reason?: string; item_id?: string }>()
     const action = needOneOf(body.action, ACTIONS, 'action')
-    await t.permitDesk('finance', 'Finance', 'VIEW')
+    await t.permitFinanceDesk()
     const ctx = await t.ctx()
 
     if (action === 'paid') return payoutPaid(ctx, batchId, needText(body.ref, 'ref'))
