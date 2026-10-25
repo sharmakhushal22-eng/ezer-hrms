@@ -1,6 +1,7 @@
 // app/api/ess/offer-approvals/route.ts
 //
-//   GET                                                -> { isHrHead, isHrManager, pending, recent, awaiting, ready }
+//   GET                                                -> { isHrHead, isHrManager, pending, recent, awaiting, ready, mine }
+//     Hiring manager: mine (offers on MRFs assigned to them — sent, accepted, awaiting reply…)
 //     HR Head    : pending (SUBMITTED, to decide) + recent decisions
 //     HR Manager : awaiting (SUBMITTED — "yet to be approved", read-only) + ready (HR_HEAD_APPROVED, send from Recruitment)
 //   POST { action:'approve'|'reject', request_id, comment } -> the HR Head's decision, from ESS
@@ -15,7 +16,7 @@ import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute } from '@/lib/ess/session'
 import { notifyDecided } from '@/lib/recruitment/offer-approval-notify'
 
-const SEL = 'id, status, company_id, mrf_id, candidate_id, offered_ctc, offered_variable_pct, monthly_inhand, joining_bonus, joining_bonus_freq, retention_bonus, esop_value, esop_vesting, hike_pct, proposed_doj, days_to_join, notice_period_days, notice_buyout, notice_buyout_amount, prev_company_name, prev_company_address, prev_total_ctc, prev_fixed_ctc, prev_variable, prev_ta_da, prev_additional, hiring_manager_remark, recruiter_comments, template_content, submitted_at, hr_head_actioned_at, hr_head_comments, revised_calculation, revision_note, candidates:candidate_id(full_name, designation, current_company, experience_years, email, mobile), manpower_requisitions:mrf_id(mrf_number, designation, position, raised_by_name, assigned_recruiter, location_id), ctc_negotiations:ctc_negotiation_id(calculation_data)'
+const SEL = 'id, status, company_id, mrf_id, candidate_id, offered_ctc, offered_variable_pct, monthly_inhand, joining_bonus, joining_bonus_freq, retention_bonus, esop_value, esop_vesting, hike_pct, proposed_doj, days_to_join, notice_period_days, notice_buyout, notice_buyout_amount, prev_company_name, prev_company_address, prev_total_ctc, prev_fixed_ctc, prev_variable, prev_ta_da, prev_additional, hiring_manager_remark, recruiter_comments, template_content, submitted_at, hr_head_actioned_at, hr_head_comments, revised_calculation, revision_note, candidates:candidate_id(full_name, designation, current_company, experience_years, email, mobile, stage, offer_accepted, offer_response, offer_sent_at), manpower_requisitions:mrf_id(mrf_number, designation, position, raised_by_name, assigned_recruiter, location_id), ctc_negotiations:ctc_negotiation_id(calculation_data)'
 
 const shape = (x: any) => ({
   id: x.id, status: x.status, company_id: x.company_id,
@@ -32,7 +33,27 @@ const shape = (x: any) => ({
   state: x.revised_calculation?.state || x.ctc_negotiations?.calculation_data?.state || null,
   location_id: x.manpower_requisitions?.location_id || null,
   revision_note: x.revision_note || null,
+  // where the candidate is with it: the reply recorded on Recruitment → Offers
+  reply: x.candidates?.offer_accepted ? 'ACCEPTED' : x.candidates?.stage === 'Rejected' ? 'BACKOUT'
+    : x.candidates?.offer_response === 'REVISION' ? 'REVISION' : x.status === 'OFFER_SENT' ? 'AWAITING' : null,
+  offer_sent_at: x.candidates?.offer_sent_at || null,
 })
+
+/** "My offers": offers on the MRFs the caller is an assigned hiring manager of — the people
+ *  who negotiate and send them — so the sender keeps seeing the offer after it goes out and
+ *  once the candidate accepts, not only the HR Head. Last 90 days, newest first. */
+async function myOffers(me: string, sel: string): Promise<any[]> {
+  const { data: mrfs } = await sb.from('manpower_requisitions').select('id').contains('assigned_recruiter_ids', [me])
+  const ids = (mrfs || []).map((m: any) => m.id)
+  if (!ids.length) return []
+  const since = new Date(Date.now() - 90 * 86400_000).toISOString()
+  let r: any = await sb.from('offer_approval_requests').select(sel).in('mrf_id', ids).in('status', ['SUBMITTED', 'HR_HEAD_APPROVED', 'HR_HEAD_REJECTED', 'OFFER_SENT']).gte('submitted_at', since).order('submitted_at', { ascending: false }).limit(30)
+  if (r.error && /notice_buyout_amount/.test(r.error.message)) r = await sb.from('offer_approval_requests').select(sel.replace(', notice_buyout_amount', '')).in('mrf_id', ids).in('status', ['SUBMITTED', 'HR_HEAD_APPROVED', 'HR_HEAD_REJECTED', 'OFFER_SENT']).gte('submitted_at', since).order('submitted_at', { ascending: false }).limit(30)
+  // One row per candidate — the latest request (a re-approved offer leaves the old one behind).
+  const seen = new Set<string>()
+  const latest = (r.data || []).filter((x: any) => !seen.has(x.candidate_id) && seen.add(x.candidate_id))
+  return await withState(latest.map(shape))
+}
 
 /** Rows whose salary calculation carries no state fall back to their MRF location's state. */
 async function withState(rows: any[]) {
@@ -57,13 +78,14 @@ export async function GET(req: NextRequest) {
   const { ctx } = r
   const isHrHead = await callerIsHrHead(ctx)
   const isHrManager = callerIsHrManager(ctx)
-  const empty = { isHrHead: false, isHrManager, pending: [], recent: [], awaiting: [], ready: [] }
+  const mine = ctx.caller.employeeId ? await myOffers(ctx.caller.employeeId, SEL) : []
+  const empty = { isHrHead: false, isHrManager, pending: [], recent: [], awaiting: [], ready: [], mine }
   if (!ctx.companyId) return NextResponse.json(empty)
 
   // The HR Manager has nothing to decide, but sees what is queued: offers submitted to the HR Head
   // ("yet to be approved" — the Send Offer button is locked) and approved ones ready to send.
   if (!isHrHead) {
-    if (!isHrManager) return NextResponse.json(empty)
+    if (!isHrManager) return NextResponse.json(empty)   // still carries `mine`
     const fetchMgr = async (sel: string) => Promise.all([
       sb.from('offer_approval_requests').select(sel).eq('company_id', ctx.companyId).eq('status', 'SUBMITTED').order('submitted_at', { ascending: true }),
       sb.from('offer_approval_requests').select(sel).eq('company_id', ctx.companyId).eq('status', 'HR_HEAD_APPROVED').order('hr_head_actioned_at', { ascending: false }).limit(20),
@@ -80,7 +102,7 @@ export async function GET(req: NextRequest) {
   ]) as Promise<[{ data: any[] | null; error: any }, { data: any[] | null; error: any }]>
   let [p, q] = await fetchBoth(SEL)
   if (p.error && /notice_buyout_amount/.test(p.error.message)) [p, q] = await fetchBoth(SEL.replace(', notice_buyout_amount', ''))   // migration 133 not applied yet
-  return NextResponse.json({ isHrHead: true, isHrManager, pending: await withState((p.data || []).map(shape)), recent: await withState((q.data || []).map(shape)), awaiting: [], ready: [] })
+  return NextResponse.json({ isHrHead: true, isHrManager, pending: await withState((p.data || []).map(shape)), recent: await withState((q.data || []).map(shape)), awaiting: [], ready: [], mine })
 }
 
 export async function POST(req: NextRequest) {

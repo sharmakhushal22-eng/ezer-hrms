@@ -570,8 +570,38 @@ export function RaiseMrfSection({ employeeId, notify, go, adminMode }: { employe
 // task. "Review" opens the full request — candidate, previous employer, offered package,
 // joining details, remarks — and the HR Head approves or rejects RIGHT HERE (same writes
 // and notifications as Recruitment → HR Head, which stays available as a link).
+const REPLY: Record<string, [string, 'ok' | 'warn' | 'dang' | 'info' | 'mut']> = {
+  ACCEPTED: ['Accepted by candidate', 'ok'], AWAITING: ['Sent · awaiting reply', 'info'],
+  REVISION: ['Revision asked', 'warn'], BACKOUT: ['Backed out', 'dang'],
+}
+/** Where each offer on my MRFs has got to: with the HR Head, approved, sent, accepted… */
+function MyOffersCard({ rows }: { rows: any[] }) {
+  const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
+  const day = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  const stateOf = (o: any): [string, 'ok' | 'warn' | 'dang' | 'info' | 'mut'] =>
+    o.reply ? REPLY[o.reply] : o.status === 'SUBMITTED' ? ['With HR Head', 'warn'] : o.status === 'HR_HEAD_APPROVED' ? ['Approved · ready to send', 'ok'] : o.status === 'HR_HEAD_REJECTED' ? ['Rejected by HR Head', 'dang'] : ['Sent', 'info']
+  const accepted = rows.filter(o => o.reply === 'ACCEPTED').length
+  return (
+    <div style={S.card}>
+      <div style={S.section}>My offers · {rows.length}{accepted ? ` · ${accepted} accepted` : ''}</div>
+      {rows.map((o: any) => {
+        const [label, tone] = stateOf(o)
+        return (
+          <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{o.candidate} · {o.designation || '-'}{o.mrf_number ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.purpleD, background: C.soft, padding: '1px 6px', borderRadius: 99 }}>{o.mrf_number}</span> : null}</div>
+              <div style={{ fontSize: 11.5, color: C.muted }}>{lakh(o.offered_ctc)}{o.proposed_doj ? ` · DOJ ${day(o.proposed_doj)}` : ''}{o.offer_sent_at ? ` · sent ${day(o.offer_sent_at)}` : ` · submitted ${day(o.submitted_at)}`}</div>
+            </div>
+            <span style={pill(tone)}>{label}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employeeId: string; notify?: (m: string, t?: 'success' | 'error') => void; focusId?: string; onDone?: () => void }) {
-  const [d, setD] = useState<{ isHrHead: boolean; isHrManager?: boolean; pending: any[]; recent: any[]; awaiting?: any[]; ready?: any[] } | null>(null)
+  const [d, setD] = useState<{ isHrHead: boolean; isHrManager?: boolean; pending: any[]; recent: any[]; awaiting?: any[]; ready?: any[]; mine?: any[] } | null>(null)
   const [open, setOpen] = useState<any | null>(null)
   const [mode, setMode] = useState<'view' | 'reject'>('view')
   const [reason, setReason] = useState('')
@@ -605,11 +635,15 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
   const day = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   // HR Manager: nothing to decide here — a task-style card per offer that is still with the HR
   // Head ("yet to be approved"), and the approved ones that are ready to send from Recruitment.
+  // Offers on the MRFs this person runs as hiring manager — they sent them, so they keep
+  // seeing them after they go out and once the candidate accepts (not only the HR Head).
+  const mineCard = !focusId && !d.isHrHead && d.mine?.length ? <MyOffersCard rows={d.mine} /> : null
   if (!d.isHrHead && d.isHrManager && !focusId) {
     const awaiting = d.awaiting || [], ready = d.ready || []
-    if (awaiting.length === 0 && ready.length === 0) return null
+    if (awaiting.length === 0 && ready.length === 0) return mineCard
     const goSend = () => { window.location.href = '/ess/recruitment/sendoffer' }
     return (
+      <>
       <div style={S.card}>
         <div style={S.section}>Offer letters · HR Manager{awaiting.length ? ` · ${awaiting.length} yet to be approved` : ''}{ready.length ? ` · ${ready.length} ready to send` : ''}</div>
         {awaiting.map((o: any) => (
@@ -634,9 +668,11 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
           </div>
         ))}
       </div>
+      {mineCard}
+      </>
     )
   }
-  if (!d.isHrHead) return focusId ? <div style={{ ...S.card, textAlign: 'center', padding: 28, color: C.muted, fontSize: 13 }}>Only the HR Head of the company can review offer approvals.</div> : null
+  if (!d.isHrHead) return focusId ? <div style={{ ...S.card, textAlign: 'center', padding: 28, color: C.muted, fontSize: 13 }}>Only the HR Head of the company can review offer approvals.</div> : mineCard
   if (d.pending.length === 0 && d.recent.length === 0 && !focusId) return null
   const say = (m: string, t?: 'success' | 'error') => notify ? notify(m, t) : (t === 'error' ? alert(m) : null)
 
