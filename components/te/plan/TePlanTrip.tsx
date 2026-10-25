@@ -239,8 +239,14 @@ export default function TePlanTrip({ snap, draft, issues, offersHub, edit, setSc
             <div className="qh">
               <span className="ico-b"><TeIcon name="home" /></span>
               <div className="grow">
-                <b>Do you need a hotel or a food allowance?</b>
-                <small>Say no for a trip out and back the same day. Saying yes adds a step for the hotels you would accept.</small>
+                <b>{draft.origin === 'POST_FACTO' ? 'Did you stay overnight, or spend on food?' : 'Do you need a hotel or a food allowance?'}</b>
+                {/* What yes actually opens differs by route: on a past trip the
+                    Stay step has no hotels to name, because there is nothing
+                    left for the desk to book. Promising "the hotels you would
+                    accept" there describes a screen that no longer appears. */}
+                <small>{draft.origin === 'POST_FACTO'
+                  ? 'Say no for a trip out and back the same day. Saying yes lets you claim the hotel and food bills against this trip.'
+                  : 'Say no for a trip out and back the same day. Saying yes adds a step for the hotels you would accept.'}</small>
               </div>
             </div>
             <div className="seg" role="group" aria-label="Hotel or food allowance">

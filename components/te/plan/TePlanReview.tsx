@@ -323,23 +323,39 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
 
           {preview && !blocking.length ? (
             <div className="sunk">
+              {/* THE HEADING FOLLOWS WHETHER THERE IS A LIST, not whether a
+                  list was expected. It used to ask `!planning` first, so a trip
+                  recorded after travel was promised "The trip and its claim go
+                  to" above an empty row: tripPreview fills `chain` only when
+                  plan.needsApproval, and a past trip needs no approval before
+                  leaving, so the array it mapped over was always []. Two
+                  conditions for one question, and they disagreed. */}
               <div className="small muted">
-                {!planning ? 'The trip and its claim go to'
-                  : preview.needsApproval ? 'This plan goes to'
+                {preview.chain.length ? (planning ? 'This plan goes to' : 'The trip and its claim go to')
+                  : !planning ? 'What happens to this'
                     : 'No approval is needed before you leave'}
               </div>
-              {preview.needsApproval || !planning ? (
-                <>
-                  <div className="row tight">
-                    {preview.chain.map((s, i) => (
-                      <span key={`${s.role}-${i}`} className="row tight">
-                        {i ? <TeIcon name="go" size="sm" /> : null}
-                        <span className="av sm">{initials(s.name || s.role)}</span>
-                        <span><b>{s.name || s.team || s.role}</b> <span className="muted small">{s.role}</span></span>
-                      </span>
-                    ))}
-                  </div>
-                </>
+              {preview.chain.length ? (
+                <div className="row tight">
+                  {preview.chain.map((s, i) => (
+                    <span key={`${s.role}-${i}`} className="row tight">
+                      {i ? <TeIcon name="go" size="sm" /> : null}
+                      <span className="av sm">{initials(s.name || s.role)}</span>
+                      <span><b>{s.name || s.team || s.role}</b> <span className="muted small">{s.role}</span></span>
+                    </span>
+                  ))}
+                </div>
+              ) : !planning ? (
+                /* Nothing is approved ahead of a trip that already happened —
+                   te_trip_save leaves it in DRAFT and returns before it builds
+                   any approval steps. The claim filed against it is the thing
+                   that gets approved. Whether an HOD joins that chain is a
+                   company setting, and the engine already says so in a warning
+                   just above this, so it is deliberately not repeated here. */
+                <div className="small">
+                  Saving this records the journeys; nothing is approved yet.
+                  The claim you file against this trip is what goes for approval.
+                </div>
               ) : (
                 <div className="small">
                   Local, {Math.round(legs.reduce((a, l) => a + l.km, 0))} km in all. Start leg 1 on the day.

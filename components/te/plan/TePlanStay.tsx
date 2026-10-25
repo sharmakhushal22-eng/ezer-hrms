@@ -37,7 +37,14 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
   nights: number
   edit: (patch: Partial<PlannerDraft>) => void
 }) {
-  const note = draft.stayWanted ? stayOptionsNote(draft.stayOptions) : null
+  /** A trip being recorded after it happened. The questions here still decide
+   *  whether a hotel and a food budget are estimated for it, but everything
+   *  addressed to the Travel Desk is already in the past tense. */
+  const past = draft.origin === 'POST_FACTO'
+
+  /** How many of the three hotels were given, for the approver. Only asked for
+   *  when there is a desk to ask, so it is not computed for a past trip. */
+  const note = draft.stayWanted && !past ? stayOptionsNote(draft.stayOptions) : null
 
   const setOption = (i: number, patch: Partial<PlannerDraft['stayOptions'][number]>) =>
     edit({ stayOptions: draft.stayOptions.map((o, j) => (j === i ? { ...o, ...patch } : o)) })
@@ -55,9 +62,12 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
       <div className="sec">
         <h4>Stay and food</h4>
         <p className="small muted">
-          Two questions, and neither commits you to anything: the hotel is picked and booked
-          by the Travel Desk, and the food budget is only spent against bills you add while
-          the trip is on.
+          {past
+            ? <>Two questions about a trip that is already over: the hotel you paid for goes on the
+                trip as a bill, and the food budget is what those bills are measured against.</>
+            : <>Two questions, and neither commits you to anything: the hotel is picked and booked
+                by the Travel Desk, and the food budget is only spent against bills you add while
+                the trip is on.</>}
         </p>
       </div>
 
@@ -74,11 +84,17 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
         <div className="qcards" role="group" aria-label="Do you need a stay">
           <button type="button" className="qcard" aria-pressed={draft.stayWanted === true} onClick={() => edit({ stayWanted: true })}>
             <TeIcon name="home" />
-            <span><b>Yes, I need a hotel</b><small>Name a few and the desk books one</small></span>
+            <span>
+              <b>{past ? 'Yes, I stayed overnight' : 'Yes, I need a hotel'}</b>
+              <small>{past ? 'Add the hotel bill to the trip' : 'Name a few and the desk books one'}</small>
+            </span>
           </button>
           <button type="button" className="qcard" aria-pressed={draft.stayWanted === false} onClick={() => edit({ stayWanted: false })}>
             <TeIcon name="close" />
-            <span><b>No stay needed</b><small>Back the same day, or staying privately</small></span>
+            <span>
+              <b>{past ? 'No stay' : 'No stay needed'}</b>
+              <small>{past ? 'Back the same day, or stayed privately' : 'Back the same day, or staying privately'}</small>
+            </span>
           </button>
         </div>
 
@@ -86,7 +102,23 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
           <p className="small muted">No hotel on this trip, so none is estimated for it.</p>
         ) : null}
 
-        {draft.stayWanted ? (
+        {/* THE THREE HOTELS ARE A REQUEST TO THE DESK, so a trip that is
+            already over has nothing to put in them. Asking somebody to name
+            hotels "you would be happy with" for nights they have already slept
+            through reads as a form that has not noticed which trip it is on —
+            and on this route the desk books nothing at all: syncDraft sets
+            bookedBy to 'self', te_trip_save leaves the trip in DRAFT, and both
+            v_te_to_book and the stays room exclude it. So the question stays,
+            because it is what decides whether a hotel is estimated, and the
+            picker goes. */}
+        {draft.stayWanted && past ? (
+          <p className="small muted">
+            The hotel is already paid for, so there is nothing for the desk to book. Add the bill to
+            this trip once it is saved and it is claimed with the trip.
+          </p>
+        ) : null}
+
+        {draft.stayWanted && !past ? (
           <>
             <p className="small muted">
               Name {STAY_OPTIONS_WANTED} hotels you would be happy with and paste the page you found each on.
