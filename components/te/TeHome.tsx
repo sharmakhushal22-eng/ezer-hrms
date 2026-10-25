@@ -423,22 +423,31 @@ export default function TeHome({ initialClaimId, onExit }: {
                     Paid for something, or hopping across the city? Put it on the trip now and it is paid with the rest
                     of it, instead of becoming a loose bill you have to explain later.
                   </p>
-                  {/* BOTH ACTIONS, not just the journey. This card offered
+                  {/* BOTH ACTIONS, AND GIVEN REAL WEIGHT. This card offered
                       "Add a journey" and nothing else, so the commoner of the
                       two — you have just paid for a meal or a cab — meant
                       opening the trip and scrolling to find the button. A bill
-                      is the thing people have in their hand; it goes first. */}
-                  <div className="row tight">
-                    <button type="button" className="btn pri" onClick={() => setSheet({ name: 'expense', tripId: onTrip.id })}>
-                      <TeIcon name="receipt" size="sm" />Add a bill
+                      is the thing people have in their hand; it goes first.
+
+                      Two wide targets side by side rather than three buttons in
+                      a row: on a phone a row of three collapses to something
+                      nobody can hit cleanly, and "Open the trip" is not the
+                      same KIND of act as the other two. It goes below, quieter,
+                      where it reads as "the rest of this trip" rather than
+                      competing with the thing you came to do. */}
+                  <div className="acts2">
+                    <button type="button" className="btn pri big" onClick={() => setSheet({ name: 'expense', tripId: onTrip.id })}>
+                      <TeIcon name="receipt" />
+                      <span>Add a bill</span>
                     </button>
-                    <button type="button" className="btn" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
-                      <TeIcon name="route" size="sm" />{openingTrip ? 'Opening…' : 'Add a journey'}
-                    </button>
-                    <button type="button" className="btn" onClick={() => setView({ name: 'trip', id: onTrip.id })}>
-                      Open the trip
+                    <button type="button" className="btn ok big" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
+                      <TeIcon name="route" />
+                      <span>{openingTrip ? 'Opening…' : 'Add a journey'}</span>
                     </button>
                   </div>
+                  <button type="button" className="btn sm wide" onClick={() => setView({ name: 'trip', id: onTrip.id })}>
+                    Open the trip<TeIcon name="go" size="sm" />
+                  </button>
                 </div>
               ) : null}
 

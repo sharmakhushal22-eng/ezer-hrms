@@ -23,6 +23,7 @@ import TeStayRequest from './TeStayRequest'
 import TeTripMap from '../plan/TeTripMap'
 import TeJourneyAnswer from '../leg/TeJourneyAnswer'
 import TeTripLedger from './TeTripLedger'
+import TeTripNow from './TeTripNow'
 import TeTripPlan from './TeTripPlan'
 import TeMapLinks from '../plan/TeMapLinks'
 import type { MapPlace } from '@/lib/te/trip-map'
@@ -235,62 +236,28 @@ export default function TeTripDetail({ tripId, me, today, masters, everyone, cat
       </div>
 
       {/* ── WHILE YOU ARE TRAVELLING ──
-          The two things somebody actually does mid-trip were the two worst
-          placed on this page: "Add a bill" sat mid-scroll inside "What you
-          spent on this trip", and "Add a journey" was a `btn sm` tucked into
-          the Route card's header, further down still. Both needed scrolling
-          past the approval chain, the estimate and the ledger — on a phone, on
-          a pavement, having just paid a cab driver who is waiting.
+          The two things anybody does mid-trip, at hero size and first on the
+          page, plus the recording strip and the slim bar that takes over once
+          they scroll away. All of it is TeTripNow; see the note there for why
+          it is tiles rather than buttons.
 
-          So they are lifted to the top and pinned there. Sticky under the
-          header, so they stay reachable however far down the page you are: the
-          whole point is that you never have to find them.
-
-          WHY THE ORIGINALS STAY. Each is contextual where it was — the bill
-          button next to the running total and the food budget, the journey
-          button next to the list of journeys — and that is the right place
-          when you are reading the page rather than acting on it. This bar is
-          for acting. It is not a third copy of anything: it is the same two
-          handlers.
-
-          ONLY WHILE IT IS LIVE. A trip you are on today, or one approved whose
-          first day has arrived — the cab to the airport is a real bill before
-          the first journey starts. Not on a finished trip, where the page is a
-          record and a pinned bar of actions would be noise, and never for a
-          desk reading somebody else's trip. */}
+          WHERE THEY USED TO BE. "Add a bill" sat mid-scroll inside "What you
+          spent on this trip" and "Add a journey" was a `btn sm` in the Route
+          card's header — both below the approval chain, the estimate and the
+          ledger. Those two keep their places, because each is contextual where
+          it is when you are reading rather than acting; these are the same two
+          handlers, given the prominence the act deserves. */}
       {live ? (
-        <div className="nowbar">
-          <div className="nb-what">
-            <span className="eyebrow">
-              {runningLeg ? 'Recording now' : 'You are on this trip'}
-            </span>
-            <b>
-              {runningLeg
-                ? `Journey ${runningLeg.n}: ${pname(runningLeg.from)} → ${pname(runningLeg.to)}`
-                : 'Add what you spend as you go'}
-            </b>
-          </div>
-          <div className="nb-do">
-            {/* The running journey first when there is one: ending it is more
-                urgent than starting anything else, and a journey that is not
-                ended cannot be claimed. */}
-            {runningLeg ? (
-              <button type="button" className="btn pri" onClick={() => onOpenLeg(runningLeg)}>
-                <TeIcon name="play" size="sm" />Open it
-              </button>
-            ) : null}
-            {canBill ? (
-              <button type="button" className={runningLeg ? 'btn' : 'btn pri'} onClick={() => onAddBill(t.id)}>
-                <TeIcon name="receipt" size="sm" />Add a bill
-              </button>
-            ) : null}
-            {mine ? (
-              <button type="button" className={runningLeg || canBill ? 'btn' : 'btn pri'} onClick={() => onAddLeg(detail)}>
-                <TeIcon name="route" size="sm" />Add a journey
-              </button>
-            ) : null}
-          </div>
-        </div>
+        <TeTripNow
+          tripId={t.id}
+          runningLeg={runningLeg}
+          canBill={canBill}
+          mine={mine}
+          nameOf={pname}
+          onAddBill={onAddBill}
+          onAddLeg={() => onAddLeg(detail)}
+          onOpenLeg={onOpenLeg}
+        />
       ) : null}
 
       {/* ── you did not plan this one; you are on it ── */}
