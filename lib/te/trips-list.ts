@@ -10,7 +10,7 @@
 // same state and belong under different headings.
 import type { TeClaim, TeExpense, TeTrip, TripDisplayStatus, TripScope, Uuid } from './types.ts'
 import type { Tone } from './format.ts'
-import { onTrip } from './co-traveller.ts'
+import { onTrip, type TripWho } from './co-traveller.ts'
 
 export type TripGroupId = 'now' | 'next' | 'claim' | 'done'
 
@@ -178,4 +178,39 @@ export function linesWaitingInTrips<L extends { tripId: Uuid | null; status: str
     }
   }
   return [...byTrip.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Stored trip statuses that can take a new expense line.
+ *
+ *  Deliberately keyed on `status` and not `display`: `display` folds ONGOING,
+ *  COMPLETED, MISSED and EXPIRED out of a single stored APPROVED, and the SQL
+ *  that will actually accept or refuse the move (185) reads `status`. Offering
+ *  a trip the server would then refuse is worse than not offering it.
+ */
+const TAKES_LINES = new Set(['APPROVED', 'CLAIMED'])
+
+/**
+ * The trips a loose bill can be moved into.
+ *
+ * WHY THIS IS NOT JUST "my trips". A bill cannot go into a plan nobody has
+ * approved yet — there is no policy to price it against — nor into one that was
+ * cancelled, rejected, or closed and settled. Those are the same conditions
+ * te_expense_move_trip enforces, repeated here only to decide what to put in
+ * the picker; SQL remains the thing that says no.
+ *
+ * Newest first: a bill somebody is filing late almost always belongs to the
+ * trip they have just come back from.
+ */
+export function tripsForLine<T extends Pick<TeTrip, 'id' | 'status' | 'start'> & TripWho>(
+  trips: T[],
+  me: Uuid,
+  o: { exclude?: Uuid | null } = {},
+): T[] {
+  return trips
+    .filter(t => TAKES_LINES.has(t.status))
+    // The bucket it is already in is not somewhere to move it to.
+    .filter(t => t.id !== o.exclude)
+    .filter(t => onTrip(t, me))
+    .slice()
+    .sort((a, b) => String(b.start ?? '').localeCompare(String(a.start ?? '')))
 }

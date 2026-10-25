@@ -172,7 +172,7 @@ export default function TeDrafts({ kind, title, reloadKey, onResume }: {
           </div>
         )}
       </div>
-      {error ? <p className="small warn">{error}</p> : null}
+      {error ? <p className="ferr"><TeIcon name="warn" size="sm" />{error}</p> : null}
       {notice ? (
         <div className="note">
           <TeIcon name="info" size="sm" />

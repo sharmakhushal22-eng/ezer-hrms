@@ -123,6 +123,10 @@ export function legAnswer(ctx: TeCtx, legId: Uuid, text: string): Promise<{ leg_
 export function expensePreview(ctx: TeCtx, input: ExpenseInput): Promise<ExpensePreview>
 export function expenseSave(ctx: TeCtx, input: ExpenseInput): Promise<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>
 export function expenseDiscard(ctx: TeCtx, expenseId: Uuid): Promise<{ expense_id: Uuid; status: 'DISCARDED' }>
+/** Move an unclaimed line into a trip, or out of every trip with tripId null.
+ *  `moved` is false when it was already in that bucket — asking for the bucket
+ *  a line is already in is a no-op, not an error. */
+export function expenseMoveTrip(ctx: TeCtx, expenseId: Uuid, tripId: Uuid | null): Promise<{ moved: boolean; expense_no: string; from_no?: string | null; trip_no: string | null }>
 
 // ── drafts ──────────────────────────────────────────────────────────────────
 // Unfinished work, stored verbatim and private to the person who wrote it.

@@ -516,6 +516,9 @@ export default function TeHome({ initialClaimId, onExit }: {
               // Screen 44: bills saved against a trip are claimed with that
               // trip, so the card that lists them goes to it.
               onOpenTrip={openTrip}
+              // A bill moved into a trip has left this bucket, so the snapshot
+              // this screen renders from is out of date the moment it happens.
+              onChanged={message => { setToast(message); reload() }}
             />
             </>
           ) : null}

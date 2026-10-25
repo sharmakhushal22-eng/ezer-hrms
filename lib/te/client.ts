@@ -305,6 +305,11 @@ export const te = {
   expensePreview: (input: ExpenseInput) => post<ExpensePreview>('expenses/preview', input),
   expenseSave: (input: ExpenseInput) => post<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>('expenses', input),
   expenseDiscard: (id: Uuid) => call<{ expense_id: Uuid; status: 'DISCARDED' }>('DELETE', `expenses/${id}`),
+  /** Move an unclaimed line into a trip's bucket. `null` moves it out of every
+   *  trip, which is how a bill filed against the wrong trip gets home. */
+  expenseMoveTrip: (id: Uuid, tripId: Uuid | null) =>
+    call<{ moved: boolean; expense_no: string; from_no?: string | null; trip_no: string | null }>(
+      'PATCH', `expenses/${id}`, { trip_id: tripId }),
 
   /**
    * Unfinished work, kept so a half-planned trip or a half-typed expense can be

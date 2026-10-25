@@ -463,6 +463,10 @@ export interface TeExpense {
   tripId: Uuid | null
   legId: Uuid | null
   journeyId: Uuid | null
+  /** The booking this line is the bill for, when the Travel Desk bought it.
+   *  Set since 185, so a trip's bucket can add a desk booking without counting
+   *  a mirrored one twice. */
+  bookingId: Uuid | null
   /** te_categories.code */
   cat: string
   date: IsoDate

@@ -32,6 +32,21 @@
 // is the local hop somebody made across the destination city, and reads
 // differently from the flight that got them there — so the row says so rather
 // than leaving the reader to infer it from the category.
+//
+// THREE KINDS OF MONEY, NOT ONE. A trip is paid for in three ways and this card
+// now shows all three, because a total that covers one of them is a total
+// nobody can act on:
+//
+//   bills       somebody paid and wants back
+//   bookings    the Travel Desk bought and the company paid for directly —
+//               these were missing entirely until 185 exposed the booking id
+//               needed to add them without double-counting the ones that
+//               already have a mirror bill
+//   the advance paid out before anybody travelled, which is not a cost at all
+//               but decides who owes whom at the end
+//
+// A booking nobody has made yet is shown and NOT added up: it is a request, and
+// counting it would say money had gone when it hasn't.
 import { useMemo } from 'react'
 import type { TeCategory, TeTripDetail as TripDetail } from '@/lib/te/types'
 import { ledgerRows, ledgerTotals } from '@/lib/te/trip-ledger'
@@ -66,11 +81,21 @@ export default function TeTripLedger({ detail, me, everyone, cats }: {
     return (id: string) => m.get(id) || 'Another traveller'
   }, [detail.employee, t.people])
 
+  const owner = detail.employee?.id
   const rows = useMemo(
-    () => ledgerRows({ expenses: detail.expenses ?? [], legs: detail.legs ?? [], me, everyone, nameOf, cats }),
-    [detail.expenses, detail.legs, me, everyone, nameOf, cats],
+    () => ledgerRows({
+      expenses: detail.expenses ?? [], legs: detail.legs ?? [], bookings: detail.bookings ?? [],
+      me, everyone, nameOf, cats, tripOwner: owner,
+    }),
+    [detail.expenses, detail.legs, detail.bookings, me, everyone, nameOf, cats, owner],
   )
-  const totals = useMemo(() => ledgerTotals(rows), [rows])
+  // The advance belongs to the trip's own traveller — the database allows one
+  // live advance per trip — so only they can have it netted against what they
+  // are owed. On a desk's screen it is shown, not netted.
+  const totals = useMemo(
+    () => ledgerTotals(rows, { advance: detail.advance, advanceMine: !!owner && owner === me }),
+    [rows, detail.advance, owner, me],
+  )
 
   if (!rows.length) {
     return (
@@ -100,25 +125,40 @@ export default function TeTripLedger({ detail, me, everyone, cats }: {
             <span>{rs(g.self + g.company)}</span>
           </div>
           {rows.filter(r => r.group === g.group).map(r => (
-            <div key={r.line.id} className="li">
+            <div key={r.kind === 'expense' ? r.line.id : `bk-${r.booking.id}`} className="li">
               <span className="ico"><TeIcon name={r.subTrip ? 'route' : r.group === 'Stay' ? 'home' : r.group === 'Travel' ? 'plane' : 'receipt'} size="sm" /></span>
               <div className="grow">
                 <div className="b">
-                  {r.line.merchant || r.catName}
+                  {r.kind === 'expense' ? (r.line.merchant || r.catName) : (r.booking.vendor || r.catName)}
                   {r.subTrip ? <span className="chip plain">Local sub-trip</span> : null}
+                  {/* Said on the row, not only in the total: a reader scanning
+                      the list must not read a request as a cost. */}
+                  {r.pending ? <span className="chip t-warn">Not booked yet</span> : null}
                 </div>
                 <div className="small muted">
-                  {r.line.no ? <span className="mono">{r.line.no}</span> : null}
-                  {r.line.date ? <> · {r.line.date}</> : null}
+                  {r.kind === 'expense' ? (
+                    <>
+                      {r.line.no ? <span className="mono">{r.line.no}</span> : null}
+                      {r.line.date ? <> · {r.line.date}</> : null}
+                    </>
+                  ) : (
+                    <>
+                      <span className="mono">{r.booking.no}</span>
+                      {r.booking.pnr ? <> · {r.booking.pnr}</> : null}
+                      <> · booked by the travel desk</>
+                    </>
+                  )}
                   {r.leg ? <> · journey {r.leg.n}</> : null}
                   {/* Named only where the reader is entitled to know. */}
                   {r.who && !r.mine ? <> · {r.who}</> : null}
-                  {r.line.pay === 'company' ? <> · paid by the company</> : null}
-                  {STATUS_WORD[r.line.status] ? <> · {STATUS_WORD[r.line.status]}</> : null}
+                  {r.pay === 'company' && !r.pending ? <> · paid by the company</> : null}
+                  {r.kind === 'expense' && STATUS_WORD[r.line.status] ? <> · {STATUS_WORD[r.line.status]}</> : null}
                 </div>
               </div>
-              {r.line.file ? <TeFileLink path={r.line.file.path} name={r.line.file.name} small /> : null}
-              <span className="amt">{rs(Number(r.line.claimed || r.line.bill || 0))}</span>
+              {r.kind === 'expense'
+                ? (r.line.file ? <TeFileLink path={r.line.file.path} name={r.line.file.name} small /> : null)
+                : (r.booking.ticket ? <TeFileLink path={r.booking.ticket} name={`${r.booking.no}-ticket`} small /> : null)}
+              <span className="amt">{rs(r.amount)}</span>
             </div>
           ))}
         </div>
@@ -134,7 +174,32 @@ export default function TeTripLedger({ detail, me, everyone, cats }: {
       <dl className="kv pad">
         {totals.self ? <><dt>{everyone ? 'Claimed by travellers' : 'Yours to claim'}</dt><dd>{rs(totals.self)}</dd></> : null}
         {totals.company ? <><dt>Paid by the company directly</dt><dd>{rs(totals.company)}</dd></> : null}
+        {/* Outside the total on purpose, and labelled so it reads that way. */}
+        {totals.pending ? <><dt>Asked for, not booked yet</dt><dd>{rs(totals.pending)}</dd></> : null}
+        {totals.advance ? <><dt>Advance already paid</dt><dd>{rs(totals.advance)}</dd></> : null}
+        {totals.advance && totals.outstanding !== totals.advance
+          ? <><dt>Advance still outstanding</dt><dd>{rs(totals.outstanding)}</dd></>
+          : null}
       </dl>
+
+      {/* WHO OWES WHOM, which is the question somebody actually came here with.
+          Only shown where it can be answered honestly: the advance is one
+          traveller's, so a desk reading another person's trip is shown the
+          parts and not a net that would mean nothing. */}
+      {totals.net !== null && (totals.mine || totals.outstanding) ? (
+        <div className={`flag ${totals.net < 0 ? 'warn' : 'ok'}`}>
+          <TeIcon name={totals.net < 0 ? 'alert' : 'check'} size="sm" />
+          <span>
+            {totals.net > 0 ? (
+              <>You are owed <span className="b">{rs(totals.net)}</span> on this trip, after the advance of {rs(totals.outstanding)} you are holding.</>
+            ) : totals.net < 0 ? (
+              <>You are holding <span className="b">{rs(-totals.net)}</span> more than you have claimed. That much of the advance comes back.</>
+            ) : (
+              <>Your claim and the advance you are holding cancel out. Nothing moves either way.</>
+            )}
+          </span>
+        </div>
+      ) : null}
     </div>
   )
 }

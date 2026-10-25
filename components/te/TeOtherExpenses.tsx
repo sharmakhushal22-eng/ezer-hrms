@@ -17,11 +17,11 @@ import type { ClaimPreview, Snapshot, TeExpense, TeFlag, TeTrip } from '@/lib/te
 import TeIcon from './TeIcon'
 import TeContactFields, { type ContactValue } from './TeContactFields'
 import { errorText, flagClass, plural, rs } from '@/lib/te/format'
-import { linesWaitingInTrips } from '@/lib/te/trips-list'
+import { linesWaitingInTrips, tripsForLine } from '@/lib/te/trips-list'
 import { claimDateOf, periodFor } from '@/lib/te/period'
 import { isCoTraveller } from '@/lib/te/co-traveller'
 
-export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted, onBack, onOpenTrip }: {
+export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted, onBack, onOpenTrip, onChanged }: {
   snap: Snapshot
   /** Set to claim one trip; left out for the standing "Other expenses" claim. */
   trip?: TeTrip
@@ -31,6 +31,10 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
   onBack?: () => void
   /** Open a trip whose bills are waiting in it (screen 44). */
   onOpenTrip?: (tripId: string) => void
+  /** Something changed on the server that this screen does not own — a line
+   *  moved into a trip, so it belongs to a different bucket now and the
+   *  snapshot has to be read again. */
+  onChanged?: (message: string) => void
 }) {
   // My own saved lines. Colleagues' lines are in the snapshot (other: true)
   // only so the server can check for duplicates; they are never mine to claim.
@@ -39,6 +43,11 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
     [snap, trip],
   )
   const catName = useMemo(() => new Map(snap.cfg.cats.map(c => [c.id, c.name])), [snap])
+  // Declared HERE, above every hook that reads it. It used to sit further down,
+  // which was fine until `movable` below listed it as a dependency: a const in
+  // its temporal dead zone throws on the first render rather than reading as
+  // undefined, so the whole screen would have gone white.
+  const tripId = trip?.id ?? null
   // Only on the standing monthly claim: on a trip's own claim these lines ARE
   // the list above.
   const waitingInTrips = useMemo(
@@ -64,9 +73,37 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
   const [contactField, setContactField] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ text: string; flags: TeFlag[] } | null>(null)
+  /** Which line is being moved into a trip, and what went wrong if it did.
+   *
+   *  MOVING IS SEPARATE FROM EDITING on purpose. Opening the form to change
+   *  which trip a bill belongs to would put the most consequential field on the
+   *  screen next to the merchant's name — and the form cannot do it anyway:
+   *  te_expense_save throws away any trip the browser sends, deliberately, so
+   *  that a form POST can never shift money between trips. */
+  const [moving, setMoving] = useState<string | null>(null)
+  const [moveBusy, setMoveBusy] = useState(false)
+  const [moveError, setMoveError] = useState('')
+  /** Trips this bill could go into. Only the ones the server would accept. */
+  const movable = useMemo(() => tripsForLine(snap.trips, snap.me, { exclude: tripId }), [snap.trips, snap.me, tripId])
+
+  async function moveTo(lineId: string, toTripId: string, toName: string) {
+    setMoveBusy(true); setMoveError('')
+    try {
+      const r = await te.expenseMoveTrip(lineId, toTripId)
+      setMoving(null)
+      // The trip number, not the name: the number is the thing the desks and
+      // Finance will see it under, and it is what the person should remember.
+      onChanged?.(r.moved
+        ? `${r.expense_no} moved into ${r.trip_no ?? toName}.`
+        : `${r.expense_no} was already there.`)
+    } catch (e) {
+      setMoveError(errorText(e))
+    } finally {
+      setMoveBusy(false)
+    }
+  }
   // The preview is asked again whenever the set of lines, or one of their amounts, changes.
   const signature = lines.map(x => `${x.id}:${x.claimed}:${x.reason}`).join('|')
-  const tripId = trip?.id ?? null
 
   useEffect(() => {
     let current = true
@@ -145,16 +182,70 @@ export default function TeOtherExpenses({ snap, trip, onAdd, onEdit, onSubmitted
             {lines.map(x => {
               const flags = review?.lines.find(l => l.id === x.id)?.flags ?? []
               return (
-                <div key={x.id} className="li click" role="button" tabIndex={0} onClick={() => onEdit(x)} onKeyDown={e => { if (e.key === 'Enter') onEdit(x) }}>
-                  <span className="ico"><TeIcon name="other" /></span>
-                  <div className="grow">
-                    <div className="b">{x.merchant || catName.get(x.cat) || x.cat}</div>
-                    <div className="small muted">{[catName.get(x.cat), x.desc, x.billNo].filter(Boolean).join(' · ')}</div>
-                    <div className="row tight">
-                      {flags.map(fl => <span key={fl.code} className={fl.block ? 'chip t-crit' : 'chip t-warn'}>{fl.code} {fl.title}</span>)}
+                <div key={x.id}>
+                  <div className="li click" role="button" tabIndex={0} onClick={() => onEdit(x)} onKeyDown={e => { if (e.key === 'Enter') onEdit(x) }}>
+                    <span className="ico"><TeIcon name="other" /></span>
+                    <div className="grow">
+                      <div className="b">{x.merchant || catName.get(x.cat) || x.cat}</div>
+                      <div className="small muted">{[catName.get(x.cat), x.desc, x.billNo].filter(Boolean).join(' · ')}</div>
+                      <div className="row tight">
+                        {flags.map(fl => <span key={fl.code} className={fl.block ? 'chip t-crit' : 'chip t-warn'}>{fl.code} {fl.title}</span>)}
+                      </div>
                     </div>
+                    <div className="amt"><b>{rs(x.claimed)}</b></div>
+                    {/* THE WHOLE ROW OPENS THE FORM, so this stops the click
+                        here: a tap meant for "move" must not also open the
+                        editor behind the picker it just opened. Offered only on
+                        the loose bucket, and only when there is somewhere to
+                        move it to — a button that opens an empty list is a
+                        button that wastes a tap. */}
+                    {!trip && movable.length ? (
+                      <button
+                        type="button"
+                        className="btn sm"
+                        onClick={e => { e.stopPropagation(); setMoveError(''); setMoving(moving === x.id ? null : x.id) }}
+                      >
+                        <TeIcon name="route" size="sm" />
+                        {moving === x.id ? 'Cancel' : 'Move to a trip'}
+                      </button>
+                    ) : null}
                   </div>
-                  <div className="amt"><b>{rs(x.claimed)}</b></div>
+                  {/* OUTSIDE the clickable row, not inside it. A list of buttons
+                      nested in something that is itself a button is unusable
+                      with a keyboard and ambiguous with a mouse. */}
+                  {moving === x.id ? (
+                    // NOT className="form". That is a two-column grid, and the
+                    // question would have sat beside the list of trips instead
+                    // of above it. A stack is what this wants.
+                    <div className="stack sm pad">
+                      <p className="small muted">
+                        Which trip does {x.merchant || catName.get(x.cat) || 'this bill'} belong to? It will be
+                        claimed with that trip instead of this month&rsquo;s other expenses.
+                      </p>
+                      {/* .ferr, not "small warn": the latter is not a class
+                          this stylesheet defines, so the refusal rendered in
+                          ordinary body text with nothing to say it had failed. */}
+                      {moveError ? <p className="ferr"><TeIcon name="warn" size="sm" />{moveError}</p> : null}
+                      <div className="stack sm">
+                        {movable.map(t => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            className="li click"
+                            disabled={moveBusy}
+                            onClick={() => void moveTo(x.id, t.id, t.no)}
+                          >
+                            <span className="ico"><TeIcon name="route" /></span>
+                            <span className="grow">
+                              <span className="b">{t.name}</span>
+                              <span className="small muted"><span className="mono">{t.no}</span>{t.start ? <> · {t.start}</> : null}</span>
+                            </span>
+                            <TeIcon name="go" size="sm" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )
             })}

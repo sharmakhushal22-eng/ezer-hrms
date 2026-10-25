@@ -348,7 +348,7 @@ export default function TePlanner({ snap, scope, origin, editing, resuming, onCl
           ? <span className="small muted"><TeIcon name="check" size="sm" />{savedAgo(autosave.savedAt, Date.now())}</span>
           : null}
         {autosave.state === 'error'
-          ? <span className="small warn"><TeIcon name="warn" size="sm" />Not saved yet — we will keep trying.</span>
+          ? <span className="ferr warn"><TeIcon name="warn" size="sm" />Not saved yet — we will keep trying.</span>
           : null}
       </div>
       <div className="row tight">

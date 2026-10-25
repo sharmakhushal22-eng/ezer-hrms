@@ -5,7 +5,7 @@
 // different headings, which is exactly the kind of rule that rots quietly.
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { groupTrips, myTrips, scopeCounts, tripChip, tripGroup, tripMoney, TRIP_GROUPS, linesWaitingInTrips } from '../trips-list.ts'
+import { groupTrips, myTrips, scopeCounts, tripChip, tripGroup, tripMoney, TRIP_GROUPS, linesWaitingInTrips, tripsForLine } from '../trips-list.ts'
 import type { TeTrip, TripDisplayStatus } from '../types.ts'
 
 const TODAY = '2026-11-16'
@@ -209,5 +209,45 @@ describe('lines waiting inside trips', () => {
   it('treats a missing amount as nothing rather than NaN', () => {
     const out = linesWaitingInTrips([{ tripId: 't1', status: 'UNCLAIMED' }], trips)
     assert.equal(out[0].total, 0)
+  })
+})
+
+describe('which trips a loose bill can be moved into', () => {
+  // The picker must not offer a trip the server will then refuse: these are the
+  // same conditions te_expense_move_trip (185) enforces.
+  const all = [
+    trip({ id: 'ok1', status: 'APPROVED', start: '2026-11-10', name: 'Mumbai' }),
+    trip({ id: 'ok2', status: 'CLAIMED', start: '2026-11-14', name: 'Pune' }),
+    trip({ id: 'draft', status: 'DRAFT', start: '2026-11-12' }),
+    trip({ id: 'waiting', status: 'PENDING_APPROVAL', start: '2026-11-12' }),
+    trip({ id: 'back', status: 'SENT_BACK', start: '2026-11-12' }),
+    trip({ id: 'closed', status: 'CLOSED', start: '2026-11-12' }),
+    trip({ id: 'gone', status: 'CANCELLED', start: '2026-11-12' }),
+    trip({ id: 'no', status: 'REJECTED', start: '2026-11-12' }),
+  ]
+
+  it('offers only trips that can actually take a line', () => {
+    assert.deepEqual(tripsForLine(all, 'me').map(t => t.id), ['ok2', 'ok1'])
+  })
+
+  it('puts the most recent first, because a late bill is usually the last trip', () => {
+    assert.equal(tripsForLine(all, 'me')[0].id, 'ok2')
+  })
+
+  it('leaves out the trip the line is already in', () => {
+    assert.deepEqual(tripsForLine(all, 'me', { exclude: 'ok2' }).map(t => t.id), ['ok1'])
+  })
+
+  it('offers a trip you were taken on, not one you have nothing to do with', () => {
+    const mates = [
+      trip({ id: 'mine', status: 'APPROVED', start: '2026-11-10' }),
+      trip({ id: 'taken', status: 'APPROVED', start: '2026-11-11', emp: 'someone', co: ['me'] }),
+      trip({ id: 'theirs', status: 'APPROVED', start: '2026-11-12', emp: 'someone', co: [] }),
+    ]
+    assert.deepEqual(tripsForLine(mates, 'me').map(t => t.id), ['taken', 'mine'])
+  })
+
+  it('an employee with no eligible trips gets an empty list, not a crash', () => {
+    assert.deepEqual(tripsForLine([], 'me'), [])
   })
 })
