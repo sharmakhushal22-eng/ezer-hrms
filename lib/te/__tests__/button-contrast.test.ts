@@ -252,3 +252,42 @@ describe('the label inside the button is readable too', () => {
     }
   })
 })
+
+describe('the trip number is a legible, obvious link', () => {
+  // It is the trip's identity and the way into it, sitting in a line of grey
+  // secondary text. A blue word among grey words is a weak signal on its own,
+  // so it is underlined at rest — and it has to stay readable at 12.5px.
+  for (const dark of [false, true]) {
+    const theme = dark ? 'dark' : 'light'
+    const card = ['te', 'card', 'ontrip']
+
+    it(`reads AAA on the card — ${theme}`, () => {
+      const bg = paint(resolve('background', card) ?? 'var(--ez-surface)', dark)
+      const fg = resolve('color', [...card, 'tripno'])
+      assert.ok(fg, '.tripno should set a colour')
+      const r = contrast(paint(fg!, dark), bg)
+      assert.ok(r >= AAA, `the trip number is ${r.toFixed(2)} on ${bg} in ${theme}`)
+    })
+
+    it(`hover does not make it harder to read — ${theme}`, () => {
+      // A hover that drops contrast punishes somebody for aiming at it.
+      const bg = paint(resolve('background', card) ?? 'var(--ez-surface)', dark)
+      const rest = contrast(paint(resolve('color', [...card, 'tripno'])!, dark), bg)
+      const over = contrast(paint(resolve('color', [...card, 'tripno'], 'hover')!, dark), bg)
+      assert.ok(over >= rest, `hover ${over.toFixed(2)} should be at least rest ${rest.toFixed(2)}`)
+      assert.ok(over >= AAA)
+    })
+  }
+
+  it('is underlined without needing a hover', () => {
+    const d = resolve('text-decoration', ['te', 'card', 'ontrip', 'tripno'])
+    assert.match(d ?? '', /underline/, 'colour alone is not an affordance')
+  })
+
+  it('every .link in the module gained a hover affordance too', () => {
+    // .link had no :hover rule at all — nothing but the colour said it was
+    // clickable, on every screen that uses one.
+    const d = resolve('text-decoration', ['te', 'link'], 'hover')
+    assert.match(d ?? '', /underline/)
+  })
+})

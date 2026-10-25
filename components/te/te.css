@@ -204,6 +204,26 @@
    two classes, so with .kinds declared later it won on source order and kept
    its four columns. Measured in the browser: the pair filled 578px of a 1172px
    row. Naming both classes outranks it instead of racing it. */
+/* THE TRIP NUMBER IS THE TRIP'S IDENTITY, so it is also the way into it —
+   the same thing the desk screens already do with `link small mono`.
+
+   Underlined at rest rather than on hover only: this sits in a line of grey
+   secondary text, and a blue word among grey words is a weak signal on its
+   own. The underline is what says "this is a link" before anybody hovers.
+
+   A TINTED PILL WAS THE FIRST IDEA AND MEASURED WORSE. brand on --ez-brand-tint
+   is 4.75 in light — lower than brand on the plain card, because the tint
+   lifts the background toward the text. Deepening the blue on the card's own
+   surface instead gives 7.08, and a third filled blue thing on a card that
+   already has two filled blue buttons would have been noise anyway. */
+.te .tripno{background:none;border:0;padding:0;cursor:pointer;
+  font-family:var(--te-f-mono);font-size:12.5px;font-weight:700;letter-spacing:.01em;
+  color:color-mix(in srgb,var(--ez-brand) 76%,var(--ez-ink));
+  text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px;
+  text-decoration-color:color-mix(in srgb,var(--ez-brand) 40%,transparent)}
+/* Hover DEEPENS rather than lightening: a hover that reduces contrast is a
+   hover that punishes the person for aiming at it. 7.08 -> 8.34. */
+.te .tripno:hover{color:color-mix(in srgb,var(--ez-brand) 64%,var(--ez-ink));text-decoration-color:currentColor}
 .te .kinds.triphero{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:16px}
 /* Two 172px tiles side by side on a phone would be a pair of slivers; one
    column each is the whole point of them being big. */
@@ -363,6 +383,10 @@
 .te .btn.onhero{background:rgba(255,255,255,.95);border-color:transparent;color:#1E3A8A}
 .te .btn.onhero.alt{background:var(--te-hero-glass);color:var(--ez-on-dark);border-color:rgba(255,255,255,.3)}
 .te .link{background:none;border:0;padding:0;color:var(--ez-brand);cursor:pointer;font-weight:600}
+/* It had no hover state at all, so nothing but the colour said these were
+   clickable — and colour alone is never enough on its own. One line, and every
+   link in the module gains the affordance. */
+.te .link:hover{text-decoration:underline;text-underline-offset:3px}
 .te .fld{display:flex;flex-direction:column;gap:5px;min-width:0}
 .te .fld>span{font-size:12px;color:var(--ez-ink-soft);font-weight:600}
 .te .fld small{color:var(--ez-muted);font-size:11.5px}

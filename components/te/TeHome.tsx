@@ -433,7 +433,17 @@ export default function TeHome({ initialClaimId, onExit }: {
                       <div className="eyebrow">{onTripUnderWay ? 'You are on a trip' : 'Back from a trip'}</div>
                       <b>{onTrip.name || onTrip.no}</b>
                       <div className="small muted">
-                        <span className="mono">{onTrip.no}</span>
+                        {/* The number IS the trip, so it opens it. Same act as
+                            "Open the trip" below, reached from the thing people
+                            actually recognise the trip by. */}
+                        <button
+                          type="button"
+                          className="tripno"
+                          onClick={() => setView({ name: 'trip', id: onTrip.id })}
+                          title={`Open ${onTrip.no} — the journeys, the bills, the stay and what it has cost so far`}
+                        >
+                          {onTrip.no}
+                        </button>
                         {onTrip.to ? <> · {onTrip.to}</> : null}
                       </div>
                     </div>
