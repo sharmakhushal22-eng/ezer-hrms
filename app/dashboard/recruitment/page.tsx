@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { maskPan, maskAadhaar } from '@/lib/ids/mask'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
@@ -3992,8 +3993,8 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   </select>
                 </div>
                 <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Nationality</label><input className="rx-input" value={cForm.nationality} onChange={e=>CF('nationality',e.target.value)} /></div>
-                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Aadhaar number</label><input className="rx-input" inputMode="numeric" maxLength={14} value={cForm.aadhaar} onChange={e=>CF('aadhaar',e.target.value.replace(/[^\d ]/g,''))} placeholder="12 digits, checked against the blacklist" /></div>
-                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>PAN</label><input className="rx-input" maxLength={10} value={cForm.pan} onChange={e=>CF('pan',e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Aadhaar number</label><input className="rx-input" inputMode="numeric" maxLength={14} value={cForm.aadhaar} onChange={e=>CF('aadhaar',maskAadhaar(e.target.value, true))} placeholder="12 digits, checked against the blacklist" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>PAN</label><input className="rx-input" maxLength={10} value={cForm.pan} onChange={e=>CF('pan',maskPan(e.target.value))} placeholder="ABCDE1234F" /></div>
                 <div style={{ gridColumn:'span 2' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input className="rx-input" value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
               </div>
 
@@ -5855,8 +5856,8 @@ function OfferReplyModal({ reply, onClose, onDone }: { reply: OfferReply; onClos
           {blacklist === true && (<>
             <div style={{ fontSize:12.5, color:C.critical, background:C.criticalTint, borderRadius:R.md, padding:'9px 12px', marginBottom:12 }}>Their Aadhaar and PAN will be blacklisted (Add Candidate will refuse them from now on) and the candidate leaves the pipeline.</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:10, marginBottom:10 }}>
-              <div><label className="rx-label" style={{ display:'block', marginBottom:5 }}>Aadhaar number</label><input className="rx-input" inputMode="numeric" maxLength={14} value={aadhaar} onChange={e => setAadhaar(e.target.value.replace(/[^\d ]/g, ''))} placeholder="12 digits" /></div>
-              <div><label className="rx-label" style={{ display:'block', marginBottom:5 }}>PAN</label><input className="rx-input" maxLength={10} value={pan} onChange={e => setPan(e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:5 }}>Aadhaar number</label><input className="rx-input" inputMode="numeric" maxLength={14} value={aadhaar} onChange={e => setAadhaar(maskAadhaar(e.target.value, true))} placeholder="12 digits" /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:5 }}>PAN</label><input className="rx-input" maxLength={10} value={pan} onChange={e => setPan(maskPan(e.target.value))} placeholder="ABCDE1234F" /></div>
             </div>
             {idDocs.length > 0 && (
               <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>

@@ -6,6 +6,7 @@
 // progress bar at the top. Hover, focus and the responsive collapse live in onboarding.css.
 'use client'
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { maskPan, maskAadhaar, maskMobile, maskIntlPhone, maskUan } from '@/lib/ids/mask'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import {
@@ -790,7 +791,7 @@ function ESignPhase({ token, onBack, onSubmit, submitting }: {
           <>
             <label style={lbl}>Aadhaar Number</label>
             <input className="ezo-code" style={inp} value={aadhaar} maxLength={14} inputMode="numeric"
-              onChange={e => setAadhaar(e.target.value)} placeholder="XXXX XXXX XXXX" />
+              onChange={e => setAadhaar(maskAadhaar(e.target.value, true))} placeholder="XXXX XXXX XXXX" />
             <div style={{ fontSize: 12, color: TK.faint, marginTop: 8 }}>An OTP goes to the mobile number linked to your Aadhaar. We only keep the last four digits.</div>
             <button className="ezo-btn" onClick={sendOtp} style={{ ...S.btnP, marginTop: 14, width: '100%' }}>Send OTP</button>
           </>
@@ -1182,6 +1183,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   const track: HiringTrack = trackOf(c.hiring_track)
   const flags = trackFlags(track)
   const isOverseas = track === 'OVERSEAS'
+  // Phones: a 10-digit Indian mobile, or (overseas) +country code and up to 15 digits.
+  const phoneMask = (v: string) => isOverseas ? maskIntlPhone(v) : maskMobile(v)
   const esicApplicable = flags.indianStatutory && (c.esic_applicable === true || (grossMonthly > 0 && grossMonthly <= 21000))
   // Foreign employee — citizenship country other than India triggers extra KYC + docs.
   // A foreign national working in India: the track says so, or the citizenship country does.
@@ -1193,7 +1196,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   const onDocUploaded = (code: string, data: any) => {
     setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: data.file_name || 'uploaded' } }))
     if (code === 'PAN' && data.ai_extracted?.pan_number) {
-      setStatutory(s => ({ ...s, pan_number: data.ai_extracted.pan_number, acc_holder: data.ai_extracted.name || s.acc_holder }))
+      setStatutory(s => ({ ...s, pan_number: maskPan(data.ai_extracted.pan_number), acc_holder: data.ai_extracted.name || s.acc_holder }))
     }
     showToast(`${DOC_LIST(true, false, true).find(d => d.code === code)?.name || code} uploaded`)
   }
@@ -1595,8 +1598,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {step === 5 && (
           <div style={S.card}>
             <div className="ezo-g2">
-              <Fld label="Mobile Number *"><input style={S.inp(!contact.mobile)} value={contact.mobile} onChange={e => setContact(c => ({ ...c, mobile: e.target.value }))} /></Fld>
-              <Fld label="Alternate Mobile"><input style={S.inp()} value={contact.alt_mobile} onChange={e => setContact(c => ({ ...c, alt_mobile: e.target.value }))} /></Fld>
+              <Fld label="Mobile Number *"><input style={S.inp(!contact.mobile)} value={contact.mobile} inputMode="tel" maxLength={isOverseas ? 16 : 10} onChange={e => setContact(c => ({ ...c, mobile: phoneMask(e.target.value) }))} /></Fld>
+              <Fld label="Alternate Mobile"><input style={S.inp()} value={contact.alt_mobile} inputMode="tel" maxLength={isOverseas ? 16 : 10} onChange={e => setContact(c => ({ ...c, alt_mobile: phoneMask(e.target.value) }))} /></Fld>
               <div style={{ gridColumn: 'span 2' }}><Fld label="Personal Email *"><input type="email" style={S.inp(!contact.personal_email)} value={contact.personal_email} onChange={e => setContact(c => ({ ...c, personal_email: e.target.value }))} /></Fld></div>
             </div>
 
@@ -1651,7 +1654,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             {aiPan && <Note tone="ok">We filled your PAN in from your PAN card. Please check it.</Note>}
             <div className="ezo-g2">
               <Fld label="PAN Number *" hint="Auto-extracted from PAN card">
-                <input style={{ ...S.inp(!statutory.pan_number), background: TK.positiveTint, border: `1px solid ${TK.positiveEdge}` }} value={statutory.pan_number || aiPan} onChange={e => setStatutory(s => ({ ...s, pan_number: e.target.value.toUpperCase() }))} maxLength={10} />
+                <input style={{ ...S.inp(!statutory.pan_number), background: TK.positiveTint, border: `1px solid ${TK.positiveEdge}` }} value={statutory.pan_number || aiPan} onChange={e => setStatutory(s => ({ ...s, pan_number: maskPan(e.target.value) }))} maxLength={10} placeholder="ABCDE1234F" />
               </Fld>
             </div>
 
@@ -1668,7 +1671,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             {statutory.has_uan && (
               <div className="ezo-g2">
                 <Fld label="UAN Number" hint="12-digit Universal Account Number">
-                  <input style={S.inp()} value={statutory.uan_number} onChange={e => setStatutory(s => ({ ...s, uan_number: e.target.value }))} maxLength={12} />
+                  <input style={S.inp()} value={statutory.uan_number} inputMode="numeric" onChange={e => setStatutory(s => ({ ...s, uan_number: maskUan(e.target.value) }))} maxLength={12} />
                 </Fld>
                 <Fld label="Previous PF Member ID">
                   <input style={S.inp()} value={statutory.prev_pf_id} onChange={e => setStatutory(s => ({ ...s, prev_pf_id: e.target.value }))} placeholder="e.g. MH/BN/12345" />
@@ -1832,7 +1835,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                   <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Sibling</option><option>Child</option><option>Other</option>
                 </select>
               </Fld>
-              <Fld label="Mobile *"><input style={S.inp(!emergency.emrg1_mobile)} value={emergency.emrg1_mobile} onChange={e => setEmergency(p => ({ ...p, emrg1_mobile: e.target.value }))} /></Fld>
+              <Fld label="Mobile *"><input style={S.inp(!emergency.emrg1_mobile)} value={emergency.emrg1_mobile} inputMode="tel" maxLength={isOverseas ? 16 : 10} onChange={e => setEmergency(p => ({ ...p, emrg1_mobile: phoneMask(e.target.value) }))} /></Fld>
             </div>
 
             <Sec>Second emergency contact <span style={{ color: TK.faint, fontWeight: 500 }}>(optional)</span></Sec>
@@ -1843,7 +1846,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                   <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Sibling</option><option>Child</option><option>Other</option>
                 </select>
               </Fld>
-              <Fld label="Mobile"><input style={S.inp()} value={emergency.emrg2_mobile} onChange={e => setEmergency(p => ({ ...p, emrg2_mobile: e.target.value }))} /></Fld>
+              <Fld label="Mobile"><input style={S.inp()} value={emergency.emrg2_mobile} inputMode="tel" maxLength={isOverseas ? 16 : 10} onChange={e => setEmergency(p => ({ ...p, emrg2_mobile: phoneMask(e.target.value) }))} /></Fld>
             </div>
 
             <Sec icon={<IconBuilding size={15} />}>Previous employment</Sec>

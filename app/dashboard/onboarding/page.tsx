@@ -3,6 +3,7 @@
 // 5 tabs: Overview | All Candidates | Pending Actions | AI Insights | Compliance
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { maskMobile } from '@/lib/ids/mask'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { canSeeScreen } from '@/lib/rms/resolve'
@@ -1498,7 +1499,7 @@ export default function OnboardingDashboard() {
               </div>
               {[
                 {label:'Full Name *',       key:'full_name',      type:'text', placeholder:'As per Aadhaar'},
-                {label:'Mobile *',          key:'mobile',         type:'tel',  placeholder:'+91 XXXXXXXXXX'},
+                {label:'Mobile *',          key:'mobile',         type:'tel',  placeholder:'10-digit mobile'},
                 {label:'Email *',           key:'email',          type:'email',placeholder:'personal@email.com'},
                 {label:'Designation *',     key:'designation',    type:'text', placeholder:'e.g. Software Engineer'},
                 {label:'Date of Joining *', key:'date_of_joining',type:'date', placeholder:''},
@@ -1507,7 +1508,7 @@ export default function OnboardingDashboard() {
               ].map(({label,key,type,placeholder})=>(
                 <div key={key} style={{marginBottom:8}}>
                   <div style={labelCss}>{label}</div>
-                  <input type={type} placeholder={placeholder} value={(newForm as any)[key]} onChange={e=>setNewForm(f=>({...f,[key]:e.target.value}))}
+                  <input type={type} placeholder={placeholder} value={(newForm as any)[key]} onChange={e=>setNewForm(f=>({...f,[key]: key==='mobile' ? maskMobile(e.target.value) : e.target.value}))}
                     style={{...inputCss,width:'100%'}}/>
                 </div>
               ))}
@@ -1581,7 +1582,7 @@ export default function OnboardingDashboard() {
             <input type="email" value={editEmail} onChange={e=>setEditEmail(e.target.value)} placeholder="candidate@email.com"
               style={{...inputCss,width:'100%',marginBottom:12}}/>
             <div style={labelCss}>Mobile</div>
-            <input type="tel" value={editMobile} onChange={e=>setEditMobile(e.target.value)} placeholder="+91 XXXXXXXXXX"
+            <input type="tel" inputMode="numeric" maxLength={10} value={editMobile} onChange={e=>setEditMobile(maskMobile(e.target.value))} placeholder="10-digit mobile"
               style={{...inputCss,width:'100%',marginBottom:12}}/>
             <div style={labelCss}>Notice period (days)</div>
             <input type="number" min={0} value={editTrack.notice_period_days} onChange={e=>setEditTrack(t=>({...t,notice_period_days:e.target.value}))} placeholder="blank = from the offer, else company default"
