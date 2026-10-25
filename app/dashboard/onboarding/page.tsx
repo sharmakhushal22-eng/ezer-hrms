@@ -15,7 +15,7 @@ import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import {
-  C as TK, R, E, Z, IconChevron, IconMail, IconPolicies, IconCompliance, IconAlert, IconUser, IconCheck,
+  C as TK, R, E, IconChevron, IconMail, IconPolicies, IconCompliance, IconAlert, IconUser, IconCheck,
   IconAi, IconLetters, IconClock, IconHome, IconEmployees, IconCalendar, IconPlus,
 } from '@/lib/ui'
 import { ApprovalsCell, type Readiness } from '@/components/onboarding/ApprovalTrail'
@@ -1030,9 +1030,7 @@ export default function OnboardingDashboard() {
                 <th style={th} title="Hover or click the approvals line to see who approved and who has it now">Statutory · approvals</th>
                 <th style={th}>BGV</th>
                 <th style={th}>Risk</th>
-                {/* Pinned right: with every column kept the table can be wider than a laptop,
-                    and the actions are the one thing a row must never scroll out of reach. */}
-                <th style={{...th,paddingRight:14,paddingLeft:12,right:0,zIndex:Z.sticky+1,boxShadow:`inset 1px 0 0 ${TK.line}`}}>Actions</th>
+                <th style={{...th,paddingRight:14}}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1119,7 +1117,7 @@ export default function OnboardingDashboard() {
                     </td>
                     <td style={td}><span style={{fontSize:12,color:TK.faint,whiteSpace:'nowrap'}}>Not started</span></td>
                     <td style={{...td,whiteSpace:'nowrap'}}>{done ? <span style={{fontSize:12,color:TK.faint}}>-</span> : <RiskBadge risk={c.ai_risk} reason={c.ai_risk_reason} short/>}</td>
-                    <td style={{...td,paddingRight:14,paddingLeft:12,position:'sticky',right:0,zIndex:Z.raised,background:TK.surface,boxShadow:`inset 1px 0 0 ${TK.line}`}}>
+                    <td style={{...td,paddingRight:14}}>
                       <RowActions actions={acts}/>
                     </td>
                   </tr>
