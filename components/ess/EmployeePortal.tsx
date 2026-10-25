@@ -3780,6 +3780,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   }, [])
   useEffect(() => { setLoading(true); loadEmployeeDetail(employeeId).then(e => { setEmp(e); setLoading(false) }) }, [employeeId])
   const reload = useCallback(() => loadEmployeeDetail(employeeId).then(setEmp), [employeeId])
+  // My Details (Profile360) fires this after any save — a new photo, phone or
+  // address — so the header avatar and anything else read from `emp` follows
+  // without a page reload.
+  useEffect(() => {
+    const on = () => { void reload() }
+    window.addEventListener('ez:profile-updated', on)
+    return () => window.removeEventListener('ez:profile-updated', on)
+  }, [reload])
 
   // Unread count for the bell. Refreshed on mount and whenever the open panel
   // marks something read, so the badge never disagrees with the list behind it.

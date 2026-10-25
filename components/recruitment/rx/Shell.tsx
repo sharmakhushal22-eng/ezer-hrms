@@ -11,16 +11,24 @@ import type { IconName } from './logic/types';
  * page.tsx does today. Switching tabs calls your existing setter.
  */
 
-export function RecruitmentHeader({ title, subtitle, help, actions, crumb = 'Recruitment & ATS' }: {
+/**
+ * A compact page intro: title with its help pill on one line, the subtitle
+ * under it, actions on the right. It used to be a tall tinted hero band with a
+ * dot pattern and a "Recruitment & ATS" crumb, which pushed every screen's real
+ * content a third of the way down the page and repeated what the stage strip
+ * already says. `crumb` is still accepted so no caller breaks; it is not shown.
+ */
+export function RecruitmentHeader({ title, subtitle, help, actions }: {
   title: string; subtitle?: React.ReactNode; help?: React.ReactNode; actions?: React.ReactNode; crumb?: string;
 }) {
   return (
     <header className="rx-head">
-      <div>
-        <div className="rx-crumb"><Icon name="brief" /><span>{crumb}</span></div>
-        <h1 className="rx-title">{title}</h1>
+      <div className="rx-head-main">
+        <div className="rx-head-row">
+          <h1 className="rx-title">{title}</h1>
+          {help}
+        </div>
         {subtitle && <p className="rx-sub">{subtitle}</p>}
-        {help && <div style={{ marginTop: 12 }}>{help}</div>}
       </div>
       {actions && <div className="rx-head-act">{actions}</div>}
     </header>
@@ -110,20 +118,81 @@ export function TabRail({ tabs, active, onSelect }: { tabs: RailTab[]; active: s
     return () => { ro?.disconnect(); rail.removeEventListener('transitionend', onEnd); };
   }, [place]);
 
-  // docked state
+  // Too wide for the room it has? Inside ESS the sidebar takes ~256px, so a 1180px window leaves
+  // the band ~920px and the 1100px media query never fires: the band overflowed and pushed the
+  // whole page sideways. Measure the rail itself. Once it overflows it switches to the compact,
+  // sideways-scrolling band (.is-tight); it switches back only when the width it needed returns,
+  // so the compact layout fitting does not flip it straight back (no resize loop).
+  const [tight, setTight] = React.useState(false);
+  const needRef = React.useRef(0);
+  React.useEffect(() => {
+    const rail = railRef.current; if (!rail) return;
+    const check = () => {
+      const w = rail.clientWidth;
+      if (!rail.classList.contains('is-tight')) {
+        if (rail.scrollWidth > w + 1) { needRef.current = rail.scrollWidth; setTight(true); }
+      } else if (needRef.current && w >= needRef.current) setTight(false);
+    };
+    check();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null;
+    ro?.observe(rail);
+    return () => ro?.disconnect();
+  }, []);
+
+  // Dock BELOW the host app's own sticky bar, not on top of it.
+  //
+  // The rail is `position:sticky; top:0`. Inside ESS the portal's top bar (the
+  // one carrying the MANAGE menus) is ALSO sticky at top:0, so on scroll both
+  // pinned to the same line: the rail slid under the bar and its tab row — the
+  // translucent band with the "35" MRF count — sat across the menu row. At
+  // /dashboard there is no such bar and the offset stays 0.
+  //
+  // Found by walking up from the rail and measuring any earlier sibling of an
+  // ancestor that is sticky/fixed at top 0 AND overlaps the rail horizontally
+  // (the ESS sidebar is sticky too, but beside the rail, not above it). Kept in
+  // a CSS variable so the stylesheet owns the rule, and re-measured when that
+  // bar changes height (it wraps on narrow screens).
+  const [dockTop, setDockTop] = React.useState(0);
+  React.useEffect(() => {
+    const rail = railRef.current; if (!rail || typeof window === 'undefined') return;
+    const bars: HTMLElement[] = [];
+    for (let el = rail.parentElement; el && el !== document.body; el = el.parentElement) {
+      for (let sib = el.previousElementSibling as HTMLElement | null; sib; sib = sib.previousElementSibling as HTMLElement | null) {
+        const cs = getComputedStyle(sib);
+        if ((cs.position === 'sticky' || cs.position === 'fixed') && parseFloat(cs.top) === 0) bars.push(sib);
+      }
+    }
+    const measure = () => {
+      const rr = rail.getBoundingClientRect();
+      let off = 0;
+      for (const b of bars) {
+        const r = b.getBoundingClientRect();
+        const overlaps = r.right > rr.left + 1 && r.left < rr.right - 1;
+        if (overlaps && r.height < window.innerHeight * 0.5) off = Math.max(off, Math.round(r.height));
+      }
+      setDockTop(off);
+    };
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    bars.forEach((b) => ro?.observe(b));
+    window.addEventListener('resize', measure);
+    return () => { ro?.disconnect(); window.removeEventListener('resize', measure); };
+  }, []);
+
+  // docked state — the sentinel counts as "gone" once it passes under the host bar
   React.useEffect(() => {
     const s = sentinelRef.current; if (!s || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting));
+    const io = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting), { rootMargin: `-${dockTop}px 0px 0px 0px` });
     io.observe(s);
     return () => io.disconnect();
-  }, []);
+  }, [dockTop]);
 
   return (
     <>
       <div className="rx-rail-sentinel" ref={sentinelRef} aria-hidden="true" />
       <nav ref={railRef} aria-label="Recruitment sections"
-        className={['rx-rail', ready && 'has-ind', stuck && 'is-stuck'].filter(Boolean).join(' ')}
-        style={{ gridTemplateColumns: present.map((g) => `minmax(max-content, ${tabs.filter((t) => t.group === g).length}fr)`).join(' ') }}>
+        className={['rx-rail', ready && 'has-ind', stuck && 'is-stuck', tight && 'is-tight'].filter(Boolean).join(' ')}
+        style={{ gridTemplateColumns: present.map((g) => `minmax(max-content, ${tabs.filter((t) => t.group === g).length}fr)`).join(' '), ['--rx-dock-top' as string]: `${dockTop}px` }}>
         <span className="rx-ind" ref={indRef} aria-hidden="true" />
         {present.map((g, i) => (
           <div className={g === activeGroup ? 'rx-grp on' : 'rx-grp'} key={g}>

@@ -14,12 +14,16 @@
 //
 // Everything past Bank — Documents, Salary, Onboarding, HR Actions, History — stays in
 // the master screen. Those are HR's tools for working ON somebody, not a view of them.
+//
+// Layout: each group is a card with a plain heading, fields sit in a responsive grid
+// with the label above the value, and a group with nothing in it says so rather than
+// printing a column of dashes.
 import type React from 'react'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import EmployeeOrgFlow from '@/components/rms/EmployeeOrgFlow'
 import HRActionPanel from '@/components/employees/HRActionPanel'
-import { C, tone } from '@/lib/ui'
+import { C, F, W, S, R, E, M, tone, numeric, eyebrow, inputStyle, Badge, type Tone } from '@/lib/ui'
 
 export const P = {
   navy: C.ink, purple: C.brand, purpleDark: C.brandDeep,
@@ -29,46 +33,173 @@ export const P = {
   red: C.critical, redBg: tone('critical').bg, amber: C.warning, amberBg: tone('warning').bg,
 }
 
-export const fmt = (v: any) => (!v || v === '' ? '-' : String(v))
-export const fmtDate = (v: string) => {
+/** Blank is null, undefined or ''. Zero and false are values. */
+export const isBlank = (v: any) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '')
+export const fmt = (v: any) => isBlank(v) ? '-' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)
+/** "01 Jan 2010". Four-digit years: "01 Jan 10" cannot be told apart from 1910 or a
+ *  day-month pair at a glance, and a date of birth is exactly where that matters. */
+export const fmtDate = (v: string | null | undefined) => {
   if (!v) return '-'
   const d = new Date(v)
-  return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, ' ')
+  return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+/** "3y 4m" from a joining date, or '—'. */
+export const tenureOf = (v: string | null | undefined) => {
+  if (!v) return '-'
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return '-'
+  const now = new Date()
+  let m = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth())
+  if (now.getDate() < d.getDate()) m -= 1
+  if (m < 0) return '-'
+  const y = Math.floor(m / 12), r = m % 12
+  return y ? `${y}y ${r}m` : `${r}m`
 }
 
-const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', border: `1px solid ${P.border}`, borderRadius: 7, fontSize: 13, fontFamily: 'inherit', background: P.card, color: P.text, outline: 'none', boxSizing: 'border-box' }
-const sel: React.CSSProperties = { ...inp }
+// ── shared skins ─────────────────────────────────────────────────────────
+const FIELD_H = 36
+const labelStyle: React.CSSProperties = {
+  fontSize: F.tiny, fontWeight: W.medium, color: C.muted, marginBottom: 5, lineHeight: 1.3,
+}
+const ctl: React.CSSProperties = { ...inputStyle(), height: FIELD_H, fontSize: F.small }
+/** inputStyle() sets outline:none, which also removes the global focus ring, so focus
+ *  is drawn here instead. Mutating the element's own style keeps this stateless. */
+export const focusOn = (e: React.FocusEvent<HTMLElement>) => {
+  e.currentTarget.style.borderColor = C.brand
+  e.currentTarget.style.boxShadow = `0 0 0 3px ${C.brandTint}`
+}
+export const focusOff = (e: React.FocusEvent<HTMLElement>) => {
+  e.currentTarget.style.borderColor = C.lineStrong
+  e.currentTarget.style.boxShadow = 'none'
+}
 
-export function Field({ label, value, editMode, fieldKey, editForm, setEditForm, type, opts }: any) {
+/** One labelled value. In edit mode the value becomes a control of the same height, so
+ *  switching modes does not reflow the grid. `readOnly` keeps a field static in edit
+ *  mode — drawn as a disabled control so it is plainly not forgotten, just not editable. */
+export function Field({ label, value, editMode, fieldKey, editForm, setEditForm, type, opts, readOnly, mono, wide, reserve: reserveProp }: {
+  label: string; value?: React.ReactNode; editMode?: boolean; fieldKey?: string
+  editForm?: Record<string, any>; setEditForm?: (fn: any) => void
+  type?: string; opts?: string[]; readOnly?: boolean; mono?: boolean; wide?: boolean
+  /** Reserve the control height in view mode. Defaults to "this record can be edited". */
+  reserve?: boolean
+}) {
+  const editable = !!(editMode && setEditForm && fieldKey && !readOnly)
+  // Reserve the control height wherever the record CAN be edited, so view and edit
+  // modes line up. The read-only ESS rendering stays compact.
+  const reserve = reserveProp ?? !!setEditForm
+  const set = (v: string) => setEditForm?.((p: any) => ({ ...p, [fieldKey as string]: v }))
+  const empty = value === undefined || value === null || value === '' || value === '-'
+  const raw = editForm?.[fieldKey as string]
+
+  let body: React.ReactNode
+  if (editable && opts) {
+    body = (
+      <select style={{ ...ctl, cursor: 'pointer' }} value={raw ?? ''} onFocus={focusOn} onBlur={focusOff}
+              onChange={e => set(e.target.value)}>
+        <option value="">Select…</option>
+        {opts.map(o => <option key={o}>{o}</option>)}
+        {/* A stored value outside the list stays selectable rather than vanishing. */}
+        {raw && !opts.includes(raw) && <option>{raw}</option>}
+      </select>
+    )
+  } else if (editable) {
+    body = (
+      <input type={type || 'text'} style={{ ...ctl, ...(mono ? numeric : null) }}
+             value={type === 'date' ? String(raw ?? '').slice(0, 10) : (raw ?? '')}
+             onFocus={focusOn} onBlur={focusOff}
+             onChange={e => set(e.target.value)} />
+    )
+  } else if (editMode && reserve) {
+    body = (
+      <div title="Not editable here" style={{
+        ...ctl, display: 'flex', alignItems: 'center', background: C.sunken,
+        borderColor: C.line, color: empty ? C.faint : C.muted, overflow: 'hidden',
+        whiteSpace: 'nowrap', textOverflow: 'ellipsis', ...(mono ? numeric : null),
+      }}>{empty ? '-' : value}</div>
+    )
+  } else {
+    body = (
+      <div style={{
+        minHeight: reserve ? FIELD_H : undefined, display: 'flex', alignItems: 'center',
+        fontSize: F.small, fontWeight: empty ? W.regular : W.medium,
+        color: empty ? C.faint : C.ink, lineHeight: 1.45, overflowWrap: 'anywhere',
+        ...(mono ? { ...numeric, letterSpacing: '.02em' } : null),
+      }}>{empty ? '-' : value}</div>
+    )
+  }
+
   return (
-    <div style={{ padding: '8px 0', borderBottom: `1px solid ${P.border}` }}>
-      <div style={{ fontSize: '10px', color: P.muted, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '4px', fontWeight: 500 }}>{label}</div>
-      {editMode ? (
-        opts ? (
-          <select style={sel} value={editForm?.[fieldKey] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))}>
-            <option value="">Select</option>
-            {opts.map((o: string) => <option key={o}>{o}</option>)}
-          </select>
-        ) : (
-          <input type={type || 'text'} style={inp}
-            value={type === 'date' ? String(editForm?.[fieldKey] ?? '').slice(0, 10) : (editForm?.[fieldKey] ?? '')}
-            onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))} />
-        )
-      ) : (
-        <div style={{ fontSize: '13px', color: value && value !== '-' ? P.text : P.muted }}>{value || '-'}</div>
-      )}
+    <div style={{ minWidth: 0, gridColumn: wide ? '1 / -1' : undefined }}>
+      <div style={labelStyle}>{label}</div>
+      {body}
     </div>
   )
 }
 
-export function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+/** A titled card. `empty` replaces the body with one line saying nothing is recorded. */
+export function Section({ title, hint, actions, empty, emptyText, children }: {
+  title: string
+  /** Accepted for older callers; no longer drawn. */
+  icon?: string
+  hint?: React.ReactNode; actions?: React.ReactNode
+  empty?: boolean; emptyText?: string
+  children?: React.ReactNode
+}) {
   return (
-    <div style={{ marginBottom: '0', padding: '16px 20px', borderBottom: `1px solid ${P.border}` }}>
-      <div style={{ fontSize: '11px', fontWeight: 600, color: P.purple, textTransform: 'uppercase', letterSpacing: '.7px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span>{icon}</span>{title}
+    <section style={{
+      background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg,
+      boxShadow: E.flat, padding: `${S.lg}px ${S.lg + 2}px`, marginBottom: S.md, minWidth: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                    gap: S.md, flexWrap: 'wrap', marginBottom: empty ? S.sm : S.lg }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: F.body, fontWeight: W.semi, color: C.ink, letterSpacing: '-.005em' }}>{title}</h3>
+          {hint && <div style={{ marginTop: 3, fontSize: F.tiny, color: C.muted, lineHeight: 1.5, maxWidth: 640 }}>{hint}</div>}
+        </div>
+        {actions}
       </div>
-      {children}
-    </div>
+      {empty
+        ? <div style={{ fontSize: F.small, color: C.faint }}>{emptyText || `No ${title.toLowerCase()} on record yet.`}</div>
+        : children}
+    </section>
+  )
+}
+
+/** The field grid. Named Grid2 for its callers; it is as many columns as fit. */
+export function Grid2({ children, min = 220 }: { children: React.ReactNode; min?: number }) {
+  return (
+    <div style={{
+      display: 'grid', gap: `${S.md + 2}px ${S.xl}px`,
+      gridTemplateColumns: `repeat(auto-fill, minmax(min(${min}px, 100%), 1fr))`,
+    }}>{children}</div>
+  )
+}
+
+/** A small heading inside a card, for a second group of fields. */
+function SubHead({ children }: { children: React.ReactNode }) {
+  return <div style={{ ...eyebrow, margin: `${S.lg + 2}px 0 ${S.md}px`, paddingTop: S.md, borderTop: `1px solid ${C.line}` }}>{children}</div>
+}
+
+/** Label-over-value facts, as many columns as fit. Used by the record header. */
+export function FactsGrid({ facts, min = 150 }: { facts: { l: string; v: React.ReactNode }[]; min?: number }) {
+  return (
+    <dl style={{
+      margin: 0, display: 'grid', gap: `${S.md}px ${S.xl}px`,
+      gridTemplateColumns: `repeat(auto-fill, minmax(min(${min}px, 100%), 1fr))`,
+    }}>
+      {facts.map(x => {
+        const empty = x.v === undefined || x.v === null || x.v === '' || x.v === '-'
+        return (
+          <div key={x.l} style={{ minWidth: 0 }}>
+            <dt style={{ ...eyebrow, fontWeight: W.semi, marginBottom: 4 }}>{x.l}</dt>
+            <dd style={{
+              margin: 0, fontSize: F.small, fontWeight: empty ? W.regular : W.semi,
+              color: empty ? C.faint : C.ink, lineHeight: 1.4, overflowWrap: 'anywhere', ...numeric,
+            }}>{empty ? '-' : x.v}</dd>
+          </div>
+        )
+      })}
+    </dl>
   )
 }
 
@@ -147,40 +278,31 @@ export function OtherInfoSection({ emp }: { emp: any }) {
     return () => { live = false }
   }, [emp?.id])
 
-  // One field per line, "Label :- Value".
-  const line = (label: string, value: React.ReactNode) => (
-    <div style={{ padding: '8px 0', borderBottom: `1px solid ${P.border}`, fontSize: '13px', color: P.text }}>
-      <span style={{ color: P.muted, fontWeight: 500 }}>{label} :- </span>
-      {value || '-'}
-    </div>
-  )
-
   return (
-    <Section title="Other Info" icon="🗂️">
-      {!data ? <div style={{ fontSize: 13, color: P.muted }}>Loading…</div> : (
-        <div>
-          {line('Role', data.ownRoles.length ? data.ownRoles.join(', ') : '-')}
-          {line('Department', data.dept)}
-          {line('Reporting Manager 1', data.rm1)}
-          {line('Reporting Manager 2', data.rm2)}
-          {line('HOD', data.hod)}
-          {data.holders.map(([label, val]: [string, string]) => (
-            <div key={label}>{line(label, val)}</div>
-          ))}
-        </div>
+    <Section title="Other info" hint="Read-only. Reporting lines come from the employee's manager fields; company role holders from the role sheet.">
+      {!data ? <div style={{ fontSize: F.small, color: C.muted }}>Loading…</div> : (
+        <>
+          <Grid2>
+            <Field label="Role" value={data.ownRoles.length ? data.ownRoles.join(', ') : '-'} />
+            <Field label="Department" value={data.dept} />
+            <Field label="Reporting manager 1" value={data.rm1} />
+            <Field label="Reporting manager 2" value={data.rm2} />
+            <Field label="HOD" value={data.hod} />
+          </Grid2>
+          <SubHead>Company role holders</SubHead>
+          <Grid2>
+            {data.holders.map(([label, val]: [string, string]) => <Field key={label} label={label} value={val} />)}
+          </Grid2>
+        </>
       )}
     </Section>
   )
 }
 
-// Shared field-label style, matching <Field>'s label.
-const fieldLabel: React.CSSProperties = { fontSize: '10px', color: P.muted, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '4px', fontWeight: 500 }
-const chipStyle = (bg: string, color: string): React.CSSProperties => ({ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: bg, color, display: 'inline-block' })
-
 // The employee's ESS role(s), read-only — shown in Employment Details on the Employee
 // Master. Roles are assigned in ESS & Roles, not here, so this is display-only. Every
 // person is an Employee (that base role is automatic), so it always shows at least that.
-export function EmpRoleField({ emp }: { emp: any }) {
+export function EmpRoleField({ emp, reserve }: { emp: any; reserve?: boolean }) {
   const [roles, setRoles] = useState<string[] | null>(null)
   useEffect(() => {
     if (!emp?.id) { setRoles(null); return }
@@ -199,10 +321,7 @@ export function EmpRoleField({ emp }: { emp: any }) {
     return () => { live = false }
   }, [emp?.id])
   return (
-    <div style={{ padding: '8px 0', borderBottom: `1px solid ${P.border}` }}>
-      <div style={fieldLabel}>Role(s)</div>
-      <div style={{ fontSize: '13px', color: P.text }}>{roles == null ? '…' : roles.join(', ')}</div>
-    </div>
+    <Field label="Role(s)" value={roles == null ? 'Loading…' : roles.join(', ')} reserve={reserve} />
   )
 }
 
@@ -210,6 +329,24 @@ export function EmpRoleField({ emp }: { emp: any }) {
 // columns the live app actually reads (ess_menu derives RM/HOD from them; the org chart
 // and Other Info read them too). Options are the employee's own company, minus themselves
 // — nobody can be their own manager.
+function ManagerPick({ label, field, opts, editForm, setEditForm }: {
+  label: string; field: string
+  opts: { id: string; emp_code: string; full_name: string; designation: string | null }[]
+  editForm: any; setEditForm: (fn: any) => void
+}) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={labelStyle}>{label}</div>
+      <select style={{ ...ctl, cursor: 'pointer' }} value={editForm?.[field] ?? ''}
+              onFocus={focusOn} onBlur={focusOff}
+              onChange={e => setEditForm((p: any) => ({ ...p, [field]: e.target.value || null }))}>
+        <option value="">None</option>
+        {opts.map(o => <option key={o.id} value={o.id}>{o.full_name} ({o.emp_code}){o.designation ? ` · ${o.designation}` : ''}</option>)}
+      </select>
+    </div>
+  )
+}
+
 export function ManagerEditor({ emp, editForm, setEditForm }: { emp: any; editForm: any; setEditForm: (fn: any) => void }) {
   const [opts, setOpts] = useState<{ id: string; emp_code: string; full_name: string; designation: string | null }[]>([])
   useEffect(() => {
@@ -221,23 +358,14 @@ export function ManagerEditor({ emp, editForm, setEditForm }: { emp: any; editFo
       .then(({ data }) => { if (live) setOpts((data as any[]) || []) })
     return () => { live = false }
   }, [emp?.company_id, emp?.id])
-  const row = (label: string, field: string) => (
-    <div style={{ padding: '8px 0', borderBottom: `1px solid ${P.border}` }}>
-      <div style={fieldLabel}>{label}</div>
-      <select style={sel} value={editForm?.[field] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [field]: e.target.value || null }))}>
-        <option value="">None</option>
-        {opts.map(o => <option key={o.id} value={o.id}>{o.full_name} ({o.emp_code}){o.designation ? ` · ${o.designation}` : ''}</option>)}
-      </select>
-    </div>
-  )
   return (
-    <Section title="Reporting Managers" icon="🧭">
-      <div style={{ fontSize: 11, color: P.muted, marginBottom: 8, lineHeight: 1.5 }}>
-        L1 / L2 / HOD set the reporting line: these drive approvals, team view, MRF routing and the org chart. (Same company only; save to apply.)
-      </div>
-      {row('Reporting Manager 1 (L1)', 'l1_manager_id')}
-      {row('Reporting Manager 2 (L2)', 'l2_manager_id')}
-      {row('HOD', 'hod_id')}
+    <Section title="Reporting managers"
+             hint="L1, L2 and HOD set the reporting line: they drive approvals, the team view, MRF routing and the org chart. Same company only; saved with the rest of the profile.">
+      <Grid2>
+        <ManagerPick label="Reporting manager 1 (L1)" field="l1_manager_id" opts={opts} editForm={editForm} setEditForm={setEditForm} />
+        <ManagerPick label="Reporting manager 2 (L2)" field="l2_manager_id" opts={opts} editForm={editForm} setEditForm={setEditForm} />
+        <ManagerPick label="HOD" field="hod_id" opts={opts} editForm={editForm} setEditForm={setEditForm} />
+      </Grid2>
     </Section>
   )
 }
@@ -253,6 +381,23 @@ const HIER_ROLE_META: { code: string; label: string; desc: string }[] = [
   { code: 'L2_MANAGER', label: 'L2 Manager', desc: 'Second-line / skip-level manager' },
   { code: 'HOD',        label: 'HOD',        desc: 'Head of Department' },
 ]
+
+function Toggle({ on, busy, label, onClick }: { on: boolean; busy: boolean; label: string; onClick: () => void }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={onClick} disabled={busy}
+      aria-label={`Toggle ${label}`}
+      style={{
+        width: 40, height: 23, borderRadius: 99, position: 'relative', flexShrink: 0, padding: 0,
+        background: on ? C.brand : C.lineStrong, border: 'none',
+        cursor: busy ? 'wait' : 'pointer', transition: `background ${M.quick}`, opacity: busy ? 0.7 : 1,
+      }}>
+      <span style={{
+        position: 'absolute', top: 2, left: on ? 19 : 2, width: 19, height: 19, borderRadius: '50%',
+        background: C.surface, transition: `left ${M.quick}`, boxShadow: E.raised,
+      }} />
+    </button>
+  )
+}
 
 export function EmpRoleEditor({ emp }: { emp: any }) {
   const [acctId, setAcctId] = useState<string | null>(null)
@@ -313,52 +458,49 @@ export function EmpRoleEditor({ emp }: { emp: any }) {
   }
 
   return (
-    <Section title="Roles" icon="🛡️">
-      <div style={{ fontSize: 11, color: P.muted, marginBottom: 12, lineHeight: 1.5 }}>
-        Give or remove the manager roles for this employee. Changes apply immediately. Other functional roles (HR Manager, Payroll, etc.) are set in <b>ESS &amp; Roles</b>.
-      </div>
-      {loading ? <div style={{ fontSize: 13, color: P.muted }}>Loading roles…</div> : (
+    <Section title="Manager roles"
+             hint={<>Give or remove the manager roles for this employee. These apply immediately, not on Save. Other functional roles (HR Manager, Payroll and so on) are set in <b>ESS &amp; Roles</b>.</>}>
+      {loading ? <div style={{ fontSize: F.small, color: C.muted }}>Loading roles…</div> : (
         <div>
-          {hier.map(m => {
+          {hier.map((m, i) => {
             const on = held.has(m.id); const saving = busy === m.id
             return (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${P.border}` }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: P.text }}>{m.label}</div>
-                  <div style={{ fontSize: 11, color: P.muted, marginTop: 1 }}>{m.desc}</div>
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: S.md, padding: `${S.md - 2}px 0`,
+                                       borderTop: i ? `1px solid ${C.line}` : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink }}>{m.label}</div>
+                  <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 1 }}>{m.desc}</div>
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 600, color: on ? P.green : P.muted, minWidth: 56, textAlign: 'right' }}>{saving ? 'Saving…' : on ? 'Assigned' : 'Off'}</span>
-                <button onClick={() => { if (!saving) toggle(m.id, m.label) }} disabled={saving} aria-label={`Toggle ${m.label}`}
-                  style={{ width: 40, height: 23, borderRadius: 99, background: on ? P.purple : '#D1D5DB', position: 'relative', border: 'none', cursor: saving ? 'wait' : 'pointer', flexShrink: 0, transition: 'background .15s', opacity: saving ? 0.7 : 1 }}>
-                  <span style={{ position: 'absolute', top: 2, left: on ? 19 : 2, width: 19, height: 19, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 2px rgba(0,0,0,.25)' }} />
-                </button>
+                <span style={{ fontSize: F.tiny, fontWeight: W.semi, color: on ? C.positive : C.muted, minWidth: 56, textAlign: 'right' }}>
+                  {saving ? 'Saving…' : on ? 'Assigned' : 'Off'}
+                </span>
+                <Toggle on={on} busy={saving} label={m.label} onClick={() => { if (!saving) toggle(m.id, m.label) }} />
               </div>
             )
           })}
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 10, color: P.muted, textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 600, marginBottom: 6 }}>All roles held</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              <span style={chipStyle(P.purpleBg, P.purpleDark)}>Employee · auto</span>
-              {hier.filter(m => held.has(m.id)).map(m => <span key={m.id} style={chipStyle(P.greenBg, P.green)}>{m.label}</span>)}
-              {otherRoles.map((n, i) => <span key={i} style={chipStyle(P.purpleBg, P.purpleDark)}>{n}</span>)}
-            </div>
+          <SubHead>All roles held</SubHead>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <Badge t="brand">Employee · automatic</Badge>
+            {hier.filter(m => held.has(m.id)).map(m => <Badge key={m.id} t="positive">{m.label}</Badge>)}
+            {otherRoles.map((n, i) => <Badge key={i} t="brand">{n}</Badge>)}
           </div>
-          {msg && <div style={{ fontSize: 11, color: msg.ok ? P.green : P.red, marginTop: 10, fontWeight: 500 }}>{msg.text}</div>}
+          {msg && <div role="status" style={{ fontSize: F.tiny, color: msg.ok ? C.positive : C.critical, marginTop: S.md, fontWeight: W.medium }}>{msg.text}</div>}
         </div>
       )}
     </Section>
   )
 }
 
-export function Grid2({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>{children}</div>
-}
-
+/** A statutory flag: applicable or not. Says it in words, so colour is never the only signal. */
 export function StatChip({ label, value }: { label: string; value: boolean }) {
+  const k = tone(value ? 'positive' : 'neutral')
   return (
-    <div style={{ flex: 1, padding: '10px 8px', borderRadius: '10px', background: value ? P.greenBg : P.page, border: `1px solid ${value ? '#BBF7D0' : P.border}`, textAlign: 'center' }}>
-      <div style={{ fontSize: '11px', fontWeight: 600, color: P.text }}>{label}</div>
-      <div style={{ fontSize: '10px', color: value ? P.green : P.muted, marginTop: '4px', fontWeight: 500 }}>{value ? 'Yes' : 'No'}</div>
+    <div style={{ padding: `${S.md - 2}px ${S.md}px`, borderRadius: R.md, background: value ? k.bg : C.surface,
+                  border: `1px solid ${k.edge}`, minWidth: 0 }}>
+      <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink }}>{label}</div>
+      <div style={{ fontSize: F.tiny, color: value ? C.positive : C.muted, marginTop: 2, fontWeight: W.medium }}>
+        {value ? 'Applicable' : 'Not applicable'}
+      </div>
     </div>
   )
 }
@@ -385,26 +527,27 @@ export const ESS_RECORD_TABS = [
   { id: 'history',    label: 'History',    icon: '' },
 ]
 
-/** The strip the Employee Master drawer carries under the name — the six facts
- *  somebody checks first. Drawn for a light background here; the master's own
- *  header keeps its dark one. */
-export function RecordQuickStats({ emp }: { emp: any }) {
-  const rows = [
-    { l: 'Group DOJ',     v: fmtDate(emp.group_doj) },
+/** The facts somebody checks first about a record, as label-over-value pairs. */
+export function recordFacts(emp: any, extra: { l1?: string } = {}) {
+  const facts: { l: string; v: React.ReactNode }[] = [
     { l: 'Company DOJ',   v: fmtDate(emp.company_doj) },
+    { l: 'Group DOJ',     v: fmtDate(emp.group_doj) },
+    { l: 'Tenure',        v: tenureOf(emp.group_doj || emp.company_doj) },
     { l: 'Confirmation',  v: fmt(emp.confirmation_status) },
     { l: 'Department',    v: emp.departments?.dept_name || emp.dept_name || '-' },
     { l: 'Location',      v: emp.locations?.location_name || emp.location_name || '-' },
-    { l: 'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '-' },
+    { l: 'Notice period', v: isBlank(emp.notice_period_days) ? '-' : `${emp.notice_period_days} days` },
   ]
+  if (extra.l1 !== undefined) facts.push({ l: 'Reporting manager', v: extra.l1 })
+  if (emp.last_working_date) facts.push({ l: 'Last working day', v: fmtDate(emp.last_working_date) })
+  return facts
+}
+
+/** The facts strip, drawn for a light background. */
+export function RecordQuickStats({ emp }: { emp: any }) {
   return (
-    <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '10px 20px',
-                  background: P.purpleLight, borderBottom: `1px solid ${P.border}` }}>
-      {rows.map(x => (
-        <div key={x.l} style={{ fontSize: 11, color: P.muted }}>
-          {x.l}: <span style={{ color: P.text, fontWeight: 500 }}>{x.v}</span>
-        </div>
-      ))}
+    <div style={{ padding: `${S.md + 2}px ${S.lg + 2}px`, background: C.sunken, borderBottom: `1px solid ${C.line}` }}>
+      <FactsGrid facts={recordFacts(emp)} />
     </div>
   )
 }
@@ -421,111 +564,120 @@ export interface ProfileSectionProps {
   showManagerChain?: boolean
 }
 
+const STATUS_TONE: Record<string, Tone> = {
+  Active: 'positive', Resigned: 'critical', Terminated: 'critical', Absconding: 'warning', Abscond: 'warning',
+}
+
 export default function EmployeeProfileSections({
   emp, profileTab, editMode = false, editForm, setEditForm, showManagerChain = true,
 }: ProfileSectionProps) {
   const ef = editForm || {}
-  const F = (label: string, key: string, type?: string, opts?: string[]) => (
+  const e = emp as any
+  const has = (k: string) => !isBlank(e[k])
+  /** In view mode, true when none of these keys hold anything. Edit mode always shows
+   *  the fields — that is where they get filled in. */
+  const none = (...keys: string[]) => !editMode && keys.every(k => !has(k))
+  const F_ = (label: string, key: string, type?: string, opts?: string[], o: { mono?: boolean; wide?: boolean } = {}) => (
     <Field key={key} label={label}
-      value={key === 'date_of_birth' || key.includes('doj') ? fmtDate((emp as any)[key]) : fmt((emp as any)[key])}
-      editMode={editMode} fieldKey={key} editForm={ef} setEditForm={setEditForm} type={type} opts={opts} />
+      value={type === 'date' ? fmtDate(e[key]) : fmt(e[key])}
+      editMode={editMode} fieldKey={key} editForm={ef} setEditForm={setEditForm} type={type} opts={opts}
+      mono={o.mono} wide={o.wide} />
   )
+  /** Shown in edit mode as a disabled control: visible, but not changed from here. */
+  const RO = (label: string, value: React.ReactNode, o: { mono?: boolean } = {}) => (
+    <Field key={label} label={label} value={value} editMode={editMode} setEditForm={setEditForm} readOnly mono={o.mono} />
+  )
+  const aadhaar = e.aadhar_last4 ? `XXXX XXXX ${e.aadhar_last4}` : '-'
 
   if (profileTab === 'personal') return (
     <div>
-      <Section title="Identity" icon="🪪">
+      <Section title="Identity" empty={none('full_name','common_code','first_name','last_name','gender','date_of_birth','blood_group','marital_status','nationality','religion','birth_place')}>
         <Grid2>
-          {F('Full Name','full_name')} {F('Common Code','common_code')}
-          {F('First Name','first_name')} {F('Last Name','last_name')}
-          {F('Gender','gender','text',['Male','Female','Other'])}
-          {F('Date of Birth','date_of_birth','date')}
-          {F('Blood Group','blood_group','text',['A+','A-','B+','B-','O+','O-','AB+','AB-'])}
-          {F('Marital Status','marital_status','text',['Single','Married','Divorced','Widowed'])}
-          {F('Nationality','nationality')} {F('Religion','religion')}
-          {F('Birth Place','birth_place')}
+          {F_('Full name','full_name')}
+          {RO('Common code', fmt(e.common_code), { mono: true })}
+          {F_('First name','first_name')} {F_('Last name','last_name')}
+          {F_('Gender','gender','text',['Male','Female','Other'])}
+          {F_('Date of birth','date_of_birth','date')}
+          {F_('Blood group','blood_group','text',['A+','A-','B+','B-','O+','O-','AB+','AB-'])}
+          {F_('Marital status','marital_status','text',['Single','Married','Divorced','Widowed'])}
+          {F_('Nationality','nationality')} {F_('Religion','religion')}
+          {F_('Birth place','birth_place')}
         </Grid2>
       </Section>
-      <Section title="Family" icon="👪">
+      <Section title="Family" empty={none('father_name','mother_name','spouse_name')} emptyText="No family details on record yet.">
         <Grid2>
-          {F("Father's Name",'father_name')} {F("Mother's Name",'mother_name')}
-          {F('Spouse Name','spouse_name')}
+          {F_("Father's name",'father_name')} {F_("Mother's name",'mother_name')}
+          {F_('Spouse name','spouse_name')}
         </Grid2>
       </Section>
-      <Section title="Contact" icon="📞">
+      <Section title="Contact" empty={none('mobile','alternate_mobile','personal_email','office_email','pan_number','uan_number','aadhar_last4')} emptyText="No contact details on record yet.">
         <Grid2>
-          {F('Mobile','mobile')} {F('Alternate Mobile','alternate_mobile')}
-          {F('Personal Email','personal_email')} {F('Office Email','office_email')}
-          <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
-            <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Aadhaar</div>
-            <div style={{ fontSize:'13px', color:P.text }}>XXXX-XXXX-{emp.aadhar_last4 || '-'}</div>
-          </div>
-          {F('PAN Number','pan_number')} {F('UAN Number','uan_number')}
+          {F_('Mobile','mobile','tel',undefined,{ mono: true })} {F_('Alternate mobile','alternate_mobile','tel',undefined,{ mono: true })}
+          {F_('Personal email','personal_email','email')} {F_('Office email','office_email','email')}
+          {RO('Aadhaar', aadhaar, { mono: true })}
+          {F_('PAN','pan_number',undefined,undefined,{ mono: true })} {F_('UAN','uan_number',undefined,undefined,{ mono: true })}
         </Grid2>
       </Section>
-      <Section title="Residential Address" icon="🏠">
+      <Section title="Residential address" empty={none('res_address1','res_city','res_state','res_pin')} emptyText="No residential address on record yet.">
         <Grid2>
-          {F('Address','res_address1')} {F('City','res_city')}
-          {F('State','res_state')} {F('PIN','res_pin')}
+          {F_('Address','res_address1',undefined,undefined,{ wide: true })}
+          {F_('City','res_city')} {F_('State','res_state')} {F_('PIN','res_pin',undefined,undefined,{ mono: true })}
         </Grid2>
       </Section>
-      <Section title="Permanent Address" icon="📍">
+      <Section title="Permanent address" empty={none('perm_address1','perm_city','perm_state','perm_pin')} emptyText="No permanent address on record yet.">
         <Grid2>
-          {F('Address','perm_address1')} {F('City','perm_city')}
-          {F('State','perm_state')} {F('PIN','perm_pin')}
+          {F_('Address','perm_address1',undefined,undefined,{ wide: true })}
+          {F_('City','perm_city')} {F_('State','perm_state')} {F_('PIN','perm_pin',undefined,undefined,{ mono: true })}
         </Grid2>
       </Section>
-      <Section title="Emergency Contact" icon="🚨">
+      <Section title="Emergency contacts" empty={none('emergency_name','emergency_relation','emergency_mobile','emergency2_name','emergency2_relation','emergency2_mobile')} emptyText="No emergency contact on record yet.">
         <Grid2>
-          {F('Name','emergency_name')} {F('Relation','emergency_relation')}
-          {F('Mobile','emergency_mobile')}
+          {F_('Contact 1: name','emergency_name')} {F_('Contact 1: relation','emergency_relation')}
+          {F_('Contact 1: mobile','emergency_mobile','tel',undefined,{ mono: true })}
         </Grid2>
-        <Grid2>
-          {F('Alt. Name','emergency2_name')} {F('Alt. Relation','emergency2_relation')}
-          {F('Alt. Mobile','emergency2_mobile')}
-        </Grid2>
+        {(editMode || has('emergency2_name') || has('emergency2_relation') || has('emergency2_mobile')) && (
+          <>
+            <SubHead>Second contact</SubHead>
+            <Grid2>
+              {F_('Contact 2: name','emergency2_name')} {F_('Contact 2: relation','emergency2_relation')}
+              {F_('Contact 2: mobile','emergency2_mobile','tel',undefined,{ mono: true })}
+            </Grid2>
+          </>
+        )}
       </Section>
     </div>
   )
 
   if (profileTab === 'employment') return (
     <div>
-      <Section title="Employment Details" icon="💼">
+      <Section title="Employment details">
         <Grid2>
-          {F('Designation','designation')}
-          {!editMode && <EmpRoleField key="role" emp={emp} />}
-          {F('Grade','grade')}
-          {F('Employment Type','employment_type','text',['Employee','Intern','NAPS','NATS','Consultant','Contract'])}
-          {F('Employment Status','employment_status','text',['Active','Resigned','Sabbatical','Abscond','Inactive'])}
-          {F('Collar Type','collar_type','text',['White Collar','Blue Collar'])}
-          {F('Function','employee_function')}
-          {F('Category','employee_category')}
-          {F('Notice Period (Days)','notice_period_days','number')}
-          {emp.employment_type === 'Intern' && F('Intern Pay (₹)','intern_pay','number')}
-          {emp.employment_type === 'Consultant' && F('Consultant Pay (₹)','consultant_pay','number')}
-          {emp.employment_type === 'Contract' && F('Contract Pay (₹)','contract_pay','number')}
+          {F_('Designation','designation')}
+          {!editMode && <EmpRoleField key="role" emp={emp} reserve={!!setEditForm} />}
+          {F_('Grade','grade')}
+          {F_('Employment type','employment_type','text',['Employee','Intern','NAPS','NATS','Consultant','Contract'])}
+          {F_('Employment status','employment_status','text',['Active','Resigned','Sabbatical','Abscond','Inactive'])}
+          {F_('Collar type','collar_type','text',['White Collar','Blue Collar'])}
+          {F_('Function','employee_function')}
+          {F_('Category','employee_category')}
+          {F_('Notice period (days)','notice_period_days','number')}
+          {e.employment_type === 'Intern' && F_('Intern pay (₹)','intern_pay','number')}
+          {e.employment_type === 'Consultant' && F_('Consultant pay (₹)','consultant_pay','number')}
+          {e.employment_type === 'Contract' && F_('Contract pay (₹)','contract_pay','number')}
         </Grid2>
       </Section>
-      <Section title="Joining & Confirmation" icon="📅">
+      <Section title="Joining and confirmation">
         <Grid2>
-          {F('Group DOJ','group_doj','date')}
-          {F('Company DOJ','company_doj','date')}
-          {F('Confirmation Status','confirmation_status','text',['Probation','Confirmed'])}
-          <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
-            <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Company</div>
-            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).companies?.company_name || (emp as any).company_name || '-'}</div>
-          </div>
-          <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
-            <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Location / Branch</div>
-            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).locations?.location_name || (emp as any).location_name || '-'}</div>
-          </div>
-          <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
-            <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Department</div>
-            <div style={{ fontSize:'13px', color:P.text }}>{(emp as any).departments?.dept_name || (emp as any).dept_name || '-'}</div>
-          </div>
+          {F_('Group DOJ','group_doj','date')}
+          {F_('Company DOJ','company_doj','date')}
+          {F_('Confirmation status','confirmation_status','text',['Probation','Confirmed'])}
+          {RO('Company', e.companies?.company_name || e.company_name || '-')}
+          {RO('Location / branch', e.locations?.location_name || e.location_name || '-')}
+          {RO('Department', e.departments?.dept_name || e.dept_name || '-')}
         </Grid2>
       </Section>
       {showManagerChain && !editMode && (
-        <Section title="Manager Information" icon="🧭">
+        <Section title="Manager information">
           <EmployeeOrgFlow employeeId={emp.id} companyId={emp.company_id} employeeName={emp.full_name} />
         </Section>
       )}
@@ -534,16 +686,16 @@ export default function EmployeeProfileSections({
       )}
       {editMode && setEditForm && <EmpRoleEditor emp={emp} />}
       <OtherInfoSection emp={emp} />
-      {emp.employment_status === 'Resigned' && (
-        <Section title="Exit Details" icon="🚪">
+      {e.employment_status === 'Resigned' && (
+        <Section title="Exit details"
+                 actions={<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                   <Badge t={e.rehire_eligible ? 'positive' : 'neutral'}>{e.rehire_eligible ? 'Rehire eligible' : 'Not rehire eligible'}</Badge>
+                   {e.blacklisted && <Badge t="critical">Blacklisted</Badge>}
+                 </div>}>
           <Grid2>
-            {F('Date of Resignation','date_of_resignation','date')}
-            {F('Last Working Date','last_working_date','date')}
+            {F_('Date of resignation','date_of_resignation','date')}
+            {F_('Last working date','last_working_date','date')}
           </Grid2>
-          <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
-            <div style={{ padding:'6px 12px', borderRadius:'10px', background: emp.rehire_eligible ? P.greenBg : P.page, border:`1px solid ${emp.rehire_eligible ? '#BBF7D0' : P.border}`, fontSize:'11px', color: emp.rehire_eligible ? P.green : P.muted }}>{emp.rehire_eligible ? 'Rehire Eligible' : 'Not Rehire Eligible'}</div>
-            {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'10px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>Blacklisted</div>}
-          </div>
         </Section>
       )}
     </div>
@@ -551,20 +703,19 @@ export default function EmployeeProfileSections({
 
   if (profileTab === 'statutory') return (
     <div>
-      <Section title="Statutory Applicability" icon="⚖️">
-        <div style={{ display:'flex', gap:'8px', marginBottom:'16px' }}>
-          <StatChip label="PF / EPF" value={emp.pf_applicable} />
-          <StatChip label="ESIC" value={emp.esic_applicable} />
-          <StatChip label="Prof. Tax" value={emp.pt_applicable} />
-          <StatChip label="LWF" value={emp.lwf_applicable} />
+      <Section title="Statutory applicability">
+        <div style={{ display: 'grid', gap: S.sm, gridTemplateColumns: 'repeat(auto-fill, minmax(min(150px, 100%), 1fr))' }}>
+          <StatChip label="PF / EPF" value={!!e.pf_applicable} />
+          <StatChip label="ESIC" value={!!e.esic_applicable} />
+          <StatChip label="Professional tax" value={!!e.pt_applicable} />
+          <StatChip label="LWF" value={!!e.lwf_applicable} />
         </div>
+      </Section>
+      <Section title="Statutory IDs" empty={none('uan_number','pan_number','aadhar_last4')} emptyText="No statutory IDs on record yet.">
         <Grid2>
-          {F('UAN Number','uan_number')}
-          {F('PAN Number','pan_number')}
-          <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
-            <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>Aadhaar</div>
-            <div style={{ fontSize:'13px', fontFamily:'monospace', color:P.text }}>XXXX-XXXX-{emp.aadhar_last4 || '-'}</div>
-          </div>
+          {F_('UAN','uan_number',undefined,undefined,{ mono: true })}
+          {F_('PAN','pan_number',undefined,undefined,{ mono: true })}
+          {RO('Aadhaar', aadhaar, { mono: true })}
         </Grid2>
       </Section>
     </div>
@@ -577,25 +728,22 @@ export default function EmployeeProfileSections({
   }
 
   if (profileTab === 'bank') return (
-    <Section title="Salary Account" icon="🏦">
-      <div style={{ background:P.greenBg, border:`1px solid #BBF7D0`, borderRadius:'10px', padding:'16px', marginBottom:'12px' }}>
-        <div style={{ fontSize:'12px', fontWeight:600, color:C.positive, marginBottom:'12px' }}>Primary Account</div>
-        <Grid2>
-          {[
-            ['Bank Name', emp.bank_name],
-            ['Account Type', emp.account_type],
-            ['Account No.', emp.bank_account_last4 ? `XXXX XXXX XXXX ${emp.bank_account_last4}` : '-'],
-            ['IFSC Code', emp.ifsc_code],
-          ].map(([l, v]) => (
-            <div key={l as string} style={{ padding:'6px 0', borderBottom:`1px solid #DCFCE7` }}>
-              <div style={{ fontSize:'10px', color:C.positive, marginBottom:'3px', fontWeight:500, textTransform:'uppercase', letterSpacing:'.4px' }}>{l}</div>
-              <div style={{ fontSize:'13px', color:P.text, fontFamily: l === 'Account No.' || l === 'IFSC Code' ? 'monospace' : 'inherit' }}>{v || '-'}</div>
-            </div>
-          ))}
-        </Grid2>
-      </div>
+    <Section title="Salary account"
+             hint="Bank details change through a request to Payroll, not from this screen."
+             actions={(has('bank_name') || has('bank_account_last4')) ? <Badge t="positive" dot>Primary</Badge> : undefined}
+             empty={!has('bank_name') && !has('bank_account_last4') && !has('ifsc_code')}
+             emptyText="No salary account on record yet.">
+      <Grid2>
+        <Field label="Bank name" value={fmt(e.bank_name)} />
+        <Field label="Account type" value={fmt(e.account_type)} />
+        <Field label="Account number" value={e.bank_account_last4 ? `XXXX XXXX ${e.bank_account_last4}` : '-'} mono />
+        <Field label="IFSC" value={fmt(e.ifsc_code)} mono />
+      </Grid2>
     </Section>
   )
 
   return null
 }
+
+// Status tone, for callers that draw the record's state as a chip.
+export const statusTone = (s: string | null | undefined): Tone => (s && STATUS_TONE[s]) || 'neutral'

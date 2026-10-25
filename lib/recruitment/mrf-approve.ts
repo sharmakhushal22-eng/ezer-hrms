@@ -71,6 +71,12 @@ export async function approveMrf(sb: SupabaseClient, inp: ApproveInput): Promise
   const patch: any = {}
   if (inp.mode === 'step') {
     cur!.status = 'APPROVED'; cur!.acted_at = now; cur!.comment = note
+    // A super admin deciding someone else's step: the step keeps its named approver and
+    // records who actually acted (the tracker shows it), rather than passing as theirs.
+    if (inp.actor.id && cur!.approver_id !== inp.actor.id) {
+      cur!.acted_by_id = inp.actor.id
+      cur!.acted_by_name = inp.actor.name ? `${inp.actor.name}${inp.actor.code ? ` (${inp.actor.code})` : ''}` : 'Super admin'
+    }
     const next = chain.find((s: any) => s.status === 'WAITING')
     if (next && !handOff) next.status = 'PENDING'
   } else {
@@ -95,7 +101,7 @@ export async function approveMrf(sb: SupabaseClient, inp: ApproveInput): Promise
 
   // Tell each assigned hiring manager they've been given this requisition to run — they
   // acknowledge it in Tasks & Approvals and pick up the MRF in Recruitment.
-  if (briefs.length) {
+  if (handOff && briefs.length) {
     const label = `${mrf.designation || mrf.position || 'a role'}${mrf.mrf_number ? ` (${mrf.mrf_number})` : ''}`
     const scope = await mrfScope(inp.id)
     await Promise.all(briefs.map(b => notifyFromTemplate(b.id, 'notify.mrf.assigned', { mrf_label: label }, { scope, link: '/ess?tab=approvals', category: 'MRF' }).catch(() => null)))

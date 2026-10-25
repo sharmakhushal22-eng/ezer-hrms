@@ -110,3 +110,66 @@ export function useTilt<T extends HTMLElement>() {
   }, []);
   return ref;
 }
+
+/**
+ * A multi-step form body that does not jump.
+ *
+ * Two things went wrong in the MRF wizards when a long step was followed by a
+ * short one: the card shrank, so the page scrolled up under the cursor and the
+ * reader landed on the MRF cards below; and the new step's top was wherever the
+ * old step's bottom had been.
+ *
+ *  - `bodyRef` goes on the element wrapping the step CONTENT. Its height is
+ *    watched and the tallest height seen so far becomes `minHeight` — put that
+ *    on the element AROUND it. The body therefore never shrinks while the form
+ *    is open (a ratchet, reset only by remounting the form).
+ *  - `topRef` goes on the form's top (stepper). When `step` changes and that top
+ *    is out of view, it is scrolled back into view below any sticky bar, and
+ *    focus moves there (without scrolling again) so keyboard and screen-reader
+ *    users start the new step at its beginning.
+ */
+export function useWizardBody(step: number) {
+  const [minHeight, setMinHeight] = React.useState(0);
+  const roRef = React.useRef<ResizeObserver | null>(null);
+  const topRef = React.useRef<HTMLDivElement | null>(null);
+  const bodyRef = React.useCallback((el: HTMLDivElement | null) => {
+    roRef.current?.disconnect(); roRef.current = null;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => { const h = el.offsetHeight; setMinHeight((m) => (h > m ? h : m)); });
+    ro.observe(el); roRef.current = ro;
+  }, []);
+  React.useEffect(() => () => roRef.current?.disconnect(), []);
+  const first = React.useRef(true);
+  React.useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const top = topRef.current; if (!top || typeof window === 'undefined') return;
+    // How much of the viewport's top is covered by sticky/fixed bars right here.
+    // Stacked bars (ESS top bar, then the recruitment rail docked under it)
+    // are found by probing just below each one in turn.
+    let cover = 0;
+    const r = top.getBoundingClientRect();
+    const x = Math.min(Math.max(r.left + 24, 1), window.innerWidth - 1);
+    for (let pass = 0; pass < 4; pass++) {
+      const y = cover + 2;
+      let next = cover;
+      for (const el of document.elementsFromPoint(x, y)) {
+        for (let n: Element | null = el; n && n !== document.body; n = n.parentElement) {
+          const cs = getComputedStyle(n);
+          if (cs.position === 'sticky' || cs.position === 'fixed') {
+            const b = n.getBoundingClientRect();
+            if (b.top <= y && b.bottom > y && b.height < window.innerHeight * 0.5) next = Math.max(next, b.bottom);
+            break;
+          }
+        }
+      }
+      if (next <= cover) break;
+      cover = next;
+    }
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (r.top < cover + 4 || r.top > window.innerHeight * 0.6) {
+      window.scrollBy({ top: r.top - cover - 12, behavior: still ? 'auto' : 'smooth' });
+    }
+    try { top.focus({ preventScroll: true }); } catch { /* older browsers */ }
+  }, [step]);
+  return { bodyRef, topRef, minHeight };
+}

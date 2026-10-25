@@ -161,13 +161,15 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
 
   const waiting = d.items.filter(i => i.waiting_on_me.length)
   const others = d.items.filter(i => !i.waiting_on_me.length)
-  const Card = ({ it }: { it: Item }) => (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${it.waiting_on_me.length ? TK.warningEdge : TK.line}`, borderRadius: 10, padding: '11px 13px', flexWrap: 'wrap', marginBottom: 8, background: it.waiting_on_me.length ? TK.warningTint : TK.surface }}>
+  // Called as a function, not mounted as <Card/> — a component declared inside the parent is a
+  // new type every render, which remounts the whole list on each keystroke elsewhere on the page.
+  const renderItem = (it: Item) => (
+    <div key={it.id} style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${it.waiting_on_me.length ? TK.warningEdge : TK.line}`, borderRadius: 10, padding: '11px 13px', flexWrap: 'wrap', marginBottom: 8, background: it.waiting_on_me.length ? TK.warningTint : TK.surface }}>
       <div style={{ flex: '1 1 220px', minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 700, color: TK.ink }}>{it.full_name} <span style={{ color: TK.muted, fontWeight: 400 }}>· {it.designation || '—'}{it.department ? ` · ${it.department}` : ''}</span></div>
         <div style={{ fontSize: 11.5, color: TK.muted, marginTop: 1 }}>Joining {day(it.date_of_joining)} · submitted {day(it.submitted_at)}{it.waiting_on_me.length ? ` · waiting on you for ${it.waiting_on_me.map(t => TEAM[t]).join(', ')}` : ''}</div>
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-          {it.approvals.map(a => <span key={a.team} style={pill(a.status)} title={a.acted_by_name ? `${a.acted_by_name} · ${day(a.acted_at)}${a.remark ? ` · ${a.remark}` : ''}` : ''}>{TEAM[a.team]} · {a.status === 'APPROVED' ? '✓' : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>)}
+          {it.approvals.map(a => <span key={a.team} style={pill(a.status)} title={a.acted_by_name ? `${a.status === 'RETURNED' ? 'Returned' : 'Approved'} by ${a.acted_by_name} on ${day(a.acted_at)}${a.remark ? `: ${a.remark}` : ''}` : 'Not decided yet'}>{TEAM[a.team]} · {a.status === 'APPROVED' ? `✓ ${a.acted_by_name || 'approved'}` : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>)}
         </div>
       </div>
       <button disabled={busy} onClick={() => review(it)} style={it.waiting_on_me.length ? btn : btnO}>{it.waiting_on_me.length ? 'Open approval form' : 'View'}</button>
@@ -185,8 +187,8 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
   return (
     <div style={card}>
       <div style={section}>Onboarding approvals · {d.teams.map(t => TEAM[t]).join(' / ')}{waiting.length ? ` · ${waiting.length} waiting on you` : ''}</div>
-      {waiting.map(it => <Card key={it.id} it={it} />)}
-      {others.map(it => <Card key={it.id} it={it} />)}
+      {waiting.map(renderItem)}
+      {others.map(renderItem)}
       <div style={{ fontSize: 12, color: TK.muted, marginTop: 6 }}>These forms are accepted by the HR Manager. Confirm your team's checklist and approve; once IT, Admin and Payroll have all approved, the HR Manager generates the employee code. Returning the form reopens the candidate's link for 48 hours.</div>
 
       {open && item && (

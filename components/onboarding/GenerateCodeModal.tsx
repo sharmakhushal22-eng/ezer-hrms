@@ -412,11 +412,11 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
           <div className="gc-foot">
             {step > 1 && <button type="button" className="gc-ghost" onClick={() => setStep(s => (s - 1) as 1 | 2 | 3)} disabled={busy}>← Back</button>}
             {step < 3 && <button type="button" className="gc-btn" onClick={() => setStep(s => (s + 1) as 1 | 2 | 3)} disabled={!opts || busy || (step === 2 && !chosenRoles.length)}>{step === 1 ? (included.length ? `Next · Roles` : 'Skip team · Roles') : 'Next · Code'} →</button>}
-            {step === 3 && <button type="button" className="gc-btn go" onClick={generate} disabled={!opts || busy || codeLoading || !code.trim() || !doj || !chosenRoles.length || !hasL1 || ahead.length > 0} title={ahead.length ? `Waiting for ${ahead[0].full_name}'s code first (FIFO)` : doj ? '' : 'Set the date of joining first'}>{busy ? 'Generating…' : ahead.length ? `⏳ Waiting for ${ahead[0].full_name.split(' ')[0]}'s code` : '⚡ Generate code & create employee'}</button>}
+            {step === 3 && <button type="button" className="gc-btn go" onClick={generate} disabled={!opts || busy || codeLoading || !code.trim() || !doj || !chosenRoles.length || !hasL1 || ahead.length > 0} title={ahead.length ? `Waiting for ${ahead[0].full_name}'s code first (FIFO)` : !hasL1 ? 'Assign the managers first' : !chosenRoles.length ? 'Tick a role first' : doj ? '' : 'Set the date of joining first'}>{busy ? 'Generating…' : ahead.length ? `⏳ Waiting for ${ahead[0].full_name.split(' ')[0]}'s code` : '⚡ Generate code & create employee'}</button>}
             <span className="gc-note" style={{ marginLeft: 'auto' }}>
               {step === 1 && (included.length ? `${plan?.summary}${autoCodes.length ? ` · roles: ${autoCodes.map(c => c.replace('_MANAGER', '').replace('L1', 'L1 Manager').replace('L2', 'L2 Manager')).join(', ')}` : ''}` : 'The team is optional.')}
               {step === 2 && (chosenRoles.length ? `${chosenRoles.length} role${chosenRoles.length === 1 ? '' : 's'}${autoRoles.length ? ` (${autoRoles.length} from the team)` : ''}` : 'At least one role is required.')}
-              {step === 3 && (ahead.length ? 'First come, first coded.' : doj ? 'Numbers are never reused.' : 'The date of joining is required.')}
+              {step === 3 && (ahead.length ? 'First come, first coded.' : !hasL1 ? 'Assign the managers on the review sheet first: the L1 is required.' : !chosenRoles.length ? 'Tick at least one role (step 2).' : doj ? 'Numbers are never reused.' : 'The date of joining is required.')}
             </span>
           </div>
         </div>
