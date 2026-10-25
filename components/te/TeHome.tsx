@@ -420,12 +420,20 @@ export default function TeHome({ initialClaimId, onExit }: {
                     <span className="chip t-pos">On the way</span>
                   </div>
                   <p className="small muted">
-                    Hopping about at the destination? Add it as a journey and it is recorded on GPS and paid with the
-                    rest of the trip, instead of becoming a loose bill.
+                    Paid for something, or hopping across the city? Put it on the trip now and it is paid with the rest
+                    of it, instead of becoming a loose bill you have to explain later.
                   </p>
+                  {/* BOTH ACTIONS, not just the journey. This card offered
+                      "Add a journey" and nothing else, so the commoner of the
+                      two — you have just paid for a meal or a cab — meant
+                      opening the trip and scrolling to find the button. A bill
+                      is the thing people have in their hand; it goes first. */}
                   <div className="row tight">
-                    <button type="button" className="btn pri" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
-                      <TeIcon name="plus" size="sm" />{openingTrip ? 'Opening…' : 'Add a journey'}
+                    <button type="button" className="btn pri" onClick={() => setSheet({ name: 'expense', tripId: onTrip.id })}>
+                      <TeIcon name="receipt" size="sm" />Add a bill
+                    </button>
+                    <button type="button" className="btn" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
+                      <TeIcon name="route" size="sm" />{openingTrip ? 'Opening…' : 'Add a journey'}
                     </button>
                     <button type="button" className="btn" onClick={() => setView({ name: 'trip', id: onTrip.id })}>
                       Open the trip

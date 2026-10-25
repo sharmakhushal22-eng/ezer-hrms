@@ -5,7 +5,7 @@
 // different headings, which is exactly the kind of rule that rots quietly.
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { groupTrips, myTrips, scopeCounts, tripChip, tripGroup, tripMoney, TRIP_GROUPS, linesWaitingInTrips, tripsForLine } from '../trips-list.ts'
+import { groupTrips, myTrips, scopeCounts, tripChip, tripGroup, tripMoney, TRIP_GROUPS, linesWaitingInTrips, tripsForLine, tripIsLive } from '../trips-list.ts'
 import type { TeTrip, TripDisplayStatus } from '../types.ts'
 
 const TODAY = '2026-11-16'
@@ -249,5 +249,52 @@ describe('which trips a loose bill can be moved into', () => {
 
   it('an employee with no eligible trips gets an empty list, not a crash', () => {
     assert.deepEqual(tripsForLine([], 'me'), [])
+  })
+})
+
+describe('when a trip is live enough to act on', () => {
+  // This gates the mid-trip action bar — the pinned "Add a bill" / "Add a
+  // journey". A condition that quietly becomes always-true would put a bar of
+  // actions on top of every finished trip in the list; always-false would put
+  // the two commonest actions back where nobody could find them.
+  const TODAY = '2026-11-16'
+  const both = { canBill: true, mine: true }
+
+  it('a trip under way is live', () => {
+    assert.equal(tripIsLive(trip({ id: 't', display: 'ONGOING', start: '2026-11-10' }), TODAY, both), true)
+  })
+
+  it('an approved trip is live once its first day has come, not before', () => {
+    assert.equal(tripIsLive(trip({ id: 't', display: 'APPROVED', start: TODAY }), TODAY, both), true)
+    assert.equal(tripIsLive(trip({ id: 't', display: 'APPROVED', start: '2026-11-10' }), TODAY, both), true)
+    assert.equal(tripIsLive(trip({ id: 't', display: 'APPROVED', start: '2026-11-20' }), TODAY, both), false)
+  })
+
+  it('an approved trip with no dates at all is not live', () => {
+    assert.equal(tripIsLive(trip({ id: 't', display: 'APPROVED', start: '' }), TODAY, both), false)
+  })
+
+  it('a finished trip is a record, not a surface to act on', () => {
+    for (const display of ['COMPLETED', 'CLAIMED', 'CLOSED', 'MISSED', 'EXPIRED'] as const) {
+      assert.equal(tripIsLive(trip({ id: 't', display, start: '2026-11-10' }), TODAY, both), false, display)
+    }
+  })
+
+  it('a plan nobody has approved is not live either', () => {
+    for (const display of ['DRAFT', 'PENDING_APPROVAL', 'SENT_BACK'] as const) {
+      assert.equal(tripIsLive(trip({ id: 't', display, start: TODAY }), TODAY, both), false, display)
+    }
+  })
+
+  it('a co-traveller gets it — their own bills are theirs to add', () => {
+    assert.equal(tripIsLive(trip({ id: 't', display: 'ONGOING', start: TODAY }), TODAY,
+      { canBill: true, mine: false }), true)
+  })
+
+  it('somebody who is neither on it nor billing it does not', () => {
+    // A desk or Finance reading a stranger's ongoing trip: the bar would offer
+    // them actions that are not theirs to take.
+    assert.equal(tripIsLive(trip({ id: 't', display: 'ONGOING', start: TODAY }), TODAY,
+      { canBill: false, mine: false }), false)
   })
 })

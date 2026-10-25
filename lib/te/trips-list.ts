@@ -214,3 +214,33 @@ export function tripsForLine<T extends Pick<TeTrip, 'id' | 'status' | 'start'> &
     .slice()
     .sort((a, b) => String(b.start ?? '').localeCompare(String(a.start ?? '')))
 }
+
+/**
+ * Is this trip live for the person reading it — something they could be
+ * spending on right now?
+ *
+ * WHAT IT GATES. The mid-trip action bar on the trip screen, which pins "Add a
+ * bill" and "Add a journey" under the header. Those two were the worst-placed
+ * controls on a long page and are the only two anybody uses while actually
+ * travelling, so the bar follows the trip being live rather than any status on
+ * its own.
+ *
+ * ONGOING is the obvious case. APPROVED-and-started is the one worth spelling
+ * out: the cab to the airport is a real bill before the first journey begins,
+ * and a trip stays APPROVED until a journey is recorded. A trip approved for
+ * next week is not live, and a finished trip is a record to read rather than a
+ * surface to act on — the contextual buttons further down the page serve that.
+ *
+ * In lib/ and pure because it decides what somebody can reach: a .tsx cannot be
+ * loaded by the test runner, and this is exactly the kind of condition that
+ * rots into "always true" without anybody noticing.
+ */
+export function tripIsLive(
+  trip: Pick<TeTrip, 'display' | 'start'>,
+  today: string,
+  who: { canBill: boolean; mine: boolean },
+): boolean {
+  if (!who.canBill && !who.mine) return false
+  if (trip.display === 'ONGOING') return true
+  return trip.display === 'APPROVED' && !!trip.start && trip.start <= today
+}

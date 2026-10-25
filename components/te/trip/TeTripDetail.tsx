@@ -12,7 +12,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeCategory, TeLeg, TeMasters, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
-import { tripChip } from '@/lib/te/trips-list'
+import { tripChip, tripIsLive } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
 import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
 import { day, dayAt, errorText, plural, rs, when } from '@/lib/te/format'
@@ -172,6 +172,14 @@ export default function TeTripDetail({ tripId, me, today, masters, everyone, cat
   const nextLeg = legs.find(l => l.status === 'ACTIVE' || l.status === 'PAUSED' || l.status === 'ENDED')
     ?? legs.find(l => l.status === 'PLANNED')
     ?? null
+  /** A journey being recorded right now — the one thing more urgent than
+   *  anything else on the page, because a journey that is never ended cannot
+   *  be claimed. ENDED is deliberately NOT included: that one is waiting to be
+   *  reported, not running. */
+  const runningLeg = legs.find(l => l.status === 'ACTIVE' || l.status === 'PAUSED') ?? null
+  /** Is this trip live for the reader — see tripIsLive, which is in lib/ and
+   *  tested, because this condition decides what somebody can reach. */
+  const live = tripIsLive(t, today, { canBill, mine })
 
   async function act(what: string, run: () => Promise<string>) {
     setBusy(what); setError('')
@@ -225,6 +233,65 @@ export default function TeTripDetail({ tripId, me, today, masters, everyone, cat
           </div>
         </div>
       </div>
+
+      {/* ── WHILE YOU ARE TRAVELLING ──
+          The two things somebody actually does mid-trip were the two worst
+          placed on this page: "Add a bill" sat mid-scroll inside "What you
+          spent on this trip", and "Add a journey" was a `btn sm` tucked into
+          the Route card's header, further down still. Both needed scrolling
+          past the approval chain, the estimate and the ledger — on a phone, on
+          a pavement, having just paid a cab driver who is waiting.
+
+          So they are lifted to the top and pinned there. Sticky under the
+          header, so they stay reachable however far down the page you are: the
+          whole point is that you never have to find them.
+
+          WHY THE ORIGINALS STAY. Each is contextual where it was — the bill
+          button next to the running total and the food budget, the journey
+          button next to the list of journeys — and that is the right place
+          when you are reading the page rather than acting on it. This bar is
+          for acting. It is not a third copy of anything: it is the same two
+          handlers.
+
+          ONLY WHILE IT IS LIVE. A trip you are on today, or one approved whose
+          first day has arrived — the cab to the airport is a real bill before
+          the first journey starts. Not on a finished trip, where the page is a
+          record and a pinned bar of actions would be noise, and never for a
+          desk reading somebody else's trip. */}
+      {live ? (
+        <div className="nowbar">
+          <div className="nb-what">
+            <span className="eyebrow">
+              {runningLeg ? 'Recording now' : 'You are on this trip'}
+            </span>
+            <b>
+              {runningLeg
+                ? `Journey ${runningLeg.n}: ${pname(runningLeg.from)} → ${pname(runningLeg.to)}`
+                : 'Add what you spend as you go'}
+            </b>
+          </div>
+          <div className="nb-do">
+            {/* The running journey first when there is one: ending it is more
+                urgent than starting anything else, and a journey that is not
+                ended cannot be claimed. */}
+            {runningLeg ? (
+              <button type="button" className="btn pri" onClick={() => onOpenLeg(runningLeg)}>
+                <TeIcon name="play" size="sm" />Open it
+              </button>
+            ) : null}
+            {canBill ? (
+              <button type="button" className={runningLeg ? 'btn' : 'btn pri'} onClick={() => onAddBill(t.id)}>
+                <TeIcon name="receipt" size="sm" />Add a bill
+              </button>
+            ) : null}
+            {mine ? (
+              <button type="button" className={runningLeg || canBill ? 'btn' : 'btn pri'} onClick={() => onAddLeg(detail)}>
+                <TeIcon name="route" size="sm" />Add a journey
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* ── you did not plan this one; you are on it ── */}
       {note ? (
