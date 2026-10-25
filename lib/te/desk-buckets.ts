@@ -176,3 +176,22 @@ function detailOf(kind: WorkKind, rows: unknown[]): string {
   }
   return 'nothing to do'
 }
+
+/**
+ * One room's rows, narrowed to a single trip.
+ *
+ * SAME TRAP AS THE GROUPING, so it lives next to it: a hotel row's trip id is
+ * `id`, not `trip_id`, because DeskStay is a row OF a trip. Filtering the
+ * hotels room on `trip_id` would compare `undefined` to a uuid and quietly
+ * empty the room — which reads exactly like "nothing to choose" and is the one
+ * message that must never be wrong, because somebody is waiting on that answer.
+ *
+ * Vehicles are deliberately not here. A vehicle belongs to a person, not a
+ * trip, so there is nothing to narrow it by and the room ignores a focus
+ * rather than pretending to honour one.
+ */
+export function focusDeskRows<T>(kind: WorkKind, rows: T[], tripId: string | null): T[] {
+  if (!tripId) return rows
+  if (kind === 'stays') return rows.filter(r => (r as { id?: string }).id === tripId)
+  return rows.filter(r => (r as { trip_id?: string }).trip_id === tripId)
+}

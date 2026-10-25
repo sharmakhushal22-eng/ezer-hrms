@@ -34,8 +34,8 @@ export default function TeDeskByTrip({ stays, toBook, booked, journeys, watch, o
   booked: DeskBooked[]
   journeys: DeskJourney[]
   watch: DeskWatch[]
-  /** Take the desk to the room that does this work. */
-  onGoRoom: (room: WorkKind) => void
+  /** Take the desk to the room that does this work, narrowed to this trip. */
+  onGoRoom: (room: WorkKind, focus: { tripId: string; tripNo: string }) => void
   /** Open the whole trip: every bill, the stay, the advance, the total. */
   onOpenTrip?: (tripId: string) => void
 }) {
@@ -94,7 +94,7 @@ export default function TeDeskByTrip({ stays, toBook, booked, journeys, watch, o
               key={l.kind}
               type="button"
               className="li click"
-              onClick={() => onGoRoom(l.kind)}
+              onClick={() => onGoRoom(l.kind, { tripId: b.tripId, tripNo: b.tripNo })}
               title={`Open ${l.label}`}
             >
               <span className="ico"><TeIcon name={ICON[l.kind]} size="sm" /></span>

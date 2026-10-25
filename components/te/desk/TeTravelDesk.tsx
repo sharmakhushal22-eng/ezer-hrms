@@ -37,6 +37,7 @@ import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeChain from '../TeChain'
 import TeContact from '../TeContact'
+import { focusDeskRows } from '@/lib/te/desk-buckets'
 import TeDeskByTrip from './TeDeskByTrip'
 import TeStayChoice from './TeStayChoice'
 import TeJourneyReview from './TeJourneyReview'
@@ -199,7 +200,25 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
     }
   }
 
-  const bookings = toBook ?? []
+  const allBookings = toBook ?? []
+
+  /** The trip every room is narrowed to, or null for all of them.
+   *
+   *  WHY IT IS ONE TRIP AND NOT A PERSISTENT MODE. A room narrowed to a trip
+   *  and left that way turns "nothing to do" into "nothing for this trip",
+   *  which are opposite messages wearing the same empty list. It is shown as a
+   *  chip the whole time it is on, and every room that honours it says how many
+   *  rows it is hiding. */
+  const [focus, setFocus] = useState<{ tripId: string; tripNo: string } | null>(null)
+  // Narrowed through focusDeskRows, which knows a hotel row's trip id is `id`
+  // rather than `trip_id` — filtering those on trip_id empties the room and
+  // reads as "nothing to choose" while somebody waits on the answer.
+  const fid = focus?.tripId ?? null
+  const bookings = focusDeskRows('book', allBookings, fid)
+  const staysHere = focusDeskRows('stays', stays, fid)
+  const bookedHere = focusDeskRows('booked', booked, fid)
+  const journeysHere = focusDeskRows('journeys', journeys, fid)
+  const watchHere = focusDeskRows('watch', watch, fid)
 
   // In the order work flows: a hotel is chosen, then it and the tickets are
   // booked, then what was booked can be undone. Vehicles are their own thing
@@ -210,7 +229,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
     // the trip it belongs to. The rooms below are unchanged.
     { k: 'trips', label: 'By trip', icon: 'route', n: 0 },
     { k: 'stays', label: 'Hotels to choose', icon: 'home', n: stays.length },
-    { k: 'book', label: 'To book', icon: 'plane', n: bookings.length },
+    { k: 'book', label: 'To book', icon: 'plane', n: allBookings.length },
     { k: 'booked', label: 'Booked', icon: 'check', n: booked.length },
     // Journeys that have happened and are waiting to be agreed. After the
     // booking rooms because it is work about the past, not about a ticket
@@ -236,8 +255,11 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
    *  booking form still open over a different trip, or to a cancellation
    *  reason typed for a booking you have since scrolled away from, is how a
    *  reason ends up filed against the wrong row. */
-  const goRoom = (k: Room) => {
+  const goRoom = (k: Room, on?: { tripId: string; tripNo: string } | null) => {
     setRoom(k)
+    // Passing undefined leaves the focus alone (a tab click); passing null
+    // clears it, which is what "show all" does.
+    if (on !== undefined) setFocus(on)
     setBooking(null)
     setTicket(null)
     setCancelling(null)
@@ -265,12 +287,33 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
         ))}
       </div>
 
+      {/* SAID WHILE IT IS ON, not just when it is set. An empty room under a
+          silent filter is the worst screen here: it reads as "nothing to do"
+          when it means "nothing for this trip". */}
+      {focus ? (
+        <div className="note">
+          <TeIcon name="pin" size="sm" />
+          <span>
+            Showing <span className="mono">{focus.tripNo}</span> only
+            {(() => {
+              // How much is being held back, said plainly. "2 of 7" is the
+              // difference between "nothing to do" and "nothing for this trip".
+              const shown = staysHere.length + bookings.length + bookedHere.length + journeysHere.length + watchHere.length
+              const all = stays.length + allBookings.length + booked.length + journeys.length + watch.length
+              return all > shown ? <> — {shown} of {all} rows across the desk</> : null
+            })()}
+            . Other trips&rsquo; work is still here.
+          </span>
+          <button type="button" className="btn sm" onClick={() => setFocus(null)}>Show all trips</button>
+        </div>
+      ) : null}
+
       {/* Choosing comes before booking, because it is what produces something
           to book. A trip sitting here has somebody waiting on an answer. */}
       {here === 'trips' ? (
         <TeDeskByTrip
           stays={stays}
-          toBook={bookings}
+          toBook={allBookings}
           booked={booked}
           journeys={journeys}
           watch={watch}
@@ -279,7 +322,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
         />
       ) : null}
 
-      {here === 'stays' ? <TeStayChoice stays={stays} onDone={message => { onToast(message); reload() }} onOpenTrip={onOpenTrip} /> : null}
+      {here === 'stays' ? <TeStayChoice stays={staysHere} onDone={message => { onToast(message); reload() }} onOpenTrip={onOpenTrip} /> : null}
 
       {here === 'book' ? (
       <div className="card pad0">
@@ -415,7 +458,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
         booked.length ? (
         <div className="card pad0">
           <div className="day"><span>Booked</span><span>{booked.length}</span></div>
-          {booked.map(b => (
+          {bookedHere.map(b => (
             <div key={b.id} className="li">
               <span className="ico"><TeIcon name={b.kind === 'hotel' ? 'pin' : 'plane'} /></span>
               <div className="grow">
@@ -486,7 +529,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
           only shows desk-booked legs that have not started. */}
       {here === 'journeys' ? (
         <TeJourneyReview
-          rows={journeys}
+          rows={journeysHere}
           desk="travel"
           basisOf={m => modes.find(x => x.id === m)?.basis}
           onOpenTrip={onOpenTrip}
@@ -507,7 +550,7 @@ export default function TeTravelDesk({ vehicleTypes, fuelPrice, modes, onOpenTri
             <TeIcon name="info" size="sm" />
             <span>Nothing here is yours to book — every journey is the traveller&rsquo;s own and no hotel was asked for. It is listed so you know what is travelling.</span>
           </div>
-          {watch.map(w => (
+          {watchHere.map(w => (
             // Nothing on this row competes for the click, so the row itself is
             // the control. Rendered as a button, not a div with an onClick, so
             // it is reachable by keyboard and announced as what it is.

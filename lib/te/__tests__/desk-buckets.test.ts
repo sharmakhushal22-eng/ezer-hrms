@@ -8,7 +8,7 @@
 // room whose work is most time-sensitive looks empty.
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { deskBuckets } from '../desk-buckets.ts'
+import { deskBuckets, focusDeskRows } from '../desk-buckets.ts'
 import type { DeskBooked, DeskJourney, DeskStay, DeskToBook, DeskWatch } from '../client.ts'
 
 const stay = (over: Partial<DeskStay>): DeskStay => ({
@@ -177,5 +177,34 @@ describe('the edges', () => {
     })
     assert.equal(b[0].who, 'Shreya Reddy')
     assert.equal(b[0].empCode, 'SRS9010')
+  })
+})
+
+describe('narrowing a room to one trip', () => {
+  it('a hotel row is matched on `id`, not `trip_id` — the same trap', () => {
+    // Filtering the hotels room on trip_id compares undefined to a uuid and
+    // empties it, which reads as "nothing to choose" when somebody is waiting.
+    const rows = [stay({ id: 'tA' }), stay({ id: 'tB' })]
+    assert.deepEqual(focusDeskRows('stays', rows, 'tA').map(r => r.id), ['tA'])
+  })
+
+  it('every other room is matched on trip_id', () => {
+    assert.deepEqual(
+      focusDeskRows('book', [toBook({ trip_id: 'a' }), toBook({ trip_id: 'b' })], 'b').map(r => r.trip_id),
+      ['b'],
+    )
+    assert.deepEqual(
+      focusDeskRows('journeys', [journey({ trip_id: 'a' }), journey({ trip_id: 'b' })], 'a').map(r => r.trip_id),
+      ['a'],
+    )
+  })
+
+  it('no focus means every row, not none', () => {
+    const rows = [toBook({ trip_id: 'a' }), toBook({ trip_id: 'b' })]
+    assert.equal(focusDeskRows('book', rows, null).length, 2)
+  })
+
+  it('a focus on a trip the room has nothing for is empty, not everything', () => {
+    assert.deepEqual(focusDeskRows('book', [toBook({ trip_id: 'a' })], 'zzz'), [])
   })
 })
