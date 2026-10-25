@@ -2,21 +2,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { orIlike } from '@/lib/pg-search'
 import { supabase } from '../../../lib/supabase'
-import { useGrant } from '@/lib/rms/client'
+import { useGrant, authToken } from '@/lib/rms/client'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
-import EmployeeProfileSections from '@/components/employees/EmployeeProfileView'
+import EmployeeProfileSections, { FactsGrid, recordFacts, statusTone } from '@/components/employees/EmployeeProfileView'
 import { UPPERCASE, fieldError } from '@/lib/hr/validate'
 // This page keeps its own local Badge / Field / Section, so the system's
 // equivalents are aliased where the names would clash.
 import {
   Page as UIPage, PageHeader, Button, Person, Th, Td, Tr, Empty, SkeletonRows,
-  Badge as Chip, inputStyle, tone,
-  C, F, W, S, R, E, M, numeric, eyebrow,
-  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown,
+  Badge as Chip, inputStyle, tone, Avatar, Tabs,
+  C, F, W, S, R, E, M, Z, numeric, eyebrow,
+  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown, IconChevron, IconCheck,
 } from '@/lib/ui'
 import IdCardsTab from '@/components/employees/IdCardsTab'
 // The same pure check the API route enforces with. Here it only decides whether
@@ -103,8 +103,6 @@ const s = {
   saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:C.onAccent, border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
 }
 
-const initials = (n: string) => n?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'NA'
-const fmt = (v: any) => !v || v === '' ? '—' : String(v)
 const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
 
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
@@ -754,79 +752,113 @@ function Badge({ val, map }: { val: string; map: Record<string,{bg:string;color:
   return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '—'}</span>
 }
 
-// Profile header strip
-function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any) {
-  const gc = GRADE_COLORS[emp.grade] || {bg:C.sunken,color:C.inkSoft}
+// ─── Employee detail: identity card ───────────────────────────────
+// A light card rather than the dark block it replaced: avatar (the photo when there
+// is one), name, designation · department, chips only for values that exist, then the
+// facts somebody checks first as a label-over-value grid.
+
+/** The employee's photo, signed server-side — employee-photos is a private bucket.
+ *  Null until it arrives, and for good when there is none; the avatar shows initials. */
+function usePhoto(emp: any): string | null {
+  const [url, setUrl] = useState<{ id: string; url: string | null } | null>(null)
+  useEffect(() => {
+    if (!emp?.id || !emp?.photo_path) return
+    let live = true
+    ;(async () => {
+      try {
+        const token = await authToken()
+        if (!token) return
+        const res = await fetch(`/api/employees/photo?id=${encodeURIComponent(emp.id)}`, {
+          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+        })
+        const j = await res.json().catch(() => ({}))
+        if (live) setUrl({ id: emp.id, url: res.ok ? (j?.url ?? null) : null })
+      } catch { /* a missing picture, not a broken screen */ }
+    })()
+    return () => { live = false }
+  }, [emp?.id, emp?.photo_path])
+  return url && url.id === emp?.id ? url.url : null
+}
+
+/** "Name (CODE)" for the L1 manager, or '—'. undefined while loading. */
+function useManagerName(id: string | null | undefined): string | undefined {
+  const [name, setName] = useState<{ id: string; v: string } | null>(null)
+  useEffect(() => {
+    if (!id) return
+    let live = true
+    supabase.from('employees').select('full_name, emp_code').eq('id', id).maybeSingle()
+      .then(({ data }) => {
+        if (live) setName({ id, v: data ? `${(data as any).full_name} (${(data as any).emp_code})` : '—' })
+      })
+    return () => { live = false }
+  }, [id])
+  if (!id) return '—'
+  return name && name.id === id ? name.v : undefined
+}
+
+function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: {
+  emp: any; editMode: boolean; saving: boolean
+  onEdit: () => void; onSave: () => void; onCancel: () => void
+}) {
+  const photo = usePhoto(emp)
+  const l1 = useManagerName(emp.l1_manager_id)
+  const dept = emp.departments?.dept_name
+  const company = emp.companies?.company_name
+  const role = [emp.designation, dept].filter(Boolean)
+  const facts = [
+    { l: 'Company', v: company || '—' },
+    ...recordFacts(emp, { l1: l1 === undefined ? 'Loading…' : l1 }).filter(f => f.l !== 'Department'),
+  ]
   return (
-    <div style={{ background:P.navy, padding:'18px 24px 0', borderRadius:'14px 14px 0 0' }}>
-      <div style={{ display:'flex', alignItems:'flex-start', gap:'16px', paddingBottom:'14px' }}>
-        {/* Avatar */}
-        <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:emp.gender==='Female'?'#FCE7F3':P.purpleBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', fontWeight:700, color:emp.gender==='Female'?'#BE185D':P.purple, flexShrink:0, border:'3px solid rgba(255,255,255,.15)' }}>
-          {initials(emp.full_name)}
+    <div style={{
+      background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg,
+      boxShadow: E.raised, overflow: 'hidden', marginBottom: S.lg,
+    }}>
+      {/* A quiet band of the brand tint, so the avatar has something to sit over. */}
+      <div aria-hidden style={{ height: 56, background: `linear-gradient(180deg, ${C.brandTint}, ${C.surface})` }} />
+      <div style={{
+        display: 'flex', gap: `${S.md}px ${S.lg}px`, alignItems: 'flex-start', flexWrap: 'wrap',
+        padding: `${S.md}px ${S.xl}px ${S.lg}px`,
+      }}>
+        {/* Only the avatar rises into the band; the name starts below it. */}
+        <div style={{ borderRadius: '50%', padding: 3, background: C.surface, boxShadow: E.raised, flexShrink: 0, lineHeight: 0, marginTop: -46 }}>
+          <Avatar name={emp.full_name} size={76} src={photo} />
         </div>
-        {/* Info */}
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:'17px', fontWeight:600, color:C.onAccent, marginBottom:'3px' }}>{emp.full_name}</div>
-          <div style={{ fontSize:'12px', color:C.onAccentDim, marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
-          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...TYPE_COLORS[emp.employment_type] }}>{emp.employment_type}</span>
-            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...STATUS_COLORS[emp.employment_status] }}>{emp.employment_status}</span>
-            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...gc }}>{emp.grade}</span>
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontSize: F.title + 2, fontWeight: W.bold, color: C.ink, letterSpacing: '-.015em', lineHeight: 1.25, overflowWrap: 'anywhere' }}>
+            {emp.full_name || 'Unnamed employee'}
+          </h2>
+          <div style={{ marginTop: 3, fontSize: F.small, color: role.length ? C.inkSoft : C.faint }}>
+            {role.length ? role.join(' · ') : 'No designation recorded'}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: S.sm + 2 }}>
+            {emp.emp_code && <span style={numeric}><Chip t="brand">{emp.emp_code}</Chip></span>}
+            {emp.employment_status && <Chip t={statusTone(emp.employment_status)} dot>{emp.employment_status}</Chip>}
+            {emp.employment_type && <Chip>{emp.employment_type}</Chip>}
+            {emp.grade && <Chip>Grade {emp.grade}</Chip>}
+            {emp.confirmation_status === 'Probation' && <Chip t="warning">On probation</Chip>}
           </div>
         </div>
-        {/* Actions */}
-        <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+        <div style={{ display: 'flex', gap: S.sm, alignItems: 'center', flexWrap: 'wrap' }}>
           {editMode ? (
             <>
-              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:C.onAccent, border:'1px solid rgba(255,255,255,.25)', borderRadius:'10px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
-              <button onClick={onSave} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? .7 : 1 }}>
-                <span>{saving ? '' : ''}</span>{saving ? 'Saving…' : 'Save changes'}
-              </button>
+              <Button onClick={onCancel} disabled={saving}>Cancel</Button>
+              <Button variant="primary" icon={<IconCheck size={16} />} onClick={onSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </Button>
             </>
           ) : (
-            <button onClick={onEdit} style={{ ...s.priBtn }}>
-              <span></span> Edit profile
-            </button>
+            <Button variant="primary" onClick={onEdit}>Edit profile</Button>
           )}
         </div>
       </div>
-      {/* Quick stat strip */}
-      <div style={{ background:'rgba(255,255,255,.06)', margin:'0 -24px', padding:'8px 24px', display:'flex', gap:'20px', flexWrap:'wrap', borderTop:'1px solid rgba(255,255,255,.08)' }}>
-        {[
-          { l:'Group DOJ', v: fmtDate(emp.group_doj) },
-          { l:'Company DOJ', v: fmtDate(emp.company_doj) },
-          { l:'Confirmation', v: fmt(emp.confirmation_status) },
-          { l:'Department', v: (emp as any).departments?.dept_name || '—' },
-          { l:'Location', v: (emp as any).locations?.location_name || '—' },
-          { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
-        ].map(x => (
-          <div key={x.l} style={{ fontSize:'11px', color:C.onAccentDim }}>
-            {x.l}: <span style={{ color:C.onAccent, fontWeight:500 }}>{x.v}</span>
-          </div>
-        ))}
+      <div style={{ borderTop: `1px solid ${C.line}`, background: C.sunken, padding: `${S.md + 2}px ${S.xl}px` }}>
+        <FactsGrid facts={facts} min={140} />
       </div>
     </div>
   )
 }
 
-// Tab bar
-function TabBar({ tabs, active, onChange }: any) {
-  return (
-    <div style={{ display:'flex', background:C.sunken, borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
-      {tabs.map((t: any) => (
-        <button key={t.id} onClick={() => onChange(t.id)} style={{
-          padding:'11px 16px', border:'none', background:'transparent', cursor:'pointer',
-          fontSize:'12px', fontWeight: active===t.id ? 600 : 400,
-          color: active===t.id ? P.purple : P.muted, whiteSpace:'nowrap',
-          borderBottom: active===t.id ? `3px solid ${P.purple}` : '3px solid transparent',
-          transition:'all .12s'
-        }}>
-          {t.icon} {t.label}
-        </button>
-      ))}
-    </div>
-  )
-}
 // ─── Main Component ───────────────────────────────────────────
 export default function EmployeeMaster() {
   const { grant, loading: grantLoading } = useGrant()
@@ -1383,30 +1415,59 @@ export default function EmployeeMaster() {
 
       {/* ── PROFILE DRAWER — full screen, same page ── */}
       {showDrawer && selected && (
-        <div style={{ position:'fixed', inset:0, background:P.page, zIndex:200, display:'flex', flexDirection:'column', overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
-          <div style={{ flex:1, width:'100%', maxWidth:'1060px', margin:'0 auto', display:'flex', flexDirection:'column' }}>
+        <div role="dialog" aria-modal="true" aria-label={`${selected.full_name} — employee details`}
+             className="ez-scroll"
+             style={{ position:'fixed', inset:0, background:C.canvas, zIndex:Z.drawer, overflowY:'auto',
+                      fontFamily:F.family, fontSize:F.body, color:C.ink }}>
+          <div className="ez-fade" style={{ width:'100%', maxWidth:1120, margin:'0 auto',
+                        padding:`${S.lg}px clamp(${S.md}px, 3vw, ${S.xl}px) ${S.huge}px`, boxSizing:'border-box' }}>
 
-            {/* Nav breadcrumb */}
-            <div style={{ padding:'10px 20px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:P.muted }}>
-              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>Employee list</button>
-              <span>›</span>
-              <span style={{ color:P.text, fontWeight:500 }}>{selected.full_name}</span>
-              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'7px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
+            {/* Back + breadcrumb */}
+            <div style={{ display:'flex', alignItems:'center', gap:S.md, flexWrap:'wrap', marginBottom:S.md }}>
+              <Button size="sm" onClick={closeDrawer}
+                      icon={<IconChevron size={14} style={{ transform:'rotate(180deg)' }} />}>
+                Employees
+              </Button>
+              <nav aria-label="Breadcrumb" style={{ display:'flex', alignItems:'center', gap:6, fontSize:F.tiny, color:C.muted, minWidth:0 }}>
+                <span>People</span>
+                <IconChevron size={12} style={{ color:C.faint }} />
+                <button onClick={closeDrawer} style={{ border:'none', background:'none', padding:0, cursor:'pointer',
+                        font:'inherit', color:C.muted }}>Employee Master</button>
+                <IconChevron size={12} style={{ color:C.faint }} />
+                <span style={{ color:C.ink, fontWeight:W.semi, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                  {selected.full_name}
+                </span>
+              </nav>
+              {editMode && <span style={{ marginLeft:'auto' }}><Chip t="warning" dot>Editing</Chip></span>}
             </div>
 
-            {/* Profile header (with edit/save/cancel) */}
-            <div style={{ margin:'0 20px', borderRadius:'14px', overflow:'hidden', border:`1px solid ${P.border}`, marginBottom:'14px' }}>
-              <ProfileHeader emp={selected} editMode={editMode} saving={saving} onEdit={() => openEdit()} onSave={saveEdit} onCancel={cancelEdit} />
+            <ProfileHeader emp={selected} editMode={editMode} saving={saving}
+                           onEdit={() => openEdit()} onSave={saveEdit} onCancel={cancelEdit} />
 
-              {/* Tab bar */}
-              <TabBar tabs={TABS} active={profileTab} onChange={setProfileTab} />
+            {/* Tabs stay in reach while a long tab scrolls. */}
+            <div style={{ position:'sticky', top:0, zIndex:Z.sticky, background:C.canvas, paddingTop:S.xs }}>
+              <Tabs tabs={TABS.map(t => ({ key:t.id, label:t.label }))} value={profileTab} onChange={setProfileTab} />
+            </div>
 
-              {/* Tab content */}
-              <div style={{ background:P.card, minHeight:'320px' }}>
-                {renderTab(selected)}
+            <div key={profileTab} className="ez-fade" style={{ minHeight:320 }}>
+              {renderTab(selected)}
+            </div>
+
+            {/* While editing, Save is never more than a glance away. */}
+            {editMode && (
+              <div style={{ position:'sticky', bottom:S.md, zIndex:Z.sticky, marginTop:S.lg,
+                            display:'flex', alignItems:'center', gap:S.sm, flexWrap:'wrap',
+                            background:C.surface, border:`1px solid ${C.line}`, borderRadius:R.lg,
+                            boxShadow:E.floating, padding:`${S.sm + 2}px ${S.lg}px` }}>
+                <span style={{ fontSize:F.small, color:C.muted, flex:'1 1 200px' }}>
+                  Editing {selected.full_name}. Changes are saved together.
+                </span>
+                <Button onClick={cancelEdit} disabled={saving}>Cancel</Button>
+                <Button variant="primary" icon={<IconCheck size={16} />} onClick={saveEdit} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save changes'}
+                </Button>
               </div>
-            </div>
-
+            )}
           </div>
         </div>
       )}

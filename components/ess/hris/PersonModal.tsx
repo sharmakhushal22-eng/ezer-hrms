@@ -49,7 +49,7 @@ export function PersonModal({ person, onClose }: { person: DirectoryRow | null; 
               </div>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{e.full_name}</div>
-                <div style={{ fontSize: 12, color: 'var(--ez-muted)' }}>{e.designation || '—'} · {e.emp_code}</div>
+                <div style={{ fontSize: 12, color: 'var(--ez-muted)' }}>{[e.designation, e.emp_code].filter(Boolean).join(' · ') || '—'}</div>
               </div>
               <button className="cl" ref={closeBtn} onClick={onClose} aria-label="Close"><Ic k="x" /></button>
             </div>
