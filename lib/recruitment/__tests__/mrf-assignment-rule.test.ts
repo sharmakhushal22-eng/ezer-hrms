@@ -149,163 +149,47 @@ test('the assignable list is loaded without waiting for the Approvals sub-tab', 
 })
 
 // ── 5. The HR Head tab — the path a user had to find by hand ───────────────
+//
+// This tab used to carry its own approveMrf / rejectMrf: a one-click Supabase
+// write of status 'APPROVED' that skipped the chain, the assignment and the
+// audit log (17 seeded MRFs ended up APPROVED with their HR_HEAD step still
+// PENDING). An earlier fix gave that write its own guards; a later merge lost
+// them. Rather than keep a fourth copy of the rule, the write is GONE: the tab
+// shows the read-only tracker, and "Review & decide" — offered only to the
+// pending approver — opens the MRF tab's review, which posts to /api/ess/mrf.
+// So enforcement point (4) no longer exists, and these tests keep it that way.
 
-describe('the HR Head tab enforces the rule at its own write', () => {
-  const start = OFFER.indexOf('async function approveMrf(')
-  const body = OFFER.slice(start, OFFER.indexOf('\n  async function rejectMrf', start))
+describe('the HR Head tab does not write an MRF decision itself', () => {
+  const start = OFFER.indexOf('export function HRHeadApprovalDashboard(')
+  const body = OFFER.slice(start, OFFER.indexOf('\n// ── Documents on the review screen', start))
 
-  test('approveMrf exists and its body was isolated', () => {
-    assert.ok(start !== -1, 'approveMrf not found in offer-flow-components.tsx')
-    assert.ok(body.length > 400 && body.length < 12_000,
-      `approveMrf body slice looks wrong (${body.length} chars) — the anchors moved`)
+  test('the dashboard body was isolated', () => {
+    assert.ok(start !== -1, 'HRHeadApprovalDashboard not found in offer-flow-components.tsx')
+    assert.ok(body.length > 2_000 && body.length < 60_000,
+      `HRHeadApprovalDashboard slice looks wrong (${body.length} chars) — the anchors moved`)
   })
 
-  test('it refuses an unassigned hand-off', () => {
-    assert.ok(/isHandOff && !picked\.length/.test(body),
-      'the HR Head tab wrote status APPROVED with nobody assigned. This screen has its own ' +
-      'Supabase write and reaches neither the ESS route nor page.tsx, so it needs its own check.')
+  test('there is no direct requisition write on this screen', () => {
+    assert.ok(!/from\('manpower_requisitions'\)\s*\.update/.test(body),
+      'the HR Head tab must not update manpower_requisitions — that is the chain-skipping write')
+    assert.ok(!/async function approveMrf\(/.test(body) && !/async function rejectMrf\(/.test(body),
+      'approveMrf / rejectMrf came back — route the decision through /api/ess/mrf instead')
   })
 
-  test('a chain with no PENDING step still counts as the hand-off', () => {
-    assert.ok(/!cur \|\| cur\.role === 'HR_HEAD'/.test(body),
-      'an MRF with no routing is opened outright by one decision, so it is a hand-off too')
+  test('the decision is handed to the MRF review, and only for the pending approver', () => {
+    assert.ok(/mine && onReviewMrf/.test(body),
+      'Review & decide must be offered only when the viewer IS the pending approver')
+    assert.ok(/pendingStep\?\.approverId === employeeId/.test(body),
+      '"mine" must compare the PENDING step\'s approver with the viewer')
+    assert.ok(/<ApprovalTracker /.test(body),
+      'the screen shows where each requisition sits with the read-only tracker')
   })
 
-  test('the refusal precedes the Supabase update', () => {
-    const guard = body.indexOf('!picked.length')
-    const write = body.indexOf("from('manpower_requisitions').update")
-    assert.ok(guard !== -1 && write !== -1 && guard < write,
-      'the check must run before the write, or a refused approval has already happened')
-  })
-
-  test('assignees are validated against the assignable list', () => {
-    // inCompany, not a flat list: the validation must use the recruiters of THIS
-    // requisition's company. An earlier version of this assertion looked for
-    // `hmOptions`, the single caller-company-scoped list that allowed an MRF to
-    // be assigned across companies — so matching it would now be a regression.
-    assert.ok(/allowed/.test(body) && /inCompany/.test(body),
-      'mirror the server-side role check, scoped to the MRF\'s own company, rather than ' +
-      'trusting the picker')
-  })
-
-  test('it advances the approval chain instead of stamping APPROVED', () => {
-    assert.ok(/'WAITING'/.test(body) && /approval_chain/.test(body),
-      "this screen set status 'APPROVED' outright, so an RM2 step was never recorded and " +
-      'the requisition skipped its own routing')
-  })
-
-  test('the decision is written to the audit log', () => {
-    assert.ok(/auditMrf\(/.test(body),
-      'approvals from this screen left no audit trail at all')
-  })
-
-  test('the assignee is told they were handed the requisition', () => {
-    // Making the assignment mandatory is only half the hand-off. /api/ess/mrf
-    // notifies each assignee on its own approve path; this screen did not, so
-    // the rule would have assigned somebody SILENTLY — they would find out only
-    // by chancing on the "Assigned to you" block in Tasks & Approvals.
-    assert.ok(/ess_notifications/.test(body),
-      'approving here must notify each assigned hiring manager, as the ESS route does')
-    assert.ok(/'\/ess\?tab=approvals'/.test(body),
-      'use the same deep link as the route — that is where Acknowledge lives')
-  })
-
-  test('both approval paths word the assignment the same way', () => {
-    // Two places tell somebody the same thing. If they drift, one assignment
-    // reads two different ways depending on which screen the HR Head used.
-    const phrase = 'You have been assigned an MRF'
-    assert.ok(ESS.includes(phrase),
-      `the ESS route's assignment notification changed — it no longer says "${phrase}"`)
-    assert.ok(OFFER.includes(phrase),
-      `the HR Head tab's assignment notification must match the route's: "${phrase}"`)
-  })
-
-  test('the assignable list is scoped to the MRF\'s own company', () => {
-    // This screen lists SUBMITTED requisitions from EVERY company (loadMrfs has
-    // no company filter), while /api/ess/mrf's hrOptions is scoped to the
-    // CALLER's company. One flat list therefore offered the wrong people, and an
-    // MRF in company A was assigned to a recruiter in company B — who never saw
-    // it, because Recruitment pins every query to the viewer's own company and
-    // dropped the row before the "assigned to me" check could run.
-    assert.ok(/hmByCompany\[m\.company_id\]/.test(OFFER),
-      "the picker must read hmByCompany[m.company_id] — a single flat list of the HR Head's " +
-      'own recruiters is what caused the cross-company assignment')
-    assert.ok(/hmByCompany\[m\.company_id\]/.test(body),
-      'approveMrf must validate against THIS MRF\'s company too, not just the picker')
-    // Anchored to the IMPORT and CALL forms, not the bare name: this regex runs
-    // over whole-file source, so a plain /toPickerPeople/ also matched the
-    // comment in the loader explaining why the helper is no longer used — the
-    // test then failed on prose while the code was correct. An assertion about
-    // what the code does NOT do has to name code.
-    assert.ok(!/import[^\n]*toPickerPeople/.test(OFFER) && !/toPickerPeople\(/.test(OFFER),
-      'hrOptions/toPickerPeople is caller-company-scoped and must not feed this screen')
-  })
-
-  test('picker rows carry is_recruiter, or the list renders empty beneath its own count', () => {
-    // RecruiterPicker's unsearched list is `people.filter(p => p.is_recruiter)`.
-    // The route returns {id, name, code} with no such flag, so passing those
-    // rows straight through showed "No recruiters suggested" directly under
-    // "3 available in <company>" — loaded, findable by typing, never offered.
-    // The count and the list read the same array, so they must not disagree.
-    assert.ok(/is_recruiter: true/.test(OFFER),
-      'rows fed to RecruiterPicker must carry is_recruiter — every one comes from ' +
-      "roleHolders(companyId, ['RECRUITER']), so the flag is true by construction")
-  })
-
-  test('the company-keyed recruiters come from the guarded route', () => {
-    const route = readFileSync('app/api/recruitment/offer-approval/route.ts', 'utf8')
-    assert.ok(/roleHolders\(id, \['RECRUITER'\]\)/.test(route),
-      'the GET must return RECRUITER holders per company — HR_MANAGER is not assignable')
-    assert.ok(/recruiters\[id\]/.test(route),
-      'they must be keyed by company id, so each MRF can be scoped to its own')
-    assert.ok(/requireModule\(req, 'Recruitment'\)/.test(route),
-      'this enumerates named employees per company — it stays session-guarded')
-  })
-
-  test('the screen renders the assignment menu', () => {
-    // The picker MOVED. This tab renders HRHeadApprovalView now, and the view's
-    // PersonGrid is the picker; RecruiterPicker is gone from this file.
-    //
-    // Matching /RecruiterPicker/ over whole-file source kept PASSING after the
-    // swap, because the name survived on a dead import line and in a comment --
-    // the same prose-matching trap the toPickerPeople assertion below documents.
-    // So this asserts the MOUNT and the view's own grid instead.
-    assert.ok(/<HRHeadApprovalView/.test(OFFER),
-      'the HR Head tab must render the approvals view, which carries the picker')
-    assert.ok(/recruitersByCompany=\{hmByCompany\}/.test(OFFER),
-      'the view must be handed the COMPANY-KEYED recruiters — a flat list is what ' +
-      'caused the cross-company assignment')
-    assert.ok(/function PersonGrid\(/.test(VIEW) && /aria-pressed=\{on\}/.test(VIEW),
-      'the view must render a selectable person list — that is the picker now')
-    // The SOURCE assertion deliberately inverted. This first demanded
-    // toPickerPeople + /api/ess/mrf, which is hrOptions — scoped to the CALLER's
-    // company. On a screen listing MRFs from every company that is the wrong
-    // list, and it is what produced the cross-company assignment. The people now
-    // come from offer-approval's company-keyed `recruiters`; see the scoping
-    // test above, which asserts toPickerPeople is absent.
-    assert.ok(/offer-approval\?company_ids=/.test(OFFER),
-      'the assignable list must be fetched per company from the guarded ' +
-      'offer-approval route, so each MRF offers only its own company\'s recruiters')
-  })
-
-  test('the Approve button is gated too, as the courtesy half', () => {
-    // Also moved into the view, and still only the courtesy half: approveMrf's
-    // own refusal above is the rule. A disabled button is not an enforcement
-    // point — which is the whole reason this file exists.
-    assert.ok(/disabled=\{!ready \|\| busy\}/.test(VIEW),
-      'the approve control must be disabled until the hand-off is ready')
-    assert.ok(/const ready = isMrf \? canApproveMrf\(mrfPicked\)/.test(VIEW),
-      'readiness must come from canApproveMrf, so the gate tracks the ids actually picked')
-    assert.ok(/return assigneeIds\.length > 0/.test(LOGIC),
-      'canApproveMrf must mean "somebody is named"')
-  })
-
-  test('page.tsx passes the employeeId the list needs', () => {
-    // No /s flag: tsconfig targets ES2017, where dotAll is a TS1501 error and
-    // would push the typecheck baseline off 43. [^>] already spans newlines.
+  test('page.tsx wires the hand-off to the MRF tab\'s review', () => {
     assert.ok(/<HRHeadApprovalDashboard[^>]*employeeId=\{grant\.employeeId\}/.test(PAGE),
-      'without employeeId the hiring-manager fetch has no identity and the menu is empty — ' +
-      'which would force the HR Head past the assignment step again')
+      'without employeeId the tab cannot tell which requisitions wait on the viewer')
+    assert.ok(/onReviewMrf=\{\(id:string\)=>\{ setMrfDeep\(\{ sub:'approvals', id \}\); setTab\('mrf'\) \}\}/.test(PAGE),
+      'onReviewMrf must open the MRF tab on its Approvals review for that requisition')
   })
 })
 

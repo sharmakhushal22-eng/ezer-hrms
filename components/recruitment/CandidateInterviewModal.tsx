@@ -289,7 +289,7 @@ export default function CandidateInterviewModal({
   }
 
   const initials = (candidate.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
-  const subLine = [mrf?.designation || mrf?.position, candidate.designation, candidate.mrf_id ? `MRF ${(mrf?.mrf_number || '').toString()}` : null].filter(Boolean).join(' · ')
+  const subLine = [mrf?.designation || mrf?.position, candidate.designation, candidate.mrf_id && mrf?.mrf_number ? String(mrf.mrf_number) : null].filter(Boolean).join(' · ')  // mrf_number already reads "MRF-2026-…"; the old "MRF " prefix printed "MRF MRF-2026-…"
   const candMeta = { name: candidate.full_name, sub: subLine, ai_score: candidate.ai_score ?? null }
 
   // ---- feedback viewer (own overlay above the modal) ----
@@ -398,6 +398,12 @@ export default function CandidateInterviewModal({
           const isOpen = openRound === r
           const panelists = shown.filter(i => !isMain(i))
           const remark = main?.decision_remark || main?.feedback?.decision_remark || null
+          // Who the round is waiting on right now, by name — the recruiter should never have to
+          // guess whose desk a round sits on. Invites carry the names even before acknowledgement.
+          const nameOf = (i: any) => i?.interviewer_name || i?.interviewer_emp_code || 'Interviewer'
+          const invitedMain = rows.find(i => isMain(i))
+          const waitingAck = rows.filter(i => i.status !== 'acknowledged' && i.status !== 'submitted')
+          const ackNames = waitingAck.map(i => `${nameOf(i)}${isMain(i) ? ' (main)' : ''}`).join(', ')
           return (
             <div key={r} style={{ border:`1px solid ${isOpen ? C.purple : C.line}`, borderRadius:12, overflow:'hidden' }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 13px', background: decision === 'REJECT' ? TK.criticalTint : complete ? C.okbg : C.card }}>
@@ -407,8 +413,8 @@ export default function CandidateInterviewModal({
                   <div style={{ fontSize:11, color:C.muted }}>
                     {!scheduled ? (direct ? 'Feedback not recorded yet' : 'No interview scheduled yet')
                       : complete ? `Main: ${main?.interviewer_name || '—'}${panelists.length ? ` · ${panelists.length} panelist${panelists.length > 1 ? 's' : ''}` : ''}`
-                      : shown.length === 0 ? 'Awaiting acknowledgement from the invited interviewers'
-                      : `${shown.length} acknowledged · awaiting the main interviewer's feedback`}
+                      : shown.length === 0 ? `Waiting on ${ackNames || 'the invited interviewers'} to acknowledge`
+                      : `Waiting on ${nameOf(main || invitedMain)} (main interviewer) for feedback`}
                   </div>
                 </div>
                 <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statBg, color: statColor }}>{statLabel}</span>
@@ -428,7 +434,7 @@ export default function CandidateInterviewModal({
 
               {/* interviewer rows — acknowledged / submitted only */}
               {scheduled && shown.length === 0 && (
-                <div style={{ padding:'8px 13px 12px', fontSize:11.5, color:C.faint, borderTop:`1px solid ${C.line}` }}>No interviewer has acknowledged yet — they’ll appear here once they accept the invite in ESS.</div>
+                <div style={{ padding:'8px 13px 12px', fontSize:11.5, color:C.faint, borderTop:`1px solid ${C.line}` }}>Invited: <b style={{ color:C.ink, fontWeight:600 }}>{ackNames || '—'}</b>. Each one appears here once they accept the invite in ESS.</div>
               )}
               {shown.length > 0 && (
                 <div style={{ padding:'4px 13px 10px' }}>

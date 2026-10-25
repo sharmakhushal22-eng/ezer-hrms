@@ -48,6 +48,8 @@ export interface AdapterContext {
    * tab passes its existing formatter instead.
    */
   budgetLabelOf?: (row: Row) => string | null;
+  /** Optional caption under the budget amount (basis and period), from the same formatter family. */
+  budgetCaptionOf?: (row: Row) => string | null;
 }
 
 export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
@@ -75,6 +77,10 @@ export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
     approverName: String(pick(s, ['approver_name', 'actor'], '') || (s.approver_id ? ctx.nameOf(String(s.approver_id)) : '—')),
     status: String(pick(s, ['status'], 'PENDING')).toUpperCase(),
     actedAt: pick<string | null>(s, ['acted_at'], null),
+    approverId: pick<string | null>(s, ['approver_id'], null),
+    approverCode: pick<string | null>(s, ['approver_code'], null),
+    comment: pick<string | null>(s, ['comment', 'comments'], null),
+    actedByName: pick<string | null>(s, ['acted_by_name'], null),
   }));
   const recruiters = (Array.isArray(row.assigned_recruiter_ids) ? row.assigned_recruiter_ids : []) as string[];
   return {
@@ -117,6 +123,9 @@ export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
     expired,
     recruiterEmail: pick<string | null>(row, ['assigned_recruiter'], null),
     budgetLabel: ctx.budgetLabelOf ? ctx.budgetLabelOf(row) : null,
+    budgetCaption: ctx.budgetCaptionOf ? ctx.budgetCaptionOf(row) : null,
+    raisedAt: pick<string | null>(row, ['created_at'], null),
+    raisedBy: pick<string | null>(row, ['raised_by_name'], null),
     raw: row,
   };
 }

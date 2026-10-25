@@ -4809,3 +4809,255 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
   }
 }
 /* <<< EZER rxo offer-request form — end */
+
+/* ==========================================================================
+   Pipeline consistency pass (Oct 2026) — everything after the MRF
+   --------------------------------------------------------------------------
+   1. A compact page intro instead of the tall dotted hero band: title + help
+      on one line, a single line of subtitle, actions on the right. No
+      gradient, no dot pattern — the stage strip above already says where you
+      are, so the crumb is not repeated.
+   2. One candidate-card grammar (.rx-cc) shared by Send Offers, Offer
+      letters, Negotiation and Pre-onboarding: name + MRF tag, a meta line,
+      tags, a status line, and a footer pinned to the bottom so buttons line up
+      across a row whatever the content above them.
+   3. .rx-trail — where an approval sits right now ("With Riya Nair · HR
+      Head"), with the whole chain in a click-open popover.
+   Every colour is a var(--ez-*) token, so dark mode repaints it.
+   ========================================================================== */
+.rx-head{padding:4px 2px 0;border:0;background:transparent;box-shadow:none;animation:none;
+  flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px 20px}
+.rx-head::before{display:none}
+.rx-head-main{min-width:0;flex:1 1 360px}
+.rx-head-row{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap}
+.rx-head .rx-title{font-size:24px;line-height:1.15;margin:0;letter-spacing:-.02em}
+.rx-head .rx-sub{font-size:13px;color:var(--ez-muted);margin-top:4px;max-width:760px;line-height:1.45}
+.rx-head .rx-help summary{height:28px;font-size:12px;color:var(--ez-brand-deep);background:var(--ez-surface)}
+.rx-head-act{flex-wrap:wrap}
+
+/* Card grid: rows stretch, so every card in a row is the same height. */
+.rx-ccg{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(290px,100%),1fr));gap:14px;align-items:stretch}
+.rx-cc{display:flex;flex-direction:column;gap:8px;min-width:0;padding:14px 16px;background:var(--ez-surface);
+  border:1px solid var(--rx-edge,var(--ez-line));border-radius:14px;box-shadow:var(--ez-shadow-flat);
+  transition:border-color .2s,box-shadow .2s;text-align:left;color:inherit;font:inherit}
+.rx-cc.is-click{cursor:pointer}
+.rx-cc.is-click:hover{border-color:var(--ez-brand-edge);box-shadow:var(--ez-shadow-raised)}
+.rx-cc.is-click:focus-visible{outline:2px solid var(--ez-brand);outline-offset:2px}
+.rx-cc.is-sel{border-color:var(--ez-brand);box-shadow:0 0 0 1px var(--ez-brand)}
+.rx-cc-h{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.rx-cc-id{display:flex;align-items:center;gap:4px 8px;flex-wrap:wrap;min-width:0;flex:1}
+.rx-cc-n{font-size:14px;font-weight:650;color:var(--ez-ink);min-width:0;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.005em}
+.rx-cc-b{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:55%}
+.rx-mrf{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:99px;font-size:10.5px;font-weight:700;
+  color:var(--ez-brand-deep);background:var(--ez-brand-tint);border:1px solid var(--ez-brand-edge);white-space:nowrap;
+  font-variant-numeric:tabular-nums;flex-shrink:0}
+.rx-cc-m{font-size:12.5px;color:var(--ez-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.rx-cc-m b{color:var(--ez-ink-soft);font-weight:600}
+.rx-cc-tags{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.rx-cc-tag{display:inline-flex;align-items:center;gap:5px;max-width:100%;min-height:22px;padding:2px 8px;border-radius:7px;
+  font-size:11.5px;font-weight:600;line-height:1.3;border:1px solid var(--ez-line);background:var(--ez-sunken);
+  color:var(--ez-ink-soft);white-space:normal;overflow-wrap:anywhere}
+.rx-cc-tag.info{background:var(--ez-info-tint);color:var(--ez-info);border-color:var(--ez-info-edge)}
+.rx-cc-tag.warn{background:var(--ez-warning-tint);color:var(--ez-warning);border-color:var(--ez-warning-edge)}
+.rx-cc-tag.pos{background:var(--ez-positive-tint);color:var(--ez-positive);border-color:var(--ez-positive-edge)}
+.rx-cc-tag.crit{background:var(--ez-critical-tint);color:var(--ez-critical);border-color:var(--ez-critical-edge)}
+.rx-cc-tag.brand{background:var(--ez-brand-tint);color:var(--ez-brand-deep);border-color:var(--ez-brand-edge)}
+.rx-cc-s{position:relative;padding-left:15px;font-size:12px;line-height:1.45;color:var(--ez-ink-soft);min-width:0;overflow-wrap:anywhere}
+.rx-cc-s::before{content:"";position:absolute;left:0;top:5px;width:7px;height:7px;border-radius:50%;background:var(--ez-faint)}
+.rx-cc-s b{font-weight:650;color:var(--ez-ink)}
+.rx-cc-s.pos{color:var(--ez-positive)}.rx-cc-s.pos::before{background:var(--ez-positive)}
+.rx-cc-s.warn::before{background:var(--ez-warning)}
+.rx-cc-s.crit{color:var(--ez-critical)}.rx-cc-s.crit::before{background:var(--ez-critical)}
+.rx-cc-s.info::before{background:var(--ez-info)}
+.rx-cc-body{display:flex;flex-direction:column;gap:8px;min-width:0}
+.rx-cc-f{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:auto;padding-top:10px;border-top:1px solid var(--ez-line)}
+.rx-cc-f > .sp{flex:1}
+.rx-cc-f .rx-btn{flex-shrink:0}
+.rx-cc-f .rx-meta{font-size:12px}
+/* the stage-board card: three facts share the width by their content, so
+   "Immediate" no longer clips to "Immedi…" in a 272px column */
+.rx-card .rx-kv{min-width:0}
+.rx-card > span:has(> .rx-kv){grid-template-columns:auto auto auto!important;justify-content:space-between}
+
+/* Approval trail: one line saying where it sits now; click for the chain. */
+.rx-trail{position:relative;display:block;min-width:0}
+.rx-trail > summary{list-style:none;display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:12px;line-height:1.45;
+  color:var(--ez-ink-soft);padding:7px 9px;border-radius:9px;background:var(--ez-sunken);border:1px solid var(--ez-line)}
+.rx-trail > summary::-webkit-details-marker{display:none}
+.rx-trail > summary:hover,.rx-trail[open] > summary{border-color:var(--ez-brand-edge);background:var(--ez-brand-tint)}
+.rx-trail > summary:focus-visible{outline:2px solid var(--ez-brand);outline-offset:2px}
+.rx-trail-dots{display:inline-flex;gap:3px;flex-shrink:0;margin-top:5px}
+.rx-trail-dots i{width:7px;height:7px;border-radius:50%;background:var(--ez-line-strong)}
+.rx-trail-dots i.done{background:var(--ez-positive)}
+.rx-trail-dots i.now{background:var(--ez-warning)}
+.rx-trail-dots i.no{background:var(--ez-critical)}
+.rx-trail-t{flex:1;min-width:0;overflow-wrap:anywhere}
+.rx-trail-t b{color:var(--ez-ink);font-weight:650}
+.rx-trail-more{font-size:11.5px;color:var(--ez-brand-deep);font-weight:600;flex-shrink:0;white-space:nowrap}
+.rx-trail-body{position:absolute;z-index:var(--ez-z-popover);top:calc(100% + 6px);left:0;width:min(330px,86vw);padding:14px 16px;
+  border-radius:14px;background:var(--ez-surface);border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-floating);cursor:default}
+.rx-trail-body.r{left:auto;right:0}
+.rx-trail-h{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ez-muted);margin-bottom:10px}
+.rx-trail-body ol{list-style:none;margin:0;padding:0}
+.rx-trail-step{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;position:relative;padding-bottom:12px}
+.rx-trail-step:last-child{padding-bottom:0}
+.rx-trail-step::before{content:"";position:absolute;left:9px;top:22px;bottom:2px;width:2px;border-radius:2px;background:var(--ez-line)}
+.rx-trail-step:last-child::before{display:none}
+.rx-trail-step.done::before{background:var(--ez-positive-edge)}
+.rx-trail-d{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:10.5px;font-weight:700;
+  background:var(--ez-sunken);color:var(--ez-muted);border:1px solid var(--ez-line-strong)}
+.rx-trail-d svg{width:11px!important;height:11px!important}
+.rx-trail-step.done .rx-trail-d{background:var(--ez-positive-tint);color:var(--ez-positive);border-color:var(--ez-positive-edge)}
+.rx-trail-step.now .rx-trail-d{background:var(--ez-warning-tint);color:var(--ez-warning);border-color:var(--ez-warning)}
+.rx-trail-step.no .rx-trail-d{background:var(--ez-critical-tint);color:var(--ez-critical);border-color:var(--ez-critical-edge)}
+.rx-trail-l{font-size:12.5px;font-weight:650;color:var(--ez-ink)}
+.rx-trail-w{font-size:12px;color:var(--ez-ink-soft);overflow-wrap:anywhere}
+.rx-trail-when{font-size:11.5px;color:var(--ez-faint)}
+.rx-trail-step.now .rx-trail-l::after{content:" · now";color:var(--ez-warning);font-weight:600}
+.rx .rx-trail > summary{border-radius:9px!important}
+
+/* A section label above a run of rows (HR Head: MRF approvals / Rehire) */
+.rx-seclabel{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--ez-ink);margin:4px 0 0}
+.rx-seclabel .rx-meta{font-weight:500}
+.rx-seclabel::after{content:"";flex:1;height:1px;background:var(--ez-line)}
+/* Filter rows: search and the four selects share one height and shrink
+   together, so the row fits on one line instead of orphaning "All positions". */
+.rx-bar > .rx-search{flex:1 1 220px}
+.rx-bar > .rx-search .rx-input{height:38px}
+.rx-bar > .rx-search svg{top:11px}
+.rx-bar > .rx-search .rx-kbd{top:9px}
+.rx-bar > select.rx-input{height:38px!important;font-size:13px!important;flex:0 1 165px;min-width:120px;width:auto;max-width:200px}
+.rx-cc-m{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.45}
+
+/* ════════════════════════════════════════════════════════════════════════
+   MRF — layout fixes, approval tracker, raise-MRF wizard
+   (Every colour is a token. Cards are ~300px wide at the 125–130% zoom the
+   app runs at, so every rule below assumes a narrow card.)
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* The rail docks under the host's sticky bar (ESS top bar) instead of on top
+   of it. --rx-dock-top is measured by TabRail; 0 at /dashboard. */
+.rx-rail{top:var(--rx-dock-top,0px)}
+
+/* Overview: the tile count varies (a "Sent back" tile appears only when used). */
+@media (min-width:1181px){.rx-ov{grid-template-columns:minmax(0,1.35fr) repeat(var(--rx-ov-n,6),minmax(0,1fr))}}
+.rx-stt-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+
+/* ── Requisition card ── */
+.rx-mc,.rx-mc-in{min-width:0}
+.rx-mc-top{min-width:0}
+.rx-mc-top .rx-b{flex-shrink:0}
+.rx-mc-code{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-mc-flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:-4px;min-width:0;transform:translateZ(10px)}
+.rx-mc-t{overflow-wrap:anywhere}
+.rx-mc-sub{min-width:0}
+.rx-mc-sub span{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
+.rx-mc-sub span svg{vertical-align:-2px;margin-right:5px}
+/* Budget gets the widest third: its value is a currency amount, not a count. */
+.rx-mc-tiles{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.45fr)}
+.rx-mt-l{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-mt-l svg{flex-shrink:0}
+.rx-mt b{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-mt b.rx-mt-amt{font-size:15px;letter-spacing:-.01em;line-height:1.25}
+.rx-mc-chain{display:block}
+.rx-mc-remark{margin:0;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+/* Footer: the next-step line takes its own row and may wrap to two lines; the
+   actions sit beneath it, right-aligned. Side by side, five icon buttons left
+   the line ~90px and clipped "1 opening left, 0 candidates…". */
+.rx-mc-foot{flex-wrap:wrap;row-gap:8px}
+.rx-mc-next{display:flex;flex:1 1 100%;min-width:0}
+.rx-mc-foot .rx-mc-next .rx-next{flex:1;white-space:normal;overflow:hidden;text-overflow:clip;line-height:1.3;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.rx-mc-foot .rx-mc-next .rx-next svg{display:inline-block;vertical-align:-2px;margin-right:6px}
+.rx-mc-act{margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.rx-mc-act .rx-btn.sm{width:auto;height:32px;padding:0 12px;font-size:12.5px}
+
+/* ── Approval tracker (read-only) ── */
+.rx-trk{min-width:0}
+.rx-trk-head{display:flex;align-items:center;gap:8px;min-width:0}
+.rx-trk-tog{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;margin:0;
+  font:inherit;color:inherit;text-align:left;cursor:pointer}
+.rx-trk-tog:disabled{cursor:default}
+.rx-trk-tog:focus-visible{outline:2px solid var(--ez-brand);outline-offset:3px}
+.rx-trk-tog .rx-cd{flex-shrink:0}
+.rx-trk-line{flex:1;min-width:0;font-size:12px;line-height:1.35;color:var(--ez-ink-soft);
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.rx-trk-chev{display:inline-flex;flex-shrink:0}
+.rx-trk-chev svg{width:14px;height:14px;color:var(--ez-faint);transition:transform .2s}
+.rx-trk-tog[aria-expanded="true"] .rx-trk-chev svg{transform:rotate(90deg)}
+.rx-cd span.back{background:var(--ez-warning-tint);color:var(--ez-warning);border-color:var(--ez-warning-edge)}
+.rx-cd span.skip{border-style:dashed}
+.rx-mc-rec{flex-shrink:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px}
+.rx-trk-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column}
+.rx-trk-step{position:relative;display:flex;gap:10px;padding:0 0 12px;min-width:0}
+.rx-trk-step:last-child{padding-bottom:0}
+.rx-trk-step:not(:last-child)::before{content:"";position:absolute;left:11px;top:26px;bottom:2px;width:2px;border-radius:2px;background:var(--ez-line)}
+.rx-trk-step.done:not(:last-child)::before{background:var(--ez-positive-edge)}
+.rx-trk-dot{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
+  font-size:9.5px;font-weight:700;background:var(--ez-surface);color:var(--ez-faint);border:1.5px solid var(--ez-line-strong)}
+.rx-trk-dot svg{width:12px;height:12px}
+.rx-trk-step.done .rx-trk-dot{background:var(--ez-positive);border-color:var(--ez-positive);color:var(--ez-on-accent)}
+.rx-trk-step.now .rx-trk-dot{background:var(--ez-warning-tint);border-color:var(--ez-warning);color:var(--ez-warning)}
+.rx-trk-step.rejected .rx-trk-dot{background:var(--ez-critical);border-color:var(--ez-critical);color:var(--ez-on-accent)}
+.rx-trk-step.sentback .rx-trk-dot{background:var(--ez-warning-tint);border-color:var(--ez-warning-edge);color:var(--ez-warning)}
+.rx-trk-step.unrecorded .rx-trk-dot{border-style:dashed}
+.rx-trk-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:12.5px}
+.rx-trk-who{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;color:var(--ez-ink)}
+.rx-trk-who b{font-weight:650;overflow-wrap:anywhere}
+.rx-trk-code{font-size:11px;color:var(--ez-muted);font-variant-numeric:tabular-nums}
+.rx-trk-role{font-size:11.5px;color:var(--ez-muted)}
+.rx-trk-st{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:var(--ez-muted);margin-top:2px}
+.rx-trk-pill{font-size:11px;font-weight:650;line-height:1.5;padding:0 7px;border-radius:99px;background:var(--ez-sunken);color:var(--ez-muted)}
+.rx-trk-pill.done{background:var(--ez-positive-tint);color:var(--ez-positive)}
+.rx-trk-pill.now,.rx-trk-pill.sentback{background:var(--ez-warning-tint);color:var(--ez-warning)}
+.rx-trk-pill.rejected{background:var(--ez-critical-tint);color:var(--ez-critical)}
+.rx-trk-note{font-size:11.5px;line-height:1.45;color:var(--ez-ink-soft);overflow-wrap:anywhere}
+.rx-trk-sum{display:flex;gap:8px;align-items:flex-start;font-size:13px;font-weight:600;line-height:1.4;padding:9px 11px;border-radius:10px;
+  background:var(--ez-sunken);color:var(--ez-ink);border:1px solid var(--ez-line)}
+.rx-trk-sum svg{width:15px;height:15px;flex-shrink:0;margin-top:2px}
+.rx-trk-sum.warn{background:var(--ez-warning-tint);color:var(--ez-warning);border-color:var(--ez-warning-edge)}
+.rx-trk-sum.pos{background:var(--ez-positive-tint);color:var(--ez-positive);border-color:var(--ez-positive-edge)}
+.rx-trk-sum.crit{background:var(--ez-critical-tint);color:var(--ez-critical);border-color:var(--ez-critical-edge)}
+.rx-trk-sum.info{background:var(--ez-info-tint);color:var(--ez-info);border-color:var(--ez-info-edge)}
+.rx-trk.full .rx-trk-list{margin-top:12px}
+.rx-trk-mini{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:12px;line-height:1.35;color:var(--ez-ink-soft)}
+.rx-trk-mini.warn{color:var(--ez-warning)}
+.rx-trk-mini.crit{color:var(--ez-critical)}
+.rx-trk-mini.pos{color:var(--ez-positive)}
+.rx-trk-mini.info{color:var(--ez-info);font-weight:600}
+
+/* Table view: long titles, recruiter lists and approval lines stay in their cells. */
+.rx-table td.rx-mt-cell-title{min-width:180px;max-width:280px;overflow-wrap:anywhere}
+.rx-table td.rx-mt-cell-appr{min-width:170px;max-width:240px}
+.rx-table td.rx-mt-cell-rec{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── Raise / edit MRF wizard ── */
+/* The step rail is a wrapping row inside the form. .rx-fnav hides itself
+   below 1280px (it was designed as a side column); in the wizard it is the
+   only way to see where you are, so it must stay. */
+.rx-fnav.rx-fnav-row{display:flex!important;position:static;flex-direction:row;flex-wrap:wrap;gap:4px;padding:10px}
+.rx-fnav.rx-fnav-row a{padding:6px 9px;font-size:12.5px;gap:8px}
+.rx-fnav.rx-fnav-row a .rx-sd{width:22px;height:22px;font-size:10.5px}
+/* The step body never shrinks below the tallest step seen so far, so going
+   from a long step to a short one does not pull the page up under the cursor. */
+.rx-wiz-body{position:relative}
+.rx-wiz-top{scroll-margin-top:140px;outline:none}
+/* Back / Next stays reachable on long steps. */
+.rx-wiz-foot{position:sticky;bottom:0;z-index:var(--ez-z-local-1);margin:18px -4px 0;padding:12px 4px;
+  background:var(--rx-wiz-bg,var(--ez-surface));border-top:1px solid var(--ez-line)}
+/* Move-stage choices: an even grid, so a short last row no longer leaves one
+   odd-width card ("Joined") hanging under the rest. */
+.rx-move{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+.rx-move label{min-width:0}
+/* Narrow cards (~300px at the app's zoom): three tiles cannot hold
+   "Candidates" and a currency amount side by side, so Budget takes its own
+   full-width row under Filled + Candidates. A container query, because the
+   card's width — not the viewport's — is what decides it. */
+.rx-mc{container-type:inline-size}
+@container (max-width:360px){
+  .rx-mc-tiles{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .rx-mc-tiles .rx-mt-money{grid-column:1 / -1;flex-direction:row;flex-wrap:wrap;align-items:baseline;column-gap:10px}
+  .rx-mc-tiles .rx-mt-money .rx-mt-l{flex-basis:100%}
+  .rx-mc-tiles .rx-mt-money b.rx-mt-amt{font-size:17px}
+}

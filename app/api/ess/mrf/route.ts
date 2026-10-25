@@ -262,7 +262,7 @@ export async function POST(req: NextRequest) {
   if (action === 'approve' || action === 'reject' || action === 'revise') {
     const id = String(body.id || '')
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
-    const { data: mrf } = await sb.from('manpower_requisitions').select('id, status, approval_chain, requested_by, designation, position, mrf_number, assigned_recruiter_ids').eq('id', id).maybeSingle()
+    const { data: mrf } = await sb.from('manpower_requisitions').select('id, status, company_id, approval_chain, requested_by, designation, position, mrf_number, assigned_recruiter_ids').eq('id', id).maybeSingle()
     if (!mrf) return NextResponse.json({ error: 'MRF not found' }, { status: 404 })
     const chain = Array.isArray(mrf.approval_chain) ? mrf.approval_chain.map((s: any) => ({ ...s })) : []
 
@@ -283,12 +283,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, sentBack: true })
     }
 
+    // Only a requisition that is actually in approval can be decided. Older rows
+    // were opened by a direct status write that skipped the chain, so an
+    // APPROVED / CLOSED MRF can still carry a PENDING step — deciding on that
+    // stale step would reject (or re-approve) a requisition already being hired.
+    if (!['SUBMITTED', 'ON_HOLD'].includes(String(mrf.status))) {
+      return NextResponse.json({ error: `This MRF is ${String(mrf.status || '').toLowerCase().replace(/_/g, ' ') || 'not in approval'} — there is nothing to decide.` }, { status: 409 })
+    }
     const cur = chain.find((s: any) => s.status === 'PENDING')
     if (!cur) return NextResponse.json({ error: 'This MRF is not awaiting approval.' }, { status: 400 })
-    if (cur.approver_id !== me && !ctx.grant.isSuperAdmin) return forbidden('This MRF is not waiting on you.')
+    // THE approval gate: only the approver the chain is waiting on (or a super
+    // admin, recorded as an override below) may approve, reject or send back.
+    if (cur.approver_id !== me && !ctx.grant.isSuperAdmin) return forbidden(`This MRF is not waiting on you — it is with ${cur.approver_name || 'another approver'}${cur.role ? ` (${cur.role === 'HR_HEAD' ? 'HR Head' : cur.role})` : ''}.`)
 
     const now = new Date().toISOString()
     const note = String(body.note || '').trim() || null
+    // Who actually pressed the button, when it was not the named approver.
+    if (cur.approver_id !== me) {
+      const by = await empBrief(me)
+      cur.acted_by_id = me; cur.acted_by_name = by ? `${by.name}${by.code ? ` (${by.code})` : ''}` : 'Super admin'
+    }
+
+    // The HR Head's approval IS the hand-off: it must name who runs the hiring,
+    // and those people must belong to this requisition's company. Checked before
+    // anything is written, so a refusal leaves the chain untouched.
+    const wantHr: string[] = action === 'approve' && Array.isArray(body.assigned_hr_ids)
+      ? Array.from(new Set(body.assigned_hr_ids.slice(0, 20).map((x: any) => String(x)))) : []
+    if (action === 'approve' && cur.role === 'HR_HEAD' && !wantHr.length) {
+      return NextResponse.json({ error: 'Assign at least one hiring manager — approving at the HR Head step hands the requisition to them.' }, { status: 400 })
+    }
+    if (wantHr.length) {
+      // The picker offers exactly hrOptions — hrTeamFor(ctx.companyId) on GET,
+      // the RECRUITER holders — so that, for THIS requisition's company, is what
+      // is accepted. An arbitrary posted employee id is refused.
+      const team = await hrTeamFor(String((mrf as any).company_id || ctx.companyId || ''))
+      const allowed = new Set(team.map(t => t.id))
+      const strays = wantHr.filter(x => !allowed.has(x))
+      if (strays.length) return NextResponse.json({ error: 'Only the company\'s hiring managers / recruiters can be assigned to this requisition.' }, { status: 400 })
+    }
 
     // Send back for revision — the approver spotted something; the raiser (RM1) fixes it
     // and resubmits, which re-enters the chain from the top.
@@ -305,7 +337,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'reject') {
       cur.status = 'REJECTED'; cur.acted_at = now; cur.comment = note
-      await sb.from('manpower_requisitions').update({ approval_chain: chain, status: 'REJECTED' }).eq('id', id)
+      await sb.from('manpower_requisitions').update({ approval_chain: chain, status: 'REJECTED', ...(note ? { remarks: note } : {}) }).eq('id', id)
       return NextResponse.json({ ok: true })
     }
 
@@ -313,10 +345,10 @@ export async function POST(req: NextRequest) {
     const next = chain.find((s: any) => s.status === 'WAITING')
     const patch: any = { approval_chain: chain }
     if (next) next.status = 'PENDING'   // advance the chain to the next approver
-    else patch.status = 'APPROVED'       // no next step → fully approved
+    else { patch.status = 'APPROVED'; patch.approved_at = now }   // no next step → fully approved
     // At the HR Head step, the approval carries the HR assignment — the people who
     // will run the hiring. Scoped to the HR Head's own company on the client too.
-    const assignedHr: string[] = (cur.role === 'HR_HEAD' && Array.isArray(body.assigned_hr_ids)) ? body.assigned_hr_ids.slice(0, 20).map((x: any) => String(x)) : []
+    const assignedHr: string[] = cur.role === 'HR_HEAD' ? wantHr : []
     if (assignedHr.length) {
       patch.assigned_recruiter_ids = assignedHr
       const briefs = await Promise.all(assignedHr.map((x: string) => empBrief(x)))
