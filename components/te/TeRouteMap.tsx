@@ -24,7 +24,7 @@
 // "map unavailable" — the facts are still true and still worth reading.
 // Google is never asked for directions: the line is already known, so drawing
 // it costs no request.
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { decodePolyline } from '@/lib/te/engine/polyline.js'
 import { hasMapKey, useGoogleMaps } from './plan/TeGoogleMap'
 import TeIcon from './TeIcon'
@@ -56,6 +56,8 @@ export default function TeRouteMap({ line, start, end, stops, height = 240, labe
   km?: number | null
 }) {
   const { ready, failed } = useGoogleMaps()
+  /** Google loaded but never painted — see the note by the effect below. */
+  const [blank, setBlank] = useState(false)
   const box = useRef<HTMLDivElement | null>(null)
 
   // WHY A SIGNATURE AND NOT THE ARRAYS. The caller rebuilds `stops` on every
@@ -160,14 +162,38 @@ export default function TeRouteMap({ line, start, end, stops, height = 240, labe
       </div>
     )
   }
-  if (!hasMapKey() || failed) {
+  // LOADED IS NOT THE SAME AS PAINTED. `failed` only fires when the script
+  // itself errors — a bad key, a blocked referrer at the network level. It does
+  // NOT fire when Google loads happily and then refuses to draw, which is what
+  // an exhausted daily quota looks like: the console gets
+  // "Maps Demo Key limit reached" and the page gets a blank panel with no
+  // explanation. Google exposes no callback for that, so this watches for the
+  // one observable consequence — the container never receives Google's own
+  // .gm-style child — and says something rather than leaving a grey hole.
+  useEffect(() => {
+    if (!ready || !box.current) return
+    const el = box.current
+    const t = setTimeout(() => {
+      if (!el.querySelector('.gm-style')) setBlank(true)
+    }, 4000)
+    return () => clearTimeout(t)
+  }, [ready, sig])
+
+  if (!hasMapKey() || failed || blank) {
     return (
       <div className="note">
         <TeIcon name="info" size="sm" />
         <span>
           {path.length
-            ? `The route was recorded — ${path.length} points${km ? `, ${km} km` : ''} — but no map key is set up on this deployment, so it cannot be drawn here.`
-            : 'The two ends of this journey were recorded; there is no map key on this deployment to draw them on.'}
+            ? `The route was recorded — ${path.length} points${km ? `, ${km} km` : ''} — but it cannot be drawn here: `
+            : 'The two ends of this journey were recorded, but they cannot be drawn here: '}
+          {!hasMapKey()
+            ? 'no map key is set up on this deployment.'
+            : blank
+              // The commonest cause by far, and the one worth naming, because
+              // it is fixed in a billing console rather than in this product.
+              ? 'the map did not load. The Google project\u2019s daily Maps quota may be used up, or this address may not be allowed by the key.'
+              : 'the map script could not be loaded.'}
         </span>
       </div>
     )

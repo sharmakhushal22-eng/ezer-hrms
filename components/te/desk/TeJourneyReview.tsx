@@ -69,6 +69,15 @@ function OneJourney({ j, desk, basisOf, onOpenTrip, onDone, onToast }: {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  /** The map is loaded on request; see the note at the render site. */
+  const [showMap, setShowMap] = useState(false)
+  /** How many GPS points the trail has, and whether there is a trail at all.
+   *  No route means nothing to offer: a journey recorded by check-in, or one
+   *  the traveller declared without GPS, has ends but no line between them. */
+  const points = Number(j.gps_points ?? 0)
+  const hasRoute = !!j.route_polyline
+    || (j.start_lat != null && j.start_lng != null)
+    || (j.end_lat != null && j.end_lng != null)
 
   // The row carries the columns; the shared logic wants the nested shape the
   // snapshot uses. One place that maps between them.
@@ -158,13 +167,32 @@ function OneJourney({ j, desk, basisOf, onOpenTrip, onDone, onToast }: {
         <div key={n} className="note"><TeIcon name="info" size="sm" /><span>{n}</span></div>
       ))}
 
-      <TeRouteMap
-        line={j.route_polyline}
-        start={j.start_lat != null && j.start_lng != null ? { lat: Number(j.start_lat), lng: Number(j.start_lng), label: j.from_name || 'Start' } : null}
-        end={j.end_lat != null && j.end_lng != null ? { lat: Number(j.end_lat), lng: Number(j.end_lng), label: j.to_name || 'End' } : null}
-        km={km}
-        label={`Recorded route of journey ${j.leg_no} of ${j.trip_no}`}
-      />
+      {/* THE MAP IS ASKED FOR, NOT ASSUMED. Every open journey card used to
+          mount a live Google map, so reviewing a trip with six journeys bought
+          six interactive maps whether anybody looked at them or not — and the
+          project's daily Maps JavaScript quota is a real, finite thing that
+          this ran through on 25 October.
+
+          The facts a reviewer triages on are already on the card above: the
+          distance GPS measured, how far each end was from the named place, how
+          many points the trail has, whether there is a bill. The map answers a
+          narrower question — does this route look like the journey somebody
+          says they made — and it is only worth loading once somebody is asking
+          it. One tap, and it stays open. */}
+      {showMap ? (
+        <TeRouteMap
+          line={j.route_polyline}
+          start={j.start_lat != null && j.start_lng != null ? { lat: Number(j.start_lat), lng: Number(j.start_lng), label: j.from_name || 'Start' } : null}
+          end={j.end_lat != null && j.end_lng != null ? { lat: Number(j.end_lat), lng: Number(j.end_lng), label: j.to_name || 'End' } : null}
+          km={km}
+          label={`Recorded route of journey ${j.leg_no} of ${j.trip_no}`}
+        />
+      ) : hasRoute ? (
+        <button type="button" className="btn sm" onClick={() => setShowMap(true)}>
+          <TeIcon name="pin" size="sm" />Show the route
+          {points ? <span className="muted"> · {plural(points, 'point')}</span> : null}
+        </button>
+      ) : null}
 
       {/* How to reach the traveller about it — the same contact the rest of the
           desk uses, read off the trip rather than their HR record. */}
