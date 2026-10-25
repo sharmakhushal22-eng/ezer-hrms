@@ -5,7 +5,7 @@
 // somebody already fixed once on this screen and which a merged view is the
 // obvious way to reintroduce. The other is the grouping — a hotel landing under
 // "Other" is wrong in a way that looks fine.
-import { test } from 'node:test'
+import { describe, it, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { type LedgerRow, ledgerRows, ledgerTotals } from '../trip-ledger.ts'
 import type { TeBooking, TeCategory, TeExpense, TeLeg } from '../types.ts'
@@ -14,7 +14,11 @@ const ME = 'me-1', MATE = 'mate-2'
 
 /** What a row is, whichever kind it is — so a whole list can be asserted in
  *  one line without narrowing at every call site. */
-const idOf = (r: LedgerRow) => (r.kind === 'expense' ? r.line.id : `bk-${r.booking.id}`)
+const idOf = (r: LedgerRow) =>
+  r.kind === 'expense' ? r.line.id
+    : r.kind === 'booking' ? `bk-${r.booking.id}`
+      : r.kind === 'journey' ? `jn-${r.leg.n}`
+        : `stay-${r.name}`
 
 /** A saved expense line. Only the fields the ledger reads are set; TeExpense
  *  has thirty-odd and filling them all in would bury what each test is about.
@@ -320,4 +324,136 @@ test('no advance means no net, rather than a net of everything claimed', () => {
   const t = ledgerTotals(rows, { advance: null, advanceMine: true })
   assert.equal(t.net, null)
   assert.equal(t.advance, 0)
+})
+
+// ── the trip's own record, not just its money ────────────────────────────────
+// WHAT WAS MISSING. The bucket listed money, so a journey nobody had billed yet
+// was not in it at all. Measured on SRS-TRP-2026-0008: four journeys, two of
+// them sub-trips, one bill between them — the bucket showed a single row and
+// three journeys appeared nowhere. A trip's bucket is meant to BE the trip.
+
+const withLegs = (expenses: TeExpense[], legs: TeLeg[], o: { everyone?: boolean; stay?: { status?: string; name?: string } | null } = {}) =>
+  ledgerRows({
+    expenses, legs, bookings: [], me: ME, everyone: o.everyone ?? false,
+    nameOf: id => (id === MATE ? 'Asha Rao' : 'Someone'), cats: CATS,
+    tripOwner: ME, stay: o.stay ?? null,
+  })
+
+describe('every journey of the trip is in the bucket', () => {
+  it('a journey with no bill still appears', () => {
+    const r = withLegs([], [leg({ id: 'l2', n: 2, kind: 'extra', status: 'PLANNED' })])
+    assert.equal(r.length, 1)
+    assert.equal(r[0].kind, 'journey')
+    assert.equal(r[0].group, 'Journeys')
+    assert.equal(r[0].amount, 0, 'and costs nothing, because nothing was billed')
+  })
+
+  it('all four of a real trip’s journeys appear, not just the billed one', () => {
+    const legs = [
+      leg({ id: 'l1', n: 1, kind: 'main', status: 'SUBMITTED' }),
+      leg({ id: 'l2', n: 2, kind: 'extra', status: 'PLANNED' }),
+      leg({ id: 'l3', n: 3, kind: 'return', status: 'SKIPPED' }),
+      leg({ id: 'l4', n: 4, kind: 'extra', status: 'PLANNED' }),
+    ]
+    const r = withLegs([line({ id: 'x', cat: 'cab', legId: 'l1', claimed: 700 })], legs)
+    const journeys = r.filter(j => j.kind === 'journey')
+    assert.equal(journeys.length, 4, 'the shape of SRS-TRP-2026-0008')
+    assert.deepEqual(journeys.map(j => j.catName),
+      ['Journey 1', 'Sub-trip 2', 'Journey 3', 'Sub-trip 4'])
+  })
+
+  it('a sub-trip is named as one', () => {
+    const r = withLegs([], [leg({ id: 'l9', n: 9, kind: 'extra', status: 'SUBMITTED' })])
+    assert.equal(r[0].catName, 'Sub-trip 9')
+    assert.equal(r[0].subTrip, true)
+  })
+
+  it('journeys come in order, whatever order they arrived in', () => {
+    const r = withLegs([], [
+      leg({ id: 'c', n: 3, kind: 'extra' }), leg({ id: 'a', n: 1 }), leg({ id: 'b', n: 2 }),
+    ])
+    assert.deepEqual(r.filter(j => j.kind === 'journey').map(j => j.leg.n), [1, 2, 3])
+  })
+
+  it('a cancelled journey is not part of the record', () => {
+    const r = withLegs([], [leg({ id: 'l1', n: 1, status: 'CANCELLED' })])
+    assert.deepEqual(r, [])
+  })
+})
+
+describe('a journey’s bills fold into it, and are not counted twice', () => {
+  it('the bill shows on the journey and nowhere else', () => {
+    const r = withLegs([line({ id: 'x', cat: 'cab', legId: 'l1', claimed: 700 })],
+      [leg({ id: 'l1', n: 1 })])
+    assert.equal(r.length, 1, 'one row, not a journey row AND a bill row')
+    assert.equal(r[0].kind, 'journey')
+    assert.equal(r[0].amount, 700)
+    assert.deepEqual(ledgerTotals(r).self, 700, 'counted once')
+  })
+
+  it('two bills on one journey add up on its row', () => {
+    const r = withLegs([
+      line({ id: 'a', cat: 'cab', legId: 'l1', claimed: 300 }),
+      line({ id: 'b', cat: 'toll', legId: 'l1', claimed: 120 }),
+    ], [leg({ id: 'l1', n: 1 })])
+    assert.equal(r.length, 1)
+    assert.equal(r[0].amount, 420)
+  })
+
+  it('bills that disagree about who paid are split, not lumped', () => {
+    // The reason a row carries self and company separately: one flag would
+    // have put the whole journey on whichever side the first line was.
+    const r = withLegs([
+      line({ id: 'a', cat: 'cab', legId: 'l1', claimed: 300, pay: 'self' }),
+      line({ id: 'b', cat: 'air', legId: 'l1', bill: 5000, claimed: 0, pay: 'company' }),
+    ], [leg({ id: 'l1', n: 1 })])
+    const t = ledgerTotals(r)
+    assert.equal(t.self, 300)
+    assert.equal(t.company, 5000)
+    assert.equal(t.total, 5300)
+  })
+
+  it('a bill on no journey stays a row of its own', () => {
+    const r = withLegs([line({ id: 'h', cat: 'hotel', legId: null, claimed: 4200 })], [])
+    assert.equal(r.length, 1)
+    assert.equal(r[0].kind, 'expense')
+    assert.equal(r[0].group, 'Stay')
+  })
+
+  it('a colleague’s private bill does not reach a journey row either', () => {
+    // The privacy filter runs before the folding, so a journey a co-traveller
+    // billed shows the journey without the amount.
+    const r = withLegs([line({ id: 'a', emp: MATE, cat: 'cab', legId: 'l1', claimed: 900 })],
+      [leg({ id: 'l1', n: 1 })])
+    assert.equal(r.length, 1)
+    assert.equal(r[0].kind, 'journey')
+    assert.equal(r[0].amount, 0, 'the journey is shown; the colleague’s money is not')
+    const desk = withLegs([line({ id: 'a', emp: MATE, cat: 'cab', legId: 'l1', claimed: 900 })],
+      [leg({ id: 'l1', n: 1 })], { everyone: true })
+    assert.equal(desk[0].amount, 900, 'but a desk sees it')
+  })
+})
+
+describe('the stay the desk chose is in the record before the bill is', () => {
+  it('a chosen hotel appears with no money against it', () => {
+    const r = withLegs([], [], { stay: { status: 'CHOSEN', name: 'Hyatt Place Noida' } })
+    assert.equal(r.length, 1)
+    assert.equal(r[0].kind, 'stay')
+    assert.equal(r[0].group, 'Stay')
+    assert.equal(r[0].amount, 0)
+    assert.equal(r[0].pending, true)
+  })
+
+  it('and gives way once a hotel bill exists', () => {
+    const r = withLegs([line({ id: 'h', cat: 'hotel', claimed: 6200 })], [],
+      { stay: { status: 'CHOSEN', name: 'Hyatt Place Noida' } })
+    assert.equal(r.filter(x => x.kind === 'stay').length, 0, 'the bill IS the stay')
+    assert.equal(r.length, 1)
+  })
+
+  it('a stay still being decided is not shown as settled', () => {
+    for (const status of ['NONE', 'ASKED', 'OFFERED']) {
+      assert.deepEqual(withLegs([], [], { stay: { status, name: 'Somewhere' } }), [])
+    }
+  })
 })
