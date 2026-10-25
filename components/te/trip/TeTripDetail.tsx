@@ -12,7 +12,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeCategory, TeLeg, TeMasters, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
-import { tripChip, tripIsLive } from '@/lib/te/trips-list'
+import { tripChip, tripHero } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
 import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
 import { day, dayAt, errorText, plural, rs, when } from '@/lib/te/format'
@@ -178,9 +178,11 @@ export default function TeTripDetail({ tripId, me, today, masters, everyone, cat
    *  be claimed. ENDED is deliberately NOT included: that one is waiting to be
    *  reported, not running. */
   const runningLeg = legs.find(l => l.status === 'ACTIVE' || l.status === 'PAUSED') ?? null
-  /** Is this trip live for the reader — see tripIsLive, which is in lib/ and
-   *  tested, because this condition decides what somebody can reach. */
-  const live = tripIsLive(t, today, { canBill, mine })
+  /** Which of the two mid-trip actions this reader gets on this trip. Each
+   *  follows the rule that governs the same action further down the page; see
+   *  tripHero, which is in lib/ and tested because it decides what somebody
+   *  can reach. */
+  const hero = tripHero(t, { canBill, mine })
 
   async function act(what: string, run: () => Promise<string>) {
     setBusy(what); setError('')
@@ -247,12 +249,12 @@ export default function TeTripDetail({ tripId, me, today, masters, everyone, cat
           ledger. Those two keep their places, because each is contextual where
           it is when you are reading rather than acting; these are the same two
           handlers, given the prominence the act deserves. */}
-      {live ? (
+      {hero.any ? (
         <TeTripNow
           tripId={t.id}
           runningLeg={runningLeg}
-          canBill={canBill}
-          mine={mine}
+          canBill={hero.bill}
+          mine={hero.journey}
           nameOf={pname}
           onAddBill={onAddBill}
           onAddLeg={() => onAddLeg(detail)}

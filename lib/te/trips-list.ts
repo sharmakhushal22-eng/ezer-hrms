@@ -216,31 +216,73 @@ export function tripsForLine<T extends Pick<TeTrip, 'id' | 'status' | 'start'> &
 }
 
 /**
- * Is this trip live for the person reading it — something they could be
- * spending on right now?
+ * What the mid-trip hero offers on this trip, for this reader.
  *
- * WHAT IT GATES. The mid-trip action bar on the trip screen, which pins "Add a
- * bill" and "Add a journey" under the header. Those two were the worst-placed
- * controls on a long page and are the only two anybody uses while actually
- * travelling, so the bar follows the trip being live rather than any status on
- * its own.
+ * WHY THIS REPLACED A SINGLE "is it live" FLAG. The first version asked for
+ * ONGOING, or APPROVED with the first day passed. That window sounds right and
+ * is nearly always empty: a trip stops being ONGOING the moment its last
+ * journey is closed, which is BEFORE the hotel bill is typed up, and it is
+ * APPROVED-with-a-future-date for the week before anybody travels. Measured
+ * against the live data, every one of the test traveller's three trips was
+ * COMPLETED, CLAIMED or EXPIRED, and the one ONGOING trip in the whole
+ * database belonged to somebody else — so the new screen could not be seen at
+ * all. It was not a rendering fault; the gate simply never opened.
  *
- * ONGOING is the obvious case. APPROVED-and-started is the one worth spelling
- * out: the cab to the airport is a real bill before the first journey begins,
- * and a trip stays APPROVED until a journey is recorded. A trip approved for
- * next week is not live, and a finished trip is a record to read rather than a
- * surface to act on — the contextual buttons further down the page serve that.
+ * So neither tile invents a window any more. Each follows the rule that
+ * already governs the same action further down the same page:
  *
- * In lib/ and pure because it decides what somebody can reach: a .tsx cannot be
- * loaded by the test runner, and this is exactly the kind of condition that
- * rots into "always true" without anybody noticing.
+ *   a bill     canBillTrip's rule — anything the trip was not called off or
+ *              refused for — with the addition that the trip must have been
+ *              approved at some point. A bill on a request still waiting for
+ *              approval has nothing to attach to, and `display` can read
+ *              EXPIRED for a plan that was never approved at all, which is how
+ *              a pending request ended up looking billable.
+ *              CLOSED is left out: settled is finished, and the bill card
+ *              lower down still takes a late one for a supplementary claim.
+ *   a journey   the Route card's rule — ONGOING or COMPLETED, and only the
+ *              planner's own trip. You cannot record a GPS journey against a
+ *              trip whose claim has gone.
+ *
+ * The hero appears when either is true, so a trip you have just come back
+ * from — the commonest moment for both acts — finally shows it.
  */
-export function tripIsLive(
-  trip: Pick<TeTrip, 'display' | 'start'>,
-  today: string,
+export interface TripHero { bill: boolean; journey: boolean; any: boolean }
+
+/** Stored statuses where a bill still has a trip to belong to. */
+const BILLABLE = new Set(['APPROVED', 'CLAIMED'])
+
+export function tripHero(
+  trip: Pick<TeTrip, 'display' | 'status'>,
   who: { canBill: boolean; mine: boolean },
-): boolean {
-  if (!who.canBill && !who.mine) return false
-  if (trip.display === 'ONGOING') return true
-  return trip.display === 'APPROVED' && !!trip.start && trip.start <= today
+): TripHero {
+  const bill = who.canBill && BILLABLE.has(trip.status)
+  const journey = who.mine && (trip.display === 'ONGOING' || trip.display === 'COMPLETED')
+  return { bill, journey, any: bill || journey }
+}
+
+/**
+ * The one trip Home's card is about: the trip that still wants something from
+ * this person.
+ *
+ * A TRIP UNDER WAY OUTRANKS ONE YOU ARE BACK FROM, whatever the dates say.
+ * Ordering by start alone picked a COMPLETED trip over an ONGOING one as soon
+ * as the finished trip had the later date — which is how a traveller with a
+ * journey actually recording was shown a different trip's card.
+ *
+ * COMPLETED-and-still-APPROVED is included because that is the commonest
+ * moment for adding a bill: every journey closed, nothing claimed. A trip
+ * stops being ONGOING before the hotel bill is typed up, and gating on ONGOING
+ * alone left Home with nothing to show on real data.
+ */
+export function tripForHomeCard<T extends Pick<TeTrip, 'emp' | 'display' | 'status' | 'start'>>(
+  trips: T[],
+  me: Uuid,
+): T | null {
+  return trips
+    .filter(t => t.emp === me
+      && (t.display === 'ONGOING' || (t.display === 'COMPLETED' && t.status === 'APPROVED')))
+    .slice()
+    .sort((a, b) =>
+      Number(b.display === 'ONGOING') - Number(a.display === 'ONGOING')
+      || (b.start ?? '').localeCompare(a.start ?? ''))[0] ?? null
 }

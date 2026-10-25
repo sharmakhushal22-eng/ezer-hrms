@@ -48,6 +48,7 @@ import TeTravelDesk from './desk/TeTravelDesk'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type WayId } from '@/lib/te/entry-flow'
+import { tripForHomeCard, tripHero } from '@/lib/te/trips-list'
 import './te.css'
 
 type View =
@@ -220,9 +221,23 @@ export default function TeHome({ initialClaimId, onExit }: {
   // The newest first, for the vanishingly rare case of two at once — the
   // database allows two approved trips to overlap, and somebody mid-trip is
   // almost certainly thinking about the one they are on.
-  const onTrip = snap.trips
-    .filter(t => t.emp === snap.me && t.display === 'ONGOING')
-    .sort((a, b) => (b.start ?? '').localeCompare(a.start ?? ''))[0] ?? null
+  // A TRIP THAT STILL WANTS SOMETHING FROM YOU — not only one under way.
+  //
+  // This asked for display === 'ONGOING' alone, and a trip stops being ONGOING
+  // the moment its last journey is closed, which is before the hotel bill is
+  // typed up. So the card vanished at exactly the point somebody is sitting
+  // down to put the trip's costs in: on the real data the test traveller had
+  // three trips, none of them ONGOING, and Home offered her nothing.
+  //
+  // COMPLETED here means every journey closed and nothing claimed yet. The
+  // card says so rather than claiming she is travelling.
+  // Which trip the card is about — see tripForHomeCard, which is in lib/ and
+  // tested: both the window and the ordering got this wrong once each.
+  const onTrip = tripForHomeCard(snap.trips, snap.me)
+  /** Which actions that trip takes — the same rule the trip screen uses, so
+   *  the two surfaces cannot offer different things. */
+  const onTripCan = onTrip ? tripHero(onTrip, { canBill: true, mine: true }) : null
+  const onTripUnderWay = onTrip?.display === 'ONGOING'
 
   // Everything the entry flow shows comes from the one snapshot. placeName and
   // modeName turn the ids the server sends into the words the prototype used.
@@ -400,28 +415,36 @@ export default function TeHome({ initialClaimId, onExit }: {
                 </div>
               </section>
 
-              {/* ON A TRIP RIGHT NOW. The only way to log a local hop used to be
-                  Home -> Trips -> find the trip -> scroll to the Route card ->
-                  "Add a journey", which is four steps too many for somebody
-                  standing on a pavement in Mumbai. Shown only while a trip of
-                  theirs is actually under way, so it is never clutter for
-                  anybody who is not travelling. */}
+              {/* THE TRIP THAT STILL WANTS SOMETHING. The only way to log a
+                  local hop used to be Home -> Trips -> find the trip -> scroll
+                  to the Route card -> "Add a journey", which is four steps too
+                  many for somebody standing on a pavement in Mumbai.
+
+                  It covers a trip under way AND one you are back from with the
+                  claim not sent, because those are the two moments bills get
+                  added and the second is the commoner of them. The wording
+                  changes rather than claiming you are travelling when you are
+                  sitting at your desk. Still nothing at all for anybody with
+                  neither, so it never becomes clutter. */}
               {onTrip ? (
                 <div className="card ontrip">
                   <div className="row sp top">
                     <div className="grow">
-                      <div className="eyebrow">You are on a trip</div>
+                      <div className="eyebrow">{onTripUnderWay ? 'You are on a trip' : 'Back from a trip'}</div>
                       <b>{onTrip.name || onTrip.no}</b>
                       <div className="small muted">
                         <span className="mono">{onTrip.no}</span>
                         {onTrip.to ? <> · {onTrip.to}</> : null}
                       </div>
                     </div>
-                    <span className="chip t-pos">On the way</span>
+                    <span className={`chip ${onTripUnderWay ? 't-pos' : 't-warn'}`}>
+                      {onTripUnderWay ? 'On the way' : 'Not claimed yet'}
+                    </span>
                   </div>
                   <p className="small muted">
-                    Paid for something, or hopping across the city? Put it on the trip now and it is paid with the rest
-                    of it, instead of becoming a loose bill you have to explain later.
+                    {onTripUnderWay
+                      ? 'Paid for something, or hopping across the city? Put it on the trip now and it is paid with the rest of it, instead of becoming a loose bill you have to explain later.'
+                      : 'Add the hotel, the food and anything else you paid for, and any journey you did not record at the time. Then send the claim.'}
                   </p>
                   {/* BOTH ACTIONS, AND GIVEN REAL WEIGHT. This card offered
                       "Add a journey" and nothing else, so the commoner of the
@@ -436,14 +459,18 @@ export default function TeHome({ initialClaimId, onExit }: {
                       where it reads as "the rest of this trip" rather than
                       competing with the thing you came to do. */}
                   <div className="acts2">
-                    <button type="button" className="btn pri big" onClick={() => setSheet({ name: 'expense', tripId: onTrip.id })}>
-                      <TeIcon name="receipt" />
-                      <span>Add a bill</span>
-                    </button>
-                    <button type="button" className="btn ok big" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
-                      <TeIcon name="route" />
-                      <span>{openingTrip ? 'Opening…' : 'Add a journey'}</span>
-                    </button>
+                    {onTripCan?.bill ? (
+                      <button type="button" className="btn pri big" onClick={() => setSheet({ name: 'expense', tripId: onTrip.id })}>
+                        <TeIcon name="receipt" />
+                        <span>Add a bill</span>
+                      </button>
+                    ) : null}
+                    {onTripCan?.journey ? (
+                      <button type="button" className="btn ok big" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
+                        <TeIcon name="route" />
+                        <span>{openingTrip ? 'Opening…' : 'Add a journey'}</span>
+                      </button>
+                    ) : null}
                   </div>
                   <button type="button" className="btn sm wide" onClick={() => setView({ name: 'trip', id: onTrip.id })}>
                     Open the trip<TeIcon name="go" size="sm" />
