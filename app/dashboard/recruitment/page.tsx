@@ -20,6 +20,7 @@ import { computeCtc, inr, EPF_WAGE_CEILING, hraMaxFor } from '@/lib/recruitment/
 import { ctcStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
 import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+import { isHandOff } from '@/lib/recruitment/mrf-handoff'
 // Every recruitment API route is guarded (docs/security/open-endpoints.md), so the
 // browser hands over whichever session it holds. uploadAuthHeaders() is the same
 // credentials WITHOUT Content-Type — mandatory for FormData, because setting it by
@@ -1380,7 +1381,8 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     try { const d = await essApi('/api/ess/mrf', employeeId); setToApprove(d.toApprove||[]); setApprPeople(toPickerPeople(d)); setApprErr('') }
     catch(e:any){ setApprErr(e.message||'Could not load approvals') }
   }, [employeeId])
-  useEffect(()=>{ if (mrfSub==='approvals') loadApprovals() }, [mrfSub, loadApprovals])
+  // On mount, not only when the Approvals sub-tab opens: the hand-off picker reads apprPeople.
+  useEffect(()=>{ loadApprovals() }, [loadApprovals])
   // Open a requisition for review — fetch the full row (the pending-list select omits some
   // fields, e.g. job_description) so the read-only form shows everything.
   const openReviewMrf = useCallback(async (m:any) => {
@@ -1401,7 +1403,6 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   const [apprPeople, setApprPeople] = useState<any[]>([])
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignIds, setAssignIds] = useState<string[]>([])
-  const pendingRole = (m:any) => (Array.isArray(m?.approval_chain)?m.approval_chain:[]).find((s:any)=>s.status==='PENDING')?.role
   const apprDecide = async (action:'approve'|'reject'|'revise', note?:string, assignedIds?:string[]) => {
     if (!reviewMrf) return
     setApprBusy(true)
@@ -1705,30 +1706,16 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     setShowForm(false); setEditMRF(null); setForm(EMPTY); setErrors({}); onRefresh()
   }
 
-  // §8 — single-click approval. One decision approves the requisition outright;
-  // any configured chain is stamped complete by the same approver so the
-  // recorded trail matches the decision, rather than leaving steps PENDING on
-  // an MRF that is already open for hiring.
-  async function approveMRF(id:string, recruiter:string, comments:string, actor:string) {
-    const mrf = mrfs.find((m:MRF)=>m.id===id); if (!mrf) return
-    const chain = asArray((mrf as any).approval_chain)
-    const now = new Date().toISOString()
-    const nextChain = chain.map((s:any)=> s.status==='APPROVED' ? s : {
-      ...s, status:'APPROVED',
-      actor: actor || s.actor || null,
-      comments: comments || s.comments || null,
-      acted_at: s.acted_at || now,
-    })
-    const patch:any = { status:'APPROVED', approval_chain:nextChain, remarks:comments||null, approved_at:now }
-    if (recruiter) patch.assigned_recruiter = recruiter
-    const { error } = await supabase.from('manpower_requisitions').update(patch).eq('id',id)
-    if (error) { showNotify('Approval failed: '+error.message,'error'); return }
-    await logMrfAudit(supabase, mrf, 'MRF_APPROVED', {
-      position: mrf.designation||mrf.position,
-      steps: chain.length ? chain.map((s:any)=>s.role).join(' → ') : 'single',
-      recruiter: recruiter||'unassigned',
-    })
-    showNotify(recruiter ? 'MRF approved, recruiter assigned.' : 'MRF approved.')
+  // §8 — single-click approval. One decision opens the requisition, so it is the hand-off:
+  // it must name the hiring manager(s) who run it. Goes through /api/recruitment/mrf-decision
+  // (lib/recruitment/mrf-approve.ts), which refuses an empty or out-of-company assignment and
+  // stamps any remaining chain steps with the same approver.
+  async function approveMRF(id:string, assignIds:string[], comments:string) {
+    if (!(assignIds||[]).length) { showNotify('Assign at least one hiring manager before approving.','error'); return }
+    const r = await fetch('/api/recruitment/mrf-decision', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ id, assigned_hr_ids: assignIds, note: comments||null }) })
+    const j = await r.json().catch(()=>({}))
+    if (!r.ok) { showNotify('Approval failed: '+(j.error||r.statusText),'error'); return }
+    showNotify('MRF approved, hiring manager assigned.')
     setApprovalModal(null); onRefresh()
   }
 
@@ -2350,7 +2337,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               Review requisition: {reviewMrf.designation||reviewMrf.position}{reviewMrf.mrf_number?` · ${reviewMrf.mrf_number}`:''}
             </div>
             <MrfForm readOnly viewRow={reviewMrf} initial={mrfToForm(reviewMrf)} employeeId={employeeId} notify={showNotify}
-              onApprove={()=>{ if (pendingRole(reviewMrf)==='HR_HEAD') { setAssignIds([]); setAssignOpen(true) } else apprDecide('approve') }}
+              onApprove={()=>{ if (isHandOff(reviewMrf.approval_chain)) { setAssignIds([]); setAssignOpen(true) } else apprDecide('approve') }}
               onReject={(note:string)=>apprDecide('reject', note)} onRevise={(note:string)=>apprDecide('revise', note)}
               actionBusy={apprBusy} onDone={()=>setReviewMrf(null)} onCancel={()=>setReviewMrf(null)} />
 
@@ -2450,14 +2437,27 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
 
 function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
   const [mode, setMode] = useState<'approve'|'reject'|'hold'>('approve')
-  const [recruiter, setRecruiter] = useState(mrf.assigned_recruiter||'')
+  const [assignIds, setAssignIds] = useState<string[]>(Array.isArray(mrf.assigned_recruiter_ids)?mrf.assigned_recruiter_ids:[])
+  const [people, setPeople] = useState<any[]|null>(null)
   const [actor, setActor] = useState('')
   const [comments, setComments] = useState('')
   const [busy, setBusy] = useState(false)
   const openings = mrf.no_of_openings||mrf.openings||0
-  const emailOk = !recruiter || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recruiter.trim())
   const chain = asArray(mrf.approval_chain)
   const comp = compOf(mrf.employment_type)
+  // The hiring managers of THIS requisition's company — the same list the server accepts.
+  useEffect(()=>{
+    if (!mrf.company_id) { setPeople([]); return }
+    let live = true
+    ;(async()=>{
+      try {
+        const r = await fetch(`/api/recruitment/mrf-decision?company_ids=${mrf.company_id}`, { headers: await authHeaders() })
+        const j = await r.json().catch(()=>({}))
+        if (live) setPeople(((j.recruiters||{})[mrf.company_id]||[]).map((p:any)=>({ id:p.id, name:p.name, code:p.code||'', designation:'Hiring Manager / Recruiter', is_recruiter:true })))
+      } catch { if (live) setPeople([]) }
+    })()
+    return ()=>{ live=false }
+  }, [mrf.company_id])
 
   async function go(fn:()=>Promise<void>|void) { setBusy(true); await fn(); setBusy(false) }
 
@@ -2504,18 +2504,25 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
 
         {mode==='approve'?(
           <>
-            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Assign Recruiter Email</label>
-            <input className="rx-input" style={{ marginBottom:4, ...(emailOk?{}:{ border: `1px solid ${C.criticalTint}`, background:C.criticalTint }) }}
-              value={recruiter} onChange={e=>setRecruiter(e.target.value)} placeholder="recruiter@company.com" />
-            <div style={{ fontSize:11, color: emailOk?C.faint:C.critical, marginBottom:11 }}>
-              {emailOk ? 'Optional: the MRF can be approved and assigned later.' : 'That does not look like a valid email.'}
-            </div>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Assign hiring manager(s) *</label>
+            {people==null ? (
+              <div style={{ fontSize:12, color:C.faint, marginBottom:11 }}>Loading hiring managers…</div>
+            ) : people.length===0 ? (
+              <div style={{ fontSize:12, color:C.critical, background:C.criticalTint, borderRadius:8, padding:'9px 12px', marginBottom:11 }}>
+                Nobody in {org?.company||'this company'} holds the Hiring Manager / Recruiter role, so there is nobody to hand this requisition to. Assign the role in ESS → Roles first.
+              </div>
+            ) : (
+              <div style={{ marginBottom:11 }}>
+                <RecruiterPicker people={people} value={assignIds} onChange={setAssignIds} />
+                <div style={{ fontSize:11, color:C.faint, marginTop:4 }}>Required: approving opens the requisition and hands it to them. {people.length} available in {org?.company||'this company'}.</div>
+              </div>
+            )}
             <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Approver comments</label>
             <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', marginBottom:16, minHeight:70 }} value={comments}
               onChange={e=>setComments(e.target.value)} placeholder="Optional note for the record" />
-            <button onClick={()=>emailOk && go(()=>onApprove(mrf.id, recruiter.trim(), comments.trim(), actor.trim()))} disabled={busy||!emailOk}
-              style={{ ...T.btnPrimary, width:'100%', opacity: busy||!emailOk?.6:1 }}>
-              {busy?'Approving…':'Approve & Assign'}
+            <button onClick={()=>assignIds.length && go(()=>onApprove(mrf.id, assignIds, comments.trim()))} disabled={busy||!assignIds.length}
+              style={{ ...T.btnPrimary, width:'100%', opacity: busy||!assignIds.length?.6:1 }}>
+              {busy?'Approving…':`Approve & Assign${assignIds.length?` (${assignIds.length})`:''}`}
             </button>
           </>
         ):mode==='hold'?(

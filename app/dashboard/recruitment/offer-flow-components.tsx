@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 // hands its own over. authHeaders() reads whichever session exists — ESS or the
 // dashboard — which matters because this file also renders inside ESS.
 import { authHeaders } from '@/lib/auth-headers'
+import RecruiterPicker from '@/components/recruitment/RecruiterPicker'
 
 // The design system, aliased around this file's own S.
 import {
@@ -141,6 +142,30 @@ const oaGrid = (cols: string): React.CSSProperties => ({ display:'grid', gridTem
 
 // ═══════════════════════════════════════════════════════════════
 // RECRUITER: CREATE OFFER APPROVAL REQUEST
+/** The hand-off step of an MRF approval: pick the hiring manager(s) of the requisition's own
+ *  company. Module level, so typing in the search never remounts it. */
+function MrfAssignPanel({ company, people, value, onChange, busy, onApprove }: { company?: string; people?: any[]; value: string[]; onChange: (ids: string[]) => void; busy: boolean; onApprove: () => void }) {
+  const list = people || []
+  return (
+    <div style={{ flexBasis:'100%', marginTop:10, padding:'12px 14px', borderRadius:10, background:TK.sunken, border:`1px solid ${TK.line}` }}>
+      <div style={{ fontSize:13, fontWeight:700, color:TK.ink }}>Assign hiring manager(s)</div>
+      <div className="rx-hint" style={{ margin:'2px 0 10px' }}>Required: approving opens this requisition and hands it to them.{list.length ? ` ${list.length} available in ${company || 'this company'}.` : ''}</div>
+      {list.length === 0 ? (
+        <div style={{ fontSize:12, color:TK.critical, background:TK.criticalTint, borderRadius:8, padding:'9px 12px' }}>
+          Nobody in {company || 'this company'} holds the Hiring Manager / Recruiter role, so there is nobody to hand this requisition to. Assign the role in ESS → Roles first.
+        </div>
+      ) : (
+        <RecruiterPicker people={list} value={value} onChange={onChange} />
+      )}
+      <div style={{ display:'flex', justifyContent:'flex-end', marginTop:10 }}>
+        <button type="button" className="rx-btn ok" disabled={busy || !value.length} style={{ opacity: busy || !value.length ? .55 : 1 }} onClick={onApprove}>
+          {busy ? 'Approving…' : `Approve & Assign${value.length ? ` (${value.length})` : ''}`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════
 export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }: any) {
   const supabase = createClient()
@@ -547,19 +572,42 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     setRequests(data || [])
   }
 
-  // HR Head approves Manpower Requisitions (the only place MRFs get approved).
+  // HR Head approves Manpower Requisitions here. Approving opens the requisition, so it is the
+  // hand-off: it must name the hiring manager(s) of THAT requisition's company who will run it.
+  // The write goes through /api/recruitment/mrf-decision (lib/recruitment/mrf-approve.ts), which
+  // refuses an empty or out-of-company assignment — this used to be a one-click direct write
+  // that set APPROVED with nobody assigned.
+  const [hmByCompany, setHmByCompany] = useState<Record<string, any[]>>({})
+  const [assignFor, setAssignFor] = useState<string|null>(null)
+  const [picks, setPicks] = useState<Record<string, string[]>>({})
+  const [approving, setApproving] = useState(false)
   async function loadMrfs() {
     const { data } = await supabase.from('manpower_requisitions')
       .select('*, companies(company_name)')
       .eq('status', 'SUBMITTED')
       .order('created_at', { ascending: false })
     setMrfs(data || [])
+    const ids = [...new Set((data || []).map((m: any) => m.company_id).filter(Boolean))]
+    if (!ids.length) return
+    try {
+      const r = await fetch(`/api/recruitment/mrf-decision?company_ids=${ids.join(',')}`, { headers: await authHeaders() })
+      const j = await r.json().catch(() => ({}))
+      const out: Record<string, any[]> = {}
+      for (const [cid, rows] of Object.entries(j.recruiters || {})) out[cid] = (rows as any[]).map(p => ({ id: p.id, name: p.name, code: p.code || '', designation: 'Hiring Manager / Recruiter', is_recruiter: true }))
+      setHmByCompany(out)
+    } catch { /* the picker says nobody is available; the server still refuses an empty hand-off */ }
   }
   async function approveMrf(id: string) {
-    const { error } = await supabase.from('manpower_requisitions')
-      .update({ status: 'APPROVED', approved_at: new Date().toISOString() }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); return }
-    loadMrfs()
+    const picked = picks[id] || []
+    if (!picked.length) { alert('Assign at least one hiring manager before approving.'); return }
+    setApproving(true)
+    try {
+      const r = await fetch('/api/recruitment/mrf-decision', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ id, assigned_hr_ids: picked }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { alert('Error: ' + (j.error || r.statusText)); return }
+      setAssignFor(null); setPicks(p => { const n = { ...p }; delete n[id]; return n })
+      loadMrfs()
+    } finally { setApproving(false) }
   }
   async function rejectMrf(id: string) {
     const reason = window.prompt('Rejection reason for this MRF:'); if (reason === null) return
@@ -697,7 +745,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
           <div className="rx-mod" style={{ textAlign:'center' as const, padding:18 }}><span className="rx-meta">{ql?'No matching MRF':'No MRFs pending approval'}</span></div>
         )}
         {fMrfs.map(m => (
-          <div key={m.id} className="rx-card" style={{ display:'flex', /* .rx-card is flex-direction:column, so a row must say so — without this, space-between distributes VERTICALLY and alignItems centres the content */ flexDirection:'row', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:SP.md }}>
+          <div key={m.id} className="rx-card" style={{ display:'flex', /* .rx-card is flex-direction:column, so a row must say so — without this, space-between distributes VERTICALLY and alignItems centres the content */ flexDirection:'row', flexWrap:'wrap', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:SP.md }}>
             <div>
               <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
               <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>
@@ -708,9 +756,13 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
               {/* Styling only — approveMrf/rejectMrf are untouched, and
                   rejectMrf still asks for its reason the way it always has. */}
-              <button type="button" className="rx-btn ok" onClick={()=>approveMrf(m.id)}>Approve</button>
+              <button type="button" className="rx-btn ok" onClick={()=>setAssignFor(assignFor===m.id?null:m.id)}>{assignFor===m.id?'Cancel':'Approve →'}</button>
               <button type="button" className="rx-btn d" onClick={()=>rejectMrf(m.id)}>Reject</button>
             </div>
+            {assignFor===m.id && (
+              <MrfAssignPanel company={m.companies?.company_name} people={hmByCompany[m.company_id]} value={picks[m.id]||[]}
+                onChange={(ids:string[])=>setPicks(p=>({ ...p, [m.id]: ids }))} busy={approving} onApprove={()=>approveMrf(m.id)} />
+            )}
           </div>
         ))}
       </div>

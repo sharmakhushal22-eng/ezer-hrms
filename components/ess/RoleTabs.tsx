@@ -20,6 +20,7 @@ import { C as TK, Z } from '@/lib/ui'
 import MrfForm, { mrfToForm } from './MrfForm'
 import InterviewFeedbackForm, { type Feedback as InterviewFeedback } from '@/components/recruitment/InterviewFeedbackForm'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+import { isHandOff } from '@/lib/recruitment/mrf-handoff'
 import OnboardingApprovals from './OnboardingApprovals'
 
 const C = {
@@ -392,7 +393,8 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
 
       {reviewFor && createPortal((() => {
         const m = reviewFor
-        const isHrHead = curRole(m) === 'HR_HEAD'
+        // The step that opens the requisition (HR Head, or whichever is last) hands it to a hiring manager.
+        const isHrHead = isHandOff(m.approval_chain)
         const onAssignStep = isHrHead && reviewStep === 'assign'
         const money = (v: any) => (v || v === 0) ? `₹${Number(v).toLocaleString('en-IN')}` : ''
         const groups: [string, [string, any][]][] = [

@@ -192,7 +192,7 @@ function RequestCard({ item, recruiters, onResolve }: { item: PendingItem; recru
 
       {isMrf && (
         <div style={{ marginBottom:8 }}>
-          <div style={{ ...C.lbl, marginBottom:4 }}>Assign HR recruiter(s) <span style={{ color:TK.faint, fontWeight:400 }}>(optional)</span></div>
+          <div style={{ ...C.lbl, marginBottom:4 }}>Assign hiring manager(s) <span style={{ color:TK.critical, fontWeight:600 }}>* required to approve</span></div>
           {selRec.length > 0 && (
             <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:6 }}>
               {selRec.map(r => (
@@ -221,7 +221,7 @@ function RequestCard({ item, recruiters, onResolve }: { item: PendingItem; recru
 
       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
         <input style={{ ...C.input, flex:1, minWidth:180 }} placeholder="Remark (required to reject)" value={remark} onChange={e => setRemark(e.target.value)} />
-        <button disabled={busy} style={{ ...C.pri, background:TK.positive }} onClick={() => run('APPROVED')}>Approve</button>
+        <button disabled={busy || (isMrf && !selRec.length)} title={isMrf && !selRec.length ? 'Assign at least one hiring manager first' : undefined} style={{ ...C.pri, background:TK.positive, opacity: isMrf && !selRec.length ? 0.5 : 1 }} onClick={() => run('APPROVED')}>Approve</button>
         <button disabled={busy || !remark.trim()} style={{ ...C.pri, background:TK.critical, opacity: remark.trim() ? 1 : 0.5 }} onClick={() => run('REJECTED')}>Reject</button>
       </div>
     </div>
