@@ -54,14 +54,14 @@ export async function GET(req: NextRequest) {
   if (!d) return bad('Offer request not found', 404)
   if (!wantsLetter) return NextResponse.json(view(d))
 
-  if (!d.complete) return bad('Verify the offer file first — tick the confirmation in the last part.', 409)
-  if (mark && !OPEN.includes(d.request.status)) return bad('This offer has already gone out — the letter cannot be regenerated.', 409)
+  if (!d.complete) return bad('Verify the offer file first: tick the confirmation in the last part.', 409)
+  if (mark && !OPEN.includes(d.request.status)) return bad('This offer has already gone out. The letter cannot be regenerated.', 409)
   let pdf
   try { pdf = await offerLetterPdf(d) } catch (e: any) { return bad(`Could not build the offer letter: ${e?.message || 'failed'}`, 500) }
   if (mark) {
     // Building takes a moment; only record it if the file is exactly what the PDF was built from.
     const now = await loadDossier(requestId)
-    if (!now?.complete || now.fileHash !== d.fileHash) return bad('Something in the offer file changed while the letter was being generated — generate it again.', 409)
+    if (!now?.complete || now.fileHash !== d.fileHash) return bad('Something in the offer file changed while the letter was being generated. Generate it again.', 409)
     const by = await actorName(gate.user)
     await markLetterGenerated(now, by)
     await sb.from('recruitment_audit_logs').insert({ candidate_id: d.candidate.id, company_id: d.request.company_id || null, action_type: 'OFFER_LETTER_GENERATED', details: { request_id: d.request.id, by }, created_at: new Date().toISOString() })
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
   if (!body?.request_id) return bad('request_id is required')
   const d = await loadDossier(String(body.request_id))
   if (!d) return bad('Offer request not found', 404)
-  if (!OPEN.includes(d.request.status)) return bad('This offer has already gone out — its file can no longer be changed.', 409)
+  if (!OPEN.includes(d.request.status)) return bad('This offer has already gone out. Its file can no longer be changed.', 409)
   const by = await actorName(gate.user)
 
   try {

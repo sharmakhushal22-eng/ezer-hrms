@@ -20,7 +20,7 @@ export { DOC_LABEL, docLabel, summarise, correctionsMail, type Corrections, type
  *  from teams that are not Payroll. */
 export async function reviewPayload(sb: SupabaseClient, onboardingId: string, o: { companyId?: string | null; maskBank?: boolean } = {}) {
   let q = sb.from('onboarding_candidates')
-    .select('id, full_name, email, mobile, designation, department, employment_type, date_of_joining, offered_ctc, status, submitted_at, form_data, company_id, hr_notes, hr_review, magic_link_token, token_expires_at, esic_applicable, l1_manager_id, l2_manager_id, hod_id')
+    .select('id, full_name, email, mobile, designation, department, employment_type, date_of_joining, offered_ctc, status, submitted_at, form_data, company_id, hr_notes, hr_review, magic_link_token, token_expires_at, esic_applicable, l1_manager_id, l2_manager_id, hod_id, hiring_track, work_country, payroll_currency, employing_entity')
     .eq('id', onboardingId)
   if (o.companyId) q = q.eq('company_id', o.companyId)
   const { data: oc } = await q.maybeSingle()

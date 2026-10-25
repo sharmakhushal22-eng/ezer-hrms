@@ -39,7 +39,7 @@ function summarizeMonths(r: PtRow): string {
   if (uniq.length === 1) return uniq[0] === 0 ? 'Exempt (₹0)' : `₹${uniq[0]} every month`
   const nonZeroMonths = amts.map((a, i) => a > 0 ? MONTH_LABELS[i] : null).filter(Boolean)
   const zeroCount = amts.filter(a => a === 0).length
-  if (zeroCount >= 10) return `₹${Math.max(...amts)} — only ${nonZeroMonths.join(', ')}`
+  if (zeroCount >= 10) return `₹${Math.max(...amts)}, only ${nonZeroMonths.join(', ')}`
   return `Varies (peak ₹${Math.max(...amts)})`
 }
 function slabLabel(r: PtRow): string {
@@ -200,7 +200,7 @@ export default function PtConfig() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try { setSlabs(await getCurrentPtSlabs()) }
-    catch (e: any) { setError(e.message || 'Could not load — run sql70 first.') }
+    catch (e: any) { setError(e.message || 'Could not load. Run sql70 first.') }
     finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
@@ -231,7 +231,7 @@ export default function PtConfig() {
       setQRes({ amount: r?.pt_amount ?? null, found: !!r?.rate_found, row })
     } catch (e: any) {
       setQErr(/could not find the function/i.test(e?.message || '')
-        ? 'get_pt_amount() is not in this database yet — run sql108, then sql109.'
+        ? 'get_pt_amount() is not in this database yet. Run sql108, then sql109.'
         : (e?.message || String(e)))
     } finally { setQBusy(false) }
   }
@@ -255,7 +255,7 @@ export default function PtConfig() {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Professional Tax Configuration</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
-            {loading ? 'Loading…' : `${states.length} states, ${slabs.length} slabs — exactly what the payroll run reads`}
+            {loading ? 'Loading…' : `${states.length} states, ${slabs.length} slabs · exactly what the payroll run reads`}
           </div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
@@ -270,7 +270,7 @@ export default function PtConfig() {
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>Quick check</div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
-          Pick a state, month and gross to see exactly which row payroll will use — same function the run calls.
+          Pick a state, month and gross to see exactly which row payroll will use. Same function the run calls.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr)) auto', gap: 10, alignItems: 'end' }}>
           <div>
@@ -308,7 +308,7 @@ export default function PtConfig() {
             </div>
             <div style={{ fontSize: 12, color: qRes.found ? '#047857' : TK.warning, marginTop: 3 }}>
               {!qRes.found
-                ? `${qState} has no slab covering ₹${Number(qGross).toLocaleString('en-IN')} — payroll deducts nothing and flags it.`
+                ? `${qState} has no slab covering ₹${Number(qGross).toLocaleString('en-IN')}, so payroll deducts nothing and flags it.`
                 : Number(qRes.amount) === 0
                   ? (noPt.has(qState)
                     ? `${qState} does not levy Professional Tax at all.`
@@ -326,8 +326,8 @@ export default function PtConfig() {
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>Full configuration table</div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
-          Every state, slab and month-wise amount. A <b>no PT</b> badge means the state levies none at all —
-          that row exists on purpose, so a state with no tax can be told apart from a state nobody configured.
+          Every state, slab and month-wise amount. A <b>no PT</b> badge means the state levies none at all.
+          That row exists on purpose, so a state with no tax can be told apart from a state nobody configured.
         </div>
         {loading ? (
           <div style={{ fontSize: 12, color: C.purple, padding: 8 }}>Loading…</div>
@@ -357,7 +357,7 @@ export default function PtConfig() {
                         {noPt.has(r.state) && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: TK.positiveTint, color: C.green }}>no PT</span>}
                       </td>
                       <td style={td}>{Number(r.slab_min).toLocaleString('en-IN')}</td>
-                      <td style={td}>{r.slab_max == null ? '—' : Number(r.slab_max).toLocaleString('en-IN')}</td>
+                      <td style={td}>{r.slab_max == null ? '-' : Number(r.slab_max).toLocaleString('en-IN')}</td>
                       <td style={{ ...td, textAlign: 'left', color: r.gender === 'ALL' ? C.muted : C.amber, fontWeight: r.gender === 'ALL' ? 400 : 700 }}>{r.gender}</td>
                       {MONTH_KEYS.map(m => {
                         const v = Number((r as any)[m]) || 0
@@ -382,10 +382,10 @@ export default function PtConfig() {
       </div>
 
       <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
-        <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s PT from here — by their
+        <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s PT from here, by their
         <b> state</b>, that month&apos;s <b>column</b> and their <b>gross</b>. No rate is written anywhere in the app,
         so a rate changed here applies to the next run on its own.
-        <br />PT is a <b>fixed monthly</b> amount — taking leave does not reduce it. Revising does not delete the
+        <br />PT is a <b>fixed monthly</b> amount. Taking leave does not reduce it. Revising does not delete the
         old row, it closes it; so re-running an earlier month still applies the rate that was in force then.
       </div>
 

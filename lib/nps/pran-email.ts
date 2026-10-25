@@ -22,7 +22,7 @@ export async function sendPranCreationEmail({ to, employeeName, deadline, remind
   const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000)
   const overdue = days < 0
   const when = overdue
-    ? `The date has passed — it was due on ${deadlineFmt}`
+    ? `The date has passed. It was due on ${deadlineFmt}`
     : days === 0 ? `Due today (${deadlineFmt})`
     : `${days} day${days === 1 ? '' : 's'} left — due by ${deadlineFmt}`
 
@@ -42,7 +42,7 @@ export async function sendPranCreationEmail({ to, employeeName, deadline, remind
   const html = `
   <div style="font-family:system-ui,sans-serif; max-width:600px; margin:0 auto; color:#1E1B4B;">
     <div style="background:#1E1B4B; padding:20px 24px; border-radius:12px 12px 0 0;">
-      <span style="color:#fff; font-size:18px; font-weight:600;">EZER — NPS Enrolment</span>
+      <span style="color:#fff; font-size:18px; font-weight:600;">EZER · NPS Enrolment</span>
     </div>
     <div style="border:1px solid #E9E7F5; border-top:none; border-radius:0 0 12px 12px; padding:24px; font-size:14px; line-height:1.7;">
       ${mail.html}

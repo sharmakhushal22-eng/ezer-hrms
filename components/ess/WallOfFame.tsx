@@ -163,7 +163,7 @@ function Hero({ composing, onCompose, winner }: {
           </h2>
           <p style={{ margin: '10px 0 0', fontSize: F.body, color: C.inkSoft, lineHeight: 1.6,
                       maxWidth: '48ch' }}>
-            What your colleagues have noticed. Noticed someone doing something well? Say so —
+            What your colleagues have noticed. Noticed someone doing something well? Say so:
             a shoutout goes on the wall for everyone, a note goes only to them.
           </p>
         </div>
@@ -178,7 +178,7 @@ function Hero({ composing, onCompose, winner }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12,
                         fontSize: F.micro, color: C.muted }}>
             <Icon name="shield" size={13} />
-            Recognition here is thanks, never pay — it changes nothing about anyone&rsquo;s salary.
+            Recognition here is thanks, never pay. It changes nothing about anyone&rsquo;s salary.
           </div>
         </div>
       </div>
@@ -387,7 +387,7 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
   const shoutoutSent = useCallback(() => {
     setComposing(null); load(); setToast('Shoutout posted to the wall')
   }, [load])
-  const noteSent = useCallback(() => { setComposing(null); setToast('Note sent — it is in their inbox') }, [])
+  const noteSent = useCallback(() => { setComposing(null); setToast('Note sent. It is in their inbox') }, [])
   const clearToast = useCallback(() => setToast(null), [])
 
   return (

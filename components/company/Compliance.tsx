@@ -257,16 +257,16 @@ export function Compliance({ co, regs, isMobile, onSave, canEdit = false, onChan
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <span style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink }}>{t.label}</span>
               {t.scope === 'BRANCH' && (
-                <span title="Held per establishment — see the branch cards below"
+                <span title="Held per establishment. See the branch cards below"
                   style={{ fontSize: 9, padding: '1px 5px', borderRadius: R.pill,
                            background: C.brandTint, color: C.brandDeep, fontWeight: W.semi }}>per site</span>
               )}
             </div>
             <Cell value={number} placeholder="Not recorded"
               onSave={v => onSave(t.code, { reg_number: v || null })} />
-            <Cell value={r?.valid_from ?? null} placeholder="—" type="date"
+            <Cell value={r?.valid_from ?? null} placeholder="-" type="date"
               onSave={v => onSave(t.code, { valid_from: v || null })} />
-            <Cell value={r?.valid_till ?? null} placeholder="—" type="date"
+            <Cell value={r?.valid_till ?? null} placeholder="-" type="date"
               onSave={v => onSave(t.code, { valid_till: v || null })} />
             <Pill h={h.state} days={h.days} />
             <DocCell r={r} />
@@ -295,9 +295,9 @@ export function Compliance({ co, regs, isMobile, onSave, canEdit = false, onChan
             </div>
             <Cell value={r.reg_number} placeholder="Not recorded"
               onSave={v => onSave(r.reg_type, { reg_number: v || null })} />
-            <Cell value={r.valid_from} placeholder="—" type="date"
+            <Cell value={r.valid_from} placeholder="-" type="date"
               onSave={v => onSave(r.reg_type, { valid_from: v || null })} />
-            <Cell value={r.valid_till} placeholder="—" type="date"
+            <Cell value={r.valid_till} placeholder="-" type="date"
               onSave={v => onSave(r.reg_type, { valid_till: v || null })} />
             <Pill h={hh.state} days={hh.days} />
             <DocCell r={r} />
@@ -405,7 +405,7 @@ export function BranchCertificate({ branch, regs, onSave }: {
         </div>
         <div>
           <div style={{ fontSize: F.micro, color: C.faint }}>Valid till</div>
-          <Cell value={r?.valid_till ?? null} placeholder="—" type="date"
+          <Cell value={r?.valid_till ?? null} placeholder="-" type="date"
             onSave={v => onSave(type, { valid_till: v || null }, branch.id)} />
         </div>
       </div>
@@ -470,7 +470,7 @@ function DocViewer({ doc, onClose }: { doc: RegDoc; onClose: () => void }) {
             <div style={{ fontSize: F.micro, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
               Previewing a .docx would mean sending this certificate to an outside
               viewer service, which is not something the app does with statutory
-              documents. Open it in Word instead — the link below works for five
+              documents. Open it in Word instead. The link below works for five
               minutes.
             </div>
             <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{

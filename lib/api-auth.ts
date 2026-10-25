@@ -39,8 +39,8 @@ export interface ApiUser {
   kind: 'ess' | 'legacy'
 }
 
-const UNAUTHORISED = 'Sign in first — this endpoint needs a dashboard session.'
-const EXPIRED = 'Your session has expired — sign in again.'
+const UNAUTHORISED = 'Sign in first. This endpoint needs a dashboard session.'
+const EXPIRED = 'Your session has expired. Sign in again.'
 
 /** Returns the signed-in user, or a 401 response to return as-is. */
 export async function requireDashboardUser(
@@ -55,6 +55,10 @@ export async function requireDashboardUser(
   // ESS first — it is the common case and needs no network round trip.
   const ess = verifyEssToken(token)
   if (ess?.employeeId) {
+    // A token outlives a revocation (12 h): an account switched off on the last working day
+    // (lib/offboarding/run.ts) or by HR must stop working at once, not at the next login.
+    const { data: acct } = await admin.from('ess_accounts').select('status').eq('employee_id', ess.employeeId).maybeSingle()
+    if (acct && acct.status !== 'ACTIVE') return { user: null, error: NextResponse.json({ error: 'Your ESS access has ended. Contact HR.' }, { status: 401 }) }
     return { user: { id: ess.employeeId, email: null, employeeId: ess.employeeId, kind: 'ess' }, error: null }
   }
 

@@ -250,7 +250,7 @@ export default function PmsPage() {
           <div style={{ marginTop: 3, fontSize: F.small, color: TK.muted }}>
             {naming
               ? <>Running now: <strong style={{ color: TK.ink }}>{naming.title}</strong> · {naming.sub}</>
-              : <>KRAs, the appraisal cycle and ratings. You are not a step in the chain —
+              : <>KRAs, the appraisal cycle and ratings. You are not a step in the chain:
                  it runs Employee → manager → second manager → HOD, and you keep it moving.</>}
           </div>
         </div>
@@ -348,7 +348,7 @@ function MigrationPending() {
         is applied. That file creates 15 tables, 9 functions, 10 views and 2 triggers.
       </div>
       <div style={{ fontSize: F.small, color: TK.muted, marginTop: 10, lineHeight: 1.6, maxWidth: 720 }}>
-        It is handed to Nayan rather than run from here — this project does not apply schema
+        It is handed to Nayan rather than run from here. This project does not apply schema
         changes itself. Nothing on this page is broken; it is waiting.
       </div>
     </Card>
@@ -362,7 +362,7 @@ function Overview({ cov }: { cov: Coverage | null }) {
         Cycle overview
       </div>
       <div style={{ fontSize: F.small, color: TK.muted, lineHeight: 1.6 }}>
-        No active period yet. Create a policy in Setup and periods generate from its frequency —
+        No active period yet. Create a policy in Setup and periods generate from its frequency:
         monthly, quarterly, half-yearly or annual.
         {cov && cov.hodResolved === 0 && ' Note the HOD warning below: the finalise step has nobody to route to yet.'}
       </div>
@@ -426,18 +426,18 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
         </div>
         <ol style={{ margin: 0, paddingLeft: 18, fontSize: F.small, color: TK.muted, lineHeight: 1.8 }}>
           <li>
-            <code>employees.hod_id</code> — explicit override for matrix and dotted-line cases
+            <code>employees.hod_id</code>: explicit override for matrix and dotted-line cases
             {' · '}<strong style={{ color: TK.ink }}>{cov.hodOverride}</strong> set
           </li>
           <li>
-            <code>departments.hod_employee_id</code> — the primary source
+            <code>departments.hod_employee_id</code>: the primary source
             {' · '}
             {cov.deptSourceReady
               ? <><strong style={{ color: TK.ink }}>{cov.hodDept}</strong> covered this way</>
               : <span style={{ color: TK.warning }}>column arrives with migration 067</span>}
           </li>
           <li>
-            Otherwise <strong style={{ color: TK.critical }}>blocked</strong> — no guess is made
+            Otherwise <strong style={{ color: TK.critical }}>blocked</strong>, no guess is made
           </li>
         </ol>
       </div>
@@ -448,7 +448,7 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
           the finalise step today.{' '}
           {cov.deptSourceReady
             ? 'Set an HOD on their department, or an override on the individual where reporting is matrix.'
-            : 'Once 067 is applied, setting an HOD per department covers most of them in one pass — the per-employee override is only for exceptions.'}
+            : 'Once 067 is applied, setting an HOD per department covers most of them in one pass. The per-employee override is only for exceptions.'}
         </div>
       )}
     </Card>

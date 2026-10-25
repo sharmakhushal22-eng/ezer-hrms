@@ -83,7 +83,7 @@ export function canPublish(employeeId: string, publishers: Publisher[]): Verdict
  * assuming the button posts publicly and then finds out it did not.
  */
 export const REPLIES_DISABLED =
-  'Broadcasts cannot be replied to in public — everybody in the company sees ' +
+  'Broadcasts cannot be replied to in public. Everybody in the company sees ' +
   'these, and an announcement with a comment section under it stops being an ' +
   'announcement. If you need to answer one, reply privately to whoever sent ' +
   'it; only they will see it.'
@@ -165,7 +165,7 @@ export function checkDraft(d: Draft, publishers: Publisher[], by: string): Draft
   if (!may.allowed) faults.push(may.because)
 
   const title = d.title.trim(), body = d.body.trim()
-  if (!title) faults.push('It needs a subject line — that is all most people will read.')
+  if (!title) faults.push('It needs a subject line. That is all most people will read.')
   else if (title.length < 8) faults.push('The subject is too short to say anything.')
   else if (title.length > 120) faults.push('Keep the subject under 120 characters so it is not cut off in a list.')
 

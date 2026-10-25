@@ -44,7 +44,7 @@ export function BroadcastView({ status, reason, items, onReplyPrivately, onRead,
           <p>
             The broadcast channel is waiting on{' '}
             <code>{reason || '088_broadcast_channel.sql'}</code>, which adds the channel to the
-            announcements table. It is handed to Nayan rather than run from here — this project
+            announcements table. It is handed to Nayan rather than run from here. This project
             does not apply schema changes itself.
           </p>
         </div>
@@ -68,7 +68,7 @@ export function BroadcastView({ status, reason, items, onReplyPrivately, onRead,
     <div className="pane">
       <div className="top">
         <h2>Broadcasts</h2>
-        <span className="why">Company-wide notices. Read only — nobody replies in public.</span>
+        <span className="why">Company-wide notices. Read only. Nobody replies in public.</span>
       </div>
       {notice && <div className="wnotice" role="status">{notice}</div>}
       <div className="bclist">

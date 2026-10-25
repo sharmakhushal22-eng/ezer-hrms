@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireModule } from '@/lib/api-auth'
-import { FORMS, isFormKey, loadStatutory, renderStatutoryForm } from '@/lib/onboarding/statutory-forms'
+import { FORMS, isFormKey, loadStatutory, renderStatutoryForm, hasStatutoryForms } from '@/lib/onboarding/statutory-forms'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
   }
   const l = await loadStatutory(supa, token ? { token } : { id: onboardingId }, { photo: form === 'esic1' })
   if (!l) return NextResponse.json({ error: 'Onboarding record not found' }, { status: 404 })
+  if (!hasStatutoryForms(l.oc)) return NextResponse.json({ error: 'No Indian statutory forms apply to an overseas employee.' }, { status: 404 })
 
   try {
     const bytes = await renderStatutoryForm(form, l.data, { photo: l.photo })

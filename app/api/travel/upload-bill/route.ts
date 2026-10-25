@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json(
         {
-          error: 'That file is too large to upload. Keep it under 10 MB — a photo of the slip is enough.',
+          error: 'That file is too large to upload. Keep it under 10 MB. A photo of the slip is enough.',
           code: 'FILE_TOO_LARGE',
         },
         { status: 413 },
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     }
     if (file.size > MAX_BYTES) {
       return NextResponse.json(
-        { error: `That file is ${(file.size / 1048576).toFixed(1)} MB. The limit is 10 MB — a photo of the slip is enough.`,
+        { error: `That file is ${(file.size / 1048576).toFixed(1)} MB. The limit is 10 MB. A photo of the slip is enough.`,
           code: 'FILE_TOO_LARGE' },
         { status: 413 },
       );
@@ -238,8 +238,8 @@ export async function POST(req: NextRequest) {
         severity: 'WARN',
         message:
           `This exact bill is already attached to another journey on ${duplicateOf.log_date} ` +
-          `(${duplicateOf.purpose ?? 'no purpose given'}, ₹${duplicateOf.amount ?? '—'}). ` +
-          'Same file, byte for byte. It may be one invoice covering both legs — confirm before approving.',
+          `(${duplicateOf.purpose ?? 'no purpose given'}, ₹${duplicateOf.amount ?? '-'}). ` +
+          'Same file, byte for byte. It may be one invoice covering both legs. Confirm before approving.',
       });
     }
 
@@ -249,12 +249,12 @@ export async function POST(req: NextRequest) {
       attachment: { ...row, url: signed?.signedUrl ?? null },
       duplicate: duplicateOf,
       message: duplicateOf
-        ? 'Bill attached, but it is the same file as another journey — your approver will see a note.'
+        ? 'Bill attached, but it is the same file as another journey. Your approver will see a note.'
         : 'Bill attached.',
     });
   } catch (e) {
     return errorResponse(e, 'Could not attach the bill',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -313,7 +313,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ attachments });
   } catch (e) {
     return errorResponse(e, 'Could not load the bills',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -345,7 +345,7 @@ export async function DELETE(req: NextRequest) {
       const editable = !claim || claim.status === 'DRAFT' || claim.status === 'SENT_BACK';
       if (!editable && !actor.onBehalf) {
         return NextResponse.json(
-          { error: `${claim.claim_no} has been submitted — its bills can no longer be removed.`, code: 'CLAIM_LOCKED' },
+          { error: `${claim.claim_no} has been submitted. Its bills can no longer be removed.`, code: 'CLAIM_LOCKED' },
           { status: 409 },
         );
       }
@@ -369,6 +369,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     return errorResponse(e, 'Could not remove the bill',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }

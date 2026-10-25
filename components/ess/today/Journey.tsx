@@ -39,9 +39,9 @@ export default function Journey({ data, prefs }: { data: TodayPayload; prefs: Pr
         <div className="mgrid"><div><b>Joined</b>Joining date not on record yet. HR can set it on your employee record.</div></div>
       )}
       <div className="jgrid">
-        <div>Designation<b>{e.designation ?? '—'}</b></div>
-        <div>Reports to<b>{e.reports_to ?? '—'}</b></div>
-        <div>Department<b>{e.department ?? '—'}</b></div>
+        <div>Designation<b>{e.designation ?? '-'}</b></div>
+        <div>Reports to<b>{e.reports_to ?? '-'}</b></div>
+        <div>Department<b>{e.department ?? '-'}</b></div>
       </div>
     </section>
   );

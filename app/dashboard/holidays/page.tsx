@@ -37,7 +37,7 @@ const TYPE_COLOR: Record<HolidayType, [string, string]> = {
   NATIONAL:[TK.brandTint,TK.inkSoft], FESTIVAL:[TK.criticalTint,TK.critical], DISCRETIONARY:[TK.warningTint,TK.warning],
   REGIONAL:[TK.infoTint,TK.brand], OPTIONAL:[TK.positiveTint,TK.positive],
 }
-const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
 const ym = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 
 // ── Toast ───────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ function CalendarsTab({ calendars, companies, maps, active, onCreate, onStatus, 
         <div style={C.sec}>Leave calendar mapping</div>
         <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>
           Which LEAVE calendar each company follows. Holiday calendars are chosen by activating
-          them above — a company can follow several at once, one per financial year.
+          them above. A company can follow several at once, one per financial year.
         </div>
         {companies.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No company found.</div>}
         {companies.map(co => {
@@ -121,7 +121,7 @@ function CalendarsTab({ calendars, companies, maps, active, onCreate, onStatus, 
             <div key={co.id} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:10, alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{co.company_name} <span style={{ fontSize:11, color:TK.faint }}>{co.company_code}</span></div>
               <select style={C.input} value={m?.leave_calendar_id || ''} onChange={e => onMap(co.id, m?.holiday_calendar_id || null, e.target.value || null)}>
-                <option value="">— Leave calendar —</option>
+                <option value="">Leave calendar</option>
                 {leaveCals.map(lc => <option key={lc.id} value={lc.id}>{lc.name}</option>)}
               </select>
             </div>
@@ -170,7 +170,7 @@ function ActivationPanel({ companies, holCals, active, onActivate, onDeactivate 
 
             {mine.length === 0 ? (
               <div style={{ fontSize:12, color:TK.critical, marginBottom:8 }}>
-                No active holiday calendar — employees of this company see no holidays at all.
+                No active holiday calendar. Employees of this company see no holidays at all.
               </div>
             ) : mine.map(a => (
               <div key={a.calendar_id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
@@ -193,7 +193,7 @@ function ActivationPanel({ companies, holCals, active, onActivate, onDeactivate 
             <div style={{ display:'flex', gap:8, marginTop:8 }}>
               <select style={{ ...C.input, maxWidth:320 }} value={chosen}
                 onChange={e => setPick(p => ({ ...p, [co.id]: e.target.value }))}>
-                <option value="">— Activate a calendar —</option>
+                <option value="">Activate a calendar</option>
                 {holCals.filter(hc => !mine.some(a => a.calendar_id === hc.id))
                   .map(hc => <option key={hc.id} value={hc.id}>{hc.name} ({fmt(hc.from_date)} – {fmt(hc.to_date)})</option>)}
               </select>
@@ -229,7 +229,7 @@ function HolidaysTab({ calendars, companies, branches, weeklyOffs, selCal, setSe
       <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
         <label style={C.lbl}>Calendar</label>
         <select style={{ ...C.input, maxWidth:420 }} value={selCal} onChange={e => setSelCal(e.target.value)}>
-          <option value="">— Select a holiday calendar —</option>
+          <option value="">Select a holiday calendar</option>
           {holCals.map(c => <option key={c.id} value={c.id}>{c.name} ({c.status})</option>)}
         </select>
       </div>
@@ -332,10 +332,10 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
         <input type="checkbox" checked={isOptional} onChange={e => setIsOptional(e.target.checked)} /> Optional / restricted holiday (employee picks)
       </label>
 
-      <div style={{ ...C.lbl, marginTop:4 }}>Applicability — company × branch</div>
+      <div style={{ ...C.lbl, marginTop:4 }}>Applicability: company × branch</div>
       <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1.4fr auto', gap:8, marginBottom:8 }}>
         <select style={C.input} value={pickCo} onChange={e => { setPickCo(e.target.value); setPickBr('') }}>
-          <option value="">— Company —</option>
+          <option value="">Company</option>
           <option value="ALL">All companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
@@ -352,12 +352,12 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
             <span style={{ cursor:'pointer', color:TK.critical, fontWeight:700 }} onClick={() => setScopes(scopes.filter((_, j) => j !== i))}>×</span>
           </span>
         ))}
-        {scopes.length === 0 && <span style={{ fontSize:11, color:TK.faint }}>No scope — add at least one company.</span>}
+        {scopes.length === 0 && <span style={{ fontSize:11, color:TK.faint }}>No scope. Add at least one company.</span>}
       </div>
 
       {conflict.conflict && (
         <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:10, padding:'10px 12px', marginBottom:10, fontSize:12, color: TK.critical }}>
-          ⚠️ {fmt(date)} is a {conflict.weekday} — a weekly off in this scope. Add it anyway?
+          ⚠️ {fmt(date)} is a {conflict.weekday}, a weekly off in this scope. Add it anyway?
           <label style={{ display:'flex', alignItems:'center', gap:7, marginTop:7, cursor:'pointer', fontWeight:600 }}>
             <input type="checkbox" checked={confirmWeekend} onChange={e => setConfirmWeekend(e.target.checked)} /> Yes, confirm the weekend override (it goes into the audit log)
           </label>
@@ -409,7 +409,7 @@ function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs,
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10, marginBottom:10 }}>
           <div><label style={C.lbl}>Weekday</label><select style={C.input} value={weekday} onChange={e => setWeekday(Number(e.target.value))}>{WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}</select></div>
           <div><label style={C.lbl}>Mode</label><select style={C.input} value={mode} onChange={e => setMode(e.target.value as WeeklyMode)}><option value="EVERY">Every week</option><option value="NTH">Specific weeks (NTH)</option></select></div>
-          <div><label style={C.lbl}>Calendar (optional)</label><select style={C.input} value={calId} onChange={e => setCalId(e.target.value)}><option value="">— none —</option>{calendars.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label style={C.lbl}>Calendar (optional)</label><select style={C.input} value={calId} onChange={e => setCalId(e.target.value)}><option value="">None</option>{calendars.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
             <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:12, cursor:'pointer' }}>
               <input type="checkbox" checked={isPrimary} onChange={e => setIsPrimary(e.target.checked)} /> Primary off
@@ -464,7 +464,7 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
   const [hols, setHols] = useState<ResolvedHoliday[]>([])
   const [offs, setOffs] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const coName = (id: string) => companies.find(c => c.id === id)?.company_name || '—'
+  const coName = (id: string) => companies.find(c => c.id === id)?.company_name || '-'
 
   async function run() {
     if (!empId) return
@@ -489,23 +489,23 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
   return (
     <>
       <div style={C.card}>
-        <div style={C.sec}>Employee preview — what they’ll see in ESS</div>
+        <div style={C.sec}>Employee preview: what they’ll see in ESS</div>
         <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:10, alignItems:'flex-end' }}>
           <div><label style={C.lbl}>Employee</label>
             <select style={C.input} value={empId} onChange={e => setEmpId(e.target.value)}>
-              <option value="">— Select employee —</option>
+              <option value="">Select employee</option>
               {employees.map(e => <option key={e.id} value={e.id}>{e.full_name} ({e.emp_code}) · {coName(e.company_id)}</option>)}
             </select>
           </div>
           <div><label style={C.lbl}>Month</label><input type="month" style={C.input} value={month} onChange={e => setMonth(e.target.value)} /></div>
           <button disabled={!empId || loading} style={{ ...C.pri, opacity: empId ? 1 : 0.5 }} onClick={run}>{loading ? '…' : 'Resolve'}</button>
         </div>
-        <div style={{ fontSize:11, color:TK.faint, marginTop:8 }}>Live from the resolver functions — for this company + branch, only PUBLISHED calendar holidays plus scoped weekly offs.</div>
+        <div style={{ fontSize:11, color:TK.faint, marginTop:8 }}>Live from the resolver functions: for this company + branch, only PUBLISHED calendar holidays plus scoped weekly offs.</div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:10 }}>
         <div style={C.card}>
-          <div style={C.sec}>Weekly off — {new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month:'long', year:'numeric' })}</div>
+          <div style={C.sec}>Weekly off: {new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month:'long', year:'numeric' })}</div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
             {WEEKDAYS.map(d => <div key={d} style={{ fontSize:10, fontWeight:600, color:TK.faint, textAlign:'center', padding:'4px 0' }}>{d.slice(0, 3)}</div>)}
             {cells.map((day, i) => {
@@ -596,7 +596,7 @@ export function HolidaysSection() {
 
   // ── handlers ──
   async function hCreateCal(i: any) { const { error } = await createCalendar(i); if (error) return notify('Failed: ' + error.message, 'error'); notify('Calendar created.'); reload() }
-  async function hStatus(id: string, s: 'DRAFT' | 'PUBLISHED') { const { error } = await setCalendarStatus(id, s); if (error) return notify('Failed: ' + error.message, 'error'); notify(s === 'PUBLISHED' ? 'Published — ESS pe live.' : 'Unpublished.'); reload() }
+  async function hStatus(id: string, s: 'DRAFT' | 'PUBLISHED') { const { error } = await setCalendarStatus(id, s); if (error) return notify('Failed: ' + error.message, 'error'); notify(s === 'PUBLISHED' ? 'Published, ESS pe live.' : 'Unpublished.'); reload() }
   async function hDeleteCal(id: string) { const { error } = await deleteCalendar(id); if (error) return notify('Failed: ' + error.message, 'error'); notify('Deleted.'); if (selCal === id) setSelCal(''); reload() }
   async function hMap(company_id: string, holiday: string | null, leave: string | null) { const { error } = await upsertCompanyMap({ company_id, holiday_calendar_id: holiday, leave_calendar_id: leave }); if (error) return notify('Failed: ' + error.message, 'error'); notify('Mapping saved.'); reload() }
 
@@ -609,7 +609,7 @@ export function HolidaysSection() {
     // The overlap guard raises with a sentence written to be shown as-is.
     if (error) return notify(error.message, 'error')
     const replaced = (data as { replaced?: string }[] | null)?.[0]?.replaced
-    notify(replaced ? `Activated — replaced ${replaced}.` : 'Activated and published — live on ESS.')
+    notify(replaced ? `Activated, replaced ${replaced}.` : 'Activated and published, live on ESS.')
     reload()
   }
   async function hDeactivate(company_id: string, calendar_id: string, name: string) {
@@ -629,7 +629,7 @@ export function HolidaysSection() {
     <>
         <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Holiday &amp; Weekly-off Configuration</div>
-        <div style={{ fontSize:12, color:TK.muted }}>Attendance &amp; Leave config layer — calendars, holidays (branch-wise), weekly offs. Only a PUBLISHED calendar reaches ESS.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Attendance &amp; Leave config layer: calendars, holidays (branch-wise), weekly offs. Only a PUBLISHED calendar reaches ESS.</div>
         </div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>

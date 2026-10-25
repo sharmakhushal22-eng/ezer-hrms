@@ -50,10 +50,16 @@ export interface PendingItem {
   facts?: string[]
   /** Something that should stop a blind click. */
   alert?: string | null
+  lwd_policy?: string | null
+  lwd_proposed?: string | null
+  notice_days?: number | null
 }
 
 /** A stage entry, as both /api/ess/approvals?resignation_id= and
  *  /api/ess/resignation return it. */
+/** Resignation dates the LWD inputs start from (lib/ess/pending.ts). */
+export interface LwdHints { lwd_policy?: string | null; lwd_proposed?: string | null; notice_days?: number | null }
+
 export interface ChainRow {
   stage: string
   action: string

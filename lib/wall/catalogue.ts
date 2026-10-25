@@ -266,7 +266,7 @@ export function checkSelection(s: Selection): SelectionCheck {
     faults.push('The same tag has been picked twice.')
   }
   if (s.tagRefs.length > MAX_TAGS) {
-    faults.push(`Pick at most ${MAX_TAGS} tags — past that they stop telling anybody anything.`)
+    faults.push(`Pick at most ${MAX_TAGS} tags. Past that they stop telling anybody anything.`)
   }
   return { ok: faults.length === 0, faults }
 }
@@ -275,7 +275,7 @@ export function checkSelection(s: Selection): SelectionCheck {
 export function describe(s: Selection): string {
   const badge = s.badgeRef ? badgeByRef(s.badgeRef)?.name : null
   const tags = s.tagRefs.map(r => tagByRef(r)?.name).filter(Boolean)
-  if (badge && tags.length) return `${badge} — ${tags.join(', ')}`
+  if (badge && tags.length) return `${badge} · ${tags.join(', ')}`
   if (badge) return badge
   if (tags.length) return tags.join(', ')
   return ''

@@ -27,7 +27,7 @@ const T = {
   section:    { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, marginTop:4, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
 const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d }
-const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) : '—'
+const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) : '-'
 const fmtDT = (s?: string|null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : 'Never'
 
 // ── Helper components (OUTSIDE parent — no focus-loss) ──────────────
@@ -45,7 +45,7 @@ function StatusPill({ status }: { status?: string }) {
     ACTIVE:   [TK.positiveTint,TK.positive,'Active'],
     INACTIVE: [TK.sunken,TK.muted,'⬜ Inactive'],
     LOCKED:   [TK.criticalTint,TK.critical,'Locked'],
-    NONE:     [TK.sunken,TK.faint,'— No account'],
+    NONE:     [TK.sunken,TK.faint,'No account'],
   }
   const [bg,c,l] = map[status || 'NONE'] || map.NONE
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{l}</span>
@@ -95,7 +95,7 @@ function RoleCheckbox({ r, picked, onToggle, canGrantHiringManager }: { r: EssRo
     : r.salary_visibility
   const title = hiringLocked ? 'Only an Implementation Manager can grant Hiring Manager / Recruiter.'
     : isBase ? 'Every employee has this automatically.'
-    : isHier ? 'Set from the reporting structure — change it in the employee record or the bulk uploader.'
+    : isHier ? 'Set from the reporting structure. Change it in the employee record or the bulk uploader.'
     : undefined
   return (
     <label style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 4px', cursor: locked ? 'not-allowed' : 'pointer', fontSize:12, opacity: locked ? 0.65 : 1 }}
@@ -159,12 +159,12 @@ function DashboardTab({ users, audit, isMobile }: { users: EssUser[]; audit: Aud
         </div>
 
         <div style={T.card}>
-          <div style={T.section}>Never Logged In ({neverLogged.length}) — HR follow-up</div>
+          <div style={T.section}>Never Logged In ({neverLogged.length}) · HR follow-up</div>
           <div style={{ maxHeight:220, overflowY:'auto' }}>
             {neverLogged.slice(0,40).map(u => (
               <div key={u.employee_id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
                 <span style={{ fontWeight:600 }}>{u.full_name}</span>
-                <span style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.dept_name || '—'}</span>
+                <span style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.dept_name || '-'}</span>
               </div>
             ))}
             {neverLogged.length > 40 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>+{neverLogged.length-40} more…</div>}
@@ -176,7 +176,7 @@ function DashboardTab({ users, audit, isMobile }: { users: EssUser[]; audit: Aud
           {audit.length === 0 && <div style={{ fontSize:12, color:TK.faint, padding:'8px 0' }}>No changes yet. Recently deactivated (30d): {recentlyDeact}.</div>}
           {audit.slice(0,10).map(a => (
             <div key={a.id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
-              <span>{auditLabel(a)} {a.details?.full_name ? `— ${a.details.full_name}` : a.details?.emp_code ? `— ${a.details.emp_code}` : ''}</span>
+              <span>{auditLabel(a)}{a.details?.full_name ? `: ${a.details.full_name}` : a.details?.emp_code ? `: ${a.details.emp_code}` : ''}</span>
               <span style={{ fontSize:10, color:TK.faint }}>{fmtDT(a.created_at)}</span>
             </div>
           ))}
@@ -272,7 +272,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
                 <input type="checkbox" checked={sel.has(u.employee_id)} onChange={() => toggle(u.employee_id)} style={{ marginTop:3 }} />
                 <div>
                   <div style={{ fontWeight:600, fontSize:13 }}>{u.full_name}</div>
-                  <div style={{ fontSize:11, color:TK.faint }}>{u.emp_code} · {u.designation || '—'} · {u.dept_name || '—'}</div>
+                  <div style={{ fontSize:11, color:TK.faint }}>{u.emp_code} · {u.designation || '-'} · {u.dept_name || '-'}</div>
                   <div style={{ marginTop:5, display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
                     <StatusPill status={u.account?.status} />
                     {u.roles.slice(0,2).map(r => <RoleChip key={r.id} label={r.role_name} />)}
@@ -304,9 +304,9 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
                   <td style={{ padding:'8px 10px' }}><input type="checkbox" checked={sel.has(u.employee_id)} onChange={() => toggle(u.employee_id)} /></td>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap', fontWeight:600 }}>{u.emp_code}</td>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{u.full_name}</td>
-                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap', color:TK.muted }}>{u.dept_name || '—'}</td>
-                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap', color:TK.muted }}>{u.designation || '—'}</td>
-                  <td style={{ padding:'8px 10px' }}><div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>{u.roles.length ? u.roles.map(r => <RoleChip key={r.id} label={r.role_name} />) : <span style={{ fontSize:10, color:TK.faint }}>—</span>}</div></td>
+                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap', color:TK.muted }}>{u.dept_name || '-'}</td>
+                  <td style={{ padding:'8px 10px', whiteSpace:'nowrap', color:TK.muted }}>{u.designation || '-'}</td>
+                  <td style={{ padding:'8px 10px' }}><div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>{u.roles.length ? u.roles.map(r => <RoleChip key={r.id} label={r.role_name} />) : <span style={{ fontSize:10, color:TK.faint }}>-</span>}</div></td>
                   <td style={{ padding:'8px 10px' }}><StatusPill status={u.account?.status} /></td>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap', fontSize:11, color:TK.muted }}>{fmtDT(u.account?.last_login_at)}</td>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap', fontSize:11, color:TK.muted }}>{fmt(u.last_working_date)}</td>
@@ -359,7 +359,7 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign, canGra
         <div style={{ maxHeight:'60vh', overflowY:'auto' }}>
           {filtered.map(u => (
             <div key={u.employee_id} onClick={() => onSelect(u)} onMouseEnter={() => setHoverId(u.employee_id)} onMouseLeave={() => setHoverId('')} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, transition:'box-shadow .15s, background .15s', background: selected?.employee_id === u.employee_id ? TK.brandTint : (hoverId === u.employee_id ? TK.sunken : 'transparent'), border: selected?.employee_id === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent', boxShadow: hoverId === u.employee_id ? '0 2px 10px rgba(124,58,237,0.18)' : 'none' }}>
-              <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.dept_name || '—'}</div></div>
+              <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.dept_name || '-'}</div></div>
               <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end' }}>{u.roles.map(r => <RoleChip key={r.id} label={r.role_name} />)}</div>
             </div>
           ))}
@@ -373,7 +373,7 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign, canGra
         ) : (
           <>
             <div style={{ fontSize:13, fontWeight:600, marginBottom:2 }}>{selected.full_name}</div>
-            <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>{selected.emp_code} · {selected.designation || '—'}</div>
+            <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>{selected.emp_code} · {selected.designation || '-'}</div>
             <div style={{ maxHeight:'42vh', overflowY:'auto', marginBottom:10 }}>
               {roles.map(r => <RoleCheckbox key={r.id} r={r} picked={picked} onToggle={toggle} canGrantHiringManager={canGrantHiringManager} />)}
             </div>
@@ -441,7 +441,7 @@ function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager
               <div key={u.employee_id} onClick={() => setEmpId(u.employee_id)} onMouseEnter={() => setHoverId(u.employee_id)} onMouseLeave={() => setHoverId('')} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, transition:'box-shadow .15s, background .15s', background: empId === u.employee_id ? TK.brandTint : (hoverId === u.employee_id ? TK.sunken : 'transparent'), border: empId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent', boxShadow: hoverId === u.employee_id ? '0 2px 10px rgba(124,58,237,0.18)' : 'none' }}>
                 <div>
                   <div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div>
-                  <div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.company_name || '—'} · {u.location_name || '—'}</div>
+                  <div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.company_name || '-'} · {u.location_name || '-'}</div>
                 </div>
                 <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end', alignItems:'center' }}>
                   <StatusPill status={u.account?.status} />
@@ -449,7 +449,7 @@ function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager
                 </div>
               </div>
             ))}
-            {emps.length > 200 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>Showing first 200 — refine the search.</div>}
+            {emps.length > 200 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>Showing first 200. Refine the search.</div>}
           </div>
         </div>
 
@@ -474,7 +474,7 @@ function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager
         ) : (
           <>
             <div style={{ fontSize:13, fontWeight:600, marginBottom:2 }}>{selEmp.full_name}</div>
-            <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>{selEmp.emp_code} · {selEmp.designation || '—'}</div>
+            <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>{selEmp.emp_code} · {selEmp.designation || '-'}</div>
             <div style={{ maxHeight:'42vh', overflowY:'auto', marginBottom:10 }}>
               {roles.map(r => <RoleCheckbox key={r.id} r={r} picked={picked} onToggle={toggle} canGrantHiringManager={canGrantHiringManager} />)}
             </div>
@@ -499,7 +499,7 @@ function AuditTab({ audit }: { audit: AuditRow[] }) {
       {audit.map(a => (
         <div key={a.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
           <div>
-            <div style={{ fontWeight:600 }}>{label(a)} {a.details?.full_name ? `— ${a.details.full_name}` : a.details?.emp_code ? `— ${a.details.emp_code}` : ''}</div>
+            <div style={{ fontWeight:600 }}>{label(a)}{a.details?.full_name ? `: ${a.details.full_name}` : a.details?.emp_code ? `: ${a.details.emp_code}` : ''}</div>
             <div style={{ fontSize:10, color:TK.faint }}>{a.performed_by_name ? `by ${a.performed_by_name}` : 'by system'}{a.reason ? ` · ${a.reason}` : ''}</div>
           </div>
           <span style={{ fontSize:10, color:TK.faint, whiteSpace:'nowrap' }}>{fmtDT(a.created_at)}</span>
@@ -561,7 +561,7 @@ export default function ESSPage() {
     const { error } = await setStatus(u, 'INACTIVE', { reason: deactReason || undefined, byName: 'Admin' })
     setDeact(null)
     if (error) { notify('Failed: ' + error.message, 'error'); return }
-    notify(`${u.full_name} deactivated — login & password reset blocked.`); reload()
+    notify(`${u.full_name} deactivated. Login & password reset blocked.`); reload()
   }
   async function doAssign(u: EssUser, roleIds: string[]) {
     // assignRoles replaces the whole set, so fold back the roles this screen locks:
@@ -662,8 +662,8 @@ export default function ESSPage() {
       {imp && (
         <div style={{ position:'fixed', inset:0, background:TK.canvas, zIndex:1200, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
           <div style={{ background: TK.dark, color:TK.onDark, padding:'10px 18px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10, flexWrap:'wrap' }}>
-            <span style={{ fontSize:13, fontWeight:600 }}>Viewing as {imp.u.full_name} — Admin Mode</span>
-            <span style={{ fontSize:11, color:TK.onDarkFaint }}>{imp.u.emp_code} · {imp.u.designation || '—'}</span>
+            <span style={{ fontSize:13, fontWeight:600 }}>Viewing as {imp.u.full_name} (Admin Mode)</span>
+            <span style={{ fontSize:11, color:TK.onDarkFaint }}>{imp.u.emp_code} · {imp.u.designation || '-'}</span>
             <button onClick={exitImpersonate} style={{ marginLeft:'auto', ...T.btnOutline, background:'transparent', color:TK.onDark, borderColor:'rgba(255,255,255,.3)' }}>Exit Admin Mode</button>
           </div>
           <EmployeePortal employeeId={imp.u.employee_id} adminMode />

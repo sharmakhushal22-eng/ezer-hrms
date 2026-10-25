@@ -106,7 +106,7 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
         <div className="hx-appr">
           {shown.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--ez-muted)', padding: '6px 0' }}>
-              Nothing here — {filter === 'MINE' ? 'nothing is waiting on you.' : 'nothing in this view.'}
+              Nothing here: {filter === 'MINE' ? 'nothing is waiting on you.' : 'nothing in this view.'}
             </div>
           ) : shown.map((it, i) => (
             <PendingCard key={`${it.kind}:${it.id}`} item={it} api={api} go={go} animate={animate} i={i}
@@ -147,7 +147,11 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
       catch (e) { setErr((e as Error).message) }
       return
     }
-    if (needsInput(a) && ask !== a) { setAsk(a); return }
+    if (needsInput(a) && ask !== a) {
+      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
+      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      setAsk(a); return
+    }
     if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
     setBusy(true)
     try {
@@ -155,7 +159,7 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
         method: 'POST',
         body: JSON.stringify({ kind: item.kind, id: item.id, action: a, note: note || null, lwd: lwd || null, regrettable: regret }),
       })
-      onDone(`${a} — done`)
+      onDone(`${a}: done`)
     } catch (e) { setErr((e as Error)?.message || String(e)) } finally { setBusy(false) }
   }
 
@@ -200,13 +204,18 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
             <div>
               <label className="hx-label">{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label>
               <input type="date" className="hx-input" value={lwd} onChange={e => setLwd(e.target.value)} />
+              <div style={{ fontSize: 11.5, color: 'var(--ez-muted)', marginTop: 4 }}>
+                {item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.`
+                  : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.`
+                  : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''}
+              </div>
             </div>
           )}
           {ask === 'Set final LWD' && (
             <div>
               <label className="hx-label">Regrettable exit?</label>
               <div className="hx-toggle">
-                <button className={`hx-btn ${regret === true ? '' : 'o'} sm`} onClick={() => setRegret(true)}>Yes — regrettable</button>
+                <button className={`hx-btn ${regret === true ? '' : 'o'} sm`} onClick={() => setRegret(true)}>Yes, regrettable</button>
                 <button className={`hx-btn ${regret === false ? '' : 'o'} sm`} onClick={() => setRegret(false)}>No</button>
               </div>
             </div>
@@ -216,7 +225,7 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
             <textarea className="hx-area" style={{ minHeight: 60 }} value={note} onChange={e => setNote(e.target.value)} />
           </div>
           <div style={{ display: 'flex', gap: 7 }}>
-            <button className="hx-btn sm" disabled={busy} onClick={() => void fire(ask)}>Confirm — {ask}</button>
+            <button className="hx-btn sm" disabled={busy} onClick={() => void fire(ask)}>Confirm: {ask}</button>
             <button className="hx-btn o sm" onClick={() => { setAsk(null); setNote(''); setLwd('') }}>Cancel</button>
           </div>
         </div>

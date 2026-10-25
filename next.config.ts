@@ -26,6 +26,12 @@ const nextConfig: NextConfig = {
   // after a verification build.
   distDir: process.env.NEXT_DIST_DIR || '.next',
 
+  // One id per build, inlined into the client bundle and into /api/version alike: an open tab
+  // compares the two and reloads itself after a deploy (components/SessionGuard.tsx).
+  env: {
+    NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || `local-${Date.now()}`,
+  },
+
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -37,6 +43,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['pdfkit', 'fontkit'],
   outputFileTracingIncludes: {
     '/api/recruitment/offer-approval': ['./node_modules/pdfkit/js/data/**'],
+    // The joining acknowledgement downloaded from the onboarding link's last screen.
+    '/api/onboarding/ack-pdf': ['./node_modules/pdfkit/js/data/**'],
     // The blank statutory forms (EPF 11, EPF 2, ESIC 1) are read from disk and filled in.
     '/api/onboarding/forms': ['./public/statutory-forms/*.pdf'],
   },

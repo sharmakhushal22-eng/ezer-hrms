@@ -33,10 +33,10 @@ export const LineNode = ({ name, sub, rank }: { name: string | null; sub: string
     <span className="tm-txt">
       <span className="tm-nameline">
         {/* title, so a name the ellipsis truncates can still be read on hover */}
-        <span className="tm-name" title={name || undefined}>{name || '—'}</span>
+        <span className="tm-name" title={name || undefined}>{name || '-'}</span>
         {rank && <span className="tm-rank">{rank}</span>}
       </span>
-      <span className="tm-sub" style={{ display: 'block' }}>{sub || '—'}</span>
+      <span className="tm-sub" style={{ display: 'block' }}>{sub || '-'}</span>
     </span>
   </div>
 )

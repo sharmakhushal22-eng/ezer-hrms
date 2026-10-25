@@ -165,7 +165,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
     try {
       const rows: Record<string, string>[] = []
       for (const id of runIds) rows.push(...await buildNeftRows(id))
-      if (!rows.length) { setErr('No payable employee found — run Calculate for the month first.'); return }
+      if (!rows.length) { setErr('No payable employee found. Run Calculate for the month first.'); return }
       const header = Object.keys(rows[0])
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, { header }), 'NEFT')
@@ -243,7 +243,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
 
           {arrears.length === 0 ? (
             <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, background: C.gray, borderRadius: 10, padding: '12px 14px' }}>
-              There is no arrear in this month. Arrear arrives from two places — <b>Attendance → Arrear Days</b> (days from an earlier month), and the <b>Arrear Addition / Arrear Deduction</b> heads in the <b>Bulk Uploader</b> (money). Both are shown together here.
+              There is no arrear in this month. Arrear arrives from two places: <b>Attendance → Arrear Days</b> (days from an earlier month), and the <b>Arrear Addition / Arrear Deduction</b> heads in the <b>Bulk Uploader</b> (money). Both are shown together here.
             </div>
           ) : (
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'auto' }}>
@@ -262,12 +262,12 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
                     <tr key={r.employee_code + i} style={{ background: i % 2 ? '#fff' : C.gray }}>
                       {isGroup && <td style={{ ...S.td, color: C.muted }}>{r.company}</td>}
                       <td style={{ ...S.td, fontWeight: 700 }}>{r.employee_code}</td>
-                      <td style={S.td}>{r.full_name || '—'}</td>
-                      <td style={{ ...S.td, textAlign: 'right' }}>{r.arrear_days || '—'}</td>
-                      <td style={{ ...S.td, color: C.muted }}>{r.source_period || '—'}</td>
-                      <td style={{ ...S.td, color: C.muted, whiteSpace: 'normal', maxWidth: 220 }}>{r.reason || '—'}</td>
-                      <td style={{ ...S.td, textAlign: 'right', color: C.green }}>{r.voucherAdd ? inr(r.voucherAdd) : '—'}</td>
-                      <td style={{ ...S.td, textAlign: 'right', color: C.red }}>{r.voucherDed ? inr(r.voucherDed) : '—'}</td>
+                      <td style={S.td}>{r.full_name || '-'}</td>
+                      <td style={{ ...S.td, textAlign: 'right' }}>{r.arrear_days || '-'}</td>
+                      <td style={{ ...S.td, color: C.muted }}>{r.source_period || '-'}</td>
+                      <td style={{ ...S.td, color: C.muted, whiteSpace: 'normal', maxWidth: 220 }}>{r.reason || '-'}</td>
+                      <td style={{ ...S.td, textAlign: 'right', color: C.green }}>{r.voucherAdd ? inr(r.voucherAdd) : '-'}</td>
+                      <td style={{ ...S.td, textAlign: 'right', color: C.red }}>{r.voucherDed ? inr(r.voucherDed) : '-'}</td>
                       <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{inr(r.voucherAdd - r.voucherDed)}</td>
                     </tr>
                   ))}
@@ -276,7 +276,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
             </div>
           )}
           <div style={{ fontSize: 11, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 10, padding: '9px 11px', lineHeight: 1.55 }}>
-            Arrear <b>days</b> and arrear <b>amounts</b> arrive by different routes. They are shown together because looking at only one is how the same arrear gets paid <b>twice</b> — once through days, once through a voucher.
+            Arrear <b>days</b> and arrear <b>amounts</b> arrive by different routes. They are shown together because looking at only one is how the same arrear gets paid <b>twice</b>: once through days, once through a voucher.
           </div>
         </div>
       )}
@@ -286,7 +286,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
         <div style={S.card}>
           {!calculated ? (
             <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '12px 14px', lineHeight: 1.6 }}>
-              <b>{label} has not been calculated yet.</b> A payment only exists once net pay has been worked out — run <b>Run Cycle → ⚙️ Calculate</b> first.
+              <b>{label} has not been calculated yet.</b> A payment only exists once net pay has been worked out. Run <b>Run Cycle → ⚙️ Calculate</b> first.
             </div>
           ) : (
             <>
@@ -306,10 +306,10 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
 
               {unbankable.length > 0 && (
                 <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '11px 13px', marginBottom: 12, lineHeight: 1.6 }}>
-                  <b>{unbankable.length} employees cannot be paid</b> — their salary is ready but their bank details are incomplete. They will not appear in the NEFT file:
+                  <b>{unbankable.length} employees cannot be paid</b>: their salary is ready but their bank details are incomplete. They will not appear in the NEFT file:
                   <div style={{ marginTop: 6 }}>
                     {unbankable.slice(0, 8).map(u => (
-                      <div key={u.employee_code} style={{ fontSize: 12 }}>· <b>{u.employee_code}</b> {u.full_name} — {u.missing} missing ({inr(u.net_pay)})</div>
+                      <div key={u.employee_code} style={{ fontSize: 12 }}>· <b>{u.employee_code}</b> {u.full_name} · {u.missing} missing ({inr(u.net_pay)})</div>
                     ))}
                     {unbankable.length > 8 && <div style={{ fontSize: 12, marginTop: 3 }}>…and {unbankable.length - 8} more</div>}
                   </div>
@@ -335,7 +335,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
                 </table>
               </div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 10, padding: '9px 11px', lineHeight: 1.55 }}>
-                The NEFT file carries the <b>full account number</b> (not masked — a masked file is rejected by the bank), and Excel keeps it as text so leading zeros survive. After <b>Mark disbursed</b>, changing the month needs a formal reopen.
+                The NEFT file carries the <b>full account number</b> (not masked, as a masked file is rejected by the bank), and Excel keeps it as text so leading zeros survive. After <b>Mark disbursed</b>, changing the month needs a formal reopen.
               </div>
             </>
           )}

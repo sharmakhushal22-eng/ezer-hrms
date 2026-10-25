@@ -9,6 +9,8 @@ import { essRoute, forbidden, audit, fmtDate } from '@/lib/ess/session'
 import { employeeScope } from '@/lib/config/store'
 import { notifyFromTemplate } from '@/lib/config/notify'
 import { buildPending } from '@/lib/ess/pending'
+import { revokeAccess } from '@/lib/offboarding/run'
+import { mailResignationStep, mailResignationApproved } from '@/lib/exit/mail'
 import { decideLeave, decideLeaveCancel, decideRegularisation, type Actor } from '@/lib/leave/workflow'
 
 export const dynamic = 'force-dynamic'
@@ -90,6 +92,9 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message.replace(/^.*?: /, '') }, { status: 409 })
     const { data: res } = await sb.from('employee_resignation').select('employee_id, status, current_approver_id, current_stage, final_lwd').eq('id', id).maybeSingle()
     const actor = meRow?.full_name || 'your manager'
+    // Mail at every step: the employee hears what happened, the approver who acted gets a confirmation.
+    const base = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
+    await mailResignationStep(sb as any, { resignationId: id, stage: String((out as any)?.stage || res?.current_stage || ''), action: code, actorId: me, note: body.note || null, lwd: body.lwd || null, baseUrl: base }).catch(e => console.warn('resignation step mail failed', e))
     if (res) {
       const st = String(res.status)
       // Words: Configuration → Employee lifecycle → Notifications, for the employee's company / branch.
@@ -98,7 +103,18 @@ export async function POST(req: NextRequest) {
       else if (st.startsWith('PENDING_')) {
         await notifyFromTemplate(res.employee_id, 'notify.resignation.moved', { actor_name: actor, next_stage: st.replace('PENDING_', '').replace('_', ' ') }, { scope })
         await notifyFromTemplate(res.current_approver_id, 'notify.resignation.awaiting', { stage: res.current_stage }, { scope, link: '/ess?tab=approvals' })
-      } else if (res.final_lwd) await notifyFromTemplate(res.employee_id, 'notify.resignation.lwd', { last_working_day: fmtDate(res.final_lwd) }, { scope })
+      } else if (res.final_lwd) {
+        await notifyFromTemplate(res.employee_id, 'notify.resignation.lwd', { last_working_day: fmtDate(res.final_lwd) }, { scope })
+        // The chain is complete: "approved — download your documents before your last day".
+        await mailResignationApproved(sb as any, id, base).catch(e => console.warn('resignation approved mail failed', e))
+        // The final last working day goes on the employee record; on that day the daily
+        // offboarding run revokes roles, access and reporting lines — at once if it is already here.
+        const { data: cur } = await sb.from('employee_resignation').select('date_of_resignation').eq('id', id).maybeSingle()
+        await sb.from('employees').update({ last_working_date: res.final_lwd, date_of_resignation: cur?.date_of_resignation || null }).eq('id', res.employee_id)
+        if (String(res.final_lwd) <= new Date().toISOString().slice(0, 10)) {
+          await revokeAccess(sb as any, res.employee_id, { reason: `Last working day ${res.final_lwd} (set by HR)`, by: me, byName: actor, lastWorkingDay: res.final_lwd }).catch(e => console.error('revoke on final LWD failed', e))
+        }
+      }
     }
     await audit(ctx.caller, `RESIGNATION_${code}`, res?.employee_id || null, { resignation_id: id, note: body.note || null, lwd: body.lwd || null })
     return NextResponse.json({ ok: true, result: out })

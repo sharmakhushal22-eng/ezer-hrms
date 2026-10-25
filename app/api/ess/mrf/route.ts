@@ -13,6 +13,8 @@ import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden } from '@/lib/ess/session'
 import { mrfScope } from '@/lib/config/store'
 import { notifyFromTemplate } from '@/lib/config/notify'
+import { approveMrf, hrTeamFor as hrTeamForCompany } from '@/lib/recruitment/mrf-approve'
+import { cleanIds } from '@/lib/recruitment/mrf-handoff'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,27 +56,8 @@ async function hrHeadFor(companyId: string | null): Promise<Brief | null> {
 }
 
 // The people an HR Head can assign an approved MRF to — only Hiring Managers / Recruiters
-// (the role that actually runs the hiring), never the broader HR team.
-const HR_ROLE_CODES = ['RECRUITER']
-async function hrTeamFor(companyId: string | null): Promise<(Brief & { role: string })[]> {
-  if (!companyId) return []
-  const { data: roles } = await sb.from('ess_roles').select('id, role_code').in('role_code', HR_ROLE_CODES)
-  const roleIds = (roles || []).map((r: any) => r.id)
-  if (!roleIds.length) return []
-  const roleByCode: Record<string, string> = {}
-  ;(roles || []).forEach((r: any) => { roleByCode[r.id] = r.role_code })
-  const { data: urs } = await sb.from('ess_user_roles')
-    .select('role_id, ess_accounts!inner(employees!inner(id, full_name, emp_code, company_id))')
-    .in('role_id', roleIds).eq('is_active', true)
-  const seen = new Set<string>(); const out: (Brief & { role: string })[] = []
-  for (const u of (urs || []) as any[]) {
-    const e = u.ess_accounts?.employees
-    if (e && e.company_id === companyId && !seen.has(e.id)) {
-      seen.add(e.id); out.push({ id: e.id, name: e.full_name, code: e.emp_code, role: roleByCode[u.role_id] })
-    }
-  }
-  return out.sort((a, b) => a.name.localeCompare(b.name))
-}
+// (the role that actually runs the hiring), never the broader HR team. lib/recruitment/mrf-approve.ts.
+const hrTeamFor = (companyId: string | null) => hrTeamForCompany(sb as any, companyId)
 
 export async function GET(req: NextRequest) {
   const r = await essRoute(req); if (r.error) return r.error
@@ -183,7 +166,7 @@ export async function POST(req: NextRequest) {
     }
     // HR Head is the final step — skipped only if they are the raiser or already the RM2 step.
     if (!wantConfidential && hh && hh.id !== me && hh.id !== rm2Brief?.id) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
-    if (status === 'SUBMITTED' && !chain.length) return NextResponse.json({ error: 'No approver could be found — your company has no HR Head / manager set. Please contact HR.' }, { status: 400 })
+    if (status === 'SUBMITTED' && !chain.length) return NextResponse.json({ error: 'No approver could be found: your company has no HR Head / manager set. Please contact HR.' }, { status: 400 })
 
     const openings = Math.max(1, Number(body.openings) || 1)
     const nOrNull = (v: any) => (v === '' || v === null || v === undefined) ? null : (Number(v) || null)
@@ -246,7 +229,7 @@ export async function POST(req: NextRequest) {
       ...(wantConfidential ? { is_confidential: true, confidential_by: me, approved_at: new Date().toISOString(), assigned_recruiter_ids: [me], acknowledged_recruiter_ids: [me] } : {}),
     }
     let { data: created, error } = await sb.from('manpower_requisitions').insert(mrfRow).select('id, mrf_number').single()
-    if (error && wantConfidential && /is_confidential|confidential_by/i.test(error.message || '')) return NextResponse.json({ error: 'Confidential hiring needs migration 135 (manpower_requisitions.is_confidential) — run it in the SQL Editor first.' }, { status: 409 })
+    if (error && wantConfidential && /is_confidential|confidential_by/i.test(error.message || '')) return NextResponse.json({ error: 'Confidential hiring needs migration 135 (manpower_requisitions.is_confidential). Run it in the SQL Editor first.' }, { status: 409 })
     // Until migration 130 adds manpower_requisitions.wage_category, PostgREST rejects the
     // unknown column — drop it and retry rather than blocking every MRF from being raised.
     if (error && /wage_category/i.test(error.message || '')) {
@@ -309,30 +292,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    cur.status = 'APPROVED'; cur.acted_at = now; cur.comment = note
-    const next = chain.find((s: any) => s.status === 'WAITING')
-    const patch: any = { approval_chain: chain }
-    if (next) next.status = 'PENDING'   // advance the chain to the next approver
-    else patch.status = 'APPROVED'       // no next step → fully approved
-    // At the HR Head step, the approval carries the HR assignment — the people who
-    // will run the hiring. Scoped to the HR Head's own company on the client too.
-    const assignedHr: string[] = (cur.role === 'HR_HEAD' && Array.isArray(body.assigned_hr_ids)) ? body.assigned_hr_ids.slice(0, 20).map((x: any) => String(x)) : []
-    if (assignedHr.length) {
-      patch.assigned_recruiter_ids = assignedHr
-      const briefs = await Promise.all(assignedHr.map((x: string) => empBrief(x)))
-      patch.assigned_recruiter = briefs.filter(Boolean).map((b: any) => `${b.name} (${b.code})`).join(', ') || null
-    }
-    await sb.from('manpower_requisitions').update(patch).eq('id', id)
-
-    // Tell each assigned hiring manager they've been given this requisition to run — they
-    // acknowledge it in Tasks & Approvals and pick up the MRF in Recruitment.
-    if (assignedHr.length) {
-      const { data: info } = await sb.from('manpower_requisitions').select('designation, position, mrf_number').eq('id', id).maybeSingle()
-      const label = `${info?.designation || info?.position || 'a role'}${info?.mrf_number ? ` (${info.mrf_number})` : ''}`
-      const scope = await mrfScope(id)
-      await Promise.all(assignedHr.map(hid => notifyFromTemplate(hid, 'notify.mrf.assigned', { mrf_label: label }, { scope, link: '/ess?tab=approvals', category: 'MRF' })))
-    }
-    return NextResponse.json({ ok: true })
+    // Approve — lib/recruitment/mrf-approve.ts. When this approval opens the requisition (the
+    // HR Head step, or whichever step is last) it must name the hiring manager(s) who run it;
+    // refused before anything is written otherwise.
+    const out = await approveMrf(sb as any, {
+      id, note, mode: 'step', mustBeApprover: !ctx.grant.isSuperAdmin,
+      actor: { id: me, name: cur.approver_name || null, code: cur.approver_code || null },
+      assignIds: cleanIds(body.assigned_hr_ids),
+    })
+    if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })
+    return NextResponse.json(out)
   }
 
   // ── Acknowledge an assignment (the hiring manager confirms it) ──────────────

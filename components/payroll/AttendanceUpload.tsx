@@ -137,7 +137,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
         const ws = wb.Sheets[wb.SheetNames[0]]
         const raw = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' })
         const parsed = raw.map(normalizeRow).filter(Boolean) as ParsedRow[]
-        if (parsed.length === 0) { setParseErr('No valid rows found — check the "Emp Code" column matches the template.'); return }
+        if (parsed.length === 0) { setParseErr('No valid rows found. Check the "Emp Code" column matches the template.'); return }
 
         // ── Sheet-shape checks: the template's columns may be edited, never added to ──
         const issues: string[] = []
@@ -311,12 +311,12 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
         <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Upload</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Leave · absent days into the frozen month snapshot — Paid Days is computed as (EL+CL+SL+Other) − Absent</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Leave · absent days into the frozen month snapshot. Paid Days is computed as (EL+CL+SL+Other) − Absent</div>
         </div>
       </div>
 
       <DownloadCard companyId={companyId} fy={fy}
-        heading="Download attendance sheet" note="— filter and download a ready-to-fill sheet"
+        heading="Download attendance sheet" note="· filter and download a ready-to-fill sheet"
         filePrefix="Attendance" sheetName="Attendance"
         buildRow={(r, ctx) => ({
           ...(ctx.isGroup ? { 'Company': ctx.companyName } : {}),
@@ -351,7 +351,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
           </div>
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>
-          One sheet covers <b>every company</b> in the group{companyCount ? ` (${companyCount} this month)` : ''} — codes are matched across all of them.
+          One sheet covers <b>every company</b> in the group{companyCount ? ` (${companyCount} this month)` : ''}, and codes are matched across all of them.
           Columns: <b>Emp Code, Weekly Off, EL, CL, SL, Other Leave, Paid Days, Absent Days</b>. Before anything is saved every row is checked for
           <b> Paid Days ≤ Max Days</b> and <b>Total Days ≤ Max Days</b>, where Total Days = Weekly Off + EL + CL + SL + Other Leave + Paid Days − Absent Days.
         </div>
@@ -359,7 +359,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
         {/* Upload — starts the checking pass. Nothing is read until this is clicked. */}
         {sheetErrs.length > 0 && (
           <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginTop: 12 }}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>This sheet has been modified — upload blocked.</div>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>This sheet has been modified. Upload blocked.</div>
             {sheetErrs.map((e, i) => <div key={i} style={{ padding: '2px 0' }}>• {e}</div>)}
           </div>
         )}
@@ -401,7 +401,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
                   return (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
                       <td style={{ padding: '7px 10px', fontWeight: 700, color: C.navy }}>{r.emp_code}</td>
-                      {[r.weekly_off, r.earned_leave, r.casual_leave, r.sick_leave, r.other_leave, r.absent_days].map((v, j) => <td key={j} style={{ padding: '7px 10px', textAlign: 'right', color: C.navy }}>{v ?? '—'}</td>)}
+                      {[r.weekly_off, r.earned_leave, r.casual_leave, r.sick_leave, r.other_leave, r.absent_days].map((v, j) => <td key={j} style={{ padding: '7px 10px', textAlign: 'right', color: C.navy }}>{v ?? '-'}</td>)}
                       <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: pd < 0 ? C.red : C.green }}>{pd}</td>
                       <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: C.purpleD }}>{totalDaysOf(r, pd)}</td>
                     </tr>
@@ -426,7 +426,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
               style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
               ⬇ Download processed file
             </button>
-            <span style={{ fontSize: 12, color: C.muted }}>Your uploaded sheet plus <b>Total Days</b> and <b>Status</b> — each employee marked <b>Processed</b>.</span>
+            <span style={{ fontSize: 12, color: C.muted }}>Your uploaded sheet plus <b>Total Days</b> and <b>Status</b>, each employee marked <b>Processed</b>.</span>
           </div>
           {notFound.length > 0 && (
             <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px' }}>

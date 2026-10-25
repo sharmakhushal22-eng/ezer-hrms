@@ -44,7 +44,7 @@ function ReadOut({ label, value, tone }: { label: string; value: any; tone?: str
   return (
     <div style={{ background: C.gray, borderRadius: 10, padding: '8px 11px' }}>
       <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 800, color: tone || C.navy }}>{value ?? '—'}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: tone || C.navy }}>{value ?? '-'}</div>
     </div>
   )
 }
@@ -87,7 +87,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
     scope(supabase.from('departments').select('id, dept_name').eq('status', 'Active').order('dept_name'))
       .then(({ data }: any) => setDeptOpts((data || []).map((d: any) => ({ value: d.id, label: d.dept_name }))))
     scope(supabase.from('employees').select('emp_code, full_name').neq('is_test', true).order('emp_code'))
-      .then(({ data }: any) => setEmpOpts((data || []).filter((e: any) => e.emp_code).map((e: any) => ({ value: e.emp_code, label: `${e.emp_code} — ${e.full_name}` }))))
+      .then(({ data }: any) => setEmpOpts((data || []).filter((e: any) => e.emp_code).map((e: any) => ({ value: e.emp_code, label: `${e.emp_code} · ${e.full_name}` }))))
     setLoc(''); setDept(''); setCodes([]); setRows(null); setNotProcessed([])
     const first = allRuns.map(r => r.month).sort((a, b) => (a || 0) - (b || 0))[0]
     setMonthVal(first != null ? String(first) : '')
@@ -176,7 +176,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
     // Reachable only by typing more absent days than the month has. Payroll floors it at
     // zero anyway, so saving it would just hide a typo until someone asks why the salary
     // was wrong.
-    ...(calcPaid < 0 ? [`Paid Days ${calcPaid} is negative — Absent Days cannot exceed Max Days ${maxD}`] : []),
+    ...(calcPaid < 0 ? [`Paid Days ${calcPaid} is negative. Absent Days cannot exceed Max Days ${maxD}`] : []),
   ]
 
   async function process() {
@@ -190,8 +190,8 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
     })
     setSaveBusy(false)
     if (error) { setSaveErr(error); return }
-    setSaveMsg(`${editing.employee_code} processed — Paid Days ${paidDays ?? calcPaid}.`)
-    if (runStatusReset) setRecalc('This month was already calculated — it has been reset to SYNCED. Recalculate payroll before approval.')
+    setSaveMsg(`${editing.employee_code} processed: Paid Days ${paidDays ?? calcPaid}.`)
+    if (runStatusReset) setRecalc('This month was already calculated. It has been reset to SYNCED. Recalculate payroll before approval.')
     setEditing(null); search()
   }
 
@@ -205,7 +205,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
         <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Edit</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Only employees whose attendance is already processed — Unprocess to reopen, then Process to re-apply the upload checks</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Only employees whose attendance is already processed. Unprocess to reopen, then Process to re-apply the upload checks</div>
         </div>
       </div>
 
@@ -218,8 +218,8 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
           <div><label style={lbl}>Department</label><SearchSelect value={dept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDept} /></div>
         </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={lbl}>Employee codes <span style={{ textTransform: 'none', fontWeight: 400, color: C.muted }}>(type or paste several — e.g. SRS0001, SRS0002)</span></label>
-          <MultiSelect values={codes} options={empOpts} placeholder="Click, then type or paste codes — e.g. SRS0001, SRS0002" onChange={setCodes} />
+          <label style={lbl}>Employee codes <span style={{ textTransform: 'none', fontWeight: 400, color: C.muted }}>(type or paste several, e.g. SRS0001, SRS0002)</span></label>
+          <MultiSelect values={codes} options={empOpts} placeholder="Click, then type or paste codes, e.g. SRS0001, SRS0002" onChange={setCodes} />
         </div>
         <button onClick={search} disabled={busy || !monthVal}
           style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy || !monthVal ? 'not-allowed' : 'pointer', opacity: busy || !monthVal ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
@@ -233,7 +233,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
 
       {notProcessed.length > 0 && (
         <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
-          <b>Attendance not processed</b> — these employees have no uploaded attendance for this month, so they cannot be edited: {notProcessed.slice(0, 40).join(', ')}{notProcessed.length > 40 ? ` +${notProcessed.length - 40} more` : ''}
+          <b>Attendance not processed</b>: these employees have no uploaded attendance for this month, so they cannot be edited: {notProcessed.slice(0, 40).join(', ')}{notProcessed.length > 40 ? ` +${notProcessed.length - 40} more` : ''}
         </div>
       )}
 
@@ -261,8 +261,8 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
                         {isGroup && <td style={{ ...td, textAlign: 'left' }}>{r.companyName}</td>}
                         <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{r.employee_code}</td>
                         <td style={{ ...td, textAlign: 'left' }}>{r.full_name}</td>
-                        <td style={{ ...td, textAlign: 'left' }}>{r.department || '—'}</td>
-                        <td style={td}>{r.maxDays ?? '—'}</td>
+                        <td style={{ ...td, textAlign: 'left' }}>{r.department || '-'}</td>
+                        <td style={td}>{r.maxDays ?? '-'}</td>
                         <td style={td}>{nn(r.weekly_off)}</td>
                         <td style={td}>{nn(r.earned_leave)}</td>
                         <td style={td}>{nn(r.casual_leave)}</td>
@@ -291,16 +291,16 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
           <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 600 }} />
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(680px, 94vw)', maxHeight: '90vh', overflowY: 'auto', background: TK.surface, borderRadius: 14, boxShadow: '0 24px 70px rgba(30,27,75,0.35)', zIndex: 601, padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Unprocessed — {editing.employee_code} · {editing.full_name}</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Unprocessed: {editing.employee_code} · {editing.full_name}</span>
               <button onClick={() => setEditing(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.muted }}></button>
             </div>
             <div style={{ fontSize: 11, color: C.muted, marginBottom: 14 }}>
-              {editing.companyName ? editing.companyName + ' · ' : ''}{editing.department || '—'}{editing.location ? ' · ' + editing.location : ''} — edit the values, then Process to re-apply the upload checks.
+              {editing.companyName ? editing.companyName + ' · ' : ''}{editing.department || '-'}{editing.location ? ' · ' + editing.location : ''}. Edit the values, then Process to re-apply the upload checks.
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10, marginBottom: 14 }}>
-              <ReadOut label="Days in Month" value={editing.days_in_month ?? '—'} />
-              <ReadOut label="Max Days" value={editing.maxDays ?? '—'} />
+              <ReadOut label="Days in Month" value={editing.days_in_month ?? '-'} />
+              <ReadOut label="Max Days" value={editing.maxDays ?? '-'} />
               <ReadOut label="Paid Days" value={calcPaid} tone={calcPaid < 0 ? C.red : C.green} />
               <ReadOut label="Total Days" value={calcTotal} tone={maxD != null && calcTotal > maxD ? C.red : C.purpleD} />
             </div>
@@ -317,14 +317,14 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
             </div>
 
             <div style={{ fontSize: 11, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 10, padding: '9px 11px', lineHeight: 1.5 }}>
-              Typing <b>Absent Days</b> sets <b>Paid Days = Max Days − Absent</b>{maxD != null && <> — right now <b>{maxD} − {nn(f.absent_days)} = {maxD - nn(f.absent_days)}</b></>}. Type over it if the case needs something else; whatever is in the box is what gets saved.
-              <br />Clear the box entirely and the server falls back to the leave formula instead — that would give <b>{formulaPaid}</b> = (EL + CL + SL + Other) − Absent.
+              Typing <b>Absent Days</b> sets <b>Paid Days = Max Days − Absent</b>{maxD != null && <> (right now <b>{maxD} − {nn(f.absent_days)} = {maxD - nn(f.absent_days)}</b>)</>}. Type over it if the case needs something else; whatever is in the box is what gets saved.
+              <br />Clear the box entirely and the server falls back to the leave formula instead, which would give <b>{formulaPaid}</b> = (EL + CL + SL + Other) − Absent.
               <br />Total Days = Weekly Off + EL + CL + SL + Other + Paid Days − Absent. Both Paid Days and Total Days must be ≤ Max Days, exactly as on upload.
             </div>
 
             {violations.length > 0 && (
               <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginTop: 12 }}>
-                <b>Cannot process</b> — {violations.join(' · ')}
+                <b>Cannot process</b>: {violations.join(' · ')}
               </div>
             )}
             {saveErr && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '9px 11px', marginTop: 12 }}>{saveErr}</div>}

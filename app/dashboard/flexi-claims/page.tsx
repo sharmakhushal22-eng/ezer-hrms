@@ -186,12 +186,12 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
           return (
             <div key={c.id} onClick={() => toggle(c.id, isPending)} style={{ display: 'grid', gridTemplateColumns: cols, borderBottom: `1px solid ${C.border}`, alignItems: 'center', background: isSel ? C.purpleBg : c.status === 'APPROVED' ? '#F6FEF9' : c.status === 'REJECTED' ? '#FEF6F6' : '#fff', cursor: isPending ? 'pointer' : 'default' }}>
               <div style={{ padding: '9px 10px' }} onClick={e => e.stopPropagation()}><input type="checkbox" checked={isSel} disabled={!isPending} onChange={() => toggle(c.id, isPending)} style={{ accentColor: C.purple, opacity: isPending ? 1 : .4 }} /></div>
-              <div style={cell}><div style={{ fontWeight: 600 }}>{c.employees?.full_name || '—'}</div><div style={{ fontSize: 10, color: C.muted }}>{c.employees?.emp_code}</div></div>
+              <div style={cell}><div style={{ fontWeight: 600 }}>{c.employees?.full_name || '-'}</div><div style={{ fontSize: 10, color: C.muted }}>{c.employees?.emp_code}</div></div>
               <div style={cell}><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: C.purpleBg, color: C.purpleDark, fontWeight: 600 }}>{c.component_code}</span></div>
               <div style={{ ...cell, fontWeight: 600 }}>{inr(c.claim_amount)}</div>
-              <div style={{ ...cell, color: C.muted }}>{c.employees?.departments?.dept_name || '—'}</div>
-              <div style={{ ...cell, color: C.muted }}>{c.employees?.locations?.location_name || '—'}</div>
-              <div style={cell}>{billN > 0 && <span style={{ fontSize: 10, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 7, marginRight: 3 }}>B:{billN}</span>}{supN > 0 && <span style={{ fontSize: 10, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 7 }}>S:{supN}</span>}{!billN && !supN && <span style={{ color: C.muted }}>—</span>}</div>
+              <div style={{ ...cell, color: C.muted }}>{c.employees?.departments?.dept_name || '-'}</div>
+              <div style={{ ...cell, color: C.muted }}>{c.employees?.locations?.location_name || '-'}</div>
+              <div style={cell}>{billN > 0 && <span style={{ fontSize: 10, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 7, marginRight: 3 }}>B:{billN}</span>}{supN > 0 && <span style={{ fontSize: 10, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 7 }}>S:{supN}</span>}{!billN && !supN && <span style={{ color: C.muted }}>-</span>}</div>
               <div style={cell}><AiBadge flag={c.ai_flag} /></div>
               <div style={{ ...cell, display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
                 {isPending ? <>
@@ -216,7 +216,7 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
       {rejectIds.length > 0 && (
         <div style={{ ...S.card, border: `1px solid #FCA5A5` }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: C.red, marginBottom: 6 }}>Reject {rejectIds.length} claim(s)</div>
-          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>The reason is shown to the employee. Rejected amounts do NOT reduce their limit — and they become <b>taxable income</b> once Payroll syncs Flexi reimbursement.</div>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>The reason is shown to the employee. Rejected amounts do NOT reduce their limit, and they become <b>taxable income</b> once Payroll syncs Flexi reimbursement.</div>
           <input style={{ ...S.inp, marginBottom: 8 }} placeholder="Rejection reason (mandatory)" value={rejectReason} onChange={e => setRejectReason(e.target.value)} />
           {rejectIds.length === 1 && (() => {
             const c = claims.find(x => x.id === rejectIds[0])
@@ -226,13 +226,13 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
               <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 10, padding: '9px 11px', marginBottom: 8 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: C.amber, marginBottom: 5 }}>Partial rejection (optional)</div>
                 <div style={{ fontSize: 11, color: C.amber, marginBottom: 6 }}>
-                  The bill is for {inr(claimed)}. If only part of it is valid, enter that amount here — the rest becomes taxable. Leave it blank and the whole {inr(claimed)} is taxable.
+                  The bill is for {inr(claimed)}. If only part of it is valid, enter that amount here. The rest becomes taxable. Leave it blank and the whole {inr(claimed)} is taxable.
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input style={{ ...S.inp, width: 150 }} placeholder={`Valid amount (max ${claimed})`} inputMode="numeric"
                     value={partialAmt} onChange={e => setPartialAmt(e.target.value.replace(/[^0-9]/g, ''))} />
                   <span style={{ fontSize: 12, color: C.amber }}>
-                    → taxable <b>{inr(claimed - ok)}</b>{ok >= claimed && claimed > 0 ? ' — fully valid, this will be approved' : ''}
+                    → taxable <b>{inr(claimed - ok)}</b>{ok >= claimed && claimed > 0 ? ' (fully valid, this will be approved)' : ''}
                   </span>
                 </div>
               </div>
@@ -246,7 +246,7 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
       {viewFiles && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setViewFiles(null)}>
           <div style={{ background: TK.surface, borderRadius: 14, padding: 20, maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Bills — {viewFiles.claim.employees?.full_name}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Bills: {viewFiles.claim.employees?.full_name}</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{viewFiles.claim.component_code} · {inr(viewFiles.claim.claim_amount)}{viewFiles.claim.bill_no ? ` · 🧾 ${viewFiles.claim.bill_no}` : ''}{(viewFiles.claim.agency_name || viewFiles.claim.vendor_desc) ? ` · 🏪 ${viewFiles.claim.agency_name || viewFiles.claim.vendor_desc}` : ''}</div>
             {viewFiles.files.length === 0 && <div style={{ color: C.muted, fontSize: 12 }}>No files uploaded for this claim.</div>}
             {viewFiles.files.map((f: any) => (
@@ -348,11 +348,11 @@ function WindowTab({ companyId, notify }: { companyId: string; notify: (m: strin
   return (
     <div style={{ maxWidth: 620 }}>
       <div style={S.card}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Submission window — {NOW.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Submission window: {NOW.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</div>
         <div style={row}><span style={{ flex: 1, color: C.muted }}>Current status</span>{win ? <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 99, background: isOpen ? C.greenBg : C.redBg, color: isOpen ? C.green : C.red, fontWeight: 600 }}>{isOpen ? 'Open' : 'Closed'}</span> : <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 99, background: C.amberBg, color: C.amber, fontWeight: 600 }}>Not created</span>}</div>
         <div style={row}><span style={{ flex: 1, color: C.muted }}>Window period</span><span>Day {openDay} → Day {closeDay} each month</span></div>
         <div style={{ margin: '12px 0' }}>
-          <label style={{ ...S.label, marginBottom: 8 }}>Select window on the calendar — {NOW.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</label>
+          <label style={{ ...S.label, marginBottom: 8 }}>Select window on the calendar: {NOW.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</label>
           <MonthCalendar openDay={openDay} closeDay={closeDay} onChange={(o, c) => { setOpenDay(o); setCloseDay(c) }} />
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -410,7 +410,7 @@ function LimitsTab({ companyId, notify }: { companyId: string; notify: (m: strin
     if (!approve) { note = window.prompt('Rejection reason:') || undefined; if (!note) return }
     const r = await post({ action: 'APPROVE_LIMIT_REQUEST', request_id: id, ...(approve ? {} : { reject_note: note }) })
     if (r.error) return notify('⚠ ' + r.error)
-    notify(approve ? 'Request approved — limit raised' : 'Request rejected'); loadReqs()
+    notify(approve ? 'Request approved, limit raised' : 'Request rejected'); loadReqs()
   }
 
   return (
@@ -431,7 +431,7 @@ function LimitsTab({ companyId, notify }: { companyId: string; notify: (m: strin
               </div>
             ))}
           </div>
-          <input style={{ ...S.inp, marginBottom: 8 }} placeholder="Override reason (mandatory — saved in audit)" value={reason} onChange={e => setReason(e.target.value)} />
+          <input style={{ ...S.inp, marginBottom: 8 }} placeholder="Override reason (mandatory, saved in audit)" value={reason} onChange={e => setReason(e.target.value)} />
           <button style={S.pri} disabled={saving} onClick={saveOverrides}>{saving ? 'Saving…' : 'Save overrides'}</button>
         </>}
       </div>
@@ -498,7 +498,7 @@ function BillFrameRow({ frame, index, options, canRemove, onChange, onFiles, onR
         onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (e.dataTransfer.files?.length) onFiles(Array.from(e.dataTransfer.files)) }}
         style={{ border: `1.5px dashed ${frame.files.length ? C.purple : C.border}`, borderRadius: 10, padding: frame.files.length ? 10 : '16px 10px', cursor: 'pointer', background: frame.files.length ? C.purpleBg : TK.sunken }}>
         {frame.files.length === 0
-          ? <div style={{ textAlign: 'center', fontSize: 12, color: C.purpleDark, fontWeight: 600 }}>📎 Upload bills — photos or files (multiple)</div>
+          ? <div style={{ textAlign: 'center', fontSize: 12, color: C.purpleDark, fontWeight: 600 }}>📎 Upload bills: photos or files (multiple)</div>
           : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }} onClick={e => e.stopPropagation()}>
               {frame.files.map((f, i) => <FileThumb key={i} file={f} onRemove={() => onRemoveFile(i)} />)}
               <div onClick={() => fileRef.current?.click()} style={{ width: 58, height: 58, borderRadius: 9, border: `1.5px dashed ${C.purple}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.purple, fontSize: 20, cursor: 'pointer' }}>+</div>
@@ -555,7 +555,7 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
 
   async function submitAll() {
     if (!emp) return
-    if (!isOpen) return notify('The flexi submission window is closed for this month — open it in the Window tab first.')
+    if (!isOpen) return notify('The flexi submission window is closed for this month. Open it in the Window tab first.')
     for (const f of frames.filter(x => x.code || x.amount || x.files.length)) {
       if (!f.code) return notify(`Bill ${frames.indexOf(f) + 1}: choose a bill type`)
       if (!f.amount || Number(f.amount) <= 0) return notify(`Bill ${frames.indexOf(f) + 1}: enter an amount`)
@@ -581,7 +581,7 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
   return (
     <div style={S.card}>
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Submit a bill on an employee's behalf</div>
-      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Pick the employee, choose the bill type, enter the amount and attach the bills. It files exactly as if they had submitted it — pending approval.</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Pick the employee, choose the bill type, enter the amount and attach the bills. It files exactly as if they had submitted it, pending approval.</div>
 
       {!emp ? (
         <div style={{ position: 'relative', maxWidth: 420 }}>
@@ -677,7 +677,7 @@ export default function FlexiClaimsAdmin() {
 
       {tab === 'submit' ? (companyId ? <SubmitBillTab companyId={companyId} notify={notify} /> : <div style={S.card}><div style={{ color: C.muted }}>Pick a company above to file a bill.</div></div>)
         : tab === 'approvals' ? <ApprovalsTab companyId={companyId} notify={notify} />
-        : !companyId ? <div style={S.card}><div style={{ color: C.muted }}>The submission window and limits are set per company — pick one above.</div></div>
+        : !companyId ? <div style={S.card}><div style={{ color: C.muted }}>The submission window and limits are set per company. Pick one above.</div></div>
           : tab === 'window' ? <WindowTab companyId={companyId} notify={notify} />
             : <LimitsTab companyId={companyId} notify={notify} />}
 

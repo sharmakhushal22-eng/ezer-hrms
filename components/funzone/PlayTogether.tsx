@@ -232,7 +232,7 @@ export default function PlayTogether({ meId }: { meId: string }) {
           Ask somebody to play
         </h3>
         <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3, marginBottom: 12 }}>
-          They get it in their inbox. Invites last {INVITE_TTL_MINUTES} minutes — it is an
+          They get it in their inbox. Invites last {INVITE_TTL_MINUTES} minutes. It is an
           offer to play now, not an appointment.
         </div>
 

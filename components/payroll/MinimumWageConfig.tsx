@@ -126,7 +126,7 @@ function ZoneFormModal({ preset, onClose, onSaved }: {
         </div>
 
         <div style={{ fontSize: 11, color: C.muted, background: C.gray, padding: '9px 11px', borderRadius: 10, marginBottom: 10, lineHeight: 1.5 }}>
-          All 4 categories for this state + zone update together with this one w.e.f date — the previous rates are automatically closed off the day before. Overlapping validity is rejected by the database itself.
+          All 4 categories for this state + zone update together with this one w.e.f date. The previous rates are automatically closed off the day before. Overlapping validity is rejected by the database itself.
         </div>
 
         {err && <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginBottom: 10 }}>{err}</div>}
@@ -152,12 +152,12 @@ export default function MinimumWageConfig() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try { setRows(await getZoneRates()) }
-    catch (e: any) { setError(e.message || 'Could not load rates — run sql67 + sql68 first.') }
+    catch (e: any) { setError(e.message || 'Could not load rates. Run sql67 + sql68 first.') }
     finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
 
-  const inr = (n: number | null) => n == null ? '—' : `₹${Number(n).toLocaleString('en-IN')}`
+  const inr = (n: number | null) => n == null ? '-' : `₹${Number(n).toLocaleString('en-IN')}`
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 860 }}>

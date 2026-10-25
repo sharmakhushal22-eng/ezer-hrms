@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
       id, full_name, email, mobile, designation, department,
       employment_type, date_of_joining, offered_ctc, status,
       current_step, form_data, otp_verified, token_expires_at,
-      company_id
+      company_id, hiring_track, work_country, payroll_currency, employing_entity, esic_applicable
     `)
     .eq('magic_link_token', token)
     .single()

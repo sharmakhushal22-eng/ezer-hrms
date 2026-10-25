@@ -14,9 +14,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { linkStatementRows } from './ctc-statement'
 
 const money = (n: any) => `Rs. ${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
-const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
-const when = (v: any) => v ? new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
-const s = (v: any) => (v == null || v === '') ? '—' : String(v)
+const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
+const when = (v: any) => v ? new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
+const s = (v: any) => (v == null || v === '') ? '-' : String(v)
 
 type Doc = PDFKit.PDFDocument
 
@@ -44,7 +44,7 @@ function section(d: Doc, t: string) {
 function kv(d: Doc, rows: [string, any][]) {
   const x0 = d.x, labelW = 170
   for (const [k, v] of rows) {
-    const val = s(v); if (val === '—') continue
+    const val = s(v); if (val === '-') continue
     const y = d.y
     d.font('Helvetica').fontSize(10).fillColor('#6B7280').text(k, x0, y, { width: labelW })
     d.font('Helvetica').fontSize(10).fillColor('#111827').text(val, x0 + labelW, y, { width: d.page.width - d.page.margins.right - x0 - labelW })
@@ -77,7 +77,7 @@ export async function mrfPdf(sb: SupabaseClient, mrfId: string): Promise<{ name:
     .select('*, departments:department_id(dept_name), companies:company_id(company_name), locations:location_id(location_name)').eq('id', mrfId).maybeSingle()
   if (!m) return null
   const chain = Array.isArray(m.approval_chain) ? m.approval_chain : []
-  const budget = (m.budget_min || m.budget_max) ? `${m.budget_min ? money(m.budget_min) : '—'} to ${m.budget_max ? money(m.budget_max) : '—'}${m.pay_period === 'MONTHLY' ? ' per month' : ' per annum'}` : null
+  const budget = (m.budget_min || m.budget_max) ? `${m.budget_min ? money(m.budget_min) : '-'} to ${m.budget_max ? money(m.budget_max) : '-'}${m.pay_period === 'MONTHLY' ? ' per month' : ' per annum'}` : null
   const content = await render(d => {
     title(d, `Manpower Requisition ${s(m.mrf_number)}`, `${s(m.designation || m.position)} · ${s((m as any).companies?.company_name)} · Status ${s(m.status)}`)
     section(d, 'Position')
@@ -112,7 +112,7 @@ export async function interviewSummaryPdf(sb: SupabaseClient, mrfId: string, hig
   const stageCount: Record<string, number> = {}
   for (const c of list) stageCount[c.stage] = (stageCount[c.stage] || 0) + 1
   const content = await render(d => {
-    title(d, `Interview summary — ${s(m.mrf_number)}`, `${s(m.designation || m.position)} · ${list.length} candidate(s) on this requisition · ${interviewed} interviewed`)
+    title(d, `Interview summary: ${s(m.mrf_number)}`, `${s(m.designation || m.position)} · ${list.length} candidate(s) on this requisition · ${interviewed} interviewed`)
     section(d, 'Pipeline')
     table(d, ['Stage', 'Candidates'], Object.entries(stageCount).map(([k, v]) => [k, String(v)]), [300, 100], { rightFrom: 1 })
     section(d, 'Candidates & rounds')
@@ -121,9 +121,9 @@ export async function interviewSummaryPdf(sb: SupabaseClient, mrfId: string, hig
       const isOffer = c.id === highlightCandidateId
       if (d.y > d.page.height - 160) d.addPage()
       d.font('Helvetica-Bold').fontSize(11).fillColor(isOffer ? '#2563EB' : '#111827').text(`${c.full_name}${isOffer ? '   (this offer)' : ''}`)
-      d.font('Helvetica').fontSize(9.5).fillColor('#6B7280').text(`${s(c.current_company)} · expected ${c.expected_ctc ? money(c.expected_ctc) : '—'} · stage ${s(c.stage)} · ${rows.length} round(s)`)
+      d.font('Helvetica').fontSize(9.5).fillColor('#6B7280').text(`${s(c.current_company)} · expected ${c.expected_ctc ? money(c.expected_ctc) : '-'} · stage ${s(c.stage)} · ${rows.length} round(s)`)
       d.moveDown(0.2)
-      if (rows.length) table(d, ['Round', 'Main interviewer', 'Result', 'Score', 'Decision', 'On'], rows.map(i => [s(i.round), s(i.interviewer_name), i.status === 'submitted' ? 'Feedback in' : i.status === 'acknowledged' ? 'Acknowledged' : 'Invited', i.feedback?.total != null ? `${i.feedback.total}/80 (${s(i.feedback.band)})` : '—', s(i.decision || i.feedback?.decision), day(i.submitted_at || i.scheduled_at)]), [80, 120, 75, 95, 70, 70])
+      if (rows.length) table(d, ['Round', 'Main interviewer', 'Result', 'Score', 'Decision', 'On'], rows.map(i => [s(i.round), s(i.interviewer_name), i.status === 'submitted' ? 'Feedback in' : i.status === 'acknowledged' ? 'Acknowledged' : 'Invited', i.feedback?.total != null ? `${i.feedback.total}/80 (${s(i.feedback.band)})` : '-', s(i.decision || i.feedback?.decision), day(i.submitted_at || i.scheduled_at)]), [80, 120, 75, 95, 70, 70])
       else { d.font('Helvetica').fontSize(9.5).fillColor('#9CA3AF').text('No interview rounds recorded.'); d.moveDown(0.5) }
     }
     d.moveDown(1); d.font('Helvetica').fontSize(8.5).fillColor('#9CA3AF').text(`Generated by EZER HRMS on ${when(new Date().toISOString())}`)
@@ -146,7 +146,7 @@ export async function ctcAcknowledgementPdf(sb: SupabaseClient, negotiationId: s
   const link = linkStatementRows(calc, n.offered_ctc)
   const accepted = n.candidate_response === 'ACCEPTED'
   const content = await render(d => {
-    title(d, `CTC break-up acknowledgement — ${s(c?.full_name || n.candidate_name)}`, `${s(n.position_title || c?.designation)} · ${s(n.company_name)} · Offer of ${money(n.offered_ctc)} per annum`)
+    title(d, `CTC break-up acknowledgement: ${s(c?.full_name || n.candidate_name)}`, `${s(n.position_title || c?.designation)} · ${s(n.company_name)} · Offer of ${money(n.offered_ctc)} per annum`)
     section(d, 'Acknowledgement')
     kv(d, [['Candidate', c?.full_name || n.candidate_name], ['Registered email', c?.email], ['Registered mobile', c?.mobile || c?.phone],
       ['Salary link sent', when(n.link_sent_at)], ['Link opened (after email OTP)', when(n.link_viewed_at)],
@@ -168,7 +168,7 @@ export async function ctcAcknowledgementPdf(sb: SupabaseClient, negotiationId: s
     if (Number(n.joining_bonus) > 0) extras.push(['Joining bonus', `${money(n.joining_bonus)}${n.joining_bonus_freq ? ` (${n.joining_bonus_freq})` : ''}`])
     if (Number(n.retention_bonus) > 0) extras.push(['Retention bonus', `${money(n.retention_bonus)}${n.retention_bonus_freq ? ` (${n.retention_bonus_freq})` : ''}`])
     if (Number(n.esop_value) > 0) extras.push(['ESOP', `${money(n.esop_value)}${n.esop_remark ? ` (${n.esop_remark})` : ''}`])
-    for (const a of Array.isArray(calc.additional_items) ? calc.additional_items : []) if (Number(a.amount) > 0) extras.push([`Additional (${s(a.freq)})`, `${money(a.amount)}${a.remark ? ` — ${a.remark}` : ''}`])
+    for (const a of Array.isArray(calc.additional_items) ? calc.additional_items : []) if (Number(a.amount) > 0) extras.push([`Additional (${s(a.freq)})`, `${money(a.amount)}${a.remark ? ` (${a.remark})` : ''}`])
     if (extras.length) { section(d, 'One-time payments & extras'); kv(d, extras) }
     if (calc.terms_conditions) { section(d, 'Terms & conditions'); d.font('Helvetica').fontSize(9.5).fillColor('#111827').text(String(calc.terms_conditions)) }
     d.moveDown(1); d.font('Helvetica').fontSize(8.5).fillColor('#9CA3AF').text(`Confidential. Password-protected with the candidate's registered mobile number. Generated by EZER HRMS on ${when(new Date().toISOString())}.`)

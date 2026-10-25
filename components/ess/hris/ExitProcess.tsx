@@ -21,9 +21,9 @@ const STAGE_LABEL: Record<string, string> = {
   PENDING_RM_L1: 'With your reporting manager',
   PENDING_RM_L2: 'With your L2 manager',
   PENDING_HOD: 'With your head of department',
-  PENDING_HR_MANAGER: 'With HR — final last working day',
-  RETENTION_HOLD: 'On hold — your manager wants to talk',
-  RECOVERY_PENDING: 'Accepted — notice recovery pending',
+  PENDING_HR_MANAGER: 'With HR: final last working day',
+  RETENTION_HOLD: 'On hold: your manager wants to talk',
+  RECOVERY_PENDING: 'Accepted: notice recovery pending',
   SETTLED: 'Settled',
   WITHDRAWN: 'Withdrawn',
 }
@@ -78,8 +78,8 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
     const kpis = [
       { k: 'Status', v: STAGE_LABEL[cur.status] || cur.status, tone: cur.status === 'RETENTION_HOLD' ? 'warn' : '' },
       { k: 'Submitted', v: fmtDate(cur.submitted_at || cur.created_at) },
-      { k: 'Notice period', v: `${cur.notice_period_days ?? '—'} days` },
-      { k: 'Last working day', v: lwd ? fmtDate(lwd) : '—', note: lwdNote },
+      { k: 'Notice period', v: `${cur.notice_period_days ?? '-'} days` },
+      { k: 'Last working day', v: lwd ? fmtDate(lwd) : '-', note: lwdNote },
     ]
     return (
       <>
@@ -95,7 +95,7 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
         <div className="hx-card pad">
           <div className="hx-sec"><h2>Your resignation</h2></div>
           <div style={{ fontSize: 12.5, color: 'var(--ez-muted)', marginBottom: 14 }}>
-            Reason: <b style={{ color: 'var(--ez-ink)' }}>{cur.exit_reason_master?.label || cur.reason_code || '—'}</b>
+            Reason: <b style={{ color: 'var(--ez-ink)' }}>{cur.exit_reason_master?.label || cur.reason_code || '-'}</b>
           </div>
           <div className="hx-sec" style={{ marginBottom: 10 }}><h2 style={{ fontSize: 12.5 }}>Acknowledgement chain</h2></div>
           <Timeline status={cur.status} chain={d.chain || []} approvers={d.approvers || {}} />
@@ -140,8 +140,8 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
           onChange={e => setRemarks(e.target.value)} />
       </div>
       <div className="hx-note w" style={{ marginTop: 12 }}>
-        Notice period on record: <b>{d.notice_period_days ?? '—'} days</b>. Submitting starts the acknowledgement
-        chain — your reporting manager first, then L2 / HOD, then HR sets the final last working day.
+        Your notice period: <b>{d.notice_period_days ?? '-'} days</b>{(d as any).on_probation ? ' (on probation)' : ' (confirmed)'}. Submitting starts the acknowledgement
+        chain: your reporting manager first, then L2 / HOD, then HR sets the final last working day.
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
         {!confirm ? (
@@ -201,7 +201,7 @@ function Timeline({ status, chain, approvers }: { status: string; chain: ChainRo
         <div className="hx-tl-item cur hx-rise" style={riseStyle(STAGE_ORDER.length)}>
           <span className="hx-tl-dot" />
           <div className="st">{STAGE_LABEL.RETENTION_HOLD}</div>
-          <div className="ac">chain paused — your manager wants to talk</div>
+          <div className="ac">chain paused: your manager wants to talk</div>
         </div>
       )}
     </div>

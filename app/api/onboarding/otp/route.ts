@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       emailed,
       message: emailed
         ? `OTP emailed to ${cand.email}`
-        : (cand.email ? 'OTP generated (email failed — check server logs)' : 'OTP generated (candidate has no email on file)'),
+        : (cand.email ? 'OTP generated (email failed, check server logs)' : 'OTP generated (candidate has no email on file)'),
       // In dev: return OTP for testing
       ...(process.env.NODE_ENV === 'development' ? { dev_otp: otp } : {}),
     })

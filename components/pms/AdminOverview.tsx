@@ -117,7 +117,7 @@ export function DepartmentTable({
     <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.sm,
                   padding: `${S.md}px ${S.lg}px ${S.lg}px`, minWidth: 0 }}>
       <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink, marginBottom: 3 }}>
-        By department — most people not started first
+        By department: most people not started first
       </div>
       <div style={{ fontSize: F.micro, color: C.muted, marginBottom: S.md }}>
         An hour of chasing buys the most at the top of this list.

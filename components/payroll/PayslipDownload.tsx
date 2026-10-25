@@ -132,7 +132,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
           setProgress({ done, total: totalCodes, phase: 'Generating' })
         }
       }
-      if (!files.length) throw new Error('No payslip could be generated — see the issues list.')
+      if (!files.length) throw new Error('No payslip could be generated. See the issues list.')
       const first = pre[0]
       const stem = pre.length > 1 ? `Group_${monthLabel(first.run.fy, first.run.month).replace(' ', '')}` : (first.company.short_name || first.company.name || 'Payslips').replace(/[^A-Za-z0-9]+/g, '')
       if (mode === 'combined') {
@@ -152,7 +152,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
         // unzipping before anything could be read, which loses the one thing HTML has
         // over PDF here: it opens in the browser the moment it lands.
         setProgress({ done, total: totalCodes, phase: 'Building HTML' })
-        const doc = wrapPayslipHtml(files.map(f => f.html || ''), `${stem} — Payslips ${monthLabel(first.run.fy, first.run.month)}`)
+        const doc = wrapPayslipHtml(files.map(f => f.html || ''), `${stem}: Payslips ${monthLabel(first.run.fy, first.run.month)}`)
         const name = `${stem}_${monthLabel(first.run.fy, first.run.month).replace(' ', '')}_Payslips.html`
         const blob = new Blob([doc], { type: 'text/html;charset=utf-8' })
         setReady({ name, url: saveBlob(name, blob, 'text/html'), count: files.length, size: blob.size })
@@ -187,7 +187,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
       {open && pre && (
         <div style={{ flexBasis: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginTop: 4, fontFamily: font }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>Payslips — {monthLabel(pre[0].run.fy, pre[0].run.month)}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>Payslips: {monthLabel(pre[0].run.fy, pre[0].run.month)}</div>
             <div style={{ fontSize: 12, color: C.muted }}>
               {eligible} of {total} employee{total === 1 ? '' : 's'} have a payslip
               {pre.length > 1 && ` across ${pre.length} companies`}
@@ -196,7 +196,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
 
           {stale && stale.length > 0 && (
             <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', color: C.red, fontSize: 12.5 }}>
-              <b>Run is out of date — payslips are blocked.</b>
+              <b>Run is out of date. Payslips are blocked.</b>
               {stale.map((s, i) => <div key={i} style={{ marginTop: 4 }}>{s}</div>)}
             </div>
           )}
@@ -207,7 +207,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
                   tax worksheet, a negative net. Naming one cause here would be a guess;
                   the list below already carries the real one for each. */}
               <b>{blockingCount} payslip{blockingCount === 1 ? '' : 's'} will be refused.</b>{' '}
-              They stay out of the download and the rest go through — open{' '}
+              They stay out of the download and the rest go through. Open{' '}
               <button onClick={() => setShowIssues(true)}
                 style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.amber, textDecoration: 'underline', cursor: 'pointer' }}>
                 the notes below
@@ -221,13 +221,13 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
               📄 One PDF, all employees
             </button>
             <button onClick={() => generate('zip')} disabled={!canGenerate} style={outlineBtn(!canGenerate)}>
-              🗜 ZIP — one PDF per employee
+              🗜 ZIP (one PDF per employee)
             </button>
             {/* Same figures, different renderer — see lib/payroll/payslip-html.ts. HTML
                 opens in a browser without a PDF reader, reflows on a phone, and can be
                 pasted into an email body, which a PDF cannot. */}
             <button onClick={() => generate('html')} disabled={!canGenerate} style={outlineBtn(!canGenerate)}>
-              🌐 HTML — all employees, one file
+              🌐 HTML (all employees, one file)
             </button>
             {progress && <span style={{ fontSize: 12, color: C.muted }}>{progress.phase} {progress.done}/{progress.total}…</span>}
             <span style={{ fontSize: 11.5, color: C.muted }}>Generated in batches of {pre[0].batch}. Every download is recorded in the payroll audit log.</span>
@@ -235,7 +235,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
           {err && <div style={{ marginTop: 8, fontSize: 12, color: C.red }}>{err}</div>}
           {ready && (
             <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#ECFDF5', border: '1px solid #A7F3D0', color: C.green, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span>✅ {ready.count} payslip{ready.count === 1 ? '' : 's'} ready — <b>{ready.name}</b> ({(ready.size / 1048576).toFixed(1)} MB).</span>
+              <span>✅ {ready.count} payslip{ready.count === 1 ? '' : 's'} ready: <b>{ready.name}</b> ({(ready.size / 1048576).toFixed(1)} MB).</span>
               <a href={ready.url} download={ready.name}
                 style={{ fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, background: C.green, borderRadius: 8, padding: '7px 14px', textDecoration: 'none' }}>
                 ⬇ Save file
@@ -262,7 +262,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
                       <tr key={m.code} style={{ borderTop: `1px solid ${C.border}` }}>
                         <td style={{ padding: '6px 10px', fontFamily: 'ui-monospace, monospace' }}>{m.code}</td>
                         <td style={{ padding: '6px 10px', color: C.navy }}>{m.name}</td>
-                        {pre.length > 1 && <td style={{ padding: '6px 10px', color: C.muted }}>{m.company || '—'}</td>}
+                        {pre.length > 1 && <td style={{ padding: '6px 10px', color: C.muted }}>{m.company || '-'}</td>}
                         <td style={{ padding: '6px 10px', color: C.muted }}>{m.reason}</td>
                       </tr>
                     ))}</tbody>

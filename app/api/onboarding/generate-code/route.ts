@@ -13,8 +13,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { requireModule } from '@/lib/api-auth'
-import { buildEmpCode } from '@/lib/employee-code'
 import { createEmployeeFromOnboarding } from '@/lib/onboarding/create-employee'
+import { nextCompanyCode, queueAheadOf } from '@/lib/onboarding/code-series'
 import { approvalsOf, TEAM_LABEL, type Team } from '@/lib/onboarding/approvals'
 import { saveCodeAssignment } from '@/lib/onboarding/hr-assignment'
 
@@ -36,10 +36,10 @@ export async function GET(req: NextRequest) {
     const { data: company } = await sb.from('companies').select('company_code').eq('id', cand.company_id).single()
     const companyCode = company?.company_code || 'EZ'
     const employmentType = cand.employment_type || 'Employee'
-    // Peek the next sequence WITHOUT incrementing (the real reservation happens on save).
-    const { data: seq } = await sb.from('employee_code_sequences').select('last_sequence').eq('company_id', cand.company_id).eq('employment_type', employmentType).maybeSingle()
-    const nextSeq = (seq?.last_sequence || 0) + 1
-    return NextResponse.json({ suggested: buildEmpCode(companyCode, employmentType, nextSeq), company_code: companyCode, employment_type: employmentType, next_sequence: nextSeq })
+    // The company series' next number (highest in use + 1) and the FIFO queue ahead of this
+    // candidate — nothing is reserved until Generate (lib/onboarding/code-series.ts).
+    const [next, { ahead }] = await Promise.all([nextCompanyCode(sb as any, cand.company_id, companyCode), queueAheadOf(sb as any, onboarding_id)])
+    return NextResponse.json({ suggested: next.code, after: next.after, company_code: companyCode, employment_type: employmentType, fifo_ahead: ahead })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
@@ -58,6 +58,9 @@ export async function POST(req: NextRequest) {
     if (pending.length && !body.force) {
       return NextResponse.json({ error: `Waiting on ${pending.join(', ')} approval${pending.length > 1 ? 's' : ''} (ESS → Tasks & Approvals).`, pending }, { status: 409 })
     }
+    // FIFO: never out of turn, and never with a typed code (create-employee checks both again).
+    const { ahead } = await queueAheadOf(sb as any, onboarding_id)
+    if (ahead.length) return NextResponse.json({ error: `${ahead[0].full_name} came into Onboarding first and has no employee code yet — generate theirs before this one.`, fifo_ahead: ahead }, { status: 409 })
     const { user } = gate
     const { data: me } = user.employeeId ? await sb.from('employees').select('full_name').eq('id', user.employeeId).maybeSingle() : { data: null as any }
     // The joining date becomes employees.company_doj — the Today tab, tenure, payroll and the
@@ -78,8 +81,8 @@ export async function POST(req: NextRequest) {
     })
     if (!saved.ok) return NextResponse.json({ error: saved.error, needs_managers: saved.code === 'needs_managers', needs_role: saved.code === 'needs_role' }, { status: saved.status || 500 })
 
-    const r = await createEmployeeFromOnboarding(sb as any, { onboardingId: onboarding_id, customCode: body.employee_code ? String(body.employee_code) : null, by: user.employeeId, notes: body.hr_notes ? String(body.hr_notes) : null, actorType: 'HR' })
-    if (!r.ok) return NextResponse.json({ error: r.error, employee_code: r.employee_code, employee_synced: r.employee_synced ?? false, sync_error: r.sync_error }, { status: r.status || 500 })
+    const r = await createEmployeeFromOnboarding(sb as any, { onboardingId: onboarding_id, customCode: null, by: user.employeeId, notes: body.hr_notes ? String(body.hr_notes) : null, actorType: 'HR' })
+    if (!r.ok) return NextResponse.json({ error: r.error, employee_code: r.employee_code, employee_synced: r.employee_synced ?? false, sync_error: r.sync_error, fifo_ahead: r.fifo_ahead }, { status: r.status || 500 })
     const { data: cand } = await sb.from('onboarding_candidates').select('full_name, email').eq('id', onboarding_id).maybeSingle()
     return NextResponse.json({
       success: true, employee_code: r.employee_code, employee_synced: true, docs_emailed: r.docs_emailed, employee_id: r.employee_id, sync_error: null, dept_matched: r.dept_matched,

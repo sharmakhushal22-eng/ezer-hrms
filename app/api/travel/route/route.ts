@@ -242,7 +242,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e) {
     return errorResponse(e, 'Could not build the route',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -296,7 +296,7 @@ export async function GET(req: NextRequest) {
     if (!track.length) {
       return NextResponse.json(
         {
-          error: 'This expense has no recorded trail — it was not a GPS-priced journey.',
+          error: 'This expense has no recorded trail. It was not a GPS-priced journey.',
           code: 'NO_TRAIL',
           log,
         },
@@ -326,6 +326,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     return errorResponse(e, 'Could not load the route',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }

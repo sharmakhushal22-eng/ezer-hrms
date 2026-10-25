@@ -163,7 +163,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: C.gray, borderRadius: 10, padding: '10px 11px', marginBottom: 10, cursor: 'pointer' }}>
           <input type="checkbox" checked={exitExemption} onChange={e => setExitExemption(e.target.checked)} style={{ marginTop: 2, accentColor: C.purple }} />
           <span style={{ fontSize: 12, color: C.navy, lineHeight: 1.5 }}>
-            Exempt employees who left before the last day of an applicable month (Haryana-style rule — also fits half-yearly states like Maharashtra, exempting anyone who resigned before the 30 Jun / 31 Dec cutoff).
+            Exempt employees who left before the last day of an applicable month (Haryana-style rule, also fits half-yearly states like Maharashtra, exempting anyone who resigned before the 30 Jun / 31 Dec cutoff).
           </span>
         </label>
 
@@ -206,7 +206,7 @@ export default function LwfConfig() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try { setRates(await getCurrentLwfRates()) }
-    catch (e: any) { setError(e.message || 'Could not load — run sql69 first.') }
+    catch (e: any) { setError(e.message || 'Could not load. Run sql69 first.') }
     finally { setLoading(false) }
   }, [])
   useEffect(() => { load() }, [load])
@@ -224,7 +224,7 @@ export default function LwfConfig() {
       }))
     } catch (e: any) {
       setQErr(/could not find the function/i.test(e?.message || '')
-        ? 'calculate_lwf_deduction() is not in this database yet — run sql69, then sql110.'
+        ? 'calculate_lwf_deduction() is not in this database yet. Run sql69, then sql110.'
         : (e?.message || String(e)))
     } finally { setQBusy(false) }
   }
@@ -259,7 +259,7 @@ export default function LwfConfig() {
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>
           {isEmp
-            ? 'Deducted from the employee’s salary, by state and month. “—” means no deduction that month.'
+            ? 'Deducted from the employee’s salary, by state and month. “-” means no deduction that month.'
             : 'Paid by the company on top, by state and month. Usually the larger of the two.'}
         </div>
         <div style={{ overflowX: 'auto', border: `1px solid ${C.border}`, borderRadius: 10 }}>
@@ -293,7 +293,7 @@ export default function LwfConfig() {
                       const on = (r.applicable_months || []).includes(mi + 1)
                       return (
                         <td key={m} style={{ ...td, color: on ? C.navy: TK.line, fontWeight: on ? 700 : 400 }}>
-                          {on ? amt : '—'}
+                          {on ? amt : '-'}
                         </td>
                       )
                     })}
@@ -323,7 +323,7 @@ export default function LwfConfig() {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Labour Welfare Fund Configuration</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
-            {loading ? 'Loading…' : `${sorted.length} states — employee and employer contribution shown separately`}
+            {loading ? 'Loading…' : `${sorted.length} states · employee and employer contribution shown separately`}
           </div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
@@ -338,7 +338,7 @@ export default function LwfConfig() {
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 3 }}>Quick check</div>
         <div style={{ fontSize: 11, color: C.muted, marginBottom: 13 }}>
-          Pick a state and month — optionally mark a mid-month exit. Same function the payroll run calls.
+          Pick a state and month, optionally mark a mid-month exit. Same function the payroll run calls.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr)) auto auto', gap: 10, alignItems: 'end' }}>
           <div>
@@ -369,8 +369,8 @@ export default function LwfConfig() {
           const found = !!qRes.rate_found
           const ee = Number(qRes.employee_contribution ?? 0)
           const er = Number(qRes.employer_contribution ?? 0)
-          const why = !found ? `${qState} is not in lwf_config — payroll deducts nothing and flags it.`
-            : qRes.is_exempt_due_to_exit ? `Exempt — left before the period ended, and ${qState} allows that.`
+          const why = !found ? `${qState} is not in lwf_config, so payroll deducts nothing and flags it.`
+            : qRes.is_exempt_due_to_exit ? `Exempt: left before the period ended, and ${qState} allows that.`
               : !qRes.is_month_applicable ? `${qState} has no LWF deduction in ${MONTH_NAMES[qMonth - 1]}.`
                 : `${MONTH_NAMES[qMonth - 1]} is a deduction month in ${qState}.`
           const box: React.CSSProperties = {
@@ -383,11 +383,11 @@ export default function LwfConfig() {
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <div style={box}>
                   <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employee contribution</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${ee}` : '—'}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${ee}` : '-'}</div>
                 </div>
                 <div style={box}>
                   <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employer contribution</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${er}` : '—'}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${er}` : '-'}</div>
                 </div>
               </div>
               <div style={{ fontSize: 12, color: found ? '#047857' : TK.warning, marginTop: 8 }}>{why}</div>
@@ -406,10 +406,10 @@ export default function LwfConfig() {
       )}
 
       <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
-        <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s LWF from here — by their
+        <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s LWF from here, by their
         <b> lwf_state</b> and that month. Note that LWF state and PT state are <b>different</b> things, and for
         300 of your 302 employees they genuinely differ.
-        <br />LWF is a <b>flat monthly</b> amount — gross and paid days make no difference to it. Revising does not
+        <br />LWF is a <b>flat monthly</b> amount. Gross and paid days make no difference to it. Revising does not
         delete the old row, it closes it; so re-running an earlier month applies the rate that was in force then.
       </div>
 

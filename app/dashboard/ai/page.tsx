@@ -18,7 +18,7 @@ export default function AiPage() {
         <Empty
           icon={<IconAi size={20} />}
           title="Ezer AI is not available yet"
-          hint="Assistive answers over your own HR data — headcount questions, policy lookups and draft copy."
+          hint="Assistive answers over your own HR data: headcount questions, policy lookups and draft copy."
         />
       </Card>
     </Page>

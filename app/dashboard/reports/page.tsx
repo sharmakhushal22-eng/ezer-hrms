@@ -70,7 +70,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'emp_master',
     label: 'Employee Master',
-    description: 'Complete employee profile — identity, employment, contact, statutory details',
+    description: 'Complete employee profile: identity, employment, contact, statutory details',
     icon: '',
     category: 'Employee',
     scope: 'all',
@@ -156,7 +156,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'ctc_report',
     label: 'CTC Report',
-    description: 'Annual CTC breakup — fixed, variable, basic, HRA, EPF wage limit per employee',
+    description: 'Annual CTC breakup: fixed, variable, basic, HRA, EPF wage limit per employee',
     icon: '',
     category: 'Salary',
     join: 'ctc_master',
@@ -220,7 +220,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'bank_report',
     label: 'Bank Details Report',
-    description: 'Employee bank account details (masked) — for salary disbursement & NEFT file',
+    description: 'Employee bank account details (masked), for salary disbursement & NEFT file',
     icon: '',
     category: 'Employee',
     scope: 'all',
@@ -277,7 +277,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'blood_group',
     label: 'Blood Group Report',
-    description: 'Employee list with blood group — useful for emergency & medical records',
+    description: 'Employee list with blood group, useful for emergency & medical records',
     icon: '',
     category: 'Employee',
     scope: 'active',
@@ -303,7 +303,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'gender_report',
     label: 'Gender Diversity Report',
-    description: 'Employee count and list by gender — for diversity metrics & compliance',
+    description: 'Employee count and list by gender, for diversity metrics & compliance',
     icon: '🧑‍🤝‍🧑',
     category: 'Employee',
     scope: 'all',
@@ -329,7 +329,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'leave_report',
     label: 'Leave Report',
-    description: 'Leave balance, accrued, used & closing per employee — all leave types',
+    description: 'Leave balance, accrued, used & closing per employee (all leave types)',
     icon: '',
     category: 'Leave',
     join: 'leave_balances',
@@ -354,7 +354,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'flexi_report',
     label: 'Flexi Declaration Report',
-    description: 'Employee-wise flexi (FBP) component declarations — old & new regime amounts',
+    description: 'Employee-wise flexi (FBP) component declarations: old & new regime amounts',
     icon: '',
     category: 'Salary',
     join: 'flexi_tds_forms',
@@ -382,7 +382,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'investment_report',
     label: 'Investment Declaration Report',
-    description: 'Employee 80C, 80D, HRA, NPS declarations — for TDS computation',
+    description: 'Employee 80C, 80D, HRA, NPS declarations, for TDS computation',
     icon: '',
     category: 'Tax',
     join: 'tds_declarations',
@@ -473,7 +473,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'confirmation_due',
     label: 'Confirmation Due Report',
-    description: 'Active employees not yet confirmed — probation review pending',
+    description: 'Active employees not yet confirmed, probation review pending',
     icon: '',
     category: 'Employee',
     scope: 'confirmation_due',
@@ -583,7 +583,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'nps_report',
     label: 'NPS Enrolment Report',
-    description: 'Employees enrolled in corporate NPS — PRAN, regime, monthly contribution',
+    description: 'Employees enrolled in corporate NPS: PRAN, regime, monthly contribution',
     icon: '',
     category: 'Statutory',
     join: 'nps_declarations',
@@ -640,7 +640,7 @@ const CATEGORIES = ['All', 'Employee', 'Salary', 'Leave', 'Tax', 'Statutory', 'R
 
 // ─── Helper: format cell ──────────────────────────────────────
 function formatCell(value: any, format?: string): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return '-';
   switch (format) {
     case 'date': {
       const d = new Date(value);
@@ -887,7 +887,7 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
       const codes = Array.from(new Set([...Object.keys(o), ...Object.keys(n)])).filter(c => (Number(o[c]) || 0) > 0 || (Number(n[c]) || 0) > 0)
       const base = { ...empSubset(e), fy: f.fy, tds_regime: e.tds_regime || f.regime, status: f.status, submitted_at: f.submitted_at }
       if (codes.length === 0) {
-        out.push({ ...base, component_code: '—', old_regime_amt: null, new_regime_amt: null })
+        out.push({ ...base, component_code: '-', old_regime_amt: null, new_regime_amt: null })
         return
       }
       codes.forEach(code => out.push({

@@ -18,7 +18,7 @@ import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden } from '@/lib/ess/session'
 import { teamsFor, decideApproval, TEAMS, HEAD_TEAMS, type Team } from '@/lib/onboarding/approvals'
-import { CHECKLISTS, isHeadTeam, confirmationsOnly } from '@/lib/onboarding/checklists'
+import { CHECKLISTS, fieldsFor, isHeadTeam, confirmationsOnly } from '@/lib/onboarding/checklists'
 import { reviewPayload } from '@/lib/onboarding/review'
 import { loadSalaryBreakdown } from '@/lib/onboarding/salary-breakdown'
 
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     if (!payload) return NextResponse.json({ error: 'Not found in your company' }, { status: 404 })
     // Each head's checklist: what the row holds, else what the candidate's columns already say
     // (the offer's CTC for Payroll, for instance).
-    const { data: cols } = await sb.from('onboarding_candidates').select(['id', 'candidate_id', 'offered_ctc', 'location_id', 'form_data', ...COLUMN_KEYS].join(', ')).eq('id', open).maybeSingle()
+    const { data: cols } = await sb.from('onboarding_candidates').select(['id', 'candidate_id', 'offered_ctc', 'location_id', 'form_data', 'hiring_track', ...COLUMN_KEYS].join(', ')).eq('id', open).maybeSingle()
     // Payroll approves the salary structure, so their form carries the breakdown: the saved
     // negotiation model, the offer letter, or the CTC model on the CTC held — and the CTC and
     // basic % of the checklist start from it.
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     for (const t of HEAD_TEAMS) {
       const row = payload.approvals.find((a: any) => a.team === t)
       const fromCols: Record<string, any> = {}
-      for (const f of CHECKLISTS[t].fields) if (f.column && cols && (cols as any)[f.key] != null) fromCols[f.key] = (cols as any)[f.key]
+      for (const f of fieldsFor(t, (cols as any)?.hiring_track)) if (f.column && cols && (cols as any)[f.key] != null) fromCols[f.key] = (cols as any)[f.key]
       if (t === 'PAYROLL') {
         if (fromCols.annual_ctc == null) fromCols.annual_ctc = salary?.annual_ctc || (cols as any)?.offered_ctc || null
         if (fromCols.basic_pct == null && salary?.basic_pct != null) fromCols.basic_pct = salary.basic_pct

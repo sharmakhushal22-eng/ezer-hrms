@@ -19,13 +19,13 @@ const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 
 /** ₹8,04,000 — Indian digit grouping. Input in RUPEES. */
 export function formatINR(rupees: number | null | undefined): string {
-  if (rupees == null || Number.isNaN(rupees)) return '—';
+  if (rupees == null || Number.isNaN(rupees)) return '-';
   return '₹' + inr.format(Math.round(rupees));
 }
 
 /** ₹8.04L — compact lakh label. Input in RUPEES. */
 export function formatLakh(rupees: number | null | undefined, digits = 2): string {
-  if (rupees == null || Number.isNaN(rupees)) return '—';
+  if (rupees == null || Number.isNaN(rupees)) return '-';
   const l = rupees / 100000;
   const txt = l.toFixed(digits).replace(/\.?0+$/, ''); // 9.00 → 9, 8.20 → 8.2, 8.04 → 8.04
   return '₹' + txt + 'L';
@@ -43,12 +43,12 @@ export function laneFor(annualRupees: number, quickHireCap: number): 'Quick Hire
 }
 
 export function noticeLabel(days: number | null | undefined): string {
-  if (days == null) return '—';
+  if (days == null) return '-';
   return days === 0 ? 'Immediate' : `${days} days`;
 }
 
 export function experienceLabel(years: number | null | undefined): string {
-  if (years == null) return '—';
+  if (years == null) return '-';
   return `${years} yr${years === 1 ? '' : 's'}`;
 }
 

@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     // ── Revision: back to the HR Head ──
     if (body.action === 'revision') {
       const note = String(body.note || '').trim()
-      if (!note) return bad('Say what should be revised — the HR Head reads this.')
+      if (!note) return bad('Say what should be revised. The HR Head reads this.')
       if (!request) return bad('No offer request was found for this candidate.', 404)
       const { error } = await sb.from('offer_approval_requests').update({
         status: 'SUBMITTED', hr_head_action: null, hr_head_comments: null, hr_head_actioned_at: null, submitted_at: new Date().toISOString(),

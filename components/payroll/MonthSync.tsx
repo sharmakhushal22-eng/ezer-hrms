@@ -91,7 +91,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>Changes vs previous month</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-            {diff ? <>Comparing <b style={{ color: C.purpleD }}>{diff.curLabel}</b> against <b style={{ color: C.purpleD }}>{diff.prevLabel}</b> — every frozen Month Master column</>
+            {diff ? <>Comparing <b style={{ color: C.purpleD }}>{diff.curLabel}</b> against <b style={{ color: C.purpleD }}>{diff.prevLabel}</b>: every frozen Month Master column</>
               : 'Every frozen Month Master column, compared employee by employee'}
           </div>
         </div>
@@ -109,7 +109,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
       {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 10, padding: '10px 14px' }}>{err}</div>}
       {!busy && !err && prevMissing && (
         <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 12px' }}>
-          Nothing to compare against — <b>{prevMissing}</b> was never created for this selection. The first month of a company has no previous month master.
+          Nothing to compare against: <b>{prevMissing}</b> was never created for this selection. The first month of a company has no previous month master.
         </div>
       )}
 
@@ -137,21 +137,21 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
                       {!c.comparable ? <span style={{ fontSize: 11, color: C.muted }}>not frozen per month</span>
                         : <b style={{ fontSize: 14, color: c.changed ? C.purple : C.muted }}>{c.changed}</b>}
                     </td>
-                    <td style={{ ...td, textAlign: 'right', color: C.muted }}>{c.comparable ? c.fields : '—'}</td>
+                    <td style={{ ...td, textAlign: 'right', color: C.muted }}>{c.comparable ? c.fields : '-'}</td>
                   </tr>
                 ))}
                 <tr style={{ background: C.gray }}>
                   <td style={{ ...td, fontWeight: 700 }}>New employees this month</td>
                   <td style={{ ...td, textAlign: 'right' }}><b style={{ fontSize: 14, color: diff.newRows ? C.green : C.muted }}>{diff.newRows}</b></td>
-                  <td style={{ ...td, textAlign: 'right', color: C.muted }}>—</td>
+                  <td style={{ ...td, textAlign: 'right', color: C.muted }}>-</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 8, background: C.gray, borderRadius: 10, padding: '9px 11px', lineHeight: 1.5 }}>
-            An employee is counted once per category, however many columns moved inside it — so “Bank details 1” means one employee’s bank data changed.
-            {!withAtt && ' Attendance and OT are excluded by default because they change every month by design — tick the box to include them.'}
-            {' '}<b>Download changes</b> gives one row per new or changed employee, carrying only emp code, name and the columns that actually changed — new joiners carry their full row, since all of it is new.
+            An employee is counted once per category, however many columns moved inside it, so “Bank details 1” means one employee’s bank data changed.
+            {!withAtt && ' Attendance and OT are excluded by default because they change every month by design. Tick the box to include them.'}
+            {' '}<b>Download changes</b> gives one row per new or changed employee, carrying only emp code, name and the columns that actually changed. New joiners carry their full row, since all of it is new.
           </div>
         </>
       )}
@@ -183,14 +183,14 @@ function CategoryRow({ cat, count, extra, busy, busyText, disabled, onSync, onDo
       {ready ? (
         <>
           <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>
-            {count == null ? '—' : count}
+            {count == null ? '-' : count}
           </span>
           {/* Run Payroll owns these five and recomputes them every run, in an order that
               matters. A Sync button here could only produce a figure the next run
               overwrites — or, pressed out of order, a wrong one. The Download stays:
               this is where the EPF, ESIC, PT and LWF registers come from. */}
           {cat.syncable === false ? (
-            <span title="Run Payroll computes this every time it runs — it is not synced by hand"
+            <span title="Run Payroll computes this every time it runs. It is not synced by hand"
               style={{ fontSize: 11, fontWeight: 700, color: C.muted, background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>
               Run Payroll
             </span>
@@ -355,7 +355,7 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
               </select>
             )}
             <input style={{ ...inp, flex: '1 1 180px', minWidth: 150 }} value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="🔍  Name, emp code — or paste a list" />
+              placeholder="🔍  Name, emp code, or paste a list" />
           </div>
         </div>
 
@@ -393,7 +393,7 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
               {diffMode && !showAll && !tokens.length && !company && !location ? (
                 <>
                   <div style={{ fontSize: 26, marginBottom: 8 }}>✅</div>
-                  <div style={{ fontWeight: 700, color: C.green, marginBottom: 4 }}>Nothing to sync — everyone's {cat.label.toLowerCase()} matches HRMS.</div>
+                  <div style={{ fontWeight: 700, color: C.green, marginBottom: 4 }}>Nothing to sync: everyone's {cat.label.toLowerCase()} matches HRMS.</div>
                   <button onClick={() => setShowAll(true)}
                     style={{ marginTop: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontSize: 11.5, fontWeight: 700, fontFamily: font, cursor: 'pointer', borderRadius: 8, padding: '6px 12px' }}>
                     Show all {pool.length} anyway
@@ -418,7 +418,7 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
                   fontSize: 10, fontWeight: 700, flexShrink: 0,
                 }}>{initials(e.name)}</span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || '—'}</span>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || '-'}</span>
                   <span style={{ display: 'block', fontSize: 10.5, color: C.muted, fontFamily: 'ui-monospace, monospace' }}>{e.code}</span>
                   {pending?.get(e.code) && (
                     <span style={{ display: 'block', fontSize: 10.5, color: C.amber, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -441,7 +441,7 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
         }}>
           <div style={{ flex: 1, fontSize: 11.5, color: C.muted, lineHeight: 1.5, minWidth: 0 }}>
             {chosen.length === 0
-              ? <b style={{ color: TK.critical }}>Nobody selected — nothing to sync.</b>
+              ? <b style={{ color: TK.critical }}>Nobody selected, nothing to sync.</b>
               : <>Writing <b style={{ color: C.navy }}>{chosen.length}</b> of {pool.length}. Only <b>{cat.label}</b> changes; the rest stays frozen.</>}
           </div>
           <button onClick={onCancel} style={{
@@ -531,7 +531,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
     const { error, count } = await runCategorySync(cat, runIds, codes)
     setBusyKey(''); setPickerCat(null)
     if (error) { setErr(error); return }
-    setMsg(`${cat.label} synced — ${count} employee${count === 1 ? '' : 's'} refreshed from HRMS`
+    setMsg(`${cat.label} synced: ${count} employee${count === 1 ? '' : 's'} refreshed from HRMS`
       + (codes ? ` (the ${codes.length} you selected)` : ' (the whole month)')
       + `, into ${label}. Every other category is untouched.`)
     refresh()
@@ -543,7 +543,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
     const { error, count } = await runFullSync(runIds)
     setBusyKey('')
     if (error) { setErr(error); return }
-    setMsg(`Full re-sync done — ${count} employees frozen from current HRMS data.`)
+    setMsg(`Full re-sync done: ${count} employees frozen from current HRMS data.`)
     refresh()
   }
 
@@ -585,7 +585,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Snapshot Sync</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
-            Sync each category on its own — nothing moves into Month Master unless you choose it. Attendance, OT and arrear are never touched by any of these.
+            Sync each category on its own. Nothing moves into Month Master unless you choose it. Attendance, OT and arrear are never touched by any of these.
           </div>
         </div>
         <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', paddingTop: 4 }}>
@@ -601,7 +601,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
           <div>
             <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>
             <select style={{ ...inp, minWidth: 220 }} value={monthVal} onChange={e => { setMonthVal(e.target.value); setMsg(''); setErr('') }}>
-              {monthOpts.length === 0 && <option value="">No month created — create one first</option>}
+              {monthOpts.length === 0 && <option value="">No month yet. Create one first</option>}
               {monthOpts.map(r => <option key={r.month} value={String(r.month)}>{periodLabel(r)}</option>)}
             </select>
           </div>
@@ -614,13 +614,13 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
 
         {status?.is_locked && (
           <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
-            This month is <b>locked / disbursed</b> — every category sync is disabled. A locked month should not be changed quietly by a small sync; reopen it formally through <b>Lock / Unlock</b> first. (The database will refuse it anyway.)
+            This month is <b>locked / disbursed</b>, so every category sync is disabled. A locked month should not be changed quietly by a small sync; reopen it formally through <b>Lock / Unlock</b> first. (The database will refuse it anyway.)
           </div>
         )}
 
         {needsMigration && (
           <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
-            Category-wise sync is off — the database could not resolve one of its functions.
+            Category-wise sync is off: the database could not resolve one of its functions.
             {migrationDetail && <div style={{ marginTop: 5, fontFamily: 'ui-monospace, monospace', fontSize: 11, opacity: .85 }}>{migrationDetail}</div>}
             <div style={{ marginTop: 5 }}>Run the migration that creates that function, then reload.</div>
             <button onClick={syncEverything} disabled={busyKey === 'all' || !runIds.length}
@@ -648,7 +648,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         ))}
 
         <div style={{ fontSize: 11, color: C.purpleD, marginTop: 14, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
-          <b>Month Create already runs Employee info, Bank, Salary and Flexi automatically.</b> Use a category’s Sync button after a CTC revision, transfer, bank change or fresh declaration — <b>only that category refreshes</b>, the rest stay exactly as they were frozen. Paid days, leave, OT and arrear stay as uploaded no matter which button you press. New joiners come in through <b>Employee info</b>, and they arrive with their full row — a joiner with a blank salary would be paid zero.
+          <b>Month Create already runs Employee info, Bank, Salary and Flexi automatically.</b> Use a category’s Sync button after a CTC revision, transfer, bank change or fresh declaration: <b>only that category refreshes</b>, the rest stay exactly as they were frozen. Paid days, leave, OT and arrear stay as uploaded no matter which button you press. New joiners come in through <b>Employee info</b>, and they arrive with their full row. A joiner with a blank salary would be paid zero.
         </div>
 
         {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}

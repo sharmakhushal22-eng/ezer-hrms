@@ -244,7 +244,7 @@ export default function ShoutoutComposer({
           p_badge_ref: draft.badgeRef ?? null,
           p_tag_refs: draft.tagRefs ?? [],
         }, actorId)
-        if (m.error) setServerErr(`Posted, but the badge did not attach — ${m.error.message}`)
+        if (m.error) setServerErr(`Posted, but the badge did not attach: ${m.error.message}`)
       }
     }
     setSending(false)

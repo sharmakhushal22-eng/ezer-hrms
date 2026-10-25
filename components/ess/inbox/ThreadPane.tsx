@@ -33,7 +33,7 @@ export function ThreadPane(p: Props) {
   const prevCount = useRef(0);
   const prevId = useRef<string | null>(null);
 
-  const kindLabel = c.kind === 'DIRECT' ? 'Direct message' : c.kind === 'DESK' ? 'Department desk' : 'Updates — notifications with an action';
+  const kindLabel = c.kind === 'DIRECT' ? 'Direct message' : c.kind === 'DESK' ? 'Department desk' : 'Updates: notifications with an action';
   const items = c.kind === 'SYSTEM' ? p.notes : p.messages;
   const newFrom = c.kind === 'SYSTEM' ? -1 : newDividerIndex(p.messages.length, p.unreadAtOpen);
 
@@ -68,7 +68,7 @@ export function ThreadPane(p: Props) {
 
   const composerOff: React.ReactNode | undefined =
     c.kind === 'SYSTEM' ? (
-      <>This is a one-way stream — act on the update above. Questions?{' '}
+      <>This is a one-way stream. Act on the update above. Questions?{' '}
         <button type="button" onClick={() => p.onWriteToDesk?.(c.folder)}>Write to a desk</button></>
     ) : c.closed ? (
       <><b>Closed.</b> Nobody can reply until it is reopened.
@@ -116,7 +116,7 @@ export function ThreadPane(p: Props) {
             which reads as broken more quietly. Hence an actual empty state.
             No .ring child: the spin lives on .ring, not on .booting. */}
         {!p.loading && items.length === 0 && c.kind !== 'SYSTEM' && (
-          <div className="booting">No messages yet — say hello.</div>
+          <div className="booting">No messages yet. Say hello.</div>
         )}
         {c.kind === 'SYSTEM'
           ? <Notes notes={p.notes} folder={folder} onDone={p.onNoteDone} />

@@ -379,7 +379,10 @@ export function formsFor(d: StatutoryData): FormKey[] {
 
 // ── Loading the facts from the database (the route and the acknowledgement mail share this) ──
 
-const OC_SELECT = 'id, full_name, email, mobile, designation, department, employment_type, date_of_joining, submitted_at, employee_code, company_id, esic_applicable, form_data'
+const OC_SELECT = 'id, full_name, email, mobile, designation, department, employment_type, date_of_joining, submitted_at, employee_code, company_id, esic_applicable, form_data, hiring_track'
+
+/** An overseas employee (lib/onboarding/hiring-track.ts) is outside Indian PF, gratuity and ESIC — no forms at all. */
+export const hasStatutoryForms = (oc: { hiring_track?: string | null } | null | undefined) => oc?.hiring_track !== 'OVERSEAS'
 
 export interface Loaded { oc: Record<string, any>; data: StatutoryData; photo: { bytes: Uint8Array; mime: string } | null }
 
@@ -411,7 +414,7 @@ export async function loadStatutory(sb: any, by: { id?: string; token?: string }
 /** Every applicable form as a mail attachment (nodemailer shape). Empty when the record is missing. */
 export async function statutoryAttachments(sb: any, onboardingId: string): Promise<{ filename: string; content: Buffer; contentType: string }[]> {
   const l = await loadStatutory(sb, { id: onboardingId }, { photo: true })
-  if (!l) return []
+  if (!l || !hasStatutoryForms(l.oc)) return []
   const out: { filename: string; content: Buffer; contentType: string }[] = []
   for (const k of formsFor(l.data)) {
     try { out.push({ filename: FORMS[k].filename(l.data), content: Buffer.from(await renderStatutoryForm(k, l.data, { photo: l.photo })), contentType: 'application/pdf' }) }
