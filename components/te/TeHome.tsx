@@ -608,7 +608,15 @@ export default function TeHome({ initialClaimId, onExit }: {
               // their own trip, and what a colleague was reimbursed is not
               // theirs to read.
               everyone={onTravelDesk || onFinanceDesk}
-              cats={cfg?.cats ?? []}
+              // FROM THE SNAPSHOT, which every employee has, not from the admin
+              // config. `cfg` is loaded by te.admin.config() and only for a desk
+              // administrator, so an ordinary traveller was handed [] and the
+              // bucket fell back to the built-in category copy: raw codes like
+              // "misc" where the company's own name belongs, and any category a
+              // company has added of its own forced into "Other". The ledger's
+              // own comment says these come from the snapshot precisely so that
+              // cannot happen; the call site was not honouring it.
+              cats={snap.cfg.cats}
               onBack={() => setView({ name: 'trips' })}
               onChanged={message => { setToast(message); reload() }}
               onEdit={d => setSheet({ name: 'plan', kind: d.trip.scope, past: d.trip.origin === 'POST_FACTO', editing: d.trip })}
