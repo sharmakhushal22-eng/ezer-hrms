@@ -39,7 +39,7 @@ export async function mergeLetterOntoLetterhead(input: MergeLetterInput): Promis
   }
 
   if (!letterhead.letterhead_configured || !letterhead.file_url) {
-    throw new Error(`No letterhead configured for branch "${letterhead.location_name}" — configure one at Branch, Company, or Group level first.`)
+    throw new Error(`No letterhead configured for branch "${letterhead.location_name}". Configure one at Branch, Company, or Group level first.`)
   }
 
   const letterheadDoc = await PDFDocument.load(letterheadPdfBytes)
@@ -126,8 +126,8 @@ export async function mergeLetterOntoLetterhead(input: MergeLetterInput): Promis
     const topY = pageHeightPt - (signatory!.sig_y_pct! / 100) * pageHeightPt
     const imgBottomY = topY - imgH
     if (sigImage) page.drawImage(sigImage, { x, y: imgBottomY, width: imgW, height: imgH })
-    page.drawText(signatory?.signatory_name ?? '—', { x, y: imgBottomY - 13, size: 10, font: boldFont, color: rgb(0.12, 0.11, 0.29) })
-    page.drawText(signatory?.signatory_designation ?? '—', { x, y: imgBottomY - 26, size: 8.5, font, color: rgb(0.42, 0.45, 0.5) })
+    page.drawText(signatory?.signatory_name ?? '-', { x, y: imgBottomY - 13, size: 10, font: boldFont, color: rgb(0.12, 0.11, 0.29) })
+    page.drawText(signatory?.signatory_designation ?? '-', { x, y: imgBottomY - 26, size: 8.5, font, color: rgb(0.42, 0.45, 0.5) })
   } else {
     // Fallback: bottom-right block inside the safe margins.
     const sigBlockX = pageWidthPt - marginRight - 180
@@ -138,8 +138,8 @@ export async function mergeLetterOntoLetterhead(input: MergeLetterInput): Promis
       sigY -= 6
     }
     page.drawLine({ start: { x: sigBlockX, y: sigY }, end: { x: sigBlockX + 160, y: sigY }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) })
-    page.drawText(signatory?.signatory_name ?? '—', { x: sigBlockX, y: sigY - 14, size: 10, font: boldFont, color: rgb(0.12, 0.11, 0.29) })
-    page.drawText(signatory?.signatory_designation ?? '—', { x: sigBlockX, y: sigY - 27, size: 8.5, font, color: rgb(0.42, 0.45, 0.5) })
+    page.drawText(signatory?.signatory_name ?? '-', { x: sigBlockX, y: sigY - 14, size: 10, font: boldFont, color: rgb(0.12, 0.11, 0.29) })
+    page.drawText(signatory?.signatory_designation ?? '-', { x: sigBlockX, y: sigY - 27, size: 8.5, font, color: rgb(0.42, 0.45, 0.5) })
   }
 
   return output.save()

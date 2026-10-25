@@ -14,7 +14,8 @@
 
 import { onboardingToEmployee } from './to-employee'
 import { applyAssignment } from './hr-assignment'
-import { buildEmpCode, isValidEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
+import { isValidEmpCode } from '@/lib/employee-code'
+import { nextCompanyCode, queueAheadOf, type Blocker } from './code-series'
 import { sendAckEmail } from './ack-email'
 import { renderEmail, onboardingScope } from '@/lib/config/store'
 import { sendMail } from '@/lib/mail/send'
@@ -28,6 +29,8 @@ export interface CreateResult {
   team_changes?: number
   /** The ESS login mail (code + temporary password). */
   credentials_mailed?: boolean; credentials_error?: string | null
+  /** FIFO: the earlier arrivals of the same company still without a code (a refused generate). */
+  fifo_ahead?: Blocker[]
 }
 
 export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId: string; customCode?: string | null; by?: string | null; notes?: string | null; actorType?: 'HR' | 'SYSTEM' }): Promise<CreateResult> {
@@ -41,21 +44,17 @@ export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId:
   const { data: company } = await supa.from('companies').select('company_code, company_name').eq('id', cand.company_id).single()
   const companyCode = (company?.company_code || 'EZ').toUpperCase()
   const employmentType = cand.employment_type || 'Employee'
-  const suffix = TYPE_SUFFIX[employmentType] ?? ''
-  const autoPattern = new RegExp(`^${companyCode}${suffix}\\d{4}$`)
 
-  // A code typed by HR that is not the auto pattern is honoured; otherwise a fresh number is
-  // reserved atomically. Either way numbers are never reused.
-  const submitted = (o.customCode || '').trim().toUpperCase()
-  const isCustom = submitted.length > 0 && !autoPattern.test(submitted)
-  let finalCode: string
-  if (isCustom) finalCode = submitted
-  else {
-    const { data: nextSeq, error: seqErr } = await supa.rpc('get_next_employee_code', { p_company_id: cand.company_id, p_employment_type: employmentType })
-    if (seqErr) return { ok: false, error: 'Sequence error: ' + seqErr.message, status: 500 }
-    finalCode = buildEmpCode(companyCode, employmentType, nextSeq as number)
-  }
-  if (!isValidEmpCode(finalCode)) return { ok: false, error: `Invalid format: "${finalCode}". Expected e.g. SSM0001 or SSMINT0001`, status: 400 }
+  // FIFO: codes go out in the order candidates arrived in Onboarding. An earlier arrival of
+  // the same company without a code yet means this one waits (lib/onboarding/code-series.ts).
+  const { ahead } = await queueAheadOf(supa, o.onboardingId)
+  if (ahead.length) return { ok: false, error: `${ahead[0].full_name} came into Onboarding first and has no employee code yet — generate theirs before this one (${ahead.length} ahead in the queue).`, status: 409, fifo_ahead: ahead }
+
+  // The code is never typed: it is the company series' highest number plus one (STC9073 →
+  // STC9074); gaps are never filled. A code sent by the form is ignored.
+  const next = await nextCompanyCode(supa, cand.company_id, companyCode)
+  const finalCode = next.code
+  if (!isValidEmpCode(finalCode)) return { ok: false, error: `Invalid format: "${finalCode}". Expected e.g. SSM0001`, status: 400 }
 
   const [empCheck, candCheck] = await Promise.all([
     supa.from('employees').select('id').eq('emp_code', finalCode).maybeSingle(),

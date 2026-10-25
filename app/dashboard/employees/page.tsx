@@ -14,7 +14,7 @@ import { UPPERCASE, fieldError } from '@/lib/hr/validate'
 // equivalents are aliased where the names would clash.
 import {
   Page as UIPage, PageHeader, Button, Person, Th, Td, Tr, Empty, SkeletonRows,
-  Badge as Chip, inputStyle, tone, Avatar, Tabs,
+  Badge as Chip, inputStyle, tone,
   C, F, W, S, R, E, M, Z, numeric, eyebrow,
   IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown, IconChevron, IconCheck,
 } from '@/lib/ui'
@@ -103,7 +103,7 @@ const s = {
   saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:C.onAccent, border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
 }
 
-const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
+const fmtDate = (v: string) => { if(!v) return '-'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
 
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
 const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
@@ -197,7 +197,7 @@ const ONBOARDING_SECTIONS: Section[] = [
   { title: 'Personal details', fields: [
     { k:'salutation', label:'Salutation', t:'select', opts:['','Mr','Ms','Mrs','Dr'] },
     { k:'name_as_per_aadhar', label:'Name as per Aadhaar', req:true, span:2,
-      hint:'Must match Aadhaar exactly — used for PF/UAN and bank validation' },
+      hint:'Must match Aadhaar exactly. Used for PF/UAN and bank validation' },
     { k:'father_name', label:"Father's name", req:true },
     { k:'mother_name', label:"Mother's name" },
     { k:'gender', label:'Gender', t:'select', opts:['','Male','Female','Other'], req:true },
@@ -243,16 +243,16 @@ const ONBOARDING_SECTIONS: Section[] = [
     { k:'perm_country', label:'Country' },
   ]},
   { title: 'Emergency contacts', fields: [
-    { k:'emergency_name', label:'Contact 1 — name', req:true },
-    { k:'emergency_relation', label:'Contact 1 — relation', req:true },
-    { k:'emergency_mobile', label:'Contact 1 — mobile', t:'tel', req:true },
-    { k:'emergency_email', label:'Contact 1 — email', t:'email' },
-    { k:'emergency_address', label:'Contact 1 — address', span:2 },
-    { k:'emergency2_name', label:'Contact 2 — name' },
-    { k:'emergency2_relation', label:'Contact 2 — relation' },
-    { k:'emergency2_mobile', label:'Contact 2 — mobile', t:'tel' },
-    { k:'emergency2_email', label:'Contact 2 — email', t:'email' },
-    { k:'emergency2_address', label:'Contact 2 — address', span:2 },
+    { k:'emergency_name', label:'Contact 1: name', req:true },
+    { k:'emergency_relation', label:'Contact 1: relation', req:true },
+    { k:'emergency_mobile', label:'Contact 1: mobile', t:'tel', req:true },
+    { k:'emergency_email', label:'Contact 1: email', t:'email' },
+    { k:'emergency_address', label:'Contact 1: address', span:2 },
+    { k:'emergency2_name', label:'Contact 2: name' },
+    { k:'emergency2_relation', label:'Contact 2: relation' },
+    { k:'emergency2_mobile', label:'Contact 2: mobile', t:'tel' },
+    { k:'emergency2_email', label:'Contact 2: email', t:'email' },
+    { k:'emergency2_address', label:'Contact 2: address', span:2 },
   ]},
   { title: 'Education', fields: [
     { k:'highest_qualification', label:'Highest qualification' },
@@ -262,16 +262,16 @@ const ONBOARDING_SECTIONS: Section[] = [
   { title: 'Previous employment and references', fields: [
     { k:'total_experience', label:'Total experience (years)', t:'number' },
     { k:'current_co_exp', label:'Current / last company experience', span:2 },
-    { k:'reference1_name', label:'Reference 1 — name' },
-    { k:'reference1_mobile', label:'Reference 1 — mobile', t:'tel' },
-    { k:'reference1_relation', label:'Reference 1 — relation' },
-    { k:'reference1_years', label:'Reference 1 — years known', t:'number' },
-    { k:'reference2_name', label:'Reference 2 — name' },
-    { k:'reference2_mobile', label:'Reference 2 — mobile', t:'tel' },
-    { k:'reference2_relation', label:'Reference 2 — relation' },
-    { k:'reference2_years', label:'Reference 2 — years known', t:'number' },
+    { k:'reference1_name', label:'Reference 1: name' },
+    { k:'reference1_mobile', label:'Reference 1: mobile', t:'tel' },
+    { k:'reference1_relation', label:'Reference 1: relation' },
+    { k:'reference1_years', label:'Reference 1: years known', t:'number' },
+    { k:'reference2_name', label:'Reference 2: name' },
+    { k:'reference2_mobile', label:'Reference 2: mobile', t:'tel' },
+    { k:'reference2_relation', label:'Reference 2: relation' },
+    { k:'reference2_years', label:'Reference 2: years known', t:'number' },
   ]},
-  { title: 'Statutory IDs', note:'Aadhaar is stored masked — only the last four digits are kept in the clear', fields: [
+  { title: 'Statutory IDs', note:'Aadhaar is stored masked: only the last four digits are kept in the clear', fields: [
     { k:'pan_number', label:'PAN', req:true, hint:'ABCDE1234F' },
     { k:'aadhaar_input', label:'Aadhaar number', req:true, hint:'12 digits' },
     { k:'uan_number', label:'UAN', cond:'existing PF members' },
@@ -291,7 +291,7 @@ const ONBOARDING_SECTIONS: Section[] = [
     { k:'bank_name', label:'Bank name', req:true },
     { k:'bank_account_input', label:'Account number', req:true },
     { k:'bank_holder_name', label:'Account holder name', req:true, span:2,
-      hint:'As printed on the passbook — the bank validates against this' },
+      hint:'As printed on the passbook. The bank validates against this' },
     { k:'ifsc_code', label:'IFSC', req:true, hint:'XXXX0XXXXXX' },
     { k:'account_type', label:'Account type', t:'select', opts:['','Savings','Current','Salary'] },
   ]},
@@ -313,11 +313,11 @@ function Field({ d, value, onChange }: { d: FieldDef; value: any; onChange: (v: 
     <div style={{ gridColumn: span > 1 ? `span ${span}` : undefined, minWidth: 0 }}>
       <label style={mc.lbl}>
         {d.label}{d.req && ' *'}
-        {d.cond && !d.hint && <span style={{ color:C.faint, fontWeight:400, textTransform:'none', letterSpacing:0 }}> — {d.cond}</span>}
+        {d.cond && !d.hint && <span style={{ color:C.faint, fontWeight:400, textTransform:'none', letterSpacing:0 }}> ({d.cond})</span>}
       </label>
       {d.t === 'select' ? (
         <select style={mc.inp} value={value ?? ''} onChange={e => onChange(e.target.value)}>
-          {(d.opts ?? []).map(o => <option key={o} value={o}>{o || '—'}</option>)}
+          {(d.opts ?? []).map(o => <option key={o} value={o}>{o || '-'}</option>)}
         </select>
       ) : d.t === 'check' ? (
         <label style={{ display:'flex', alignItems:'center', gap:8, height:36, fontSize:13, color:C.ink }}>
@@ -510,7 +510,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
         for (const co of chosen) {
           const c = await nextEmpCode(co.company_code || 'EZ', co.id, f.employment_type)
           const { data: clash } = await supabase.from('employees').select('id').eq('emp_code', c).maybeSingle()
-          if (clash) { setErr(`Code ${c} already exists — nothing was created.`); setBusy(false); return }
+          if (clash) { setErr(`Code ${c} already exists. Nothing was created.`); setBusy(false); return }
           rows.push({ ...common, emp_code: c, common_code: shared, company_id: co.id,
                       location_id: null, department_id: null })
         }
@@ -678,8 +678,8 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
               {picked.length}
             </span>
             <div style={{ fontSize:12, color:C.ink, lineHeight:1.65 }}>
-              <b>{picked.length} records will be created</b> — one in{' '}
-              {companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')} — each with
+              <b>{picked.length} records will be created</b>: one in{' '}
+              {companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')}, each with
               its own employee code, tied together by a single group code so the system treats them as
               one person.
               <div style={{ color:C.muted, marginTop:2 }}>
@@ -713,8 +713,8 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
         <div style={{ marginTop:'18px', borderTop:`1px solid ${C.line}`, paddingTop:'12px' }}>
           <div style={{ ...eyebrow, color:C.ink, marginBottom:6 }}>Photo and documents</div>
           <div style={{ fontSize:12, color:C.muted, lineHeight:1.6 }}>
-            The passport photo and the twelve document uploads — PAN, Aadhaar, cancelled cheque,
-            education and experience certificates — are collected after the record exists, from the
+            The passport photo and the twelve document uploads (PAN, Aadhaar, cancelled cheque,
+            education and experience certificates) are collected after the record exists, from the
             employee&rsquo;s profile. They are files rather than fields and do not belong in this form.
           </div>
         </div>
@@ -723,7 +723,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
           <div style={{ background:C.criticalTint, color:C.critical, fontSize:12,
                         padding:'9px 12px', borderRadius:8, marginTop:14, lineHeight:1.6 }}>
             <b>{problems.length} field{problems.length === 1 ? '' : 's'} need{problems.length === 1 ? 's' : ''} checking</b>
-            {' — '}{problems.map(([k]) => k.replace(/_/g, ' ').replace('input', '')).join(', ')}
+            {': '}{problems.map(([k]) => k.replace(/_/g, ' ').replace('input', '')).join(', ')}
           </div>
         )}
         {err && <div style={{ background:C.criticalTint, color:C.critical, fontSize:'12px', padding:'8px 12px', borderRadius:'7px', margin:'14px 0' }}>{err}</div>}
@@ -749,7 +749,7 @@ function StatCard({ label, value, color, onClick, active }: any) {
 
 function Badge({ val, map }: { val: string; map: Record<string,{bg:string;color:string}> }) {
   const c = map[val] || {bg:C.sunken,color:C.inkSoft}
-  return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '—'}</span>
+  return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '-'}</span>
 }
 
 // ─── Employee detail: identity card ───────────────────────────────
@@ -788,12 +788,63 @@ function useManagerName(id: string | null | undefined): string | undefined {
     let live = true
     supabase.from('employees').select('full_name, emp_code').eq('id', id).maybeSingle()
       .then(({ data }) => {
-        if (live) setName({ id, v: data ? `${(data as any).full_name} (${(data as any).emp_code})` : '—' })
+        if (live) setName({ id, v: data ? `${(data as any).full_name} (${(data as any).emp_code})` : '-' })
       })
     return () => { live = false }
   }, [id])
-  if (!id) return '—'
+  if (!id) return '-'
   return name && name.id === id ? name.v : undefined
+}
+
+/** The face on the identity card: a rounded square, the shape ESS Profile uses, so
+ *  a person looks the same on HR's screen as on their own. Photo when there is one,
+ *  otherwise initials on the brand colour. */
+function Face({ name, src, size = 80 }: { name?: string | null; src?: string | null; size?: number }) {
+  const ini = (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
+  const box: React.CSSProperties = {
+    width: size, height: size, borderRadius: R.lg + 4, flexShrink: 0, boxSizing: 'border-box',
+    border: `3px solid ${C.surface}`, boxShadow: E.raised,
+  }
+  return src
+    ? <img src={src} alt="" width={size} height={size} style={{ ...box, objectFit: 'cover', display: 'block', background: C.sunken }} />
+    : (
+      <div aria-hidden style={{
+        ...box, display: 'grid', placeItems: 'center', background: C.brand, color: C.onAccent,
+        fontSize: Math.round(size * 0.32), fontWeight: W.bold, letterSpacing: '.01em',
+      }}>{ini}</div>
+    )
+}
+
+/** The record's tabs as a segmented control: the sub-tab shape the ESS portal uses
+ *  (portal.css .ess-seg), drawn from tokens so it holds on the admin dashboard too,
+ *  where that stylesheet is not loaded. Scrolls sideways rather than wrapping. */
+function SegTabs({ tabs, value, onChange }: {
+  tabs: { key: string; label: string }[]; value: string; onChange: (k: string) => void
+}) {
+  return (
+    <div role="tablist" aria-label="Employee record" className="ez-scroll" style={{
+      display: 'flex', gap: 2, padding: 4, width: 'max-content', maxWidth: '100%', overflowX: 'auto',
+      boxSizing: 'border-box', borderRadius: R.lg - 1,
+      background: `color-mix(in srgb, ${C.brand} 7%, ${C.surface})`,
+      border: `1px solid color-mix(in srgb, ${C.brand} 14%, transparent)`,
+    }}>
+      {tabs.map(t => {
+        const on = t.key === value
+        return (
+          <button key={t.key} role="tab" aria-selected={on} onClick={() => onChange(t.key)} className="ez-press"
+            style={{
+              flex: 'none', height: 34, padding: '0 15px', border: 'none', borderRadius: R.md,
+              background: on ? C.surface : 'transparent', color: on ? C.brandDeep : C.muted,
+              fontFamily: 'inherit', fontSize: F.small, fontWeight: W.semi, cursor: 'pointer', whiteSpace: 'nowrap',
+              boxShadow: on ? `inset 0 -2.5px 0 ${C.brand}, ${E.flat}` : 'none',
+              transition: `background ${M.quick}, color ${M.quick}`,
+            }}>
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: {
@@ -806,23 +857,24 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: {
   const company = emp.companies?.company_name
   const role = [emp.designation, dept].filter(Boolean)
   const facts = [
-    { l: 'Company', v: company || '—' },
+    { l: 'Company', v: company || '-' },
     ...recordFacts(emp, { l1: l1 === undefined ? 'Loading…' : l1 }).filter(f => f.l !== 'Department'),
   ]
   return (
     <div style={{
-      background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg,
+      background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.xl,
       boxShadow: E.raised, overflow: 'hidden', marginBottom: S.lg,
     }}>
-      {/* A quiet band of the brand tint, so the avatar has something to sit over. */}
-      <div aria-hidden style={{ height: 56, background: `linear-gradient(180deg, ${C.brandTint}, ${C.surface})` }} />
+      {/* The cover, as on the employee's own ESS Profile: a flat band of the brand
+          tint that the face overlaps. Flat, so it reads as a surface, not a banner. */}
+      <div aria-hidden style={{ height: 64, background: C.brandTint, borderBottom: `1px solid ${C.brandEdge}` }} />
       <div style={{
         display: 'flex', gap: `${S.md}px ${S.lg}px`, alignItems: 'flex-start', flexWrap: 'wrap',
         padding: `${S.md}px ${S.xl}px ${S.lg}px`,
       }}>
-        {/* Only the avatar rises into the band; the name starts below it. */}
-        <div style={{ borderRadius: '50%', padding: 3, background: C.surface, boxShadow: E.raised, flexShrink: 0, lineHeight: 0, marginTop: -46 }}>
-          <Avatar name={emp.full_name} size={76} src={photo} />
+        {/* Only the face rises into the cover; the name starts below it. */}
+        <div style={{ flexShrink: 0, marginTop: -48 }}>
+          <Face name={emp.full_name} src={photo} />
         </div>
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
           <h2 style={{ margin: 0, fontSize: F.title + 2, fontWeight: W.bold, color: C.ink, letterSpacing: '-.015em', lineHeight: 1.25, overflowWrap: 'anywhere' }}>
@@ -887,6 +939,26 @@ export default function EmployeeMaster() {
   const [selected, setSelected]   = useState<Employee|null>(null)
   const [profileTab, setProfileTab] = useState('personal')
   const [showDrawer, setShowDrawer] = useState(false)
+  // Inside the ESS portal this page sits in the portal's main column. There the record
+  // opens in that column, under the portal's own top bar and beside its rail, the way
+  // every other ESS screen does; a full-window overlay would hide the navigation. On
+  // the admin dashboard it stays a full-screen view.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [inShell, setInShell] = useState(false)
+  /** Height of the portal's sticky top bar, so the record's tabs pin just below it. */
+  const [shellTop, setShellTop] = useState(0)
+  const listScrollY = useRef(0)
+  useEffect(() => { setInShell(!!rootRef.current?.closest('.ess-main')) }, [])
+  useEffect(() => {
+    if (!showDrawer || !inShell) return
+    const bar = rootRef.current?.closest('.ess-main')?.querySelector('.ess-top') as HTMLElement | null
+    setShellTop(bar ? Math.round(bar.getBoundingClientRect().height) : 0)
+    // The record replaces the list in place, so start it at the top and put the list
+    // back where it was on the way out.
+    listScrollY.current = window.scrollY
+    window.scrollTo(0, 0)
+    return () => { const y = listScrollY.current; requestAnimationFrame(() => window.scrollTo(0, y)) }
+  }, [showDrawer, inShell])
   const [editMode, setEditMode]   = useState(false)
   const [editForm, setEditForm]   = useState<any>({})
   const [saving, setSaving]       = useState(false)
@@ -1019,7 +1091,7 @@ export default function EmployeeMaster() {
       })
       // Column reference sheet — keep only "Y" employee columns + name/code joins + the
       // CTC / Salary breakup (all Y). Everything else (backend/*_id/unlisted columns) is dropped.
-      const allRaw = Array.from(rows.reduce((set, r) => { Object.keys(r).forEach(k => set.add(k)); return set }, new Set<string>()))
+      const allRaw = Array.from(rows.reduce<Set<string>>((set, r) => { Object.keys(r).forEach(k => set.add(k)); return set }, new Set<string>()))
       const empPresent = EXPORT_EMP_COLS.filter(k => allRaw.includes(k))
       const nameCols = EXPORT_NAME_COLS.filter(k => allRaw.includes(k))
       const ctcKeys = allRaw.filter(k => k.startsWith('CTC_')).sort()
@@ -1141,9 +1213,9 @@ export default function EmployeeMaster() {
 
   // ─── JSX ──────────────────────────────────────────────────────
   return (
-    <div style={s.page}>
+    <div ref={rootRef} style={s.page}>
 
-      <div style={s.body}>
+      <div style={{ ...s.body, display: inShell && showDrawer && selected ? 'none' : undefined }}>
         <PageHeader
           title="Employee Master"
           context={loading
@@ -1210,7 +1282,7 @@ export default function EmployeeMaster() {
                 // pill. A solid deeper fill of the brand carries them.
                 background: f.on ? C.brandDeep : C.sunken,
                 color: f.on ? C.surface : C.faint, ...numeric,
-              }}>{loading ? '—' : f.n}</span>
+              }}>{loading ? '-' : f.n}</span>
             </button>
           ))}
         </div>
@@ -1230,7 +1302,7 @@ export default function EmployeeMaster() {
           </div>
           <select style={{ ...s.sel, width:'auto', minWidth:'140px' }} value={filterCompany} onChange={e=>{setFCo(e.target.value);setFLoc('');setFDept('')}}>
             <option value="">All Companies</option>
-            {companies.map(c=><option key={c.id} value={c.id}>{c.company_code} — {c.company_name}</option>)}
+            {companies.map(c=><option key={c.id} value={c.id}>{c.company_code} · {c.company_name}</option>)}
           </select>
           <select style={{ ...s.sel, width:'auto', minWidth:'130px' }} value={filterLocation} onChange={e=>setFLoc(e.target.value)}>
             <option value="">All Locations</option>
@@ -1338,7 +1410,7 @@ export default function EmployeeMaster() {
                       <Td>
                         {/* Avatar + name + designation. The face makes a long
                             list scannable in a way a column of text does not. */}
-                        <Person name={emp.full_name} meta={emp.designation || '—'} />
+                        <Person name={emp.full_name} meta={emp.designation || ''} />
                       </Td>
                       <Td><Badge val={emp.employment_type} map={TYPE_COLORS} /></Td>
                       <Td style={{ maxWidth:108 }}>
@@ -1353,7 +1425,7 @@ export default function EmployeeMaster() {
                               <div title={loc || co || ''} style={{
                                 color: loc ? C.ink : C.muted, whiteSpace:'nowrap',
                                 overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.3,
-                              }}>{loc || co || '—'}</div>
+                              }}>{loc || co || '-'}</div>
                               {loc && co && (
                                 <div style={{ fontSize:F.micro, color:C.faint, lineHeight:1.3 }}>{co}</div>
                               )}
@@ -1365,7 +1437,7 @@ export default function EmployeeMaster() {
                         <span style={{
                           padding:'2px 9px', borderRadius:R.pill, fontSize:F.tiny,
                           fontWeight:W.semi, whiteSpace:'nowrap', ...gc,
-                        }}>{emp.grade || '—'}</span>
+                        }}>{emp.grade || '-'}</span>
                       </Td>
                       <Td>
                         <span style={{
@@ -1379,7 +1451,7 @@ export default function EmployeeMaster() {
                         )}
                       </Td>
                       <Td mono style={{ color:C.muted, fontSize:F.tiny, whiteSpace:'nowrap' }}>{fmtDate(emp.company_doj)}</Td>
-                      <Td mono style={{ fontSize:F.tiny, whiteSpace:'nowrap' }}>{emp.mobile||'—'}</Td>
+                      <Td mono style={{ fontSize:F.tiny, whiteSpace:'nowrap' }}>{emp.mobile||'-'}</Td>
                       <Td align="right" style={{
                         whiteSpace:'nowrap', position:'sticky', right:0,
                         background:C.surface, boxShadow:`inset 1px 0 0 ${C.line}`,
@@ -1415,10 +1487,13 @@ export default function EmployeeMaster() {
 
       {/* ── PROFILE DRAWER — full screen, same page ── */}
       {showDrawer && selected && (
-        <div role="dialog" aria-modal="true" aria-label={`${selected.full_name} — employee details`}
-             className="ez-scroll"
-             style={{ position:'fixed', inset:0, background:C.canvas, zIndex:Z.drawer, overflowY:'auto',
-                      fontFamily:F.family, fontSize:F.body, color:C.ink }}>
+        <div role={inShell ? 'region' : 'dialog'} aria-modal={inShell ? undefined : true}
+             aria-label={`${selected.full_name}: employee details`}
+             className={inShell ? undefined : 'ez-scroll'}
+             style={inShell
+               ? { fontFamily:F.family, fontSize:F.body, color:C.ink }
+               : { position:'fixed', inset:0, background:C.canvas, zIndex:Z.drawer, overflowY:'auto',
+                   fontFamily:F.family, fontSize:F.body, color:C.ink }}>
           <div className="ez-fade" style={{ width:'100%', maxWidth:1120, margin:'0 auto',
                         padding:`${S.lg}px clamp(${S.md}px, 3vw, ${S.xl}px) ${S.huge}px`, boxSizing:'border-box' }}>
 
@@ -1445,8 +1520,10 @@ export default function EmployeeMaster() {
                            onEdit={() => openEdit()} onSave={saveEdit} onCancel={cancelEdit} />
 
             {/* Tabs stay in reach while a long tab scrolls. */}
-            <div style={{ position:'sticky', top:0, zIndex:Z.sticky, background:C.canvas, paddingTop:S.xs }}>
-              <Tabs tabs={TABS.map(t => ({ key:t.id, label:t.label }))} value={profileTab} onChange={setProfileTab} />
+            <div style={{ position:'sticky', top: inShell ? shellTop : 0, zIndex:Z.sticky,
+                          background:C.canvas,
+                          padding:`${S.sm}px 0 ${S.md}px` }}>
+              <SegTabs tabs={TABS.map(t => ({ key:t.id, label:t.label }))} value={profileTab} onChange={setProfileTab} />
             </div>
 
             <div key={profileTab} className="ez-fade" style={{ minHeight:320 }}>

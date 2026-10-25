@@ -97,7 +97,7 @@ export default function BroadcastInbox({ employeeId, onUnread }: {
     const { error } = await supabase.from('ess_broadcast_responses')
       .insert({ announcement_id: id, author_id: employeeId, body })
     setBusy(null)
-    setNote(error ? `That did not send — ${error.message}` : 'Sent. Only they can see it.')
+    setNote(error ? `That did not send: ${error.message}` : 'Sent. Only they can see it.')
   }
 
   return (

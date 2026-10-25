@@ -117,7 +117,7 @@ export default function Celebrations({ employeeId, onSent }: { employeeId: strin
         <div style={{ fontSize:11, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
           {/* Code included because names repeat — two active employees share
               the name "Sunita Kapoor". */}
-          {[c.emp_code, c.designation, c.dept_name].filter(Boolean).join(' · ') || '—'}
+          {[c.emp_code, c.designation, c.dept_name].filter(Boolean).join(' · ') || '-'}
         </div>
       </div>
       <button
@@ -175,7 +175,7 @@ export default function Celebrations({ employeeId, onSent }: { employeeId: strin
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{n.name}</div>
                 <div style={{ fontSize:11, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                  {[n.designation, n.department].filter(Boolean).join(' · ') || '—'}
+                  {[n.designation, n.department].filter(Boolean).join(' · ') || '-'}
                 </div>
               </div>
               <button

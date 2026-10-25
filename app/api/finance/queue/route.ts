@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     return errorResponse(e, 'Could not load the finance queue',
-      'The finance tables do not exist yet — migration 053_finance_department.sql has not been run.');
+      'The finance tables do not exist yet: migration 053_finance_department.sql has not been run.');
   }
 }
 
@@ -189,6 +189,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true, status: settleAs });
   } catch (e) {
     return errorResponse(e, 'Could not action that item',
-      'The finance tables do not exist yet — migration 053_finance_department.sql has not been run.');
+      'The finance tables do not exist yet: migration 053_finance_department.sql has not been run.');
   }
 }

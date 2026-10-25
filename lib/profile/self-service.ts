@@ -103,13 +103,13 @@ export function checkAadhaar(raw: string): string | null {
   const s = digits(raw)
   if (!/^\d{12}$/.test(s)) return 'An Aadhaar number is 12 digits.'
   if (/^[01]/.test(s)) return 'An Aadhaar number never starts with 0 or 1.'
-  if (!verhoeffOk(s)) return 'That is not a valid Aadhaar number — please check the digits.'
+  if (!verhoeffOk(s)) return 'That is not a valid Aadhaar number. Please check the digits.'
   return null
 }
 
 export function checkPan(raw: string): string | null {
   const s = raw.trim().toUpperCase()
-  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(s)) return 'A PAN looks like ABCDE1234F — five letters, four digits, one letter.'
+  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(s)) return 'A PAN looks like ABCDE1234F: five letters, four digits, one letter.'
   return null
 }
 
@@ -119,7 +119,7 @@ export function checkUan(raw: string): string | null {
 
 export function checkIfsc(raw: string): string | null {
   return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(raw.trim().toUpperCase())
-    ? null : 'An IFSC is 11 characters — four letters, a zero, then six letters or digits (e.g. HDFC0001234).'
+    ? null : 'An IFSC is 11 characters: four letters, a zero, then six letters or digits (e.g. HDFC0001234).'
 }
 
 export function checkAccount(raw: string): string | null {
@@ -378,11 +378,11 @@ export function routeFor(key: string): 'hr' | 'payroll' {
 }
 
 export function goesTo(key: string, a: Approvers | null | undefined): { stages: string[]; summary: string } {
-  const who = (p: Person | null | undefined, team: string) => p ? `${team} — ${p.name}` : `${team} team`
+  const who = (p: Person | null | undefined, team: string) => p ? `${p.name} (${team})` : `${team} team`
   if (routeFor(key) === 'payroll') {
     const s = [who(a?.payroll, 'Payroll')]
     return { stages: s, summary: s[0] }
   }
-  const stages = a?.l1 ? [`Line manager — ${a.l1.name}`, who(a?.hr, 'HR')] : [who(a?.hr, 'HR')]
+  const stages = a?.l1 ? [`${a.l1.name} (line manager)`, who(a?.hr, 'HR')] : [who(a?.hr, 'HR')]
   return { stages, summary: stages.join(', then ') }
 }

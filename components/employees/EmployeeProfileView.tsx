@@ -35,23 +35,23 @@ export const P = {
 
 /** Blank is null, undefined or ''. Zero and false are values. */
 export const isBlank = (v: any) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '')
-export const fmt = (v: any) => isBlank(v) ? '—' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)
+export const fmt = (v: any) => isBlank(v) ? '-' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)
 /** "01 Jan 2010". Four-digit years: "01 Jan 10" cannot be told apart from 1910 or a
  *  day-month pair at a glance, and a date of birth is exactly where that matters. */
 export const fmtDate = (v: string | null | undefined) => {
-  if (!v) return '—'
+  if (!v) return '-'
   const d = new Date(v)
   return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 /** "3y 4m" from a joining date, or '—'. */
 export const tenureOf = (v: string | null | undefined) => {
-  if (!v) return '—'
+  if (!v) return '-'
   const d = new Date(v)
-  if (isNaN(d.getTime())) return '—'
+  if (isNaN(d.getTime())) return '-'
   const now = new Date()
   let m = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth())
   if (now.getDate() < d.getDate()) m -= 1
-  if (m < 0) return '—'
+  if (m < 0) return '-'
   const y = Math.floor(m / 12), r = m % 12
   return y ? `${y}y ${r}m` : `${r}m`
 }
@@ -88,7 +88,7 @@ export function Field({ label, value, editMode, fieldKey, editForm, setEditForm,
   // modes line up. The read-only ESS rendering stays compact.
   const reserve = reserveProp ?? !!setEditForm
   const set = (v: string) => setEditForm?.((p: any) => ({ ...p, [fieldKey as string]: v }))
-  const empty = value === undefined || value === null || value === '' || value === '—'
+  const empty = value === undefined || value === null || value === '' || value === '-'
   const raw = editForm?.[fieldKey as string]
 
   let body: React.ReactNode
@@ -115,7 +115,7 @@ export function Field({ label, value, editMode, fieldKey, editForm, setEditForm,
         ...ctl, display: 'flex', alignItems: 'center', background: C.sunken,
         borderColor: C.line, color: empty ? C.faint : C.muted, overflow: 'hidden',
         whiteSpace: 'nowrap', textOverflow: 'ellipsis', ...(mono ? numeric : null),
-      }}>{empty ? '—' : value}</div>
+      }}>{empty ? '-' : value}</div>
     )
   } else {
     body = (
@@ -124,7 +124,7 @@ export function Field({ label, value, editMode, fieldKey, editForm, setEditForm,
         fontSize: F.small, fontWeight: empty ? W.regular : W.medium,
         color: empty ? C.faint : C.ink, lineHeight: 1.45, overflowWrap: 'anywhere',
         ...(mono ? { ...numeric, letterSpacing: '.02em' } : null),
-      }}>{empty ? '—' : value}</div>
+      }}>{empty ? '-' : value}</div>
     )
   }
 
@@ -188,14 +188,14 @@ export function FactsGrid({ facts, min = 150 }: { facts: { l: string; v: React.R
       gridTemplateColumns: `repeat(auto-fill, minmax(min(${min}px, 100%), 1fr))`,
     }}>
       {facts.map(x => {
-        const empty = x.v === undefined || x.v === null || x.v === '' || x.v === '—'
+        const empty = x.v === undefined || x.v === null || x.v === '' || x.v === '-'
         return (
           <div key={x.l} style={{ minWidth: 0 }}>
             <dt style={{ ...eyebrow, fontWeight: W.semi, marginBottom: 4 }}>{x.l}</dt>
             <dd style={{
               margin: 0, fontSize: F.small, fontWeight: empty ? W.regular : W.semi,
               color: empty ? C.faint : C.ink, lineHeight: 1.4, overflowWrap: 'anywhere', ...numeric,
-            }}>{empty ? '—' : x.v}</dd>
+            }}>{empty ? '-' : x.v}</dd>
           </div>
         )
       })}
@@ -246,8 +246,8 @@ export function OtherInfoSection({ emp }: { emp: any }) {
       ;(byCodeRes.data || []).forEach((m: any) => { mByCode[m.emp_code] = m })
       // "Full Name (EMP_CODE) (Department)"
       const fmt = (e: any) => { const d = e?.departments?.dept_name; return `${e.full_name} (${e.emp_code})${d ? ` (${d})` : ''}` }
-      const nameById = (id: string | null) => (id && mById[id]) ? fmt(mById[id]) : '—'
-      const nameByCode = (c: string) => mByCode[c] ? fmt(mByCode[c]) : '—'
+      const nameById = (id: string | null) => (id && mById[id]) ? fmt(mById[id]) : '-'
+      const nameByCode = (c: string) => mByCode[c] ? fmt(mByCode[c]) : '-'
       // The hierarchy must never look empty: a missing RM1 / RM2 / HOD slot is filled
       // from whatever else the chain has, in the sensible order for that slot — even if
       // that repeats a name across two lines. (140 employees have no L2 set; their L2
@@ -268,7 +268,7 @@ export function OtherInfoSection({ emp }: { emp: any }) {
       // even for a brand-new record with no account or assigned roles yet.
       if (!ownRoles.some(r => r.toLowerCase() === 'employee')) ownRoles = ['Employee', ...ownRoles]
 
-      const dept = self.departments?.dept_name || emp.departments?.dept_name || emp.dept_name || '—'
+      const dept = self.departments?.dept_name || emp.departments?.dept_name || emp.dept_name || '-'
       if (live) setData({
         dept, ownRoles,
         rm1: nameById(rm1Id), rm2: nameById(rm2Id), hod: nameById(hodId),
@@ -283,7 +283,7 @@ export function OtherInfoSection({ emp }: { emp: any }) {
       {!data ? <div style={{ fontSize: F.small, color: C.muted }}>Loading…</div> : (
         <>
           <Grid2>
-            <Field label="Role" value={data.ownRoles.length ? data.ownRoles.join(', ') : '—'} />
+            <Field label="Role" value={data.ownRoles.length ? data.ownRoles.join(', ') : '-'} />
             <Field label="Department" value={data.dept} />
             <Field label="Reporting manager 1" value={data.rm1} />
             <Field label="Reporting manager 2" value={data.rm2} />
@@ -341,7 +341,7 @@ function ManagerPick({ label, field, opts, editForm, setEditForm }: {
               onFocus={focusOn} onBlur={focusOff}
               onChange={e => setEditForm((p: any) => ({ ...p, [field]: e.target.value || null }))}>
         <option value="">None</option>
-        {opts.map(o => <option key={o.id} value={o.id}>{o.full_name} ({o.emp_code}){o.designation ? ` — ${o.designation}` : ''}</option>)}
+        {opts.map(o => <option key={o.id} value={o.id}>{o.full_name} ({o.emp_code}){o.designation ? ` · ${o.designation}` : ''}</option>)}
       </select>
     </div>
   )
@@ -360,7 +360,7 @@ export function ManagerEditor({ emp, editForm, setEditForm }: { emp: any; editFo
   }, [emp?.company_id, emp?.id])
   return (
     <Section title="Reporting managers"
-             hint="L1, L2 and HOD set the reporting line — they drive approvals, the team view, MRF routing and the org chart. Same company only; saved with the rest of the profile.">
+             hint="L1, L2 and HOD set the reporting line: they drive approvals, the team view, MRF routing and the org chart. Same company only; saved with the rest of the profile.">
       <Grid2>
         <ManagerPick label="Reporting manager 1 (L1)" field="l1_manager_id" opts={opts} editForm={editForm} setEditForm={setEditForm} />
         <ManagerPick label="Reporting manager 2 (L2)" field="l2_manager_id" opts={opts} editForm={editForm} setEditForm={setEditForm} />
@@ -377,7 +377,7 @@ export function ManagerEditor({ emp, editForm, setEditForm }: { emp: any; editFo
 // Save button handles). EMPLOYEE stays automatic; other functional roles are read-only
 // here (they live in ESS & Roles).
 const HIER_ROLE_META: { code: string; label: string; desc: string }[] = [
-  { code: 'L1_MANAGER', label: 'L1 Manager', desc: 'First-line manager — approves their team’s requests' },
+  { code: 'L1_MANAGER', label: 'L1 Manager', desc: 'First-line manager, approves their team’s requests' },
   { code: 'L2_MANAGER', label: 'L2 Manager', desc: 'Second-line / skip-level manager' },
   { code: 'HOD',        label: 'HOD',        desc: 'Head of Department' },
 ]
@@ -459,7 +459,7 @@ export function EmpRoleEditor({ emp }: { emp: any }) {
 
   return (
     <Section title="Manager roles"
-             hint={<>Give or remove the manager roles for this employee — these apply immediately, not on Save. Other functional roles (HR Manager, Payroll and so on) are set in <b>ESS &amp; Roles</b>.</>}>
+             hint={<>Give or remove the manager roles for this employee. These apply immediately, not on Save. Other functional roles (HR Manager, Payroll and so on) are set in <b>ESS &amp; Roles</b>.</>}>
       {loading ? <div style={{ fontSize: F.small, color: C.muted }}>Loading roles…</div> : (
         <div>
           {hier.map((m, i) => {
@@ -534,9 +534,9 @@ export function recordFacts(emp: any, extra: { l1?: string } = {}) {
     { l: 'Group DOJ',     v: fmtDate(emp.group_doj) },
     { l: 'Tenure',        v: tenureOf(emp.group_doj || emp.company_doj) },
     { l: 'Confirmation',  v: fmt(emp.confirmation_status) },
-    { l: 'Department',    v: emp.departments?.dept_name || emp.dept_name || '—' },
-    { l: 'Location',      v: emp.locations?.location_name || emp.location_name || '—' },
-    { l: 'Notice period', v: isBlank(emp.notice_period_days) ? '—' : `${emp.notice_period_days} days` },
+    { l: 'Department',    v: emp.departments?.dept_name || emp.dept_name || '-' },
+    { l: 'Location',      v: emp.locations?.location_name || emp.location_name || '-' },
+    { l: 'Notice period', v: isBlank(emp.notice_period_days) ? '-' : `${emp.notice_period_days} days` },
   ]
   if (extra.l1 !== undefined) facts.push({ l: 'Reporting manager', v: extra.l1 })
   if (emp.last_working_date) facts.push({ l: 'Last working day', v: fmtDate(emp.last_working_date) })
@@ -587,7 +587,7 @@ export default function EmployeeProfileSections({
   const RO = (label: string, value: React.ReactNode, o: { mono?: boolean } = {}) => (
     <Field key={label} label={label} value={value} editMode={editMode} setEditForm={setEditForm} readOnly mono={o.mono} />
   )
-  const aadhaar = e.aadhar_last4 ? `XXXX XXXX ${e.aadhar_last4}` : '—'
+  const aadhaar = e.aadhar_last4 ? `XXXX XXXX ${e.aadhar_last4}` : '-'
 
   if (profileTab === 'personal') return (
     <div>
@@ -632,15 +632,15 @@ export default function EmployeeProfileSections({
       </Section>
       <Section title="Emergency contacts" empty={none('emergency_name','emergency_relation','emergency_mobile','emergency2_name','emergency2_relation','emergency2_mobile')} emptyText="No emergency contact on record yet.">
         <Grid2>
-          {F_('Contact 1 — name','emergency_name')} {F_('Contact 1 — relation','emergency_relation')}
-          {F_('Contact 1 — mobile','emergency_mobile','tel',undefined,{ mono: true })}
+          {F_('Contact 1: name','emergency_name')} {F_('Contact 1: relation','emergency_relation')}
+          {F_('Contact 1: mobile','emergency_mobile','tel',undefined,{ mono: true })}
         </Grid2>
         {(editMode || has('emergency2_name') || has('emergency2_relation') || has('emergency2_mobile')) && (
           <>
             <SubHead>Second contact</SubHead>
             <Grid2>
-              {F_('Contact 2 — name','emergency2_name')} {F_('Contact 2 — relation','emergency2_relation')}
-              {F_('Contact 2 — mobile','emergency2_mobile','tel',undefined,{ mono: true })}
+              {F_('Contact 2: name','emergency2_name')} {F_('Contact 2: relation','emergency2_relation')}
+              {F_('Contact 2: mobile','emergency2_mobile','tel',undefined,{ mono: true })}
             </Grid2>
           </>
         )}
@@ -671,9 +671,9 @@ export default function EmployeeProfileSections({
           {F_('Group DOJ','group_doj','date')}
           {F_('Company DOJ','company_doj','date')}
           {F_('Confirmation status','confirmation_status','text',['Probation','Confirmed'])}
-          {RO('Company', e.companies?.company_name || e.company_name || '—')}
-          {RO('Location / branch', e.locations?.location_name || e.location_name || '—')}
-          {RO('Department', e.departments?.dept_name || e.dept_name || '—')}
+          {RO('Company', e.companies?.company_name || e.company_name || '-')}
+          {RO('Location / branch', e.locations?.location_name || e.location_name || '-')}
+          {RO('Department', e.departments?.dept_name || e.dept_name || '-')}
         </Grid2>
       </Section>
       {showManagerChain && !editMode && (
@@ -736,7 +736,7 @@ export default function EmployeeProfileSections({
       <Grid2>
         <Field label="Bank name" value={fmt(e.bank_name)} />
         <Field label="Account type" value={fmt(e.account_type)} />
-        <Field label="Account number" value={e.bank_account_last4 ? `XXXX XXXX ${e.bank_account_last4}` : '—'} mono />
+        <Field label="Account number" value={e.bank_account_last4 ? `XXXX XXXX ${e.bank_account_last4}` : '-'} mono />
         <Field label="IFSC" value={fmt(e.ifsc_code)} mono />
       </Grid2>
     </Section>

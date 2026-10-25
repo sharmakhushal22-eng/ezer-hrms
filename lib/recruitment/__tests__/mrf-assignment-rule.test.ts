@@ -1,136 +1,103 @@
-// lib/recruitment/__tests__/mrf-assignment-rule.test.ts — approving at the
-// HR Head step must hand the requisition to somebody.
+// lib/recruitment/__tests__/mrf-assignment-rule.test.ts — approving the step that opens an
+// MRF must hand the requisition to somebody.
 //
 // WHY THIS FILE EXISTS
 //
-// The HR Head's approval IS the hand-off. "Assigned to you" reads
-// manpower_requisitions.assigned_recruiter_ids, so approving with an empty one
-// opens a requisition that reaches no queue at all — nobody is working it and
-// nothing says so.
+// The approval that opens a requisition IS the hand-off. "Assigned to you" reads
+// manpower_requisitions.assigned_recruiter_ids, so approving with an empty one opens a
+// requisition that reaches no queue at all.
 //
-// THE RULE LIVES IN FOUR PLACES, AND THEY WERE FIXED ONE AT A TIME
+// The rule was fixed once at four separate writes (a767c8a, 3823b5f, 1cce8cc, ac37d83) and
+// then lost in later merges ("main's recruitment flow wins"), so an HR Head could again
+// approve from the HR Head tab with one click and nobody assigned. It now lives in ONE
+// server function, lib/recruitment/mrf-approve.ts, and every screen that approves an MRF
+// calls an endpoint that uses it. This file checks the rule itself and that no screen
+// writes APPROVED on its own again.
 //
-//   1. app/api/ess/mrf/route.ts        refuses an HR_HEAD step with no
-//                                      assigned_hr_ids, before any mutation
-//   2. ApprovalModal's Approve button  disabled while nothing is picked
-//   3. approveMRF()        (page.tsx)  the Review modal's Supabase write
-//   4. approveMrf()  (offer-flow-...)  the HR Head TAB's Supabase write
-//
-// (1) and (2) came first. (3) was missed, and an HR Head approved an MRF
-// through the Review modal with nobody assigned. (4) was missed again — and
-// (4) is the screen whose own heading says "MRF approvals", reached from the
-// HR Head tab in the rail. It had no picker at all: one click wrote
-// status 'APPROVED', skipping the assignment, the approval chain and the audit
-// log together. A user found it manually after (3) was fixed.
-//
-// The lesson this file now encodes: a rule enforced at one write is not
-// enforced. Every path that writes the approval needs its own check, and this
-// test enumerates them so the next one cannot be added quietly.
-//
-// A disabled button is not an enforcement point. Two routes past (2):
-// a chain with no PENDING step made the modal's atHrHead false (so Approve
-// enabled), and apprPeople was only fetched when the Approvals sub-tab had been
-// opened — so from the Requisitions list the picker offered nobody at all.
-//
-// This reads the source rather than driving the UI: approveMRF is a closure
-// inside a 6,000-line client component, and reaching it needs React, Supabase
-// and a session. A test needing all three to check a guard is a test nobody
-// runs. The cost is that a rename breaks it, which is the point — a human then
-// re-reads the rule.
+// The hand-off is the LAST step, not merely the one called HR_HEAD: when the HR Head is
+// also the raiser's manager the chain is a single RM2 step, and a chainless MRF is opened
+// by one decision.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { isHandOff, cleanIds, strays } from '../mrf-handoff.ts'
 
-const PAGE = readFileSync('app/dashboard/recruitment/page.tsx', 'utf8')
-// The picker and the button gate moved into the redesigned view, so the
-// courtesy half is asserted where it now lives. The four WRITE-level
-// enforcement points below are unchanged.
-const VIEW = readFileSync('components/recruitment/rx/views/HRHeadApprovalView.tsx', 'utf8')
-const LOGIC = readFileSync('components/recruitment/rx/logic/approvals.ts', 'utf8')
-const ESS = readFileSync('app/api/ess/mrf/route.ts', 'utf8')
-const OFFER = readFileSync('app/dashboard/recruitment/offer-flow-components.tsx', 'utf8')
-
-// ── The parse, guarded ──────────────────────────────────────────────────────
-// Every assertion below is worthless if these anchors moved and matched nothing.
-
-test('both sources were actually read', () => {
-  assert.ok(PAGE.length > 50_000, `recruitment/page.tsx looks truncated (${PAGE.length} chars)`)
-  assert.ok(ESS.length > 10_000, `ess/mrf/route.ts looks truncated (${ESS.length} chars)`)
-  assert.ok(/async function approveMRF\(/.test(PAGE),
-    'approveMRF not found — it was renamed, so re-check that the assignment rule moved with it')
-  assert.ok(/function ApprovalModal\(/.test(PAGE), 'ApprovalModal not found')
-})
-
-// ── 1. The server route ─────────────────────────────────────────────────────
-
-describe('the ESS route refuses an unassigned hand-off', () => {
-  test('an HR_HEAD step with no assigned_hr_ids is rejected', () => {
-    assert.ok(/cur\.role === 'HR_HEAD' && !wantHr\.length/.test(ESS),
-      'the ESS approve action must refuse an HR_HEAD step carrying no assigned_hr_ids')
+describe('isHandOff', () => {
+  test('the HR Head step is the hand-off', () => {
+    assert.equal(isHandOff([{ role: 'RM2', status: 'APPROVED' }, { role: 'HR_HEAD', status: 'PENDING' }]), true)
   })
-
-  test('the assignees are validated against the company hiring-manager list', () => {
-    assert.ok(/hrTeamFor\(ctx\.companyId\)/.test(ESS) && /strays/.test(ESS),
-      'posting an arbitrary employee id must be refused, or the picker is decoration')
+  test('an RM2 step with the HR Head still waiting is not', () => {
+    assert.equal(isHandOff([{ role: 'RM2', status: 'PENDING' }, { role: 'HR_HEAD', status: 'WAITING' }]), false)
   })
-
-  test('the refusal happens before the row is mutated', () => {
-    const guard = ESS.indexOf("cur.role === 'HR_HEAD' && !wantHr.length")
-    const approve = ESS.indexOf("cur.status = 'APPROVED'")
-    assert.ok(guard !== -1 && approve !== -1 && guard < approve,
-      'the assignment check must precede the approval write, so a refusal leaves the chain untouched')
+  test('a lone RM2 step (the HR Head is the raiser\'s manager) is the hand-off', () => {
+    assert.equal(isHandOff([{ role: 'RM2', status: 'PENDING' }]), true)
+  })
+  test('no chain, or nothing pending, is opened by one decision', () => {
+    assert.equal(isHandOff([]), true)
+    assert.equal(isHandOff(null), true)
+    assert.equal(isHandOff([{ role: 'RM2', status: 'APPROVED' }]), true)
   })
 })
 
-// ── 2. The dashboard write — the path that was missing ──────────────────────
+test('cleanIds and strays', () => {
+  assert.deepEqual(cleanIds(['a', 'a', ' b ', '', null]), ['a', 'b'])
+  assert.deepEqual(cleanIds('a'), [])
+  assert.deepEqual(strays(['a', 'x'], ['a', 'b']), ['x'])
+})
 
-describe('approveMRF enforces the rule itself, not via a button', () => {
-  // Slice approveMRF's body so a guard living in some other function cannot
-  // satisfy these assertions by accident.
-  const start = PAGE.indexOf('async function approveMRF(')
-  const body = PAGE.slice(start, PAGE.indexOf('\n  async function', start + 10))
+const read = (p: string) => readFileSync(p, 'utf8')
+const LIB = read('lib/recruitment/mrf-approve.ts')
+const ESS = read('app/api/ess/mrf/route.ts')
+const DECIDE = read('app/api/recruitment/mrf-decision/route.ts')
+const PAGE = read('app/dashboard/recruitment/page.tsx')
+const OFFER = read('app/dashboard/recruitment/offer-flow-components.tsx')
+const ESSLIB = read('lib/supabase-ess.ts')
+const ROLETABS = read('components/ess/RoleTabs.tsx')
 
-  test('the body was isolated', () => {
-    assert.ok(start !== -1 && body.length > 400 && body.length < 12_000,
-      `approveMRF body slice looks wrong (${body.length} chars)`)
+describe('the server refuses an unassigned hand-off', () => {
+  test('before anything is written', () => {
+    const guard = LIB.indexOf('if (handOff && !inp.assignIds.length)')
+    const write = LIB.indexOf(".from('manpower_requisitions').update(")
+    assert.ok(guard !== -1 && write !== -1 && guard < write)
   })
-
-  test('it refuses when the hand-off carries no assignee', () => {
-    assert.ok(/!\(assignIds\|\|\[\]\)\.length/.test(body),
-      'approveMRF must refuse an empty assignIds at the hand-off step. Without this the ' +
-      'rule exists only in a disabled button, which the Review modal can bypass.')
+  test('assignees must be recruiters of the MRF\'s own company', () => {
+    assert.ok(/hrTeamFor\(sb, mrf\.company_id\)/.test(LIB) && /strays\(/.test(LIB))
   })
-
-  test('a chain with no PENDING step still counts as the hand-off', () => {
-    assert.ok(/!pend \|\| pend\.role === 'HR_HEAD'/.test(body),
-      'an MRF with no pending step is opened outright by one decision, so it is a ' +
-      'hand-off too. Checking only === HR_HEAD let that case through.')
-  })
-
-  test('the refusal precedes the Supabase update', () => {
-    const guard = body.indexOf('!(assignIds||[]).length')
-    const write = body.indexOf("from('manpower_requisitions').update")
-    assert.ok(guard !== -1 && write !== -1 && guard < write,
-      'the check must run before the write, or a refused approval has already happened')
-  })
-
-  test('assignees are checked against the assignable list', () => {
-    assert.ok(/allowed/.test(body) && /strays/.test(body),
-      'approveMRF should mirror the server-side role check rather than trusting the picker')
+  test('both endpoints approve through it', () => {
+    assert.ok(/approveMrf\(sb as any, \{/.test(ESS), 'ESS approve must use lib/recruitment/mrf-approve')
+    assert.ok(/approveMrf\(sb as any, \{/.test(DECIDE), 'dashboard approve must use lib/recruitment/mrf-approve')
+    assert.ok(/requireModule\(req, 'Recruitment'\)/.test(DECIDE))
   })
 })
 
-// ── 3. The modal, as a courtesy rather than the rule ────────────────────────
-
-describe('ApprovalModal still guides the HR Head', () => {
-  test('Approve stays disabled while nothing is picked at the hand-off', () => {
-    assert.ok(/const canApprove = !atHrHead \|\| assignIds\.length > 0/.test(PAGE),
-      'the button gate is the courtesy half — keep it, but it is not the enforcement')
+describe('no screen writes an MRF approval itself', () => {
+  // A browser write of status APPROVED on manpower_requisitions skips the rule. Reopening a
+  // CLOSED requisition (status back to APPROVED on an already-assigned MRF) is the one
+  // legitimate case, and it never carries approved_at.
+  for (const [name, src] of [['recruitment/page.tsx', PAGE], ['offer-flow-components.tsx', OFFER], ['lib/supabase-ess.ts', ESSLIB]] as const) {
+    test(name, () => {
+      assert.ok(!/manpower_requisitions'\)\s*\.update\(\{[^}]*approved_at/.test(src), `${name} writes approved_at directly`)
+      assert.ok(!/status: ?'APPROVED', ?approved_at/.test(src), `${name} stamps APPROVED directly`)
+    })
+  }
+  test('the admin approvals queue calls the decision endpoint', () => {
+    assert.ok(ESSLIB.includes("'/api/recruitment/mrf-decision'"))
   })
-
-  test('atHrHead treats a missing pending step as the hand-off', () => {
-    assert.ok(/const atHrHead = !pending \|\| pending\.role === 'HR_HEAD'/.test(PAGE),
-      'reading === HR_HEAD alone enabled Approve on a chainless MRF')
+  // The Recruitment MRF tab (dashboard AND ESS) decides ONE step, as the pending approver,
+  // through /api/ess/mrf — never the one-decision 'final' approval of mrf-decision, which
+  // let anyone with the module open a requisition on behalf of the RM2 and the HR Head.
+  test('the MRF tab decides through /api/ess/mrf, step by step', () => {
+    assert.ok(/essApi\('\/api\/ess\/mrf', employeeId, \{ method:'POST'/.test(PAGE),
+      'decideMRF must post the decision to /api/ess/mrf')
+    assert.ok(!/fetch\('\/api\/recruitment\/mrf-decision', \{ method:'POST'/.test(PAGE),
+      'the MRF tab must not approve through the one-decision mrf-decision endpoint')
+  })
+  test('the pickers use the hand-off rule, not role === HR_HEAD', () => {
+    assert.ok(/isHandOff\(m\.approval_chain\)/.test(ROLETABS))
+    assert.ok(/isHandOff\(asArray\(m\.approval_chain\)\)/.test(PAGE), 'approveMRF must require assignees by the hand-off rule')
+    assert.ok(/isHandOff\(asArray\(mrf\.approval_chain\)\)/.test(PAGE), 'ApprovalModal must show the picker by the hand-off rule')
+    assert.ok(!/cur\?\.role==='HR_HEAD'/.test(PAGE) && !/pend\.role === 'HR_HEAD'/.test(PAGE),
+      'role === HR_HEAD misses the lone-RM2 chain, which also opens the requisition')
   })
 })
 
@@ -194,8 +161,37 @@ describe('the HR Head tab does not write an MRF decision itself', () => {
 })
 
 test('only hiring managers / recruiters are assignable', () => {
-  assert.ok(/const HR_ROLE_CODES = \['RECRUITER'\]/.test(ESS),
+  assert.ok(/const HR_ROLE_CODES = \['RECRUITER'\]/.test(LIB),
     "the assignable role is RECRUITER (seeded 'Hiring Manager / Recruiter'). HR_MANAGER is " +
     'the senior HR tier and oversees requisitions rather than running them — if this list ' +
     'grows, re-read who should be handed hiring work.')
+})
+
+// ── 6. Who may decide, on the ESS route ─────────────────────────────────────
+//
+// approveMrf enforces the hand-off; the route in front of it decides WHO may act and
+// WHEN. Both halves have been lost in merges before, so both are pinned here.
+
+describe('the ESS route gates the decision before approveMrf runs', () => {
+  const start = ESS.indexOf("if (action === 'approve' || action === 'reject' || action === 'revise')")
+  const call = ESS.indexOf('approveMrf(sb as any, {', start)
+
+  test('only a requisition in approval can be decided', () => {
+    const gate = ESS.indexOf("['SUBMITTED', 'ON_HOLD'].includes(String(mrf.status))", start)
+    assert.ok(start !== -1 && gate !== -1 && gate < call,
+      'an APPROVED / CLOSED MRF carrying a stale PENDING step must be refused, not decided')
+  })
+
+  test('only the pending approver (or a super admin) may approve, reject or send back', () => {
+    const gate = ESS.indexOf('cur.approver_id !== me && !ctx.grant.isSuperAdmin', start)
+    assert.ok(gate !== -1 && gate < call, 'the approver check must run before any decision is written')
+    assert.ok(/mustBeApprover: !ctx\.grant\.isSuperAdmin/.test(ESS), 'approveMrf must repeat the approver check')
+  })
+
+  test('a super-admin override is recorded on the step, under the real actor', () => {
+    assert.ok(/cur\.acted_by_id = me/.test(ESS), 'reject / send back by an override must record who acted')
+    assert.ok(/cur!\.acted_by_id = inp\.actor\.id/.test(LIB), 'an approval by an override must record who acted')
+    assert.ok(/actor: \{ id: me, name: meB\?\.name/.test(ESS),
+      'the actor is the caller, not the named approver: an override must not pass as theirs')
+  })
 })

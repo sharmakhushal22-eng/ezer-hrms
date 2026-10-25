@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { openApprovals } from '@/lib/onboarding/approvals'
 import { docLabel } from '@/lib/onboarding/corrections'
 import { missingFields, describeMissing } from '@/lib/onboarding/required'
+import { trackOf, requiredDocCodes } from '@/lib/onboarding/hiring-track'
 import { renderEmail, onboardingScope, isUuid } from '@/lib/config/store'
 import { sendMail } from '@/lib/mail/send'
 
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     const { data: cand, error } = await supa
       .from('onboarding_candidates')
-      .select('id, company_id, full_name, email, designation, status, form_data, hr_spoc_id, created_by, hr_review')
+      .select('id, company_id, full_name, email, designation, status, form_data, hr_spoc_id, created_by, hr_review, hiring_track, esic_applicable, offered_ctc')
       .eq('magic_link_token', token)
       .single()
 
@@ -48,7 +49,8 @@ export async function POST(req: NextRequest) {
 
     // The required details (lib/onboarding/required.ts) — the portal checks them step by step,
     // and this is the fence for anything that got past it.
-    const missing = missingFields(fullData)
+    const track = trackOf(cand.hiring_track)
+    const missing = missingFields(fullData, { track })
     if (missing.length) {
       return NextResponse.json({ error: `Some required details are missing or invalid: ${describeMissing(missing)}.`, missing_fields: missing }, { status: 400 })
     }
@@ -66,7 +68,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Please upload a new copy of the rejected document${stillRejected.length > 1 ? 's' : ''} first: ${stillRejected.join(', ')}.`, rejected_docs: stillRejected }, { status: 400 })
     }
 
-    const mandatoryDocs = ['AADHAAR_FRONT', 'PAN', 'PHOTO']
+    // Per track (lib/onboarding/hiring-track.ts): Aadhaar for domestic, passport + visa for a
+    // foreign national in India, passport for overseas; PAN unless overseas.
+    const gross = cand.offered_ctc ? Number(cand.offered_ctc) / 12 : 0
+    const esicOn = cand.esic_applicable === true || (gross > 0 && gross <= 21000)
+    const fresher = fullData.step_5?.is_fresher === true
+    const mandatoryDocs = requiredDocCodes(track, { esic: esicOn, fresher }).filter(d => d !== 'DEGREE' && d !== 'BANK_PROOF' && d !== 'FAMILY_PHOTO' && d !== 'AADHAAR_BACK')
     const uploadedCodes = (docs || []).map(d => d.doc_code)
     const missingDocs   = mandatoryDocs.filter(d => !uploadedCodes.includes(d))
 

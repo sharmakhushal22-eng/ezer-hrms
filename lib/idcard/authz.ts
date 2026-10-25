@@ -192,12 +192,12 @@ export function exportRefusal(
   credentialState?: string | null,
 ): string | null {
   const status = String(emp.employment_status ?? '').toLowerCase().trim()
-  if (LEFT.has(status)) return 'Downloads stop on exit — this employee has left.'
+  if (LEFT.has(status)) return 'Downloads stop on exit. This employee has left.'
 
   if (emp.date_of_leaving) {
     const lwd = new Date(String(emp.date_of_leaving))
     if (!isNaN(lwd.getTime()) && lwd <= new Date()) {
-      return 'Downloads stop on exit — the last working day has passed.'
+      return 'Downloads stop on exit. The last working day has passed.'
     }
   }
 

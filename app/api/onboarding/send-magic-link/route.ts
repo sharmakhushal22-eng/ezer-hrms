@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { requireModule } from '@/lib/api-auth'
 import { renderEmail } from '@/lib/config/store'
 import { sendMail } from '@/lib/mail/send'
+import { trackOf } from '@/lib/onboarding/hiring-track'
 import { importCollectedDocs } from '@/lib/onboarding/import-docs'
 import { seedFormData } from '@/lib/onboarding/seed-form'
 
@@ -29,7 +30,26 @@ export async function POST(req: NextRequest) {
     const {
       candidate_id, company_id, full_name, email, mobile,
       designation, department, department_id, employment_type, date_of_joining, offered_ctc,
+      hiring_track, work_country, payroll_currency, employing_entity, notice_period_days,
     } = body
+    // The notice period the joiner will serve: typed by HR, else the offer's (ctc_negotiations /
+    // offer_letters), else the company default. It lands on employees.notice_period_days at code
+    // generation — the number the resignation chain uses for the policy last working day.
+    let noticeDays: number | null = Number(notice_period_days) > 0 ? Math.round(Number(notice_period_days)) : null
+    if (!noticeDays && candidate_id) {
+      const [{ data: ol }, { data: neg }] = await Promise.all([
+        supa.from('offer_letters').select('notice_period_days').eq('candidate_id', candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supa.from('ctc_negotiations').select('notice_period_days').eq('candidate_id', candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      ])
+      noticeDays = Number(ol?.notice_period_days) > 0 ? Number(ol!.notice_period_days) : Number(neg?.notice_period_days) > 0 ? Number(neg!.notice_period_days) : null
+    }
+    if (!noticeDays) { const { data: co } = await supa.from('companies').select('notice_period_days').eq('id', company_id).maybeSingle(); noticeDays = Number(co?.notice_period_days) > 0 ? Number(co!.notice_period_days) : null }
+    // The hiring track (lib/onboarding/hiring-track.ts) decides the portal's steps, documents
+    // and statutory treatment. An overseas employee needs a work country.
+    const track = trackOf(hiring_track)
+    if (track === 'OVERSEAS' && !String(work_country || '').trim()) {
+      return NextResponse.json({ error: 'Pick the work country for an overseas employee.' }, { status: 400 })
+    }
 
     if (!company_id || !full_name || !mobile) {
       return NextResponse.json({ error: 'company_id, full_name, mobile required' }, { status: 400 })
@@ -64,6 +84,11 @@ export async function POST(req: NextRequest) {
         employment_type: employment_type || 'Employee',
         date_of_joining: date_of_joining || null,
         offered_ctc:     offered_ctc || null,
+        hiring_track:    track,
+        work_country:    track === 'DOMESTIC' ? 'India' : (String(work_country || '').trim() || (track === 'FOREIGN_IN_INDIA' ? 'India' : null)),
+        payroll_currency: String(payroll_currency || '').trim().toUpperCase() || (track === 'OVERSEAS' ? null : 'INR'),
+        employing_entity: String(employing_entity || '').trim() || null,
+        notice_period_days: noticeDays,
         status:          'INVITED',
         token_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         created_by:      body.created_by || null,

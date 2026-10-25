@@ -129,12 +129,12 @@ export function approvalTrail(i: TrailInput): Trail {
 
   let nowWith: string, summary: string, tone: TrailTone
   if (created) {
-    nowWith = 'Nobody — the employee code is generated'
+    nowWith = 'Nobody: the employee code is generated'
     summary = 'Complete'
     tone = 'positive'
   } else if (beforeSubmit) {
     const back = hrReturned || returnedRow
-    nowWith = back ? 'The candidate — returned for corrections' : i.status === 'NOT_INVITED' ? 'HR — the onboarding link is not sent yet' : 'The candidate — filling in the form'
+    nowWith = back ? 'The candidate: returned for corrections' : i.status === 'NOT_INVITED' ? 'HR: the onboarding link is not sent yet' : 'The candidate: filling in the form'
     summary = back ? 'Returned' : 'Not started'
     tone = back ? 'critical' : 'neutral'
   } else {

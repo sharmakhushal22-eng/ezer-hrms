@@ -288,7 +288,7 @@ test('a big swing is flagged for a reviewer to look at', () => {
 test('the summary tells an admin what to do, not just a count', () => {
   assert.match(summarise(checkUpload([], known)), /no rows/)
   assert.match(summarise(checkUpload([{ employee_code: 'NOPE', period_code: 'Q3', final_rating: 3 }], known)),
-    /nothing is committed until every row is clean/)
+    /nothing is committed until every row is clean/i)
   assert.match(summarise(checkUpload([{ employee_code: 'SRS001', period_code: 'Q3', final_rating: 3 }], known)),
     /none of which change a rating/)
   for (const e of Object.values(ERROR_TEXT)) assert.ok(e.length > 20)

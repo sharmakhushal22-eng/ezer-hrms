@@ -94,7 +94,7 @@ const initialsOf = (name: string) =>
 /** PostgREST's "that relation/function is not there" — i.e. 118 is not applied. */
 const notInstalled = (msg: string) => /PGRST202|PGRST205|does not exist/i.test(msg)
 const pendingResponse = () => NextResponse.json(
-  { error: 'Social is not switched on yet — migration 118 has not been applied.', installed: false },
+  { error: 'Social is not switched on yet: migration 118 has not been applied.', installed: false },
   { status: 503 },
 )
 
@@ -473,7 +473,7 @@ export async function POST(req: NextRequest) {
       if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
       if (reason.length < 5) {
         return NextResponse.json(
-          { error: 'Give a remark — the author is shown it in place of their words.' }, { status: 400 })
+          { error: 'Give a remark. The author is shown it in place of their words.' }, { status: 400 })
       }
 
       const table = target === 'comment' ? 'social_comments' : 'social_posts'

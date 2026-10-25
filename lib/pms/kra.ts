@@ -67,11 +67,11 @@ export function checkKras(kras: Kra[], r: Rules = DEFAULT_RULES): KraCheck {
 
   if (count < r.minKra) {
     faults.push({ seq: null, says:
-      `Add ${r.minKra - count} more — a rating needs at least ${r.minKra} KRAs to rest on.` })
+      `Add ${r.minKra - count} more. A rating needs at least ${r.minKra} KRAs to rest on.` })
   }
   if (count > r.maxKra) {
     faults.push({ seq: null, says:
-      `Remove ${count - r.maxKra} — past ${r.maxKra} the weightages get too thin to mean anything.` })
+      `Remove ${count - r.maxKra}. Past ${r.maxKra} the weightages get too thin to mean anything.` })
   }
   if (total !== r.totalWeightage) {
     const d = r.totalWeightage - total
@@ -119,7 +119,7 @@ export function canDelete(kras: Kra[], r: Rules = DEFAULT_RULES):
   { allowed: boolean; reason?: string } {
   return kras.length > r.minKra
     ? { allowed: true }
-    : { allowed: false, reason: `${r.minKra} is the minimum — edit this one instead of removing it.` }
+    : { allowed: false, reason: `${r.minKra} is the minimum. Edit this one instead of removing it.` }
 }
 
 /** What the weightage meter shows. Colour is never the only signal; `says`
@@ -131,9 +131,9 @@ export function meter(c: KraCheck, r: Rules = DEFAULT_RULES):
     return { tone: 'good', pct, says: `Totals ${r.totalWeightage}. Ready to send.` }
   }
   if (c.total > r.totalWeightage) {
-    return { tone: 'bad', pct: 100, says: `${c.total} — that is ${c.short} too many.` }
+    return { tone: 'bad', pct: 100, says: `${c.total}: that is ${c.short} too many.` }
   }
-  return { tone: 'warn', pct, says: `${c.total} of ${r.totalWeightage} — ${-c.short} still to allocate.` }
+  return { tone: 'warn', pct, says: `${c.total} of ${r.totalWeightage}, ${-c.short} still to allocate.` }
 }
 
 /** Spread 100 across n rows as evenly as whole numbers allow, remainder on

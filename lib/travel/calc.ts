@@ -188,7 +188,7 @@ export function computeFare(input: FareInput): FareResult {
       flag_type: input.type.requires_gps ? 'GPS_REQUIRED' : 'MANUAL_DISTANCE',
       severity: 'BLOCK',
       message: input.type.requires_gps
-        ? `${input.type.type_name} has no bill to verify, so the journey must be recorded. Use Start travel and End travel — a typed distance is not accepted for this mode.`
+        ? `${input.type.type_name} has no bill to verify, so the journey must be recorded. Use Start travel and End travel. A typed distance is not accepted for this mode.`
         : 'Distance could not be determined. Enter the from and to locations.',
     });
     return {
@@ -341,7 +341,7 @@ export function poolLimit(
         guest_name: c.guest_name ?? null,
         contributed: 0,
       })),
-      breakdown_label: `${type.type_name} is charged per vehicle, not per person — limit stays ₹${single.toLocaleString(
+      breakdown_label: `${type.type_name} is charged per vehicle, not per person: limit stays ₹${single.toLocaleString(
         'en-IN'
       )}`,
     };
@@ -551,7 +551,7 @@ export function billAgeFlag(
       severity: 'WARN',
       policy_value: policy.bill_max_age_days,
       actual_value: age,
-      message: `This bill is ${age} days old. Claims over ${policy.bill_max_age_days} days are not accepted — submit soon.`,
+      message: `This bill is ${age} days old. Claims over ${policy.bill_max_age_days} days are not accepted. Submit soon.`,
     };
   }
 

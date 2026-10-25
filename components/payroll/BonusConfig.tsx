@@ -121,7 +121,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
         <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
           {paymentFrequency === 'MONTHLY'
             ? 'Bonus is calculated and paid out every month, along with salary.'
-            : 'Bonus accrues every month but is only paid as one lump sum — trigger the year-end payout when ready.'}
+            : 'Bonus accrues every month but is only paid as one lump sum. Trigger the year-end payout when ready.'}
         </div>
       </SectionCard>
 
@@ -134,13 +134,13 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
         </div>
         {percentPreset === 'CUSTOM' && (
           <div>
-            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Percentage (%) — can go above the statutory 20% max for a discretionary bonus</label>
+            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Percentage (%): can go above the statutory 20% max for a discretionary bonus</label>
             <input type="number" step="0.01" min="0" value={bonusPercent} onChange={e => setBonusPercent(Number(e.target.value))} style={inputStyle} />
           </div>
         )}
         {isAboveStatutoryMax && (
           <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, padding: '8px 11px', borderRadius: 10, marginTop: 10, lineHeight: 1.5 }}>
-            ⚠ {bonusPercent}% is above the statutory maximum of {STATUTORY_MAX_PERCENT}% — a discretionary bonus beyond the Act&apos;s requirement, which is allowed but worth confirming is intentional.
+            ⚠ {bonusPercent}% is above the statutory maximum of {STATUTORY_MAX_PERCENT}%: a discretionary bonus beyond the Act&apos;s requirement, which is allowed but worth confirming is intentional.
           </div>
         )}
       </SectionCard>
@@ -158,7 +158,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
           </div>
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.6, background: C.gray, borderRadius: 10, padding: '9px 11px' }}>
-          Bonus is calculated on <strong style={{ color: C.navy }}>earned basic</strong> (structured basic pro-rated by paid days) — capped at the
+          Bonus is calculated on <strong style={{ color: C.navy }}>earned basic</strong> (structured basic pro-rated by paid days), capped at the
           calculation ceiling if earned basic exceeds it. Only employees with structured basic at or below the eligibility
           ceiling accrue bonus at all.
         </div>

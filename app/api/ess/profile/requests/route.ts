@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   // A rejection that says nothing is the complaint HR fields all day: the
   // employee sees "Not approved" and has no idea what to fix.
   if (action === 'reject' && !remarks) {
-    return bad('A reason is required when rejecting — the employee sees it.')
+    return bad('A reason is required when rejecting. The employee sees it.')
   }
 
   // COMPOSITE KEYS AT THEIR FINAL STAGE are applied here, not by 105.

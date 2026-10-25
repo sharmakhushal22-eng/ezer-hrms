@@ -98,7 +98,7 @@ export default function CompanyPoliciesPage() {
     notify(`${p.policy_code} ${p.is_active ? 'deactivated' : 'activated'}.`); reload(companyId)
   }
   async function doDelete(p: CompanyPolicy) {
-    if (!confirm(`Remove ${p.policy_code}? (soft delete — record kept for compliance, hidden from new onboarding)`)) return
+    if (!confirm(`Remove ${p.policy_code}? (soft delete: record kept for compliance, hidden from new onboarding)`)) return
     const { error } = await softDeletePolicy(p.id)
     if (error) { notify('Failed: ' + error.message, 'error'); return }
     notify('Policy removed.'); reload(companyId)
@@ -110,13 +110,13 @@ export default function CompanyPoliciesPage() {
       <div style={{ maxWidth:1100, margin:'0 auto' }}>
         <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Company Policies</div>
-        <div style={{ fontSize:12, color:TK.muted }}>Per-company policies that appear in the onboarding magic-link Phase 9 (acknowledgement). Add / edit / reorder — changes apply to new onboarding sessions instantly; already-acked candidates keep their original version.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Per-company policies that appear in the onboarding magic-link Phase 9 (acknowledgement). Add / edit / reorder. Changes apply to new onboarding sessions instantly; already-acked candidates keep their original version.</div>
         </div>
 
         <div style={{ ...C.card, display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap' }}>
           <div><label style={C.lbl}>Company</label>
             <select style={{ ...C.input, minWidth:280 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-              <option value="">— Select company —</option>
+              <option value="">Select company</option>
               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>

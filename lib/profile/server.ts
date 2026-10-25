@@ -114,11 +114,11 @@ export async function approversFor(employeeId: string): Promise<Approvers> {
   }
 }
 
-/** "Waiting on HR — Asha Rao", for a request at a given stage. */
+/** "Waiting on Asha Rao (HR)", for a request at a given stage. */
 export function waitingOn(status: string, a: Approvers): string | null {
-  if (status === 'pending_l1')      return a.l1 ? `Line manager — ${a.l1.name}` : 'Your line manager'
-  if (status === 'pending_hr')      return a.hr ? `HR — ${a.hr.name}` : 'HR team'
-  if (status === 'pending_payroll') return a.payroll ? `Payroll — ${a.payroll.name}` : 'Payroll team'
+  if (status === 'pending_l1')      return a.l1 ? `${a.l1.name} (line manager)` : 'Your line manager'
+  if (status === 'pending_hr')      return a.hr ? `${a.hr.name} (HR)` : 'HR team'
+  if (status === 'pending_payroll') return a.payroll ? `${a.payroll.name} (Payroll)` : 'Payroll team'
   return null
 }
 
@@ -229,8 +229,8 @@ export async function compositeOldValue(employeeId: string, fieldKey: string): P
   const r = (data ?? {}) as Record<string, unknown>
   if (fieldKey === 'salary_account') {
     if (!r.bank_account_last4 && !r.bank_name) return null
-    return [`Bank: ${r.bank_name ?? '—'}`, `Account: ••••${r.bank_account_last4 ?? '—'}`,
-            `IFSC: ${r.ifsc_code ?? '—'}`, `Holder: ${r.bank_holder_name ?? '—'}`].join('\n')
+    return [`Bank: ${r.bank_name ?? '-'}`, `Account: ••••${r.bank_account_last4 ?? '-'}`,
+            `IFSC: ${r.ifsc_code ?? '-'}`, `Holder: ${r.bank_holder_name ?? '-'}`].join('\n')
   }
   const a = addr(r, fieldKey === 'present_address' ? 'res' : 'perm')
   return a ? (a.city && a.state && a.pin ? formatAddress(a) : addressOneLine(a)) : null

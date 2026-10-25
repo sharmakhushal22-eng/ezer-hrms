@@ -133,6 +133,12 @@
   .rx-grp{flex-shrink:0;scroll-snap-align:start}
   .rx-tab{flex:0 0 auto}
 }
+/* band wider than its column (ESS sidebar + a ~1200px window): same sideways band as the
+   narrow-screen rule above, with slimmer tabs so most of it still fits. Set by Shell.tsx. */
+.rx-rail.is-tight{display:flex;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x proximity;padding-left:18px;padding-right:18px}
+.rx-rail.is-tight::-webkit-scrollbar{display:none}
+.rx-rail.is-tight .rx-grp{flex-shrink:0;scroll-snap-align:start}
+.rx-rail.is-tight .rx-tab{flex:0 0 auto;padding-left:9px;padding-right:9px}
 @media (prefers-reduced-motion: reduce){
   .rx-ind,.rx-ph,.rx-ph i::after,.rx-ti{transition:none}
   .rx-rail::after,.rx-ind::after,.rx-tab .rx-n.you::after{animation:none}
@@ -4953,9 +4959,11 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx-mc-t{overflow-wrap:anywhere}
 .rx-mc-sub{min-width:0}
 .rx-mc-sub span{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
-.rx-mc-sub span svg{vertical-align:-2px;margin-right:5px}
-/* Budget gets the widest third: its value is a currency amount, not a count. */
-.rx-mc-tiles{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.45fr)}
+.rx-mc-sub span svg{display:inline-block;vertical-align:-2px;margin-right:5px}  /* inline: the global reset makes svg a block, which put the text under its icon */
+/* Budget gets the widest third: its value is a currency amount, not a count.
+   Filled is the narrowest ("1/1" and a bar), so "Candidates" fits on a 3-up
+   card at 1440 instead of clipping to "Candidat". */
+.rx-mc-tiles{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr) minmax(0,1.4fr)}
 .rx-mt-l{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rx-mt-l svg{flex-shrink:0}
 .rx-mt b{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -5029,7 +5037,13 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 
 /* Table view: long titles, recruiter lists and approval lines stay in their cells. */
 .rx-table td.rx-mt-cell-title{min-width:180px;max-width:280px;overflow-wrap:anywhere}
-.rx-table td.rx-mt-cell-appr{min-width:170px;max-width:240px}
+.rx-table td.rx-mt-cell-appr{min-width:160px;max-width:210px;white-space:normal}
+/* The table's cells are nowrap; the two sentence-long cells (where it is now,
+   what happens next) wrap to two lines instead, so a 10-column table needs far
+   less sideways scrolling and nothing is cut mid-word. */
+.rx-table td.rx-mt-cell-next{min-width:170px;max-width:230px;white-space:normal}
+.rx-table td.rx-mt-cell-next .rx-next{white-space:normal;align-items:flex-start;line-height:1.35}
+.rx-table td.rx-mt-cell-next .rx-next svg{flex-shrink:0;margin-top:1px}
 .rx-table td.rx-mt-cell-rec{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ── Raise / edit MRF wizard ── */

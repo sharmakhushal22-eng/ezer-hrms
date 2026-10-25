@@ -2,10 +2,13 @@
  *
  * Calm and scannable: white cards on the canvas, one blue family, colour only
  * where it says something (a pending item, a verified document, a total that
- * is not yet 100%). No gradients — the cover, the avatar and the ID card used
- * to be three of them stacked in one corner.
+ * is not yet 100%). It follows the ESS shell (components/ess/portal.css): the
+ * identity header is the portal's soft hero, cards take the shell's hairline,
+ * 16px corners and soft shadow (--ess-hair / --ess-shadow, with --ez-*
+ * fallbacks outside the portal), and the tabs are an underline strip so they
+ * read as one level below the portal's segmented sub-tabs above them.
  *
- *   identity header, overlapping a short flat cover band
+ *   identity header (soft hero)
  *   a two-column shell: a SHORT 300px side column beside the tabs
  *   drawers for Edit profile, Digital ID, Change history and Documents
  *   modals for each editor (components/profile/editors.tsx)
@@ -16,31 +19,39 @@
  * Scoped under .ezp throughout. The PMS stylesheet once shipped with every
  * rule under .pms while the page never set the class — perfect in the
  * harness, unstyled in the product. Profile360's root sets .ezp, and the
- * drawers and modals are rendered inside it for that reason.
+ * drawers and modals render on document.body inside their own .ezp (the
+ * Layer in editors.tsx) for that reason.
  */
 
 .ezp { width: 100%; min-width: 0; color: var(--ez-ink); }
+/* the overlay root (editors.tsx Layer): holds only fixed-position children */
+.ezp.ezp-layer { width: 0; height: 0; font-family: "DM Sans", "Segoe UI", sans-serif; font-size: 13px; }   /* the portal font; body is Arial */
 
-/* ── cover + identity ─────────────────────────────────────────────────── */
-.ezp .cover {
-  height: 64px; border-radius: 14px 14px 0 0;
-  background: var(--ez-brand-tint); border: 1px solid var(--ez-line); border-bottom: 0;
+/* ── identity ─────────────────────────────────────────────────────────── */
+/* One card, on the portal's soft hero surface (components/ess/portal.css
+   .ess-soft-hero: white into a faint brand light, a hairline, the shell's
+   shadow) so My Details opens the way Home, Attendance and Leave do. The
+   declarations here are the fallback outside the portal (the preview
+   harness), where portal.css is not loaded. The flat cover band that used
+   to sit above it is gone: it was a second box for the same header. */
+:where(.ezp .idcard) {
+  background: var(--ez-surface); border: 1px solid var(--ez-line); border-radius: 18px;
 }
-
 .ezp .idcard {
-  background: var(--ez-surface); border: 1px solid var(--ez-line);
-  border-radius: 0 0 14px 14px; padding: 0 18px 16px; position: relative;
-  display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
+  padding: 18px 20px; position: relative;
+  display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
 }
+/* the hero clips its decoration; the camera button sits inside the face's box */
+.ezp .idcard.ess-soft-hero { overflow: hidden; }
+.ezp .idcard > * { position: relative; }
 .ezp .face {
-  width: 78px; height: 78px; border-radius: 18px; flex: 0 0 auto; margin-top: -32px;
+  width: 76px; height: 76px; border-radius: 50%; flex: 0 0 auto;   /* round, as on Home's hero */
   display: grid; place-items: center; font-size: 24px; font-weight: 700;
-  color: var(--ez-on-accent); border: 3px solid var(--ez-surface);
-  background: var(--ez-brand);
-  box-shadow: var(--ez-shadow-raised);
+  color: var(--ez-on-accent); background: var(--ez-brand);
+  box-shadow: 0 0 0 4px var(--ez-surface), var(--ez-shadow-raised);
 }
-.ezp .who { flex: 1 1 320px; min-width: 0; padding-top: 12px; }
-.ezp .who h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.ezp .who { flex: 1 1 320px; min-width: 0; }
+.ezp .who h2 { margin: 0; font-size: 21px; font-weight: 750; letter-spacing: -.02em; }
 .ezp .who .role { font-size: 13px; color: var(--ez-muted); margin-top: 2px; }
 .ezp .who .role b { color: var(--ez-ink-soft); font-weight: 600; }
 
@@ -55,32 +66,46 @@
 .ezp .pill.warn  { color: var(--ez-warning);  background: var(--ez-warning-tint);  border-color: transparent; }
 .ezp .pill.bad   { color: var(--ez-critical); background: var(--ez-critical-tint); border-color: transparent; }
 
-.ezp .facts { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px;
+.ezp .facts { display: flex; gap: 4px 16px; flex-wrap: wrap; margin-top: 10px;
               font-size: 12px; color: var(--ez-ink-soft); }
 .ezp .facts span { display: inline-flex; align-items: center; gap: 6px; }
 .ezp .facts .k { color: var(--ez-muted); }
 
-.ezp .idacts { display: grid; gap: 7px; min-width: 176px; padding-top: 14px; }
+/* The three things people come here to do, in a row, like the actions on the
+   portal's other heroes. A stacked column made the header twice as tall. */
+.ezp .idacts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;
+               flex: 0 1 auto; margin-left: auto; }
 .ezp .lnk {
   background: none; border: 0; cursor: pointer; padding: 2px; font: inherit;
   font-size: 12px; font-weight: 600; color: var(--ez-brand); text-decoration: none;
 }
 .ezp .lnk:hover { text-decoration: underline; }
-.ezp .idacts .lnk { color: var(--ez-muted); text-align: center; }
+.ezp .idacts .lnk { color: var(--ez-muted); padding: 6px 4px; }
 .ezp .idacts .lnk:hover { color: var(--ez-brand); }
 
 /* ── the two-column shell ─────────────────────────────────────────────── */
-.ezp .shell { display: grid; gap: 14px; margin-top: 14px;
-              grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
-@media (max-width: 1040px) { .ezp .shell { grid-template-columns: minmax(0, 1fr); } }
-
-.ezp .rail { display: grid; gap: 12px; align-content: start; min-width: 0; }
-@media (min-width: 1041px) { .ezp .rail { position: sticky; top: 12px; } }
-.ezp .card { background: var(--ez-surface); border: 1px solid var(--ez-line);
-             border-radius: 12px; padding: 14px 16px; min-width: 0; }
+/* Sized by the space the portal actually gives the page, not by the window:
+   inside ESS a 256px sidebar comes off the top, so a viewport breakpoint
+   picked two columns where there was room for one. The flex-basis pair wraps
+   the main column under the side column once both no longer fit. */
+.ezp .shell { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; align-items: flex-start; }
+/* Beside the tabs it is one column; once it wraps above them it lays its cards
+   side by side, so completeness and the chain do not push the tabs a screen down. */
+.ezp .rail { flex: 1 1 300px; display: grid; gap: 12px; align-content: start; align-items: start; min-width: 0;
+             grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); }
+.ezp .main { flex: 999 1 540px; }
+/* Sticky only where the two columns are certainly side by side. */
+@media (min-width: 1280px) { .ezp .rail { position: sticky; top: 12px; } }
+/* The shell's card: hairline, 16px corners, its soft shadow (portal.css
+   .ess-card). Outside the portal the --ez-* fallbacks apply. */
+.ezp .card { background: var(--ez-surface); border: 1px solid var(--ess-hair, var(--ez-line));
+             border-radius: 16px; padding: 16px 18px; min-width: 0; box-shadow: var(--ess-shadow, none); }
 .ezp .card > .hd { display: flex; align-items: center; justify-content: space-between;
                    gap: 10px; margin-bottom: 10px; }
-.ezp .card h3 { margin: 0; font-size: 13px; font-weight: 700; }
+.ezp .card h3 { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: -.01em;
+                display: flex; align-items: center; gap: 8px; }
+/* the short brand bar Home's cards open their titles with (today.css .card h2) */
+.ezp .card h3::before { content: ""; width: 4px; height: 14px; border-radius: 3px; background: var(--ez-brand); flex: 0 0 auto; }
 .ezp .sub { font-size: 11.5px; color: var(--ez-muted); }
 
 /* ── completeness ─────────────────────────────────────────────────────── */
@@ -131,17 +156,21 @@
 .ezp .reqmini .more { font-size: 12px; }
 
 /* ── main column: tabs ────────────────────────────────────────────────── */
-.ezp .main { min-width: 0; display: grid; gap: 14px; align-content: start; }
-.ezp .tabwrap { background: var(--ez-surface); border: 1px solid var(--ez-line);
-                border-radius: 12px; padding: 4px; display: flex; align-items: center;
-                gap: 4px; position: relative; }
+.ezp .main { min-width: 0; display: grid; gap: 14px; align-content: start; grid-template-columns: minmax(0, 1fr); }
+/* An underline strip, not a second segmented control: the portal's sub-tabs
+   (My Details · Letter Requests · My Letters) are the segmented one directly
+   above, and two of those stacked read as the same level. The active tab
+   keeps the portal's short brand bar. */
+.ezp .tabwrap { display: flex; align-items: center; gap: 4px; position: relative;
+                border-bottom: 1px solid var(--ess-hair, var(--ez-line)); }
 .ezp .tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; flex: 1 1 auto; min-width: 0; }
 .ezp .tabs::-webkit-scrollbar { display: none; }
 .ezp .tabs button { flex: 0 0 auto; background: none; border: 0; cursor: pointer; font: inherit;
-                    padding: 8px 13px; border-radius: 9px; font-size: 12.5px;
-                    font-weight: 600; color: var(--ez-muted); white-space: nowrap; }
+                    padding: 10px 12px 11px; border-radius: 0; font-size: 13px;
+                    font-weight: 600; color: var(--ez-muted); white-space: nowrap;
+                    box-shadow: inset 0 -2.5px 0 transparent; transition: color .15s ease, box-shadow .15s ease; }
 .ezp .tabs button:hover { color: var(--ez-ink); }
-.ezp .tabs button.on { color: var(--ez-brand); background: var(--ez-brand-tint); }
+.ezp .tabs button.on { color: var(--ez-brand); box-shadow: inset 0 -2.5px 0 var(--ez-brand); }
 
 .ezp .howbtn {
   flex: 0 0 auto; width: 26px; height: 26px; margin-right: 4px; border-radius: 50%;
@@ -171,12 +200,12 @@
 .ezp .g3 { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(220px,100%), 1fr)); }
 .ezp .g2 { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(300px,100%), 1fr)); align-items: start; }
 /* The overview: always two by two, so four cards make a square, not 3 + 1. */
-.ezp .g2x { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
-@media (max-width: 760px) { .ezp .g2x { grid-template-columns: minmax(0, 1fr); } }
+.ezp .g2x { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+.ezp .g2x > * { flex: 1 1 calc(50% - 6px); min-width: min(100%, 280px); }
 
 .ezp .fld { position: relative; background: var(--ez-surface);
-            border: 1px solid var(--ez-line); border-radius: 10px;
-            padding: 10px 12px 11px; min-width: 0; }
+            border: 1px solid var(--ess-hair, var(--ez-line)); border-radius: 12px;
+            padding: 11px 13px 12px; min-width: 0; box-shadow: var(--ess-shadow, none); }
 .ezp .fld.act { cursor: pointer; transition: border-color 120ms ease, background 120ms ease; }
 .ezp .fld.act:hover { border-color: var(--ez-brand-edge); background: var(--ez-brand-tint); }
 .ezp .fld.span2 { grid-column: 1 / -1; }
@@ -207,8 +236,8 @@
 
 /* ── person / nominee cards ───────────────────────────────────────────── */
 .ezp .pc { display: flex; gap: 11px; align-items: flex-start; min-width: 0;
-           background: var(--ez-surface); border: 1px solid var(--ez-line);
-           border-radius: 12px; padding: 12px 13px; }
+           background: var(--ez-surface); border: 1px solid var(--ess-hair, var(--ez-line));
+           border-radius: 14px; padding: 13px 14px; box-shadow: var(--ess-shadow, none); }
 .ezp .pc .ph { width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
                display: grid; place-items: center; font-size: 12px; font-weight: 700;
                background: var(--ez-brand-tint); color: var(--ez-brand); }
@@ -216,8 +245,8 @@
 .ezp .pc .s { font-size: 11.5px; color: var(--ez-muted); margin-top: 1px; }
 .ezp .pc .pl { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px; }
 
-.ezp .nom { background: var(--ez-surface); border: 1px solid var(--ez-line);
-            border-radius: 12px; padding: 12px 13px; }
+.ezp .nom { background: var(--ez-surface); border: 1px solid var(--ess-hair, var(--ez-line));
+            border-radius: 14px; padding: 13px 14px; box-shadow: var(--ess-shadow, none); }
 .ezp .nom .top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
 .ezp .nom .n { font-size: 12.5px; font-weight: 700; }
 .ezp .nom .s { font-size: 11.5px; color: var(--ez-muted); margin-top: 2px; }
@@ -296,7 +325,7 @@
 .ezp .scrim { position: fixed; inset: 0; background: rgba(15,23,42,.45);
               display: grid; place-items: center; padding: 16px; z-index: var(--ez-z-modal); }
 .ezp .modal { background: var(--ez-surface); border: 1px solid var(--ez-line);
-              border-radius: 14px; width: min(480px, 100%); max-height: 92vh;
+              border-radius: 16px; width: min(480px, 100%); max-height: 92vh;
               display: flex; flex-direction: column; box-shadow: var(--ez-shadow-overlay); }
 .ezp .modal.wide { width: min(640px, 100%); }
 .ezp .mhd { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
@@ -372,7 +401,7 @@
 /* ── drawer ───────────────────────────────────────────────────────────── */
 .ezp .dscrim { position: fixed; inset: 0; z-index: var(--ez-z-modal); background: rgba(15,23,42,.38);
                display: flex; justify-content: flex-end; }
-.ezp .drawer { width: min(520px, 100%); height: 100%; background: var(--ez-canvas);
+.ezp .drawer { width: min(520px, 100%); height: 100%; background: var(--ess-canvas, var(--ez-canvas));
                border-left: 1px solid var(--ez-line); box-shadow: var(--ez-shadow-overlay);
                display: flex; flex-direction: column; animation: ezp-in 180ms ease-out; }
 @keyframes ezp-in { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
@@ -388,7 +417,7 @@
    address) would otherwise set the column's min-content width and push every
    button out past the drawer's edge. */
 .ezp .hubwrap { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
-.ezp .hubsec { background: var(--ez-surface); border: 1px solid var(--ez-line); border-radius: 12px; padding: 12px 14px; }
+.ezp .hubsec { background: var(--ez-surface); border: 1px solid var(--ess-hair, var(--ez-line)); border-radius: 14px; padding: 13px 15px; box-shadow: var(--ess-shadow, none); }
 .ezp .hubsec h4 { margin: 0; font-size: 13px; font-weight: 700; }
 .ezp .hubsec > .sub { margin: 2px 0 6px; }
 .ezp .hublist { list-style: none; margin: 4px 0 0; padding: 0; }
@@ -439,12 +468,18 @@
 .ezp .dig .note { font-size: 10px; opacity: .8; margin-top: 12px; }
 
 @media (max-width: 560px) {
-  .ezp .idcard { padding: 0 14px 14px; }
-  .ezp .face { width: 64px; height: 64px; margin-top: -26px; font-size: 20px; }
-  .ezp .who { padding-top: 6px; }
+  .ezp .idcard { padding: 16px; gap: 14px; align-items: flex-start; }
+  .ezp .face { width: 60px; height: 60px; font-size: 20px; }
+  .ezp .who { flex-basis: calc(100% - 80px); }
   .ezp .who h2 { font-size: 18px; }
-  .ezp .idacts { min-width: 0; width: 100%; grid-template-columns: 1fr 1fr; }
-  .ezp .idacts .lnk { grid-column: 1 / -1; }
+  /* label and value run as text, so a long company name wraps under itself
+     instead of standing as a column beside its label */
+  .ezp .facts { gap: 4px 14px; }
+  .ezp .facts span { display: inline; }
+  .ezp .facts .k { margin-right: 5px; }
+  .ezp .idacts { width: 100%; display: grid; grid-template-columns: 1fr 1fr; margin-left: 0; }
+  .ezp .idacts .btn:first-child { grid-column: 1 / -1; }
+  .ezp .idacts .lnk { grid-column: 1 / -1; text-align: center; }
   .ezp .kv { grid-template-columns: 1fr; gap: 2px; }
   .ezp .kv dd { margin-bottom: 6px; }
 }
@@ -459,7 +494,7 @@
 .ezp .reqsec h4 { margin: 0; font-size: 13px; font-weight: 700; }
 .ezp .reqlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .ezp .reqlist li {
-  border: 1px solid var(--ez-line); border-radius: 12px;
+  border: 1px solid var(--ess-hair, var(--ez-line)); border-radius: 14px;
   padding: 12px 13px; background: var(--ez-surface); min-width: 0;
 }
 .ezp .reqtop { display: flex; align-items: flex-start; justify-content: space-between;
@@ -530,14 +565,14 @@
   position: absolute; inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;                 /* a portrait must not stretch to square */
-  border-radius: 15px;               /* 18px outer minus the 3px border */
+  border-radius: inherit;
   display: block;
 }
 
 /* The camera button. Sits on the corner of the disc rather than over the face,
    so it never covers what you are trying to look at. */
 .ezp .face .facebtn {
-  position: absolute; right: -5px; bottom: -5px;
+  position: absolute; right: -2px; bottom: -2px;
   width: 26px; height: 26px; padding: 0;
   display: grid; place-items: center;
   border: 2px solid var(--ez-surface);

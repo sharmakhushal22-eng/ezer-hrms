@@ -98,7 +98,7 @@ export default function InboxPolicy() {
       })
       const j = await r.json()
       if (!r.ok) { setMsg(j.error || 'Not saved.'); return }
-      setMsg('Saved. It applies to the next message anyone sends — nothing already open is affected.')
+      setMsg('Saved. It applies to the next message anyone sends. Nothing already open is affected.')
       setDirty(false); load()
     } finally { setSaving(false) }
   }
@@ -226,7 +226,7 @@ export default function InboxPolicy() {
         <div style={h2}>Exceptions by role</div>
         <div style={sub}>
           A role listed here ignores the setting above. Use it to give HR org-wide
-          reach while everyone else stays narrow — the widest of a person's roles
+          reach while everyone else stays narrow. The widest of a person's roles
           wins, so adding one never takes reach away.
         </div>
         <div style={{ display: 'grid', gap: 6 }}>
@@ -258,7 +258,7 @@ export default function InboxPolicy() {
         <div style={h2}>Department desks</div>
         <div style={sub}>
           Who answers when an employee writes to a department. Membership takes
-          effect immediately, including on conversations that are already open —
+          effect immediately, including on conversations that are already open:
           a desk follows whoever staffs it today, not whoever staffed it when
           the thread started.
         </div>

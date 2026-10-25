@@ -42,7 +42,7 @@ export function trackerStepsOf(raw: unknown, nameOf?: (id: string) => string): T
     return {
       role: str(s.role) ?? 'Approver',
       approverId: id,
-      approverName: str(s.approver_name) ?? str(s.actor) ?? (resolved && resolved !== '—' ? resolved : 'Not resolved'),
+      approverName: str(s.approver_name) ?? str(s.actor) ?? (resolved && resolved !== '—' && resolved !== '-' ? resolved : 'Not resolved'),
       approverCode: str(s.approver_code),
       status: (str(s.status) ?? 'PENDING').toUpperCase(),
       actedAt: str(s.acted_at),
@@ -103,7 +103,7 @@ export interface TrackerSummary {
 /** "Now with Riya Nair (HR Head) since 22 Oct" — or what happened instead. */
 export function trackerSummary(steps: TrackerStep[], mrfStatus: string, opts: { raisedAt?: string | null; raisedBy?: string | null; viewerId?: string | null } = {}): TrackerSummary {
   const st = String(mrfStatus || '').toUpperCase();
-  if (st === 'DRAFT') return { text: 'Draft — not sent for approval yet', tone: 'mute' };
+  if (st === 'DRAFT') return { text: 'Draft: not sent for approval yet', tone: 'mute' };
   const rejected = steps.find((s) => s.status === 'REJECTED');
   const sentBack = [...steps].reverse().find((s) => s.status === 'REVISION');
   if (st === 'REJECTED') {
@@ -113,11 +113,11 @@ export function trackerSummary(steps: TrackerStep[], mrfStatus: string, opts: { 
   }
   if (st === 'NEEDS_REVISION') {
     const who = opts.raisedBy ? opts.raisedBy : 'the raiser';
-    return { text: `Back with ${who} for changes${sentBack ? ` — sent back by ${sentBack.approverName}${sentBack.actedAt ? ` on ${trackerDate(sentBack.actedAt)}` : ''}` : ''}`, tone: 'warn', since: sentBack?.actedAt ?? null };
+    return { text: `Back with ${who} for changes${sentBack ? `, sent back by ${sentBack.approverName}${sentBack.actedAt ? ` on ${trackerDate(sentBack.actedAt)}` : ''}` : ''}`, tone: 'warn', since: sentBack?.actedAt ?? null };
   }
   if (LIVE.has(st)) {
     const idx = steps.findIndex((s) => s.status === 'PENDING');
-    if (idx < 0) return { text: steps.length ? 'Waiting for approval — no step is marked pending' : 'Waiting for approval — no approver routed', tone: 'warn' };
+    if (idx < 0) return { text: steps.length ? 'Waiting for approval: no step is marked pending' : 'Waiting for approval: no approver routed', tone: 'warn' };
     const now = steps[idx];
     const prevDone = [...steps.slice(0, idx)].reverse().find((s) => s.status === 'APPROVED' && s.actedAt);
     const since = prevDone?.actedAt ?? opts.raisedAt ?? null;
@@ -133,11 +133,11 @@ export function trackerSummary(steps: TrackerStep[], mrfStatus: string, opts: { 
     const missing = steps.length - done.length;
     const last = [...done].reverse().find((s) => s.actedAt);
     const base = st === 'CLOSED' ? 'Closed' : 'Approved';
-    if (!steps.length) return { text: `${base} — no approval chain recorded`, tone: 'mute' };
-    if (missing > 0) return { text: `${base} — ${missing} of ${steps.length} approval step${steps.length === 1 ? '' : 's'} never recorded`, tone: 'warn' };
+    if (!steps.length) return { text: `${base}: no approval chain recorded`, tone: 'mute' };
+    if (missing > 0) return { text: `${base}: ${missing} of ${steps.length} approval step${steps.length === 1 ? '' : 's'} never recorded`, tone: 'warn' };
     return { text: `${base} by all ${done.length}${last?.actedAt ? ` · last on ${trackerDate(last.actedAt)}` : ''}`, tone: st === 'CLOSED' ? 'mute' : 'pos' };
   }
-  return { text: st ? st.replace(/_/g, ' ').toLowerCase() : '—', tone: 'mute' };
+  return { text: st ? st.replace(/_/g, ' ').toLowerCase() : '-', tone: 'mute' };
 }
 
 const STATE_TEXT: Record<StepState, string> = {

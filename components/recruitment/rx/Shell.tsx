@@ -118,6 +118,27 @@ export function TabRail({ tabs, active, onSelect }: { tabs: RailTab[]; active: s
     return () => { ro?.disconnect(); rail.removeEventListener('transitionend', onEnd); };
   }, [place]);
 
+  // Too wide for the room it has? Inside ESS the sidebar takes ~256px, so a 1180px window leaves
+  // the band ~920px and the 1100px media query never fires: the band overflowed and pushed the
+  // whole page sideways. Measure the rail itself. Once it overflows it switches to the compact,
+  // sideways-scrolling band (.is-tight); it switches back only when the width it needed returns,
+  // so the compact layout fitting does not flip it straight back (no resize loop).
+  const [tight, setTight] = React.useState(false);
+  const needRef = React.useRef(0);
+  React.useEffect(() => {
+    const rail = railRef.current; if (!rail) return;
+    const check = () => {
+      const w = rail.clientWidth;
+      if (!rail.classList.contains('is-tight')) {
+        if (rail.scrollWidth > w + 1) { needRef.current = rail.scrollWidth; setTight(true); }
+      } else if (needRef.current && w >= needRef.current) setTight(false);
+    };
+    check();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null;
+    ro?.observe(rail);
+    return () => ro?.disconnect();
+  }, []);
+
   // Dock BELOW the host app's own sticky bar, not on top of it.
   //
   // The rail is `position:sticky; top:0`. Inside ESS the portal's top bar (the
@@ -170,7 +191,7 @@ export function TabRail({ tabs, active, onSelect }: { tabs: RailTab[]; active: s
     <>
       <div className="rx-rail-sentinel" ref={sentinelRef} aria-hidden="true" />
       <nav ref={railRef} aria-label="Recruitment sections"
-        className={['rx-rail', ready && 'has-ind', stuck && 'is-stuck'].filter(Boolean).join(' ')}
+        className={['rx-rail', ready && 'has-ind', stuck && 'is-stuck', tight && 'is-tight'].filter(Boolean).join(' ')}
         style={{ gridTemplateColumns: present.map((g) => `minmax(max-content, ${tabs.filter((t) => t.group === g).length}fr)`).join(' '), ['--rx-dock-top' as string]: `${dockTop}px` }}>
         <span className="rx-ind" ref={indRef} aria-hidden="true" />
         {present.map((g, i) => (

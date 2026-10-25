@@ -62,11 +62,11 @@ export async function POST(req: NextRequest) {
   const vPct = b.variable_pct === undefined ? Number(r.offered_variable_pct ?? neg?.variable_pct ?? 0) : num(b.variable_pct)
   const ctcChanged = Math.round(ctc) !== Math.round(Number(r.offered_ctc || 0)) || Number(vPct) !== Number(r.offered_variable_pct ?? neg?.variable_pct ?? 0)
   if (ctcChanged) {
-    if (neg?.is_stipend) return bad('This is a stipend offer — change the stipend from Negotiation and raise a fresh request.')
+    if (neg?.is_stipend) return bad('This is a stipend offer. Change the stipend from Negotiation and raise a fresh request.')
     if (!(ctc > 0)) return bad('Enter the annual CTC')
     if (!(vPct >= 0 && vPct < 100)) return bad('Variable % must be between 0 and 99')
     const base = r.revised_calculation || neg?.calculation_data || {}
-    if (!base.state || base.minWage == null) return bad('The original salary calculation is missing its inputs — revise this offer from Negotiation instead.')
+    if (!base.state || base.minWage == null) return bad('The original salary calculation is missing its inputs. Revise this offer from Negotiation instead.')
     const model = computeCtc({
       ctcAnnual: ctc, variableAnnual: Math.round(ctc * vPct / 100), minWage: Number(base.minWage), state: base.state,
       gratuity: base.gratuity, bonusPct: Number(base.bonusPct) || 0, bonusMode: base.bonusMode, epfCeiling: base.epfCeiling, hraMax: base.hraMax,

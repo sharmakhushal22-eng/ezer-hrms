@@ -42,10 +42,10 @@ export async function POST(req: NextRequest) {
   const res = await notify({
     subjectId: to,                  // audience is SELF — it is about them
     code: isB ? 'BIRTHDAY' : 'ANNIVERSARY',
-    title: isB ? '🎂 Happy Birthday!' : `🌟 Happy Work Anniversary — ${years} year${plural}!`,
+    title: isB ? '🎂 Happy Birthday!' : `🌟 Happy Work Anniversary: ${years} year${plural}!`,
     body: isB
-      ? `Wishing you a very happy birthday, ${first}! Have a wonderful year ahead. — Team HR`
-      : `Congratulations on completing ${years} year${plural} with us, ${first}. Thank you for everything you do! — Team HR`,
+      ? `Wishing you a very happy birthday, ${first}! Have a wonderful year ahead. Team HR`
+      : `Congratulations on completing ${years} year${plural} with us, ${first}. Thank you for everything you do! Team HR`,
   })
 
   const blind = res.undeliverable.length > 0

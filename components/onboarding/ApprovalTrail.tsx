@@ -38,11 +38,11 @@ function stepLine(s: TrailStep, holdersKnown: boolean): React.ReactNode {
         ? <>Generated{s.remark ? <> · <b>{s.remark}</b></> : null}{s.by ? ` by ${s.by}` : ''}{s.at ? ` on ${dayLabel(s.at)}` : ''}</>
         : <>Approved{s.by ? <> by <b>{s.by}</b></> : ''}{s.at ? ` on ${dayLabel(s.at)}` : ''}</>
     case 'waiting':
-      return <>Waiting on {who ? <b>{who}</b> : holdersKnown ? <span style={{ color: TK.critical }}>nobody — no one holds this role</span> : 'the team'}{since(s.since)}</>
+      return <>Waiting on {who ? <b>{who}</b> : holdersKnown ? <span style={{ color: TK.critical }}>nobody, no one holds this role</span> : 'the team'}{since(s.since)}</>
     case 'returned':
       return <>Returned{s.by ? <> by <b>{s.by}</b></> : ''}{s.at ? ` on ${dayLabel(s.at)}` : ''}{s.remark ? <span style={{ display: 'block', color: TK.inkSoft, marginTop: 2 }}>“{s.remark}”</span> : null}</>
     case 'skipped':
-      return <>Not on record — the code was generated without it</>
+      return <>Not on record: the code was generated without it</>
     default:
       return s.key === 'HR_MANAGER' ? <>Starts when the candidate submits the form{who ? ` · ${who}` : ''}</>
         : s.key === 'CODE' ? <>After IT, Admin and Payroll approve{who ? ` · ${who}` : ''}</>
@@ -130,7 +130,7 @@ export function ApprovalsCell({ name, trail, holdersKnown, managers, readiness }
 }) {
   const k = toneOf(trail.tone)
   const waiting = trail.steps.filter(s => s.state === 'waiting')
-  const sub = trail.beforeSubmit ? (trail.summary === 'Returned' ? 'back with the candidate' : 'after the form is submitted')
+  const sub = trail.beforeSubmit ? (trail.summary === 'Returned' ? 'back with the candidate' : 'after submission')
     : waiting.length ? peopleLine(waiting.flatMap(s => s.people), 1) || 'see who' : trail.summary === 'Complete' ? 'all signed off' : ''
   return (
     <AnchoredPopover hover width={360} label={`Approvals for ${name}: ${trail.summary}. Now with ${trail.nowWith}`}

@@ -107,7 +107,7 @@ function LeaveTypeModal({ row, companies, branches, onClose, onSave }: { row: Le
           <Chk k="probation_eligible" label="Eligible during probation" />
         </div>
 
-        <div style={T.sec}>Applies to (scope — blank = all)</div>
+        <div style={T.sec}>Applies to (scope: blank = all)</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
           <div><label style={T.lbl}>Company</label><select style={T.input} value={f.company_id || ''} onChange={e => { set('company_id', e.target.value || null); set('branch_id', null) }}><option value="">All companies</option>{companies.map((c:any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={T.lbl}>Branch / Location</label><select style={T.input} value={f.branch_id || ''} onChange={e => set('branch_id', e.target.value || null)} disabled={!f.company_id}><option value="">All branches</option>{branches.filter((b:any) => b.company_id === f.company_id).map((b:any) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
@@ -117,10 +117,10 @@ function LeaveTypeModal({ row, companies, branches, onClose, onSave }: { row: Le
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:8 }}>
           <div><label style={T.lbl}>Default annual quota</label><input type="number" style={T.input} value={f.annual_quota ?? 0} onChange={e => set('annual_quota', Number(e.target.value))} /></div>
           <div><label style={T.lbl}>Carry-forward max</label><input type="number" style={T.input} value={f.carry_forward_max ?? 0} onChange={e => set('carry_forward_max', Number(e.target.value))} /></div>
-          <div><label style={T.lbl}>Encash after (balance)</label><input type="number" style={T.input} value={f.encashment_after ?? ''} placeholder="—" onChange={e => set('encashment_after', numN(e.target.value))} /></div>
+          <div><label style={T.lbl}>Encash after (balance)</label><input type="number" style={T.input} value={f.encashment_after ?? ''} placeholder="-" onChange={e => set('encashment_after', numN(e.target.value))} /></div>
           <div><label style={T.lbl}>Accrual</label><select style={T.input} value={f.accrual} onChange={e => set('accrual', e.target.value)}><option value="YEARLY">Yearly</option><option value="MONTHLY">Monthly</option><option value="NONE">None</option></select></div>
-          <div><label style={T.lbl}>Doc required after (days)</label><input type="number" style={T.input} value={f.doc_required_after ?? ''} placeholder="—" onChange={e => set('doc_required_after', numN(e.target.value))} /></div>
-          <div><label style={T.lbl}>Probation limit</label><input type="number" style={T.input} value={f.probation_limit ?? ''} placeholder="—" onChange={e => set('probation_limit', numN(e.target.value))} /></div>
+          <div><label style={T.lbl}>Doc required after (days)</label><input type="number" style={T.input} value={f.doc_required_after ?? ''} placeholder="-" onChange={e => set('doc_required_after', numN(e.target.value))} /></div>
+          <div><label style={T.lbl}>Probation limit</label><input type="number" style={T.input} value={f.probation_limit ?? ''} placeholder="-" onChange={e => set('probation_limit', numN(e.target.value))} /></div>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'2px 20px', marginBottom:16 }}>
           <Chk k="laps" label="Lapses at year-end" />
@@ -146,7 +146,7 @@ function LeaveTypesTab({ types, onEdit, onAdd, onToggle, onDelete }: {
   return (
     <>
       <div style={{ display:'flex', alignItems:'center', marginBottom:12 }}>
-        <div style={{ fontSize:12, color:TK.muted }}>Leave types are <b>data</b> — add a new type and a row is inserted; no code changes.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Leave types are <b>data</b>: add a new type and a row is inserted; no code changes.</div>
         <button style={{ ...T.pri, marginLeft:'auto' }} onClick={onAdd}>+ Add leave type</button>
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(330px,1fr))', gap:12 }}>
@@ -205,14 +205,14 @@ function BranchQuotaTab({ companies, branches, rows, company, branch, fy, onComp
     <>
       <div style={{ ...T.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
         <div style={{ display:'grid', gridTemplateColumns:'2fr 2fr 1fr', gap:12 }}>
-          <div><label style={T.lbl}>Company</label><select style={T.input} value={company} onChange={e => { const v = e.target.value; onCompany(v); if (v === 'ALL') onBranch('') }}><option value="">— Select company —</option><option value="ALL">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label style={T.lbl}>Company</label><select style={T.input} value={company} onChange={e => { const v = e.target.value; onCompany(v); if (v === 'ALL') onBranch('') }}><option value="">Select company</option><option value="ALL">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={T.lbl}>Branch</label><select style={T.input} value={branch} onChange={e => onBranch(e.target.value)} disabled={!company || company === 'ALL'}><option value="">Company default (all branches)</option>{coBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
           <div><label style={T.lbl}>FY</label><input style={T.input} value={fy} onChange={e => onFy(e.target.value)} placeholder="2026-27" /></div>
         </div>
-        <div style={{ fontSize:11, color:TK.faint, marginTop:8 }}>A branch-specific quota overrides the company default. The <b>source</b> column shows where a value comes from — branch / company / catalog. Saving creates or updates the policy row for this exact scope.</div>
+        <div style={{ fontSize:11, color:TK.faint, marginTop:8 }}>A branch-specific quota overrides the company default. The <b>source</b> column shows where a value comes from: branch / company / catalog. Saving creates or updates the policy row for this exact scope.</div>
       </div>
 
-      {company === 'ALL' && <div style={{ ...T.card, fontSize:12, color: TK.brand, background:TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>🌐 <b>All companies</b> — quotas below are shown from a template; clicking <b>Save</b> on a row applies that quota to <b>every</b> company (company-default scope).</div>}
+      {company === 'ALL' && <div style={{ ...T.card, fontSize:12, color: TK.brand, background:TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>🌐 <b>All companies</b>: quotas below are shown from a template; clicking <b>Save</b> on a row applies that quota to <b>every</b> company (company-default scope).</div>}
       {!company ? <div style={{ ...T.card, textAlign:'center', color:TK.faint, padding:30 }}>Pick a company to see its quota.</div> : (
         <div style={{ ...T.card, overflowX:'auto', padding:0 }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
@@ -341,7 +341,7 @@ function UploadTab() {
         desc="Each employee's opening / accrued / used / encashed per leave type. For mid-year migration or correction."
         columns={['Employee Code', 'Leave Type Code', 'Year', 'Opening', 'Accrued', 'Used', 'Encashed']}
         errorFile="balance_errors.xlsx" onTemplate={downloadBalanceTemplate} onParse={parseBalanceFile} onCommit={commitBalances} />
-      <div style={{ fontSize: 12, color: TK.muted }}>Templates include "Leave Types / Companies / Branches" reference sheets — copy valid codes from there.</div>
+      <div style={{ fontSize: 12, color: TK.muted }}>Templates include "Leave Types / Companies / Branches" reference sheets. Copy valid codes from there.</div>
     </>
   )
 }
@@ -407,7 +407,7 @@ export default function LeaveConfigPage() {
     notify(`${t.short_name} ${t.is_active ? 'deactivated' : 'activated'}.`); reload()
   }
   async function delType(t: LeaveType) {
-    if (t.is_system) { notify('System type protected — deactivate instead.', 'error'); return }
+    if (t.is_system) { notify('System type protected. Deactivate instead.', 'error'); return }
     if (!confirm(`Delete ${t.short_name}? All of its policies and balances will be deleted too.`)) return
     const { error } = await deleteLeaveType(t.id)
     if (error) { notify('Delete failed: ' + error.message, 'error'); return }

@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK, F, W, S, R, E, Z, tone, numeric, eyebrow, inputStyle, Badge, type Tone } from '@/lib/ui'
 
-const money = (n?: number | null) => (n == null) ? '—' : '₹' + Number(n).toLocaleString('en-IN')
+const money = (n?: number | null) => (n == null) ? '-' : '₹' + Number(n).toLocaleString('en-IN')
 
 // Same skins as the record sections in EmployeeProfileView: a card per group, a plain
 // heading, labels above controls, 36px controls, and the system's button shapes.
@@ -30,16 +30,16 @@ const C = {
 }
 /** A secondary button tinted to the outcome it records — Passed, Approve, Reject. */
 const outTone = (t: Tone): React.CSSProperties => ({ ...C.out, color: tone(t).fg, borderColor: tone(t).edge })
-const fmt = (s?: string | null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+const fmt = (s?: string | null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
 const addDays = (iso: string, n: number) => { if (!iso) return ''; const d = new Date(iso); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10) }
 const todayISO = () => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10) }
 
 function Row({ k, v }: { k: string; v: any }) {
-  const empty = v == null || v === '' || v === '—'
+  const empty = v == null || v === '' || v === '-'
   return (
     <div style={{ display:'flex', justifyContent:'space-between', gap:S.md, padding:'8px 0', borderBottom:`1px solid ${TK.line}`, fontSize:F.small }}>
       <span style={{ color:TK.muted }}>{k}</span>
-      <span style={{ fontWeight: empty ? W.regular : W.semi, color: empty ? TK.faint : TK.ink, textAlign:'right', overflowWrap:'anywhere', ...numeric }}>{empty ? '—' : v}</span>
+      <span style={{ fontWeight: empty ? W.regular : W.semi, color: empty ? TK.faint : TK.ink, textAlign:'right', overflowWrap:'anywhere', ...numeric }}>{empty ? '-' : v}</span>
     </div>
   )
 }
@@ -61,10 +61,19 @@ function EmptyCard({ title, hint }: { title: string; hint?: string }) {
     </div>
   )
 }
+/** "AADHAAR_FRONT" -> "Aadhaar front". The code is a storage key, not a label. */
+const DOC_WORDS: Record<string, string> = { PAN: 'PAN', UAN: 'UAN', ID: 'ID', EXP: 'Experience', AADHAAR: 'Aadhaar' }
+const docLabel = (code?: string | null) => {
+  const parts = String(code || '').split(/[_\s]+/).filter(Boolean)
+  if (!parts.length) return 'Document'
+  return parts.map((p, i) => DOC_WORDS[p.toUpperCase()] ?? (i ? p.toLowerCase() : p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())).join(' ')
+}
 /** Document verification state. */
 function DocBadge({ d }: { d: { hr_verified?: boolean | null; ai_status?: string | null } }) {
   return d.hr_verified ? <Badge t="positive">HR verified</Badge>
     : d.ai_status === 'VERIFIED' ? <Badge t="brand">AI verified</Badge>
+    // "Failed" alone reads as if the upload failed; it is the automatic check.
+    : d.ai_status === 'FAILED' ? <Badge t="warning">AI check failed</Badge>
     : <Badge t="warning">{d.ai_status ? String(d.ai_status).replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : 'Uploaded'}</Badge>
 }
 
@@ -83,18 +92,18 @@ function OnboardingTab({ onb }: { onb: HR.OnboardingInfo | null }) {
       </div>
       <div style={C.card}>
         <div style={C.sec}>Personal (from onboarding)</div>
-        <Row k="Full Name" v={p.full_name} /><Row k="Date of Birth" v={p.dob ? fmt(p.dob) : '—'} />
+        <Row k="Full Name" v={p.full_name} /><Row k="Date of Birth" v={p.dob ? fmt(p.dob) : '-'} />
         <Row k="Gender" v={p.gender} /><Row k="Father's Name" v={p.father_name || p.fatherSpouseName} />
         <Row k="Mother's Name" v={p.mother_name} /><Row k="Blood Group" v={p.blood_group} /><Row k="Marital Status" v={p.marital_status} />
       </div>
       <div style={C.card}>
         <div style={C.sec}>Contact and address</div>
-        <Row k="Mobile" v={ct.mobile} /><Row k="Personal Email" v={ct.personal_email} /><Row k="Permanent Address" v={perm || '—'} />
+        <Row k="Mobile" v={ct.mobile} /><Row k="Personal Email" v={ct.personal_email} /><Row k="Permanent Address" v={perm || '-'} />
       </div>
       <div style={C.card}>
         <div style={C.sec}>KYC and bank</div>
         <Row k="PAN" v={st.pan_number} /><Row k="Bank" v={st.bank_name} />
-        <Row k="Account" v={st.bank_account ? `XXXX${String(st.bank_account).slice(-4)}` : '—'} /><Row k="IFSC" v={st.bank_ifsc} />
+        <Row k="Account" v={st.bank_account ? `XXXX${String(st.bank_account).slice(-4)}` : '-'} /><Row k="IFSC" v={st.bank_ifsc} />
       </div>
       <div style={C.card}>
         <div style={C.sec}>Documents <Badge t="neutral" size="sm">{onb.documents.length}</Badge></div>
@@ -172,7 +181,7 @@ function ResignationForm({ noticeDays, onSave }: { noticeDays: number; onSave: (
       </div>
       {empLwd && (shortfall > 0
         ? <Banner t="critical"><b>Notice shortfall = {shortfall} day(s).</b> A recovery mail will be sent to Payroll.</Banner>
-        : <Banner t="positive">Full notice served — no recovery needed.</Banner>)}
+        : <Banner t="positive">Full notice served. No recovery needed.</Banner>)}
       <button style={C.pri} onClick={() => { if (!dor || !empLwd) return; onSave({ date_of_resignation: dor, notice_period_days: noticeDays || 0, lwd_as_per_policy: policyLwd, lwd_confirmed_by_emp: empLwd }) }}>Initiate resignation</button>
     </div>
   )
@@ -227,7 +236,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
     if (!isMid || !toBranch) return null
     if (tb && fromBranch && tb.state !== fromBranch.state)
       return `Effective date is mid-month. For this month, statutory (PT/LWF/PF) will be per the PREVIOUS state (${fromBranch.state}). New state (${tb.state}) applies next month.`
-    return `Effective mid-month; statutory stays ${fromBranch?.state || tb?.state || '—'} this month.`
+    return `Effective mid-month; statutory stays ${fromBranch?.state || tb?.state || '-'} this month.`
   })()
 
   const lastDay = transferDate ? addDays(transferDate, -1) : ''
@@ -259,7 +268,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
           <div style={{ ...C.g2, marginBottom:S.md }}>
             <div><label style={C.label}>New reporting manager</label>
               <select style={C.input} value={mgr} onChange={e => setMgr(e.target.value)}>
-                <option value="">— unchanged —</option>
+                <option value="">unchanged</option>
                 {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}{m.emp_code ? ` (${m.emp_code})` : ''}</option>)}
               </select></div>
             <div><label style={C.label}>New designation</label><input style={C.input} value={desig} onChange={e => setDesig(e.target.value)} placeholder="optional" /></div>
@@ -267,7 +276,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
           <div style={{ ...C.g2, marginBottom:S.md }}>
             <div><label style={C.label}>New department</label>
               <select style={C.input} value={dept} onChange={e => setDept(e.target.value)}>
-                <option value="">— unchanged —</option>
+                <option value="">unchanged</option>
                 {compDepts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
               </select></div>
             <div><label style={C.label}>New cost centre</label><input style={C.input} value={cc} onChange={e => setCc(e.target.value)} placeholder="optional" /></div>
@@ -275,7 +284,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
           <div style={{ ...C.g2, marginBottom:S.md }}>
             <div><label style={C.label}>Shift</label>
               <select style={C.input} value={shift} onChange={e => setShift(e.target.value)}>
-                <option value="">— unchanged —</option>
+                <option value="">unchanged</option>
                 {compShifts.map(s => <option key={s.id} value={s.id}>{s.shift_code}</option>)}
               </select></div>
             <div><label style={C.label}>Benefit</label>
@@ -313,14 +322,14 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
           <div style={{ ...C.g2, marginBottom:S.md }}>
             <div><label style={C.label}>To department</label>
               <select style={C.input} value={iDept} onChange={e => setIDept(e.target.value)}>
-                <option value="">— optional —</option>
+                <option value="">optional</option>
                 {interDepts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
               </select></div>
             <div><label style={C.label}>New designation</label><input style={C.input} value={iDesig} onChange={e => setIDesig(e.target.value)} placeholder="optional" /></div>
           </div>
           <div style={{ ...C.g2, marginBottom:S.md }}>
             <div><label style={C.label}>Transfer date</label><input type="date" style={C.input} value={transferDate} onChange={e => setTransferDate(e.target.value)} /></div>
-            <div><label style={C.label}>Last working day (old company)</label><input style={{ ...C.input, background: TK.sunken }} value={lastDay ? fmt(lastDay) : '—'} readOnly /></div>
+            <div><label style={C.label}>Last working day (old company)</label><input style={{ ...C.input, background: TK.sunken }} value={lastDay ? fmt(lastDay) : '-'} readOnly /></div>
           </div>
           <div style={{ marginBottom:S.md }}><label style={C.label}>Benefit mode</label>
             <select style={{ ...C.input, maxWidth: 260 }} value={benefitMode} onChange={e => setBenefitMode(e.target.value as any)}>
@@ -355,7 +364,7 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
       {onb.documents.map((d, i) => (
         <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:S.md, flexWrap:'wrap', padding:'10px 0', borderTop: i ? `1px solid ${TK.line}` : 'none', fontSize:F.small }}>
           <div style={{ minWidth:0, flex:'1 1 200px' }}>
-            <div style={{ fontWeight:W.semi, color:TK.ink }}>{d.doc_code}</div>
+            <div style={{ fontWeight:W.semi, color:TK.ink }}>{docLabel(d.doc_code)}</div>
             <div style={{ fontSize:F.tiny, color:TK.muted, overflowWrap:'anywhere' }}>{d.file_name || 'No file name'}</div>
           </div>
           <div style={{ display:'flex', gap:S.sm, alignItems:'center', flexShrink:0 }}>
@@ -379,7 +388,7 @@ function BreakupRow({ label, monthly, annual, kind }: { label: string; monthly: 
     <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', gap:S.sm, padding:'8px 14px', background:bg, borderBottom: `1px solid ${TK.line}`, fontSize:F.small }}>
       <span style={{ color: bold ? color : TK.inkSoft, fontWeight: bold ? W.bold : W.regular }}>{label}</span>
       <span style={{ textAlign:'right', fontWeight: bold ? W.bold : W.medium, color: bold ? color : TK.ink, ...numeric }}>{money(monthly)}</span>
-      <span style={{ textAlign:'right', fontWeight: bold ? W.bold : W.medium, color: bold ? color : TK.muted, ...numeric }}>{annual != null ? money(annual) : '—'}</span>
+      <span style={{ textAlign:'right', fontWeight: bold ? W.bold : W.medium, color: bold ? color : TK.muted, ...numeric }}>{annual != null ? money(annual) : '-'}</span>
     </div>
   )
 }
@@ -405,7 +414,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
         <div style={C.card}>
           <div style={C.sec}>CTC summary</div>
           <Row k="Annual CTC" v={money(salary.offered_ctc)} />
-          <Row k="Variable %" v={salary.variable_pct != null ? `${salary.variable_pct}%` : '—'} />
+          <Row k="Variable %" v={salary.variable_pct != null ? `${salary.variable_pct}%` : '-'} />
           <Row k="Monthly In-hand (est.)" v={money(salary.net_monthly)} />
           {salary.basic_monthly != null && <Row k="Basic (monthly)" v={money(salary.basic_monthly)} />}
           {salary.hra_monthly != null && <Row k="HRA (monthly)" v={money(salary.hra_monthly)} />}
@@ -435,7 +444,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
           </div>
         </div>
         <Footnote>
-          {isConsultant ? 'Consultant professional fee. GST @18% and TDS u/s 194J apply where registered.' : 'Training stipend — no statutory deductions.'}
+          {isConsultant ? 'Consultant professional fee. GST @18% and TDS u/s 194J apply where registered.' : 'Training stipend. No statutory deductions.'}
         </Footnote>
       </div>
     )
@@ -583,13 +592,13 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
       {/* Active banners + close actions */}
       {states.pip && <Banner t="warning"><b>PIP active</b> since {fmt(states.pip.start_date)}.
         <div style={{ marginTop:S.sm, display:'flex', gap:6, flexWrap:'wrap' }}>
-          <button style={outTone('positive')} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'PASSED', by), 'PIP closed — Passed')}>Mark passed</button>
-          <button style={outTone('critical')} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'FAILED', by), 'PIP closed — Failed')}>Mark failed</button>
+          <button style={outTone('positive')} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'PASSED', by), 'PIP closed: Passed')}>Mark passed</button>
+          <button style={outTone('critical')} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'FAILED', by), 'PIP closed: Failed')}>Mark failed</button>
         </div></Banner>}
       {states.sabbatical && <Banner t="info"><b>On sabbatical</b> {fmt(states.sabbatical.from_date)} → {fmt(states.sabbatical.to_date)}.
         <div style={{ marginTop:S.sm }}><button style={C.out} onClick={() => run(() => HR.markSabbaticalReturned(states.sabbatical.id, employee.id, todayISO(), by), 'Marked returned')}>Mark returned (today)</button></div></Banner>}
       {states.abscond && <Banner t="critical"><b>Absconding</b> since {fmt(states.abscond.abscond_from)}.
-        <div style={{ marginTop:S.sm }}><button style={C.out} onClick={() => run(() => HR.closeAbscond(states.abscond.id, employee.id, todayISO(), by), 'Abscond closed — returned')}>Close (returned today)</button></div></Banner>}
+        <div style={{ marginTop:S.sm }}><button style={C.out} onClick={() => run(() => HR.closeAbscond(states.abscond.id, employee.id, todayISO(), by), 'Abscond closed: returned')}>Close (returned today)</button></div></Banner>}
       {states.resignation && <Banner t="brand"><b>Resignation {states.resignation.status}</b> · LWD {fmt(states.resignation.lwd_confirmed_by_emp)} · shortfall {states.resignation.notice_shortfall_days}d
         <div style={{ marginTop:S.sm }}><button style={C.out} onClick={() => run(() => HR.withdrawResignation(states.resignation.id, employee.id, by), 'Resignation withdrawn')}>Withdraw</button></div></Banner>}
 
@@ -636,9 +645,9 @@ function Toast({ t }: { t: { msg: string; type: 'success'|'error' } }) {
 
 /** A request's payload as "key: value" pairs, not raw JSON. */
 function summarise(data: any): string {
-  if (!data || typeof data !== 'object') return String(data ?? '—')
+  if (!data || typeof data !== 'object') return String(data ?? '-')
   const parts = Object.entries(data).filter(([, v]) => v !== null && v !== undefined && v !== '')
     .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
   const out = parts.join(' · ')
-  return out.length > 120 ? out.slice(0, 117) + '…' : (out || '—')
+  return out.length > 120 ? out.slice(0, 117) + '…' : (out || '-')
 }

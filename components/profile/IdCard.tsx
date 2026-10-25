@@ -24,7 +24,7 @@ interface Issued {
 
 const ini = (n: string) => n.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 const pretty = (v?: string | null) => {
-  if (!v) return '—'
+  if (!v) return '-'
   const d = new Date(v)
   return isNaN(d.getTime()) ? v
     : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -102,9 +102,9 @@ export default function IdCard({ name, designation, company, code, doj, blood, e
           <div className="grid2">
             <div><div className="lb">Employee code</div><div className="vv">{code}</div></div>
             <div><div className="lb">Date of joining</div><div className="vv">{pretty(doj)}</div></div>
-            <div><div className="lb">Blood group</div><div className="vv">{blood || '—'}</div></div>
+            <div><div className="lb">Blood group</div><div className="vv">{blood || '-'}</div></div>
             <div><div className="lb">Emergency</div>
-                 <div className="vv">{(emergency || '').split('·').pop()?.trim() || '—'}</div></div>
+                 <div className="vv">{(emergency || '').split('·').pop()?.trim() || '-'}</div></div>
           </div>
         </>
       ) : (

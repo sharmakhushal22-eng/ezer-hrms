@@ -353,7 +353,7 @@ export default function Social({ employeeId, initial }: { employeeId?: string; i
                 <section className="card">
                   <h2><span className="ic"><Trophy /></span> Recently recognised</h2>
                   <div className="hint">
-                    Recognition here is thanks, never pay — it changes nothing about anyone’s salary.
+                    Recognition here is thanks, never pay. It changes nothing about anyone’s salary.
                   </div>
                   {data.wall.length
                     ? data.wall.map(p => (
@@ -369,7 +369,7 @@ export default function Social({ employeeId, initial }: { employeeId?: string; i
             <>
               <section className={'card' + (todayBirthdays.length ? ' is-today' : '')}>
                 <h2><span className="ic"><Cake /></span> Today</h2>
-                <div className="hint">Say something — it takes ten seconds and it is remembered.</div>
+                <div className="hint">Say something. It takes ten seconds and it is remembered.</div>
                 {todayBirthdays.length
                   ? todayBirthdays.map(p => (
                       <PostBlock key={p.id} post={p} me={me} onChange={update} onReact={react} onSay={say} />
@@ -452,7 +452,7 @@ export default function Social({ employeeId, initial }: { employeeId?: string; i
                         <div style={{ paddingLeft: 55 }}>
                           <Empty
                             title="No introduction yet"
-                            hint={`${p.subject.name.split(' ')[0]} has not written one. It is theirs to write, not HR's — welcome them anyway.`}
+                            hint={`${p.subject.name.split(' ')[0]} has not written one. It is theirs to write, not HR's. Welcome them anyway.`}
                           />
                         </div>
                       )}
@@ -465,7 +465,7 @@ export default function Social({ employeeId, initial }: { employeeId?: string; i
 
         <p style={{ fontSize: 11.5, color: 'var(--ez-faint)', textAlign: 'center', margin: '18px 0 40px' }}>
           Showing {active.label.toLowerCase()} for {data.group.name}.
-          Birthdays show the day and month only — never the year.
+          Birthdays show the day and month only, never the year.
         </p>
       </div>
     </div>

@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
     }
     await Promise.all(tasks)
   } else {
-    emailSkipped = 'Email not configured (GMAIL_USER / GMAIL_APP_PASSWORD) — invites and ESS tasks were still created.'
+    emailSkipped = 'Email not configured (GMAIL_USER / GMAIL_APP_PASSWORD). Invites and ESS tasks were still created.'
   }
 
   return NextResponse.json({ ok: true, invited: ins.data?.length || 0, main: mainEmp?.full_name || null, panelists: panelIds.length, emailed, emailSkipped })

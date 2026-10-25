@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/ess/api'
 import { C as TK, Z } from '@/lib/ui'
-import { CHECKLISTS, missingItems, confirmationsOnly, type ChecklistField, type HeadTeam } from '@/lib/onboarding/checklists'
+import { CHECKLISTS, fieldsFor, missingItems, confirmationsOnly, type ChecklistField, type HeadTeam } from '@/lib/onboarding/checklists'
 import { rebuildFor, type SalaryBreakdown } from '@/lib/onboarding/salary-breakdown'
 import { SHEET_CSS, SectionView, SCHEMA, TEAM } from '@/components/onboarding/ReviewDrawer'
 
@@ -40,12 +40,14 @@ const TEAM_BLURB: Record<HeadTeam, string> = {
 // ── Sub-components live OUTSIDE the parent so typing never remounts them ──────────────────
 
 /** The team's checklist as tiles (yes / no items) and fields. */
-function Checklist({ team, values, onChange, readOnly }: { team: HeadTeam; values: Record<string, any>; onChange: (k: string, v: any) => void; readOnly: boolean }) {
+function Checklist({ team, values, onChange, readOnly, track }: { team: HeadTeam; values: Record<string, any>; onChange: (k: string, v: any) => void; readOnly: boolean; track?: string | null }) {
   const def = CHECKLISTS[team]
-  const missing = new Set(missingItems(team, values))
-  const bools = def.fields.filter(f => f.kind === 'bool'), inputs = def.fields.filter(f => f.kind !== 'bool')
-  const done = def.fields.filter(f => f.required).length - def.fields.filter(f => f.required && missing.has(f.label)).length
-  const total = def.fields.filter(f => f.required).length
+  // Only the items of this hiring track (a domestic joiner is not asked about FRRO; an overseas one not about PF).
+  const fields = fieldsFor(team, track)
+  const missing = new Set(missingItems(team, values, track))
+  const bools = fields.filter(f => f.kind === 'bool'), inputs = fields.filter(f => f.kind !== 'bool')
+  const done = fields.filter(f => f.required).length - fields.filter(f => f.required && missing.has(f.label)).length
+  const total = fields.filter(f => f.required).length
   // The typed details are facts on the record (kept by HR) — shown, never edited here.
   const fact = (f: ChecklistField) => {
     const v = values[f.key]
@@ -146,7 +148,7 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
   async function decide(action: 'approve' | 'return' | 'save') {
     if (!open) return
     if (action === 'return' && !remark.trim()) { say('Say what the candidate should fix.', 'error'); return }
-    if (action === 'approve') { const m = missingItems(team, check[team]); if (m.length) { say(`Confirm the checklist first: ${m.join(', ')}.`, 'error'); return } }
+    if (action === 'approve') { const m = missingItems(team, check[team], open?.item?.hiring_track); if (m.length) { say(`Confirm the checklist first: ${m.join(', ')}.`, 'error'); return } }
     setBusy(true)
     try {
       const r = await api('/api/ess/onboarding-approvals', employeeId, { method: 'POST', body: JSON.stringify({ onboarding_id: open.item.id, team, action, remark, checklist: confirmationsOnly(team, check[team]) }) })
@@ -167,7 +169,7 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
         <div style={{ fontSize: 13.5, fontWeight: 700, color: TK.ink }}>{it.full_name} <span style={{ color: TK.muted, fontWeight: 400 }}>· {it.designation || '—'}{it.department ? ` · ${it.department}` : ''}</span></div>
         <div style={{ fontSize: 11.5, color: TK.muted, marginTop: 1 }}>Joining {day(it.date_of_joining)} · submitted {day(it.submitted_at)}{it.waiting_on_me.length ? ` · waiting on you for ${it.waiting_on_me.map(t => TEAM[t]).join(', ')}` : ''}</div>
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-          {it.approvals.map(a => <span key={a.team} style={pill(a.status)} title={a.acted_by_name ? `${a.status === 'RETURNED' ? 'Returned' : 'Approved'} by ${a.acted_by_name} on ${day(a.acted_at)}${a.remark ? ` — ${a.remark}` : ''}` : 'Not decided yet'}>{TEAM[a.team]} · {a.status === 'APPROVED' ? `✓ ${a.acted_by_name || 'approved'}` : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>)}
+          {it.approvals.map(a => <span key={a.team} style={pill(a.status)} title={a.acted_by_name ? `${a.status === 'RETURNED' ? 'Returned' : 'Approved'} by ${a.acted_by_name} on ${day(a.acted_at)}${a.remark ? `: ${a.remark}` : ''}` : 'Not decided yet'}>{TEAM[a.team]} · {a.status === 'APPROVED' ? `✓ ${a.acted_by_name || 'approved'}` : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>)}
         </div>
       </div>
       <button disabled={busy} onClick={() => review(it)} style={it.waiting_on_me.length ? btn : btnO}>{it.waiting_on_me.length ? 'Open approval form' : 'View'}</button>
@@ -177,7 +179,7 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
   const item = open?.item
   const mine: Approval | null = open ? open.approvals.find((a: Approval) => a.team === team) : null
   const decided = mine?.status === 'APPROVED'
-  const missingNow = open ? missingItems(team, check[team]) : []
+  const missingNow = open ? missingItems(team, check[team], open.item?.hiring_track) : []
   const salary: SalaryBreakdown | null = open?.salary || null
   const n = (i: number) => String(i).padStart(2, '0')
   let sec = 0
@@ -224,7 +226,7 @@ export default function OnboardingApprovals({ employeeId, notify }: { employeeId
             {/* ── The team's checklist ── */}
             <section style={{ marginTop: 28 }}>
               <h3 className="rv-h">{n(++sec)} <span>{CHECKLISTS[team].title} · your checklist</span></h3>
-              <div style={{ marginTop: 14 }}><Checklist team={team} values={check[team] || {}} onChange={setField} readOnly={decided} /></div>
+              <div style={{ marginTop: 14 }}><Checklist team={team} values={check[team] || {}} onChange={setField} readOnly={decided} track={item?.hiring_track} /></div>
             </section>
 
             {/* ── Payroll: the salary structure being approved ── */}

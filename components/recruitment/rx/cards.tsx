@@ -43,7 +43,7 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, canDelete =
   const d = daysUntil(m.targetDate);
   const urgent = m.status === 'APPROVED' && d !== null && d <= 7 && m.filled < m.openings;
   const next = mrfNextStep(m);
-  const budgetAmount = m.budgetLabel ?? (m.budgetMaxRupees != null ? formatLakh(m.budgetMaxRupees, 1) : '—');
+  const budgetAmount = m.budgetLabel ?? (m.budgetMaxRupees != null ? formatLakh(m.budgetMaxRupees, 1) : '-');
   const budgetCaption = m.budgetCaption ?? (m.budgetLabel ? null : m.budgetMaxRupees != null ? 'max per year' : 'Not set');
   const budgetTitle = [budgetAmount, budgetCaption].filter(Boolean).join(' · ');
   return (
@@ -61,7 +61,7 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, canDelete =
           {urgent && <Badge tone="crit" live>{d! < 0 ? 'Past target' : `${d} days left`}</Badge>}
           {/* Past its validity date: a warning the compact card must still carry. */}
           {m.expired && <Badge tone="crit" title="Past its validity date">Expired</Badge>}
-          {m.confidential && <Badge tone="dark" dot={false} title="Confidential hiring — visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
+          {m.confidential && <Badge tone="dark" dot={false} title="Confidential hiring: visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
         </div>
         <h3 className="rx-mc-t" title={m.title}>{m.title}</h3>
         <div className="rx-mc-sub"><span title={m.department}><Icon name="building" />{m.department}</span><span title={m.location}><Icon name="pin" />{m.location}</span></div>
@@ -98,7 +98,7 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, canDelete =
             <span title={next.text} className="rx-mc-next"><NextStepLine step={next} /></span>)}
           <div className="rx-mc-act">
             {onReview && canReview && (
-              <button type="button" className="rx-btn sm p" onClick={onReview} aria-label={`Review the approval request for ${m.title}`} title="It is waiting on you — open the request to approve, send back or reject">Review request</button>)}
+              <button type="button" className="rx-btn sm p" onClick={onReview} aria-label={`Review the approval request for ${m.title}`} title="It is waiting on you. Open the request to approve, send back or reject">Review request</button>)}
             <button type="button" className="rx-btn g" onClick={onView} aria-label={`View ${m.title}`} title="View"><Icon name="eye" /></button>
             {onCloseMrf && canCloseReopen && m.status === 'APPROVED' && (
               <button type="button" className="rx-btn g" onClick={onCloseMrf} aria-label={`Close ${m.title}`} title="Close MRF"><Icon name="lock" /></button>)}
@@ -121,7 +121,7 @@ export function CandidateCard({ c, next, onOpen }: { c: CandidateVM; next: NextS
         <Avatar initials={initialsOf(c.name)} tone={toneFor(c.name)} />
         <span style={{ minWidth: 0, flex: 1, display: 'block' }}>
           <span className="rx-name" style={{ fontSize: 13.5, display: 'block' }}>{c.name}</span>
-          <span className="rx-meta" style={{ fontSize: 12, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.currentRole ?? '—'}</span>
+          <span className="rx-meta" style={{ fontSize: 12, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.currentRole ?? '-'}</span>
         </span>
       </span>
       <span style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'var(--ez-sunken)' }}>
@@ -132,7 +132,7 @@ export function CandidateCard({ c, next, onOpen }: { c: CandidateVM; next: NextS
       <span className="rx-row" style={{ justifyContent: 'space-between' }}>
         <span className="rx-meta" style={{ fontSize: 12 }}>{c.source ?? ''}</span>
         <span className="rx-row" style={{ gap: 6 }}>
-          {c.confidential && <Badge tone="dark" dot={false} title="Confidential hiring — visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
+          {c.confidential && <Badge tone="dark" dot={false} title="Confidential hiring: visible to the HR Head and HR Manager only">🔒 Confidential</Badge>}
           {c.aiScore != null && <Badge tone="pos" dot={false}>AI {c.aiScore}</Badge>}
         </span>
       </span>
@@ -238,7 +238,7 @@ export function MrfTag({ code }: { code?: string | null }) {
 
 /** Joins the parts that exist with " · " — no leading or doubled separators when a field is blank. */
 export const metaLine = (...parts: (string | number | null | undefined | false)[]) =>
-  parts.filter((p) => p !== null && p !== undefined && p !== false && String(p).trim() !== '' && String(p).trim() !== '—').join(' · ');
+  parts.filter((p) => p !== null && p !== undefined && p !== false && String(p).trim() !== '' && String(p).trim() !== '—' && String(p).trim() !== '-').join(' · ');
 
 export function CandCard({ name, mrf, badges, meta, tags, status, statusTone, body, actions, onOpen, selected, label }: {
   name: string; mrf?: string | null; badges?: React.ReactNode; meta?: React.ReactNode;

@@ -257,7 +257,7 @@ export async function POST(req: NextRequest) {
   // action === 'request'
   const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
   if (!value.trim()) return bad('What should it be changed to?')
-  if (!reason) return bad('A reason is required — HR sees it when they review this.')
+  if (!reason) return bad('A reason is required. HR sees it when they review this.')
 
   const { data, error: reqErr } = await sb.rpc('raise_profile_change_request', {
     p_employee_id: me, p_requested_by: me, p_field_key: key,

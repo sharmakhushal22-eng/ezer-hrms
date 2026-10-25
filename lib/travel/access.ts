@@ -299,7 +299,7 @@ export async function checkPeriodOpen(
     return {
       allowed: false,
       code: 'PERIOD_LOCKED',
-      message: `${period.period_label} is locked — it has already been paid through payroll and cannot be changed.`,
+      message: `${period.period_label} is locked. It has already been paid through payroll and cannot be changed.`,
       meta: { period },
     };
   }

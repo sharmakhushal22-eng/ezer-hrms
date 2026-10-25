@@ -127,7 +127,7 @@ export const MOCK: SocialPayload = {
       acted: true,
       comments: [
         { id: 'c5', author: neha, at: ago(300), reactions: [], body: 'Welcome aboard Devanshi! Your induction is on Thursday.' },
-        { id: 'c6', author: me, at: ago(240), reactions: [r('❤️', 1)], body: 'Welcome! Finance sits on the third floor — come find us.', mine: true },
+        { id: 'c6', author: me, at: ago(240), reactions: [r('❤️', 1)], body: 'Welcome! Finance sits on the third floor, come find us.', mine: true },
       ],
     },
     {
@@ -233,7 +233,7 @@ export const WISH_SUGGESTIONS: Record<string, string[]> = {
   birthday: [
     'Happy birthday! Hope you get the day you want.',
     'Many happy returns 🎂',
-    'Have a brilliant one — enjoy every bit of it.',
+    'Have a brilliant one, enjoy every bit of it.',
   ],
   anniversary: [
     'Congratulations on the milestone!',
@@ -242,7 +242,7 @@ export const WISH_SUGGESTIONS: Record<string, string[]> = {
   ],
   joiner: [
     'Welcome to the team!',
-    'Great to have you with us — shout if you need anything.',
+    'Great to have you with us. Shout if you need anything.',
     'Welcome aboard 👋',
   ],
 };

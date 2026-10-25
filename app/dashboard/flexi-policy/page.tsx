@@ -55,7 +55,7 @@ function RegimeCell({ c, reg, rs, onToggle, onAmt }: {
     <div style={{ width: 120, display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
       <button onClick={onToggle} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: `1px solid ${on ? color : C.border}`, background: on ? bg : 'transparent', color: on ? dark : C.muted }}>{on ? 'Y' : 'N'}</button>
       {c.formula
-        ? <span style={{ width: 66, fontSize: 10, color: C.muted }}>{on ? '8.33%' : '—'}</span>
+        ? <span style={{ width: 66, fontSize: 10, color: C.muted }}>{on ? '8.33%' : '-'}</span>
         : <input type="number" min={0} step={1000} placeholder="amt" disabled={!on} value={amt} onChange={e => onAmt(e.target.value)} style={{ width: 66, padding: 5, borderRadius: 7, border: `1px solid ${C.border}`, opacity: on ? 1 : 0.35, fontFamily: 'inherit', boxSizing: 'border-box' }} />}
     </div>
   )
@@ -110,7 +110,7 @@ export default function FlexiConfigBuilder() {
     const { data } = await q
     setSlabs(data ?? [])
   }, [companyId])
-  const companyName = (id: string) => companies.find(c => c.id === id)?.company_name || '—'
+  const companyName = (id: string) => companies.find(c => c.id === id)?.company_name || '-'
   useEffect(() => { loadSlabs() }, [loadSlabs])
 
   const toggle = (code: string, reg: 'old' | 'new') =>
@@ -176,7 +176,7 @@ export default function FlexiConfigBuilder() {
         const limitRows = buildLimitRows(slab.id, idByCode)
         if (limitRows.length) {
           const { error: le } = await supabase.from('flexi_slab_limits').insert(limitRows)
-          if (le) { errors.push(`${companyName(cid)}: components — ${le.message}`); continue }
+          if (le) { errors.push(`${companyName(cid)}: components (${le.message})`); continue }
         }
         saved++
       }
@@ -185,7 +185,7 @@ export default function FlexiConfigBuilder() {
         const scope = companyId ? companyName(companyId) : `${saved} companies`
         setMsg(`✓ Slab (${inr(mn)}–${inr(mx)}) saved for ${scope}${errors.length ? ` · ${errors.length} skipped` : ''}.`)
         setSmin(String(mx + 1)); setSmax(String(mx + 500000)); setRows(blankRows()); loadSlabs()
-        if (errors.length) setErr(`Skipped — ${errors.join(' · ')}`)
+        if (errors.length) setErr(`Skipped: ${errors.join(' · ')}`)
       } else {
         setErr(errors.length ? errors.join(' · ') : 'Nothing was saved.')
       }
@@ -205,7 +205,7 @@ export default function FlexiConfigBuilder() {
   return (
     <div style={{ padding: 24, fontFamily: '"DM Sans","Segoe UI",sans-serif', maxWidth: 820, margin: '0 auto', background: C.bg, minHeight: '100vh' }}>
       <div className="ez-page-head">
-      <div style={{ fontSize: 20, fontWeight: 600, color: C.navy, marginBottom: 4 }}>Flexi policy — slab builder (Old + New together)</div>
+      <div style={{ fontSize: 20, fontWeight: 600, color: C.navy, marginBottom: 4 }}>Flexi policy: slab builder (Old + New together)</div>
       <div style={{ fontSize: 13, color: C.muted }}>Build the FBP policy slab-by-slab per company. Each slab covers a salary range and both regimes; saved in one action.</div>
       </div>
 

@@ -294,7 +294,7 @@ export function ThemeToggle({ onDark, compact }: { onDark?: boolean; compact?: b
       <>
       <ThemeToggleStyles />
       <button onClick={() => pick(next)}
-        title={`Theme: ${m.label} — switch to ${MODE[next].label}`}
+        title={`Theme: ${m.label}. Switch to ${MODE[next].label}`}
         aria-label={`Theme: ${m.label}. Switch to ${MODE[next].label}.`}
         className="ez-seg ez-seg-on"
         style={{

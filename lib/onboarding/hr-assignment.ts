@@ -44,7 +44,7 @@ export interface HrAssignment {
 
 /** Roles that are never handed out from onboarding. */
 const HIDDEN_ROLES = new Set(['ALL_ACCESS', 'ADMIN_SUPER', 'IMPL_MANAGER', 'HI'])
-const CAND = 'id, full_name, email, designation, department, employment_type, status, company_id, l1_manager_id, l2_manager_id, hod_id, role_assignment, employee_code, it_email'
+const CAND = 'id, full_name, email, designation, department, employment_type, status, company_id, l1_manager_id, l2_manager_id, hod_id, role_assignment, employee_code, it_email, hiring_track, work_country, payroll_currency, employing_entity'
 const OPEN = ['SUBMITTED', 'HR_REVIEW', 'APPROVED']
 const today = () => new Date().toISOString().slice(0, 10)
 

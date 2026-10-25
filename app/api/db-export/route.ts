@@ -43,7 +43,7 @@ export async function GET(req: Request) {
   try {
     // 1. Enumerate every public base table + its columns via the export_schema() function (sql62).
     const { data: schemaRows, error: schemaErr } = await supa.rpc('export_schema')
-    if (schemaErr) return NextResponse.json({ error: 'Schema lookup failed — run sql62-db-export-schema.txt first. (' + schemaErr.message + ')' }, { status: 500 })
+    if (schemaErr) return NextResponse.json({ error: 'Schema lookup failed. Run sql62-db-export-schema.txt first. (' + schemaErr.message + ')' }, { status: 500 })
     const colsByTable = new Map<string, string[]>()
     for (const r of (schemaRows || []) as any[]) {
       const arr = colsByTable.get(r.table_name) || []
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
       colsByTable.set(r.table_name, arr)
     }
     const tables = Array.from(colsByTable.keys()).sort()
-    if (!tables.length) return NextResponse.json({ error: 'No tables found — run sql62 first.' }, { status: 500 })
+    if (!tables.length) return NextResponse.json({ error: 'No tables found. Run sql62 first.' }, { status: 500 })
 
     const wb = XLSX.utils.book_new()
     const used = new Set<string>()
@@ -90,7 +90,7 @@ export async function GET(req: Request) {
     }
 
     // Index sheet first for easy navigation.
-    const idx = XLSX.utils.aoa_to_sheet([['EZER HRMS — full export', new Date().toISOString()], [usingServiceRole ? 'service-role (all rows)' : 'anon key (RLS-limited)'], [], ...summary])
+    const idx = XLSX.utils.aoa_to_sheet([['EZER HRMS: full export', new Date().toISOString()], [usingServiceRole ? 'service-role (all rows)' : 'anon key (RLS-limited)'], [], ...summary])
     XLSX.utils.book_append_sheet(wb, idx, '_INDEX')
     // move _INDEX to front
     wb.SheetNames.unshift(wb.SheetNames.pop() as string)

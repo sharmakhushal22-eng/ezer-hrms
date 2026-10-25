@@ -35,7 +35,7 @@
 // The distinction the whole file still turns on:
 //
 //   key MISSING from the payload  ->  "Restricted"  (not yours to see)
-//   key present but null/empty    ->  "—"           (nobody filled it in)
+//   key present but null/empty    ->  "-"           (nobody filled it in)
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { TABS, MODEL, RECORD_CARDS, CARD_COLUMNS } from '@/lib/profile/model'
@@ -50,12 +50,14 @@ import IdCardDownload from '@/components/profile/IdCardDownload'
 import PhotoUploader from '@/components/profile/PhotoUploader'
 import {
   Drawer, FieldEditor, IdentityEditor, AddressEditor, EmergencyEditor, NomineeEditor, BankEditor,
-  DocumentsPanel,
+  DocumentsPanel, Layer,
 } from '@/components/profile/editors'
 import '@/components/profile/profile.css'
 
+/** What an empty value reads as. A plain hyphen, as across the app (no em dashes in copy). */
+const NIL = '-'
 const val = (v: unknown): string => {
-  if (v === null || v === undefined || v === '') return '—'
+  if (v === null || v === undefined || v === '') return NIL
   if (typeof v === 'boolean') return v ? 'Yes' : 'No'
   return String(v)
 }
@@ -99,7 +101,7 @@ function shownValue(f: ProfileField, p: ProfilePayload): { text: string; restric
   const present = Object.prototype.hasOwnProperty.call(emp, f.key)
   if (f.key === 'pan' && !present && p.self?.ids?.pan_masked) return { text: p.self.ids.pan_masked, restricted: false }
   if (!maySee(p.viewer_role, f.min) || !present) {
-    if (f.key === 'pan' && p.self && !p.self.ids.has_pan) return { text: '—', restricted: false }
+    if (f.key === 'pan' && p.self && !p.self.ids.has_pan) return { text: NIL, restricted: false }
     return { text: 'Restricted', restricted: true }
   }
   if ((f.key === 'present_address' || f.key === 'permanent_address') && p.self) {
@@ -116,7 +118,7 @@ function fieldMode(f: ProfileField, p: ProfilePayload, self: boolean): Mode {
   const none: Mode = { kind: 'none', label: '' }
   if (!self) return none
   const { text, restricted } = shownValue(f, p)
-  const empty = text === '—'
+  const empty = text === NIL
   if (f.addable && f.editor) {
     // self.ids is authoritative (it sees PAN, which the payload strips below
     // HR); without it — an older payload, the preview — go by what is shown.
@@ -148,7 +150,7 @@ function FieldCard({ f, payload, self, onAct }: {
   const act = mode.kind !== 'none'
   // Reveal only applies to the real value (HR's view). A masked PAN from
   // self.ids is already safe to show.
-  const masked = f.mask && !shown && text !== '—' && !restricted && !text.includes('•')
+  const masked = f.mask && !shown && text !== NIL && !restricted && !text.includes('•')
 
   return (
     <div className={`fld${f.wide ? ' span2' : ''}${act ? ' act' : ''}`}
@@ -159,7 +161,7 @@ function FieldCard({ f, payload, self, onAct }: {
         <span>{f.label}</span>
         {act ? <span className={`fa ${mode.kind}`}>{mode.label}</span>
              : self && f.state === 'locked' && !restricted
-               ? <span className="lk" title="Maintained by HR — ask HR to correct it"><LockGlyph /></span> : null}
+               ? <span className="lk" title="Maintained by HR. Ask HR to correct it."><LockGlyph /></span> : null}
       </div>
       <div className={`v${f.mono ? ' mono' : ''}`}>
         {restricted ? <span className="no">Restricted</span>
@@ -167,7 +169,7 @@ function FieldCard({ f, payload, self, onAct }: {
               <span className="msk">{'•'.repeat(Math.min(12, Math.max(4, text.length)))}</span>
               <button className="eye" onClick={e => { e.stopPropagation(); setShown(true) }}>Reveal</button>
             </>
-          : <>{text === '—' ? <span className="nil">Not added</span> : text}
+          : <>{text === NIL ? <span className="nil">Not added</span> : text}
               {f.mask && shown && <button className="eye" onClick={e => { e.stopPropagation(); setShown(false) }}>Hide</button>}</>}
       </div>
       {f.hint && <div className="hint">{f.hint}</div>}
@@ -236,6 +238,12 @@ const RecordTable = ({ title, rows, columns, empty }: {
 
 // ── side column ──────────────────────────────────────────────────────────
 
+/** A completeness sentence as shown. They come from the database and some
+ *  carry an em dash ("Add a gratuity nominee — the shares must total 100%");
+ *  the app's copy has none, so it reads as two sentences here. fixActionFor()
+ *  still gets the original. */
+const tidy = (s: string) => s.replace(/\s+[—–]\s+(\w)/g, (_, c: string) => `. ${c.toUpperCase()}`)
+
 const fixLabel = (a: string | null) =>
   a === 'photo' || a === 'documents' ? 'Upload' : a && FIX_MODE[a as keyof typeof FIX_MODE] === 'payroll' ? 'Request' : 'Add'
 
@@ -260,7 +268,7 @@ function Completeness({ score, pending, self, onFix }: {
               const a = fixActionFor(p)
               return (
                 <li key={p}><i />
-                  <span className="tt">{p}</span>
+                  <span className="tt">{tidy(p)}</span>
                   {self && <button type="button" className="fix" onClick={() => onFix(p)}>{fixLabel(a)}</button>}
                 </li>
               )
@@ -331,9 +339,9 @@ function HowEditing({ onClose }: { onClose: () => void }) {
     <div className="howpop" role="dialog" aria-label="How editing works">
       <div className="hhd"><b>How editing works</b><button type="button" className="x" onClick={onClose} aria-label="Close">×</button></div>
       <dl>
-        <dt className="edit">Edit · Add</dt><dd>Saves straight away — contact details, emergency contacts, blood group, nominees, a missing PAN, UAN, Aadhaar or address.</dd>
+        <dt className="edit">Edit · Add</dt><dd>Saves straight away: contact details, emergency contacts, blood group, nominees, a missing PAN, UAN, Aadhaar or address.</dd>
         <dt className="request">Request change</dt><dd>Goes for approval and says to whom. Changing an address, spouse or marital status goes to HR; the salary account goes to Payroll.</dd>
-        <dt className="locked"><LockGlyph /> Locked</dt><dd>Maintained by HR — your name, date of birth, job details. Ask HR to correct these.</dd>
+        <dt className="locked"><LockGlyph /> Locked</dt><dd>Maintained by HR: your name, date of birth, job details. Ask HR to correct these.</dd>
       </dl>
     </div>
   )
@@ -349,7 +357,7 @@ function HubRow({ label, value, action, sub, onClick }: {
       <div className="hl">
         <div className="hk">{label}</div>
         {value !== null && (
-          <div className={`hv${value === '—' || !value ? ' nil' : ''}`}>{value && value !== '—' ? value : 'Not added'}</div>
+          <div className={`hv${value === NIL || !value ? ' nil' : ''}`}>{value && value !== NIL ? value : 'Not added'}</div>
         )}
         {sub && <div className="hs">{sub}</div>}
       </div>
@@ -388,7 +396,7 @@ function EditHub({ payload, focus, onField, onAction, onFix }: {
           <h4>To complete</h4>
           <ul className="todo">
             {pending.map(p => (
-              <li key={p}><i /><span className="tt">{p}</span>
+              <li key={p}><i /><span className="tt">{tidy(p)}</span>
                 <button type="button" className="fix" onClick={() => onFix(p)}>{fixLabel(fixActionFor(p))}</button></li>
             ))}
           </ul>
@@ -409,7 +417,7 @@ function EditHub({ payload, focus, onField, onAction, onFix }: {
             <HubRow key={s} label={`${SCHEME_LABEL[s]} nominees`} value={nom(s)} action={nom(s) ? 'Edit' : 'Add'}
                     onClick={() => onAction(s === 'pf' ? 'nominee_pf' : 'nominee_gratuity')} />
           ))}
-          <HubRow label="Documents" value={null} action="Open" sub="Aadhaar, PAN, certificates — HR verifies each upload"
+          <HubRow label="Documents" value={null} action="Open" sub="Aadhaar, PAN, certificates. HR verifies each upload."
                   onClick={() => onAction('documents')} />
         </ul>
       </section>
@@ -505,7 +513,7 @@ function Overview({ p, self, onAction, openTab }: {
           ['Work email', val(emp.official_email)],
           ['Mobile', Object.prototype.hasOwnProperty.call(emp, 'mobile') ? val(emp.mobile) : 'Restricted'],
           ['Personal email', Object.prototype.hasOwnProperty.call(emp, 'personal_email') ? val(emp.personal_email) : 'Restricted'],
-          ['Location', [emp.location_name, emp.workstation].filter(Boolean).map(String).join(' · ') || '—'],
+          ['Location', [emp.location_name, emp.workstation].filter(Boolean).map(String).join(' · ') || NIL],
           ...(self ? [['Emergency', e1 ? String(e1)
             : <button type="button" className="lnk" onClick={() => onAction('emergency')}>Add an emergency contact</button>] as [string, React.ReactNode]] : []),
         ]} />
@@ -513,28 +521,28 @@ function Overview({ p, self, onAction, openTab }: {
 
       <Card title="Key dates">
         <KV rows={[
-          ['Joined', emp.date_of_joining ? `${pretty(emp.date_of_joining)} · ${val(emp.tenure_years)}y ${val(emp.tenure_months)}m` : '—'],
+          ['Joined', emp.date_of_joining ? `${pretty(emp.date_of_joining)} · ${val(emp.tenure_years)}y ${val(emp.tenure_months)}m` : NIL],
           ...(ann && emp.date_of_joining ? [['Work anniversary', `${ann.years} year${ann.years === 1 ? '' : 's'} on ${dm(ann.date)} · ${inDays(ann.days)}`] as [string, string]] : []),
           ...(bday ? [['Birthday', `${dm(bday.date)} · ${inDays(bday.days)}`] as [string, string]] : []),
-          ['Confirmed', emp.confirmation_date ? pretty(emp.confirmation_date) : emp.probation_months ? `On probation (${val(emp.probation_months)} months)` : '—'],
+          ['Confirmed', emp.confirmation_date ? pretty(emp.confirmation_date) : emp.probation_months ? `On probation (${val(emp.probation_months)} months)` : NIL],
         ]} />
       </Card>
 
       <Card title="Employment" right={<button type="button" className="lnk" onClick={() => openTab('job')}>More</button>}>
         <KV rows={[
-          ['Type', [emp.employment_type, emp.employee_category].filter(Boolean).map(String).join(' · ') || '—'],
-          ['Grade', [emp.grade, emp.job_level].filter(Boolean).map(String).join(' · ') || '—'],
-          ['Notice period', emp.notice_period_days ? `${val(emp.notice_period_days)} days` : '—'],
+          ['Type', [emp.employment_type, emp.employee_category].filter(Boolean).map(String).join(' · ') || NIL],
+          ['Grade', [emp.grade, emp.job_level].filter(Boolean).map(String).join(' · ') || NIL],
+          ['Notice period', emp.notice_period_days ? `${val(emp.notice_period_days)} days` : NIL],
           ['Weekly off', val(emp.weekly_off)],
         ]} />
       </Card>
 
       <Card title="Family & nominees" right={<button type="button" className="lnk" onClick={() => openTab('family')}>Open</button>}>
         <KV rows={[
-          ['Family members', p.family.length ? `${p.family.length} recorded` : '—'],
+          ['Family members', p.family.length ? `${p.family.length} recorded` : NIL],
           ['PF nominee', <span key="pf" className="kvact">{nomState(pf)}{self && <button type="button" className="lnk" onClick={() => onAction('nominee_pf')}>{pf.length ? 'Edit' : 'Add'}</button>}</span>],
           ['Gratuity nominee', <span key="gr" className="kvact">{nomState(gr)}{self && <button type="button" className="lnk" onClick={() => onAction('nominee_gratuity')}>{gr.length ? 'Edit' : 'Add'}</button>}</span>],
-          ['Insurance', p.insurance.length ? `${p.insurance.length} active polic${p.insurance.length === 1 ? 'y' : 'ies'}` : '—'],
+          ['Insurance', p.insurance.length ? `${p.insurance.length} active polic${p.insurance.length === 1 ? 'y' : 'ies'}` : NIL],
         ]} />
       </Card>
     </div>
@@ -688,11 +696,13 @@ export default function Profile360({ code, employeeId, initial }: {
 
   return (
     <div className="ezp">
-      {flash && <div className="toast" role="status">{flash}</div>}
+      {flash && <Layer><div className="toast" role="status">{flash}</div></Layer>}
 
-      {/* ── identity ── */}
-      <div className="cover" />
-      <div className="idcard">
+      {/* ── identity ──
+          The portal's soft hero surface (components/ess/portal.css .ess-soft-hero),
+          the same one Home, Attendance and Leave open with, so My Details starts
+          the way the rest of ESS does. One card: there is no separate cover band. */}
+      <div className="idcard ess-soft-hero">
         <div className={'face' + (photo ? ' hasimg' : '')}>
           {photo
             /* eslint-disable-next-line @next/next/no-img-element */
@@ -829,8 +839,8 @@ export default function Profile360({ code, employeeId, initial }: {
                     <tbody>
                       {([['Basic', 'basic_monthly'], ['House rent allowance', 'hra_monthly'],
                          ['Conveyance', 'conveyance'], ['Gratuity', 'gratuity_monthly'],
-                         ['Provident fund — employee', 'employee_pf'],
-                         ['Provident fund — employer', 'employer_pf']] as const)
+                         ['Provident fund (employee)', 'employee_pf'],
+                         ['Provident fund (employer)', 'employer_pf']] as const)
                         .filter(([, k]) => payload.salary?.[k] !== null && payload.salary?.[k] !== undefined)
                         .map(([label, k]) => (
                           <tr key={k}>
@@ -883,7 +893,7 @@ export default function Profile360({ code, employeeId, initial }: {
                       <div className="pc" key={String(r.id ?? i)}>
                         <div style={{ minWidth: 0 }}>
                           <div className="n">{val(r.kind)}{r.cycle_label ? ` · ${val(r.cycle_label)}` : ''}</div>
-                          <div className="s">{String(r.message ?? '').slice(0, 110) || '—'}</div>
+                          <div className="s">{String(r.message ?? '').slice(0, 110) || NIL}</div>
                           <div className="pl"><span className="pill">{pretty(r.created_at)}</span></div>
                         </div>
                       </div>
@@ -987,17 +997,19 @@ export default function Profile360({ code, employeeId, initial }: {
                     onClose={closeEditor} onDone={m => afterSave(m)} />
       )}
 
-      {/* Inside .ezp deliberately: PhotoUploader's classes are un-namespaced,
-          so profile.css scopes them under .ezp and they only bite here.
-          Mounted only while open, so every open starts from fresh state. */}
+      {/* In a Layer (its own .ezp on document.body): PhotoUploader's classes
+          are un-namespaced, so profile.css scopes them under .ezp and they only
+          bite here. Mounted only while open, so every open starts fresh. */}
       {self && photoOpen && (
-        <PhotoUploader
-          open
-          onClose={() => setPhotoOpen(false)}
-          onDone={url => {
-            setPhoto(url)
-            afterSave('Profile photo updated.', url)
-          }} />
+        <Layer>
+          <PhotoUploader
+            open
+            onClose={() => setPhotoOpen(false)}
+            onDone={url => {
+              setPhoto(url)
+              afterSave('Profile photo updated.', url)
+            }} />
+        </Layer>
       )}
     </div>
   )

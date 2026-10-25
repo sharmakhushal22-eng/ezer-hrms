@@ -28,7 +28,7 @@ export function ctcStatementRows(calc:any, form:any): StmtRow[] {
   rows.push({ kind:'row', label:'Special Allowance', basis:'balance of fixed CTC', monthly:calc.specialAllow||0, annual:(calc.specialAllow||0)*12 })
   rows.push({ kind:'sum', label:'Gross Earnings (A)', monthly:calc.gross, annual:calc.gross*12 })
   rows.push({ kind:'emp', label:'Employer EPF', basis:`13% on PF wages ₹${Math.round(epfBase).toLocaleString('en-IN')} (Basic, ceiling ₹${ceil.toLocaleString('en-IN')})`, monthly:calc.epfEmployer, annual:calc.epfEmployer*12, remark:'In CTC' })
-  rows.push({ kind:'emp', label:'Employer ESIC', basis: (calc.esicEmployer||0)>0 ? '3.25% of Basic (Basic < ₹21,000)' : 'not applicable — Basic ≥ ₹21,000', monthly:calc.esicEmployer||0, annual:(calc.esicEmployer||0)*12, remark:'In CTC' })
+  rows.push({ kind:'emp', label:'Employer ESIC', basis: (calc.esicEmployer||0)>0 ? '3.25% of Basic (Basic < ₹21,000)' : 'not applicable (Basic ≥ ₹21,000)', monthly:calc.esicEmployer||0, annual:(calc.esicEmployer||0)*12, remark:'In CTC' })
   if (calc.gratuity==='yes') rows.push({ kind:'grat', label:'Gratuity', basis:'4.81% of Basic', monthly:calc.gratuityMonthly||0, annual:(calc.gratuityMonthly||0)*12, remark:'In CTC' })
   if (calc.bonusMode==='ctc' && (calc.bonusOverheadMonthly||0)>0) rows.push({ kind:'bonus', label:'Statutory Bonus (employer overhead)', basis:`${calc.bonusPct}% on ₹${Math.round(calc.bonusBase||calc.basic).toLocaleString('en-IN')}`, monthly:calc.bonusOverheadMonthly, annual:calc.bonusOverheadMonthly*12, remark:'In CTC' })
   rows.push({ kind:'sum', label:'Fixed CTC Package', basis:'gross + employer contributions', monthly:calc.fixedMonthly, annual:calc.fixedMonthly*12 })
@@ -140,9 +140,9 @@ export function engagementStatementRows(calc: any, kind: LetterKind, months: num
   rows.push({ kind: 'head', label: 'Deductions & net payable' })
   rows.push(tdsOn
     ? { kind: 'ded', label: `(−) TDS`, basis: fees ? `${tdsPct}% under s.194J of the Income-tax Act, 1961` : `${tdsPct}% as applicable`, monthly: tdsMonthly, annual: tot(tdsMonthly), remark: 'Deduction' }
-    : { kind: 'muted', label: 'TDS', basis: fees ? 'nil at source — declare and pay as per your assessment' : 'not applicable on this stipend', monthly: 0, annual: 0 })
+    : { kind: 'muted', label: 'TDS', basis: fees ? 'nil at source: declare and pay as per your assessment' : 'not applicable on this stipend', monthly: 0, annual: 0 })
   rows.push({ kind: 'net', label: `Net ${noun.toLowerCase()} payable`, basis: tdsOn ? 'after TDS' : undefined, monthly: netMonthly, annual: tot(netMonthly) })
-  if (isApprenticeship(kind)) rows.push({ kind: 'note', label: `${SCHEMES[kind as 'NATS' | 'NAPS'].govShare[0].toUpperCase()}${SCHEMES[kind as 'NATS' | 'NAPS'].govShare.slice(1)}, credited to the apprentice's Aadhaar-seeded bank account by Direct Benefit Transfer where admissible; the Company pays the balance so that the stipend above is received in full. No PF, ESIC, gratuity or bonus applies — an apprentice is not a worker (s.18, Apprentices Act, 1961).` })
+  if (isApprenticeship(kind)) rows.push({ kind: 'note', label: `${SCHEMES[kind as 'NATS' | 'NAPS'].govShare[0].toUpperCase()}${SCHEMES[kind as 'NATS' | 'NAPS'].govShare.slice(1)}, credited to the apprentice's Aadhaar-seeded bank account by Direct Benefit Transfer where admissible; the Company pays the balance so that the stipend above is received in full. No PF, ESIC, gratuity or bonus applies: an apprentice is not a worker (s.18, Apprentices Act, 1961).` })
   else if (!fees) rows.push({ kind: 'note', label: 'A stipend, not a salary: no PF, ESIC, gratuity, bonus or other statutory benefit of employment applies to this internship.' })
   else rows.push({ kind: 'note', label: 'Fees for services, not salary: no PF, ESIC, gratuity, bonus, leave encashment or other employee benefit applies. GST, where you are registered, is payable over and above on a valid tax invoice.' })
   return { rows, monthly, tdsPct, tdsMonthly, netMonthly, months: m, totalLabel, govShare }

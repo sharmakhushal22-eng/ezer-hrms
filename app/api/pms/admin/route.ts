@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
       if (!['EDIT', 'REISSUE', 'TERMINATE'].includes(what)) {
         return bad('The action must be EDIT, REISSUE or TERMINATE.')
       }
-      if (!reason) return bad('A reason is required — it goes into the audit log.')
+      if (!reason) return bad('A reason is required. It goes into the audit log.')
       if (what === 'EDIT' && !str('goal_id')) return bad('EDIT needs the goal to edit.')
 
       const r = await sb.rpc('pms_hr_kra_action', {

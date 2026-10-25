@@ -36,7 +36,7 @@ const V = {
 const inr = (n: unknown) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const num = (v: unknown) => Number(v) || 0
 const dmy = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+  d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
 const S = {
   card: { background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
@@ -177,10 +177,10 @@ function TeamRow({ m, onChange, busy }: {
                   borderBottom: `1px solid ${V.border}`, flexWrap: 'wrap' }}>
       <div style={{ flex: 1, minWidth: 170 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: m.is_active ? V.navy : V.muted }}>
-          {m.employee?.full_name ?? '—'}
+          {m.employee?.full_name ?? '-'}
           <span style={{ color: V.muted, fontWeight: 500 }}> · {m.employee?.emp_code ?? ''}</span>
         </div>
-        <div style={{ fontSize: 11, color: V.muted }}>{m.employee?.designation ?? '—'}</div>
+        <div style={{ fontSize: 11, color: V.muted }}>{m.employee?.designation ?? '-'}</div>
       </div>
 
       <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99, background: V.purpleBg,
@@ -264,7 +264,7 @@ export default function FinanceDepartment() {
           setPending(j.error || 'The finance tables have not been created yet.')
           setNote(null)
         } else if (qr.status === 401) {
-          setNote({ tone: 'warn', text: 'Your dashboard session has expired — sign in again.' })
+          setNote({ tone: 'warn', text: 'Your dashboard session has expired. Sign in again.' })
         } else {
           setNote({ tone: 'err', text: j.error || `Could not load the finance queue (HTTP ${qr.status}).` })
         }
@@ -307,7 +307,7 @@ export default function FinanceDepartment() {
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setNote({ tone: 'err', text: j.error || 'That action did not go through.' }); return }
-      setNote({ tone: 'ok', text: `Done — ${j.status?.toLowerCase()}.` })
+      setNote({ tone: 'ok', text: `Done: ${j.status?.toLowerCase()}.` })
       await load()
     } finally { setBusy(false) }
   }
@@ -397,7 +397,7 @@ export default function FinanceDepartment() {
             {pending}
             <br /><br />
             The department, its authority rules and the shared work queue all live in
-            that migration. Until it is applied there is nothing to read — this is a
+            that migration. Until it is applied there is nothing to read. This is a
             setup step, not a fault. The screens below are already built and will fill
             in as soon as it runs.
           </div>
@@ -463,14 +463,14 @@ export default function FinanceDepartment() {
 
       {!pending && tab === 'TEAM' && !companyId ? (
         <div style={S.card}><div style={{ fontSize: 12, color: V.muted }}>
-          The finance team is kept per company — pick one above to add or edit members. (The queue works across all companies.)
+          The finance team is kept per company. Pick one above to add or edit members. (The queue works across all companies.)
         </div></div>
       ) : null}
       {!pending && tab === 'TEAM' && !!companyId && (
         <div style={S.card}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Finance team</div>
           <div style={{ fontSize: 12, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
-            Sitting in the Finance &amp; Accounts department does not grant approval rights — a row
+            Sitting in the Finance &amp; Accounts department does not grant approval rights. A row
             here does. Approving a claim and releasing the money are separate permissions, and a
             limit caps what each person can sign off alone.
           </div>

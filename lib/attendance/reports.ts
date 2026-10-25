@@ -21,9 +21,9 @@ export interface ReportDef {
 export const REPORTS: ReportDef[] = [
   { id: 'daily_punch',        label: 'Daily Punch (In / Out)',      group: 'Attendance', desc: 'Every day’s in/out time, status, late & OT for the date range.', dateRange: true },
   { id: 'left_employees',     label: 'Left Employees Attendance',   group: 'Attendance', desc: 'Attendance of employees who have left, with their leaving date.', dateRange: true },
-  { id: 'miss_punch',         label: 'Miss Punch — single employee', group: 'Exceptions', desc: 'Days a single employee has a missing in/out punch.', dateRange: true, singleEmp: true },
-  { id: 'late_comers',        label: 'Late Comers',                 group: 'Exceptions', desc: 'Employees arriving late — late days & total late time.', dateRange: true },
-  { id: 'regularisation',     label: 'Regularisation Audit',        group: 'Exceptions', desc: 'Every regularisation request — who, when, status.', dateRange: true },
+  { id: 'miss_punch',         label: 'Miss Punch (single employee)', group: 'Exceptions', desc: 'Days a single employee has a missing in/out punch.', dateRange: true, singleEmp: true },
+  { id: 'late_comers',        label: 'Late Comers',                 group: 'Exceptions', desc: 'Employees arriving late: late days & total late time.', dateRange: true },
+  { id: 'regularisation',     label: 'Regularisation Audit',        group: 'Exceptions', desc: 'Every regularisation request: who, when, status.', dateRange: true },
   { id: 'absenteeism',        label: 'Absenteeism Summary',         group: 'Summary',    desc: 'Present / Absent / Leave / LOP days & attendance % per employee.', dateRange: true },
   { id: 'overtime',           label: 'Overtime Report',             group: 'Summary',    desc: 'Total overtime hours per employee over the range.', dateRange: true },
   { id: 'abscond',            label: 'Abscond Report',              group: 'Leave',      desc: 'Employees marked Abscond (AB) in the range.', dateRange: true },

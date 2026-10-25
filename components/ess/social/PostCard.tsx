@@ -330,7 +330,7 @@ export default function PostCard({ post, me, onChange, action, onReact, onCommen
         <div className="meta">
           <div className="nm">{headline}</div>
           <div className="rl">
-            {[post.subject.designation, post.subject.department].filter(Boolean).join(' · ') || '—'}
+            {[post.subject.designation, post.subject.department].filter(Boolean).join(' · ') || '-'}
             {post.subject.company && <> <span className="co">{post.subject.company}</span></>}
           </div>
         </div>

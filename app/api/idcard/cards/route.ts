@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   const ids = Array.isArray(body.ids) ? body.ids.filter((v): v is string => typeof v === 'string') : []
   if (!ids.length) return NextResponse.json({ error: 'No employees selected.' }, { status: 400 })
   if (ids.length > MAX_BATCH) {
-    return NextResponse.json({ error: `Too many at once — ${MAX_BATCH} is the limit.` }, { status: 400 })
+    return NextResponse.json({ error: `Too many at once. ${MAX_BATCH} is the limit.` }, { status: 400 })
   }
   const sides = ['both', 'front', 'back'].includes(String(body.sides)) ? String(body.sides) : 'both'
 

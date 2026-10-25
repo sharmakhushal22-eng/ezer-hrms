@@ -66,11 +66,11 @@ function ConfirmDelete({ entry, company, busy, onCancel, onConfirm }: {
         </div>
         <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 13px', fontSize: 12.5, lineHeight: 1.7, marginBottom: 8 }}>
           <div><b>{entry.employee_code}</b>{company ? <span style={{ color: C.muted }}> · {company}</span> : null}</div>
-          <div>{entry.head_name} <span style={{ color: entry.head_type === 'Addition' ? C.green : C.red, fontWeight: 700 }}>({entry.head_type})</span> — <b>{inr(entry.amount)}</b></div>
+          <div>{entry.head_name} <span style={{ color: entry.head_type === 'Addition' ? C.green : C.red, fontWeight: 700 }}>({entry.head_type})</span> · <b>{inr(entry.amount)}</b></div>
           {entry.remark && <div style={{ color: C.muted }}>“{entry.remark}”</div>}
         </div>
         <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, marginBottom: 16 }}>
-          The amount leaves this month's payroll for this employee. The removal is recorded in Tracking, but the entry itself cannot be brought back — it would have to be typed in again.
+          The amount leaves this month's payroll for this employee. The removal is recorded in Tracking, but the entry itself cannot be brought back. It would have to be typed in again.
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{ padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.navy, fontWeight: 600, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}>Cancel</button>
@@ -144,7 +144,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     setCoByRun(co); setRunByCode(byCode)
     setEmpOpts((data || []).map((e: any) => ({
       value: e.employee_code,
-      label: `${e.employee_code} — ${e.full_name}${isGroup && co[e.run_id] ? ` · ${co[e.run_id]}` : ''}`,
+      label: `${e.employee_code} · ${e.full_name}${isGroup && co[e.run_id] ? ` · ${co[e.run_id]}` : ''}`,
     })))
   }, [runIds.join(','), isGroup])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { refresh() }, [refresh])
@@ -164,7 +164,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     const { error, action } = await saveVoucher({ runId: rid, empCode, headName, amount: Number(amount), remark, via: 'INDIVIDUAL' })
     setBusy(false)
     if (error) { setErr(error); return }
-    setMsg(`${action === 'REPLACED' ? 'Replaced' : 'Saved'} — ${headName} ${inr(amount)} for ${empCode}.`)
+    setMsg(`${action === 'REPLACED' ? 'Replaced' : 'Saved'}: ${headName} ${inr(amount)} for ${empCode}.`)
     setAmount(''); setRemark(''); refresh()
   }
 
@@ -174,7 +174,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     const { error } = await deleteVoucher(e.id)
     setDelBusy(false); setConfirmDel(null)
     if (error) { setErr(error); return }
-    setMsg(`Deleted — ${e.head_name} for ${e.employee_code}.`); refresh()
+    setMsg(`Deleted: ${e.head_name} for ${e.employee_code}.`); refresh()
   }
 
   // ── Bulk template: this month's employees × the picked heads, pre-filled ──
@@ -341,12 +341,12 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
                     <tbody>
                       {entries.map((e, i) => (
                         <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
-                          {isGroup && <td style={{ ...td, color: C.muted }}>{coByRun[e.run_id] || '—'}</td>}
+                          {isGroup && <td style={{ ...td, color: C.muted }}>{coByRun[e.run_id] || '-'}</td>}
                           <td style={{ ...td, fontWeight: 700 }}>{e.employee_code}</td>
                           <td style={td}>{e.head_name}</td>
                           <td style={{ ...td, color: e.head_type === 'Addition' ? C.green : C.red, fontWeight: 700 }}>{e.head_type}</td>
                           <td style={{ ...td, fontWeight: 700 }}>{inr(e.amount)}</td>
-                          <td style={{ ...td, color: C.muted }}>{e.remark || '—'}</td>
+                          <td style={{ ...td, color: C.muted }}>{e.remark || '-'}</td>
                           <td style={{ ...td, color: C.muted, fontSize: 11 }}>{e.uploaded_via}</td>
                           <td style={td}>
                             <button onClick={() => setConfirmDel(e)} style={{ padding: '4px 10px', borderRadius: 99, border: `1px solid ${C.red}`, background: C.redBg, color: C.red, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
@@ -420,7 +420,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
               <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                 {bulkResults.map((r, i) => (
                   <div key={i} style={{ fontSize: 12, padding: '4px 0', color: r.ok ? C.navy : C.red, borderBottom: `1px solid ${TK.brandEdge}` }}>
-                    {r.ok ? '' : ''} <b>{r.code}</b> · {r.head} — {r.detail}
+                    {r.ok ? '' : ''} <b>{r.code}</b> · {r.head}: {r.detail}
                   </div>
                 ))}
               </div>
@@ -448,9 +448,9 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
                           <td style={{ ...td, fontWeight: 700 }}>{a.employee_code}</td>
                           <td style={td}>{a.head_name}</td>
                           <td style={td}><span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: t.bg, color: t.fg }}>{a.action}</span></td>
-                          <td style={{ ...td, color: C.muted }}>{a.old_amount == null ? '—' : inr(a.old_amount)}</td>
-                          <td style={{ ...td, fontWeight: 700 }}>{a.new_amount == null ? '—' : inr(a.new_amount)}</td>
-                          <td style={{ ...td, color: C.muted, fontSize: 11 }}>{a.uploaded_via || '—'}</td>
+                          <td style={{ ...td, color: C.muted }}>{a.old_amount == null ? '-' : inr(a.old_amount)}</td>
+                          <td style={{ ...td, fontWeight: 700 }}>{a.new_amount == null ? '-' : inr(a.new_amount)}</td>
+                          <td style={{ ...td, color: C.muted, fontSize: 11 }}>{a.uploaded_via || '-'}</td>
                         </tr>
                       )
                     })}

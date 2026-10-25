@@ -97,7 +97,7 @@ function CcPicker({ value, onChange }: { value: CcEmp[]; onChange: (v: CcEmp[]) 
           <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:Z.navMenu, background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:8, marginTop:3, boxShadow:E.floating, maxHeight:220, overflowY:'auto' }}>
             {hits.map(e => (
               <button key={e.id} type="button" onClick={() => { onChange([...value, e]); setQ('') }} style={{ display:'flex', width:'100%', textAlign:'left', gap:8, alignItems:'center', padding:'8px 11px', border:'none', borderBottom:`1px solid ${TK.line}`, background:TK.surface, cursor:'pointer', fontFamily:'inherit' }}>
-                <span style={{ flex:1, fontSize:12.5, color:TK.ink }}>{e.full_name} <span style={{ color:TK.faint }}>· {e.emp_code || '—'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
+                <span style={{ flex:1, fontSize:12.5, color:TK.ink }}>{e.full_name} <span style={{ color:TK.faint }}>· {e.emp_code || '-'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
               </button>
             ))}
           </div>
@@ -210,7 +210,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     const doj = joining.proposed_doj
     const ref = `OAR-${(mrf?.mrf_number || '').replace(/^MRF-/, '') || Date.now().toString().slice(-6)}-${(candidate?.full_name || 'C').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 3)}`
     const parts = [
-      `OFFER APPROVAL REQUEST — CONFIDENTIAL`,
+      `OFFER APPROVAL REQUEST (CONFIDENTIAL)`,
       `Reference ${ref} · ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
       '',
       block('CANDIDATE', [
@@ -238,13 +238,13 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
       block('JOINING', [
         line('Proposed DOJ', doj ? `${new Date(doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} (${daysDiff(doj)} days from today)` : null),
         line('Notice period', joining.notice_period_days ? `${joining.notice_period_days} days` : null),
-        line('Notice buyout', joining.notice_buyout ? (Number(joining.notice_buyout_amount) > 0 ? `Yes — ${money(joining.notice_buyout_amount)}` : 'Yes') : null),
+        line('Notice buyout', joining.notice_buyout ? (Number(joining.notice_buyout_amount) > 0 ? `Yes · ${money(joining.notice_buyout_amount)}` : 'Yes') : null),
       ]),
       block('REMARKS', [ line('Hiring manager', hiringRemark), line('Recruiter', recruiterComments) ]),
       cc.length ? block('CC ON THE APPROVAL MAIL', [ `  ${cc.map(e => `${e.full_name}${e.emp_code ? ` (${e.emp_code})` : ''}`).join(', ')}` ]) : null,
       '',
       'Attachments: MRF · interview summary · CTC break-up acknowledgement (password-protected).',
-      'Confidential — for internal approval only.',
+      'Confidential: for internal approval only.',
     ]
     setTemplate(parts.filter(x => x !== null).join('\n\n').replace(/\n{3,}/g, '\n\n'))
     setShowTemplate(true)
@@ -340,7 +340,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
     alert(notified > 0
-      ? `Offer approval request submitted — the HR Head has been notified to review and approve (${notified} notified${emailedTo ? `, mail sent to ${emailedTo}` : ''}${notifyWarning ? `; ${notifyWarning}` : ''}).`
+      ? `Offer approval request submitted. The HR Head has been notified to review and approve (${notified} notified${emailedTo ? `, mail sent to ${emailedTo}` : ''}${notifyWarning ? `; ${notifyWarning}` : ''}).`
       : `Offer approval request submitted. ${notifyWarning || 'The HR Head could not be notified.'}`)
     if (onSubmitted) onSubmitted()
   }
@@ -384,13 +384,13 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
         </div>
 
         {/* 1 · offered package — read only, straight from the calculator */}
-        <OaCard n={1} title="Offered package" sub="from the negotiation calculator — change it there, not here">
+        <OaCard n={1} title="Offered package" sub="from the negotiation calculator. Change it there, not here">
           {negotiation ? (<>
             <div style={oaGrid('repeat(auto-fit, minmax(150px, 1fr))')}>
               <OaTile l="Annual CTC" v={`₹${fmt(ctcN)}`} sub={varAmt ? `fixed ₹${fmt(fixedAmt)}` : 'all fixed'} />
               <OaTile l="Variable" v={varAmt ? `₹${fmt(varAmt)}` : 'Nil'} sub={varAmt ? `${varPct}% of CTC` : undefined} />
               <OaTile l="Monthly in-hand" v={`₹${fmt(negotiation.net_monthly || 0)}`} sub="estimated · before TDS" tone="ok" />
-              <OaTile l="Hike" v={hikeLive != null && isFinite(hikeLive) ? `${hikeLive > 0 ? '+' : ''}${hikeLive.toFixed(1)}%` : '—'} sub={prevTotal > 0 ? `over ₹${fmt(prevTotal)}` : 'enter previous CTC'} />
+              <OaTile l="Hike" v={hikeLive != null && isFinite(hikeLive) ? `${hikeLive > 0 ? '+' : ''}${hikeLive.toFixed(1)}%` : '-'} sub={prevTotal > 0 ? `over ₹${fmt(prevTotal)}` : 'enter previous CTC'} />
             </div>
             {(Number(negotiation.joining_bonus) > 0 || Number(negotiation.retention_bonus) > 0 || Number(negotiation.esop_value) > 0) && (
               <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
@@ -405,7 +405,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
         </OaCard>
 
         {/* 2 · previous employer */}
-        <OaCard n={2} title="Previous employer" tag={<span className="rx-chip" style={{ color:TK.warning, background:TK.warningTint }}>Confidential — HR only</span>} sub="prefilled from the candidate record; not shown to the candidate">
+        <OaCard n={2} title="Previous employer" tag={<span className="rx-chip" style={{ color:TK.warning, background:TK.warningTint }}>Confidential · HR only</span>} sub="prefilled from the candidate record; not shown to the candidate">
           <div style={oaGrid('1fr 1fr')}>
             <OaField label="Previous company *"><input className="rx-input" value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></OaField>
             <OaField label="Company address"><input className="rx-input" value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></OaField>
@@ -437,7 +437,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
           {joining.notice_buyout && (
             <div style={{ ...oaGrid('1fr 2fr'), marginTop:12, alignItems:'end' }}>
               <OaField label="Buyout amount (₹)"><input className="rx-input" type="number" min={0} step={1} value={joining.notice_buyout_amount} onChange={e=>J('notice_buyout_amount',e.target.value)} placeholder="e.g. 60000" /></OaField>
-              <div className="rx-hint" style={{ paddingBottom:10 }}>Goes into the approval mail as “Notice buyout” — leave blank if the amount is not known yet.</div>
+              <div className="rx-hint" style={{ paddingBottom:10 }}>Goes into the approval mail as “Notice buyout”. Leave blank if the amount is not known yet.</div>
             </div>
           )}
         </OaCard>
@@ -455,7 +455,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
         {showTemplate && (
           <div className="rx-mod" style={{ padding:0, overflow:'hidden' }}>
             <div className="rx-mod-h" style={{ padding:'14px 22px 0' }}>
-              <div className="rx-mod-t">Approval request — preview</div>
+              <div className="rx-mod-t">Approval request: preview</div>
               <div style={{ display:'flex', gap:8 }}>
                 <button type="button" className="rx-btn sm" onClick={generateTemplate}>Regenerate</button>
                 <button type="button" className="rx-btn sm g" onClick={()=>setShowTemplate(false)}>Hide</button>
@@ -558,7 +558,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   // happens only where the chain is honoured: the MRF tab's review (POST /api/ess/mrf), which
   // checks the caller IS the pending approver, records the step, asks the HR Head to assign the
   // hiring manager(s), advances the chain and notifies. Here: the tracker, and a Review button
-  // for the requisitions actually waiting on the viewer.
+  // for the requisitions actually waiting on the viewer. (The hand-off rule, that approving
+  // must name the hiring manager(s) of the MRF's own company, is enforced on that same path by
+  // lib/recruitment/mrf-approve.ts.)
   async function loadMrfs() {
     const { data } = await supabase.from('manpower_requisitions')
       .select('*, companies(company_name)')
@@ -580,7 +582,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   }
   async function rehire(c: any, stage: string) {
     if (!stage) { alert('Pick a pipeline stage to place the candidate'); return }
-    if (occupiesSlot(stage)) { alert(`A rehired candidate re-enters the interview funnel — ${stage} holds an opening and is reached through the rounds.`); return }
+    if (occupiesSlot(stage)) { alert(`A rehired candidate re-enters the interview funnel: ${stage} holds an opening and is reached through the rounds.`); return }
     const { error } = await supabase.from('candidates')
       .update({ stage, blacklisted: false, blacklist_reason: null, status: 'active' }).eq('id', c.id)
     if (error) { alert('Error: ' + error.message); return }
@@ -716,13 +718,13 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             const open = () => { setSelected(r); setAction('approve'); setComment(''); setDecided(null) }
             const pending = r.status === 'SUBMITTED'
             return (
-              <CandCard key={r.id} name={r.candidates?.full_name || '—'} mrf={mn} selected={on} onOpen={open}
+              <CandCard key={r.id} name={r.candidates?.full_name || '-'} mrf={mn} selected={on} onOpen={open}
                 label={`${pending ? 'Review' : 'View'} the offer for ${r.candidates?.full_name || 'this candidate'}`}
                 badges={pending ? <span className="rx-b b-warn">Awaiting you</span> : <span className="rx-b b-pos">Approved</span>}
                 meta={metaLine(r.candidates?.designation, r.candidates?.experience_years != null ? `${r.candidates.experience_years} yr exp` : null, r.candidates?.current_company)}
                 body={
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8 }}>
-                    {[['CTC', r.offered_ctc ? `₹${(Number(r.offered_ctc)/100000).toFixed(2)}L` : '—'], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '—'], ['Joins', r.proposed_doj ? fullDate(r.proposed_doj).replace(/ \d{4}$/, '') : '—']].map(([k,v]) => (
+                    {[['CTC', r.offered_ctc ? `₹${(Number(r.offered_ctc)/100000).toFixed(2)}L` : '-'], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '-'], ['Joins', r.proposed_doj ? fullDate(r.proposed_doj).replace(/ \d{4}$/, '') : '-']].map(([k,v]) => (
                       <div key={k} className="rx-tile" style={{ padding:'8px 10px', minWidth:0 }}>
                         <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:TK.muted }}>{k}</div>
                         <div style={{ fontSize:14.5, fontWeight:700, color: k==='Hike' && hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', ...numeric }}>{v}</div>
@@ -732,7 +734,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                 status={pending ? null : <>Approved{r.hr_head_actioned_at ? ` ${fullDate(r.hr_head_actioned_at)}` : ''} · with the HR Manager in <b>Send Offers</b></>}
                 statusTone="pos"
                 actions={<>
-                  <span className="rx-meta">Submitted {r.submitted_at ? fullDate(r.submitted_at) : '—'}{r.notice_buyout ? ' · buyout' : ''}</span>
+                  <span className="rx-meta">Submitted {r.submitted_at ? fullDate(r.submitted_at) : '-'}{r.notice_buyout ? ' · buyout' : ''}</span>
                   <span className="sp" />
                   <button type="button" className={pending ? 'rx-btn sm p' : 'rx-btn sm'} onClick={open}>{pending ? 'Review & decide' : 'View'}</button>
                 </>} />
@@ -742,9 +744,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       )}
       </section>
 
-      {/* MRF Approvals — HR Head approves new manpower requisitions here */}
+      {/* MRFs in approval: read-only tracker; the decision is made in the MRF tab review */}
       <section style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        <div className="rx-seclabel">MRFs in approval {fMrfs.length > 0 && <span className="rx-meta">{fMrfs.length} · {fMrfs.filter((m:any)=>!!employeeId && trackerStepsOf(m.approval_chain).find(st=>st.status==='PENDING')?.approverId===employeeId).length} waiting on you</span>}</div>
+        <div className="rx-mod-h" style={{ marginBottom:0 }}><div className="rx-mod-t">MRFs in approval {fMrfs.length > 0 && <span className="rx-meta">{fMrfs.length} · {fMrfs.filter((m:any)=>!!employeeId && trackerStepsOf(m.approval_chain).find(st=>st.status==='PENDING')?.approverId===employeeId).length} waiting on you</span>}</div></div>
         {fMrfs.length === 0 && (
           <div className="rx-mod" style={{ textAlign:'center' as const, padding:16 }}><span className="rx-meta">{ql?'No matching MRF':'No requisitions in approval'}</span></div>
         )}
@@ -779,7 +781,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
       <section style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        <div className="rx-seclabel">Rehire rejected candidates <span className="rx-meta">{fRejected.length}</span></div>
+        <div className="rx-mod-h" style={{ marginBottom:0 }}><div className="rx-mod-t">Rehire rejected candidates <span className="rx-meta">{fRejected.length}</span></div></div>
         {fRejected.length === 0 && (
           <div className="rx-mod" style={{ textAlign:'center' as const, padding:16 }}><span className="rx-meta">{ql?'No matching candidate':'No rejected candidates'}</span></div>
         )}
@@ -875,9 +877,9 @@ function DocPreview({ requestId, doc, onClose, onDownload, load, hint }: {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); onClose() } }
     window.addEventListener('keydown', onKey, true); return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
-  const note = hint || (doc.key === 'ctc' ? 'Password-protected — the password is the candidate’s registered mobile number.' : '')
+  const note = hint || (doc.key === 'ctc' ? 'Password-protected: the password is the candidate’s registered mobile number.' : '')
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={`Preview — ${doc.name}`}
+    <div role="dialog" aria-modal="true" aria-label={`Preview: ${doc.name}`}
       style={{ position:'fixed', inset:0, zIndex:Z.modal, background:TK.canvas, display:'flex', flexDirection:'column', animation:'rxFade .2s both' }}>
       <div style={{ padding:'12px 20px', borderBottom:`1px solid ${TK.line}`, background:TK.surface, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
         <button type="button" className="rx-btn sm g" onClick={onClose}>← Back</button>
@@ -1015,7 +1017,7 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setEditErr(j.error || 'Could not save the revised offer'); setSaving(false); return }
       setSaving(false); onRevised(Number(j.notified || 0))
-    } catch { setEditErr('Network error — nothing was saved'); setSaving(false) }
+    } catch { setEditErr('Network error. Nothing was saved'); setSaving(false) }
   }
   const busyAny = processing || saving
   useEffect(() => {
@@ -1026,7 +1028,7 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
   if (typeof document === 'undefined') return null
   const c = req.candidates || {}
   const rs = (n: any) => `₹${fmt(Number(n || 0))}`
-  const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+  const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
   const ctc = Number(req.offered_ctc || 0), vp = Number(req.offered_variable_pct || 0), vAmt = ctc > 0 && vp > 0 ? Math.round(ctc * vp / 100) : 0
   const hike = req.hike_pct != null ? Number(req.hike_pct) : null
   const pending = req.status === 'SUBMITTED'
@@ -1078,7 +1080,7 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
             {req.revision_note && pending && (
               <div style={{ marginBottom:12 }}>
                 <Callout tone="warn">
-                  <b>Revision requested</b>{req.revision_requested_by ? ` by ${req.revision_requested_by}` : ''}{req.revision_requested_at ? ` on ${day(req.revision_requested_at)}` : ''}: “{req.revision_note}”. Edit the offer below and approve it — it goes back to Send Offers.
+                  <b>Revision requested</b>{req.revision_requested_by ? ` by ${req.revision_requested_by}` : ''}{req.revision_requested_at ? ` on ${day(req.revision_requested_at)}` : ''}: “{req.revision_note}”. Edit the offer below and approve it. It goes back to Send Offers.
                 </Callout>
               </div>
             )}
@@ -1086,14 +1088,14 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
             {overBudget && (
               <div style={{ marginBottom:12 }}>
                 <Callout tone="warn">
-                  This offer is above the requisition&rsquo;s budget — {rs(ctc)} against a ceiling of {rs(ceiling)}.
+                  This offer is above the requisition&rsquo;s budget: {rs(ctc)} against a ceiling of {rs(ceiling)}.
                   {monthlyBudget && ` The requisition is budgeted monthly (${rs(mrf?.budget_max)}/mo), shown here as a year.`}
                 </Callout>
               </div>
             )}
             {/* hero numbers */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
-              {[['Offered CTC', rs(ctc), 'per annum', TK.ink], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '—', Number(req.prev_total_ctc) > 0 ? `over ${rs(req.prev_total_ctc)}` : 'previous CTC unknown', hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink], ['Monthly in-hand', req.monthly_inhand ? rs(req.monthly_inhand) : '—', 'estimated · before TDS', TK.ink]].map(([k, v, sub, col], i) => (
+              {[['Offered CTC', rs(ctc), 'per annum', TK.ink], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '-', Number(req.prev_total_ctc) > 0 ? `over ${rs(req.prev_total_ctc)}` : 'previous CTC unknown', hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink], ['Monthly in-hand', req.monthly_inhand ? rs(req.monthly_inhand) : '-', 'estimated · before TDS', TK.ink]].map(([k, v, sub, col], i) => (
                 <div key={String(k)} className="rx-tile" style={{ animation:`rxRise .45s ${.05 * i}s cubic-bezier(.2,.8,.2,1) both` }}>
                   <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted }}>{k}</div>
                   <div style={{ fontSize:20, fontWeight:800, letterSpacing:'-.02em', color: col as string, marginTop:3, ...numeric }}>{v}</div>
@@ -1121,7 +1123,7 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
             <Row k="Company" v={req.prev_company_name || c.current_company} />
             <Row k="Address" v={req.prev_company_address} />
             <Row k="Total CTC" v={Number(req.prev_total_ctc) > 0 ? `${rs(req.prev_total_ctc)} p.a.` : null} strong />
-            <Row k="Fixed / variable" v={(Number(req.prev_fixed_ctc) > 0 || Number(req.prev_variable) > 0) ? `${Number(req.prev_fixed_ctc) > 0 ? rs(req.prev_fixed_ctc) : '—'} / ${Number(req.prev_variable) > 0 ? rs(req.prev_variable) : '—'}` : null} />
+            <Row k="Fixed / variable" v={(Number(req.prev_fixed_ctc) > 0 || Number(req.prev_variable) > 0) ? `${Number(req.prev_fixed_ctc) > 0 ? rs(req.prev_fixed_ctc) : '-'} / ${Number(req.prev_variable) > 0 ? rs(req.prev_variable) : '-'}` : null} />
             <Row k="TA / DA (monthly)" v={Number(req.prev_ta_da) > 0 ? rs(req.prev_ta_da) : null} />
             <Row k="Additional" v={req.prev_additional} />
 
@@ -1167,13 +1169,13 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
             {mode === 'reject' && (
               <div style={{ padding:14, borderRadius:14, border:`1px solid ${TK.criticalEdge}`, background:TK.criticalTint, display:'flex', flexDirection:'column', gap:8, animation:'rxRise .3s both' }}>
                 <div style={{ fontSize:12.5, fontWeight:700, color:TK.critical }}>Why are you rejecting this offer? The recruiter and the MRF raiser will read this.</div>
-                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. CTC is above the approved band for this grade — revise and resubmit." style={{ height:'auto', minHeight:72, resize:'vertical', padding:'10px 13px' }} />
+                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. CTC is above the approved band for this grade. Revise and resubmit." style={{ height:'auto', minHeight:72, resize:'vertical', padding:'10px 13px' }} />
               </div>
             )}
             {mode === 'approve' && (
               <div style={{ padding:14, borderRadius:14, border:`1px solid ${TK.positiveEdge}`, background:TK.positiveTint, display:'flex', flexDirection:'column', gap:8, animation:'rxRise .3s both' }}>
                 <div style={{ fontSize:12.5, fontWeight:700, color:TK.positive }}>Approve {rs(ctc)} for {c.full_name}? A note for the HR manager is optional.</div>
-                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional comment — goes with the approval notification." style={{ height:'auto', minHeight:56, resize:'vertical', padding:'10px 13px' }} />
+                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional comment (goes with the approval notification)." style={{ height:'auto', minHeight:56, resize:'vertical', padding:'10px 13px' }} />
               </div>
             )}
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -1231,7 +1233,7 @@ const whenShort = (v?: string | null) => v ? new Date(v).toLocaleString('en-IN',
 const OFFER_STEPS: { title: string; sub: string; sections?: string[]; salary?: boolean; extra?: 'review' }[] = [
   { title: 'Candidate', sub: 'Personal & contact details', sections: ['Personal', 'Contact'] },
   { title: 'Background', sub: 'Education, experience & previous employer', sections: ['Education & experience', 'Previous employer (as approved)', 'Source'] },
-  { title: 'Offer', sub: 'Position, joining & approved compensation', sections: ['Position & joining', 'Offered compensation (approved — locked)'], salary: true },
+  { title: 'Offer', sub: 'Position, joining & approved compensation', sections: ['Position & joining', 'Offered compensation (approved, locked)'], salary: true },
   { title: 'Interviews & documents', sub: 'Interview outcomes and the pre-negotiation documents', extra: 'review' },
 ]
 const draftOf = (r: FileRow) => r.raw == null ? '' : r.type === 'date' ? String(r.raw).slice(0, 10) : Array.isArray(r.raw) ? r.raw.join(', ') : String(r.raw)
@@ -1253,7 +1255,7 @@ function FormField({ row, editing, value, onChange }: { row: FileRow; editing: b
               type={row.type === 'number' ? 'number' : row.type === 'date' ? 'date' : row.type === 'email' ? 'email' : row.type === 'tel' ? 'tel' : 'text'} />
       ) : (
         <div style={{ minHeight:38, padding:'9px 12px', borderRadius:R.md, border:`1px solid ${TK.line}`, background: row.editable ? TK.surface : TK.sunken, fontSize:13.5, fontWeight:600, color: row.value ? TK.ink : TK.faint, whiteSpace:'pre-wrap', wordBreak:'break-word', boxSizing:'border-box' }}>
-          {row.value || '—'}
+          {row.value || '-'}
         </div>
       )}
     </div>
@@ -1332,7 +1334,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setErr(j.error || 'Failed'); return null }
       setFile(j); return j
-    } catch { setErr('Network error — nothing was saved'); return null }
+    } catch { setErr('Network error. Nothing was saved'); return null }
     finally { setBusy(false) }
   }
 
@@ -1388,7 +1390,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
   const card: React.CSSProperties = { background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:R.lg, padding:'18px 20px', marginBottom:14 }
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={`Offer file — ${req.candidates?.full_name || ''}`}
+    <div role="dialog" aria-modal="true" aria-label={`Offer file: ${req.candidates?.full_name || ''}`}
       style={{ position:'fixed', inset:0, zIndex:Z.modal, background:TK.canvas, color:TK.ink, display:'flex', flexDirection:'column', animation:'rxFade .25s both' }}>
       {/* header */}
       <div style={{ background:TK.surface, borderBottom:`1px solid ${TK.line}` }}>
@@ -1431,7 +1433,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                 )}
               </div>
               {!!file.warnings?.length && cur.salary && <WarnList items={file.warnings} />}
-              {editing && verified && <div style={{ fontSize:12, color:TK.warning, background:TK.warningTint, borderRadius:R.md, padding:'8px 12px', marginBottom:12 }}>Saving a change withdraws the verification — you will confirm the file again in the last part.</div>}
+              {editing && verified && <div style={{ fontSize:12, color:TK.warning, background:TK.warningTint, borderRadius:R.md, padding:'8px 12px', marginBottom:12 }}>Saving a change withdraws the verification. You will confirm the file again in the last part.</div>}
 
               {(cur.sections || []).map(sec => {
                 const rows = stepRows(step).filter(r => r.section === sec)
@@ -1448,7 +1450,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
 
               {cur.salary && file.salary && (
                 <section style={card}>
-                  <div style={formHead}>{file.letter ? `${file.letter.annexA} (approved — locked)` : 'Salary break-up (approved — locked)'}</div>
+                  <div style={formHead}>{file.letter ? `${file.letter.annexA} (approved, locked)` : 'Salary break-up (approved, locked)'}</div>
                   <div style={{ overflowX:'auto' }}>
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
                       <thead><tr style={{ background:TK.sunken }}>{['Component', 'Basis', 'Monthly', file.salary.totalLabel || 'Annual'].map((h, i) => <th key={h} style={{ textAlign: i >= 2 ? 'right' : 'left', padding:'8px 12px', fontWeight:700, color:TK.muted, borderBottom:`1px solid ${TK.line}` }}>{h}</th>)}</tr></thead>
@@ -1526,7 +1528,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                     <div style={{ fontSize:15, fontWeight:800 }}>I have verified all the details of {req.candidates?.full_name}</div>
                     <div style={{ fontSize:12.5, color:TK.muted, marginTop:4, lineHeight:1.55 }}>
                       Personal, contact, education, experience, previous employer, position, {file.letter?.months ? 'period, ' : ''}joining and the approved {file.letter?.payNoun || 'compensation'} in parts 1–3, the {file.letter ? file.letter.annexA.toLowerCase() : 'salary break-up'},
-                      {` ${file.interviews.length} interview${file.interviews.length === 1 ? '' : 's'}`} and {file.documents.length} document{file.documents.length === 1 ? '' : 's'} — and they are correct.
+                      {` ${file.interviews.length} interview${file.interviews.length === 1 ? '' : 's'}`} and {file.documents.length} document{file.documents.length === 1 ? '' : 's'}, and they are correct.
                     </div>
                     {verified && <div style={{ fontSize:12, fontWeight:700, color:TK.positive, marginTop:8 }}>Verified by {verified.by} · {whenShort(verified.at)}</div>}
                   </div>
@@ -1543,7 +1545,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   )}
                   <div className="rx-meta" style={{ marginBottom:12, lineHeight:1.5 }}>
                     {!verified ? 'Tick the confirmation above to unlock this.'
-                      : letter ? `Generated by ${letter.by} · ${whenShort(letter.at)}.` : `Generate the ${(file.letter?.title || 'offer letter').toLowerCase()} on the company letterhead — letter, ${(file.letter?.annexA || 'salary break-up').toLowerCase()} (Annexure A) and terms (Annexure B).`}
+                      : letter ? `Generated by ${letter.by} · ${whenShort(letter.at)}.` : `Generate the ${(file.letter?.title || 'offer letter').toLowerCase()} on the company letterhead: letter, ${(file.letter?.annexA || 'salary break-up').toLowerCase()} (Annexure A) and terms (Annexure B).`}
                   </div>
                   <button type="button" className="rx-btn p" disabled={!verified || locked} onClick={generate} style={{ width:'100%', opacity: verified ? 1 : .5, cursor: verified ? 'pointer' : 'not-allowed' }}>
                     {generating ? 'Generating…' : !verified ? '🔒 Generate letter' : letter ? '↻ Regenerate letter' : `Generate ${file.letter?.kind === 'EMPLOYMENT' || !file.letter ? 'offer letter' : file.letter.title.toLowerCase()}`}
@@ -1569,7 +1571,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   <div style={{ fontSize:11.5, borderRadius:7, padding:'8px 12px', marginBottom:10, background: canSend ? TK.brandTint : TK.warningTint, color: canSend ? TK.brandDeep : TK.warning }}>
                     {!approved ? `Yet to be approved by the HR Head${headNames ? ` (${headNames})` : ''}. You can verify and generate meanwhile.`
                       : !verified ? 'Tick the confirmation above first.'
-                      : !letter ? 'Generate the letter first — it is attached to this mail.'
+                      : !letter ? 'Generate the letter first. It is attached to this mail.'
                       : 'Emails the candidate with the offer letter PDF attached, records it, and moves the candidate to Offer Sent.'}
                   </div>
                   <button type="button" className="rx-btn p" onClick={onSend} disabled={sending || !canSend || locked} style={{ width:'100%', opacity: canSend ? 1 : .5, cursor: canSend ? 'pointer' : 'not-allowed' }}>
@@ -1594,7 +1596,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
       )}
 
       {preview && <DocPreview requestId={req.id} doc={preview} onClose={() => setPreview(null)} onDownload={() => preview.downloadUrl && window.open(preview.downloadUrl, '_blank', 'noopener')} />}
-      {letterPreview && <DocPreview requestId={req.id} doc={{ key:'offer-letter', name:`${file?.letter?.title || 'Offer letter'} — ${req.candidates?.full_name || ''}` }} load={() => letterBlob(false)}
+      {letterPreview && <DocPreview requestId={req.id} doc={{ key:'offer-letter', name:`${file?.letter?.title || 'Offer letter'}: ${req.candidates?.full_name || ''}` }} load={() => letterBlob(false)}
         hint={`On the ${file?.company?.company_name || 'company'} letterhead`} onClose={() => setLetterPreview(false)} onDownload={downloadLetter} />}
     </div>,
     document.body,
@@ -1660,7 +1662,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
   const payLine = (r: any) => {
     const n = r.ctc_negotiations
     if (n?.is_stipend && Number(n.stipend_monthly) > 0) return `₹${fmt(n.stipend_monthly)}/month ${isFeesKind(kindOf(r)) ? 'fees' : 'stipend'}`
-    return `CTC ₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}${r.hike_pct ? ` · Hike ${Number(r.hike_pct).toFixed(1)}%` : ''}`
+    return `CTC ₹${r.offered_ctc ? fmt(r.offered_ctc) : '-'}${r.hike_pct ? ` · Hike ${Number(r.hike_pct).toFixed(1)}%` : ''}`
   }
   // The request's own mrf_id is empty on older rows; the candidate always carries it. Reading only
   // the request is why one card showed its MRF chip and the next did not — and why the department /
@@ -1710,7 +1712,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
     // Never trust the button state alone — re-read the row so an offer the HR Head has not
     // approved (or has rejected since the screen loaded) cannot go out.
     const { data: live } = await supabase.from('offer_approval_requests').select('status').eq('id', selected.id).maybeSingle()
-    if (live?.status !== 'HR_HEAD_APPROVED') { alert(live?.status === 'SUBMITTED' ? 'The HR Head has not approved this offer yet. The Send Offer button unlocks once they do.' : `This offer is ${String(live?.status || 'unavailable').replace(/_/g, ' ').toLowerCase()} — it cannot be sent.`); setTick(t => t + 1); return }
+    if (live?.status !== 'HR_HEAD_APPROVED') { alert(live?.status === 'SUBMITTED' ? 'The HR Head has not approved this offer yet. The Send Offer button unlocks once they do.' : `This offer is ${String(live?.status || 'unavailable').replace(/_/g, ' ').toLowerCase()}. It cannot be sent.`); setTick(t => t + 1); return }
 
     // Validate the To + CC addresses, and warn if CC was left empty (easy to forget).
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -1819,7 +1821,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         subtitle="Every offer submitted to the HR Head. Open the offer file to verify it, generate the letter and send it."
         help={<Help label="How this works">
           <p>A candidate appears the moment the recruiter <b>submits the offer to the HR Head</b>.</p>
-          <p>Open the <b>offer file</b>: four parts — candidate, background, offer, interviews &amp; documents — read like a filled form, with <b>Next</b> to move on. Candidate and joining details can be edited; the approved compensation is locked.</p>
+          <p>Open the <b>offer file</b>: four parts (candidate, background, offer, interviews &amp; documents) read like a filled form, with <b>Next</b> to move on. Candidate and joining details can be edited; the approved compensation is locked.</p>
           <p>The letter follows the engagement on the MRF: an <b>Employee</b> gets an Offer of Employment with a CTC break-up; an <b>Intern</b> an Internship Offer with a stipend and period; <b>NATS</b> / <b>NAPS</b> an Offer of Apprenticeship under the Apprentices Act, 1961 (stipend, Government share by DBT, no PF/ESIC); <b>Contract</b> / <b>Consultant</b> an engagement letter with fees and TDS under s.194J. Each on its own company's letterhead.</p>
           <p>In the last part, one checkbox confirms the whole file. <b>Generate letter</b> then builds the multi-page letter on the company letterhead, and <b>Send</b> unlocks once the HR Head has approved; it emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
         </Help>}
@@ -1867,14 +1869,14 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
               const heads = headNames(r)
               const approver = r.hr_head_email || heads
               return (
-                <CandCard key={r.id} name={r.candidates?.full_name || '—'} mrf={mrfNo(r)}
+                <CandCard key={r.id} name={r.candidates?.full_name || '-'} mrf={mrfNo(r)}
                   selected={selected?.id === r.id} onOpen={() => prepareOffer(r)} label={`Open the offer file for ${r.candidates?.full_name || 'this candidate'}`}
                   meta={metaLine(r.candidates?.designation || r.manpower_requisitions?.designation,
                     r.candidates?.experience_years != null ? `${r.candidates.experience_years} yr exp` : null,
                     payLine(r), months && kind !== 'EMPLOYMENT' ? `${months} months` : null)}
                   tags={(kind !== 'EMPLOYMENT' || r.manpower_requisitions?.is_confidential) ? <>
                     {kind !== 'EMPLOYMENT' && <span className="rx-cc-tag info" title={specOf(kind).title}>{specOf(kind).label}</span>}
-                    {r.manpower_requisitions?.is_confidential && <span className="rx-cc-tag warn" title="Confidential hiring — self-approved by the HR Head">🔒 Confidential</span>}
+                    {r.manpower_requisitions?.is_confidential && <span className="rx-cc-tag warn" title="Confidential hiring: self-approved by the HR Head">🔒 Confidential</span>}
                   </> : null}
                   body={<ApprovalTrail
                     summary={ok

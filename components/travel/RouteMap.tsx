@@ -42,7 +42,7 @@ export interface RouteData {
 }
 
 const km = (n: number | null | undefined) =>
-  n == null ? '—' : `${Number(n).toFixed(2)} km`
+  n == null ? '-' : `${Number(n).toFixed(2)} km`
 
 // ---------------------------------------------------------------------------
 // Sub-components outside the parent — inside, they remount every render.
@@ -256,7 +256,7 @@ export default function RouteMap({ route, height = 300, title }: {
 
       {!key && (
         <div style={{ fontSize: 11, color: V.amber, marginTop: 8, lineHeight: 1.6 }}>
-          Showing the recorded path without a basemap — no Google Maps key is configured.
+          Showing the recorded path without a basemap. No Google Maps key is configured.
           Distances above are still measured from the real trail. Set
           NEXT_PUBLIC_GOOGLE_MAPS_KEY for the map, and GOOGLE_MAPS_API_KEY on the server
           for road matching and the direct-route comparison.

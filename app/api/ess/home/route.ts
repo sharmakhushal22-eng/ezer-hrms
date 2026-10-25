@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 
   const kpis: Kpi[] = [
     { label: 'Leave balance', value: `${leaveBal % 1 ? leaveBal.toFixed(1) : leaveBal} days` },
-    { label: 'Latest payroll', value: run?.period_label || '—', note: run?.status ? run.status.toLowerCase().replace('_', ' ') : undefined },
+    { label: 'Latest payroll', value: run?.period_label || '-', note: run?.status ? run.status.toLowerCase().replace('_', ' ') : undefined },
     { label: 'Declaration', value: decl?.declaration_status ? decl.declaration_status.charAt(0) + decl.declaration_status.slice(1).toLowerCase() : 'Not started', note: decl?.regime ? `${decl.regime === 'OLD' ? 'Old' : 'New'} regime` : undefined },
     { label: 'Proof status', value: proofStatus, tone: proofStatus === 'Not submitted' ? 'warn' : undefined },
   ]
@@ -65,5 +65,5 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ kpis: kpis.slice(0, 8), pending, pending_title:
-    ctx.canCompany ? 'Needs your attention — company-wide' : ctx.menu.is_rm || ctx.menu.is_hod ? 'Pending on you — your team' : 'Your open items' })
+    ctx.canCompany ? 'Needs your attention (company-wide)' : ctx.menu.is_rm || ctx.menu.is_hod ? 'Pending on you (your team)' : 'Your open items' })
 }

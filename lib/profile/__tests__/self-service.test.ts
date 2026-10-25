@@ -94,7 +94,7 @@ test('generic fields are validated and normalised server-side too', () => {
 
 test('who a request goes to is said in words', () => {
   const a = { l1: { name: 'Pooja Verma', code: 'X1' }, hr: { name: 'Asha Rao', code: 'H1' }, payroll: null };
-  assert.equal(goesTo('spouse_name', a).summary, 'Line manager — Pooja Verma, then HR — Asha Rao');
+  assert.equal(goesTo('spouse_name', a).summary, 'Pooja Verma (line manager), then Asha Rao (HR)');
   assert.equal(goesTo('salary_account', a).summary, 'Payroll team');
-  assert.equal(goesTo('present_address', { ...a, l1: null }).summary, 'HR — Asha Rao');
+  assert.equal(goesTo('present_address', { ...a, l1: null }).summary, 'Asha Rao (HR)');
 });

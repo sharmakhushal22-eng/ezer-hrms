@@ -34,7 +34,7 @@ export const TEAM: Record<string, string> = { IT: 'IT', ADMIN: 'Admin', PAYROLL:
 
 /** The paper sheet's styling — shared with the heads' approval form (components/ess/OnboardingApprovals.tsx). */
 export const SHEET_CSS = `
-  .rv-paper{background:${TK.surface};color:${TK.ink};width:min(920px,100%);margin:0 auto;border-radius:6px;box-shadow:${E.overlay};padding:40px 52px 0;font-size:13px;line-height:1.45;position:relative}
+  .rv-paper{background:${TK.surface};color:${TK.ink};width:min(920px,100%);margin:0 auto 40px;border-radius:6px;box-shadow:${E.overlay};padding:40px 52px 0;font-size:13px;line-height:1.45;position:relative}
   .rv-paper:before{content:'';position:absolute;left:0;right:0;top:0;height:5px;border-radius:6px 6px 0 0;background:${TK.brand}}
   .rv-h{display:flex;align-items:baseline;gap:10px;margin:0;padding-bottom:6px;border-bottom:1px solid ${TK.lineStrong};font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:${TK.brand}}
   .rv-h span{color:${TK.ink};font-size:14px;font-weight:700;letter-spacing:0;text-transform:none}
@@ -342,7 +342,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
   const docMarks = list.filter(m => m.kind === 'doc').length, detMarks = list.length - docMarks
 
   return (
-    <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: Z.modal, overflowY: 'auto', padding: '28px 12px 40px', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
+    <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: Z.modal, overflowY: 'auto', padding: '28px 12px 0', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
       <style>{SHEET_CSS}</style>
 
       <div className="rv-paper">
@@ -352,7 +352,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
           <>
             {/* ── Letterhead ── */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: TK.muted }}>Onboarding form · {item.employment_type || 'Employee'}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: TK.muted }}>Onboarding form · {item.employment_type || 'Employee'}{item.hiring_track === 'FOREIGN_IN_INDIA' ? <span style={{ marginLeft: 10, color: TK.brand }}>· Foreign national in India</span> : item.hiring_track === 'OVERSEAS' ? <span style={{ marginLeft: 10, color: TK.brand }}>· Overseas · {item.work_country || '—'}{item.payroll_currency ? ` · ${item.payroll_currency}` : ''}{item.employing_entity ? ` · ${item.employing_entity}` : ''}</span> : null}</div>
               <button onClick={onClose} className="rv-ghost" aria-label="Close">✕ Close</button>
             </div>
             <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
@@ -364,7 +364,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {(data.approvals as Approval[]).map(a => {
                   const c = a.status === 'APPROVED' ? TK.positive : a.status === 'RETURNED' ? TK.critical : TK.muted
-                  return <span key={a.team} className="rv-stamp" style={{ color: c, borderColor: c, background: a.status === 'APPROVED' ? TK.positiveTint : a.status === 'RETURNED' ? TK.criticalTint : TK.sunken }} title={a.status === 'PENDING' ? 'Not decided yet' : `${a.status === 'APPROVED' ? 'Approved' : 'Returned'}${a.acted_by_name ? ` by ${a.acted_by_name}` : ''}${a.remark ? ` — ${a.remark}` : ''}`}>{TEAM[a.team]} {a.status === 'APPROVED' ? '✓' : a.status === 'RETURNED' ? '↩' : '·'} {a.status === 'APPROVED' ? (a.acted_by_name || 'approved') : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>
+                  return <span key={a.team} className="rv-stamp" style={{ color: c, borderColor: c, background: a.status === 'APPROVED' ? TK.positiveTint : a.status === 'RETURNED' ? TK.criticalTint : TK.sunken }} title={a.status === 'PENDING' ? 'Not decided yet' : `${a.status === 'APPROVED' ? 'Approved' : 'Returned'}${a.acted_by_name ? ` by ${a.acted_by_name}` : ''}${a.remark ? `: ${a.remark}` : ''}`}>{TEAM[a.team]} {a.status === 'APPROVED' ? '✓' : a.status === 'RETURNED' ? '↩' : '·'} {a.status === 'APPROVED' ? (a.acted_by_name || 'approved') : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>
                 })}
               </div>
             </div>
@@ -393,12 +393,13 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               {docs.length === 0 && <div style={{ fontSize: 12, color: TK.muted, marginTop: 8 }}>No documents uploaded.</div>}
               <div className="rv-docs">{docs.map(doc => <DocCard key={doc.doc_code} doc={doc} on={!!marks[`doc:${doc.doc_code}`]} pick={canDecide} onPick={() => toggle({ key: `doc:${doc.doc_code}`, kind: 'doc', label: doc.label, doc_code: doc.doc_code })} />)}</div>
               {/* The official forms, filled from this sheet — opened in a new tab (the call needs the session header). */}
+              {item.hiring_track === 'OVERSEAS' ? <div style={{ fontSize: 12, color: TK.muted, marginTop: 14 }}>Overseas employee — no Indian statutory forms (PF, gratuity, ESIC) apply.</div> : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
                 <span className="rv-sub" style={{ marginBottom: 0 }}>Statutory forms, filled</span>
                 {([['form11', 'EPF Form 11'], ['form2', 'EPF Form 2'], ['formf', 'Gratuity Form F'], ...(item.esic_applicable ? [['esic1', 'ESIC Form 1']] : [])] as [string, string][]).map(([k, l]) => (
                   <button key={k} type="button" className="rv-view" disabled={!!opening} onClick={() => openForm(k, l)} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{opening === k ? 'Opening…' : `${l} ↗`}</button>
                 ))}
-              </div>
+              </div>)}
             </section>
 
             {/* ── Details, section by section ── */}
@@ -433,7 +434,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
                     {data.hr_review?.outcome === 'RETURNED' && list.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>{list.map(m => <span key={m.key} className="rv-chip">{m.label}</span>)}</div>}
                     {data.hr_review?.outcome === 'RETURNED' && remark && <div><b>Remark sent:</b> {remark}</div>}
                     {readOnly && data.hr_review?.outcome === 'ACCEPTED' && <>Accepted by {data.hr_review.by_name || 'the HR Manager'} on {day(data.hr_review.at)}. The stamps at the top show where IT, Admin and Payroll are.</>}
-                    {readOnly && data.hr_review?.outcome === 'RESUBMITTED' && 'The candidate resubmitted after a return — open it with Review form to decide.'}
+                    {readOnly && data.hr_review?.outcome === 'RESUBMITTED' && 'The candidate resubmitted after a return. Open it with Review form to decide.'}
                     {readOnly && !data.hr_review && 'Read-only view of the submitted form.'}
                     {!readOnly && !canDecide && !data.hr_review && (item.status === 'EMPLOYEE_CREATED' ? 'The employee code is already generated.' : item.status === 'IN_PROGRESS' ? 'The candidate has not submitted the form yet.' : 'Already approved by the HR Manager.')}
                   </div>

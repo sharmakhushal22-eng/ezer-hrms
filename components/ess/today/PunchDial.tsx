@@ -111,7 +111,10 @@ export default function PunchDial({ data, prefs, onToast, onPunched, onState, co
     <div className="dialwrap">
       <div className="dial">
         <svg viewBox="0 0 224 224" aria-hidden="true">
-          <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#FFFFFF" /><stop offset="1" stopColor="#7DD3FC" /></linearGradient></defs>
+          {/* The ring's two stops follow the hero's theme (today.css --ring-a/--ring-b):
+              white→sky on the dark navy hero, blue→sky on the light one, where a white
+              ring would vanish. */}
+          <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: 'var(--ring-a)' }} /><stop offset="1" style={{ stopColor: 'var(--ring-b)' }} /></linearGradient></defs>
           <circle className="track" cx={C} cy={C} r={R} />
           <circle className="prog" pathLength={1} cx={C} cy={C} r={R} style={{ strokeDashoffset: 1 - p }} />
           <g>{ticks}</g>
@@ -127,7 +130,7 @@ export default function PunchDial({ data, prefs, onToast, onPunched, onState, co
             <small>since {fmtClock(inAt, prefs.time_format)}</small>
           </> : outAt ? <>
             <span className="eyebrow">Day done</span>
-            <span className="timer">{data.today?.punch_in ? (() => { const ms = outAt.getTime() - new Date(data.today.punch_in).getTime(); return `${Math.floor(ms / 3.6e6)}h ${two(Math.floor(ms / 6e4) % 60)}m`; })() : '—'}</span>
+            <span className="timer">{data.today?.punch_in ? (() => { const ms = outAt.getTime() - new Date(data.today.punch_in).getTime(); return `${Math.floor(ms / 3.6e6)}h ${two(Math.floor(ms / 6e4) % 60)}m`; })() : '-'}</span>
             <small>out at {fmtClock(outAt, prefs.time_format)}</small>
           </> : <>
             <span className="eyebrow">Not punched in</span>

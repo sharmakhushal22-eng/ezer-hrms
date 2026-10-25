@@ -1,6 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CHECKLISTS, HEAD_TEAMS, missingItems, normaliseChecklist, checklistColumns, summariseChecklist, confirmationsOnly } from '../checklists.ts'
+import { register } from 'node:module'
+// The module imports its siblings extensionless (hiring-track) — see lib/test-support.
+register('../../test-support/alias-hooks.mjs', import.meta.url)
+const { CHECKLISTS, HEAD_TEAMS, missingItems, normaliseChecklist, checklistColumns, summariseChecklist, confirmationsOnly } = await import('../checklists.ts')
 
 test('every head team has a checklist with at least one required item', () => {
   for (const t of HEAD_TEAMS) assert.ok(CHECKLISTS[t].fields.some(f => f.required), t)

@@ -51,7 +51,7 @@ export default function CompanyStructureView({ companyId }: { companyId: string 
   }, [companyId])
 
   const deptName: Record<string, string> = {}; depts.forEach(d => { deptName[d.id] = d.dept_name })
-  const co = (id: string) => allCo ? <span style={{ fontSize: 10, color: C.muted }}> · {comps[id] || '—'}</span> : null
+  const co = (id: string) => allCo ? <span style={{ fontSize: 10, color: C.muted }}> · {comps[id] || '-'}</span> : null
   const item = (main: React.ReactNode, sub: React.ReactNode) => (
     <div style={{ padding: '7px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: C.navy }}>{main}</div>
@@ -62,7 +62,7 @@ export default function CompanyStructureView({ companyId }: { companyId: string 
 
   return (
     <div style={{ fontFamily: font }}>
-      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Company-wise organisation structure {allCo ? '(all companies)' : ''} — departments, sub-departments and locations. Manage the values in <b>Admin Setup</b>.</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Company-wise organisation structure {allCo ? '(all companies)' : ''}: departments, sub-departments and locations. Manage the values in <b>Admin Setup</b>.</div>
       {loading ? <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div> : (
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <SectionCard icon="🗂️" title="Departments" count={depts.length}>
@@ -72,7 +72,7 @@ export default function CompanyStructureView({ companyId }: { companyId: string 
           </SectionCard>
 
           <SectionCard icon="🧩" title="Sub-departments" count={subs.length}>
-            {subs.length === 0 ? empty('No sub-departments yet — add them in Admin Setup.') : subs.map(s => (
+            {subs.length === 0 ? empty('No sub-departments yet. Add them in Admin Setup.') : subs.map(s => (
               <div key={s.id}>{item(<>{s.name}{s.code ? <span style={{ color: C.muted, fontWeight: 400 }}> · {s.code}</span> : null}</>, <>{s.department_id && deptName[s.department_id] ? `under ${deptName[s.department_id]}` : ''}{co(s.company_id)}</>)}</div>
             ))}
           </SectionCard>

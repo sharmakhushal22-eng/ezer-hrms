@@ -148,8 +148,8 @@ async function identity(me: string, companyId: string | null, emp: Record<string
   const current = String(emp[col] ?? '').trim().toUpperCase()
 
   if (current && current !== value) {
-    return bad(`Your ${ID_LABEL[kind]} is already on file. If it is wrong, ask HR to correct it — `
-             + `a number already used for payroll and returns is not changed from here.`, 409)
+    return bad(`Your ${ID_LABEL[kind]} is already on file. If it is wrong, ask HR to correct it. `
+             + `A number already used for payroll and returns is not changed from here.`, 409)
   }
 
   if (!current) {
@@ -199,7 +199,7 @@ async function address(me: string, emp: Record<string, string | null>, p: Record
   // exemption, so it goes through 105's HR chain like before — routed by the
   // database (raise_profile_change_request), not decided here.
   const reason = str(p.reason)
-  if (!reason) return bad('A reason is required — HR reads it when they review the change.')
+  if (!reason) return bad('A reason is required. HR reads it when they review the change.')
   const old = await compositeOldValue(me, key)
   const nv = formatAddress(a)
   if (old && old === nv) return bad('That is the address already on file.')

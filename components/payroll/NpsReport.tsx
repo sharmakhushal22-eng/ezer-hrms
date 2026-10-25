@@ -27,7 +27,7 @@ const C = {
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 const fmtDate = (d?: string | null) =>
-  d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+  d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
 // Payroll months of the FY, in payroll order: 1 = April … 12 = March.
 const FY_MONTHS = ['April','May','June','July','August','September','October','November','December','January','February','March']
@@ -102,7 +102,7 @@ const STATUS_STYLE: Record<string, [string, string]> = {
   STOPPED: [C.redBg, C.red], SUPERSEDED: [TK.sunken, TK.muted],
 }
 function StatusPill({ s }: { s: string }) {
-  if (!s || s === '—') return <span style={{ color: C.muted }}>—</span>
+  if (!s || s === '-') return <span style={{ color: C.muted }}>-</span>
   const [bg, fg] = STATUS_STYLE[s] || [TK.brandTint, C.purpleD]
   return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: bg, color: fg }}>{s.replace('_', ' ')}</span>
 }
@@ -214,9 +214,9 @@ function NpsDialog({ rows, onClose, onDone }: {
       if (!res.ok) { setErr(d.error || 'That did not go through.'); setBusy(false); return }
       onDone(mode === 'y'
         ? (d.pending_pran
-            ? `${sel.emp_code} enrolled — PRAN pending, the form has been emailed to them.`
+            ? `${sel.emp_code} enrolled. PRAN pending, the form has been emailed to them.`
             : `${sel.emp_code} enrolled in NPS.`)
-        : `${sel.emp_code} — NPS stopped. Nothing will be deducted from next month.`)
+        : `${sel.emp_code}: NPS stopped. Nothing will be deducted from next month.`)
     } catch (x: any) { setErr(x?.message || String(x)); setBusy(false) }
   }
 
@@ -252,7 +252,7 @@ function NpsDialog({ rows, onClose, onDone }: {
           {!sel ? (
             <>
               <input autoFocus value={q} onChange={ev => setQ(ev.target.value)}
-                placeholder="Employee code or name — e.g. SRS9008, Nisha"
+                placeholder="Employee code or name, e.g. SRS9008, Nisha"
                 style={{ ...S.sel, width: '100%', padding: '11px 13px', fontSize: 14, borderRadius: 10 }} />
 
               {terms.length < 2 ? (
@@ -271,7 +271,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                 <>
                   {results.map(r => <SearchResult key={r.emp_code} r={r} onPick={pick} />)}
                   {results.length === 25 && (
-                    <div style={{ fontSize: 11, color: C.muted, padding: '10px 2px 0' }}>Showing the first 25 — narrow the search to see more.</div>
+                    <div style={{ fontSize: 11, color: C.muted, padding: '10px 2px 0' }}>Showing the first 25. Narrow the search to see more.</div>
                   )}
                 </>
               )}
@@ -294,7 +294,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                 <DetailRow k="Company" v={sel.company} />
                 <DetailRow k="Date of Joining" v={fmtDate(sel.doj)} />
                 {sel.dol && <DetailRow k="Date of Leaving" v={<span style={{ color: C.red }}>{fmtDate(sel.dol)}</span>} />}
-                <DetailRow k="Current NPS" v={<><YesNo yes={sel.opted} /> {sel.status !== '—' && <span style={{ marginLeft: 6 }}><StatusPill s={sel.status} /></span>}</>} />
+                <DetailRow k="Current NPS" v={<><YesNo yes={sel.opted} /> {sel.status !== '-' && <span style={{ marginLeft: 6 }}><StatusPill s={sel.status} /></span>}</>} />
                 {loading ? <DetailRow k="Salary figures" v={<span style={{ color: C.muted }}>loading…</span>} /> : e && (
                   <>
                     <DetailRow k="Tax regime" v={e.tax_regime} />
@@ -308,13 +308,13 @@ function NpsDialog({ rows, onClose, onDone }: {
               {/* Y / N */}
               <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 7px' }}>Set NPS</div>
               <div style={{ display: 'flex', gap: 9 }}>
-                {seg('y', 'Yes — enrol', mode === 'y', sel.opted)}
-                {seg('n', 'No — stop', mode === 'n', !sel.opted)}
+                {seg('y', 'Yes, enrol', mode === 'y', sel.opted)}
+                {seg('n', 'No, stop', mode === 'n', !sel.opted)}
               </div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
                 {sel.opted
-                  ? 'Already enrolled — only “No” does anything here.'
-                  : 'Not enrolled — only “Yes” does anything here.'}
+                  ? 'Already enrolled. Only “No” does anything here.'
+                  : 'Not enrolled. Only “Yes” does anything here.'}
               </div>
 
               {mode === 'y' && !sel.opted && (
@@ -340,7 +340,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                   ) : (
                     <div style={{ marginTop: 9, fontSize: 12, color: TK.brand, background: TK.brandTint, borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
                       A PRAN creation form is emailed to the employee and the enrolment stays
-                      <b> PRAN pending</b> until they submit it — it does not go active on its own.
+                      <b> PRAN pending</b> until they submit it. It does not go active on its own.
                     </div>
                   )}
 
@@ -351,7 +351,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                   {e && !e.has_ctc && (
                     <div style={{ marginTop: 10, fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
                       No CTC in ctc_master, so Basic reads ₹0 and the contribution would be ₹0.
-                      Set their CTC first — enrolling now records a contribution of nothing.
+                      Set their CTC first. Enrolling now records a contribution of nothing.
                     </div>
                   )}
 
@@ -454,14 +454,14 @@ export default function NpsReport({ fy }: { fy: string }) {
 
       const out: NpsRow[] = ((empRes.data as any[]) || []).map(e => {
         const n = npsBy.get(e.id)
-        const st = n?.status || '—'
+        const st = n?.status || '-'
         return {
           id: e.id,
-          company: e.companies?.company_name || '—',
+          company: e.companies?.company_name || '-',
           emp_code: e.emp_code || '',
           full_name: e.full_name || '',
-          department: e.departments?.dept_name || '—',
-          location: e.locations?.location_name || '—',
+          department: e.departments?.dept_name || '-',
+          location: e.locations?.location_name || '-',
           doj: e.group_doj || null,
           dol: e.date_of_leaving || null,
           // tds_declarations only exists once an employee actually declares — 9 rows for
@@ -484,9 +484,9 @@ export default function NpsReport({ fy }: { fy: string }) {
   }, [fy])
   useEffect(() => { load() }, [load])
 
-  const companies = useMemo(() => Array.from(new Set(rows.map(r => r.company).filter(x => x && x !== '—'))).sort(), [rows])
-  const depts = useMemo(() => Array.from(new Set(rows.map(r => r.department).filter(x => x && x !== '—'))).sort(), [rows])
-  const locs = useMemo(() => Array.from(new Set(rows.map(r => r.location).filter(x => x && x !== '—'))).sort(), [rows])
+  const companies = useMemo(() => Array.from(new Set(rows.map(r => r.company).filter(x => x && x !== '-'))).sort(), [rows])
+  const depts = useMemo(() => Array.from(new Set(rows.map(r => r.department).filter(x => x && x !== '-'))).sort(), [rows])
+  const locs = useMemo(() => Array.from(new Set(rows.map(r => r.location).filter(x => x && x !== '-'))).sort(), [rows])
 
   const shown = useMemo(() => {
     // A pasted list of codes works as well as a single name.
@@ -512,7 +512,7 @@ export default function NpsReport({ fy }: { fy: string }) {
   const monthlyTotal = shown.filter(r => r.opted).reduce((s, r) => s + (r.monthly || 0), 0)
   // The contribution rate follows the regime — 10% of Basic on old, 14% on new. If the
   // employee switched regime after enrolling, the percent on file is for the old one.
-  const regimeMismatch = shown.filter(r => r.opted && r.nps_regime && r.regime !== '—' && r.nps_regime !== r.regime)
+  const regimeMismatch = shown.filter(r => r.opted && r.nps_regime && r.regime !== '-' && r.nps_regime !== r.regime)
 
   // Chasing whoever is still waiting on a PRAN. Until it arrives nothing is deducted and
   // nothing is credited, so an enrolment left pending is an enrolment that never happened.
@@ -544,7 +544,7 @@ export default function NpsReport({ fy }: { fy: string }) {
       'Effective Date': effOf(r),
       'Regime': r.regime,
       'NPS Opted (Y/N)': r.opted ? 'Y' : 'N',
-      'NPS Status': r.status === '—' ? '' : r.status,
+      'NPS Status': r.status === '-' ? '' : r.status,
       'PRAN': r.pran,
       'Tier': r.tier,
       'Contribution %': r.percent ?? '',
@@ -558,10 +558,10 @@ export default function NpsReport({ fy }: { fy: string }) {
   return (
     <div style={{ fontFamily: font, color: C.navy }}>
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.1 }}>Corporate NPS — Enrolment Report</div>
+        <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.1 }}>Corporate NPS: Enrolment Report</div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
           FY {fy} · who is enrolled in the corporate NPS and who is not. Employer contribution
-          is 80CCD(2) — over and above the ₹1.5L 80C limit.
+          is 80CCD(2), over and above the ₹1.5L 80C limit.
         </div>
       </div>
 
@@ -625,7 +625,7 @@ export default function NpsReport({ fy }: { fy: string }) {
         {regimeMismatch.length > 0 && (
           <div style={{ marginTop: 11, fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
             <b>{regimeMismatch.length} employee{regimeMismatch.length === 1 ? '' : 's'} changed tax regime after enrolling.</b> The
-            NPS rate follows the regime — 10% of Basic on old, 14% on new — so the percent on
+            NPS rate follows the regime (10% of Basic on old, 14% on new), so the percent on
             file was worked out for the other one and the contribution is stale:{' '}
             {regimeMismatch.slice(0, 6).map(r => `${r.emp_code} (${r.nps_regime}→${r.regime})`).join(', ')}
             {regimeMismatch.length > 6 ? `, …and ${regimeMismatch.length - 6} more` : ''}.
@@ -667,10 +667,10 @@ export default function NpsReport({ fy }: { fy: string }) {
                   <td style={S.td}>{r.regime}</td>
                   <td style={S.td}><YesNo yes={r.opted} /></td>
                   <td style={S.td}><StatusPill s={r.status} /></td>
-                  <td style={{ ...S.td, fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{r.pran || '—'}</td>
-                  <td style={S.td}>{r.tier || '—'}</td>
-                  <td style={S.td}>{r.percent == null ? '—' : `${r.percent}%`}</td>
-                  <td style={{ ...S.td, fontWeight: 700 }}>{r.monthly == null ? '—' : inr(r.monthly)}</td>
+                  <td style={{ ...S.td, fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{r.pran || '-'}</td>
+                  <td style={S.td}>{r.tier || '-'}</td>
+                  <td style={S.td}>{r.percent == null ? '-' : `${r.percent}%`}</td>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{r.monthly == null ? '-' : inr(r.monthly)}</td>
                 </tr>
               ))}
             </tbody>
@@ -688,11 +688,11 @@ export default function NpsReport({ fy }: { fy: string }) {
       )}
 
       <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
-        <b>Y</b> means a live enrolment — ACTIVE, or PENDING_PRAN where the employee has enrolled
+        <b>Y</b> means a live enrolment: ACTIVE, or PENDING_PRAN where the employee has enrolled
         but not yet submitted their PRAN. <b>N</b> covers both never enrolled and enrolled-then-stopped;
         the Status column separates the two, so a stopped enrolment is never mistaken for someone
         who was simply never asked.
-        <br />Enrolment happens in the employee&apos;s ESS portal. This screen reports it — it does not change it.
+        <br />Enrolment happens in the employee&apos;s ESS portal. This screen reports it. It does not change it.
       </div>
     </div>
   )

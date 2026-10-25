@@ -126,7 +126,7 @@ export default function IdCardsTab() {
     setLoading(true); setErr(null)
     try {
       const token = await authToken()
-      if (!token) { setErr('Your session has expired — sign in again.'); return }
+      if (!token) { setErr('Your session has expired. Sign in again.'); return }
       const res = await fetch('/api/idcard/employees', {
         headers: { Authorization: `Bearer ${token}` }, signal: ac.signal,
       })
@@ -176,7 +176,7 @@ export default function IdCardsTab() {
     setBusy(label); setErr(null); setFlash(null)
     try {
       const token = await authToken()
-      if (!token) { setErr('Your session has expired — sign in again.'); return }
+      if (!token) { setErr('Your session has expired. Sign in again.'); return }
       const res = await fetch('/api/idcard/cards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -201,7 +201,7 @@ export default function IdCardsTab() {
       const skipped = (j.skipped || []) as { reason: string }[]
       setFlash(
         `${cards.length} card${cards.length === 1 ? '' : 's'} downloaded and recorded.` +
-        (skipped.length ? ` ${skipped.length} skipped — ${skipped[0].reason}` : ''),
+        (skipped.length ? ` ${skipped.length} skipped: ${skipped[0].reason}` : ''),
       )
       setSel({})
     } catch (e) {
@@ -215,7 +215,7 @@ export default function IdCardsTab() {
     setBusy(`preview:${row.id}`); setErr(null)
     try {
       const token = await authToken()
-      if (!token) { setErr('Your session has expired — sign in again.'); return }
+      if (!token) { setErr('Your session has expired. Sign in again.'); return }
       const res = await fetch('/api/idcard/cards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -236,7 +236,7 @@ export default function IdCardsTab() {
   const loadLog = useCallback(async () => {
     setLogErr(null)
     const token = await authToken()
-    if (!token) { setLogErr('Your session has expired — sign in again.'); return }
+    if (!token) { setLogErr('Your session has expired. Sign in again.'); return }
     const res = await fetch('/api/idcard/log', { headers: { Authorization: `Bearer ${token}` } })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) { setLogErr(j?.error || `Could not load the log (${res.status}).`); return }
@@ -288,7 +288,7 @@ export default function IdCardsTab() {
         ].map(s2 => (
           <div key={s2.k} style={{ ...card, flex: '1 1 150px', padding: `${S.sm}px ${S.md}px`, marginBottom: 0 }}>
             <div style={{ fontSize: F.micro, color: C.muted, fontWeight: W.semi }}>{s2.k}</div>
-            <div style={{ fontSize: 20, fontWeight: W.bold, color: s2.c }}>{loading ? '—' : s2.v}</div>
+            <div style={{ fontSize: 20, fontWeight: W.bold, color: s2.c }}>{loading ? '-' : s2.v}</div>
           </div>
         ))}
       </div>
@@ -336,7 +336,7 @@ export default function IdCardsTab() {
         }}>
           <b style={{ fontSize: F.small }}>{selectedIds.length} selected</b>
           <span style={{ fontSize: F.micro, color: C.muted }}>
-            Bulk export is one PDF — a browser blocks a burst of separate downloads.
+            Bulk export is one PDF: a browser blocks a burst of separate downloads.
           </span>
           <span style={{ flex: 1 }} />
           <Button size="sm" onClick={() => setSel({})}>Clear</Button>
@@ -351,7 +351,7 @@ export default function IdCardsTab() {
         <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: `${S.sm}px ${S.md}px`, fontSize: F.small, fontWeight: W.semi }}>
             Download log
-            <span style={{ fontWeight: W.medium, color: C.muted }}> — who downloaded whose card, and when</span>
+            <span style={{ fontWeight: W.medium, color: C.muted }}> · who downloaded whose card, and when</span>
           </div>
           {logErr && <div style={{ padding: `${S.sm}px ${S.md}px`, fontSize: F.small, color: C.critical }}>{logErr}</div>}
           {!logErr && (
@@ -367,10 +367,10 @@ export default function IdCardsTab() {
                   {log.map(l => (
                     <Tr key={l.id}>
                       <Td>{new Date(l.downloaded_at).toLocaleString('en-IN')}</Td>
-                      <Td>{l.actor_label || '—'}
+                      <Td>{l.actor_label || '-'}
                         <div style={{ fontSize: F.micro, color: C.faint }}>{(l.actor_role_codes || []).join(', ')}</div>
                       </Td>
-                      <Td mono>{l.subject_emp_code || '—'}</Td>
+                      <Td mono>{l.subject_emp_code || '-'}</Td>
                       <Td>{String(l.format || '').toUpperCase()}</Td>
                       <Td>{l.batch_size}</Td>
                     </Tr>
@@ -417,10 +417,10 @@ export default function IdCardsTab() {
                              onChange={() => setSel(s2 => ({ ...s2, [r.id]: !s2[r.id] }))} />
                     )}
                   </Td>
-                  <Td><Person name={r.full_name || '—'} meta={r.emp_code || '—'} /></Td>
-                  <Td>{r.designation || '—'}</Td>
-                  <Td>{r.department_name || '—'}</Td>
-                  <Td>{r.location_name || '—'}</Td>
+                  <Td><Person name={r.full_name || '-'} meta={r.emp_code || ''} /></Td>
+                  <Td>{r.designation || '-'}</Td>
+                  <Td>{r.department_name || '-'}</Td>
+                  <Td>{r.location_name || '-'}</Td>
                   <Td>
                     {r.gaps.length === 0
                       ? pill('Complete', C.positiveTint, C.positive)

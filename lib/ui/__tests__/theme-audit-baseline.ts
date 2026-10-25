@@ -39,7 +39,6 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'app/dashboard/holidays/page.tsx': 1,
   'app/dashboard/layout.tsx': 11,
   'app/dashboard/leave-upload/page.tsx': 2,
-  'app/dashboard/onboarding/page.tsx': 0,
   'app/dashboard/org-chart/page.tsx': 14,
   'app/dashboard/page.tsx': 2,
   // 6 → 2. HRHeadApprovalDashboard converted onto the redesign frame: the
@@ -71,8 +70,6 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'app/dashboard/roles/page.tsx': 2,
   'app/ess-login/page.tsx': 1,
   'app/joining/[token]/client.tsx': 6,
-  'app/onboarding/[token]/client.tsx': 0,
-  'app/onboarding/[token]/page.tsx': 1,
   'app/page.tsx': 7,
   // Zero now. The candidate-facing offer page went onto tokens with the
   // Recruitment blend: page grounds, the validity band, the regime and FBP
@@ -84,11 +81,10 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/company/GroupHeader.tsx': 1,
   'components/company/Sections.tsx': 1,
   'components/employees/EmployeeProfileView.tsx': 0,
-  'components/ess/EmployeePortal.tsx': 6,
+  'components/ess/EmployeePortal.tsx': 5,
   'components/ess/FlexiTdsCalculator.tsx': 21,
-  'components/ess/LeaveSection.tsx': 7,
+  'components/ess/LeaveSection.tsx': 3,
   'components/ess/RoleTabs.tsx': 0,
-  'components/ess/today/PunchDial.tsx': 1,
   'components/ess/today/Toast.tsx': 1,
   'components/letters/LetterheadConfig.tsx': 2,
   'components/payroll/Appraisal.tsx': 2,
@@ -119,4 +115,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 216;
+export const THEME_AUDIT_TOTAL = 194;

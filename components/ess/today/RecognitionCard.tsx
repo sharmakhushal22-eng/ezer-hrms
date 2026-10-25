@@ -17,7 +17,7 @@ export default function RecognitionCard({ data, nav }: { data: TodayPayload; nav
             {r.tags && r.tags.length > 0 && <div className="tags">{r.tags.map(t => <span key={t} className="tag">{t}</span>)}</div>}
           </div>
         </div>
-      ) : <div style={{ fontSize: 12.5, color: 'var(--ez-faint)' }}>No kudos yet — appreciation from colleagues will appear here.</div>}
+      ) : <div style={{ fontSize: 12.5, color: 'var(--ez-faint)' }}>No kudos yet. Appreciation from colleagues will appear here.</div>}
       <button className="give" onClick={() => nav(ROUTES.appreciate)}>Appreciate a colleague</button>
     </section>
   );

@@ -40,7 +40,7 @@ export const MGR_TABS: { k: MgrTab; label: string; blurb: string }[] = [
   { k: 'team',      label: 'Team Dashboard',           blurb: 'who is where, worst deadline first' },
   { k: 'approve',   label: 'KRA Approval & One-to-One',blurb: 'check their sets, then log the discussion' },
   { k: 'rate',      label: 'Rate My Team',             blurb: 'rate each KRA against what they delivered' },
-  { k: 'pip',       label: 'PIP Request',              blurb: 'raise one — HR decides whether it starts' },
+  { k: 'pip',       label: 'PIP Request',              blurb: 'raise one, and HR decides whether it starts' },
   { k: 'analytics', label: 'Team Analytics',           blurb: 'distribution and gaps, for information' },
 ]
 
@@ -105,12 +105,12 @@ function ExitBanner({ rows }: { rows: QueueRow[] }) {
             counts and then appending the generic notice-period sentence read
             as though that sentence described the people who had already left. */}
         {notice > 0 && (
-          <><b>{notice} {notice === 1 ? 'person is' : 'people are'} serving notice</b> —
+          <><b>{notice} {notice === 1 ? 'person is' : 'people are'} serving notice</b>:
           rate them before their last working day, after which the record locks and
           the rating can never be given.{exited > 0 ? ' ' : ''}</>
         )}
         {exited > 0 && (
-          <><b>{exited} {exited === 1 ? 'has' : 'have'} already left</b> — still
+          <><b>{exited} {exited === 1 ? 'has' : 'have'} already left</b>: still
           finalisable, but read-only once done, and the result is emailed before
           their login closes.</>
         )}
@@ -162,7 +162,7 @@ function QueueTable({ rows, extraHead, extraCell, empty }: {
               <td>{r.member.selfSubmitted
                 ? <span className="pill p-green">submitted</span>
                 : <span className="pill p-amber">waiting</span>}</td>
-              <td className="num">{r.member.selfScore === null ? '—' : r.member.selfScore.toFixed(2)}</td>
+              <td className="num">{r.member.selfScore === null ? '-' : r.member.selfScore.toFixed(2)}</td>
               <td className="k">
                 {r.next}
                 {r.priorityNote && <><br /><b>{r.priorityNote}</b></>}
@@ -200,7 +200,7 @@ export function TeamTab({ members, today, managerName }: {
               note={s.noticePeriod ? 'Rate before their last day' : 'None'} />
         <Stat label="Finalised" value={s.finalised} note={`of ${s.size}`} />
       </div>
-      <Card title={`My team — ${managerName}`}
+      <Card title={`My team: ${managerName}`}
             sub="Ordered by whose deadline cannot move, then by what is actually owed.">
         <QueueTable rows={rows} empty={EMPTY_TEAM} />
       </Card>
@@ -226,7 +226,7 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge }: {
         <div>
           A set is valid at <b>{DEFAULT_RULES.minKra} to {DEFAULT_RULES.maxKra} KRAs
           totalling exactly {DEFAULT_RULES.totalWeightage}</b>. Weightage locks only once
-          you and they have both acknowledged the KRA one-to-one — one tick is a manager
+          you and they have both acknowledged the KRA one-to-one. One tick is a manager
           asserting a conversation happened, two is a record.
         </div>
       </div>
@@ -315,7 +315,7 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
 
   if (!canRate.open) {
     return (
-      <Card title={`${member.name} — not yet`}>
+      <Card title={`${member.name}: not yet`}>
         <div className="banner b-amber" style={{ marginBottom: 0 }}>
           <span aria-hidden="true">⏳</span><div>{canRate.because}</div>
         </div>
@@ -327,11 +327,11 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
     <>
       <div className="grid g4" style={{ marginBottom: 16 }}>
         <Stat tone="accent" label="Rating" value={`${member.name}`} note={member.code} />
-        <Stat label="They rated themselves" value={theirs === null ? '—' : theirs.toFixed(2)} />
-        <Stat label="Your score so far" value={mine === null ? '—' : mine.toFixed(2)}
+        <Stat label="They rated themselves" value={theirs === null ? '-' : theirs.toFixed(2)} />
+        <Stat label="Your score so far" value={mine === null ? '-' : mine.toFixed(2)}
               note={band ? band.label : `${unrated} still unrated`} />
         <Stat tone={g.flag === 'MAJOR_GAP' ? 'warn' : undefined}
-              label="Difference" value={g.delta === null ? '—' : g.delta.toFixed(2)}
+              label="Difference" value={g.delta === null ? '-' : g.delta.toFixed(2)}
               note={g.flag === 'MAJOR_GAP' ? 'Worth raising with them' : ''} />
       </div>
 
@@ -357,7 +357,7 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
                       {r.selfComment && <div className="k">{r.selfComment}</div>}
                     </td>
                     <td className="num">
-                      {r.selfRating ?? '—'}
+                      {r.selfRating ?? '-'}
                       {rg.flag === 'MAJOR_GAP' && <span className="pill p-amber" style={{ marginLeft: 4 }}>gap</span>}
                     </td>
                     <td>
@@ -432,7 +432,7 @@ export function PipRequestTab({ members, today, onRaise, saving }: {
         <span aria-hidden="true">ℹ️</span>
         <div>
           You raise the request; <b>HR decides whether a PIP starts</b>. That is not a
-          formality — the plan is the documentation trail that answers a claim under the
+          formality: the plan is the documentation trail that answers a claim under the
           Industrial Disputes Act, and HR gatekeeping is what keeps it consistent enough
           to rely on. HR can adjust your dates, drop an area, send it back, or decline it.
         </div>
@@ -448,7 +448,7 @@ export function PipRequestTab({ members, today, onRaise, saving }: {
               {rows.map(r => (
                 <option key={r.member.employeeId} value={r.member.employeeId}>
                   {r.member.name} ({r.member.code})
-                  {r.member.finalRating !== null ? ` — last rated ${r.member.finalRating}` : ''}
+                  {r.member.finalRating !== null ? ` · last rated ${r.member.finalRating}` : ''}
                 </option>
               ))}
             </select>
@@ -522,7 +522,7 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
   return (
     <>
       <Card title={`How ${scopeLabel} was rated`}
-            sub="For information. There is no curve to fit — with no pay attached, a forced distribution would be rationing nothing.">
+            sub="For information. There is no curve to fit. With no pay attached, a forced distribution would be rationing nothing.">
         {rated === 0 ? (
           <div className="k">Nothing has been finalised yet, so there is no distribution to show.</div>
         ) : dist.map(d => {
@@ -540,8 +540,8 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
       </Card>
 
       <div className="grid g3" style={{ marginBottom: 16 }}>
-        <Stat label={`${scopeLabel} average`} value={deptAverage === null ? '—' : deptAverage.toFixed(2)} />
-        <Stat label="Company average" value={companyAverage === null ? '—' : companyAverage.toFixed(2)} />
+        <Stat label={`${scopeLabel} average`} value={deptAverage === null ? '-' : deptAverage.toFixed(2)} />
+        <Stat label="Company average" value={companyAverage === null ? '-' : companyAverage.toFixed(2)} />
         <Stat label="Rated 2 or below"
               value={dist.filter(d => d.rating <= 2).reduce((s, d) => s + d.n, 0)}
               note="Each of these owes improvement feedback" />
@@ -557,7 +557,7 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
               <div className="tr" role="img" aria-label={`${c.label}: ${c.score ?? 'not rated'} out of 5`}>
                 <div className="m" style={{ width: `${((c.score ?? 0) / 5) * 100}%`, height: '100%', borderRadius: 5 }} />
               </div>
-              <div className="vv">{c.score === null ? '—' : c.score.toFixed(2)}</div>
+              <div className="vv">{c.score === null ? '-' : c.score.toFixed(2)}</div>
             </div>
           ))}
       </Card>
@@ -593,7 +593,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
         <div>
           The chain is <b>{CHAIN_LABEL[chain]}</b>, and under this policy{' '}
           <b>{FINALISER_LABEL[whoCanFinalise]}</b> may finalise. A row cannot
-          be finalised while a step ahead of it is still open — that is not a nicety, it is
+          be finalised while a step ahead of it is still open. That is not a nicety, it is
           the difference between a rating that went through the chain and one that skipped it.
         </div>
       </div>
@@ -603,11 +603,11 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
         <Stat tone="accent" label="Awaiting finalisation" value={awaiting} note={`of ${rows.length}`} />
         <Stat label="Finalised" value={done} />
         <Stat tone={urgent ? 'warn' : undefined} label="Exit or notice" value={urgent}
-              note={urgent ? 'Clear these first — their deadline cannot move' : 'None outstanding'} />
-        <Stat label={`${deptName} average`} value={avg === null ? '—' : avg.toFixed(2)} />
+              note={urgent ? 'Clear these first. Their deadline cannot move' : 'None outstanding'} />
+        <Stat label={`${deptName} average`} value={avg === null ? '-' : avg.toFixed(2)} />
       </div>
 
-      <Card title={`Finalisation queue — ${deptName}`}
+      <Card title={`Finalisation queue: ${deptName}`}
             sub="Exit and notice rows are pinned to the top, because after a last working day the record locks for good.">
         <div className="tblwrap">
           <table>
@@ -630,9 +630,9 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                   <td>{r.member.code}</td>
                   <td style={{ fontWeight: 600 }}>{r.member.name}</td>
                   <td><FlagPill r={r} /></td>
-                  <td className="num">{r.member.selfScore?.toFixed(2) ?? '—'}</td>
-                  <td className="num">{r.member.rmL1Score?.toFixed(2) ?? '—'}</td>
-                  <td className="num">{r.member.rmL2Score?.toFixed(2) ?? '—'}</td>
+                  <td className="num">{r.member.selfScore?.toFixed(2) ?? '-'}</td>
+                  <td className="num">{r.member.rmL1Score?.toFixed(2) ?? '-'}</td>
+                  <td className="num">{r.member.rmL2Score?.toFixed(2) ?? '-'}</td>
                   <td>
                     {r.member.finalised
                       ? <span className="pill p-green">{r.member.finalRating} · finalised</span>
@@ -713,7 +713,7 @@ export function FeedbackTab({ member, rating, appreciation, improvement, benefit
       <div className="grid g3" style={{ marginBottom: 16 }}>
         <Stat tone="accent" label="Writing feedback for" value={member.name} note={member.code} />
         <Stat label="Final rating"
-              value={rating === null ? '—' : `${rating}${band ? ` · ${band.label}` : ''}`} />
+              value={rating === null ? '-' : `${rating}${band ? ` · ${band.label}` : ''}`} />
         <Stat tone={band?.improvementMandatory ? 'warn' : undefined}
               label="Improvement feedback"
               value={band?.improvementMandatory ? 'Required' : 'Optional'}
@@ -737,7 +737,7 @@ export function FeedbackTab({ member, rating, appreciation, improvement, benefit
       </div>
 
       <Card title="🎁 Recognition"
-            sub="Non-monetary only — a certificate, a nomination, an award. Anything with a cash component would touch payroll, and this module does not.">
+            sub="Non-monetary only: a certificate, a nomination, an award. Anything with a cash component would touch payroll, and this module does not.">
         {benefits.map((b, i) => (
           <div className="grid g2" key={i}>
             <div className="fld">

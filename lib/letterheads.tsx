@@ -23,26 +23,26 @@ export interface Letterhead {
 export const LETTERHEADS: Record<string, Letterhead> = {
   SRS: {
     code: 'SRS', name: 'Sharma Retail Solutions', type: 'Private Limited', eyebrow: 'A Sharma Group Company', badge: 'SRS',
-    addr: ['Tower B, DLF Cyber City', 'Gurugram, Haryana — 122 002', 'Ph: +91 124 456 7892', 'E: info@sharmaretail.in', 'W: www.sharmaretail.in'],
+    addr: ['Tower B, DLF Cyber City', 'Gurugram, Haryana 122 002', 'Ph: +91 124 456 7892', 'E: info@sharmaretail.in', 'W: www.sharmaretail.in'],
     cin: 'U52100DL2018PTC330456', gstin: '07AAKSR1234B1ZP', pan: 'AAKSR1234B', extra: 'Incorp. 2018 · Delhi',
     headerBg: '#0E7490', headerText: '#FFFFFF', headerSub: 'rgba(255,255,255,0.72)', accent: '#1D4ED8',
-    footerRegistered: 'Registered Office: Tower B, DLF Cyber City, Gurugram, Haryana — 122 002, India',
+    footerRegistered: 'Registered Office: Tower B, DLF Cyber City, Gurugram, Haryana 122 002, India',
     confidential: 'This letter is confidential and intended solely for the named addressee. Unauthorised disclosure or copying is strictly prohibited.',
   },
   SSM: {
     code: 'SSM', name: 'Sharma Sons Manufacturing', type: 'Private Limited', eyebrow: 'A Sharma Group Company · Since 2010', badge: 'SSM',
-    addr: ['Plot 12, Sector 5, Dwarka', 'New Delhi — 110 075', 'Ph: +91 11 2891 7654', 'E: works@sharmasons.in', 'W: www.sharmasons.in'],
+    addr: ['Plot 12, Sector 5, Dwarka', 'New Delhi 110 075', 'Ph: +91 11 2891 7654', 'E: works@sharmasons.in', 'W: www.sharmasons.in'],
     cin: 'U29100HR2010PTC040123', gstin: '06AAHSS2345C1ZR', pan: 'AAHSS2345C', extra: 'UDYAM-HR-05-0034821',
     headerBg: '#1B2A4A', headerText: '#FFFFFF', headerSub: 'rgba(255,255,255,0.7)', accent: '#E85D04',
-    footerRegistered: 'Registered Office: Plot 12, Sector 5, Dwarka, New Delhi — 110 075, India · ISO 9001:2015 Certified',
+    footerRegistered: 'Registered Office: Plot 12, Sector 5, Dwarka, New Delhi 110 075, India · ISO 9001:2015 Certified',
     confidential: 'This document is confidential. Contents are not to be reproduced without prior written consent of Sharma Sons Manufacturing Pvt Ltd.',
   },
   STC: {
     code: 'STC', name: 'Sharma Trading Corporation', type: 'Established · Bombay', eyebrow: 'A Sharma Group Company · Mumbai', badge: 'STC',
-    addr: ['Office 301, Nariman Point', 'Mumbai, Maharashtra — 400 021', 'Ph: +91 22 6612 4400', 'E: trade@sharmatcorp.in', 'W: www.sharmatcorp.in'],
+    addr: ['Office 301, Nariman Point', 'Mumbai, Maharashtra 400 021', 'Ph: +91 22 6612 4400', 'E: trade@sharmatcorp.in', 'W: www.sharmatcorp.in'],
     cin: 'U51909MH2005PTC291234', gstin: '27AAHST3456D1ZS', pan: 'AAHST3456D', extra: 'IEC 0305021987',
     headerBg: '#6B0F1A', headerText: '#FFFFFF', headerSub: 'rgba(255,255,255,0.72)', accent: '#B8860B',
-    footerRegistered: 'Registered Office: Office 301, Nariman Point, Mumbai, Maharashtra — 400 021, India',
+    footerRegistered: 'Registered Office: Office 301, Nariman Point, Mumbai, Maharashtra 400 021, India',
     confidential: 'This correspondence is confidential and privileged. Any unauthorised review, use, disclosure or distribution is prohibited.',
   },
 }

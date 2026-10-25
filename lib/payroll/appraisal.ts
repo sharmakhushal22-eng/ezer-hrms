@@ -118,7 +118,7 @@ export async function saveAppraisal(a: {
       // genuinely absent, so naming sql111 is safe — but carry the database's own words
       // too, in case what is missing is some other function this path calls.
       error: /could not find the function/i.test(error.message)
-        ? `Appraisal needs migration sql111 — it is not applied to this database yet. (${error.message})`
+        ? `Appraisal needs migration sql111. It is not applied to this database yet. (${error.message})`
         : error.message,
     }
   }

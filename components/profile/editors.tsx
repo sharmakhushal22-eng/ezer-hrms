@@ -21,6 +21,7 @@
 // new type on every render, remount on each keystroke and drop focus.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   editorFor, checkFieldValue, checkAadhaar, checkPan, checkUan, checkAddress, emptyAddress,
   checkEmergency, EMERGENCY_RELATIONS, NOMINEE_RELATIONS, INDIAN_STATES, checkNominees, nomineeTotal,
@@ -36,6 +37,18 @@ export type Done = (message: string) => void
 
 // ── shells ───────────────────────────────────────────────────────────────
 
+/** Overlays render on document.body, inside their own .ezp so profile.css
+ *  still styles them. Inside the page they were not full screen: the ESS
+ *  page wrapper keeps a transform from its enter animation (lib/ui
+ *  .ez-page-enter), and a transformed ancestor becomes the containing block
+ *  of position: fixed. The scrim covered the content column only, the
+ *  sidebar and top bar stayed bright, and a modal centred itself on the
+ *  whole scrolled page, half off screen. */
+export function Layer({ children }: { children: React.ReactNode }) {
+  if (typeof document === 'undefined') return null
+  return createPortal(<div className="ezp ezp-layer">{children}</div>, document.body)
+}
+
 export function Modal({ title, sub, onClose, children, footer, wide }: {
   title: string; sub?: React.ReactNode; onClose: () => void
   children: React.ReactNode; footer: React.ReactNode; wide?: boolean
@@ -46,6 +59,7 @@ export function Modal({ title, sub, onClose, children, footer, wide }: {
     return () => window.removeEventListener('keydown', k)
   }, [onClose])
   return (
+    <Layer>
     <div className="scrim" role="dialog" aria-modal="true" aria-label={title}
          onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className={`modal${wide ? ' wide' : ''}`}>
@@ -60,6 +74,7 @@ export function Modal({ title, sub, onClose, children, footer, wide }: {
         <div className="mft">{footer}</div>
       </div>
     </div>
+    </Layer>
   )
 }
 
@@ -72,6 +87,7 @@ export function Drawer({ title, sub, onClose, children }: {
     return () => window.removeEventListener('keydown', k)
   }, [onClose])
   return (
+    <Layer>
     <div className="dscrim" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
         <div className="dhd">
@@ -84,6 +100,7 @@ export function Drawer({ title, sub, onClose, children }: {
         <div className="dbd">{children}</div>
       </aside>
     </div>
+    </Layer>
   )
 }
 
@@ -176,7 +193,7 @@ export function FieldEditor({ field, current, approvers, onClose, onDone }: {
     setBusy(false)
     if (r.error) { setErr(r.error.message); return }
     const w = (r.data as { waiting_on?: string | null } | null)?.waiting_on
-    onDone(direct ? `${field.label} saved.` : `Request sent${w ? ` — waiting on ${w}` : ''}.`)
+    onDone(direct ? `${field.label} saved.` : `Request sent${w ? `. Waiting on ${w}` : ''}.`)
   }
 
   const id = `fe-${field.key}`
@@ -246,7 +263,7 @@ const ID_META = {
   pan:     { title: 'Add your PAN', label: 'PAN', ph: 'ABCDE1234F', check: checkPan,
              note: 'Used for TDS on your salary. Without it, tax is deducted at a higher rate.' },
   uan:     { title: 'Add your UAN', label: 'Universal Account Number (UAN)', ph: '100123456789', check: checkUan,
-             note: 'From your previous employer’s payslip or the EPFO portal. New to PF? Leave it — payroll generates one.' },
+             note: 'From your previous employer’s payslip or the EPFO portal. New to PF? Leave it blank and payroll generates one.' },
 } as const
 
 export function IdentityEditor({ which, onFile, masked, onClose, onDone }: {
@@ -517,7 +534,7 @@ export function NomineeEditor({ scheme, nominations, family, onClose, onDone }: 
             </div>
             <button type="button" className="rm" aria-label={`Remove nominee ${i + 1}`} disabled={rows.length === 1}
                     onClick={() => setRows(rs => rs.filter((_, j) => j !== i))}>×</button>
-            {isMinor(r.dob) && <div className="nr-note">Under 18 — HR will ask for a guardian when filing the form.</div>}
+            {isMinor(r.dob) && <div className="nr-note">Under 18. HR will ask for a guardian when filing the form.</div>}
           </div>
         ))}
       </div>
@@ -564,11 +581,11 @@ export function BankEditor({ self, current, onClose, onDone }: {
 
   return (
     <Modal title={onFile ? 'Change your salary account' : 'Add your salary account'} wide onClose={onClose}
-           sub="Your salary is paid into this account, so Payroll checks every change before it applies — including the first."
+           sub="Your salary is paid into this account, so Payroll checks every change before it applies, including the first."
            footer={<Actions busy={busy} onClose={onClose} onSave={save} label="Send to Payroll" />}>
       {onFile && (
         <div className="cur"><span className="ck">On file</span>
-          <span className="cv">{String(current.bank_name ?? '—')} · {self?.ids?.bank_masked ?? '—'} · {String(current.ifsc ?? '—')}</span></div>
+          <span className="cv">{String(current.bank_name ?? '-')} · {self?.ids?.bank_masked ?? '-'} · {String(current.ifsc ?? '-')}</span></div>
       )}
       <div className="g2f">
         <div>
@@ -618,8 +635,8 @@ const DOC_STATUS: Record<string, { text: string; tone: string }> = {
   verified: { text: 'Verified', tone: 'good' },
   uploaded: { text: 'With HR for verification', tone: 'warn' },
   pending:  { text: 'With HR for verification', tone: 'warn' },
-  rejected: { text: 'Not accepted — upload again', tone: 'bad' },
-  expired:  { text: 'Expired — upload a current one', tone: 'bad' },
+  rejected: { text: 'Not accepted. Upload again', tone: 'bad' },
+  expired:  { text: 'Expired. Upload a current one', tone: 'bad' },
 }
 
 function DocRow({ req, doc, busy, onUpload }: {
