@@ -427,7 +427,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                   sitting at your desk. Still nothing at all for anybody with
                   neither, so it never becomes clutter. */}
               {onTrip ? (
-                <div className="card ontrip">
+                <div className={`card ontrip${onTripUnderWay ? '' : ' back'}`}>
                   <div className="row sp top">
                     <div className="grow">
                       <div className="eyebrow">{onTripUnderWay ? 'You are on a trip' : 'Back from a trip'}</div>
@@ -466,7 +466,7 @@ export default function TeHome({ initialClaimId, onExit }: {
                       </button>
                     ) : null}
                     {onTripCan?.journey ? (
-                      <button type="button" className="btn ok big" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
+                      <button type="button" className="btn pos big" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
                         <TeIcon name="route" />
                         <span>{openingTrip ? 'Opening…' : 'Add a journey'}</span>
                       </button>

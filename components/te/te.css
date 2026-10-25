@@ -164,8 +164,23 @@
    trip of theirs is under way, so it is never clutter for anybody who is not
    travelling. Bordered in the live colour, like .card.live and .livebar, because
    it means the same thing. */
-.te .ontrip{border-color:var(--ez-positive);background:var(--ez-positive-tint);display:grid;gap:9px}
+/* ONE IDENTITY, AT THE EDGE — not a wash over the whole card.
+   This was background:var(--ez-positive-tint) with a positive border, and the
+   wash was the contrast bug: the secondary action's own background was the
+   SAME --ez-positive-tint, so "Add a journey" had no fill of its own and read
+   as a hole cut in the card. Three colour languages were competing in a card
+   four lines tall — a green wash, a filled blue button and a green ghost.
+
+   So the card is a plain surface, like every other card in the module, and its
+   identity is carried by a 3px inset edge plus the eyebrow and the chip. That
+   is the same accent device .draftrow.picked and .li.leg.nx already use.
+
+   The accent follows the state rather than staying green while the chip turns
+   amber: on the trip it is positive, back from it and unclaimed it is warning. */
+.te .ontrip{display:grid;gap:10px;box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-positive)}
 .te .ontrip .eyebrow{color:var(--ez-positive)}
+.te .ontrip.back{box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-warning)}
+.te .ontrip.back .eyebrow{color:var(--ez-warning)}
 
 /* ── while a trip is under way (components/te/trip/TeTripNow.tsx) ──────────
    Two hero tiles for the two things anybody does mid-trip, a strip above them
@@ -194,11 +209,14 @@
 .te .acts2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .te .btn.big{flex-direction:column;gap:6px;padding:14px 12px;min-height:84px;font-size:14px;border-radius:var(--te-r-sm);line-height:1.25}
 .te .btn.big svg{width:24px;height:24px}
-/* Green, to pair with the journey the way --ez-positive carries "live, and
-   yours" everywhere else in the module — and so the two do not read as the
-   same answer twice. .btn.ok existed only as .btn.ok.glow before this. */
-.te .btn.ok{color:var(--ez-positive);border-color:var(--ez-positive-edge);background:var(--ez-positive-tint)}
-.te .btn.ok:hover{border-color:var(--ez-positive)}
+/* NO .btn.ok RULE HERE, deliberately. Adding one gave the pair two different
+   button species — a filled blue beside a green ghost on a green card — and it
+   reached further than intended: TeDrafts' "Keep them" is `btn ok glow`, which
+   had always taken its background from .btn, and gained a green fill it was
+   never designed with. .btn.ok.glow further down sets glow tokens only, which
+   is all `ok` was ever meant to mean. The two actions here are an ordinary
+   primary and secondary instead: same shape, same size, told apart by weight
+   and by their icons. */
 .te .ontrip .acts2{margin-top:2px}
 
 /* RECORDING NOW. Sticky, because an unfinished journey blocks the claim and so
@@ -274,6 +292,22 @@
 .te .btn:hover{border-color:var(--ez-brand);color:var(--ez-brand)}
 .te .btn.pri{background:var(--ez-brand);border-color:var(--ez-brand);color:var(--ez-on-accent)}
 .te .btn.pri:hover{background:var(--ez-brand-deep);color:var(--ez-on-accent)}
+/* A SECOND FILLED BUTTON, for a genuinely co-equal action.
+   The on-a-trip card offers two things of the same importance — put a bill on
+   the trip, or record a journey — and they were a filled blue beside an almost
+   invisible ghost. Measured: the ghost's border was 1.24 against the card it
+   sat on, which is not a button anybody is drawn to.
+   Filled positive instead: 5.48 against the card in light and 8.99 in dark,
+   with the on-accent label at 5.48 / 9.84. Same species, same size, same
+   radius as .pri — told apart by hue, by icon and by label, because the two
+   fills are only 1.06 apart in luminance and hue alone should never be the
+   whole signal. */
+.te .btn.pos{background:var(--ez-positive);border-color:var(--ez-positive);color:var(--ez-on-accent)}
+/* There is no --ez-positive-deep; only brand has a pressed token. Mixing
+   toward --ez-ink is theme-correct both ways — ink is near-black in light, so
+   the green darkens, and near-white in dark, so it lifts. Either way it moves,
+   which is all a hover has to do. */
+.te .btn.pos:hover{background:color-mix(in srgb,var(--ez-positive) 88%,var(--ez-ink));color:var(--ez-on-accent)}
 .te .btn.dan{color:var(--ez-critical)}
 .te .btn.dan:hover{border-color:var(--ez-critical)}
 .te .btn.sm{padding:5px 10px;font-size:12.5px;border-radius:8px}
