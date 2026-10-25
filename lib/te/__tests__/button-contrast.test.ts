@@ -86,6 +86,42 @@ function matches(sel: string, classes: string[], pseudo: string | null): boolean
   return parts.slice(0, -1).every(p => p.split('.').filter(Boolean).every(c => c === 'te' || classes.includes(c)))
 }
 
+/**
+ * The winning value of a property for a DESCENDANT ELEMENT of the button —
+ * the <span> the label actually lives in.
+ *
+ * THIS IS THE HOLE THAT LET THE REAL BUG THROUGH. The first version of this
+ * file resolved colour for the button's class list alone, as though the button
+ * and its label were one element. They are not: the label is a <span>, and a
+ * rule matching that span wins for the span no matter what the button says,
+ * because the span's own declaration beats an inherited value.
+ *
+ * `.te .big span { color: var(--ez-muted) }` — a 46px display-number
+ * component — matched, because the size modifier had been named `.big` too.
+ * So the button was white and the text was grey, and every measurement said
+ * AAA because it was measuring the button.
+ */
+function resolveDescendant(prop: string, tag: string, ancestorClasses: string[]): string | null {
+  const hits = rules()
+    .filter(r => {
+      const parts = r.selector.split(/\s+/).filter(Boolean)
+      if (parts.length < 2) return false
+      if (parts[parts.length - 1] !== tag) return false        // the element itself
+      return parts.slice(0, -1).every(p =>
+        p.split('.').filter(Boolean).every(c => c === 'te' || ancestorClasses.includes(c)))
+    })
+    .map(r => {
+      const re = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'g')
+      let m: RegExpExecArray | null, v: string | null = null
+      while ((m = re.exec(r.decls))) v = m[1].trim()
+      return v ? { ...r, value: v } : null
+    })
+    .filter((r): r is Rule & { value: string } => !!r)
+  if (!hits.length) return null
+  hits.sort((a, b) => specificity(a.selector) - specificity(b.selector) || a.order - b.order)
+  return hits[hits.length - 1].value
+}
+
 /** The winning value of one property for an element with these classes. */
 function resolve(prop: string, classes: string[], pseudo: string | null = null): string | null {
   const hits = rules()
@@ -116,8 +152,8 @@ function paint(value: string, dark: boolean): string {
 const AA = 4.5, AAA = 7
 /** The two hero actions on the on-a-trip card. */
 const HERO = [
-  { name: 'Add a bill', classes: ['te', 'btn', 'pri', 'big'] },
-  { name: 'Add a journey', classes: ['te', 'btn', 'pos', 'big'] },
+  { name: 'Add a bill', classes: ['te', 'btn', 'pri', 'actbtn'] },
+  { name: 'Add a journey', classes: ['te', 'btn', 'pos', 'actbtn'] },
 ]
 
 describe('the hero buttons’ labels are readable', () => {
@@ -167,7 +203,7 @@ describe('the pair is one species', () => {
   it('both are filled, and both carry the same size class', () => {
     for (const btn of HERO) {
       assert.ok(resolve('background', btn.classes), `${btn.name} should have a fill`)
-      assert.ok(btn.classes.includes('big'))
+      assert.ok(btn.classes.includes('actbtn'))
     }
   })
 
@@ -177,5 +213,42 @@ describe('the pair is one species', () => {
     const bg = resolve('background', ['te', 'btn', 'ok', 'glow'])
     assert.ok(!bg || !/positive-tint/.test(bg),
       '`ok` should mean glow tokens only, not a green fill')
+  })
+})
+
+describe('the label inside the button is readable too', () => {
+  // Reported three times. The button was white-on-blue at 7.08; the <span>
+  // holding the words was --ez-muted on the same blue, around 1.4, because the
+  // size modifier collided with an unrelated .big component whose `span` rule
+  // paints a grey unit. Nothing measured the span until somebody looked at the
+  // screen.
+  for (const dark of [false, true]) {
+    const theme = dark ? 'dark' : 'light'
+    for (const btn of HERO) {
+      it(`${btn.name}'s <span> label, ${theme}`, () => {
+        const bg = paint(resolve('background', btn.classes)!, dark)
+        // a span rule if one matches, otherwise the colour it inherits
+        const spanColour = resolveDescendant('color', 'span', btn.classes)
+          ?? resolve('color', btn.classes)
+        const r = contrast(paint(spanColour!, dark), bg)
+        assert.ok(r >= AAA,
+          `${btn.name} ${theme}: the LABEL is ${paint(spanColour!, dark)} on ${bg} = ${r.toFixed(2)}`
+          + (resolveDescendant('color', 'span', btn.classes)
+            ? ' — a descendant rule is overriding the button\'s own colour'
+            : ''))
+      })
+    }
+  }
+
+  it('no rule paints a span inside these buttons at all', () => {
+    // The safest state: the label inherits the button's colour and cannot
+    // drift from it. If a rule ever matches again, the assertions above will
+    // measure it, but this says plainly that none should.
+    for (const btn of HERO) {
+      const rule = resolveDescendant('color', 'span', btn.classes)
+      assert.equal(rule, null,
+        `a span rule is reaching into ${btn.name}: color ${rule}. Check the class names on it — `
+        + '.big, for one, belongs to a 46px display number whose span is a grey unit.')
+    }
   })
 })

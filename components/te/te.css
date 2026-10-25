@@ -193,7 +193,21 @@
    on a trip" language the positive tint carries everywhere else in the module. */
 .te .k-bill{--te-k:var(--ez-brand);--te-kt:var(--ez-brand-tint)}
 .te .k-hop{--te-k:var(--ez-positive);--te-kt:var(--ez-positive-tint)}
-.te .triphero{margin-bottom:16px}
+/* ITS OWN TWO-COLUMN GRID. These were `.kinds compact`, which was wrong twice
+   over: .kinds is a FOUR-column grid, so two tiles filled half the row and left
+   the other half empty on any desktop; and .compact is the dense horizontal
+   variant — min-height:0, a 40px icon, the footer line hidden — meant for a
+   list, not for the two biggest actions on the screen. Measured in the browser
+   at 1440px: 283x111 tiles in a 1172px row, icon chip 40px instead of 52px.
+   So: plain .kind tiles at their full size, in a grid of exactly two. */
+/* .kinds.triphero, not .triphero — `.te .kinds` and `.te .triphero` both carry
+   two classes, so with .kinds declared later it won on source order and kept
+   its four columns. Measured in the browser: the pair filled 578px of a 1172px
+   row. Naming both classes outranks it instead of racing it. */
+.te .kinds.triphero{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:16px}
+/* Two 172px tiles side by side on a phone would be a pair of slivers; one
+   column each is the whole point of them being big. */
+@media (max-width:640px){.te .kinds.triphero{grid-template-columns:minmax(0,1fr)}}
 .te .hero-end{height:0;margin:0}
 
 /* The on-a-trip card's two actions, on Home.
@@ -207,8 +221,15 @@
    recognising, and stacking lets both buttons stay the same height however
    long the label gets in another language. */
 .te .acts2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.te .btn.big{flex-direction:column;gap:6px;padding:14px 12px;min-height:84px;font-size:14px;border-radius:var(--te-r-sm);line-height:1.25}
-.te .btn.big svg{width:24px;height:24px}
+/* NAMED .actbtn, NOT .big — .big was already taken.
+   `.te .big` is a 46px display number and `.te .big span` paints its unit
+   --ez-muted. The label here lives in a <span>, so reusing .big put grey text
+   on a dark filled button: the button's own color:var(--ez-on-accent) was
+   never what the text took. Reported three times as "bad contrast"; every
+   measurement I made said AAA, because I was measuring the BUTTON and the
+   browser was painting the SPAN. Found by asking getComputedStyle. */
+.te .btn.actbtn{flex-direction:column;gap:6px;padding:14px 12px;min-height:84px;font-size:14px;border-radius:var(--te-r-sm);line-height:1.25}
+.te .btn.actbtn svg{width:24px;height:24px}
 /* THE LABEL ON A HERO BUTTON NEEDS MORE ROOM THAN THE TOKENS GIVE.
    14px semibold on a filled background is NORMAL text to WCAG, not large — so
    AA is 4.5 and AAA is 7.0. The base tokens deliver 5.17 (brand) and 5.48
@@ -230,10 +251,10 @@
    5.17; deepening every primary button in the product is a far larger change
    than was asked for, and a bigger button carrying a slightly deeper fill
    reads as emphasis rather than as a second shade of the same thing. */
-.te .btn.pri.big{background:color-mix(in srgb,var(--ez-brand) 76%,var(--ez-ink));border-color:transparent}
-.te .btn.pri.big:hover{background:color-mix(in srgb,var(--ez-brand) 64%,var(--ez-ink))}
-.te .btn.pos.big{background:color-mix(in srgb,var(--ez-positive) 76%,var(--ez-ink));border-color:transparent}
-.te .btn.pos.big:hover{background:color-mix(in srgb,var(--ez-positive) 64%,var(--ez-ink))}
+.te .btn.pri.actbtn{background:color-mix(in srgb,var(--ez-brand) 76%,var(--ez-ink));border-color:transparent}
+.te .btn.pri.actbtn:hover{background:color-mix(in srgb,var(--ez-brand) 64%,var(--ez-ink))}
+.te .btn.pos.actbtn{background:color-mix(in srgb,var(--ez-positive) 76%,var(--ez-ink));border-color:transparent}
+.te .btn.pos.actbtn:hover{background:color-mix(in srgb,var(--ez-positive) 64%,var(--ez-ink))}
 /* NO .btn.ok RULE HERE, deliberately. Adding one gave the pair two different
    button species — a filled blue beside a green ghost on a green card — and it
    reached further than intended: TeDrafts' "Keep them" is `btn ok glow`, which
@@ -287,7 +308,7 @@
   /* The tiles are the whole point on a phone, so they keep their description
      where .kind would normally drop it — a tile that says only "Add a bill" is
      a button with extra padding. */
-  .te .triphero .kind .kt small{display:block;font-size:12px}
+  .te .triphero .kind .kt small{display:block;font-size:12.5px}
   .te .recnow{gap:10px;padding:10px 12px}
   .te .recnow .btn{padding:8px 11px}
   /* The label goes; the actions take the width. Nobody needs telling they are

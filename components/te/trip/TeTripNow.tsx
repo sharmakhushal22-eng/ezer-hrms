@@ -116,7 +116,10 @@ export default function TeTripNow({ runningLeg, canBill, mine, nameOf, onAddBill
         </div>
       ) : null}
 
-      <div className="kinds compact triphero">
+      {/* .kinds for the tile machinery, .triphero for a grid of exactly two.
+          NOT .compact — that is the dense horizontal variant with a 40px icon
+          and no footer line, which turned these into list rows. */}
+      <div className="kinds triphero">
         {bill}
         {hop}
       </div>

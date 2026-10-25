@@ -460,13 +460,13 @@ export default function TeHome({ initialClaimId, onExit }: {
                       competing with the thing you came to do. */}
                   <div className="acts2">
                     {onTripCan?.bill ? (
-                      <button type="button" className="btn pri big" onClick={() => setSheet({ name: 'expense', tripId: onTrip.id })}>
+                      <button type="button" className="btn pri actbtn" onClick={() => setSheet({ name: 'expense', tripId: onTrip.id })}>
                         <TeIcon name="receipt" />
                         <span>Add a bill</span>
                       </button>
                     ) : null}
                     {onTripCan?.journey ? (
-                      <button type="button" className="btn pos big" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
+                      <button type="button" className="btn pos actbtn" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
                         <TeIcon name="route" />
                         <span>{openingTrip ? 'Opening…' : 'Add a journey'}</span>
                       </button>
