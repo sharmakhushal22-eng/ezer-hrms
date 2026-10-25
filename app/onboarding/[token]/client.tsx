@@ -4,7 +4,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C as TK, Z, E } from '@/lib/ui'
 import { missingFor, missingFields, describeMissing } from '@/lib/onboarding/required'
 
 // ── Types ────────────────────────────────────────────────────────
@@ -53,8 +53,8 @@ async function api(path: string, body: any, method = 'POST') {
 // ── Toast ─────────────────────────────────────────────────────────
 function Toast({ msg, type }: { msg: string; type: 'ok' | 'err' }) {
   return (
-    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, borderRadius: 10, padding: '12px 20px', fontSize: 13, fontWeight: 500, background: type === 'ok' ? TK.positive : TK.critical, color: TK.onAccent, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 320 }}>
-      {type === 'ok' ? '' : ''} {msg}
+    <div role="status" style={{ position: 'fixed', bottom: 24, right: 24, left: 24, marginLeft: 'auto', zIndex: Z.toast, borderRadius: 10, padding: '12px 20px', fontSize: 13, fontWeight: 500, background: type === 'ok' ? TK.positive : TK.critical, color: TK.onAccent, boxShadow: E.overlay, maxWidth: 360, width: 'fit-content' }}>
+      {msg}
     </div>
   )
 }
@@ -72,7 +72,7 @@ function StepBar({ current }: { current: Step }) {
           return (
             <div key={s} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, background: done ? TK.positive : active ? P : TK.brandTint, color: done || active ? '#fff' : TK.faint, transition: 'all .3s' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, background: done ? TK.positive : active ? P : TK.brandTint, color: done || active ? TK.onAccent : TK.faint, transition: 'all .3s' }}>
                   {done ? '' : n}
                 </div>
                 <div style={{ fontSize: 9, color: active ? P : done ? TK.positive : TK.faint, fontWeight: active ? 600 : 400, whiteSpace: 'nowrap' }}>{s}</div>
@@ -342,7 +342,7 @@ function FormRow({ l, v }: { l: string; v: any }) {
 function StatutoryFormCard({ code, title, rows }: { code: string; title: string; rows: [string, any][] }) {
   const [ok, setOk] = useState(false)
   return (
-    <div style={{ ...S.card, border: `1px solid ${ok ? '#A7F3D0' : TK.brandTint}`, background: ok ? '#F6FFF9' : '#fff' }}>
+    <div style={{ ...S.card, border: `1px solid ${ok ? TK.positiveEdge : TK.brandTint}`, background: ok ? TK.positiveTint : TK.surface }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 9, fontWeight: 700, color: TK.brand, background: TK.brandTint, padding: '2px 8px', borderRadius: 99 }}>{code}</span>
         <span style={{ fontSize: 13, fontWeight: 600 }}>{title}</span>
@@ -469,7 +469,7 @@ function PolicyCard({ policy, acked, onAck }: { policy: any; acked: boolean; onA
     if (el && el.scrollHeight <= el.clientHeight + 4) setScrolledEnd(true)
   }, [open])
   return (
-    <div style={{ ...S.card, border: `1px solid ${acked ? '#A7F3D0' : TK.brandTint}`, background: acked ? TK.positiveTint: TK.surface }}>
+    <div style={{ ...S.card, border: `1px solid ${acked ? TK.positiveEdge : TK.brandTint}`, background: acked ? TK.positiveTint: TK.surface }}>
       <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
         <span style={{ fontSize: 13, fontWeight: 600 }}>{policy.policy_title}</span>
         <span style={{ fontSize: 10, color: TK.faint }}>{policy.policy_code} · v{policy.version}</span>
@@ -604,7 +604,7 @@ function ESignPhase({ token, onBack, onSubmit, submitting }: {
   const clean = aadhaar.replace(/\D/g, '')
   const bundle = ['EPF Form 11 (PF Declaration)', 'EPF Form 2 (Nominee Declaration)', 'Gratuity Form F', 'All Policy Acknowledgements', 'Complete Joining Form (consolidated)']
   const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }
-  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', background: TK.sunken, border: `1px solid #DDD6FE`, borderRadius: 10, fontSize: 15, color: TK.ink, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', letterSpacing: 2 }
+  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', background: TK.sunken, border: `1px solid ${TK.lineStrong}`, borderRadius: 10, fontSize: 15, color: TK.ink, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', letterSpacing: 2 }
 
   const sendOtp = () => {
     if (clean.length !== 12) { setErr('Enter a valid 12-digit Aadhaar number'); return }
@@ -732,7 +732,7 @@ function CrossDocCheck({ docs, onResolve, onMismatchChange }: {
                 <div style={{ marginTop: 8 }}>
                   <label style={S.lbl}>Pick the correct {f.label.toLowerCase()}</label>
                   <select
-                    style={{ ...S.sel, border: resolved[f.key] ? '1px solid #A7F3D0' : '1px solid #FCD34D', background: resolved[f.key] ? TK.positiveTint : TK.warningTint }}
+                    style={{ ...S.sel, border: `1px solid ${resolved[f.key] ? TK.positiveEdge : TK.warningEdge}`, background: resolved[f.key] ? TK.positiveTint : TK.warningTint }}
                     value={resolved[f.key] || ''}
                     onChange={e => {
                       const chosen = e.target.value
@@ -1178,15 +1178,15 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   if (submitted) {
     const ackNo = `EZR-ACK-${(token || '').slice(0, 8).toUpperCase()}`
     const generatedAt = new Date().toLocaleString('en-IN')
-    const doj = c.date_of_joining ? new Date(c.date_of_joining).toLocaleDateString('en-IN') : '—'
+    const doj = c.date_of_joining ? new Date(c.date_of_joining).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
     const ackForms = ['Form 11', 'Form 2', 'Form III', ...(esicApplicable ? ['ESIC Form 1'] : [])]
     return (
       <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ maxWidth: 760, width: '100%', padding: 24, textAlign: 'center' }}>
           <div style={{ ...S.card, padding: 40 }}>
-            <div style={{ fontSize: 56, marginBottom: 16 }}></div>
+            <div aria-hidden="true" style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 700, background: TK.positiveTint, color: TK.positive, border: `1px solid ${TK.positiveEdge}` }}>✓</div>
             <div style={{ fontSize: 22, fontWeight: 600, color: TK.ink, marginBottom: 8 }}>Welcome to {co?.company_name || 'the team'}!</div>
-            <div style={{ fontSize: 13, color: '#000000ff', lineHeight: 1.8, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, color: TK.inkSoft, lineHeight: 1.8, marginBottom: 20 }}>
               Your joining form has been submitted successfully!<br />
               HR will review it and generate your Employee ID.<br />
               You'll receive an email with your ESS login details.
@@ -1198,7 +1198,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               ))}
             </div>
             <div style={{ fontSize: 12, color: TK.faint, lineHeight: 1.7 }}>
-              Questions? Contact HR at {co?.hr_email || 'hr@company.com'}
+              {co?.hr_email ? <>Questions? Contact HR at {co.hr_email}</> : 'Questions? Contact your HR team.'}
             </div>
           </div>
 
@@ -1218,7 +1218,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   return (
     <div style={S.page}>
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, ${P}, #4F46E5)`, padding: '14px 20px', color: TK.onAccent, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ background: P, padding: '14px 20px', color: TK.onAccent, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>{co?.company_name || 'EZER HRMS'} — Joining Formalities</div>
           <div style={{ fontSize: 11, color: TK.onAccentDim, marginTop: 1 }}>{(c.full_name || '').toUpperCase()} · {c.designation}</div>
@@ -1255,7 +1255,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {/* ═══ STEP 1: WELCOME + IDENTITY VERIFY ════════════════════ */}
         {step === 1 && (
           <div>
-            <div style={{ ...S.card, background: `linear-gradient(135deg, ${P}, #4F46E5)`, color: TK.onAccent }}>
+            <div style={{ ...S.card, background: P, color: TK.onAccent }}>
               <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>Welcome, {(c.full_name || '').toUpperCase()}! 👋</div>
               <div style={{ fontSize: 13, color: TK.onAccentSoft, lineHeight: 1.8 }}>
                 We're excited to have you join {co?.company_name}. Let's verify your identity to begin.

@@ -2,7 +2,7 @@
 // EZER HRMS — Onboarding Admin Dashboard
 // 5 tabs: Overview | All Candidates | Pending Actions | AI Insights | Compliance
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { canSeeScreen } from '@/lib/rms/resolve'
@@ -13,15 +13,22 @@ import GenerateCodeModal from '@/components/onboarding/GenerateCodeModal'
 import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK, R, E, IconChevron } from '@/lib/ui'
+import { C as TK, R, E, Z, tone as toneOf, IconChevron, IconCheck, IconPlus } from '@/lib/ui'
+import { ApprovalsCell, type Readiness } from '@/components/onboarding/ApprovalTrail'
+import { AnchoredPopover, MenuItem } from '@/components/onboarding/AnchoredPopover'
+import { approvalTrail, dayLabel, daysFromToday, relDays, type ApprovalRow, type Holder, type TrailTeam, type Trail } from '@/lib/onboarding/approval-trail'
 
 // ── Types ─────────────────────────────────────────────────────────
 type Stage = 'NOT_INVITED'|'INVITED'|'IN_PROGRESS'|'SUBMITTED'|'HR_REVIEW'|'APPROVED'|'EMPLOYEE_CREATED'
 type RiskLevel = 'LOW'|'MEDIUM'|'HIGH'
 type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
+type Holders = Record<string, Partial<Record<TrailTeam, Holder[]>>>
 
 interface Candidate {
-  approvals?: { team: string; status: string }[]
+  /** Every onboarding_approvals row on record (team, status, who, when, remark). */
+  approvals?: ApprovalRow[]
+  docs_required_have?: number; docs_required_total?: number; docs_rejected?: number
+  it_laptop_issued?: boolean | null; admin_id_card?: boolean | null
   /** The HR Manager's assignments (lib/onboarding/hr-assignment.ts): managers from the review sheet (Assign managers), then the team + roles recorded at Generate code. */
   role_assignment?: { managers?: { l1_name?: string | null; l2_name?: string | null; hod_name?: string | null }; roles?: { role_code: string; role_name: string }[]; team?: { summary?: string; count?: number }; by_name?: string | null; at?: string } | null
   l1_manager_id?: string | null; l2_manager_id?: string | null; hod_id?: string | null
@@ -43,27 +50,53 @@ interface Candidate {
 
 // ── EZER theme constants ───────────────────────────────────────────
 const P = TK.brand
-const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
-  NOT_INVITED:      { label:'Not invited',       bg: TK.sunken, color:TK.muted },
-  INVITED:          { label:'Link sent',        bg:TK.warningTint, color:TK.warning },
-  IN_PROGRESS:      { label:'In progress',      bg: TK.brandTint, color: TK.brand },
-  SUBMITTED:        { label:'Submitted',         bg:TK.brandTint, color:P        },
-  HR_REVIEW:        { label:'HR accepted · with teams', bg:TK.infoTint, color:TK.info },
-  APPROVED:         { label:'Teams approved',    bg:TK.positiveTint, color:TK.positive },
-  EMPLOYEE_CREATED: { label:'Employee created',  bg: TK.sunken, color: TK.positive },
+// Colour says whose move it is: neutral = the candidate's, warning = HR's, info = the teams',
+// positive = done / ready. Every stage reads as words too, never colour alone.
+const stageTone = (t: 'neutral'|'brand'|'warning'|'info'|'positive'|'critical') => { const k = toneOf(t); return { bg: k.bg, color: k.fg, edge: k.edge } }
+const STAGE_META: Record<Stage, {label:string; bg:string; color:string; edge:string}> = {
+  NOT_INVITED:      { label:'Not invited',          ...stageTone('neutral') },
+  INVITED:          { label:'Link sent',            ...stageTone('neutral') },
+  IN_PROGRESS:      { label:'Filling the form',     ...stageTone('brand') },
+  SUBMITTED:        { label:'HR to review',         ...stageTone('warning') },
+  HR_REVIEW:        { label:'With the teams',       ...stageTone('info') },
+  APPROVED:         { label:'Ready for code',       ...stageTone('positive') },
+  EMPLOYEE_CREATED: { label:'Employee created',     ...stageTone('positive') },
 }
-const TEAM_SHORT: Record<string,string> = { IT:'IT', ADMIN:'Admin', PAYROLL:'Payroll', HR_MANAGER:'HR Mgr' }
-const STEP_LABELS = ['','Welcome','OTP','Personal','Contact','Emergency','Documents','Statutory','Declaration']
+const RETURNED_META = { label:'Returned for fixes', ...stageTone('critical') }
+// The documents the portal will not submit without (app/onboarding/[token]/client.tsx DOC_LIST);
+// the experience letter too unless the candidate ticked Fresher.
 const DOCS_REQ = ['AADHAAR_FRONT','AADHAAR_BACK','PAN','PHOTO','DEGREE','BANK_PROOF']
 
 // ── Small helpers ─────────────────────────────────────────────────
-const fmt = (s?: string) => s ? new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : '—'
-const daysLeft = (doj?: string) => {
-  if (!doj) return null
-  // Compare calendar dates (ignore time of day) so a same-day joining = 0, not negative.
-  const a = new Date(doj); a.setHours(0, 0, 0, 0)
-  const b = new Date(); b.setHours(0, 0, 0, 0)
-  return Math.round((a.getTime() - b.getTime()) / 86400000)
+// One date format on every onboarding screen: "12 Oct 2026".
+const fmt = (s?: string | null) => dayLabel(s)
+const daysLeft = (doj?: string | null) => daysFromToday(doj)
+const isReturned = (c: Candidate) => c.status === 'IN_PROGRESS' && (c.hr_review?.outcome === 'RETURNED' || (c.approvals || []).some(a => a.status === 'RETURNED'))
+
+/**
+ * Sticky bars on this page must sit BELOW the host's own sticky bar — the ESS top bar with
+ * the Manage menus — not slide underneath it. The host is not ours to change, so measure it:
+ * the nearest earlier sibling (of this page or an ancestor) that is sticky at top 0 and is a
+ * bar, not a full-height rail. Its height goes in --ob-top on the page root; 0 on /dashboard.
+ */
+function useHostStickyOffset(ref: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const root = ref.current
+    if (!root || typeof ResizeObserver === 'undefined') return
+    let bar: HTMLElement | null = null
+    for (let el: HTMLElement | null = root; el && el !== document.body && !bar; el = el.parentElement) {
+      for (let s = el.previousElementSibling as HTMLElement | null; s; s = s.previousElementSibling as HTMLElement | null) {
+        const cs = getComputedStyle(s)
+        if ((cs.position === 'sticky' || cs.position === 'fixed') && (parseFloat(cs.top) || 0) === 0 && s.offsetHeight > 0 && s.offsetHeight < 160 && s.offsetWidth >= el.offsetWidth * 0.6) { bar = s; break }
+      }
+    }
+    if (!bar) return
+    const b = bar
+    const set = () => root.style.setProperty('--ob-top', `${b.offsetHeight}px`)
+    set()
+    const ro = new ResizeObserver(set); ro.observe(b)
+    return () => ro.disconnect()
+  }, [ref])
 }
 const progressPct = (c: Candidate) => {
   const baseStep = Math.min(c.current_step || 1, 8)
@@ -73,31 +106,65 @@ const progressPct = (c: Candidate) => {
   return Math.min(100, stepPct + docBonus + statBonus)
 }
 
-const Badge = ({ label, bg, color }: {label:string;bg:string;color:string}) => (
-  <span style={{fontSize:10,padding:'2px 8px',borderRadius:99,background:bg,color,fontWeight:600,display:'inline-flex',alignItems:'center'}}>{label}</span>
+const Badge = ({ label, bg, color, edge, title }: {label:string;bg:string;color:string;edge?:string;title?:string}) => (
+  <span title={title} style={{fontSize:11,padding:'2px 8px',borderRadius:99,background:bg,color,fontWeight:600,display:'inline-flex',alignItems:'center',whiteSpace:'nowrap',lineHeight:1.5,border:`1px solid ${edge || 'transparent'}`}}>{label}</span>
 )
-const RiskBadge = ({ risk }: {risk?: RiskLevel}) => {
+const RISK_META: Record<RiskLevel,{label:string;t:'neutral'|'warning'|'critical'}> = {
+  LOW:    {label:'Low',    t:'neutral'},
+  MEDIUM: {label:'Medium', t:'warning'},
+  HIGH:   {label:'High',   t:'critical'},
+}
+const RiskBadge = ({ risk, reason, long }: {risk?: RiskLevel; reason?: string; long?: boolean}) => {
   if (!risk) return null
-  const m: Record<RiskLevel,{bg:string;color:string}> = {
-    LOW:    {bg: TK.sunken,color: TK.positive},
-    MEDIUM: {bg:TK.warningTint,color:TK.warning},
-    HIGH:   {bg: TK.criticalTint,color:TK.critical},
-  }
-  return <Badge label={`${risk === 'HIGH' ? '⚠ ' : ''}${risk} risk`} {...m[risk]}/>
+  const k = toneOf(RISK_META[risk].t)
+  return <Badge label={`${RISK_META[risk].label}${long ? ' risk' : ''}`} bg={k.bg} color={risk==='LOW'?TK.muted:k.fg} edge={k.edge} title={reason || undefined}/>
 }
 
 function Toast({msg,type,onClose}:{msg:string;type:'ok'|'err';onClose:()=>void}) {
-  useEffect(()=>{const t=setTimeout(onClose,3500);return()=>clearTimeout(t)},[onClose])
-  return <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:500,background:type==='ok'?TK.positive:TK.critical,color:TK.onAccent,boxShadow:'0 8px 24px rgba(0,0,0,.18)',maxWidth:320}}>{type==='ok'?'':''} {msg}</div>
+  // Errors stay a little longer — they are usually something to act on.
+  useEffect(()=>{const t=setTimeout(onClose,type==='err'?6000:3500);return()=>clearTimeout(t)},[onClose,type])
+  return <div role="status" style={{position:'fixed',bottom:24,right:24,zIndex:Z.toast,borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:500,background:type==='ok'?TK.positive:TK.critical,color:TK.onAccent,boxShadow:E.overlay,maxWidth:380,lineHeight:1.45}}>{msg}</div>
 }
 
 function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
   return (
-    <div style={{height:5,background:'rgba(37,99,235,.1)',borderRadius:99,overflow:'hidden',marginTop:4}}>
+    <div style={{height:5,background:TK.sunken,borderRadius:99,overflow:'hidden',marginTop:4}}>
       <div style={{height:'100%',background:color,borderRadius:99,width:`${pct}%`,transition:'width .4s'}}/>
     </div>
   )
 }
+
+type RowAction = { label: string; hint?: string; onClick: () => void; disabled?: boolean; kind?: 'primary' | 'go' | 'outline' }
+
+/** A row's actions: one primary button, the rest behind "⋯" — so every row is one line high. */
+function RowActions({ name, primary, more }: { name: string; primary?: RowAction | null; more: RowAction[] }) {
+  const btn: React.CSSProperties = { padding:'5px 10px', borderRadius:R.sm, fontSize:12, fontWeight:600, fontFamily:'inherit', whiteSpace:'nowrap', cursor:'pointer', lineHeight:1.4 }
+  const skin = (k?: RowAction['kind']): React.CSSProperties =>
+    k === 'go' ? { background:TK.positive, color:TK.onAccent, border:`1px solid ${TK.positive}` }
+    : k === 'outline' ? { background:TK.surface, color:TK.brandDeep, border:`1px solid ${TK.brandEdge}` }
+    : { background:TK.brand, color:TK.onAccent, border:`1px solid ${TK.brand}` }
+  return (
+    <div style={{ display:'flex', gap:5, alignItems:'center', justifyContent:'flex-end' }}>
+      {primary && <button type="button" onClick={primary.onClick} disabled={primary.disabled} title={primary.hint} style={{ ...btn, ...skin(primary.kind) }}>{primary.label}</button>}
+      {more.length > 0 && (
+        <AnchoredPopover label={`More actions for ${name}`} width={230} align="end" triggerTitle="More actions"
+          triggerStyle={{ ...btn, padding:'5px 7px', background:TK.surface, color:TK.inkSoft, border:`1px solid ${TK.line}`, letterSpacing:'.08em' }}
+          trigger={<span aria-hidden="true">⋯</span>}>
+          {close => (
+            <div role="menu" style={{ padding:5 }}>
+              {more.map(a => <MenuItem key={a.label} hint={a.hint} disabled={a.disabled} onClick={() => { close(); a.onClick() }}>{a.label}</MenuItem>)}
+            </div>
+          )}
+        </AnchoredPopover>
+      )}
+      {!primary && !more.length && <span style={{ fontSize:11, color:TK.faint }}>—</span>}
+    </div>
+  )
+}
+
+const POP_CSS = `.ob-mi:not(:disabled):hover,.ob-mi:focus-visible{background:${TK.sunken};outline:none}
+  .ob-row:hover td{background:${TK.brandTint}}
+  .ob-row td{vertical-align:middle}`
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN DASHBOARD
@@ -128,6 +195,10 @@ export default function OnboardingDashboard() {
   const [resendingId,  setResendingId] = useState('')
   const [reviewing,    setReviewing]  = useState<{ id: string; readOnly: boolean } | null>(null)
   const [selIds,       setSelIds]     = useState<Set<string>>(new Set())
+  // Who acts for each approval team, per company (/api/onboarding/approvers). null = not loaded.
+  const [holders,      setHolders]    = useState<Holders | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useHostStickyOffset(rootRef)
   // New link form
   const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
   const [departments, setDepartments] = useState<{id:string;dept_name:string;company_id:string}[]>([])
@@ -185,11 +256,12 @@ export default function OnboardingDashboard() {
       )
       return parts.flatMap(p => (p.data as any[]) || [])
     }
-    const [allDocs, allForms, allAssets, allApprovals] = await Promise.all([
-      fetchAll('onboarding_documents',       'onboarding_id,doc_code,ai_status'),
+    const [allDocs, allForms, allAssets, allApprovals, allAcks] = await Promise.all([
+      fetchAll('onboarding_documents',       'onboarding_id,doc_code,ai_status,hr_verified'),
       fetchAll('onboarding_statutory_forms', 'onboarding_id,form_type'),
       fetchAll('onboarding_asset_requests',  'onboarding_id,asset_type,status'),
-      fetchAll('onboarding_approvals',       'onboarding_id,team,status'),
+      fetchAll('onboarding_approvals',       'onboarding_id,team,status,acted_by_name,acted_at,remark'),
+      fetchAll('onboarding_policy_acks',     'onboarding_id,acknowledged_at'),
     ])
     const groupBy = (rows: any[]) => {
       const m = new Map<string, any[]>()
@@ -197,13 +269,19 @@ export default function OnboardingDashboard() {
       return m
     }
     const docsBy = groupBy(allDocs), formsBy = groupBy(allForms), assetsBy = groupBy(allAssets), approvalsBy = groupBy(allApprovals)
+    const ackedIds = new Set(allAcks.filter((a: any) => a.acknowledged_at).map((a: any) => a.onboarding_id))
 
     const enriched: Candidate[] = (cands || []).map((c) => {
       const docs = docsBy.get(c.id) || []
       const forms = formsBy.get(c.id) || []
       const assets = assetsBy.get(c.id) || []
-      const docCodes  = (docs||[]).map(d=>d.doc_code)
+      // A document code can have more than one row (a re-upload, a carried-over pre-offer copy),
+      // and most codes are optional — so "uploaded / required" counts DISTINCT required codes.
+      // It used to divide every row by the six required ones and showed "16/6".
+      const codes     = new Set((docs||[]).map(d=>d.doc_code))
+      const required  = [...DOCS_REQ, ...(c.form_data?.step_5 && c.form_data.step_5.is_fresher !== true ? ['EXP_LETTER'] : [])]
       const flagged   = (docs||[]).filter(d=>d.ai_status==='MISMATCH'||d.ai_status==='FAILED').length
+      const rejected  = (docs||[]).filter(d=>d.hr_verified===false).length
       const formTypes = (forms||[]).map(f=>f.form_type)
       const laptop    = (assets||[]).find(a=>a.asset_type==='LAPTOP')
       const idCard    = (assets||[]).find(a=>a.asset_type==='ID_CARD')
@@ -212,23 +290,32 @@ export default function OnboardingDashboard() {
       let risk: RiskLevel = 'LOW'
       let riskReason = ''
       const days = daysLeft(c.date_of_joining)
-      if (days !== null && days <= 3 && c.status !== 'EMPLOYEE_CREATED') { risk='HIGH'; riskReason='Joining in ≤3 days, not complete' }
-      else if (flagged > 0) { risk='MEDIUM'; riskReason=`${flagged} document(s) AI flagged` }
+      if (days !== null && days < 0 && c.status !== 'EMPLOYEE_CREATED') { risk='HIGH'; riskReason=`Joining date passed ${relDays(days)} — onboarding not complete` }
+      else if (days !== null && days <= 3 && c.status !== 'EMPLOYEE_CREATED') { risk='HIGH'; riskReason=`Joining ${relDays(days)} — onboarding not complete` }
+      else if (flagged > 0 && c.status !== 'EMPLOYEE_CREATED') { risk='MEDIUM'; riskReason=`${flagged} document${flagged===1?'':'s'} flagged by the AI check` }
       else if (c.status==='INVITED' && days !== null && days <= 7) { risk='MEDIUM'; riskReason='Link not opened, joining close' }
+      else if (days === null && c.status !== 'EMPLOYEE_CREATED') { risk='MEDIUM'; riskReason='No date of joining set' }
 
       return {
         ...c,
-        docs_uploaded:   docCodes.length,
+        docs_uploaded:   codes.size,
+        docs_required_have:  required.filter(r => codes.has(r)).length,
+        docs_required_total: required.length,
         docs_ai_flagged: flagged,
+        docs_rejected:   rejected,
         form11:          formTypes.includes('EPF_FORM11'),
         form2:           formTypes.includes('EPF_FORM2'),
         bank:            formTypes.includes('BANK_MANDATE'),
-        policy_ack:      !!(c.form_data?.step_8?.declaration_accepted),
-        laptop_issued:   laptop?.status === 'ISSUED',
-        id_card_issued:  idCard?.status  === 'ISSUED',
+        // The portal records each policy acknowledgement in onboarding_policy_acks; nothing ever
+        // wrote form_data.step_8.declaration_accepted, so this read "Policy pending" for everyone.
+        policy_ack:      ackedIds.has(c.id) || !!(c.form_data?.step_8?.declaration_accepted),
+        // IT and Admin confirm the laptop and the ID card on their approval checklist
+        // (onboarding_candidates columns); the older "Mark issued" asset rows count too.
+        laptop_issued:   laptop?.status === 'ISSUED' || c.it_laptop_issued === true,
+        id_card_issued:  idCard?.status  === 'ISSUED' || c.admin_id_card === true,
         ai_risk:         risk,
         ai_risk_reason:  riskReason,
-        approvals:       ['IT','ADMIN','PAYROLL','HR_MANAGER'].map(team => ({ team, status: (approvalsBy.get(c.id) || []).find((a: any) => a.team === team)?.status || 'PENDING' })),
+        approvals:       (approvalsBy.get(c.id) || []) as ApprovalRow[],
       } as Candidate
     })
 
@@ -284,9 +371,38 @@ export default function OnboardingDashboard() {
 
     setCandidates(merged as Candidate[])
     setLoading(false)
+
+    // Who acts for each approval team in these companies — names for the approvals popover.
+    // Non-blocking: the table shows without it, and says "the team" until it lands.
+    const coIds = [...new Set(enriched.filter(c => c.status !== 'NOT_INVITED').map(c => c.company_id).filter(Boolean))]
+    if (coIds.length) {
+      try {
+        const res = await fetch(`/api/onboarding/approvers?company_ids=${encodeURIComponent(coIds.join(','))}`, { headers: await authHeaders() })
+        const d = await res.json().catch(() => ({}))
+        setHolders(res.ok ? (d.holders || {}) : null)
+      } catch { setHolders(null) }
+    }
   }, [grant])
 
+  /** Where this onboarding's sign-off is, and who has it (lib/onboarding/approval-trail.ts). */
+  const trailOf = (c: Candidate): Trail => approvalTrail({
+    status: c.status, submitted_at: c.submitted_at, approvals: c.approvals || [],
+    holders: holders?.[c.company_id] || null, hr_review: c.hr_review || null,
+    role_assignment: c.role_assignment || null, employee_code: c.employee_code || null,
+  })
+  const readinessOf = (c: Candidate): Readiness[] => [
+    { label:'EPF Form 11', done:!!c.form11 }, { label:'EPF Form 2', done:!!c.form2 }, { label:'Bank mandate', done:!!c.bank },
+    { label:'Policy acknowledged', done:!!c.policy_ack }, { label:'Laptop', done:!!c.laptop_issued }, { label:'ID card', done:!!c.id_card_issued },
+  ]
+
   useEffect(()=>{ if (!grantLoading) load() },[load, grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Escape closes the page's own small dialogs (the drawer and the code modal handle theirs).
+  useEffect(()=>{
+    if (!linkModal && !dateModal) return
+    const onKey = (e: KeyboardEvent) => { if (e.key==='Escape' && !saving) { setLinkModal(false); setDateModal(null) } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  },[linkModal, dateModal, saving])
 
   // ── Send onboarding link ────────────────────────────────────────────
   const sendMagicLink = async () => {
@@ -367,6 +483,11 @@ export default function OnboardingDashboard() {
   const openDateEdit = (c: Candidate) => { setDateModal(c); setDateVal(c.date_of_joining ? c.date_of_joining.slice(0,10) : ''); setEditEmail(c.email || ''); setEditMobile(c.mobile || '') }
   const saveDate = async () => {
     if (!dateModal) return
+    // The joining date and the email are required everywhere else (the link, Generate code);
+    // the edit must not be the one place that can blank them.
+    if (!dateVal) { showToast('The date of joining is required.','err'); return }
+    if (editEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(editEmail.trim())) { showToast('That email does not look right.','err'); return }
+    if (editMobile && !/^[6-9]\d{9}$/.test(editMobile.replace(/\D/g,'').slice(-10))) { showToast('The mobile must be a 10-digit Indian number.','err'); return }
     setSaving(true)
     const c = dateModal
     // Recruitment joiner (not yet invited) → candidates. Already-invited → onboarding_candidates.
@@ -425,19 +546,25 @@ export default function OnboardingDashboard() {
   const openCodeModal = (candidate: Candidate) => setCodeModal(candidate)
 
   // ── Issue asset ───────────────────────────────────────────────
-  const issueAsset = async (candidateId: string, assetType: string) => {
-    await supabase.from('onboarding_asset_requests').upsert({
+  const issueAsset = async (candidateId: string, assetType: 'LAPTOP'|'ID_CARD') => {
+    // A recruitment joiner who has not been sent the link has no onboarding record to hang it on.
+    if (candidateId.startsWith('rec_')) { showToast('Send the onboarding link first — there is no onboarding record yet.','err'); return }
+    const { error } = await supabase.from('onboarding_asset_requests').upsert({
       onboarding_id: candidateId, asset_type: assetType,
       status:'ISSUED', issued_at: new Date().toISOString(),
     },{onConflict:'onboarding_id,asset_type'})
-    showToast(`${assetType} marked as issued`)
+    if (error) { showToast('Could not mark it issued: '+error.message,'err'); return }
+    showToast(`${assetType==='LAPTOP'?'Laptop':'ID card'} marked as issued`)
     load()
   }
 
   // ── Computed stats ─────────────────────────────────────────────
   const total       = candidates.length
   const active      = candidates.filter(c=>!['EMPLOYEE_CREATED'].includes(c.status)).length
-  const submitted   = candidates.filter(c=>c.status==='SUBMITTED'||c.status==='HR_REVIEW').length
+  // "Awaiting code" = every team has approved and only Generate code is left. It used to count
+  // SUBMITTED + HR_REVIEW, i.e. forms nobody had approved yet.
+  const submitted   = candidates.filter(c=>c.status==='APPROVED').length
+  const awaitingReview = candidates.filter(c=>c.status==='SUBMITTED').length
   const highRisk    = candidates.filter(c=>c.ai_risk==='HIGH').length
   const joined      = candidates.filter(c=>c.status==='EMPLOYEE_CREATED').length
   const thisWeek    = candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).length
@@ -469,11 +596,12 @@ export default function OnboardingDashboard() {
     const days = daysLeft(c.date_of_joining)
 
     if (c.status==='SUBMITTED') {
-      actions.push({priority:'HIGH',label:'Form submitted — review the documents and details (Review form)',candidate:c.full_name,action:'review',cid:c.id})
+      // Flagged documents matter while HR still has to look at them — on the review sheet.
+      const f = c.docs_ai_flagged || 0
+      actions.push({priority:'HIGH',label:`Form submitted — review the documents and details${f ? ` (${f} document${f===1?'':'s'} flagged by the AI check)` : ''}`,candidate:c.full_name,action:'review',cid:c.id})
     }
     if (c.status==='HR_REVIEW') {
-      const waiting = (c.approvals||[]).filter(a=>a.status!=='APPROVED'&&a.team!=='HR_MANAGER').map(a=>TEAM_SHORT[a.team]||a.team)
-      actions.push({priority:'MEDIUM',label:`Accepted by HR — with ${waiting.join(', ') || 'the teams'} for their checklist (ESS → HRIS → Tasks & Approvals)`,candidate:c.full_name,action:'approvals',cid:c.id})
+      actions.push({priority:'MEDIUM',label:`Accepted by HR — now with ${trailOf(c).nowWith} for their checklist (ESS → HRIS → Tasks & Approvals)`,candidate:c.full_name,action:'approvals',cid:c.id})
     }
     if (c.status==='APPROVED') {
       actions.push({priority:'HIGH',label:'IT, Admin and Payroll approved — generate the employee code (their team, ESS roles and the code; the login is mailed to them)',candidate:c.full_name,action:'generate',cid:c.id})
@@ -482,8 +610,8 @@ export default function OnboardingDashboard() {
       const n = (c.hr_review.documents||[]).length, m = (c.hr_review.details||[]).length
       actions.push({priority:'MEDIUM',label:`Returned to candidate — ${n} document${n===1?'':'s'} rejected, ${m} detail${m===1?'':'s'} flagged; resend the link if they have not acted`,candidate:c.full_name,action:'returned',cid:c.id})
     }
+    if (c.status==='NOT_INVITED' && days!==null && days<=7) actions.push({priority:days<=3?'HIGH':'MEDIUM',label:`Onboarding link not sent — joining ${relDays(days)}`,candidate:c.full_name,action:'send',cid:c.id})
     if (c.status==='INVITED' && days!==null && days<=5) actions.push({priority:'HIGH',label:'Link not opened — follow up candidate',candidate:c.full_name,action:'followup',cid:c.id})
-    if (c.docs_ai_flagged && c.docs_ai_flagged>0) actions.push({priority:'MEDIUM',label:`${c.docs_ai_flagged} document(s) AI flagged — review`,candidate:c.full_name,action:'docs',cid:c.id})
     if (c.status==='APPROVED' && !c.laptop_issued) actions.push({priority:'MEDIUM',label:'Laptop not issued — contact IT',candidate:c.full_name,action:'laptop',cid:c.id})
     if (c.status==='APPROVED' && !c.id_card_issued) actions.push({priority:'LOW',label:'ID card not issued — contact Admin',candidate:c.full_name,action:'idcard',cid:c.id})
     if (!c.policy_ack && c.status==='IN_PROGRESS') actions.push({priority:'LOW',label:'Policy acknowledgement pending',candidate:c.full_name,action:'policy',cid:c.id})
@@ -501,65 +629,57 @@ export default function OnboardingDashboard() {
   // ── OVERVIEW TAB ───────────────────────────────────────────────
   const OverviewTab = () => (
     <div>
-      {/* Stat cards */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:18}}>
-        {[
-          {label:'Total pipeline',    val:total,     color:P},
-          {label:'Active onboarding', val:active,    color: TK.brand},
-          {label:'Joining this week', val:thisWeek,  color:TK.warning},
-          {label:'Awaiting code',     val:submitted, color:TK.brand},
-          {label:'High risk',         val:highRisk,  color:TK.critical},
-          {label:'Completed',         val:joined,    color:TK.positive},
-        ].map(({label,val,color})=>(
-          <div key={label} style={{background:TK.sunken,borderRadius:'10px',padding:'12px 14px',borderTop:`3px solid ${color}`}}>
-            <div style={{fontSize:10,color:TK.muted,fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>{label}</div>
-            <div style={{fontSize:26,fontWeight:500,color}}>{val}</div>
-          </div>
+      {/* Stat cards — white, the figure in ink; colour only where it is a signal. Each opens the list it counts. */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:18}}>
+        {([
+          {label:'Active onboarding',  val:active,         t:'neutral',  go:()=>{ setFilterStage('ALL'); setJoinWindow('all'); setFilterRisk('ALL'); setTab('candidates') }},
+          {label:'Joining this week',  val:thisWeek,       t:'neutral',  go:()=>{ setFilterStage('ALL'); setFilterRisk('ALL'); setJoinWindow('week'); setTab('candidates') }},
+          {label:'Awaiting HR review', val:awaitingReview, t:'warning',  go:()=>{ setJoinWindow('all'); setFilterRisk('ALL'); setFilterStage('SUBMITTED'); setTab('candidates') }},
+          {label:'Awaiting code',      val:submitted,      t:'positive', go:()=>{ setJoinWindow('all'); setFilterRisk('ALL'); setFilterStage('APPROVED'); setTab('candidates') }},
+          {label:'High risk',          val:highRisk,       t:'critical', go:()=>{ setJoinWindow('all'); setFilterStage('ALL'); setFilterRisk('HIGH'); setTab('candidates') }},
+          {label:'Completed',          val:joined,         t:'neutral',  go:()=>{ setJoinWindow('all'); setFilterRisk('ALL'); setFilterStage('EMPLOYEE_CREATED'); setTab('candidates') }},
+        ] as const).map(({label,val,t,go})=>(
+          <button key={label} type="button" onClick={go} className="ez-press" style={{textAlign:'left',background:TK.surface,border:`1px solid ${TK.line}`,borderRadius:R.md,padding:'12px 14px',cursor:'pointer',fontFamily:'inherit',boxShadow:E.flat}}>
+            <div style={{fontSize:11,color:TK.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>{label}</div>
+            <div style={{fontSize:24,fontWeight:700,color:val>0&&t!=='neutral'?toneOf(t).fg:TK.ink,fontVariantNumeric:'tabular-nums'}}>{val}</div>
+          </button>
         ))}
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:14}}>
 
         {/* Quick actions */}
         <div>
           <SH title="Quick actions"/>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            <button onClick={()=>setTab('candidates')} className="ez-cta"
+            <button onClick={()=>{ setFilterStage('NOT_INVITED'); setJoinWindow('all'); setTab('candidates') }} className="ez-cta"
               style={{
-                // This is the primary action of the whole screen and it read as
-                // one more row in a list. It now carries the brand gradient,
-                // elevation in its own colour, and an arrow that travels on
-                // hover — the three things that make a control look pressable
-                // rather than painted on.
-                padding:'14px 16px', borderRadius:R.md, border:`1px solid ${TK.brandDeep}`,
-                cursor:'pointer', background:`linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})`,
+                padding:'13px 16px', borderRadius:R.md, border:`1px solid ${TK.brand}`,
+                cursor:'pointer', background:TK.brand,
                 color:TK.onAccent, fontSize:14, fontWeight:600, fontFamily:'inherit',
-                textAlign:'left', display:'flex', alignItems:'center', gap:11,
-                boxShadow:E.brand, width:'100%',
+                textAlign:'left', display:'flex', alignItems:'center', gap:11, width:'100%',
               }}>
-              <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/>
-              <span style={{flex:1}}>Send onboarding links</span>
-              <span style={{fontSize:12, fontWeight:500, opacity:.82}}>All candidates</span>
+                            <span style={{flex:1}}>Send onboarding links</span>
+              <span style={{fontSize:12, fontWeight:500, opacity:.85}}>{candidates.filter(c=>c.status==='NOT_INVITED').length} not invited</span>
               <span className="ez-cta-arrow" style={{display:'flex'}}><IconChevron size={16} /></span>
             </button>
-            <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:TK.ink}}>
-              <i className="ti ti-list-check" style={{fontSize:16,color:TK.warning}} aria-hidden="true"/> View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions
+            <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:R.md,border: `1px solid ${TK.line}`,cursor:'pointer',background:TK.surface,fontSize:12.5,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:TK.ink}}>
+              View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions
             </button>
-            <button onClick={()=>setTab('compliance')} style={{padding:'11px 14px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:TK.ink}}>
-              <i className="ti ti-shield-check" style={{fontSize:16,color: TK.brand}} aria-hidden="true"/> Review PF / ESI / BGV compliance status
+            <button onClick={()=>setTab('compliance')} style={{padding:'11px 14px',borderRadius:R.md,border: `1px solid ${TK.line}`,cursor:'pointer',background:TK.surface,fontSize:12.5,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:TK.ink}}>
+              Review PF / ESI / BGV compliance status
             </button>
           </div>
 
           {/* AI alerts */}
           {highRisk > 0 && (
-            <div style={{marginTop:14,background: TK.criticalTint,border: `1px solid ${TK.criticalTint}`,borderRadius:'10px',padding:'12px 14px'}}>
+            <div style={{marginTop:14,background: TK.criticalTint,border: `1px solid ${TK.criticalEdge}`,borderRadius:'10px',padding:'12px 14px'}}>
               <div style={{fontSize:12,fontWeight:500,color: TK.critical,marginBottom:8}}>
-                <i className="ti ti-alert-triangle" style={{fontSize:14,verticalAlign:-2,marginRight:5}} aria-hidden="true"/>
-                AI flagged {highRisk} high-risk joining{highRisk>1?'s':''}
+                                AI flagged {highRisk} high-risk joining{highRisk>1?'s':''}
               </div>
               {candidates.filter(c=>c.ai_risk==='HIGH').slice(0,3).map(c=>(
                 <div key={c.id} style={{fontSize:11,color:TK.critical,marginBottom:4,display:'flex',alignItems:'center',gap:5}}>
-                  <i className="ti ti-user" style={{fontSize:12}} aria-hidden="true"/> {c.full_name} — {c.ai_risk_reason}
+                  {c.full_name} — {c.ai_risk_reason}
                 </div>
               ))}
             </div>
@@ -568,7 +688,7 @@ export default function OnboardingDashboard() {
 
         {/* This week joiners */}
         <div>
-          <SH title="Joining this week" sub="D-7 to today"/>
+          <SH title="Joining this week" sub="Today and the next 7 days"/>
           {candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).length === 0
             ? <div style={{padding:20,textAlign:'center',color:TK.muted,fontSize:12}}>No joinings this week</div>
             : candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).map(c=>{
@@ -584,11 +704,12 @@ export default function OnboardingDashboard() {
                     </div>
                     <div style={{textAlign:'right'}}>
                       <div style={{fontSize:11,fontWeight:600,color:days<=1?TK.critical:days<=3?TK.warning:P}}>
-                        {days===0?'Today!':days===1?'Tomorrow':`D-${days}`}
+                        {days===0?'Today':days===1?'Tomorrow':`In ${days} days`}
                       </div>
                       <Badge {...sm} label={sm.label}/>
                     </div>
                   </div>
+                  <div style={{fontSize:10.5,color:TK.muted,marginTop:4}}>Joining {fmt(c.date_of_joining)}</div>
                   <ProgressBar pct={pct} color={pct===100?TK.positive:days<=3?TK.critical:P}/>
                   <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:TK.muted}}>
                     <span>Step {c.current_step||1}/8 · {pct}% complete</span>
@@ -612,193 +733,180 @@ export default function OnboardingDashboard() {
     </div>
   )
 
+  // ── Row actions: one primary, the rest behind "⋯" ─────────────
+  const copyLink = async (c: Candidate) => {
+    const link = `${window.location.origin}/onboarding/${c.magic_link_token}`
+    try { await navigator.clipboard.writeText(link); showToast('Link copied — paste it to the candidate') }
+    catch { showToast(`Copy failed — the link is ${link}`, 'err') }
+  }
+  const actionsFor = (c: Candidate): { primary: RowAction | null; more: RowAction[] } => {
+    const more: RowAction[] = []
+    const asset = () => {
+      if (!c.laptop_issued) more.push({ label:'Mark laptop issued', hint:'IT usually confirms it on their checklist', onClick:()=>issueAsset(c.id,'LAPTOP') })
+      if (!c.id_card_issued) more.push({ label:'Mark ID card issued', hint:'Admin usually confirms it on their checklist', onClick:()=>issueAsset(c.id,'ID_CARD') })
+    }
+    switch (c.status) {
+      case 'NOT_INVITED':
+        more.push({ label:'Edit details', hint:'Joining date, email, mobile', onClick:()=>openDateEdit(c) })
+        return { primary:{ label:'Send link', onClick:()=>sendOnboardingFor(c), disabled:saving, hint:'Email the onboarding link (valid 24 hours)' }, more }
+      case 'INVITED':
+      case 'IN_PROGRESS':
+        more.push({ label:'Copy link', onClick:()=>copyLink(c) })
+        more.push({ label:'Extend validity', hint:'+7 days, without re-mailing', onClick:()=>extendValidity(c) })
+        more.push({ label:'Edit details', hint:'Joining date, email, mobile', onClick:()=>openDateEdit(c) })
+        return { primary:{ label: resendingId===c.id ? 'Sending…' : 'Resend link', onClick:()=>resendLink(c), disabled:resendingId===c.id, kind: isReturned(c) ? 'primary' : 'outline', hint: isReturned(c) ? 'Re-send the link with the list of corrections' : 'Mail the link again (a fresh 24 hours)' }, more }
+      case 'SUBMITTED':
+        return { primary:{ label:'Review form', onClick:()=>setReviewing({ id:c.id, readOnly:false }) }, more }
+      case 'HR_REVIEW':
+        return { primary:{ label:'View form', kind:'outline', onClick:()=>setReviewing({ id:c.id, readOnly:true }) }, more }
+      case 'APPROVED':
+        more.push({ label:'View form', onClick:()=>setReviewing({ id:c.id, readOnly:true }) })
+        asset()
+        return { primary:{ label:'Generate code', kind:'go', onClick:()=>openCodeModal(c), hint:`IT, Admin and Payroll have approved — the team, ESS roles and the employee code${c.role_assignment?.managers?.l1_name ? ` · reports to ${c.role_assignment.managers.l1_name}` : ''}` }, more }
+      case 'EMPLOYEE_CREATED':
+        asset()
+        return { primary:{ label:'View form', kind:'outline', onClick:()=>setReviewing({ id:c.id, readOnly:true }) }, more }
+    }
+    return { primary:null, more }
+  }
+
   // ── ALL CANDIDATES TAB ─────────────────────────────────────────
-  const CandidatesTab = () => (
+  const ctl: React.CSSProperties = {padding:'7px 11px',borderRadius:R.sm,border:`1px solid ${TK.lineStrong}`,fontSize:12.5,fontFamily:'inherit',color:TK.ink,background:TK.surface,outline:'none'}
+  const th: React.CSSProperties = {padding:'9px 7px',textAlign:'left',fontSize:11,fontWeight:600,color:TK.muted,textTransform:'uppercase',letterSpacing:'.05em',borderBottom:`1px solid ${TK.line}`,whiteSpace:'nowrap',background:TK.sunken}
+  const td: React.CSSProperties = {padding:'9px 7px',borderBottom:`1px solid ${TK.line}`}
+  const CandidatesTab = () => {
+    const notInvitedShown = filtered.filter(c=>c.status==='NOT_INVITED')
+    const selCount = notInvitedShown.filter(c=>selIds.has(c.id)).length
+    const filtersOn = filterStage!=='ALL' || filterRisk!=='ALL' || joinWindow!=='all' || !!searchQ
+    return (
     <div>
-      {/* Joining-window filter */}
-      <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
-        <span style={{fontSize:11,color:TK.muted,marginRight:2}}>Joining:</span>
-        {([
-          {k:'all',   label:'All'},
-          {k:'today', label:'Today'},
-          {k:'3days', label:'Next 3 days'},
-          {k:'week',  label:'This week'},
-          {k:'month', label:'This month'},
-        ] as {k:typeof joinWindow;label:string}[]).map(w=>(
-          <button key={w.k} onClick={()=>setJoinWindow(w.k)}
-            style={{padding:'6px 13px',borderRadius:99,border:'1px solid '+(joinWindow===w.k?P:TK.brandTint),cursor:'pointer',fontSize:12,fontWeight:joinWindow===w.k?600:500,fontFamily:'inherit',background:joinWindow===w.k?P:TK.sunken,color:joinWindow===w.k?TK.surface:TK.ink}}>
-            {w.label}
-          </button>
-        ))}
-      </div>
-      {/* Filters — frozen (sticky) so they stay visible while the list scrolls */}
-      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',alignItems:'center',position:'sticky',top:0,zIndex:30,background:TK.canvas,padding:'10px 12px',borderRadius:10,boxShadow:'var(--ez-shadow-flat)'}}>
-        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
-          placeholder="Search name, designation..."
-          style={{padding:'7px 11px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,fontSize:12,fontFamily:'inherit',color:TK.ink,background:TK.sunken,outline:'none',minWidth:200}}/>
-        <select value={filterStage} onChange={e=>setFilterStage(e.target.value as any)}
-          style={{padding:'7px 11px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,fontSize:12,fontFamily:'inherit',background:TK.sunken,color:TK.ink,outline:'none'}}>
-          <option value="ALL">All stages</option>
-          {(Object.keys(STAGE_META) as Stage[]).map(s=><option key={s} value={s}>{STAGE_META[s].label}</option>)}
-        </select>
-        <select value={filterRisk} onChange={e=>setFilterRisk(e.target.value as any)}
-          style={{padding:'7px 11px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,fontSize:12,fontFamily:'inherit',background:TK.sunken,color:TK.ink,outline:'none'}}>
-          <option value="ALL">All risk levels</option>
-          <option value="HIGH">High risk only</option>
-          <option value="MEDIUM">Medium risk</option>
-          <option value="LOW">Low risk</option>
-        </select>
-        <div style={{marginLeft:'auto',fontSize:11,color:TK.muted}}>{filtered.length} of {total} shown</div>
-        <button onClick={()=>{ const ni = filtered.filter(c=>c.status==='NOT_INVITED'); const all = ni.length>0 && ni.every(c=>selIds.has(c.id)); setSelIds(prev=>{ const n=new Set(prev); ni.forEach(c=>all?n.delete(c.id):n.add(c.id)); return n }) }} style={{padding:'7px 12px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.brandDeep}}>Select all (not invited)</button>
-        {filtered.some(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)) && (
-          <button onClick={bulkSend} disabled={saving} style={{padding:'7px 14px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:12,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1,display:'flex',alignItems:'center',gap:5}}>
-            <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send link to {filtered.filter(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)).length} selected
-          </button>
-        )}
+      {/* Toolbar — sticky, below the host's own sticky bar (--ob-top), on a solid ground so
+          nothing scrolling underneath shows through. */}
+      <div style={{position:'sticky',top:'var(--ob-top, 0px)',zIndex:Z.sticky,background:TK.canvas,padding:'10px 0',marginBottom:6,display:'flex',flexDirection:'column',gap:8,boxShadow:`0 1px 0 ${TK.line}`}}>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+          <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Search name or designation…" aria-label="Search candidates" style={{...ctl,minWidth:200,flex:'1 1 200px',maxWidth:300}}/>
+          <select value={filterStage} onChange={e=>setFilterStage(e.target.value as any)} aria-label="Stage" style={ctl}>
+            <option value="ALL">All stages</option>
+            {(Object.keys(STAGE_META) as Stage[]).map(s=><option key={s} value={s}>{STAGE_META[s].label}</option>)}
+          </select>
+          <select value={filterRisk} onChange={e=>setFilterRisk(e.target.value as any)} aria-label="Risk" style={ctl}>
+            <option value="ALL">All risk levels</option>
+            <option value="HIGH">High risk</option>
+            <option value="MEDIUM">Medium risk</option>
+            <option value="LOW">Low risk</option>
+          </select>
+          <div role="group" aria-label="Joining" style={{display:'inline-flex',border:`1px solid ${TK.lineStrong}`,borderRadius:R.sm,overflow:'hidden',background:TK.surface}}>
+            {([
+              {k:'all',   label:'Any date'},
+              {k:'today', label:'Today'},
+              {k:'3days', label:'3 days'},
+              {k:'week',  label:'7 days'},
+              {k:'month', label:'30 days'},
+            ] as {k:typeof joinWindow;label:string}[]).map((w,wi)=>(
+              <button key={w.k} type="button" onClick={()=>setJoinWindow(w.k)} aria-pressed={joinWindow===w.k}
+                style={{padding:'6px 10px',border:'none',borderLeft:wi?`1px solid ${TK.line}`:'none',cursor:'pointer',fontSize:12,fontWeight:joinWindow===w.k?700:500,fontFamily:'inherit',background:joinWindow===w.k?TK.brandTint:'transparent',color:joinWindow===w.k?TK.brandDeep:TK.inkSoft}}>
+                {w.label}
+              </button>
+            ))}
+          </div>
+          {filtersOn && <button type="button" onClick={()=>{ setFilterStage('ALL'); setFilterRisk('ALL'); setJoinWindow('all'); setSearchQ('') }} style={{...ctl,border:'none',background:'transparent',color:TK.brandDeep,fontWeight:600,cursor:'pointer',padding:'7px 4px'}}>Clear filters</button>}
+          <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
+            <span style={{fontSize:12,color:TK.muted,whiteSpace:'nowrap'}}>{filtered.length} shown</span>
+            {notInvitedShown.length > 0 && (
+              <button type="button" onClick={()=>{ const all = notInvitedShown.every(c=>selIds.has(c.id)); setSelIds(prev=>{ const n=new Set(prev); notInvitedShown.forEach(c=>all?n.delete(c.id):n.add(c.id)); return n }) }}
+                style={{...ctl,cursor:'pointer',color:TK.brandDeep,fontWeight:600,whiteSpace:'nowrap'}}>
+                {notInvitedShown.every(c=>selIds.has(c.id)) ? 'Clear selection' : `Select ${notInvitedShown.length} not invited`}
+              </button>
+            )}
+            {selCount > 0 && (
+              <button type="button" onClick={bulkSend} disabled={saving} style={{...ctl,border:`1px solid ${TK.brand}`,background:P,color:TK.onAccent,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>
+                Send link to {selCount}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Table */}
-      <div style={{border:'1px solid var(--ez-line)',borderRadius:'10px',overflow:'hidden'}}>
+      {/* Table — sized to fit without a sideways scroll at 125–130% zoom; the scroll is only a fallback. */}
+      <div style={{border:`1px solid ${TK.line}`,borderRadius:R.md,overflow:'hidden',background:TK.surface,boxShadow:E.flat}}>
         <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+          <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12.5,minWidth:740}}>
             <thead>
-              <tr style={{background:TK.sunken}}>
-                {['','Candidate','Stage','Progress','DOJ','Docs','Statutory','BGV','Risk','Actions'].map((h,hi)=>(
-                  <th key={hi} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'1px solid var(--ez-line)',whiteSpace:'nowrap'}}>{h}</th>
-                ))}
+              <tr>
+                <th style={{...th,paddingLeft:12}}>Candidate</th>
+                <th style={th}>Stage</th>
+                <th style={th}>Joining</th>
+                <th style={th}>Documents</th>
+                <th style={th} title="Hover or click a row's summary to see who has it">Approvals</th>
+                <th style={th}>Risk</th>
+                <th style={{...th,textAlign:'right',paddingRight:10}}><span style={{position:'absolute',width:1,height:1,overflow:'hidden',clip:'rect(0,0,0,0)'}}>Actions</span></th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={10} style={{padding:32,textAlign:'center',color:TK.muted}}>No candidates found</td></tr>
+                <tr><td colSpan={7} style={{padding:32,textAlign:'center',color:TK.muted}}>
+                  {candidates.length === 0 ? 'No onboarding candidates yet.' : 'No candidates match these filters.'}
+                  {filtersOn && <> <button type="button" onClick={()=>{ setFilterStage('ALL'); setFilterRisk('ALL'); setJoinWindow('all'); setSearchQ('') }} style={{border:'none',background:'none',color:TK.brandDeep,fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit'}}>Clear filters</button></>}
+                </td></tr>
               )}
-              {filtered.map((c,i)=>{
-                const sm  = STAGE_META[c.status]
+              {filtered.map(c=>{
+                const returned = isReturned(c)
+                const sm  = returned ? RETURNED_META : STAGE_META[c.status]
                 const notInvited = c.status==='NOT_INVITED'
-                const pct = notInvited ? 0 : progressPct(c)
                 const days = daysLeft(c.date_of_joining)
+                const done = c.status==='EMPLOYEE_CREATED'
+                const trail = trailOf(c)
+                const acts = actionsFor(c)
+                const reqHave = c.docs_required_have||0, reqTotal = c.docs_required_total||DOCS_REQ.length
+                const joinTone = days===null ? TK.warning : done ? TK.muted : days<0 ? TK.critical : days<=3 ? TK.warning : TK.muted
+                const sub = [c.designation, c.department].filter(Boolean).join(' · ')
                 return (
-                  <tr key={c.id} style={{borderBottom:'1px solid var(--ez-line)',background:i%2===0?TK.surface:TK.sunken}}>
-                    <td style={{padding:'10px 12px'}}>
-                      {notInvited && <input type="checkbox" checked={selIds.has(c.id)} onChange={()=>setSelIds(prev=>{ const n=new Set(prev); n.has(c.id)?n.delete(c.id):n.add(c.id); return n })} />}
-                    </td>
-                    <td style={{padding:'10px 12px',minWidth:160}}>
-                      <div style={{fontWeight:500}}>{c.full_name}</div>
-                      <div style={{fontSize:10,color:TK.muted,marginTop:1}}>{c.designation || '—'}</div>
-                      {c.employee_code && <div style={{fontSize:10,color:TK.positive,marginTop:1,fontWeight:600}}>{c.employee_code}</div>}
-                    </td>
-                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
-                      <Badge {...sm} label={sm.label}/>
-                      {c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED' && (
-                        <div title={[...(c.hr_review.documents||[]).map(d=>`${d.label}: ${d.reason}`), ...(c.hr_review.details||[]).map(d=>`${d.field}: ${d.reason}`)].join('\n')} style={{fontSize:9,fontWeight:700,color:TK.critical,marginTop:3}}>↩ Returned · {(c.hr_review.documents||[]).length} doc{(c.hr_review.documents||[]).length===1?'':'s'} rejected</div>
-                      )}
-                    </td>
-                    <td style={{padding:'10px 12px',minWidth:100}}>
-                      {notInvited ? <span style={{fontSize:11,color:TK.faint}}>—</span> : <>
-                      <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:TK.muted,marginBottom:2}}>
-                        <span>Step {c.current_step||1}/8</span><span>{pct}%</span>
+                  <tr key={c.id} className="ob-row" style={{background:TK.surface}}>
+                    <td style={{...td,paddingLeft:12,minWidth:116,maxWidth:200}}>
+                      <div style={{display:'flex',alignItems:'center',gap:7,minWidth:0}}>
+                        {/* Not-invited joiners can be picked for a bulk send; the box sits with the name. */}
+                        {notInvited && <input type="checkbox" aria-label={`Select ${c.full_name} for the bulk send`} checked={selIds.has(c.id)} onChange={()=>setSelIds(prev=>{ const n=new Set(prev); n.has(c.id)?n.delete(c.id):n.add(c.id); return n })} style={{margin:0,flex:'none'}} />}
+                        <div style={{fontWeight:600,color:TK.ink,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={c.full_name}>{c.full_name}</div>
                       </div>
-                      <ProgressBar pct={pct} color={pct===100?TK.positive:pct>=60?P:TK.warning}/>
-                      </>}
-                    </td>
-                    <td style={{padding:'10px 12px',whiteSpace:'nowrap',fontSize:11}}>
-                      {fmt(c.date_of_joining)}
-                      {days !== null && <div style={{fontSize:10,fontWeight:600,color:days<=3?TK.critical:days<=7?TK.warning:TK.positive}}>{days<0?`${Math.abs(days)}d ago`:days===0?'Today!':days===1?'Tomorrow':`D-${days}`}</div>}
-                    </td>
-                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
-                      {notInvited ? <span style={{fontSize:11,color:TK.faint}}>—</span> : <>
-                      <span style={{fontSize:11}}>{c.docs_uploaded||0}/{DOCS_REQ.length}</span>
-                      {(c.docs_ai_flagged||0)>0 && <div style={{fontSize:10,color:TK.warning,marginTop:1}}>⚠ {c.docs_ai_flagged} flagged</div>}
-                      </>}
-                    </td>
-                    <td style={{padding:'10px 12px'}}>
-                      {notInvited ? <span style={{fontSize:11,color:TK.faint}}>—</span> : <>
-                      <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form11?'#EAF3DE':'#FCEBEB',color:c.form11?'#3B6D11':TK.critical,fontWeight:600}}>F11</span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form2?'#EAF3DE':'#FCEBEB',color:c.form2?'#3B6D11':TK.critical,fontWeight:600}}>F2</span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.bank?'#EAF3DE':'#FCEBEB',color:c.bank?'#3B6D11':TK.critical,fontWeight:600}}>Bank</span>
+                      <div style={{fontSize:11.5,color:TK.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={sub}>
+                        {sub || '—'}{c.employee_code && <span style={{color:TK.positive,fontWeight:700}}> · {c.employee_code}</span>}
                       </div>
-                      <div style={{display:'flex',gap:3,marginTop:3}}>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.laptop_issued?'#EAF3DE':TK.brandTint,color:c.laptop_issued?'#3B6D11':P,fontWeight:600}}>
-                          {c.laptop_issued?'':''}
-                        </span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.id_card_issued?'#EAF3DE':TK.brandTint,color:c.id_card_issued?'#3B6D11':P,fontWeight:600}}>
-                          {c.id_card_issued?'':''}
-                        </span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.policy_ack?'#EAF3DE':TK.brandTint,color:c.policy_ack?'#3B6D11':P,fontWeight:600}}>
-                          {c.policy_ack?'Policy✓':'Policy'}
-                        </span>
+                    </td>
+                    <td style={td}>
+                      <Badge {...sm} label={sm.label} title={returned ? [...(c.hr_review?.documents||[]).map(d=>`${d.label}: ${d.reason}`), ...(c.hr_review?.details||[]).map(d=>`${d.field}: ${d.reason}`)].join('\n') || undefined : undefined}/>
+                      <div style={{fontSize:11,color:returned?TK.critical:TK.muted,marginTop:3,whiteSpace:'nowrap'}}>
+                        {returned
+                          ? `${(c.hr_review?.documents||[]).length} doc${(c.hr_review?.documents||[]).length===1?'':'s'} · ${(c.hr_review?.details||[]).length} detail${(c.hr_review?.details||[]).length===1?'':'s'} to fix`
+                          : c.status==='INVITED'||c.status==='IN_PROGRESS' ? `Step ${Math.max(1,Math.min(c.current_step||1,8))} of 8`
+                          : c.status==='SUBMITTED' && c.submitted_at ? `Since ${fmt(c.submitted_at)}`
+                          : notInvited ? 'From recruitment' : ''}
                       </div>
-                      {(c.status==='SUBMITTED'||c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
-                        <div style={{display:'flex',gap:3,marginTop:3}} title="HR Manager accepts the form; then IT, Admin and Payroll confirm their checklists (ESS → HRIS → Tasks & Approvals)">
-                          {(c.approvals||[]).map(a=>(
-                            <span key={a.team} style={{fontSize:9,padding:'1px 5px',borderRadius:99,fontWeight:600,background:a.status==='APPROVED'?TK.positiveTint:a.status==='RETURNED'?TK.criticalTint:TK.warningTint,color:a.status==='APPROVED'?TK.positive:a.status==='RETURNED'?TK.critical:TK.warning}}>
-                              {TEAM_SHORT[a.team]} {a.status==='APPROVED'?'✓':a.status==='RETURNED'?'↩':'○'}
-                            </span>
-                          ))}
+                    </td>
+                    <td style={{...td,whiteSpace:'nowrap'}}>
+                      {c.date_of_joining ? <>
+                        <div style={{color:TK.ink}}>{fmt(c.date_of_joining)}</div>
+                        {days!==null && <div style={{fontSize:11,fontWeight:days<=3&&!done?600:500,color:joinTone,marginTop:1}}>{relDays(days).replace(/^./,m=>m.toUpperCase())}</div>}
+                      </> : <span style={{fontSize:12,fontWeight:600,color:TK.warning}}>Not set</span>}
+                    </td>
+                    <td style={{...td,whiteSpace:'nowrap'}}>
+                      {notInvited ? <span style={{fontSize:12,color:TK.faint}}>—</span> : <>
+                        <div style={{color:reqHave>=reqTotal?TK.positive:TK.ink,fontWeight:600}} title={`${reqHave} of the ${reqTotal} required documents uploaded`}>{reqHave}/{reqTotal} required</div>
+                        <div style={{fontSize:11,color:TK.muted,marginTop:1}} title={(c.docs_ai_flagged||0)>0 ? 'Flagged = the AI check could not read the document or found a mismatch. HR decides on the review sheet.' : undefined}>
+                          {c.docs_uploaded||0} file{(c.docs_uploaded||0)===1?'':'s'}
+                          {(c.docs_rejected||0)>0 ? <span style={{color:TK.critical,fontWeight:600}}> · {c.docs_rejected} rejected</span>
+                            : (c.docs_ai_flagged||0)>0 && !done ? <span style={{color:TK.warning,fontWeight:600}}> · {c.docs_ai_flagged} flagged</span> : null}
                         </div>
-                      )}
                       </>}
                     </td>
-                    <td style={{padding:'10px 12px'}}>
-                      <span style={{fontSize:10,fontWeight:600,color:TK.muted}}>—</span>
+                    <td style={td}>
+                      {notInvited ? <span style={{fontSize:12,color:TK.faint}}>—</span>
+                        : <ApprovalsCell name={c.full_name} trail={trail} holdersKnown={holders!==null}
+                            managers={{ l1:c.role_assignment?.managers?.l1_name, l2:c.role_assignment?.managers?.l2_name, hod:c.role_assignment?.managers?.hod_name }}
+                            readiness={readinessOf(c)} />}
                     </td>
-                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><RiskBadge risk={c.ai_risk}/></td>
-                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
-                      <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                        {notInvited && (
-                          <button onClick={()=>sendOnboardingFor(c)} disabled={saving} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1}}>
-                            <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Send onboarding link
-                          </button>
-                        )}
-                        {notInvited && (
-                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.brandDeep}}>Edit</button>
-                        )}
-                        {c.status==='SUBMITTED' && (
-                          <button onClick={()=>setReviewing({ id: c.id, readOnly: false })} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
-                            <i className="ti ti-checklist" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Review form
-                          </button>
-                        )}
-                        {c.status==='APPROVED' && (
-                          <button onClick={()=>{openCodeModal(c)}} title={`IT, Admin and Payroll have approved — their team, ESS roles and the employee code${c.role_assignment?.managers?.l1_name ? ` · reports to ${c.role_assignment.managers.l1_name}` : ''}`} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:TK.positive,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
-                            <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Generate code
-                          </button>
-                        )}
-                        {c.status==='APPROVED' && c.role_assignment?.managers?.l1_name && (
-                          <span title="Assigned on the review sheet (View form → Change)" style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>L1 ✓ {c.role_assignment.managers.l1_name}</span>
-                        )}
-                        {(c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
-                          <button onClick={()=>setReviewing({ id: c.id, readOnly: true })} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>View form</button>
-                        )}
-                        {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
-                          <button onClick={async()=>{
-                            const link=`${window.location.origin}/onboarding/${c.magic_link_token}`
-                            await navigator.clipboard.writeText(link).catch(()=>{})
-                            showToast('Link copied!')
-                          }} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>
-                            <i className="ti ti-copy" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Link
-                          </button>
-                        )}
-                        {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
-                          <button onClick={()=>resendLink(c)} disabled={resendingId===c.id} style={{padding:'4px 9px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:resendingId===c.id?.6:1}}>
-                            <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>{resendingId===c.id?'Sending…':'Resend link'}
-                          </button>
-                        )}
-                        {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
-                          <button onClick={()=>extendValidity(c)} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>Extend</button>
-                        )}
-                        {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
-                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.brandDeep}}>Edit</button>
-                        )}
-                        {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.laptop_issued && (
-                          <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.warningTint,fontSize:10,fontFamily:'inherit',color: TK.warning}}>Issue
-                          </button>
-                        )}
-                        {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.id_card_issued && (
-                          <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{padding:'4px 9px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background: TK.brandTint,fontSize:10,fontFamily:'inherit',color: TK.brand}}>Issue
-                          </button>
-                        )}
-                      </div>
+                    <td style={{...td,whiteSpace:'nowrap'}}>{done ? <span style={{fontSize:12,color:TK.faint}}>—</span> : <RiskBadge risk={c.ai_risk} reason={c.ai_risk_reason}/>}</td>
+                    <td style={{...td,whiteSpace:'nowrap',paddingRight:10}}>
+                      <RowActions name={c.full_name} primary={acts.primary} more={acts.more} />
                     </td>
                   </tr>
                 )
@@ -807,8 +915,13 @@ export default function OnboardingDashboard() {
           </table>
         </div>
       </div>
+      <div style={{fontSize:11.5,color:TK.muted,marginTop:8}}>
+        Approvals: the HR Manager reviews the submitted form, then IT, Admin and Payroll confirm their checklists in ESS → HRIS → Tasks &amp; Approvals, then the HR Manager generates the code. Hover or click a row's approvals to see who has it.
+        {filterStage!=='EMPLOYEE_CREATED' && joined>0 && <> Completed onboardings are hidden — <button type="button" onClick={()=>setFilterStage('EMPLOYEE_CREATED')} style={{border:'none',background:'none',padding:0,color:TK.brandDeep,fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit'}}>show {joined}</button>.</>}
+      </div>
     </div>
-  )
+    )
+  }
 
   // ── PENDING ACTIONS TAB ────────────────────────────────────────
   const PendingTab = () => {
@@ -818,16 +931,16 @@ export default function OnboardingDashboard() {
       LOW:    pendingActions.filter(a=>a.priority==='LOW'),
     }
     const gMeta = {
-      HIGH:   {label:'Urgent — do today',     bg: TK.criticalTint, color:TK.critical, border: TK.criticalTint},
-      MEDIUM: {label:'Important — this week',  bg:TK.warningTint, color:TK.warning, border: TK.warningTint},
-      LOW:    {label:'When possible',          bg: TK.brandTint, color: TK.brand, border: TK.brandEdge},
+      HIGH:   {label:'Urgent — do today',     bg: TK.surface, color:TK.critical, border: TK.criticalEdge},
+      MEDIUM: {label:'Important — this week',  bg: TK.surface, color:TK.warning, border: TK.warningEdge},
+      LOW:    {label:'When possible',          bg: TK.surface, color: TK.brandDeep, border: TK.line},
     }
     return (
       <div>
         <SH title="Pending actions" sub="Priority-sorted. Resolve High first."/>
         {pendingActions.length === 0 && (
           <div style={{padding:40,textAlign:'center',color:TK.muted}}>
-            <i className="ti ti-circle-check" style={{fontSize:40,color:TK.positive,display:'block',marginBottom:10}} aria-hidden="true"/>
+            <span aria-hidden="true" style={{display:'flex',width:44,height:44,margin:'0 auto 10px',borderRadius:'50%',alignItems:'center',justifyContent:'center',background:TK.positiveTint,color:TK.positive}}><IconCheck size={22}/></span>
             All clear! No pending actions.
           </div>
         )}
@@ -841,26 +954,42 @@ export default function OnboardingDashboard() {
               {groups[pri].map((a,i)=>{
                 const cand = candidates.find(c=>c.id===a.cid)
                 return (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:gMeta[pri].bg,borderRadius:'10px',border:`1px solid ${gMeta[pri].border}`}}>
-                    <div style={{flex:1}}>
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:gMeta[pri].bg,borderRadius:'10px',border:`1px solid ${gMeta[pri].border}`,flexWrap:'wrap'}}>
+                    <div style={{flex:'1 1 260px',minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:500,color:TK.ink}}>{a.label}</div>
                       <div style={{fontSize:11,color:TK.muted,marginTop:1}}>
-                        <i className="ti ti-user" style={{fontSize:11,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>{a.candidate}
-                        {cand?.date_of_joining && <span style={{marginLeft:8}}>· DOJ: {fmt(cand.date_of_joining)}</span>}
+                        {a.candidate}
+                        {cand?.date_of_joining ? <span style={{marginLeft:8}}>· Joining {fmt(cand.date_of_joining)}</span> : cand && <span style={{marginLeft:8,color:TK.warning}}>· No joining date</span>}
                       </div>
                     </div>
                     {a.action==='generate' && cand && (
                       <button onClick={()=>{openCodeModal(cand)}} style={{padding:'5px 12px',borderRadius:'10px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
-                        <i className="ti ti-bolt" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Generate code
+                        Generate code
+                      </button>
+                    )}
+                    {a.action==='review' && cand && (
+                      <button onClick={()=>setReviewing({ id: cand.id, readOnly: false })} style={{padding:'5px 12px',borderRadius:R.sm,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11.5,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                        Review form
+                      </button>
+                    )}
+                    {a.action==='send' && cand && (
+                      <button onClick={()=>sendOnboardingFor(cand)} disabled={saving} style={{padding:'5px 12px',borderRadius:R.sm,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11.5,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                        Send link
+                      </button>
+                    )}
+                    {a.action==='approvals' && cand && (
+                      <ApprovalsCell name={cand.full_name} trail={trailOf(cand)} holdersKnown={holders!==null}
+                        managers={{ l1:cand.role_assignment?.managers?.l1_name, l2:cand.role_assignment?.managers?.l2_name, hod:cand.role_assignment?.managers?.hod_name }}
+                        readiness={readinessOf(cand)} />
+                    )}
+                    {(a.action==='followup'||a.action==='returned') && cand && (
+                      <button onClick={()=>resendLink(cand)} disabled={resendingId===cand.id} style={{padding:'5px 12px',borderRadius:R.sm,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11.5,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                        {resendingId===cand.id ? 'Sending…' : 'Resend link'}
                       </button>
                     )}
                     {a.action==='followup' && cand && (
-                      <button onClick={async()=>{
-                        const link=`${window.location.origin}/onboarding/${cand.magic_link_token}`
-                        await navigator.clipboard.writeText(link).catch(()=>{})
-                        showToast('Link copied — send to candidate')
-                      }} style={{padding:'5px 12px',borderRadius:'10px',border:`1px solid ${gMeta[pri].border}`,cursor:'pointer',background:TK.surface,fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
-                        <i className="ti ti-copy" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Copy link
+                      <button onClick={()=>copyLink(cand)} style={{padding:'5px 12px',borderRadius:R.sm,border:`1px solid ${gMeta[pri].border}`,cursor:'pointer',background:TK.surface,fontSize:11.5,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
+                        Copy link
                       </button>
                     )}
                     {(a.action==='laptop'||a.action==='idcard') && cand && (
@@ -882,7 +1011,8 @@ export default function OnboardingDashboard() {
   const InsightsTab = () => {
     const atRisk = candidates.filter(c=>c.ai_risk==='HIGH'||c.ai_risk==='MEDIUM')
     const champs = candidates.filter(c=>progressPct(c)===100)
-    const flaggedDocs = candidates.filter(c=>(c.docs_ai_flagged||0)>0)
+    // Only while someone still has to act on them — not for employees already created.
+    const flaggedDocs = candidates.filter(c=>(c.docs_ai_flagged||0)>0 && c.status!=='EMPLOYEE_CREATED')
     return (
       <div>
         <SH title="AI insights" sub="Powered by EZER AI — updated on load"/>
@@ -890,20 +1020,18 @@ export default function OnboardingDashboard() {
         {/* Attrition risk */}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-            <i className="ti ti-alert-triangle" style={{fontSize:15,color:TK.critical}} aria-hidden="true"/>
-            Attrition & at-risk joiners ({atRisk.length})
+                        Attrition & at-risk joiners ({atRisk.length})
           </div>
           {atRisk.length===0
             ? <div style={{padding:16,background: TK.sunken,borderRadius:'10px',fontSize:12,color: TK.positive}}>No at-risk candidates right now.</div>
             : atRisk.map(c=>(
-              <div key={c.id} style={{background:TK.surface,border:`1px solid ${c.ai_risk==='HIGH'?'#F09595':'#FDE68A'}`,borderRadius:'10px',padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${c.ai_risk==='HIGH'?TK.critical:TK.warning}`}}>
+              <div key={c.id} style={{background:TK.surface,border:`1px solid ${c.ai_risk==='HIGH'?TK.criticalEdge:TK.warningEdge}`,borderRadius:'10px',padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${c.ai_risk==='HIGH'?TK.critical:TK.warning}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                   <div>
-                    <div style={{fontSize:12,fontWeight:500}}>{c.full_name} <RiskBadge risk={c.ai_risk}/></div>
-                    <div style={{fontSize:11,color:TK.muted,marginTop:2}}>{c.designation} · DOJ: {fmt(c.date_of_joining)}</div>
+                    <div style={{fontSize:12,fontWeight:500}}>{c.full_name} <RiskBadge risk={c.ai_risk} long/></div>
+                    <div style={{fontSize:11,color:TK.muted,marginTop:2}}>{c.designation || '—'} · {c.date_of_joining ? `Joining ${fmt(c.date_of_joining)}` : 'No joining date'}</div>
                     <div style={{fontSize:11,color:c.ai_risk==='HIGH'?TK.critical:TK.warning,marginTop:4,fontStyle:'italic'}}>
-                      <i className="ti ti-robot" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
-                      {c.ai_risk_reason}
+                                            {c.ai_risk_reason}
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6}}>
@@ -924,17 +1052,15 @@ export default function OnboardingDashboard() {
         {/* Document AI flags */}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-            <i className="ti ti-file-alert" style={{fontSize:15,color:TK.warning}} aria-hidden="true"/>
-            Document AI flags ({flaggedDocs.length} candidates)
+                        Document AI flags ({flaggedDocs.length} candidates)
           </div>
           {flaggedDocs.length===0
             ? <div style={{padding:16,background: TK.sunken,borderRadius:'10px',fontSize:12,color: TK.positive}}>All uploaded documents verified by AI.</div>
             : flaggedDocs.map(c=>(
-              <div key={c.id} style={{background:TK.warningTint,border: `1px solid ${TK.warningTint}`,borderRadius:'10px',padding:'10px 12px',marginBottom:6}}>
+              <div key={c.id} style={{background:TK.surface,border: `1px solid ${TK.warningEdge}`,borderRadius:'10px',padding:'10px 12px',marginBottom:6}}>
                 <div style={{fontSize:12,fontWeight:500}}>{c.full_name}</div>
                 <div style={{fontSize:11,color:TK.warning,marginTop:2}}>
-                  <i className="ti ti-robot" style={{fontSize:11,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>
-                  {c.docs_ai_flagged} document(s) flagged — low confidence or mismatch detected. Manual review recommended.
+                                    {c.docs_ai_flagged} document(s) flagged — low confidence or mismatch detected. Manual review recommended.
                 </div>
               </div>
             ))
@@ -944,8 +1070,7 @@ export default function OnboardingDashboard() {
         {/* Onboarding champions */}
         <div>
           <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-            <i className="ti ti-star" style={{fontSize:15,color:TK.warning}} aria-hidden="true"/>
-            Onboarding champions — 100% complete ({champs.length})
+                        Onboarding champions — 100% complete ({champs.length})
           </div>
           {champs.length===0
             ? <div style={{padding:16,background:TK.brandTint,borderRadius:'10px',fontSize:12,color:P}}>No 100% complete onboardings yet.</div>
@@ -968,81 +1093,79 @@ export default function OnboardingDashboard() {
 
   // ── COMPLIANCE TAB ─────────────────────────────────────────────
   const ComplianceTab = () => {
-    const active = candidates.filter(c=>c.status!=='EMPLOYEE_CREATED')
+    // Recruitment joiners who have not been sent the link have nothing to track yet.
+    const rows = candidates.filter(c=>c.status!=='NOT_INVITED')
+    const active = rows.filter(c=>c.status!=='EMPLOYEE_CREATED')
+    // Words, not an icon font: the tabler font is not loaded everywhere this page is mounted
+    // (inside ESS the icons rendered as nothing and the columns looked empty).
+    const tick = (done?: boolean, what?: string) => (
+      <span title={`${what}: ${done ? 'done' : 'pending'}`} style={{fontSize:11.5,fontWeight:600,color:done?TK.positive:TK.warning,whiteSpace:'nowrap'}}>
+        {done ? '✓ Done' : 'Pending'}
+      </span>
+    )
+    const cell: React.CSSProperties = {padding:'9px 10px',borderBottom:`1px solid ${TK.line}`}
+    const issueBtn: React.CSSProperties = {fontSize:11,padding:'2px 8px',borderRadius:99,border:`1px solid ${TK.lineStrong}`,cursor:'pointer',background:TK.surface,fontFamily:'inherit',color:TK.inkSoft}
     return (
       <div>
-        <SH title="Compliance tracker" sub="India-specific: PF / ESI / PT / BGV — employee-wise"/>
+        <SH title="Compliance tracker" sub="PF / bank / policy / assets for every onboarding that has started — the counts are for the ones still in progress"/>
 
         {/* Summary row */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8,marginBottom:16}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8,marginBottom:16}}>
           {[
-            {label:'Form 11 pending', val:active.filter(c=>!c.form11).length, color:TK.warning},
-            {label:'Form 2 pending',  val:active.filter(c=>!c.form2).length,  color:TK.warning},
-            {label:'Bank pending',    val:active.filter(c=>!c.bank).length,   color:TK.warning},
-            {label:'Policy pending',  val:active.filter(c=>!c.policy_ack).length, color: TK.brand},
-            {label:'Laptop pending',  val:active.filter(c=>!c.laptop_issued).length, color:P},
-            {label:'ID card pending', val:active.filter(c=>!c.id_card_issued).length, color:P},
-          ].map(({label,val,color})=>(
-            <div key={label} style={{background:TK.sunken,borderRadius:'10px',padding:'10px 12px',borderLeft:`3px solid ${val>0?color:TK.positive}`}}>
-              <div style={{fontSize:10,color:TK.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>{label}</div>
-              <div style={{fontSize:22,fontWeight:500,color:val>0?color:TK.positive}}>{val}</div>
+            {label:'Form 11 pending', val:active.filter(c=>!c.form11).length},
+            {label:'Form 2 pending',  val:active.filter(c=>!c.form2).length},
+            {label:'Bank pending',    val:active.filter(c=>!c.bank).length},
+            {label:'Policy pending',  val:active.filter(c=>!c.policy_ack).length},
+            {label:'Laptop pending',  val:active.filter(c=>!c.laptop_issued).length},
+            {label:'ID card pending', val:active.filter(c=>!c.id_card_issued).length},
+          ].map(({label,val})=>(
+            <div key={label} style={{background:TK.surface,border:`1px solid ${TK.line}`,borderRadius:R.md,padding:'10px 12px'}}>
+              <div style={{fontSize:11,color:TK.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:600}}>{label}</div>
+              <div style={{fontSize:22,fontWeight:700,color:val>0?TK.warning:TK.positive,fontVariantNumeric:'tabular-nums'}}>{val}</div>
             </div>
           ))}
         </div>
 
         {/* Compliance grid */}
-        <div style={{border:'1px solid var(--ez-line)',borderRadius:'10px',overflow:'hidden'}}>
+        <div style={{border:`1px solid ${TK.line}`,borderRadius:R.md,overflow:'hidden',background:TK.surface}}>
           <div style={{overflowX:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
               <thead>
                 <tr style={{background:TK.sunken}}>
-                  {['Employee','DOJ','EPF Form 11','EPF Form 2','Bank','Policy Ack','Laptop','ID Card','PT State','BGV'].map(h=>(
-                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:9,fontWeight:600,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'1px solid var(--ez-line)',whiteSpace:'nowrap'}}>{h}</th>
+                  {['Candidate','Joining','EPF Form 11','EPF Form 2','Bank','Policy','Laptop','ID card','PT state','BGV'].map(h=>(
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:11,fontWeight:600,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:`1px solid ${TK.line}`,whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {candidates.length===0 && (
-                  <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:TK.muted}}>No data</td></tr>
+                {rows.length===0 && (
+                  <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:TK.muted}}>No onboarding has started yet.</td></tr>
                 )}
-                {candidates.map((c,i)=>{
+                {rows.map(c=>{
                   const ptState = (c.form_data as any)?.step_4?.perm_state || '—'
-                  const Tick = ({done}:{done?:boolean}) => (
-                    <span style={{fontSize:14,color:done?TK.positive:TK.warning}}>
-                      {done
-                        ? <i className="ti ti-circle-check" style={{verticalAlign:-1}} aria-hidden="true"/>
-                        : <i className="ti ti-clock" style={{verticalAlign:-1}} aria-hidden="true"/>
-                      }
-                    </span>
-                  )
                   return (
-                    <tr key={c.id} style={{borderBottom:'1px solid var(--ez-line)',background:i%2===0?TK.surface:TK.sunken}}>
-                      <td style={{padding:'9px 10px',minWidth:130}}>
-                        <div style={{fontWeight:500,fontSize:12}}>{c.full_name}</div>
-                        <div style={{fontSize:10,color:TK.muted}}>{c.designation||'—'}</div>
-                        {c.employee_code && <div style={{fontSize:10,color:TK.positive,fontWeight:600}}>{c.employee_code}</div>}
+                    <tr key={c.id} className="ob-row">
+                      <td style={{...cell,minWidth:140}}>
+                        <div style={{fontWeight:600,fontSize:12.5}}>{c.full_name}</div>
+                        <div style={{fontSize:11,color:TK.muted}}>{c.designation||'—'}{c.employee_code && <span style={{color:TK.positive,fontWeight:700}}> · {c.employee_code}</span>}</div>
                       </td>
-                      <td style={{padding:'9px 10px',whiteSpace:'nowrap'}}>{fmt(c.date_of_joining)}</td>
-                      <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.form11}/></td>
-                      <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.form2}/></td>
-                      <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.bank}/></td>
-                      <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.policy_ack}/></td>
-                      <td style={{padding:'9px 10px',textAlign:'center'}}>
+                      <td style={{...cell,whiteSpace:'nowrap'}}>{fmt(c.date_of_joining)}</td>
+                      <td style={{...cell,textAlign:'center'}}>{tick(c.form11,'EPF Form 11')}</td>
+                      <td style={{...cell,textAlign:'center'}}>{tick(c.form2,'EPF Form 2')}</td>
+                      <td style={{...cell,textAlign:'center'}}>{tick(c.bank,'Bank mandate')}</td>
+                      <td style={{...cell,textAlign:'center'}}>{tick(c.policy_ack,'Policy acknowledgement')}</td>
+                      <td style={{...cell,textAlign:'center'}}>
                         {c.laptop_issued
-                          ? <span style={{fontSize:10,color:TK.positive,fontWeight:600}}>Issued</span>
-                          : <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontFamily:'inherit',color:TK.muted}}>Issue</button>
-                        }
+                          ? <span style={{fontSize:11,color:TK.positive,fontWeight:600}}>Issued</span>
+                          : <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={issueBtn} title="Mark the laptop issued">Mark issued</button>}
                       </td>
-                      <td style={{padding:'9px 10px',textAlign:'center'}}>
+                      <td style={{...cell,textAlign:'center'}}>
                         {c.id_card_issued
-                          ? <span style={{fontSize:10,color:TK.positive,fontWeight:600}}>Issued</span>
-                          : <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontFamily:'inherit',color:TK.muted}}>Issue</button>
-                        }
+                          ? <span style={{fontSize:11,color:TK.positive,fontWeight:600}}>Issued</span>
+                          : <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={issueBtn} title="Mark the ID card issued">Mark issued</button>}
                       </td>
-                      <td style={{padding:'9px 10px',fontSize:11,color:TK.muted}}>{ptState}</td>
-                      <td style={{padding:'9px 10px'}}>
-                        <span style={{fontSize:10,color:TK.muted}}>—</span>
-                      </td>
+                      <td style={{...cell,color:TK.muted}}>{ptState}</td>
+                      <td style={{...cell,color:TK.faint,whiteSpace:'nowrap'}} title="Background verification is not tracked in EZER yet">Not tracked</td>
                     </tr>
                   )
                 })}
@@ -1057,49 +1180,54 @@ export default function OnboardingDashboard() {
   // ── RENDER ─────────────────────────────────────────────────────
   const TABS: {key:Tab; icon:string; label:string; badge?:number}[] = [
     {key:'overview',    icon:'ti-home',        label:'Overview'},
-    {key:'candidates',  icon:'ti-users',       label:'All candidates', badge:total},
+    {key:'candidates',  icon:'ti-users',       label:'All candidates', badge:candidates.filter(c=>c.status!=='EMPLOYEE_CREATED').length},
     {key:'pending',     icon:'ti-list-check',  label:'Pending actions', badge:pendingActions.filter(a=>a.priority==='HIGH').length||undefined},
     {key:'insights',    icon:'ti-brain',       label:'AI insights',    badge:highRisk||undefined},
     {key:'compliance',  icon:'ti-shield-check',label:'Compliance'},
   ]
 
-  return (
-    <div style={{background:TK.canvas,minHeight:'100vh',fontFamily:'"DM Sans","Segoe UI",sans-serif',color:TK.ink}}>
+  const notInvitedCount = candidates.filter(c=>c.status==='NOT_INVITED').length
 
-      {/* Header */}
-      {/* Header — the shared band, so this page reads like the other 31.
-          It used to be a saturated blue gradient with white text. The tabs sat
-          ON that gradient, which is why they had to move: on a light band a
-          translucent white outline has nothing to hold against. They are the
-          same outlined pills the ATS uses now, below the band rather than
-          inside it. */}
-      <div style={{padding:'16px 24px 0'}}>
+  return (
+    <div ref={rootRef} style={{background:TK.canvas,minHeight:'100vh',fontFamily:'"DM Sans","Segoe UI",sans-serif',color:TK.ink}}>
+      <style>{POP_CSS}</style>
+
+      {/* Header — the shared band. Not sticky: the host page (ESS) already keeps its own bar
+          at the top, and a second sticky band under it is what used to collide with it. The
+          All-candidates toolbar is the one thing that sticks, and it sits below the host's bar. */}
+      <div style={{padding:'16px clamp(14px, 2vw, 24px) 0',maxWidth:1400,margin:'0 auto'}}>
         <div className="ez-page-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:16,flexWrap:'wrap'}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:20,fontWeight:700,color:TK.ink,letterSpacing:'-.02em'}}>Onboarding</div>
             <div style={{fontSize:13,color:TK.muted,marginTop:3}}>
-              {active} active · {thisWeek} joining this week
+              {active} in progress · {thisWeek} joining in the next 7 days · {awaitingReview} awaiting HR review · {submitted} awaiting employee code
             </div>
           </div>
-          <button onClick={()=>setTab('candidates')} className="ez-press" style={{padding:'9px 16px',borderRadius:10,cursor:'pointer',background:TK.brand,border:`1px solid ${TK.brand}`,color:TK.onAccent,fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6,boxShadow:E.brand}}>
-            <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send onboarding links
-          </button>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <button type="button" onClick={()=>setLinkModal(true)} className="ez-press" style={{padding:'9px 14px',borderRadius:R.md,cursor:'pointer',background:TK.surface,border:`1px solid ${TK.lineStrong}`,color:TK.ink,fontSize:12.5,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+              <IconPlus size={14}/> Add candidate
+            </button>
+            <button type="button" onClick={()=>{ setFilterStage('NOT_INVITED'); setFilterRisk('ALL'); setJoinWindow('all'); setTab('candidates') }} className="ez-press" title="Recruitment joiners who have not been sent the onboarding link"
+              style={{padding:'9px 14px',borderRadius:R.md,cursor:'pointer',background:TK.brand,border:`1px solid ${TK.brand}`,color:TK.onAccent,fontSize:12.5,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+              Send onboarding links{notInvitedCount ? ` · ${notInvitedCount}` : ''}
+            </button>
+          </div>
         </div>
 
         {/* Tab nav */}
-        <div style={{display:'flex',gap:6,paddingBottom:14,flexWrap:'wrap'}}>
+        <div role="tablist" aria-label="Onboarding" style={{display:'flex',gap:6,paddingBottom:4,flexWrap:'wrap'}}>
           {TABS.filter(t=>canSeeScreen(grant,'onboarding.'+t.key)).map(t=>(
-            <button key={t.key} onClick={()=>setTab(t.key)}
+            <button key={t.key} type="button" role="tab" aria-selected={tab===t.key} onClick={()=>setTab(t.key)}
               className="ez-tab" data-on={tab===t.key ? '1' : '0'}
-              style={{padding:'7px 13px',cursor:'pointer',fontSize:12,fontWeight:tab===t.key?600:500,fontFamily:'inherit',
+              style={{padding:'7px 13px',cursor:'pointer',fontSize:12.5,fontWeight:tab===t.key?600:500,fontFamily:'inherit',borderRadius:R.md,
                 background: tab===t.key ? TK.brand : 'transparent',
-                color: tab===t.key ? TK.onAccent : TK.muted,
+                color: tab===t.key ? TK.onAccent : TK.inkSoft,
                 border: `1px solid ${tab===t.key ? TK.brand : TK.line}`,
                 display:'flex',alignItems:'center',gap:5}}>
               <i className={`ti ${t.icon}`} style={{fontSize:14}} aria-hidden="true"/>
               {t.label}
               {t.badge!==undefined && t.badge > 0 && (
-                <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background: t.key==='pending' ? TK.critical : (tab===t.key ? `color-mix(in srgb, ${TK.onAccent} 24%, transparent)` : TK.sunken),color: t.key==='pending' ? TK.onAccent : (tab===t.key ? TK.onAccent : TK.muted),fontWeight:600,minWidth:16,textAlign:'center'}}>
+                <span style={{fontSize:10.5,padding:'1px 6px',borderRadius:99,background: t.key==='pending' ? TK.critical : (tab===t.key ? `color-mix(in srgb, ${TK.onAccent} 24%, transparent)` : TK.sunken),color: t.key==='pending' ? TK.onAccent : (tab===t.key ? TK.onAccent : TK.muted),fontWeight:700,minWidth:16,textAlign:'center'}}>
                   {t.badge}
                 </span>
               )}
@@ -1109,9 +1237,9 @@ export default function OnboardingDashboard() {
       </div>
 
       {/* Content */}
-      <div style={{padding:'20px 24px',maxWidth:1400,margin:'0 auto'}}>
+      <div style={{padding:'14px clamp(14px, 2vw, 24px) 32px',maxWidth:1400,margin:'0 auto'}}>
         {loading
-          ? <div style={{textAlign:'center',padding:60,color:TK.muted}}>Loading onboarding data...</div>
+          ? <div style={{textAlign:'center',padding:60,color:TK.muted}}>Loading onboarding…</div>
           : <>
             {/* Called as functions (not <Tab/>) so they render inline and don't
                 remount on every keystroke — keeps search-input focus. */}
@@ -1126,11 +1254,11 @@ export default function OnboardingDashboard() {
 
       {/* ── SEND ONBOARDING LINK MODAL ────────────────────────────── */}
       {linkModal && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-          <div style={{background:TK.surface,borderRadius:'14px',padding:'20px 22px',width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
+        <div onMouseDown={e=>{ if (e.target===e.currentTarget && !saving) setLinkModal(false) }} style={{position:'fixed',inset:0,background:'rgba(15,23,42,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal,padding:16}}>
+          <div role="dialog" aria-label="Add a candidate and send the onboarding link" style={{background:TK.surface,borderRadius:'14px',padding:'20px 22px',width:'100%',maxWidth:520,boxShadow:E.overlay,maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div style={{fontSize:15,fontWeight:500}}>Send joining link to new candidate</div>
-              <button onClick={()=>setLinkModal(false)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:TK.muted,lineHeight:1}}>×</button>
+              <div style={{fontSize:15,fontWeight:600}}>Add a candidate · send the onboarding link</div>
+              <button onClick={()=>setLinkModal(false)} aria-label="Close" style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:TK.muted,lineHeight:1}}>×</button>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <div style={{marginBottom:8,gridColumn:'1 / -1'}}>
@@ -1144,8 +1272,8 @@ export default function OnboardingDashboard() {
               {[
                 {label:'Full Name *',       key:'full_name',      type:'text', placeholder:'As per Aadhaar'},
                 {label:'Mobile *',          key:'mobile',         type:'tel',  placeholder:'+91 XXXXXXXXXX'},
-                {label:'Email',             key:'email',          type:'email',placeholder:'personal@email.com'},
-                {label:'Designation',       key:'designation',    type:'text', placeholder:'e.g. Software Engineer'},
+                {label:'Email *',           key:'email',          type:'email',placeholder:'personal@email.com'},
+                {label:'Designation *',     key:'designation',    type:'text', placeholder:'e.g. Software Engineer'},
                 {label:'Date of Joining *', key:'date_of_joining',type:'date', placeholder:''},
                 {label:'Offered CTC (₹)',   key:'offered_ctc',    type:'number',placeholder:'e.g. 800000'},
               ].map(({label,key,type,placeholder})=>(
@@ -1164,7 +1292,7 @@ export default function OnboardingDashboard() {
                 </select>
               </div>
               <div style={{marginBottom:8}}>
-                <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type</div>
+                <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type *</div>
                 <select value={newForm.employment_type} onChange={e=>setNewForm(f=>({...f,employment_type:e.target.value}))}
                   style={{width:'100%',padding:'8px 11px',background:TK.sunken,border: `1px solid ${TK.brandEdge}`,borderRadius:'10px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
                   <option>Employee</option><option>Intern</option><option>Consultant</option><option>Contract</option><option>NAPS</option><option>NATS</option>
@@ -1172,8 +1300,7 @@ export default function OnboardingDashboard() {
               </div>
             </div>
             <div style={{background:TK.brandTint,borderRadius:'10px',padding:'9px 12px',marginTop:4,fontSize:11,color: TK.muted,lineHeight:1.7}}>
-              <i className="ti ti-info-circle" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
-              A 24-hour onboarding link will be generated. Share with candidate via email or WhatsApp. OTP will be sent to their mobile for verification.
+                            The onboarding link is emailed to the candidate and stays valid for 24 hours (Resend or Extend from the row's menu). They verify with an OTP on their mobile.
             </div>
             <div style={{display:'flex',gap:10,marginTop:16}}>
               <button onClick={()=>setLinkModal(false)} style={{padding:'9px 16px',borderRadius:'10px',border: `1px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.ink}}>Cancel</button>
@@ -1187,13 +1314,13 @@ export default function OnboardingDashboard() {
 
       {/* ── EDIT ONBOARDING DATE MODAL ───────────────────────── */}
       {dateModal && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-          <div style={{background:TK.surface,borderRadius:'14px',padding:'20px 22px',width:'100%',maxWidth:420,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+        <div onMouseDown={e=>{ if (e.target===e.currentTarget && !saving) setDateModal(null) }} style={{position:'fixed',inset:0,background:'rgba(15,23,42,.55)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal,padding:16}}>
+          <div role="dialog" aria-label={`Edit ${dateModal.full_name}`} style={{background:TK.surface,borderRadius:'14px',padding:'20px 22px',width:'100%',maxWidth:420,boxShadow:E.overlay}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div style={{fontSize:15,fontWeight:500}}>Edit candidate — {dateModal.full_name}</div>
-              <button onClick={()=>setDateModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:TK.muted,lineHeight:1}}>×</button>
+              <div style={{fontSize:15,fontWeight:600}}>Edit candidate — {dateModal.full_name}</div>
+              <button onClick={()=>setDateModal(null)} aria-label="Close" style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:TK.muted,lineHeight:1}}>×</button>
             </div>
-            <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Joining / Onboarding Date</div>
+            <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Date of joining *</div>
             <input type="date" value={dateVal} onChange={e=>setDateVal(e.target.value)}
               style={{width:'100%',padding:'9px 11px',background:TK.sunken,border: `1px solid ${TK.brandEdge}`,borderRadius:'10px',fontSize:13,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
             <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Email</div>
@@ -1212,7 +1339,8 @@ export default function OnboardingDashboard() {
 
       {/* ── GENERATE CODE (after the three heads approve): the team, the ESS roles, the code ── */}
       {codeModal && (
-        <GenerateCodeModal onboardingId={codeModal.id} candidate={codeModal}
+        <GenerateCodeModal onboardingId={codeModal.id}
+          candidate={{ ...codeModal, approvals: ['HR_MANAGER','IT','ADMIN','PAYROLL'].map(team => ({ team, status: (codeModal.approvals||[]).find(a=>a.team===team)?.status || 'PENDING' })) }}
           onClose={() => setCodeModal(null)}
           onDone={(m,t)=>{ showToast(m,t); load() }} />
       )}

@@ -364,7 +364,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {(data.approvals as Approval[]).map(a => {
                   const c = a.status === 'APPROVED' ? TK.positive : a.status === 'RETURNED' ? TK.critical : TK.muted
-                  return <span key={a.team} className="rv-stamp" style={{ color: c, borderColor: c, background: a.status === 'APPROVED' ? TK.positiveTint : a.status === 'RETURNED' ? TK.criticalTint : TK.sunken }} title={a.remark || ''}>{TEAM[a.team]} {a.status === 'APPROVED' ? '✓' : a.status === 'RETURNED' ? '↩' : '·'} {a.status === 'APPROVED' ? (a.acted_by_name || 'approved') : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>
+                  return <span key={a.team} className="rv-stamp" style={{ color: c, borderColor: c, background: a.status === 'APPROVED' ? TK.positiveTint : a.status === 'RETURNED' ? TK.criticalTint : TK.sunken }} title={a.status === 'PENDING' ? 'Not decided yet' : `${a.status === 'APPROVED' ? 'Approved' : 'Returned'}${a.acted_by_name ? ` by ${a.acted_by_name}` : ''}${a.remark ? ` — ${a.remark}` : ''}`}>{TEAM[a.team]} {a.status === 'APPROVED' ? '✓' : a.status === 'RETURNED' ? '↩' : '·'} {a.status === 'APPROVED' ? (a.acted_by_name || 'approved') : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>
                 })}
               </div>
             </div>
@@ -389,7 +389,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
 
             {/* ── Documents ── */}
             <section style={{ marginTop: 28 }}>
-              <h3 className="rv-h">01 <span>Documents</span><span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: TK.muted, letterSpacing: 0, textTransform: 'none' }}>{docs.length} uploaded</span></h3>
+              <h3 className="rv-h">01 <span>Documents</span><span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: TK.muted, letterSpacing: 0, textTransform: 'none' }}>{docs.length} file{docs.length === 1 ? '' : 's'}</span></h3>
               {docs.length === 0 && <div style={{ fontSize: 12, color: TK.muted, marginTop: 8 }}>No documents uploaded.</div>}
               <div className="rv-docs">{docs.map(doc => <DocCard key={doc.doc_code} doc={doc} on={!!marks[`doc:${doc.doc_code}`]} pick={canDecide} onPick={() => toggle({ key: `doc:${doc.doc_code}`, kind: 'doc', label: doc.label, doc_code: doc.doc_code })} />)}</div>
               {/* The official forms, filled from this sheet — opened in a new tab (the call needs the session header). */}
@@ -432,7 +432,9 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
                   <div style={{ flex: '1 1 300px', fontSize: 12.5, color: TK.inkSoft }}>
                     {data.hr_review?.outcome === 'RETURNED' && list.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>{list.map(m => <span key={m.key} className="rv-chip">{m.label}</span>)}</div>}
                     {data.hr_review?.outcome === 'RETURNED' && remark && <div><b>Remark sent:</b> {remark}</div>}
-                    {readOnly && !data.hr_review && 'Read-only.'}
+                    {readOnly && data.hr_review?.outcome === 'ACCEPTED' && <>Accepted by {data.hr_review.by_name || 'the HR Manager'} on {day(data.hr_review.at)}. The stamps at the top show where IT, Admin and Payroll are.</>}
+                    {readOnly && data.hr_review?.outcome === 'RESUBMITTED' && 'The candidate resubmitted after a return — open it with Review form to decide.'}
+                    {readOnly && !data.hr_review && 'Read-only view of the submitted form.'}
                     {!readOnly && !canDecide && !data.hr_review && (item.status === 'EMPLOYEE_CREATED' ? 'The employee code is already generated.' : item.status === 'IN_PROGRESS' ? 'The candidate has not submitted the form yet.' : 'Already approved by the HR Manager.')}
                   </div>
                   <button onClick={onClose} className="rv-ghost">Close</button>
