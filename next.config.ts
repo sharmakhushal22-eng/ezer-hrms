@@ -26,6 +26,12 @@ const nextConfig: NextConfig = {
   // after a verification build.
   distDir: process.env.NEXT_DIST_DIR || '.next',
 
+  // One id per build, inlined into the client bundle and into /api/version alike: an open tab
+  // compares the two and reloads itself after a deploy (components/SessionGuard.tsx).
+  env: {
+    NEXT_PUBLIC_BUILD_ID: process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || `local-${Date.now()}`,
+  },
+
   typescript: {
     ignoreBuildErrors: true,
   },
