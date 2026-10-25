@@ -252,6 +252,9 @@ export default function TeJourneyReview({ rows, desk, basisOf, onOpenTrip, onDon
   // first (it is holding a claim), then unlooked-at, then agreed; and within a
   // trip, journey order once urgency ties, because a trip reads as a sequence.
   const buckets = useMemo(() => journeyBuckets(rows, desk), [rows, desk])
+  /** Which trip boxes are open. Explicit only — the default is derived below,
+   *  so it cannot be decided on a list that had not loaded yet. */
+  const [open, setOpen] = useState<Record<string, boolean>>({})
 
   if (!rows.length) {
     return (
@@ -272,43 +275,63 @@ export default function TeJourneyReview({ rows, desk, basisOf, onOpenTrip, onDon
           trip&rsquo;s claim until they answer.
         </span>
       </div>
-      {buckets.map(b => (
-        <div key={b.tripId} className="jbucket">
-          <div className="jb-head">
-            <div className="grow">
-              {/* The number is the bucket: everything under it belongs to this
-                  trip, and it opens the whole record. */}
-              {onOpenTrip ? (
-                <button
-                  type="button"
-                  className="tripno"
-                  onClick={() => onOpenTrip(b.tripId)}
-                  title={`Open ${b.tripNo} — every journey, bill, stay and what it has cost`}
-                >
-                  {b.tripNo}
-                </button>
-              ) : <span className="mono">{b.tripNo}</span>}
-              <div className="b">{b.tripName || 'A trip'}</div>
-              <div className="small muted">
-                {b.who || 'A traveller'}{b.empCode ? <> · <span className="mono">{b.empCode}</span></> : null}
-                {' · '}{plural(b.journeys.length, 'journey')}
-                {b.subTrips ? <> · {b.subTrips === 1 ? 'one a sub-trip' : `${b.subTrips} sub-trips`}</> : null}
+      {buckets.map(b => {
+        // Shut unless somebody opened it — except when it is the only trip
+        // here, where a shut box is a click that buys nothing. Derived rather
+        // than seeded into state so it stays right as rows arrive: the parent
+        // can hand this component an empty list for a moment while the desk
+        // loads, and a seeded Set would have been decided on that.
+        const isOpen = open[b.tripId] ?? buckets.length === 1
+        return (
+          <div key={b.tripId} className={`card jbox${b.sentBack ? ' back' : b.waiting ? ' waiting' : ''}`}>
+            <button
+              type="button"
+              className="jb-head"
+              aria-expanded={isOpen}
+              onClick={() => setOpen(o => ({ ...o, [b.tripId]: !isOpen }))}
+            >
+              <span className="jb-caret" aria-hidden="true"><TeIcon name={isOpen ? 'down' : 'rightc'} size="sm" /></span>
+              <span className="grow">
+                <span className="jb-no">{b.tripNo}</span>
+                <span className="b">{b.tripName || 'A trip'}</span>
+                <span className="small muted">
+                  {b.who || 'A traveller'}{b.empCode ? ` · ${b.empCode}` : ''}
+                  {' · '}{plural(b.journeys.length, 'journey')}
+                  {b.subTrips ? (b.subTrips === 1 ? ' · one a sub-trip' : ` · ${b.subTrips} sub-trips`) : ''}
+                </span>
+              </span>
+              {/* The two facts a reviewer triages on, readable while the box is
+                  shut — the whole point of being able to shut it. */}
+              {b.sentBack ? <span className="chip t-crit">{b.sentBack} sent back</span> : null}
+              {b.waiting
+                ? <span className="chip t-warn">{b.waiting} to confirm</span>
+                : <span className="chip plain t-pos">All confirmed</span>}
+            </button>
+
+            {isOpen ? (
+              <div className="jb-body">
+                {/* The number opens the whole trip: every bill, the stay, the
+                    advance, what it has cost. Inside the box, because out in
+                    the header it would compete with opening the box itself —
+                    and a control nested in a button is not a control. */}
+                {onOpenTrip ? (
+                  <button
+                    type="button"
+                    className="tripno"
+                    onClick={() => onOpenTrip(b.tripId)}
+                    title={`Open ${b.tripNo} — every journey, bill, stay and what it has cost`}
+                  >
+                    Open {b.tripNo}
+                  </button>
+                ) : null}
+                {b.journeys.map(j => (
+                  <OneJourney key={j.leg_id} j={j} desk={desk} basisOf={basisOf} onOpenTrip={onOpenTrip} onDone={onDone} onToast={onToast} />
+                ))}
               </div>
-            </div>
-            {/* The two facts a reviewer sorts by, said on the bucket so the
-                trip can be triaged without opening every journey in it. */}
-            {b.sentBack ? <span className="chip t-crit">{b.sentBack} sent back</span> : null}
-            {b.waiting
-              ? <span className="chip t-warn">{b.waiting} to confirm</span>
-              : <span className="chip plain t-pos">All confirmed</span>}
+            ) : null}
           </div>
-          <div className="stack">
-            {b.journeys.map(j => (
-              <OneJourney key={j.leg_id} j={j} desk={desk} basisOf={basisOf} onOpenTrip={onOpenTrip} onDone={onDone} onToast={onToast} />
-            ))}
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

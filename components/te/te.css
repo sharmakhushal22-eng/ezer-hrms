@@ -245,20 +245,38 @@
 .te .tripbucket .li{padding-left:16px;padding-right:16px}
 .te .tripbucket .li .b{display:flex;align-items:center;gap:8px}
 
-/* A trip's journeys, gathered (components/te/desk/TeJourneyReview.tsx).
+/* A trip's journeys, as a box that opens (components/te/desk/TeJourneyReview.tsx).
 
-   The bucket is a frame around the journey cards rather than a card itself:
-   .jrev already carries its own border and background, and a card inside a card
-   reads as two boxes arguing. A heading, a hairline and the trip's own accent
-   edge are enough to say "these belong together". */
-.te .jbucket{display:grid;gap:12px;padding:0 0 4px;border-left:3px solid var(--ez-line-strong,var(--ez-line));padding-left:13px}
-/* A trip holding somebody's claim earns the loud edge; one merely waiting the
-   quiet one. Same device .ontrip and .tripbucket use, same meaning. */
-.te .jbucket:has(.chip.t-crit){border-left-color:var(--ez-critical)}
-.te .jbucket:has(.chip.t-warn):not(:has(.chip.t-crit)){border-left-color:var(--ez-warning)}
-.te .jbucket .jb-head{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
-.te .jbucket .jb-head .grow{min-width:0}
-.te .jbucket .stack{gap:12px}
+   ONE BOX PER TRIP, SHUT BY DEFAULT. A desk with eight trips of journeys was
+   eight trips of maps and buttons stacked down one page; shut, it is eight
+   lines you can read in a glance and open the one you want. The head carries
+   the counts precisely so the box is worth shutting.
+
+   The accent edge says what is inside without opening it, the same device
+   .ontrip and .tripbucket use: critical when something is sent back and holding
+   a claim, warning when something waits, nothing when it is all agreed. */
+.te .jbox{padding:0;overflow:hidden}
+.te .jbox.back{box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-critical)}
+.te .jbox.waiting{box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-warning)}
+
+/* The whole head is the button, so the target is the width of the box rather
+   than a chevron somebody has to aim at. */
+.te .jbox .jb-head{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;width:100%;
+  padding:14px 16px;border:0;background:none;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.te .jbox .jb-head:hover{background:var(--ez-brand-tint)}
+.te .jbox .jb-head .grow{min-width:0;display:grid;gap:2px}
+.te .jbox .jb-head .b,.te .jbox .jb-head .small{display:block}
+.te .jbox .jb-caret{flex-shrink:0;margin-top:2px;color:var(--ez-muted)}
+/* The number, readable while shut. Not a link here: a control inside a button
+   is not a control, so opening the trip lives in the body. */
+.te .jbox .jb-no{display:block;font-family:var(--te-f-mono);font-size:12px;font-weight:700;
+  color:color-mix(in srgb,var(--ez-brand) 76%,var(--ez-ink))}
+.te .jbox .jb-body{display:grid;gap:12px;padding:0 16px 16px;border-top:1px solid var(--ez-line)}
+.te .jbox .jb-body .tripno{justify-self:start;margin-top:12px}
+@media (max-width:560px){
+  .te .jbox .jb-head{padding:12px 13px;gap:8px}
+  .te .jbox .jb-body{padding:0 13px 13px}
+}
 
 /* The on-a-trip card's two actions, on Home.
 
