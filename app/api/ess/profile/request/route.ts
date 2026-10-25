@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { essViewerId, resolveEmployeeId, svc } from '@/lib/profile/access';
+import { resolveEmployeeId, svc } from '@/lib/profile/access';
+import { writer } from '@/lib/profile/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,8 +12,13 @@ export const dynamic = 'force-dynamic';
  * by raise_profile_change_request() in the database, not here.
  */
 export async function POST(req: NextRequest) {
-  const viewerId = await essViewerId(req);
-  if (!viewerId) return NextResponse.json({ error: 'not_authenticated' }, { status: 401 });
+  // writer(), not essViewerId(): the latter answers the VIEWED employee in
+  // view-as, so the shared dashboard login could file requests as anybody.
+  // The live screen uses POST /api/ess/profile { action: 'request' }; this is
+  // the vendor shell's path, kept working but held to the same rule.
+  const w = await writer(req);
+  if (w.error) return w.error;
+  const viewerId = w.me;
 
   const b = await req.json().catch(() => ({}));
   const { code, fieldKey, fieldLabel, newValue, reason } = b ?? {};

@@ -1,131 +1,111 @@
-/* components/profile/profile.css — Profile 360.
+/* components/profile/profile.css — Profile ("My Details").
  *
- * A port of EZER-ESS-Profile-360.html's LAYOUT, drawn in EZER's own tokens.
- * The structure is the design's, measured off it rather than guessed:
+ * Calm and scannable: white cards on the canvas, one blue family, colour only
+ * where it says something (a pending item, a verified document, a total that
+ * is not yet 100%). No gradients — the cover, the avatar and the ID card used
+ * to be three of them stacked in one corner.
  *
- *   a gradient cover, with the identity card overlapping its lower edge
- *   a KPI strip beneath it, each stat with a mini progress bar
- *   a two-column shell: a 296px rail, and the tab panels beside it
- *   the rail carries the completeness ring, the reporting chain, the ID card
- *   the tab strip sits in its own rounded container, the legend beneath it
+ *   identity header, overlapping a short flat cover band
+ *   a two-column shell: a SHORT 300px side column beside the tabs
+ *   drawers for Edit profile, Digital ID, Change history and Documents
+ *   modals for each editor (components/profile/editors.tsx)
  *
- * Colour is the one departure. The design hard-codes #2563EB and friends;
- * everything here resolves through --ez-*, so Profile follows the theme
- * toggle rather than staying light when the app goes dark. That mapping is
- * nearly 1:1 — --ez-brand is already #2563EB.
- *
- * THREE THINGS THE FIELD CARD DELIBERATELY DOES NOT HAVE, because the design
- * does not: a filled pill for the state (it is plain coloured text), the
- * source column printed underneath, and a per-field button. Editing is
- * reached from "Edit profile" and "Request an update" on the identity card.
+ * Every colour resolves through --ez-*, so the page follows the theme toggle.
+ * The few rgba() values left are neutral scrims and shadows over any theme.
  *
  * Scoped under .ezp throughout. The PMS stylesheet once shipped with every
  * rule under .pms while the page never set the class — perfect in the
- * harness, unstyled in the product. Profile360's root sets .ezp.
+ * harness, unstyled in the product. Profile360's root sets .ezp, and the
+ * drawers and modals are rendered inside it for that reason.
  */
 
 .ezp { width: 100%; min-width: 0; color: var(--ez-ink); }
 
 /* ── cover + identity ─────────────────────────────────────────────────── */
 .ezp .cover {
-  height: 132px; border-radius: 18px; position: relative;
-  background: linear-gradient(115deg, var(--ez-brand-deep), var(--ez-brand) 45%, var(--ez-brand-edge));
+  height: 64px; border-radius: 14px 14px 0 0;
+  background: var(--ez-brand-tint); border: 1px solid var(--ez-line); border-bottom: 0;
 }
-.ezp .coveracts { position: absolute; top: 14px; right: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
-.ezp .coveracts button {
-  background: rgba(255,255,255,.16); color: var(--ez-on-accent);
-  border: 1px solid rgba(255,255,255,.28); border-radius: 20px;
-  padding: 5px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer;
-}
-.ezp .coveracts button:hover { background: rgba(255,255,255,.26); }
 
 .ezp .idcard {
   background: var(--ez-surface); border: 1px solid var(--ez-line);
-  border-radius: 16px; padding: 16px 18px; margin: -58px 14px 0; position: relative;
+  border-radius: 0 0 14px 14px; padding: 0 18px 16px; position: relative;
   display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
 }
 .ezp .face {
-  width: 74px; height: 74px; border-radius: 18px; flex: 0 0 auto; margin-top: -34px;
+  width: 78px; height: 78px; border-radius: 18px; flex: 0 0 auto; margin-top: -32px;
   display: grid; place-items: center; font-size: 24px; font-weight: 700;
   color: var(--ez-on-accent); border: 3px solid var(--ez-surface);
-  background: linear-gradient(140deg, var(--ez-brand-deep), var(--ez-brand-edge));
-  box-shadow: 0 6px 18px -8px rgba(15,23,42,.45);
+  background: var(--ez-brand);
+  box-shadow: var(--ez-shadow-raised);
 }
-.ezp .who { flex: 1 1 320px; min-width: 0; }
-.ezp .who h2 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+.ezp .who { flex: 1 1 320px; min-width: 0; padding-top: 12px; }
+.ezp .who h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
 .ezp .who .role { font-size: 13px; color: var(--ez-muted); margin-top: 2px; }
 .ezp .who .role b { color: var(--ez-ink-soft); font-weight: 600; }
 
 .ezp .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
 .ezp .pill {
-  display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px;
-  border-radius: 20px; border: 1px solid var(--ez-line);
-  color: var(--ez-muted); background: var(--ez-sunken);
+  display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px;
+  border-radius: 99px; border: 1px solid var(--ez-line);
+  color: var(--ez-muted); background: var(--ez-sunken); white-space: nowrap;
 }
 .ezp .pill.brand { color: var(--ez-brand);    background: var(--ez-brand-tint);    border-color: transparent; }
 .ezp .pill.good  { color: var(--ez-positive); background: var(--ez-positive-tint); border-color: transparent; }
 .ezp .pill.warn  { color: var(--ez-warning);  background: var(--ez-warning-tint);  border-color: transparent; }
+.ezp .pill.bad   { color: var(--ez-critical); background: var(--ez-critical-tint); border-color: transparent; }
 
 .ezp .facts { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px;
               font-size: 12px; color: var(--ez-ink-soft); }
 .ezp .facts span { display: inline-flex; align-items: center; gap: 6px; }
 .ezp .facts .k { color: var(--ez-muted); }
 
-.ezp .idacts { display: grid; gap: 7px; min-width: 168px; }
-.ezp .idacts .lnk {
-  background: none; border: 0; cursor: pointer; padding: 2px;
-  font-size: 12px; font-weight: 600; color: var(--ez-muted); text-align: center;
+.ezp .idacts { display: grid; gap: 7px; min-width: 176px; padding-top: 14px; }
+.ezp .lnk {
+  background: none; border: 0; cursor: pointer; padding: 2px; font: inherit;
+  font-size: 12px; font-weight: 600; color: var(--ez-brand); text-decoration: none;
 }
+.ezp .lnk:hover { text-decoration: underline; }
+.ezp .idacts .lnk { color: var(--ez-muted); text-align: center; }
 .ezp .idacts .lnk:hover { color: var(--ez-brand); }
-
-/* ── KPI strip ────────────────────────────────────────────────────────── */
-.ezp .kpis { display: grid; gap: 10px; margin-top: 14px;
-             grid-template-columns: repeat(auto-fit, minmax(min(150px,100%), 1fr)); }
-.ezp .kpi { background: var(--ez-surface); border: 1px solid var(--ez-line);
-            border-radius: 12px; padding: 11px 13px 12px; }
-.ezp .kpi .k { font-size: 11px; color: var(--ez-muted); }
-.ezp .kpi .v { font-size: 19px; font-weight: 700; margin-top: 2px; letter-spacing: -.01em; }
-.ezp .kpi .v small { font-size: 11.5px; font-weight: 600; color: var(--ez-muted); margin-left: 3px; }
-.ezp .kpi .bar { height: 3px; border-radius: 20px; background: var(--ez-sunken);
-                 margin-top: 9px; overflow: hidden; }
-.ezp .kpi .bar > i { display: block; height: 100%; background: var(--ez-brand); border-radius: 20px; }
 
 /* ── the two-column shell ─────────────────────────────────────────────── */
 .ezp .shell { display: grid; gap: 14px; margin-top: 14px;
-              grid-template-columns: 296px minmax(0, 1fr); }
+              grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
 @media (max-width: 1040px) { .ezp .shell { grid-template-columns: minmax(0, 1fr); } }
 
 .ezp .rail { display: grid; gap: 12px; align-content: start; min-width: 0; }
+@media (min-width: 1041px) { .ezp .rail { position: sticky; top: 12px; } }
 .ezp .card { background: var(--ez-surface); border: 1px solid var(--ez-line);
-             border-radius: 14px; padding: 15px 16px; min-width: 0; }
+             border-radius: 12px; padding: 14px 16px; min-width: 0; }
 .ezp .card > .hd { display: flex; align-items: center; justify-content: space-between;
-                   gap: 10px; margin-bottom: 12px; }
+                   gap: 10px; margin-bottom: 10px; }
 .ezp .card h3 { margin: 0; font-size: 13px; font-weight: 700; }
-.ezp .card .sub { font-size: 11.5px; color: var(--ez-muted); }
+.ezp .sub { font-size: 11.5px; color: var(--ez-muted); }
 
-/* ── completeness ring ────────────────────────────────────────────────── */
-.ezp .ez-ringrow { display: flex; gap: 14px; align-items: center; }
-/* Named ez-ring, not ring. "ring" is a Tailwind utility — it emits
-     --tw-ring-shadow: ... 0 0 0 calc(1px + ...) var(--tw-ring-color, currentcolor),
-     and this app imports tailwindcss in globals.css, so the class on the element
-     matched it and painted a 1px box-shadow ring in the ink colour. The div has
-     no radius, so it drew a hard SQUARE around every progress circle. Our
-     stylesheet never sets box-shadow here, so there was nothing to win with. */
-.ezp .ez-ring { position: relative; width: 76px; height: 76px; flex: 0 0 auto; }
+/* ── completeness ─────────────────────────────────────────────────────── */
+.ezp .ez-ringrow { display: flex; gap: 12px; align-items: center; }
+/* Named ez-ring, not ring. "ring" is a Tailwind utility — it emits a 1px
+   box-shadow in the ink colour, and this app imports tailwindcss in
+   globals.css, so the class drew a hard square around every progress circle. */
+.ezp .ez-ring { position: relative; width: 64px; height: 64px; flex: 0 0 auto; }
 .ezp .ez-ring svg { transform: rotate(-90deg); display: block; }
-.ezp .ez-ring .mid { position: absolute; inset: 0; display: grid; place-items: center;
-                  text-align: center; line-height: 1.1; }
-.ezp .ez-ring .num { font-size: 17px; font-weight: 700; }
-.ezp .ez-ring .cap { font-size: 9px; color: var(--ez-muted); }
-.ezp .ez-ringrow p { margin: 0; font-size: 11.5px; color: var(--ez-muted); }
+.ezp .ez-ring .mid { position: absolute; inset: 0; display: grid; place-items: center; }
+.ezp .ez-ring .num { font-size: 15px; font-weight: 700; }
+.ezp .ez-ringrow p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ez-muted); }
 
-.ezp .todo { list-style: none; margin: 13px 0 0; padding: 0; display: grid; gap: 9px; }
-.ezp .todo li { display: flex; gap: 8px; align-items: flex-start;
-                font-size: 12px; color: var(--ez-ink-soft); }
-.ezp .todo i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto;
-               margin-top: 5px; background: var(--ez-warning); }
-.ezp .todo .fix { margin-left: auto; background: none; border: 0; cursor: pointer;
-                  font-size: 11.5px; font-weight: 600; color: var(--ez-brand); }
+.ezp .todo { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 2px; }
+.ezp .todo li { display: flex; gap: 9px; align-items: center; font-size: 12.5px;
+                color: var(--ez-ink-soft); padding: 6px 0; border-top: 1px solid var(--ez-line); }
+.ezp .todo li:first-child { border-top: 0; }
+.ezp .todo i { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; background: var(--ez-warning); }
+.ezp .todo .tt { flex: 1 1 auto; min-width: 0; }
+.ezp .todo .fix {
+  flex: 0 0 auto; background: var(--ez-surface); border: 1px solid var(--ez-line-strong); cursor: pointer;
+  border-radius: 7px; padding: 3px 10px; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--ez-brand);
+}
+.ezp .todo .fix:hover { background: var(--ez-brand-tint); border-color: var(--ez-brand-edge); }
+.ezp .lnk.more { margin-top: 6px; }
 
 /* ── reporting chain ──────────────────────────────────────────────────── */
 .ezp .chain { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -133,82 +113,99 @@
 .ezp .chain .p { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto;
                  display: grid; place-items: center; font-size: 11px; font-weight: 700;
                  background: var(--ez-sunken); color: var(--ez-muted); }
-.ezp .chain li.me .p { background: var(--ez-brand); color: var(--ez-on-accent); }
-.ezp .chain li.me .n { color: var(--ez-brand); }
+.ezp .chain .p.dot { width: 10px; height: 10px; margin: 0 10px; background: var(--ez-brand-edge); }
+.ezp .chain li.me .p { background: var(--ez-brand-tint); color: var(--ez-brand); }
 .ezp .chain .n { font-size: 12.5px; font-weight: 600; }
 .ezp .chain .r { font-size: 11px; color: var(--ez-muted); }
 
-/* ── the digital ID card in the rail ──────────────────────────────────── */
-.ezp .dig { border-radius: 14px; padding: 14px; color: var(--ez-on-accent);
-            background: linear-gradient(140deg, var(--ez-brand-deep), var(--ez-brand) 60%, var(--ez-brand-edge)); }
-.ezp .dig .brandline { font-size: 9.5px; font-weight: 700; letter-spacing: .08em;
-                       text-transform: uppercase; opacity: .85; display: flex;
-                       align-items: center; gap: 7px; margin-bottom: 12px; }
-.ezp .dig .mark { width: 17px; height: 17px; border-radius: 5px; display: grid;
-                  place-items: center; background: rgba(255,255,255,.22);
-                  font-size: 8px; font-weight: 700; }
-.ezp .dig .top { display: flex; gap: 10px; align-items: center; }
-.ezp .dig .ph { width: 38px; height: 38px; border-radius: 10px; flex: 0 0 auto;
-                display: grid; place-items: center; font-size: 13px; font-weight: 700;
-                background: rgba(255,255,255,.2); }
-.ezp .dig .nm { font-size: 13px; font-weight: 700; }
-.ezp .dig .ds { font-size: 10.5px; opacity: .85; }
-.ezp .dig .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
-.ezp .dig .lb { font-size: 9px; opacity: .75; text-transform: uppercase; letter-spacing: .05em; }
-.ezp .dig .vv { font-size: 11.5px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
-.ezp .dig .note { font-size: 10px; opacity: .8; margin-top: 12px; }
+/* ── requests summary (side column) ───────────────────────────────────── */
+.ezp .reqcall {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 10px;
+  padding: 8px 10px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 12px; text-align: left;
+  color: var(--ez-brand); background: var(--ez-brand-tint); border: 1px solid var(--ez-brand-edge);
+}
+.ezp .reqcall span { margin-left: auto; }
+.ezp .reqmini { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ezp .reqmini .rn { font-size: 12.5px; font-weight: 600; }
+.ezp .reqmini .rw { font-size: 11.5px; color: var(--ez-warning); }
+.ezp .reqmini .more { font-size: 12px; }
 
-/* ── main column: tabs + legend ───────────────────────────────────────── */
-.ezp .main { min-width: 0; display: grid; gap: 12px; align-content: start; }
+/* ── main column: tabs ────────────────────────────────────────────────── */
+.ezp .main { min-width: 0; display: grid; gap: 14px; align-content: start; }
 .ezp .tabwrap { background: var(--ez-surface); border: 1px solid var(--ez-line);
-                border-radius: 14px; padding: 5px; }
-.ezp .tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+                border-radius: 12px; padding: 4px; display: flex; align-items: center;
+                gap: 4px; position: relative; }
+.ezp .tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; flex: 1 1 auto; min-width: 0; }
 .ezp .tabs::-webkit-scrollbar { display: none; }
-.ezp .tabs button { flex: 0 0 auto; background: none; border: 0; cursor: pointer;
-                    padding: 8px 14px; border-radius: 10px; font-size: 12.5px;
+.ezp .tabs button { flex: 0 0 auto; background: none; border: 0; cursor: pointer; font: inherit;
+                    padding: 8px 13px; border-radius: 9px; font-size: 12.5px;
                     font-weight: 600; color: var(--ez-muted); white-space: nowrap; }
 .ezp .tabs button:hover { color: var(--ez-ink); }
 .ezp .tabs button.on { color: var(--ez-brand); background: var(--ez-brand-tint); }
 
-.ezp .legend { background: var(--ez-surface); border: 1px solid var(--ez-line);
-               border-radius: 12px; padding: 9px 13px; display: flex; gap: 16px;
-               flex-wrap: wrap; font-size: 11.5px; color: var(--ez-muted); }
-.ezp .legend b { font-weight: 700; }
-.ezp .legend .direct  { color: var(--ez-positive); }
-.ezp .legend .request { color: var(--ez-warning); }
-.ezp .legend .locked  { color: var(--ez-muted); }
-.ezp .legend .event   { color: var(--ez-info); }
+.ezp .howbtn {
+  flex: 0 0 auto; width: 26px; height: 26px; margin-right: 4px; border-radius: 50%;
+  border: 1px solid var(--ez-line-strong); background: var(--ez-surface); cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--ez-muted);
+}
+.ezp .howbtn:hover, .ezp .howbtn[aria-expanded="true"] { color: var(--ez-brand); border-color: var(--ez-brand-edge); }
+.ezp .howpop {
+  position: absolute; right: 4px; top: calc(100% + 6px); z-index: var(--ez-z-popover); width: min(360px, calc(100vw - 32px));
+  background: var(--ez-surface); border: 1px solid var(--ez-line); border-radius: 12px;
+  box-shadow: var(--ez-shadow-floating); padding: 12px 14px; font-size: 12px;
+}
+.ezp .howpop .hhd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.ezp .howpop dl { margin: 0; display: grid; gap: 4px; }
+.ezp .howpop dt { font-weight: 700; margin-top: 6px; display: flex; align-items: center; gap: 5px; }
+.ezp .howpop dt.edit { color: var(--ez-positive); }
+.ezp .howpop dt.request { color: var(--ez-warning); }
+.ezp .howpop dt.locked { color: var(--ez-muted); }
+.ezp .howpop dd { margin: 0; color: var(--ez-ink-soft); line-height: 1.45; }
 
-/* ── field groups ─────────────────────────────────────────────────────── */
-.ezp .sec { margin-top: 4px; }
-.ezp .sec > h4 { margin: 0 0 10px; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
-.ezp .sec > .sub { font-size: 12px; color: var(--ez-muted); margin: -6px 0 11px; }
+/* ── sections + field cards ───────────────────────────────────────────── */
+.ezp .sec { min-width: 0; }
+.ezp .sechd { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.ezp .sechd h4 { margin: 0; font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+.ezp .sechd .sub { margin-top: 2px; }
 
-.ezp .g3 { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(232px,100%), 1fr)); }
-.ezp .g2 { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(300px,100%), 1fr)); }
+.ezp .g3 { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(220px,100%), 1fr)); }
+.ezp .g2 { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(300px,100%), 1fr)); align-items: start; }
+/* The overview: always two by two, so four cards make a square, not 3 + 1. */
+.ezp .g2x { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+@media (max-width: 760px) { .ezp .g2x { grid-template-columns: minmax(0, 1fr); } }
 
 .ezp .fld { position: relative; background: var(--ez-surface);
-            border: 1px solid var(--ez-line); border-radius: 11px;
-            padding: 11px 13px 12px; min-width: 0; }
-.ezp .fld.act { cursor: pointer; }
-.ezp .fld.act:hover { border-color: var(--ez-brand); }
+            border: 1px solid var(--ez-line); border-radius: 10px;
+            padding: 10px 12px 11px; min-width: 0; }
+.ezp .fld.act { cursor: pointer; transition: border-color 120ms ease, background 120ms ease; }
+.ezp .fld.act:hover { border-color: var(--ez-brand-edge); background: var(--ez-brand-tint); }
 .ezp .fld.span2 { grid-column: 1 / -1; }
-.ezp .fld .st { position: absolute; top: 11px; right: 13px; font-size: 10px; font-weight: 700; }
-.ezp .fld .st.locked  { color: var(--ez-muted); }
-.ezp .fld .st.direct  { color: var(--ez-positive); }
-.ezp .fld .st.request { color: var(--ez-warning); }
-.ezp .fld .st.event   { color: var(--ez-info); }
-.ezp .fld .k { font-size: 11px; color: var(--ez-muted); padding-right: 58px; }
+.ezp .fld .k { font-size: 11px; color: var(--ez-muted); display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.ezp .fld .fa { font-size: 11px; font-weight: 650; color: var(--ez-brand); flex: 0 0 auto; }
+.ezp .fld .fa.request { color: var(--ez-warning); }
+.ezp .fld .lk { color: var(--ez-faint); display: inline-flex; }
 .ezp .fld .v { font-size: 13.5px; font-weight: 600; margin-top: 3px; overflow-wrap: anywhere; }
 .ezp .fld .v.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
-.ezp .fld .hint { font-size: 11px; color: var(--ez-warning); margin-top: 5px; }
+.ezp .fld .nil, .ezp .hub .hv.nil { color: var(--ez-faint); font-weight: 500; }
+.ezp .fld .hint { font-size: 11px; color: var(--ez-muted); margin-top: 4px; }
 .ezp .fld .no { font-size: 12px; color: var(--ez-faint); font-style: italic; font-weight: 500; }
 .ezp .msk { font-family: ui-monospace, Menlo, monospace; letter-spacing: .1em; }
 .ezp .eye { background: none; border: 0; cursor: pointer; color: var(--ez-muted);
             padding: 0 0 0 7px; font-size: 11px; font-weight: 600; }
 .ezp .eye:hover { color: var(--ez-brand); }
 
-/* ── person / record cards ────────────────────────────────────────────── */
+.ezp .foot-note { margin: 0; font-size: 12px; color: var(--ez-muted); line-height: 1.5; }
+
+/* ── key/value lists (overview cards) ─────────────────────────────────── */
+.ezp .kv { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 7px 14px; margin: 0; font-size: 12.5px; }
+.ezp .kv dt { color: var(--ez-muted); }
+.ezp .kv dd { margin: 0; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.ezp .kvact { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ezp .tag { font-size: 11.5px; font-weight: 600; }
+.ezp .tag.good { color: var(--ez-positive); }
+.ezp .tag.warn { color: var(--ez-warning); }
+
+/* ── person / nominee cards ───────────────────────────────────────────── */
 .ezp .pc { display: flex; gap: 11px; align-items: flex-start; min-width: 0;
            background: var(--ez-surface); border: 1px solid var(--ez-line);
            border-radius: 12px; padding: 12px 13px; }
@@ -218,27 +215,27 @@
 .ezp .pc .n { font-size: 12.5px; font-weight: 700; }
 .ezp .pc .s { font-size: 11.5px; color: var(--ez-muted); margin-top: 1px; }
 .ezp .pc .pl { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px; }
-.ezp .pc .mg { margin-left: auto; background: none; border: 0; cursor: pointer;
-               font-size: 11.5px; font-weight: 600; color: var(--ez-muted); flex: 0 0 auto; }
-.ezp .pc .mg:hover { color: var(--ez-brand); }
 
 .ezp .nom { background: var(--ez-surface); border: 1px solid var(--ez-line);
             border-radius: 12px; padding: 12px 13px; }
 .ezp .nom .top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
 .ezp .nom .n { font-size: 12.5px; font-weight: 700; }
-.ezp .nom .s { font-size: 11.5px; color: var(--ez-muted); margin-top: 1px; }
+.ezp .nom .s { font-size: 11.5px; color: var(--ez-muted); margin-top: 2px; }
 .ezp .nom .pc100 { font-size: 12px; font-weight: 700; color: var(--ez-positive); }
 .ezp .nom .pcbad { font-size: 12px; font-weight: 700; color: var(--ez-warning); }
-.ezp .meter { height: 4px; border-radius: 20px; background: var(--ez-sunken);
+.ezp .meter { height: 4px; border-radius: 99px; background: var(--ez-sunken);
               overflow: hidden; margin: 10px 0 9px; }
-.ezp .meter > i { display: block; height: 100%; border-radius: 20px; background: var(--ez-brand); }
+.ezp .meter > i { display: block; height: 100%; border-radius: 99px; background: var(--ez-warning);
+                  transition: width 160ms ease; }
+.ezp .meter > i.ok { background: var(--ez-positive); }
+.ezp .meter > i.over { background: var(--ez-critical); }
 .ezp .nom .foot { display: flex; justify-content: space-between; align-items: center;
                   gap: 10px; font-size: 11.5px; color: var(--ez-muted);
                   border-top: 1px solid var(--ez-line); padding-top: 8px; }
-.ezp .nom .foot button { background: none; border: 0; cursor: pointer;
-                         font-size: 11.5px; font-weight: 600; color: var(--ez-brand); }
+.ezp .nom .foot button { background: none; border: 0; cursor: pointer; font: inherit;
+                         font-size: 12px; font-weight: 600; color: var(--ez-brand); }
 
-/* ── tables, notes, modal ─────────────────────────────────────────────── */
+/* ── tables, notes ────────────────────────────────────────────────────── */
 .ezp .tbl { width: 100%; overflow-x: auto; }
 .ezp table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 420px; }
 .ezp th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
@@ -246,114 +243,244 @@
           background: var(--ez-sunken); border-bottom: 1px solid var(--ez-line); white-space: nowrap; }
 .ezp td { padding: 8px 10px; border-bottom: 1px solid var(--ez-line); }
 .ezp tbody tr:last-child td { border-bottom: 0; }
-.ezp .empty { font-size: 12.5px; color: var(--ez-muted); }
+.ezp .empty { font-size: 12.5px; color: var(--ez-muted); margin: 0; }
 
-.ezp .note { font-size: 12px; border-radius: 10px; padding: 10px 12px; }
+.ezp .note { font-size: 12px; border-radius: 9px; padding: 9px 12px; line-height: 1.45; }
 .ezp .note.bad  { color: var(--ez-critical); background: var(--ez-critical-tint); }
 .ezp .note.good { color: var(--ez-positive); background: var(--ez-positive-tint); }
 .ezp .note.warn { color: var(--ez-warning);  background: var(--ez-warning-tint); }
 
-.ezp .scrim { position: fixed; inset: 0; background: rgba(15,23,42,.45);
-              display: grid; place-items: center; padding: 18px; z-index: 60; }
-.ezp .modal { background: var(--ez-surface); border: 1px solid var(--ez-line);
-              border-radius: 16px; padding: 20px; width: min(470px, 100%);
-              max-height: 90vh; overflow: auto; }
-.ezp .modal h3 { margin: 0 0 4px; font-size: 15px; }
-.ezp .modal label { display: block; font-size: 11px; color: var(--ez-muted); margin: 13px 0 4px; }
-.ezp input, .ezp textarea, .ezp select {
-  width: 100%; padding: 8px 10px; font: inherit; font-size: 13px;
-  color: var(--ez-ink); background: var(--ez-surface);
-  border: 1px solid var(--ez-line); border-radius: 9px;
+.ezp .toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 1100;   /* above the modal tier (1000): a save confirmed from inside a drawer must show */
+  max-width: min(520px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 10px;
+  font-size: 12.5px; font-weight: 600; color: var(--ez-positive);
+  background: var(--ez-surface); border: 1px solid var(--ez-positive-edge); box-shadow: var(--ez-shadow-floating);
 }
-.ezp textarea { min-height: 76px; resize: vertical; }
-.ezp input:focus-visible, .ezp textarea:focus-visible, .ezp select:focus-visible,
-.ezp button:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 1px; }
-.ezp .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-.ezp .btn { background: var(--ez-brand); color: var(--ez-on-accent); border: 1px solid var(--ez-brand);
-            border-radius: 10px; padding: 9px 15px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.ezp .btn:disabled { opacity: .55; cursor: not-allowed; }
-.ezp .btn.ghost { background: none; color: var(--ez-ink-soft); border-color: var(--ez-line); }
-.ezp .btn.wide { width: 100%; }
 
-/* The printable-card button.
- *
- * It was `btn ghost`: transparent fill, muted ink, hairline border — the
- * lowest-emphasis style in the system, sitting directly under a saturated
- * ID card. Next to that it read as disabled, which is why nobody could see it.
- *
- * Every colour here is a token, not a literal: --ez-brand-deep is documented
- * as "pressed, gradient end" and --ez-shadow-brand exists precisely for a
- * brand-coloured lift, so this is the system's own vocabulary rather than a
- * new one. Both are redefined for dark, where the ramp inverts (brand is the
- * darker of the two) and --ez-on-accent flips to dark ink — so the fill stays
- * legible in either theme without a second rule. */
+/* ── buttons + inputs ─────────────────────────────────────────────────── */
+.ezp input, .ezp textarea, .ezp select {
+  width: 100%; padding: 8px 10px; font: inherit; font-size: 13px; box-sizing: border-box;
+  color: var(--ez-ink); background: var(--ez-surface);
+  border: 1px solid var(--ez-line-strong); border-radius: 7px;
+}
+.ezp input[type="checkbox"] { width: auto; }
+.ezp input[disabled], .ezp select[disabled], .ezp textarea[disabled] { background: var(--ez-sunken); color: var(--ez-muted); }
+.ezp input.mono { font-family: ui-monospace, Menlo, monospace; letter-spacing: .04em; }
+.ezp textarea { min-height: 70px; resize: vertical; }
+.ezp input:focus-visible, .ezp textarea:focus-visible, .ezp select:focus-visible,
+.ezp button:focus-visible, .ezp .fld.act:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 1px; }
+.ezp .btn { background: var(--ez-brand); color: var(--ez-on-accent); border: 1px solid var(--ez-brand);
+            border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+            white-space: nowrap; }
+.ezp .btn:hover:not(:disabled) { background: var(--ez-brand-deep); border-color: var(--ez-brand-deep); }
+.ezp .btn:disabled { opacity: .55; cursor: not-allowed; }
+.ezp .btn.ghost { background: var(--ez-surface); color: var(--ez-ink-soft); border-color: var(--ez-line-strong); }
+.ezp .btn.ghost:hover:not(:disabled) { background: var(--ez-sunken); border-color: var(--ez-line-strong); }
+.ezp .btn.sm { padding: 5px 11px; font-size: 12px; }
+.ezp .btn.wide { width: 100%; }
+.ezp .x { background: none; border: 0; cursor: pointer; font-size: 20px; line-height: 1;
+          color: var(--ez-muted); padding: 2px 6px; border-radius: 6px; }
+.ezp .x:hover { color: var(--ez-ink); background: var(--ez-sunken); }
+
+/* The printable-card button (IdCardDownload). Was a brand gradient with a
+ * lift; now the plain primary button, which is already the strongest thing
+ * in the drawer. */
 .ezp .btn.getcard {
   display: flex; align-items: center; justify-content: center; gap: 9px;
-  padding: 12px 16px;
-  font-size: 13.5px; font-weight: 650; letter-spacing: -.005em;
-  border-radius: 12px;
-  background: linear-gradient(180deg, var(--ez-brand), var(--ez-brand-deep));
-  border-color: var(--ez-brand-deep);
-  box-shadow: var(--ez-shadow-brand);
-  transition: transform 120ms ease, box-shadow 160ms ease, filter 120ms ease;
+  padding: 11px 16px; font-size: 13px; border-radius: 10px;
 }
-.ezp .btn.getcard:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: var(--ez-shadow-floating);
-  filter: saturate(1.06);
-}
-.ezp .btn.getcard:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: var(--ez-shadow-flat);
-}
-/* The glyph carries no colour of its own — currentColor keeps it correct in
-   both themes, where the ink on an accent fill flips from white to near-black. */
 .ezp .btn.getcard svg { flex: 0 0 auto; }
-.ezp .btn.getcard:disabled { box-shadow: none; }
+
+/* ── modal (editors) ──────────────────────────────────────────────────── */
+.ezp .scrim { position: fixed; inset: 0; background: rgba(15,23,42,.45);
+              display: grid; place-items: center; padding: 16px; z-index: var(--ez-z-modal); }
+.ezp .modal { background: var(--ez-surface); border: 1px solid var(--ez-line);
+              border-radius: 14px; width: min(480px, 100%); max-height: 92vh;
+              display: flex; flex-direction: column; box-shadow: var(--ez-shadow-overlay); }
+.ezp .modal.wide { width: min(640px, 100%); }
+.ezp .mhd { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+            padding: 16px 18px 12px; border-bottom: 1px solid var(--ez-line); }
+.ezp .mhd h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.ezp .mhd .sub { margin-top: 3px; font-size: 12px; line-height: 1.45; }
+.ezp .mbd { padding: 14px 18px 16px; overflow: auto; }
+.ezp .mft { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px;
+            border-top: 1px solid var(--ez-line); }
+.ezp .mbd label { display: block; font-size: 11.5px; font-weight: 600; color: var(--ez-ink-soft); margin: 12px 0 5px; }
+.ezp .mbd label .opt { font-weight: 500; color: var(--ez-faint); }
+.ezp .mbd label.chk { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-weight: 500; cursor: pointer; }
+.ezp .mbd .fs { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ezp .ferr { font-size: 11.5px; color: var(--ez-critical); margin-top: 5px; }
+.ezp .fhint { font-size: 11.5px; color: var(--ez-warning); margin-top: 5px; }
+.ezp .fhint.muted { color: var(--ez-muted); }
+.ezp .para { font-size: 12.5px; color: var(--ez-ink-soft); line-height: 1.5; margin: 12px 0 0; }
+.ezp .g2f { display: grid; gap: 0 12px; grid-template-columns: repeat(auto-fit, minmax(min(200px,100%), 1fr)); }
+.ezp .g3f { display: grid; gap: 0 12px; grid-template-columns: 1.3fr 1.3fr 1fr; }
+@media (max-width: 560px) { .ezp .g3f { grid-template-columns: 1fr; } }
+
+.ezp .cur { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 8px;
+            background: var(--ez-sunken); font-size: 12.5px; }
+.ezp .cur .ck { color: var(--ez-muted); font-size: 11.5px; flex: 0 0 auto; }
+.ezp .cur .cv { font-weight: 600; overflow-wrap: anywhere; }
+.ezp .cur .cv.mono { font-family: ui-monospace, Menlo, monospace; }
+
+.ezp .seg { display: inline-flex; border: 1px solid var(--ez-line-strong); border-radius: 8px; overflow: hidden; }
+.ezp .seg button { border: 0; background: var(--ez-surface); padding: 7px 18px; font: inherit; font-size: 12.5px;
+                   font-weight: 600; color: var(--ez-ink-soft); cursor: pointer; }
+.ezp .seg button + button { border-left: 1px solid var(--ez-line-strong); }
+.ezp .seg button.on { background: var(--ez-brand-tint); color: var(--ez-brand); }
+
+/* Who a request goes to — the line people asked for. */
+.ezp .goes { margin-top: 14px; padding: 10px 12px; border-radius: 9px;
+             background: var(--ez-warning-tint); border: 1px solid var(--ez-warning-edge); }
+.ezp .goes .gk { font-size: 11px; font-weight: 700; color: var(--ez-warning); text-transform: uppercase; letter-spacing: .05em; }
+.ezp .goes ol { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.ezp .goes li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ez-ink); }
+.ezp .goes .gn { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto;
+                 font-size: 10.5px; background: var(--ez-surface); color: var(--ez-warning); border: 1px solid var(--ez-warning-edge); }
+.ezp .goes .gh { font-size: 11.5px; color: var(--ez-ink-soft); margin-top: 6px; }
+
+.ezp .filef { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ezp .filef .fname { font-size: 12px; color: var(--ez-muted); min-width: 0; overflow-wrap: anywhere; }
+
+/* nominee rows */
+.ezp .picks { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.ezp .picks .pk { font-size: 11.5px; color: var(--ez-muted); margin-right: 2px; }
+.ezp .chipbtn { border: 1px dashed var(--ez-line-strong); background: var(--ez-surface); border-radius: 99px;
+                padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 600; color: var(--ez-brand); cursor: pointer; }
+.ezp .chipbtn span { color: var(--ez-muted); font-weight: 500; }
+.ezp .chipbtn:hover { background: var(--ez-brand-tint); }
+.ezp .nomrows { display: grid; gap: 8px; }
+.ezp .nomrow { display: grid; gap: 0 10px; align-items: end; padding: 2px 0 10px;
+               grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1.1fr) 84px 28px;
+               border-bottom: 1px solid var(--ez-line); }
+.ezp .nomrow .rm { height: 34px; border: 0; background: none; cursor: pointer; font-size: 18px; color: var(--ez-muted); border-radius: 6px; }
+.ezp .nomrow .rm:hover:not(:disabled) { color: var(--ez-critical); background: var(--ez-critical-tint); }
+.ezp .nomrow .rm:disabled { opacity: .3; cursor: default; }
+.ezp .nomrow .nr-note { grid-column: 1 / -1; font-size: 11.5px; color: var(--ez-info); margin-top: 6px; }
+@media (max-width: 600px) {
+  .ezp .nomrow { grid-template-columns: 1fr 1fr; }
+  .ezp .nomrow .nr-name { grid-column: 1 / -1; }
+  .ezp .nomrow .rm { justify-self: end; }
+}
+.ezp .nomfoot { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.ezp .nomfoot .grow { flex: 1 1 auto; }
+.ezp .nomfoot .tot { font-size: 12.5px; font-weight: 700; }
+.ezp .nomfoot .tot.ok { color: var(--ez-positive); }
+.ezp .nomfoot .tot.off { color: var(--ez-warning); }
+
+/* ── drawer ───────────────────────────────────────────────────────────── */
+.ezp .dscrim { position: fixed; inset: 0; z-index: var(--ez-z-modal); background: rgba(15,23,42,.38);
+               display: flex; justify-content: flex-end; }
+.ezp .drawer { width: min(520px, 100%); height: 100%; background: var(--ez-canvas);
+               border-left: 1px solid var(--ez-line); box-shadow: var(--ez-shadow-overlay);
+               display: flex; flex-direction: column; animation: ezp-in 180ms ease-out; }
+@keyframes ezp-in { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ezp .drawer { animation: none; } }
+.ezp .dhd { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+            padding: 16px 18px 12px; background: var(--ez-surface); border-bottom: 1px solid var(--ez-line); }
+.ezp .dhd h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.ezp .dhd .sub { margin-top: 3px; font-size: 12px; line-height: 1.45; }
+.ezp .dbd { padding: 14px 16px 24px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-width: 0; }
+
+/* Edit profile hub */
+/* minmax(0, 1fr), not the implicit auto column: a long nowrap value (an
+   address) would otherwise set the column's min-content width and push every
+   button out past the drawer's edge. */
+.ezp .hubwrap { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.ezp .hubsec { background: var(--ez-surface); border: 1px solid var(--ez-line); border-radius: 12px; padding: 12px 14px; }
+.ezp .hubsec h4 { margin: 0; font-size: 13px; font-weight: 700; }
+.ezp .hubsec > .sub { margin: 2px 0 6px; }
+.ezp .hublist { list-style: none; margin: 4px 0 0; padding: 0; }
+.ezp .hub { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--ez-line); }
+.ezp .hub:first-child { border-top: 0; }
+.ezp .hub .hl { flex: 1 1 auto; min-width: 0; }
+.ezp .hub .hk { font-size: 12.5px; font-weight: 600; }
+.ezp .hub .hv { font-size: 12px; color: var(--ez-ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ezp .hub .hs { font-size: 11px; color: var(--ez-warning); margin-top: 1px; }
+.ezp .hubsec.lockd summary { cursor: pointer; font-size: 13px; font-weight: 700; }
+.ezp .lockgrid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.ezp .lockgrid span { font-size: 11.5px; padding: 2px 8px; border-radius: 99px; background: var(--ez-sunken); color: var(--ez-muted); }
+
+/* documents */
+.ezp .docsum { font-size: 12.5px; color: var(--ez-ink-soft); margin-bottom: 10px; }
+.ezp .doclist { list-style: none; margin: 0; padding: 0; }
+.ezp .docrow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--ez-line); }
+.ezp .docrow:first-child { border-top: 0; }
+.ezp .docrow .dl { flex: 1 1 auto; min-width: 0; }
+.ezp .docrow .dn { font-size: 12.5px; font-weight: 600; }
+.ezp .docrow .dn .opt { font-weight: 500; color: var(--ez-faint); }
+.ezp .docrow .ds { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 3px; }
+.ezp .docrow .dsrc { font-size: 11px; color: var(--ez-muted); }
+.ezp .docrow .drem { font-size: 11.5px; color: var(--ez-critical); }
+.ezp .docrow .da { display: flex; gap: 10px; align-items: center; flex: 0 0 auto; }
+.ezp .dsub { font-size: 11px; font-weight: 700; color: var(--ez-muted); text-transform: uppercase;
+             letter-spacing: .05em; margin: 14px 0 2px; }
+
+/* ── the digital ID card (in its drawer) ──────────────────────────────── */
+.ezp .idwrap { display: grid; gap: 12px; max-width: 360px; margin: 0 auto; }
+.ezp .dig { border-radius: 14px; padding: 14px; color: var(--ez-on-accent); background: var(--ez-brand); }
+.ezp .dig .brandline { font-size: 9.5px; font-weight: 700; letter-spacing: .08em;
+                       text-transform: uppercase; opacity: .85; display: flex;
+                       align-items: center; gap: 7px; margin-bottom: 12px; }
+.ezp .dig .mark { width: 17px; height: 17px; border-radius: 5px; display: grid;
+                  place-items: center; background: rgba(255,255,255,.22);
+                  font-size: 8px; font-weight: 700; }
+.ezp .dig .top { display: flex; gap: 10px; align-items: center; }
+.ezp .dig .ph { width: 44px; height: 44px; border-radius: 10px; flex: 0 0 auto; overflow: hidden;
+                display: grid; place-items: center; font-size: 14px; font-weight: 700;
+                background: rgba(255,255,255,.2); }
+.ezp .dig .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ezp .dig .nm { font-size: 13px; font-weight: 700; }
+.ezp .dig .ds { font-size: 10.5px; opacity: .85; }
+.ezp .dig .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
+.ezp .dig .lb { font-size: 9px; opacity: .75; text-transform: uppercase; letter-spacing: .05em; }
+.ezp .dig .vv { font-size: 11.5px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+.ezp .dig .note { font-size: 10px; opacity: .8; margin-top: 12px; }
 
 @media (max-width: 560px) {
-  .ezp .idcard { margin: -46px 6px 0; padding: 14px; }
-  .ezp .face { width: 60px; height: 60px; margin-top: -28px; font-size: 19px; }
+  .ezp .idcard { padding: 0 14px 14px; }
+  .ezp .face { width: 64px; height: 64px; margin-top: -26px; font-size: 20px; }
+  .ezp .who { padding-top: 6px; }
   .ezp .who h2 { font-size: 18px; }
-  .ezp .fld .st { position: static; display: block; margin-bottom: 4px; }
-  .ezp .fld .k { padding-right: 0; }
+  .ezp .idacts { min-width: 0; width: 100%; grid-template-columns: 1fr 1fr; }
+  .ezp .idacts .lnk { grid-column: 1 / -1; }
+  .ezp .kv { grid-template-columns: 1fr; gap: 2px; }
+  .ezp .kv dd { margin-bottom: 6px; }
 }
 
 /* ── change requests (105) ────────────────────────────────────────────────
- *
- * Same card as everything else on the page — these are not a separate module
- * with its own look, they are the other half of the field cards above. The
- * only new idea is the before/after pair, which reads left to right so the
- * approver sees what is being replaced without hunting for it.
+ * Same card language as the rest of the page. The before/after pair reads
+ * left to right so the approver sees what is being replaced. Addresses and
+ * bank accounts arrive as several lines, so both sides keep line breaks.
  */
-.ezp .reqs { margin-top: 14px; }
+.ezp .reqs { display: grid; gap: 14px; }
+.ezp .reqsec .hd { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.ezp .reqsec h4 { margin: 0; font-size: 13px; font-weight: 700; }
 .ezp .reqlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .ezp .reqlist li {
   border: 1px solid var(--ez-line); border-radius: 12px;
-  padding: 12px 13px; background: var(--ez-sunken); min-width: 0;
+  padding: 12px 13px; background: var(--ez-surface); min-width: 0;
 }
 .ezp .reqtop { display: flex; align-items: flex-start; justify-content: space-between;
                gap: 10px; margin-bottom: 8px; }
 .ezp .reqtop b { font-size: 13px; }
 .ezp .reqtop .code { font-size: 11px; color: var(--ez-muted); margin-left: 6px; }
-.ezp .fldname { font-size: 12px; color: var(--ez-ink-soft); font-weight: 600; margin-top: 2px; }
+.ezp .fldname { font-size: 12.5px; color: var(--ez-ink); font-weight: 650; margin-top: 2px; }
 
-/* Before and after. The old value is quiet, the new one carries the weight —
- * an approver is deciding about the right-hand side. */
-.ezp .reqval { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+.ezp .reqval { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap;
                font-size: 12.5px; margin-bottom: 6px; }
+.ezp .reqval .was, .ezp .reqval .now { white-space: pre-line; overflow-wrap: anywhere; }
 .ezp .reqval .was { color: var(--ez-muted); text-decoration: line-through;
-                    text-decoration-color: var(--ez-line); overflow-wrap: anywhere; }
+                    text-decoration-color: var(--ez-line-strong); }
 .ezp .reqval .was i { text-decoration: none; opacity: .8; }
 .ezp .reqval .arw { color: var(--ez-muted); }
-.ezp .reqval .now { font-weight: 600; overflow-wrap: anywhere; }
+.ezp .reqval .now { font-weight: 600; }
 
-.ezp .reqs .why { margin: 6px 0 0; font-size: 12px; color: var(--ez-ink-soft);
-                  overflow-wrap: anywhere; }
-.ezp .reqs .meta { font-size: 11.5px; color: var(--ez-muted); margin-top: 6px; }
+.ezp .reqs .with { font-size: 12px; color: var(--ez-warning); margin-top: 4px; }
+.ezp .reqs .why { margin: 6px 0 0; font-size: 12px; color: var(--ez-ink-soft); overflow-wrap: anywhere; }
+.ezp .reqs .meta { font-size: 11.5px; color: var(--ez-muted); margin-top: 4px; }
 
-/* Age earns emphasis only once it is genuinely stale, so the colour still
- * means something on a queue that is mostly fresh. */
 .ezp .reqage { font-size: 11.5px; color: var(--ez-muted); white-space: nowrap; }
 .ezp .reqage.old { color: var(--ez-warning); font-weight: 600; }
 
@@ -369,13 +496,8 @@
 
 .ezp .rejbox { margin-top: 10px; display: grid; gap: 6px; }
 .ezp .rejbox label { font-size: 11.5px; color: var(--ez-ink-soft); }
-.ezp .rejbox textarea {
-  width: 100%; resize: vertical; font: inherit; font-size: 12.5px;
-  color: var(--ez-ink); background: var(--ez-surface);
-  border: 1px solid var(--ez-line); border-radius: 10px; padding: 8px 10px;
-}
 
-.ezp .reqmsg { font-size: 12px; border-radius: 10px; padding: 9px 12px; margin-bottom: 10px; }
+.ezp .reqmsg { font-size: 12px; border-radius: 10px; padding: 9px 12px; }
 .ezp .reqmsg.ok { color: var(--ez-positive); background: var(--ez-positive-tint); }
 .ezp .reqmsg.no { color: var(--ez-critical); background: var(--ez-critical-tint); }
 
@@ -433,7 +555,7 @@
 
 /* ── the uploader modal ──────────────────────────────────────────────────── */
 .ezp .ez-scrim {
-  position: fixed; inset: 0; z-index: 90;
+  position: fixed; inset: 0; z-index: 1010;   /* the cropper sits over a drawer or modal */
   display: grid; place-items: center;
   padding: 20px;
   background: rgba(15, 23, 42, .52);
