@@ -65,7 +65,22 @@ interface Invite {
   interviewer_name: string | null; role?: 'MAIN' | 'PANELIST' | null
   scheduled_at: string | null; meet_link: string | null; meet_passcode?: string | null
   scheduled_by_name: string | null; status: string; feedback: Feedback | null; submitted_at: string | null
-  decision?: Decision | null; decision_remark?: string | null
+  decision?: Decision | null; decision_remark?: string | null; acknowledged_at?: string | null
+}
+
+const when = (ts: string) => new Date(ts).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })
+
+/** Where one invited interviewer is: not yet acknowledged, or acknowledged (and when). */
+function InviteStatus({ invite: i }: { invite: Invite }) {
+  const acked = i.status === 'acknowledged' || i.status === 'submitted'
+  const label = !acked ? 'Awaiting acknowledgement'
+    : `Acknowledged${i.acknowledged_at ? ` · ${when(i.acknowledged_at)}` : ''}${isMain(i) ? ' · awaiting feedback' : ''}`
+  return (
+    <span title={acked ? 'Accepted the invite in ESS' : 'Has not accepted the invite in ESS yet'}
+      style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:99, whiteSpace:'nowrap', background: acked ? C.okbg : C.warnbg, color: acked ? C.ok : C.warn }}>
+      {acked ? '✓ ' : '⏳ '}{label}
+    </span>
+  )
 }
 interface Emp { id: string; emp_code: string | null; full_name: string; designation: string | null; company_id: string | null }
 
@@ -337,16 +352,17 @@ export default function CandidateInterviewModal({
           const rows = invitesByRound[r] || []
           const main = mainOf(r)
           const decision = decisionOf(main)
-          // Only interviewers who have ACKNOWLEDGED (or submitted feedback) are shown on the
-          // candidate's card — an invite that nobody has picked up yet is not displayed.
-          const shown = rows.filter(i => i.status === 'acknowledged' || i.status === 'submitted')
+          // Every invited interviewer is shown — name, employee code and where they are
+          // (awaiting acknowledgement / acknowledged / feedback in) — main interviewer first.
+          const shown = [...rows].sort((a, b) => Number(isMain(b)) - Number(isMain(a)))
+          const acked = rows.filter(i => i.status === 'acknowledged' || i.status === 'submitted')
           const complete = roundComplete(r)
           const scheduled = rows.length > 0
           const direct = DIRECT_ROUNDS.has(r.toLowerCase())
           // Pill carries its own tint (a var() colour + '18' is invalid CSS).
           const [statLabel, statColor, statBg] = decision ? [DECISION_LABEL[decision], DECISION_COLOR[decision], DECISION_BG[decision]] : complete ? ['Feedback in', C.ok, C.okbg] : scheduled ? ['Scheduled', C.info, C.infobg] : ['Not scheduled', C.faint, C.sunken]
           const isOpen = openRound === r
-          const panelists = shown.filter(i => !isMain(i))
+          const panelists = acked.filter(i => !isMain(i))
           const remark = main?.decision_remark || main?.feedback?.decision_remark || null
           return (
             <div key={r} style={{ border:`1px solid ${isOpen ? C.purple : C.line}`, borderRadius:12, overflow:'hidden' }}>
@@ -357,8 +373,8 @@ export default function CandidateInterviewModal({
                   <div style={{ fontSize:11, color:C.muted }}>
                     {!scheduled ? (direct ? 'Feedback not recorded yet' : 'No interview scheduled yet')
                       : complete ? `Main: ${main?.interviewer_name || '-'}${panelists.length ? ` · ${panelists.length} panelist${panelists.length > 1 ? 's' : ''}` : ''}`
-                      : shown.length === 0 ? 'Awaiting acknowledgement from the invited interviewers'
-                      : `${shown.length} acknowledged · awaiting the main interviewer's feedback`}
+                      : acked.length === 0 ? `Awaiting acknowledgement from ${rows.length} invited interviewer${rows.length > 1 ? 's' : ''}`
+                      : `${acked.length} of ${rows.length} acknowledged · awaiting the main interviewer's feedback`}
                   </div>
                 </div>
                 <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statBg, color: statColor }}>{statLabel}</span>
@@ -376,17 +392,15 @@ export default function CandidateInterviewModal({
                 <div style={{ padding:'6px 13px 10px', fontSize:12, color:C.ink, borderTop:`1px solid ${C.line}` }}><b style={{ color: DECISION_COLOR[decision] }}>{DECISION_LABEL[decision]} remark:</b> {remark}</div>
               ) : null}
 
-              {/* interviewer rows — acknowledged / submitted only */}
-              {scheduled && shown.length === 0 && (
-                <div style={{ padding:'8px 13px 12px', fontSize:11.5, color:C.faint, borderTop:`1px solid ${C.line}` }}>No interviewer has acknowledged yet. They’ll appear here once they accept the invite in ESS.</div>
-              )}
+              {/* interviewer rows — everyone invited, with their acknowledgement status */}
               {shown.length > 0 && (
                 <div style={{ padding:'4px 13px 10px' }}>
                   {shown.map(i => (
                     <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderTop:`1px solid ${C.line}` }}>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:12.5, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                          {i.interviewer_name || i.interviewer_emp_code || 'Interviewer'}
+                          {i.interviewer_name || 'Interviewer'}
+                          {i.interviewer_emp_code && <span style={{ fontSize:11, fontWeight:600, color:C.muted, marginLeft:6 }}>{i.interviewer_emp_code}</span>}
                           <span style={{ fontSize:9.5, fontWeight:800, padding:'2px 7px', borderRadius:99, marginLeft:6, background: isMain(i) ? C.infobg : C.sunken, color: isMain(i) ? C.info : C.muted }}>{isMain(i) ? 'MAIN' : 'PANELIST'}</span>
                         </div>
                         <div style={{ fontSize:10.5, color:C.faint }}>{i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : i.submitted_at ? `recorded ${new Date(i.submitted_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}` : 'time TBC'}{i.meet_link ? ' · link sent' : ''}{i.meet_passcode ? ` · passcode ${i.meet_passcode}` : ''}</div>
@@ -397,9 +411,7 @@ export default function CandidateInterviewModal({
                           <button onClick={() => setViewing(i)} style={{ ...btn.small, background:C.info, color:TK.onAccent, border:'none' }}>View feedback</button>
                         </>
                       ) : (
-                        <span style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:99, background:C.sunken, color: isMain(i) ? C.info : C.muted }}>
-                          {isMain(i) ? 'Acknowledged · awaiting feedback' : 'Acknowledged'}
-                        </span>
+                        <InviteStatus invite={i} />
                       )}
                     </div>
                   ))}
