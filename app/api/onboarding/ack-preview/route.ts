@@ -20,10 +20,10 @@ export async function GET(req: NextRequest) {
 
     // companies.work_location doesn't exist in this schema — fall back to the branch name.
     const { data: company } = await supa.from('companies').select('company_name, company_code').eq('id', cand.company_id).single()
-    let work_location = '—'
+    let work_location = '-'
     if (cand.location_id) {
       const { data: loc } = await supa.from('locations').select('location_name, city').eq('id', cand.location_id).maybeSingle()
-      work_location = [loc?.location_name, loc?.city].filter(Boolean).join(', ') || '—'
+      work_location = [loc?.location_name, loc?.city].filter(Boolean).join(', ') || '-'
     }
 
     const { data: policies } = await supa.from('onboarding_policy_acks')
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const fd: any = cand.form_data || {}
     return NextResponse.json({
       employee_name: cand.full_name,
-      father_name:   fd.step_3?.father_name || fd.personal?.father_name || '—',
+      father_name:   fd.step_3?.father_name || fd.personal?.father_name || '-',
       employee_code: cand.employee_code || 'Pending',
       designation:   cand.designation,
       department:    cand.department,

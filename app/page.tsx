@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 import { ThemeToggle, getThemeChoice } from '@/lib/ui/ThemeToggle'
 import { supabase } from '@/lib/supabase'
+import { LOGIN_AT_KEY } from '@/lib/session-policy'
 
 // ── Why this page carries its own palette ───────────────────────────────────
 // The left panel is a deep gradient in EVERY theme, so its text can never come
@@ -52,6 +53,11 @@ export default function LoginPage() {
     return () => { mq.removeEventListener('change', resolve); obs.disconnect() }
   }, [])
 
+  // Sent here by components/SessionGuard.tsx after a session ran out.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('expired') === '1') setError('Your session expired. Please sign in again.')
+  }, [])
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -59,6 +65,7 @@ export default function LoginPage() {
     setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError(error.message); setLoading(false); return }
+    try { localStorage.setItem(LOGIN_AT_KEY, String(Date.now())) } catch { /* private mode */ }
 
     // Everyone lands in ESS, not the admin dashboard — including HR and payroll, who
     // now see the modules they hold inside their own portal. The dashboard is still

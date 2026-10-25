@@ -29,7 +29,7 @@ import {
 
 const WEEKDAY = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 
-const MONTH = ['—','January','February','March','April','May','June','July','August','September','October','November','December']
+const MONTH = ['-','January','February','March','April','May','June','July','August','September','October','November','December']
 const ord = (n?: number | null) => !n ? null : `${n}${['th','st','nd','rd'][(n % 100 - n % 10 !== 10) ? Math.min(n % 10, 4) : 0] ?? 'th'}`
 
 export interface SectionData {
@@ -177,7 +177,7 @@ export function CompanySections({ d, isMobile, saveReg, canEdit = false, onChang
         <div key={tab} className="cp-in" style={block()}>
           <StatStrip isMobile={isMobile} items={[
             { label: 'Years trading', accent: ACC,
-              value: co.date_of_inc ? Math.max(0, new Date().getFullYear() - new Date(co.date_of_inc).getFullYear()) : '—',
+              value: co.date_of_inc ? Math.max(0, new Date().getFullYear() - new Date(co.date_of_inc).getFullYear()) : '-',
               hint: co.date_of_inc ? `since ${new Date(co.date_of_inc).getFullYear()}` : 'no date on record' },
             { label: 'Sites', accent: ACCENT.location, value: d.branches.length,
               hint: `${new Set(d.branches.map(b => b.city).filter(Boolean)).size} cities` },
@@ -296,7 +296,7 @@ export function CompanySections({ d, isMobile, saveReg, canEdit = false, onChang
           <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>
             Contacts live in <code style={{ fontFamily: 'ui-monospace, monospace', fontSize: F.micro }}>company_contacts</code>,
             a table added by migration <strong>077</strong>. Until that runs there is nowhere to store them, so this
-            section has nothing to show — the other nine sections are unaffected.
+            section has nothing to show. The other nine sections are unaffected.
           </div>
           <div style={{ ...grid(cols), marginTop: 14, opacity: .55 }}>
             {['Primary contact', 'Company email', 'Phone', 'Alternate phone', 'HR email', 'Payroll contact', 'Admin contact']
@@ -313,7 +313,7 @@ export function CompanySections({ d, isMobile, saveReg, canEdit = false, onChang
               hint: d.banks.length ? `${d.banks.filter(b => b.is_primary).length} primary` : 'none on record' },
             { label: 'Currency', accent: ACCENT.org, value: co.currency ?? 'INR' },
             { label: 'FY starts', accent: ACCENT.payroll,
-              value: co.fy_start_month ? MONTH[co.fy_start_month].slice(0,3) : '—' },
+              value: co.fy_start_month ? MONTH[co.fy_start_month].slice(0,3) : '-' },
           ]} />
           <Head>Financial</Head>
           <div style={grid(cols)}>
@@ -354,7 +354,7 @@ export function CompanySections({ d, isMobile, saveReg, canEdit = false, onChang
               { label: 'Cost centres', accent: ACCENT.finance,
                 value: new Set(d.departments.map(x => x.cost_center).filter(Boolean)).size },
               { label: 'Avg dept size', accent: ACCENT.hr,
-                value: d.departments.length ? Math.round(headTotal / d.departments.length) : '—',
+                value: d.departments.length ? Math.round(headTotal / d.departments.length) : '-',
                 hint: 'people per department' },
             ]} />
             <Head>Organisation</Head>
@@ -386,8 +386,8 @@ export function CompanySections({ d, isMobile, saveReg, canEdit = false, onChang
       {tab === 'payroll' && (
         <div key={tab} className="cp-in" style={block()}>
           <StatStrip isMobile={isMobile} items={[
-            { label: 'Frequency', accent: ACC, value: co.payroll_frequency?.replace('_','-').toLowerCase() ?? '—' },
-            { label: 'Paid on', accent: ACCENT.finance, value: ord(co.salary_disbursement_day) ?? '—' },
+            { label: 'Frequency', accent: ACC, value: co.payroll_frequency?.replace('_','-').toLowerCase() ?? '-' },
+            { label: 'Paid on', accent: ACCENT.finance, value: ord(co.salary_disbursement_day) ?? '-' },
             { label: 'Currency', accent: ACCENT.org, value: co.currency ?? 'INR' },
             { label: 'Registrations', accent: ACCENT.statutory,
               value: `${[co.epf_code, co.esic_code, co.wc_policy_number].filter(Boolean).length}/3`,
@@ -461,7 +461,7 @@ export function CompanySections({ d, isMobile, saveReg, canEdit = false, onChang
                       {isFactory ? 'Factory Licence' : 'Shops & Establishment'}
                     </span>
                     <span style={{ fontSize: F.micro, color: C.ink, flex: 1, fontFamily: 'ui-monospace, monospace' }}>
-                      {r?.reg_number || '—'}
+                      {r?.reg_number || '-'}
                     </span>
                     <span style={{ fontSize: F.micro, color: tone, fontWeight: W.semi }}>
                       {st.state === 'MISSING' ? 'Not recorded' : st.state.toLowerCase()}
@@ -494,7 +494,7 @@ export function CompanySections({ d, isMobile, saveReg, canEdit = false, onChang
                   { label: 'Men', accent: '#2563EB', value: g?.male ?? 0,
                     hint: g && g.total ? `${Math.round((g.male / g.total) * 100)}% of headcount` : undefined },
                   { label: 'Attrition', accent: attr != null && attr > 15 ? '#DC2626' : ACCENT.org,
-                    value: attr != null ? `${attr.toFixed(1)}%` : '—',
+                    value: attr != null ? `${attr.toFixed(1)}%` : '-',
                     hint: `${d.leavers12m} left in 12 months` },
                 ]} />
               )

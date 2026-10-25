@@ -85,7 +85,7 @@ function staleReason(ctx: RunCtx): string | null {
   const lastCalc = ctx.audit.find(a => a.action === 'PAYROLL_CALCULATED')?.created_at
   const lastSync = ctx.audit.find(a => String(a.action).startsWith('SYNC_'))?.created_at
   if (lastCalc && lastSync && new Date(lastSync) > new Date(lastCalc)) {
-    return 'The Month Master was synced after the last payroll calculation — re-run payroll so the payslips match the engine.'
+    return 'The Month Master was synced after the last payroll calculation. Re-run payroll so the payslips match the engine.'
   }
 
   let olderCfg = 0, noCfg = 0
@@ -95,8 +95,8 @@ function staleReason(ctx: RunCtx): string | null {
     else if (ctx.configVersion && new Date(s.tds_config_version) < new Date(ctx.configVersion)) olderCfg++
   }
   const n = (k: number) => `${k} employee${k === 1 ? '' : 's'}`
-  if (noCfg) return `${n(noCfg)} have no TDS engine result stored (the TDS sync did not complete on the last run) — re-run payroll and check that the TDS step succeeds.`
-  if (olderCfg) return `${n(olderCfg)} were calculated under an older tax configuration — re-run payroll first.`
+  if (noCfg) return `${n(noCfg)} have no TDS engine result stored (the TDS sync did not complete on the last run). Re-run payroll and check that the TDS step succeeds.`
+  if (olderCfg) return `${n(olderCfg)} were calculated under an older tax configuration. Re-run payroll first.`
   return null
 }
 
@@ -232,7 +232,7 @@ export async function POST(req: NextRequest) {
   const targets = ctx.snapshots.filter(s => want.has(String(s.employee_code)))
   const aux = await loadAux(ctx, targets.map(s => s.employee_id))
   for (const s of targets) {
-    if (!ctx.lines.has(s.employee_id)) { refused.push({ code: s.employee_code, reasons: ['No payroll line — not paid in this run.'] }); continue }
+    if (!ctx.lines.has(s.employee_id)) { refused.push({ code: s.employee_code, reasons: ['No payroll line: not paid in this run.'] }); continue }
     const p = assembleFor(ctx, aux, s)
     const blocking = p.issues.filter(i => i.blocking)
     if (blocking.length) { refused.push({ code: s.employee_code, reasons: blocking.map(i => i.text) }); continue }

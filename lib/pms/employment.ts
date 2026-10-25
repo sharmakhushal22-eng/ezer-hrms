@@ -67,7 +67,7 @@ export const FLAG_LABEL: Record<Flag, string> = {
 export const FLAG_MEANING: Record<Flag, string> = {
   EXITED: 'Their record is read-only once finalised. Rate them before their last day.',
   NOTICE_PERIOD: 'Leaving soon. Their appraisal has to be finished before the last working day.',
-  NEW_JOINER: 'Joined too recently to be rated fairly this period — marked NR.',
+  NEW_JOINER: 'Joined too recently to be rated fairly this period, marked NR.',
   ACTIVE: 'Nothing unusual.',
 }
 

@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     return errorResponse(e, 'Failed to load periods',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ period: data });
   } catch (e) {
     return errorResponse(e, 'Failed to create period',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -205,7 +205,7 @@ export async function PATCH(req: NextRequest) {
     if (period.status === 'LOCKED' && action !== 'LOCK') {
       return NextResponse.json(
         {
-          error: `${period.period_label} is locked — it has been paid through payroll and cannot be changed.`,
+          error: `${period.period_label} is locked. It has been paid through payroll and cannot be changed.`,
           code: 'PERIOD_LOCKED',
         },
         { status: 409 }
@@ -295,7 +295,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ period: updated });
   } catch (e) {
     return errorResponse(e, 'Failed to update period',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 

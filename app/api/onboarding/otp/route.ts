@@ -2,7 +2,8 @@
 // POST: send OTP | PUT: verify OTP
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import nodemailer from 'nodemailer'
+import { renderEmail, onboardingScope } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
 
 export const runtime = 'nodejs' // nodemailer needs Node.js runtime, not Edge
 
@@ -36,29 +37,11 @@ export async function POST(req: NextRequest) {
     }).eq('id', cand.id)
 
     // Deliver the OTP by email (Gmail SMTP). An SMS provider can be added later.
-    const user = process.env.GMAIL_USER
-    const pass = process.env.GMAIL_APP_PASSWORD
+    // Words: Configuration → "Onboarding — verification code", for the joiner's company / branch.
     let emailed = false
-    if (cand.email && user && pass) {
-      try {
-        const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-        const from = `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`
-        const body =
-`Dear ${cand.full_name},
-
-Your onboarding verification code (OTP) is: ${otp}
-
-This code is valid for 10 minutes. Enter it on your onboarding page to continue.
-
-If you didn't request this, you can safely ignore this email.
-
-Warm regards,
-HR Team`
-        await transporter.sendMail({ from, to: cand.email, subject: `Your onboarding OTP: ${otp}`, text: body, html: body.replace(/\n/g, '<br>') })
-        emailed = true
-      } catch (e) {
-        console.error('OTP email failed:', e)
-      }
+    if (cand.email) {
+      const mail = await renderEmail('onboarding.otp', await onboardingScope(cand.id), { candidate_name: cand.full_name, otp })
+      emailed = (await sendMail({ to: cand.email, subject: mail.subject, text: mail.text, html: mail.html })).sent
     }
     // Dev convenience: log the OTP to the server terminal.
     if (process.env.NODE_ENV === 'development') {
@@ -79,7 +62,7 @@ HR Team`
       emailed,
       message: emailed
         ? `OTP emailed to ${cand.email}`
-        : (cand.email ? 'OTP generated (email failed — check server logs)' : 'OTP generated (candidate has no email on file)'),
+        : (cand.email ? 'OTP generated (email failed, check server logs)' : 'OTP generated (candidate has no email on file)'),
       // In dev: return OTP for testing
       ...(process.env.NODE_ENV === 'development' ? { dev_otp: otp } : {}),
     })

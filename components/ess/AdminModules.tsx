@@ -60,6 +60,7 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   // Setup
   ess:                  lazy(() => import('@/app/dashboard/ess/page')),
   admin:                lazy(() => import('@/app/dashboard/admin/page')),
+  configuration:        lazy(() => import('@/app/dashboard/configuration/page')),
   'flexi-policy':       lazy(() => import('@/app/dashboard/flexi-policy/page')),
   'company-profile':    lazy(() => import('@/app/dashboard/company-profile/page')),
   'db-export':          lazy(() => import('@/app/dashboard/db-export/page')),
@@ -73,7 +74,7 @@ export function AdminModuleHost({ moduleKey }: { moduleKey: string }) {
   if (!Cmp) {
     return (
       <div style={{ padding: 30, fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.muted, fontSize: 13 }}>
-        This module is not available inside ESS yet — open it from the Admin dashboard.
+        This module is not available inside ESS yet. Open it from the Admin dashboard.
       </div>
     )
   }

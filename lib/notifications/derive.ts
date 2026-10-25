@@ -48,32 +48,12 @@ const ref = (base: string, id: string) => `${base}${base.includes('?') ? '&' : '
 export async function deriveFor(me: string): Promise<Derived[]> {
   const out: Derived[] = []
 
-  // ── Leave approvals pending ON me (RM audience) ─────────────────────────
-  out.push(...await safely('leave-inbox', async () => {
-    const { data } = await sb.from('leave_applications')
-      .select('id, employee_id, from_date, to_date, status, current_approver_id')
-      .eq('current_approver_id', me).eq('status', 'PENDING')
-    if (!data?.length) return []
-    const names = await namesFor(data.map(r => r.employee_id))
-    return data.map(r => ({
-      code: 'MGR_NEW_LEAVE',
-      title: `Leave request from ${names.get(r.employee_id) ?? 'a team member'}`,
-      body: `${r.from_date}${r.to_date && r.to_date !== r.from_date ? ` to ${r.to_date}` : ''} — waiting for your approval.`,
-      link: ref('/ess?tab=approvals', r.id),
-    }))
-  }))
-
-  // ── My own leave, once somebody has decided (SELF audience) ─────────────
-  out.push(...await safely('leave-mine', async () => {
-    const { data } = await sb.from('leave_applications')
-      .select('id, status, from_date').eq('employee_id', me).in('status', ['APPROVED', 'REJECTED'])
-    return (data ?? []).map(r => ({
-      code: r.status === 'APPROVED' ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED',
-      title: r.status === 'APPROVED' ? 'Your leave was approved' : 'Your leave was rejected',
-      body: `For ${r.from_date}.`,
-      link: ref('/ess?tab=leave', r.id),
-    }))
-  }))
+  // ── Leave — deliberately NOT derived ───────────────────────────────────
+  // Leave and attendance requests are announced as they happen, by name and
+  // with the remark (lib/leave/workflow.ts), and anything waiting more than two
+  // days gets a daily digest (lib/leave/daily.ts). Deriving them here as well
+  // gave every decision a second, cruder bell entry ("Your leave was approved
+  // | For 2026-10-13") beside the real one.
 
   // ── Travel claims waiting on me, and my own once decided ────────────────
   out.push(...await safely('travel', async () => {
@@ -87,7 +67,7 @@ export async function deriveFor(me: string): Promise<Derived[]> {
         // Finance sees the same row under its own code once it reaches them.
         code: r.status === 'PENDING_FINANCE' ? 'FIN_TRAVEL_STAGE' : 'MGR_NEW_TRAVEL',
         title: `Travel claim from ${names.get(r.employee_id) ?? 'a team member'}`,
-        body: `Status ${r.status} — waiting on you.`,
+        body: `Status ${r.status}. Waiting on you.`,
         link: ref('/ess?tab=approvals', r.id),
       })))
     }

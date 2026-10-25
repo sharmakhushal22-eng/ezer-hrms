@@ -1,7 +1,7 @@
 -- 159_te_stay_decision.sql — the Travel Desk picks one of the three hotels.
 -- SAFE TO RUN TWICE.
 -- ----------------------------------------------------------------------------
--- 158 let an employee name three hotels they would accept. This is the other
+-- 164 let an employee name three hotels they would accept. This is the other
 -- end of that: somebody on the desk reads the three, picks one or turns them
 -- all down with a reason, and the employee is told which.
 --
@@ -14,7 +14,7 @@
 -- 'NONE' MEANS NOBODY HAS DECIDED, which is why te_trip_save is untouched by
 -- this file. Planning a trip does not have to know the decision exists; the
 -- column defaults to NONE and the desk moves it from there. That also keeps
--- te_trip_save from being reproduced a third time (146 -> 156 -> 158), each
+-- te_trip_save from being reproduced a third time (146 -> 162 -> 164), each
 -- reproduction being another chance to drop something.
 --
 -- THE NAME IS COPIED, NOT JUST THE INDEX. stay_chosen_name records which hotel

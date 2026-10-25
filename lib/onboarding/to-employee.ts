@@ -8,6 +8,9 @@
 //
 // Pass a Supabase client (the API route passes its service-role/anon client).
 
+import { trackOf, frroDueDate } from './hiring-track'
+import { PROBATION_NOTICE_DAYS, PROBATION_MONTHS } from '@/lib/exit/notice'
+
 export interface SyncResult {
   ok?: boolean
   skipped?: boolean
@@ -18,7 +21,7 @@ export interface SyncResult {
 
 export async function onboardingToEmployee(supa: any, onboardingId: string, employeeCode: string): Promise<SyncResult> {
   const { data: oc } = await supa.from('onboarding_candidates')
-    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type')
+    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, l2_manager_id, hod_id, it_email, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type, notice_period_days, hiring_track, work_country, payroll_currency, employing_entity, pf_international_worker, ssa_exempt, pan_pending, paid_outside_india, frro_done, visa_checked, contract_signed')
     .eq('id', onboardingId).maybeSingle()
   if (!oc) return { error: 'onboarding record not found' }
 
@@ -30,6 +33,8 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   }
 
   const f = oc.form_data || {}
+  const track = trackOf(oc.hiring_track)
+  const { data: coRow } = await supa.from('companies').select('notice_period_days').eq('id', oc.company_id).maybeSingle()
   // Inter-company transfer: carry the group DOJ forward from the 1st company (seniority/gratuity).
   const isTransfer = f.is_transfer === true
   const groupDoj = (isTransfer && f.group_doj_carry) ? f.group_doj_carry : (oc.date_of_joining || null)
@@ -66,6 +71,8 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   }
 
   const bankAcc = st.bank_account ? String(st.bank_account) : ''
+  const edu: any[] = Array.isArray(em.education) ? em.education : []
+  const highest = [...edu].reverse().find(e => e && (e.institute || e.year))
 
   const row: any = {
     // identity / org
@@ -90,6 +97,19 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     spouse_name:     orNull(insr.spouse_name),
     spouse_dob:      orNull(insr.spouse_dob),
     aadhar_last4:    orNull(st.aadhaar_last4 || f.aadhaar_last4),
+    birth_place:     orNull(p.birth_place),
+    // other government IDs (optional on the form)
+    passport_no:     orNull(st.passport_no || st.fe_passport_number),
+    voter_id:        orNull(st.voter_id),
+    driving_licence: orNull(st.driving_licence),
+    // existing PF member: the UAN carried forward, and the ESIC IP number if they had one
+    pf_existing_member: st.has_uan === true ? true : null,
+    previous_uan:    st.has_uan ? orNull(st.uan_number) : null,
+    esic_number:     orNull(st.esic_details?.prev_ip),
+    esic_dispensary: orNull(st.esic_details?.dispensary),
+    // highest qualification: the last education row the candidate filled in
+    highest_qualification: highest?.qualification || null,
+    institution_name: highest?.institute || null,
     // employment (doj→company_doj + group_doj)
     designation:     oc.designation || null,
     employment_type: oc.employment_type || 'Employee',
@@ -124,7 +144,7 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     // statutory / bank (bank_ifsc→ifsc_code; bank_account→last4 only, no plaintext)
     pan_number:      st.pan_number || null,
     uan_number:      st.uan_number || null,
-    esic_applicable: oc.esic_applicable ?? null,
+    esic_applicable: track === 'OVERSEAS' ? false : (oc.esic_applicable ?? null),
     bank_name:       st.bank_name || null,
     bank_account_last4: bankAcc ? bankAcc.slice(-4) : null,
     ifsc_code:       st.bank_ifsc || null,
@@ -132,15 +152,55 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     // ── HR activation wizard fields ──
     grade:                  oc.grade || null,
     l1_manager_id:          oc.l1_manager_id || null,   // employees.l1_manager_id (there is no reporting_manager_id column)
-    tds_regime:             oc.tds_regime || 'NEW',
+    l2_manager_id:          oc.l2_manager_id || null,
+    hod_id:                 oc.hod_id || null,           // Assign managers on the review sheet
+    office_email:           oc.it_email || null,         // the official email IT confirmed on their checklist
+    // ── Hiring track (lib/onboarding/hiring-track.ts): the immigration facts the candidate typed and what the heads confirmed ──
+    hiring_track:           track,
+    work_country:           oc.work_country || (track === 'OVERSEAS' ? null : 'India'),
+    payroll_currency:       oc.payroll_currency || (track === 'OVERSEAS' ? null : 'INR'),
+    employing_entity:       oc.employing_entity || null,
+    paid_outside_india:     track === 'OVERSEAS' ? oc.paid_outside_india !== false : false,
+    passport_country:       orNull(st.fe_passport_country),
+    passport_expiry:        orNull(st.fe_passport_expiry),
+    visa_type:              orNull(st.fe_visa_type),
+    visa_number:            orNull(st.fe_visa_number),
+    visa_expiry:            orNull(st.fe_visa_expiry),
+    work_permit_number:     orNull(st.fe_work_permit_number),
+    work_permit_expiry:     orNull(st.fe_work_permit_expiry),
+    india_entry_date:       orNull(st.fe_india_entry_date),
+    frro_number:            orNull(st.fe_frro_number),
+    frro_date:              orNull(st.fe_frro_date) || (oc.frro_done === true ? (oc.date_of_joining || null) : null),
+    frro_due_date:          track === 'FOREIGN_IN_INDIA' ? frroDueDate(st.fe_india_entry_date || oc.date_of_joining) : null,
+    tax_residency_status:   orNull(st.fe_tax_residency),
+    tax_residency_country:  orNull(st.fe_tax_country),
+    foreign_tin:            orNull(st.fe_foreign_tin),
+    local_tax_id:           orNull(st.local_tax_id),
+    pan_pending:            oc.pan_pending === true || st.pan_applied === true,
+    international_employee: track === 'FOREIGN_IN_INDIA' ? (oc.pf_international_worker === true || oc.ssa_exempt !== true) : (track === 'OVERSEAS' ? null : false),
+    certificate_of_coverage: orNull(st.fe_ssa_coc),
+    ssa_country:            orNull(st.fe_ssa_country),
+    ssa_coc_expiry:         orNull(st.fe_ssa_coc_expiry),
+    bank_iban:              orNull(st.bank_iban),
+    bank_swift:             orNull(st.bank_swift),
+    bank_country:           orNull(st.bank_country),
+    // An overseas employee is outside Indian statutory altogether; a foreign national in India is
+    // in PF (as an International Worker) unless the SSA certificate exempts them.
+    tds_regime:             track === 'OVERSEAS' ? null : (oc.tds_regime || 'NEW'),
     pf_wage_type:           oc.pf_wage_type || 'BASIC_DA',
-    pf_applicable:          oc.pf_applicable ?? true,
-    professional_tax_state: oc.pt_state || null,
-    lwf_applicable:         oc.lwf_applicable ?? false,
+    pf_applicable:          track === 'OVERSEAS' ? false : track === 'FOREIGN_IN_INDIA' ? oc.ssa_exempt !== true : (oc.pf_applicable ?? true),
+    professional_tax_state: track === 'OVERSEAS' ? null : (oc.pt_state || null),
+    lwf_applicable:         track === 'OVERSEAS' ? false : (oc.lwf_applicable ?? false),
     cost_centre:            oc.cost_centre || null,
     induction_date:         oc.induction_date || null,
     team_name:              oc.team_name || null,
     work_location_type:     oc.work_location_type || 'Office',
+    // The notice period from the offer / the link form (else the company default, else 30) —
+    // what the resignation chain turns into the policy last working day.
+    // A new joiner starts on probation: 30 days' notice (60 once confirmed — lib/exit/notice.ts,
+    // kept current by the daily offboarding run).
+    notice_period_days:     PROBATION_NOTICE_DAYS,
+    probation_months:       PROBATION_MONTHS,
     // previous employer: employees has no previous_company column — it lives in employee_experience (below)
   }
 

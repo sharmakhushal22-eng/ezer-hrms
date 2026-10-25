@@ -117,6 +117,10 @@ export const IconAdmin = (p: IconProps) => (
 export const IconPolicies = (p: IconProps) => (
   <Svg {...p}><path d="M5 3h9a1.5 1.5 0 0 1 1.5 1.5V17H6.5A1.5 1.5 0 0 1 5 15.5Z" /><path d="M5 3a1.5 1.5 0 0 0-1.5 1.5v11A1.5 1.5 0 0 1 5 14" /><path d="M8 7h5M8 10h5" /></Svg>
 );
+// A page with a pencil — the letters and emails edited in Configuration.
+export const IconTemplates = (p: IconProps) => (
+  <Svg {...p}><path d="M11 17H5.5A1.5 1.5 0 0 1 4 15.5v-11A1.5 1.5 0 0 1 5.5 3h7A1.5 1.5 0 0 1 14 4.5V8" /><path d="M7 7h4M7 10h3" /><path d="m14.6 10.4 1.9 1.9-4.2 4.2-2.4.5.5-2.4Z" /></Svg>
+);
 export const IconSliders = (p: IconProps) => (
   <Svg {...p}><path d="M3 6h5M12 6h5M3 14h9M16 14h1" /><circle cx="10" cy="6" r="2" /><circle cx="14" cy="14" r="2" /></Svg>
 );
@@ -183,6 +187,34 @@ export const IconBell = (p: IconProps) => (
  *  the set. */
 export const IconMail = (p: IconProps) => (
   <Svg {...p}><rect x="3" y="5" width="14" height="10" rx="2" /><path d="M3.6 6.4 10 11l6.4-4.6" /></Svg>
+);
+/** One person — "my profile". IconEmployees is two people and means a group. */
+export const IconUser = (p: IconProps) => (
+  <Svg {...p}><circle cx="10" cy="6.8" r="3.3" /><path d="M3.8 17c.5-3.3 3.1-5.4 6.2-5.4s5.7 2.1 6.2 5.4" /></Svg>
+);
+export const IconHeart = (p: IconProps) => (
+  <Svg {...p}><path d="M10 16.5S3 12.6 3 7.7A3.7 3.7 0 0 1 10 6a3.7 3.7 0 0 1 7 1.7c0 4.9-7 8.8-7 8.8Z" /></Svg>
+);
+/** A rosette — reward & recognition. */
+export const IconAward = (p: IconProps) => (
+  <Svg {...p}><circle cx="10" cy="7.5" r="4.5" /><path d="M7.2 11 6 17.5l4-2 4 2-1.2-6.5" /></Svg>
+);
+/** A game controller — Fun Zone. */
+export const IconGame = (p: IconProps) => (
+  <Svg {...p}><path d="M6 6.5h8a4 4 0 0 1 3.9 4.9l-.6 2.6a2 2 0 0 1-3.4.9L12.4 13H7.6l-1.5 1.9a2 2 0 0 1-3.4-.9l-.6-2.6A4 4 0 0 1 6 6.5Z" /><path d="M6.5 9v3M5 10.5h3" /><path d="M13 10h.01M14.5 11.5h.01" /></Svg>
+);
+export const IconLock = (p: IconProps) => (
+  <Svg {...p}><rect x="4" y="9" width="12" height="8.5" rx="2" /><path d="M6.8 9V6.5a3.2 3.2 0 0 1 6.4 0V9" /></Svg>
+);
+export const IconEye = (p: IconProps) => (
+  <Svg {...p}><path d="M1.8 10S4.8 4.5 10 4.5 18.2 10 18.2 10 15.2 15.5 10 15.5 1.8 10 1.8 10Z" /><circle cx="10" cy="10" r="2.6" /></Svg>
+);
+export const IconEyeOff = (p: IconProps) => (
+  <Svg {...p}><path d="M8.1 4.7A8 8 0 0 1 10 4.5c5.2 0 8.2 5.5 8.2 5.5a14 14 0 0 1-2.3 2.9M5.4 6A13.7 13.7 0 0 0 1.8 10s3 5.5 8.2 5.5a7.8 7.8 0 0 0 3.6-.9" /><path d="M8.2 8.3a2.6 2.6 0 0 0 3.5 3.5" /><path d="M3 3l14 14" /></Svg>
+);
+/** Three dots in a row — "More". */
+export const IconMore = (p: IconProps) => (
+  <Svg {...p}><circle cx="4.5" cy="10" r="1.1" /><circle cx="10" cy="10" r="1.1" /><circle cx="15.5" cy="10" r="1.1" /></Svg>
 );
 export const IconLogout = (p: IconProps) => (
   <Svg {...p}><path d="M7.5 3.5H5A1.5 1.5 0 0 0 3.5 5v10A1.5 1.5 0 0 0 5 16.5h2.5" /><path d="M12 6.5 15.5 10 12 13.5M15.5 10h-8" /></Svg>

@@ -87,7 +87,7 @@ export function buildTabs(p: ProfilePayload): ProfileTab[] {
       const restricted = o.min ? !can(role, o.min) : false;
       return {
         key, label, state, column,
-        value: restricted ? null : (value == null || value === '' ? '—' : String(value)),
+        value: restricted ? null : (value == null || value === '' ? '-' : String(value)),
         mono: o.mono, masked: o.masked, wide: o.wide,
         hint: o.hint ?? null, routeTo: o.routeTo ?? null, restricted,
       };

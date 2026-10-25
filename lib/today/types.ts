@@ -10,11 +10,14 @@ export interface TodayPayload {
   employee: {
     id: string; code: string; name: string; first_name: string; initials: string;
     designation: string | null; department: string | null; location: string | null;
-    date_of_joining: string; reports_to: string | null;
+    date_of_joining: string | null; reports_to: string | null;
   };
   shift: { start: string; end: string };                 // 'HH:MM'
   prefs: Prefs;
-  today: { punch_in: string | null; punch_out: string | null; work_mode: string | null } | null;
+  /** punch_in = first IN today, punch_out = last OUT (null while open). `open`
+   *  and `last_in` come from /api/ess/today's punch read (lib/attendance/punch.ts):
+   *  open = at work right now. */
+  today: { punch_in: string | null; punch_out: string | null; work_mode: string | null; open?: boolean; last_in?: string | null } | null;
   week: Array<{ date: string; punch_in: string | null; punch_out: string | null; is_late: boolean; is_off: boolean; hours: number | null }>;
   week_hours: number;
   streak: number;

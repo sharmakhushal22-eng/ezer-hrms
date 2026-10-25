@@ -1,49 +1,59 @@
-// app/api/ess/punch/route.ts — POST { kind:'in'|'out', lat?, lng? } → ess_punch()
+// app/api/ess/punch/route.ts — Punch In / Punch Out for the signed-in employee.
 //
-// TWO EDITS FROM THE DROP.
+// GET  → today's punch state (open or not, first in, last out, the punches)
+// POST → { kind: 'in' | 'out', lat?, lng? }
 //
-// 1. The handler passes its request to getSessionEmployee(); identity here is a
-//    bearer token on the request, invisible to a no-argument helper.
-//
-// 2. THE RPC SIGNATURE IS NOT THE ONE THE PACKAGE ASSUMED. It was written
-//    against ess_punch(p_employee_id, p_kind 'in'|'out', p_lat, p_lng,
-//    p_source) from a migration called 087_mobile_app.sql, which was never in
-//    this repo — 087 here is 087_social_and_inbox.sql, something else entirely.
-//    The function does exist, with different parameter names and uppercase
-//    punch types:
-//
-//        ess_punch(p_employee_id, p_punch_type 'IN'|'OUT',
-//                  p_latitude, p_longitude, p_branch_id)
-//
-//    Called the package's way it fails with PGRST202 and the dial does nothing.
-//    Geofence and miss-punch rules already live inside the function; this only
-//    translates the arguments and hands the RPC's own message back as a toast.
+// Identity comes from the ESS session only. The rule — punches alternate, IN
+// refused while one is open, OUT refused when none is — is lib/attendance/punch.ts,
+// shared with the older /api/attendance/punch so no screen can get round it.
+// A refusal still returns `state`, so the screen corrects itself to the truth
+// instead of showing the wrong button again.
 import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
-import { getSessionEmployee } from '@/lib/session';
-import { TODAY_RPC } from '@/lib/today/schema';
+import { essCaller } from '@/lib/ess/session';
+import { rmsServiceClient as sb } from '@/lib/rms/server';
+import { punch, punchState } from '@/lib/attendance/punch';
+
+export const dynamic = 'force-dynamic';
+const NO_STORE = { 'Cache-Control': 'no-store' };
+
+/**
+ * The signed-in employee — never somebody being viewed. essCaller() honours an
+ * employee_id on the request for an admin "viewing as" somebody, which is right
+ * for reading a portal and wrong for punching: it would put a punch on THEIR day.
+ */
+async function me(req: NextRequest, write: boolean) {
+  const c = await essCaller(req);
+  if (c.error) return { error: c.error };
+  // Two situations, one refusal — see the note in app/api/ess/mrf/route.ts. actorEmployeeId
+  // null means no employee record behind the session (a lapsed ESS token included), not
+  // impersonation, and the person needs to sign in again rather than open their own portal.
+  if (write && c.caller.viewAs)
+    return { error: NextResponse.json({ error: c.caller.actorEmployeeId === null
+      ? 'Your ESS session is not active, so there is nobody to punch for. Sign in again with your own ESS account.'
+      : "A punch lands on your own day, so it cannot be made while you are viewing somebody else's portal. Open your own portal to punch." }, { status: 403 }) };
+  const { data: emp } = await sb.from('employees').select('id, date_of_leaving').eq('id', c.caller.employeeId).maybeSingle();
+  if (!emp) return { error: NextResponse.json({ error: 'unauthenticated' }, { status: 401 }) };
+  if (emp.date_of_leaving && new Date(emp.date_of_leaving) < new Date())
+    return { error: NextResponse.json({ error: 'access ended' }, { status: 403 }) };
+  return { id: emp.id as string };
+}
+
+export async function GET(req: NextRequest) {
+  const m = await me(req, false);
+  if ('error' in m) return m.error;
+  return NextResponse.json({ state: await punchState(m.id) }, { headers: NO_STORE });
+}
 
 export async function POST(req: NextRequest) {
-  const me = await getSessionEmployee(req);
-  if (!me) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
-  if (me.date_of_leaving && new Date(me.date_of_leaving) < new Date())
-    return NextResponse.json({ error: 'access ended' }, { status: 403 });
+  const m = await me(req, true);
+  if ('error' in m) return m.error;
 
-  const { kind, lat, lng } = await req.json();
+  const { kind, lat, lng } = await req.json().catch(() => ({}));
   if (kind !== 'in' && kind !== 'out')
     return NextResponse.json({ error: 'kind must be in|out' }, { status: 400 });
 
-  const sb = createServerClient();
-  const { data, error } = await sb.rpc(TODAY_RPC.punch, {
-    p_employee_id: me.id,
-    p_punch_type: kind === 'in' ? 'IN' : 'OUT',   // the function takes uppercase
-    p_latitude: lat ?? null,
-    p_longitude: lng ?? null,
-    p_branch_id: null,
-  });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
+  const out = await punch(m.id, kind, { lat, lng });
+  if (!out.ok) return NextResponse.json({ error: out.error, state: out.state }, { status: out.status, headers: NO_STORE });
   // The dial shows the time it actually landed, not when the click happened.
-  const at = (data as { punch_time?: string } | null)?.punch_time ?? new Date().toISOString();
-  return NextResponse.json({ ok: true, at, result: data });
+  return NextResponse.json({ ok: true, at: out.at, result: out.result, state: out.state }, { headers: NO_STORE });
 }

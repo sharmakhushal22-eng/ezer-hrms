@@ -86,7 +86,7 @@ function OrgCard({ node, isSelf, isReport, onToggle, collapsed, hasChildren, reg
             ? `0 0 0 3px ${P.purpleBg}, 0 10px 24px rgba(124,58,237,0.22)`
             : '0 2px 8px rgba(30,27,75,0.07)',
       }}
-      title={`${n.fullName || '—'} · ${n.designation || '—'}${n.department ? ' · ' + n.department : ''}`}
+      title={`${n.fullName || '-'} · ${n.designation || '-'}${n.department ? ' · ' + n.department : ''}`}
     >
       <div style={{ height: 5, borderRadius: '12px 12px 0 0', background: `linear-gradient(90deg, ${style.bar}, ${style.bar}AA)` }} />
       <div style={{ padding: '12px 11px 10px', textAlign: 'center', position: 'relative', borderRadius: bottomTag ? 0 : '0 0 12px 12px', overflow: 'hidden' }}>
@@ -106,12 +106,12 @@ function OrgCard({ node, isSelf, isReport, onToggle, collapsed, hasChildren, reg
         <div className="orgcard-clamp" style={{
           fontSize: 12, fontWeight: 700, color: P.text, lineHeight: 1.25,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-        }}>{n.fullName || '—'}</div>
-        <div style={{ fontSize: 10, color: P.muted, fontFamily: 'monospace', marginTop: 2 }}>{n.empCode || '—'}</div>
+        }}>{n.fullName || '-'}</div>
+        <div style={{ fontSize: 10, color: P.muted, fontFamily: 'monospace', marginTop: 2 }}>{n.empCode || '-'}</div>
         <div className="orgcard-clamp" style={{
           fontSize: 10.5, color: P.muted, marginTop: 3, lineHeight: 1.3,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-        }}>{n.designation || '—'}</div>
+        }}>{n.designation || '-'}</div>
         <div style={{
           display: 'inline-block', marginTop: 7, fontSize: 8.5, fontWeight: 700, color: style.bar,
           background: style.bar + '18', borderRadius: 99, padding: '2px 8px',
@@ -213,7 +213,7 @@ function DiagPanel({ orphans, span, loading }: {
           <div style={{ fontSize: 11, fontWeight: 700, color: P.red, textTransform: 'uppercase', letterSpacing: '.05em' }}>No one to approve for them</div>
         </div>
         {loading ? <div style={{ fontSize: 12, color: P.muted }}>Loading…</div> : orphans.length === 0 ? (
-          <div style={{ fontSize: 12, color: P.muted }}>Nobody — every active employee has a manager or is a named department head.</div>
+          <div style={{ fontSize: 12, color: P.muted }}>Nobody: every active employee has a manager or is a named department head.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {orphans.map(o => (
@@ -235,7 +235,7 @@ function DiagPanel({ orphans, span, loading }: {
           <div key={s.emp_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid ${P.border}`, fontSize: 11.5 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ color: P.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.full_name}</div>
-              <div style={{ color: P.muted, fontSize: 10.5 }}>{s.department || '—'}</div>
+              <div style={{ color: P.muted, fontSize: 10.5 }}>{s.department || '-'}</div>
             </div>
             <span style={{ fontSize: 11, fontWeight: 700, color: s.direct_reports >= 15 ? P.red : P.purpleDark, flexShrink: 0, marginLeft: 8 }}>{s.direct_reports}</span>
           </div>
@@ -450,7 +450,7 @@ export default function OrgChartPage() {
         }}>{loading ? 'Loading…' : `${total} people`}</span>
       </div>
       <div style={{ fontSize: 12, color: P.muted, marginBottom: 14, marginLeft: 50 }}>
-        Read straight from the reporting lines set on the Employee Master and the org-chart import — moving somebody’s manager there moves them here.
+        Read straight from the reporting lines set on the Employee Master and the org-chart import. Moving somebody’s manager there moves them here.
       </div>
 
       <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 12, padding: '10px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(124,58,237,0.05)' }}>

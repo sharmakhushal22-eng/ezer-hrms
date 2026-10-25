@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   if (!account || !account.password_hash || !account.password_salt) return NextResponse.json(INVALID, { status: 401 })
-  if (account.status !== 'ACTIVE') return NextResponse.json({ error: 'Account inactive — contact HR.' }, { status: 403 })
+  if (account.status !== 'ACTIVE') return NextResponse.json({ error: 'Account inactive. Contact HR.' }, { status: 403 })
   if (!verifyPassword(password, account.password_hash, account.password_salt)) return NextResponse.json(INVALID, { status: 401 })
 
   await sb.from('ess_accounts')

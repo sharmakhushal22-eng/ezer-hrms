@@ -134,7 +134,7 @@ test('describe reads as a sentence in every combination', () => {
   assert.equal(describe({ badgeRef: 'B001', tagRefs: [] }), 'Best Performer')
   assert.equal(describe({ badgeRef: null, tagRefs: ['T001'] }), 'High Performer')
   assert.equal(describe({ badgeRef: 'B001', tagRefs: ['T001'] }),
-               'Best Performer — High Performer')
+               'Best Performer · High Performer')
   assert.equal(describe(EMPTY_SELECTION), '')
 })
 

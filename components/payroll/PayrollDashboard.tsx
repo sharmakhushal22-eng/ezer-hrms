@@ -40,7 +40,7 @@ function fyMonthOptions(fy: string) {
   })
 }
 function fmtDate(d: string | null) {
-  if (!d) return '—'
+  if (!d) return '-'
   try { return new Date(d + (d.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) } catch { return d }
 }
 function timeAgo(iso: string) {
@@ -98,7 +98,7 @@ function GenderDonut({ male, female, other }: { male: number; female: number; ot
       <div>
         {[['Male', male, C.purple], ['Female', female, C.pink], ['Other', other, TK.faint]].filter(r => (r[1] as number) > 0).map(([l, v, c]) => (
           <div key={l as string} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5, fontSize: 12, color: C.navy }}>
-            <span style={{ width: 9, height: 9, borderRadius: 2, background: c as string }} />{l as string} — <b>{v as number}</b>
+            <span style={{ width: 9, height: 9, borderRadius: 2, background: c as string }} />{l as string}: <b>{v as number}</b>
           </div>
         ))}
       </div>
@@ -192,7 +192,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
     // "Sales & Marketing" means the function across the group.
     const byName: Record<string, number> = {}
     Object.entries(deptCostMap).forEach(([id, cost]) => {
-      const name = id === 'unassigned' ? 'Unassigned' : (deptName[id] || '—')
+      const name = id === 'unassigned' ? 'Unassigned' : (deptName[id] || '-')
       byName[name] = (byName[name] || 0) + cost
     })
     const deptCostArr = Object.entries(byName)
@@ -224,7 +224,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
       const { data: locs } = await lq
       const cm: Record<string, string> = {}; companies.forEach(c => { cm[c.id] = c.company_name })
       const bc: Record<string, number> = {}; (locs || []).forEach((l: any) => { bc[l.company_id] = (bc[l.company_id] || 0) + 1 })
-      setBranches(Object.entries(bc).map(([id, count]) => ({ company: cm[id] || '—', count })).sort((a, b) => b.count - a.count))
+      setBranches(Object.entries(bc).map(([id, count]) => ({ company: cm[id] || '-', count })).sort((a, b) => b.count - a.count))
     } catch { setBranches([]) }
 
     // ── Recent activity: new joiners + salary revisions ──
@@ -236,7 +236,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
       ;(joiners || []).forEach((j: any) => acts.push({ text: `${j.full_name} joined`, when: timeAgo(j.created_at), iso: j.created_at }))
       const { data: revs } = await supabase.from('salary_structures')
         .select('employee_id, created_at, employees(full_name)').order('created_at', { ascending: false }).limit(6)
-      ;(revs || []).forEach((r: any) => acts.push({ text: `Salary updated — ${r.employees?.full_name || 'employee'}`, when: timeAgo(r.created_at), iso: r.created_at }))
+      ;(revs || []).forEach((r: any) => acts.push({ text: `Salary updated: ${r.employees?.full_name || 'employee'}`, when: timeAgo(r.created_at), iso: r.created_at }))
       acts.sort((a, b) => (b.iso || '').localeCompare(a.iso || ''))
       setActivity(acts.slice(0, 7))
     } catch { setActivity([]) }

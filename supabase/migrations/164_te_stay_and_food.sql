@@ -31,7 +31,7 @@
 -- planned before today has null in both. That means "never asked", which the
 -- screens need to tell apart from a deliberate no.
 --
--- te_trip_save IS REPRODUCED FROM 156, NOT 146. 156 is the live definition and
+-- te_trip_save IS REPRODUCED FROM 162, NOT 146. 162 is the live definition and
 -- carries the journey wording; taking 146's would quietly undo it.
 --
 -- A LOCAL TRIP CAN NOW HAVE A HOTEL. Three things used to say otherwise: the

@@ -176,15 +176,15 @@ export interface FlowStep {
 
 /** §1's twelve boxes. Steps 9-12 only run when the rating is low. */
 export const FLOW: FlowStep[] = [
-  { n: 1,  actor: 'HR Admin', what: 'Build the policy — frequency, KRA rules, chain, eligibility', gate: null },
+  { n: 1,  actor: 'HR Admin', what: 'Build the policy: frequency, KRA rules, chain, eligibility', gate: null },
   { n: 2,  actor: 'System',   what: 'Periods generate automatically with all four windows', gate: null },
   { n: 3,  actor: 'Employee', what: 'Write 4 to 10 KRAs totalling exactly 100 weightage', gate: 'Submit stays disabled until the total is 100' },
   { n: 4,  actor: 'Employee + RM', what: 'One-to-one: discuss, settle weightage, both acknowledge', gate: 'Without both acknowledgements the weightage cannot lock' },
-  { n: 5,  actor: 'Employee', what: 'Self rating on each KRA — achievement, rating, comment', gate: 'Submitting locks self and unlocks the RM' },
+  { n: 5,  actor: 'Employee', what: 'Self rating on each KRA: achievement, rating, comment', gate: 'Submitting locks self and unlocks the RM' },
   { n: 6,  actor: 'RM L1 → RM L2', what: 'Rate and comment; RM L2 confirms', gate: 'Blocked until the self rating is in' },
   { n: 7,  actor: 'Whoever the policy appoints', what: 'Final review one-to-one, then finalise with feedback and any recognition', gate: 'Blocked until the final review one-to-one is logged' },
   { n: 8,  actor: 'Employee', what: 'Sees the result and feedback, and acknowledges', gate: 'Nothing is visible before publish' },
-  { n: 9,  actor: 'RM',       what: 'Raises a PIP request — dates, areas, targets, measures, support', gate: 'Only when the rating is low' },
+  { n: 9,  actor: 'RM',       what: 'Raises a PIP request: dates, areas, targets, measures, support', gate: 'Only when the rating is low' },
   { n: 10, actor: 'HR Manager', what: 'Reviews: adjust, drop an area, reject, or send back', gate: null },
   { n: 11, actor: 'HR',       what: 'Initiates; the employee is notified and acknowledges', gate: 'An RM cannot do this step' },
   { n: 12, actor: 'RM + HR',  what: 'Fortnightly or monthly reviews, then the outcome', gate: null },

@@ -379,7 +379,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     setSaving(false)
     setMsg(error
       ? ((error as { code?: string }).code === MISSING_TABLE
-          ? 'The performance module is not live yet — migration 066 has not been applied.'
+          ? 'The performance module is not live yet: migration 066 has not been applied.'
           : error.message)
       : 'Sent to your reporting manager.')
     if (!error) { setDraftKras(null); loadPeriodData() }
@@ -475,7 +475,7 @@ const ACTION_NOTE: Record<StageKey, string> = {
   kra: `${DEFAULT_RULES.minKra} to ${DEFAULT_RULES.maxKra}, totalling ${DEFAULT_RULES.totalWeightage}`,
   oneToOne: 'Both of you have to acknowledge it',
   lock: 'They lock the weightages once acknowledged',
-  self: 'Rate every KRA, then submit — it locks',
+  self: 'Rate every KRA, then submit (it locks)',
   review: 'Nothing owed from you right now',
   finalise: 'Nothing owed from you right now',
   result: 'Acknowledge once you have read it',
@@ -603,7 +603,7 @@ function NoPeriod() {
       <h3>No period is open</h3>
       <div className="k" style={{ lineHeight: 1.7, maxWidth: 620 }}>
         Nothing is running right now. A period opens when HR publishes the cycle
-        configuration, and everybody eligible is enrolled at that moment — there is
+        configuration, and everybody eligible is enrolled at that moment. There is
         nothing to do here until then.
       </div>
     </div>
@@ -621,7 +621,7 @@ function ModulePending() {
           until <code>supabase/migrations/066_pms_module.sql</code> is applied. That
           file creates 15 tables, 9 functions, 10 views and 2 triggers.
           <br /><br />
-          It is handed to Nayan rather than run from here — this project does not
+          It is handed to Nayan rather than run from here. This project does not
           apply schema changes itself. Nothing on this page is broken; it is waiting.
         </div>
       </div>

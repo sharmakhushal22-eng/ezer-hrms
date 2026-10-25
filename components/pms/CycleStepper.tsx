@@ -37,7 +37,7 @@ export interface CycleStepperProps {
 const TONE: Record<StageState, { dot: string; ink: string; ring: string; label: string }> = {
   done:     { dot: 'var(--pms-done)',    ink: 'var(--pms-done-ink)',  ring: 'transparent',        label: 'completed' },
   active:   { dot: 'var(--pms-active)',  ink: '#FFFFFF',              ring: 'var(--pms-active-ring)', label: 'in progress now' },
-  blocked:  { dot: 'var(--pms-blocked)', ink: '#FFFFFF',              ring: 'var(--pms-blocked-ring)', label: 'waiting — cannot start' },
+  blocked:  { dot: 'var(--pms-blocked)', ink: '#FFFFFF',              ring: 'var(--pms-blocked-ring)', label: 'waiting, cannot start' },
   upcoming: { dot: 'var(--pms-todo)',    ink: 'var(--pms-todo-ink)',  ring: 'transparent',        label: 'not started' },
 }
 
@@ -76,7 +76,7 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
                        every copy-paste of the page, so anyone quoting the
                        stepper got "in progress now" and "not started"
                        interleaved through it. */
-                    aria-label={`Step ${s.n} of ${STAGES.length}: ${s.label} — ${t.label}`}
+                    aria-label={`Step ${s.n} of ${STAGES.length}: ${s.label} (${t.label})`}
                     // A stage is not a control; it is a thing you can inspect.
                     // Button only so the blurb is reachable from the keyboard.
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'help' }}>

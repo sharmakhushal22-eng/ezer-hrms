@@ -11,7 +11,7 @@ import { authHeaders } from '@/lib/auth-headers'
 import {
   C as TK, F as TF, W, R, E, S as SP, Z, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
-import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help, Timeline, Callout } from '@/components/recruitment/rx'
+import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help, Timeline, Callout, CandCard, ApprovalTrail, EmptyState, metaLine, fullDate, ApprovalTracker, trackerStepsOf } from '@/components/recruitment/rx'
 // The offer's ceiling is the MRF budget normalised to a year. budget_max is
 // quoted in the engagement's own period; offered_ctc is always annual. See
 // lib/recruitment/compensation.ts for why that lives outside this page.
@@ -19,6 +19,11 @@ import { overCeiling, annualCeiling, compOf } from '@/lib/recruitment/compensati
 // Which letter an engagement gets — employment, internship, NATS / NAPS apprenticeship,
 // contract — and the words that go with it (stipend / fees instead of CTC, and so on).
 import { letterKindOf, specOf, isFeesKind, type LetterSpec } from '@/lib/recruitment/engagement'
+// The offer email's words come from Configuration (one template per engagement), filled here
+// so the mail refreshes on every offer-file edit. See lib/config/offer-mail.ts.
+import { offerMailVars } from '@/lib/config/offer-mail'
+import { occupiesSlot } from '@/lib/recruitment/pipeline-gates'
+import { renderText } from '@/lib/config/render'
 
 // ── STYLES ───────────────────────────────────────────────────────
 // Bound to the design system. This file owns the name S, so the tokens are
@@ -89,10 +94,10 @@ function CcPicker({ value, onChange }: { value: CcEmp[]; onChange: (v: CcEmp[]) 
       <div style={{ position:'relative' }}>
         <input className="rx-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Search by name or employee code to CC…" />
         {hits.length > 0 && (
-          <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:8, marginTop:3, boxShadow:E.floating, maxHeight:220, overflowY:'auto' }}>
+          <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:Z.navMenu, background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:8, marginTop:3, boxShadow:E.floating, maxHeight:220, overflowY:'auto' }}>
             {hits.map(e => (
               <button key={e.id} type="button" onClick={() => { onChange([...value, e]); setQ('') }} style={{ display:'flex', width:'100%', textAlign:'left', gap:8, alignItems:'center', padding:'8px 11px', border:'none', borderBottom:`1px solid ${TK.line}`, background:TK.surface, cursor:'pointer', fontFamily:'inherit' }}>
-                <span style={{ flex:1, fontSize:12.5, color:TK.ink }}>{e.full_name} <span style={{ color:TK.faint }}>· {e.emp_code || '—'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
+                <span style={{ flex:1, fontSize:12.5, color:TK.ink }}>{e.full_name} <span style={{ color:TK.faint }}>· {e.emp_code || '-'}{e.designation ? ` · ${e.designation}` : ''}</span></span>
               </button>
             ))}
           </div>
@@ -148,7 +153,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   useEffect(() => {
     const cid = candidate?.company_id || mrf?.company_id
     if (!cid) { setHrHeads([]); return }
-    fetch(`/api/recruitment/offer-approval?company_ids=${cid}`).then(r => r.json()).then(j => setHrHeads(j.heads?.[cid] || [])).catch(() => setHrHeads([]))
+    authHeaders().then(h => fetch(`/api/recruitment/offer-approval?company_ids=${cid}`, { headers: h })).then(r => r.json()).then(j => setHrHeads(j.heads?.[cid] || [])).catch(() => setHrHeads([]))
   }, [candidate?.company_id, mrf?.company_id])
 
   // Everything the recruiter already captured is prefilled: the negotiation's previous-employer
@@ -205,7 +210,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     const doj = joining.proposed_doj
     const ref = `OAR-${(mrf?.mrf_number || '').replace(/^MRF-/, '') || Date.now().toString().slice(-6)}-${(candidate?.full_name || 'C').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 3)}`
     const parts = [
-      `OFFER APPROVAL REQUEST — CONFIDENTIAL`,
+      `OFFER APPROVAL REQUEST (CONFIDENTIAL)`,
       `Reference ${ref} · ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
       '',
       block('CANDIDATE', [
@@ -233,13 +238,13 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
       block('JOINING', [
         line('Proposed DOJ', doj ? `${new Date(doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} (${daysDiff(doj)} days from today)` : null),
         line('Notice period', joining.notice_period_days ? `${joining.notice_period_days} days` : null),
-        line('Notice buyout', joining.notice_buyout ? (Number(joining.notice_buyout_amount) > 0 ? `Yes — ${money(joining.notice_buyout_amount)}` : 'Yes') : null),
+        line('Notice buyout', joining.notice_buyout ? (Number(joining.notice_buyout_amount) > 0 ? `Yes · ${money(joining.notice_buyout_amount)}` : 'Yes') : null),
       ]),
       block('REMARKS', [ line('Hiring manager', hiringRemark), line('Recruiter', recruiterComments) ]),
       cc.length ? block('CC ON THE APPROVAL MAIL', [ `  ${cc.map(e => `${e.full_name}${e.emp_code ? ` (${e.emp_code})` : ''}`).join(', ')}` ]) : null,
       '',
       'Attachments: MRF · interview summary · CTC break-up acknowledgement (password-protected).',
-      'Confidential — for internal approval only.',
+      'Confidential: for internal approval only.',
     ]
     setTemplate(parts.filter(x => x !== null).join('\n\n').replace(/\n{3,}/g, '\n\n'))
     setShowTemplate(true)
@@ -316,7 +321,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     let notified = 0, notifyWarning = '', emailedTo = ''
     if (!error && created?.id) {
       try {
-        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'submitted', request_id: created.id }) })
+        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ action:'submitted', request_id: created.id }) })
         const j = await r.json().catch(() => ({}))
         notified = Number(j.notified || 0); notifyWarning = j.warning || j.emailSkipped || (!r.ok ? (j.error || 'notification failed') : '')
         if (Number(j.emailed) > 0) emailedTo = `${j.emailed} recipient(s)`
@@ -335,7 +340,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     setSaving(false)
     if (error) { alert('Error: ' + error.message); return }
     alert(notified > 0
-      ? `Offer approval request submitted — the HR Head has been notified to review and approve (${notified} notified${emailedTo ? `, mail sent to ${emailedTo}` : ''}${notifyWarning ? `; ${notifyWarning}` : ''}).`
+      ? `Offer approval request submitted. The HR Head has been notified to review and approve (${notified} notified${emailedTo ? `, mail sent to ${emailedTo}` : ''}${notifyWarning ? `; ${notifyWarning}` : ''}).`
       : `Offer approval request submitted. ${notifyWarning || 'The HR Head could not be notified.'}`)
     if (onSubmitted) onSubmitted()
   }
@@ -379,13 +384,13 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
         </div>
 
         {/* 1 · offered package — read only, straight from the calculator */}
-        <OaCard n={1} title="Offered package" sub="from the negotiation calculator — change it there, not here">
+        <OaCard n={1} title="Offered package" sub="from the negotiation calculator. Change it there, not here">
           {negotiation ? (<>
             <div style={oaGrid('repeat(auto-fit, minmax(150px, 1fr))')}>
               <OaTile l="Annual CTC" v={`₹${fmt(ctcN)}`} sub={varAmt ? `fixed ₹${fmt(fixedAmt)}` : 'all fixed'} />
               <OaTile l="Variable" v={varAmt ? `₹${fmt(varAmt)}` : 'Nil'} sub={varAmt ? `${varPct}% of CTC` : undefined} />
               <OaTile l="Monthly in-hand" v={`₹${fmt(negotiation.net_monthly || 0)}`} sub="estimated · before TDS" tone="ok" />
-              <OaTile l="Hike" v={hikeLive != null && isFinite(hikeLive) ? `${hikeLive > 0 ? '+' : ''}${hikeLive.toFixed(1)}%` : '—'} sub={prevTotal > 0 ? `over ₹${fmt(prevTotal)}` : 'enter previous CTC'} />
+              <OaTile l="Hike" v={hikeLive != null && isFinite(hikeLive) ? `${hikeLive > 0 ? '+' : ''}${hikeLive.toFixed(1)}%` : '-'} sub={prevTotal > 0 ? `over ₹${fmt(prevTotal)}` : 'enter previous CTC'} />
             </div>
             {(Number(negotiation.joining_bonus) > 0 || Number(negotiation.retention_bonus) > 0 || Number(negotiation.esop_value) > 0) && (
               <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
@@ -400,7 +405,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
         </OaCard>
 
         {/* 2 · previous employer */}
-        <OaCard n={2} title="Previous employer" tag={<span className="rx-chip" style={{ color:TK.warning, background:TK.warningTint }}>Confidential — HR only</span>} sub="prefilled from the candidate record; not shown to the candidate">
+        <OaCard n={2} title="Previous employer" tag={<span className="rx-chip" style={{ color:TK.warning, background:TK.warningTint }}>Confidential · HR only</span>} sub="prefilled from the candidate record; not shown to the candidate">
           <div style={oaGrid('1fr 1fr')}>
             <OaField label="Previous company *"><input className="rx-input" value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></OaField>
             <OaField label="Company address"><input className="rx-input" value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></OaField>
@@ -432,7 +437,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
           {joining.notice_buyout && (
             <div style={{ ...oaGrid('1fr 2fr'), marginTop:12, alignItems:'end' }}>
               <OaField label="Buyout amount (₹)"><input className="rx-input" type="number" min={0} step={1} value={joining.notice_buyout_amount} onChange={e=>J('notice_buyout_amount',e.target.value)} placeholder="e.g. 60000" /></OaField>
-              <div className="rx-hint" style={{ paddingBottom:10 }}>Goes into the approval mail as “Notice buyout” — leave blank if the amount is not known yet.</div>
+              <div className="rx-hint" style={{ paddingBottom:10 }}>Goes into the approval mail as “Notice buyout”. Leave blank if the amount is not known yet.</div>
             </div>
           )}
         </OaCard>
@@ -450,7 +455,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
         {showTemplate && (
           <div className="rx-mod" style={{ padding:0, overflow:'hidden' }}>
             <div className="rx-mod-h" style={{ padding:'14px 22px 0' }}>
-              <div className="rx-mod-t">Approval request — preview</div>
+              <div className="rx-mod-t">Approval request: preview</div>
               <div style={{ display:'flex', gap:8 }}>
                 <button type="button" className="rx-btn sm" onClick={generateTemplate}>Regenerate</button>
                 <button type="button" className="rx-btn sm g" onClick={()=>setShowTemplate(false)}>Hide</button>
@@ -458,7 +463,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
             </div>
             <div style={{ padding:'0 22px 20px' }}>
               <div className="rx-paper" style={{ padding:'28px 32px', animation:'none' }}>
-                <pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.65, color:'#1f2937' }}>{template}</pre>
+                <pre style={{ margin:0, whiteSpace:'pre-wrap', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize:11.5, lineHeight:1.65, color:TK.ink }}>{template}</pre>
               </div>
               <div className="rx-hint" style={{ marginTop:8 }}>This is what goes to the HR Head with the mail. Edit the fields above and click Regenerate to refresh it.</div>
             </div>
@@ -509,7 +514,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail, focusOfferId }: any = {}) {
+export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail, focusOfferId, employeeId, onReviewMrf }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [requests, setRequests] = useState<any[]>([])
@@ -522,6 +527,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const [rejected, setRejected] = useState<any[]>([])
   const [rehireStage, setRehireStage] = useState<Record<string,string>>({})
   const [hq, setHq] = useState('')
+  // Rehire can run to dozens of rows; show a few and let the rest open on demand.
+  const [showAllRehire, setShowAllRehire] = useState(false)
+  const REHIRE_PREVIEW = 4
 
   useEffect(() => { loadRequests() }, [tab])
   useEffect(() => { loadMrfs(); loadRejected() }, [])
@@ -537,36 +545,35 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
   async function loadRequests() {
     const { data } = await supabase.from('offer_approval_requests')
-      .select('*, candidates(full_name, email, phone, experience_years, current_company, designation), ctc_negotiations(calculation_data)')
+      .select('*, candidates(full_name, email, phone, experience_years, current_company, designation, mrf_id), ctc_negotiations(calculation_data)')
       .eq('status', tab === 'pending' ? 'SUBMITTED' : 'HR_HEAD_APPROVED')
       .order('submitted_at', { ascending: false })
     setRequests(data || [])
   }
 
-  // HR Head approves Manpower Requisitions (the only place MRFs get approved).
+  // Requisitions in approval, with where each one sits. This list used to carry its own
+  // Approve / Reject buttons that wrote status:'APPROVED' / 'REJECTED' straight onto the row —
+  // skipping the approval chain, so an MRF could open with its HR Head step still PENDING and
+  // no hiring manager assigned (17 rows in the data were left that way). The decision now
+  // happens only where the chain is honoured: the MRF tab's review (POST /api/ess/mrf), which
+  // checks the caller IS the pending approver, records the step, asks the HR Head to assign the
+  // hiring manager(s), advances the chain and notifies. Here: the tracker, and a Review button
+  // for the requisitions actually waiting on the viewer. (The hand-off rule, that approving
+  // must name the hiring manager(s) of the MRF's own company, is enforced on that same path by
+  // lib/recruitment/mrf-approve.ts.)
   async function loadMrfs() {
     const { data } = await supabase.from('manpower_requisitions')
       .select('*, companies(company_name)')
-      .eq('status', 'SUBMITTED')
+      .in('status', ['SUBMITTED', 'ON_HOLD'])
       .order('created_at', { ascending: false })
     setMrfs(data || [])
   }
-  async function approveMrf(id: string) {
-    const { error } = await supabase.from('manpower_requisitions')
-      .update({ status: 'APPROVED', approved_at: new Date().toISOString() }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); return }
-    loadMrfs()
-  }
-  async function rejectMrf(id: string) {
-    const reason = window.prompt('Rejection reason for this MRF:'); if (reason === null) return
-    const { error } = await supabase.from('manpower_requisitions')
-      .update({ status: 'REJECTED', remarks: reason }).eq('id', id)
-    if (error) { alert('Error: ' + error.message); return }
-    loadMrfs()
-  }
 
   // ── Rehire: HR Head re-enters a rejected candidate into the pipeline ──
-  const REHIRE_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted']
+  // No Shortlisted: a shortlisted candidate holds one of the requisition's openings
+  // (lib/recruitment/pipeline-gates.ts), so re-entering at Shortlisted would jump the
+  // interview rounds AND the openings cap at once. Rehire puts them back in the funnel.
+  const REHIRE_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round']
   async function loadRejected() {
     const { data } = await supabase.from('candidates')
       .select('id, full_name, designation, stage, blacklisted, mrf_id, company_id')
@@ -575,6 +582,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   }
   async function rehire(c: any, stage: string) {
     if (!stage) { alert('Pick a pipeline stage to place the candidate'); return }
+    if (occupiesSlot(stage)) { alert(`A rehired candidate re-enters the interview funnel: ${stage} holds an opening and is reached through the rounds.`); return }
     const { error } = await supabase.from('candidates')
       .update({ stage, blacklisted: false, blacklist_reason: null, status: 'active' }).eq('id', c.id)
     if (error) { alert('Error: ' + error.message); return }
@@ -611,7 +619,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     let notified = 0
     if (!error) {
       try {
-        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ action:'decided', request_id: selected.id }) })
+        const r = await fetch('/api/recruitment/offer-approval', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ action:'decided', request_id: selected.id }) })
         const j = await r.json().catch(() => ({})); notified = Number(j.notified || 0)
       } catch { /* the decision is saved regardless */ }
     }
@@ -642,7 +650,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const mrfMatch = (m:any) => recordMatchesFilters({ company_id:m.company_id, mrf_id:m.id, position:m.designation||m.position }, [m], f)
   const fMrfs = mrfs.filter((m:any)=>(!ql || (m.designation||m.position||'').toLowerCase().includes(ql)) && mrfMatch(m))
   const fRejected = rejected.filter((c:any)=>(!ql || (c.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:c.company_id, mrf_id:c.mrf_id, position:c.designation }, mrfLookup, f))
-  const fRequests = requests.filter((r:any)=>(!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation }, mrfLookup, f))
+  const fRequests = requests.filter((r:any)=>(!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id || r.candidates?.mrf_id, position:r.candidates?.designation }, mrfLookup, f))
 
   return (
     <RxPage header={
@@ -684,112 +692,128 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             {positionOpts.map((p:string)=><option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <div className="s12">
+        <div className="s12" style={{ display:'flex', flexDirection:'column', gap:22 }}>
 
-      {/* MRF Approvals — HR Head approves new manpower requisitions here */}
-      <div style={{ marginBottom:22 }}>
-        <div className="rx-label" style={{ margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
-        {fMrfs.length === 0 && (
-          <div className="rx-mod" style={{ textAlign:'center' as const, padding:18 }}><span className="rx-meta">{ql?'No matching MRF':'No MRFs pending approval'}</span></div>
-        )}
-        {fMrfs.map(m => (
-          <div key={m.id} className="rx-card" style={{ display:'flex', /* .rx-card is flex-direction:column, so a row must say so — without this, space-between distributes VERTICALLY and alignItems centres the content */ flexDirection:'row', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:SP.md }}>
-            <div>
-              <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
-              <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>
-                {m.companies?.company_name || ''} · {m.no_of_openings || m.openings || 0} openings · {m.employment_type || '—'}{m.experience_required ? ` · ${m.experience_required}` : ''}
-              </div>
-              {m.skills_required && <div style={{ fontSize:11, color:TK.brandDeep, marginTop:3 }}>Skills: {m.skills_required}</div>}
-            </div>
-            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-              {/* Styling only — approveMrf/rejectMrf are untouched, and
-                  rejectMrf still asks for its reason the way it always has. */}
-              <button type="button" className="rx-btn ok" onClick={()=>approveMrf(m.id)}>Approve</button>
-              <button type="button" className="rx-btn d" onClick={()=>rejectMrf(m.id)}>Reject</button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
-      <div style={{ marginBottom:22 }}>
-        <div className="rx-label" style={{ margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
-        {fRejected.length === 0 && (
-          <div className="rx-mod" style={{ textAlign:'center' as const, padding:18 }}><span className="rx-meta">{ql?'No matching candidate':'No rejected candidates'}</span></div>
-        )}
-        {fRejected.map(c => (
-          <div key={c.id} className="rx-card" style={{ display:'flex', /* see the MRF row above: .rx-card supplies flex-direction:column */ flexDirection:'row', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:SP.md }}>
-            <div>
-              <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}{c.blacklisted && <span style={{ fontSize:10, color:TK.critical, marginLeft:8, fontWeight:600 }}>BLACKLISTED</span>}</div>
-              <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{c.designation || '—'}</div>
-            </div>
-            <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
-              <select value={rehireStage[c.id] || ''} onChange={e=>setRehireStage(m=>({ ...m, [c.id]: e.target.value }))} className="rx-input" style={{ width:160 }}>
-                <option value="">Place at stage…</option>
-                {REHIRE_STAGES.map(st => <option key={st} value={st}>{st}</option>)}
-              </select>
-              <button type="button" className="rx-btn ok" onClick={()=>rehire(c, rehireStage[c.id])}>Rehire</button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="rx-mod-h" style={{ marginBottom:10 }}>
-        <div className="rx-mod-t">Offer approvals{tab==='pending' && fRequests.length ? <span className="rx-chip" style={{ background:TK.warningTint, color:TK.warning }}>{fRequests.length} waiting</span> : null}</div>
+      {/* Offer approvals first: they are the decisions waiting on this person
+          and were buried under the MRF and rehire lists (eight rehire rows
+          pushed them below the fold). Then MRF approvals, then rehire. */}
+      <section style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <div className="rx-mod-h" style={{ marginBottom:0, flexWrap:'wrap' }}>
+        <div className="rx-mod-t">Offer approvals{tab==='pending' && fRequests.length ? <span className="rx-b b-warn">{fRequests.length} waiting on you</span> : null}</div>
         <Segmented label="Offer approvals" value={tab}
           onChange={(v:'pending'|'done')=>{ setTab(v); setSelected(null) }}
-          options={[{ value:'pending' as const, label:`Pending (${fRequests.length})` },
-                    { value:'done' as const,    label:'Approved' }]} />
+          options={[{ value:'pending' as const, label:`Pending${tab==='pending' ? ` · ${fRequests.length}` : ''}` },
+                    { value:'done' as const,    label:`Approved${tab==='done' ? ` · ${fRequests.length}` : ''}` }]} />
       </div>
 
       {fRequests.length === 0 ? (
-        <div className="rx-mod" style={{ textAlign:'center' as const, padding:36 }}>
-          <div style={{ fontSize:28, marginBottom:6 }}>{tab==='pending' ? '🗂️' : '✅'}</div>
-          <div style={{ fontSize:14, fontWeight:700, color:TK.ink }}>{ql ? 'No matching candidate' : tab==='pending' ? 'Nothing waiting on you' : 'No approved offers yet'}</div>
-          <div className="rx-meta" style={{ marginTop:4 }}>{tab==='pending' ? 'Offers land here when a recruiter submits them after the candidate accepts the salary link.' : 'Approved offers move to Send Offers for the HR manager.'}</div>
-        </div>
+        <EmptyState title={ql ? 'No matching candidate' : tab==='pending' ? 'Nothing waiting on you' : 'No approved offers yet'}
+          hint={ql ? 'Try another name, or clear the filters.' : tab==='pending' ? 'Offers land here when a recruiter submits them after the candidate accepts the salary link.' : 'Approved offers move to Send Offers for the HR Manager.'} />
       ) : (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:14 }}>
-          {fRequests.map((r, i) => {
-            const mn = (mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number
+        <div className="rx-ccg">
+          {fRequests.map((r) => {
+            const mn = (mrfLookup||[]).find((m:any)=>m.id===(r.mrf_id || r.candidates?.mrf_id))?.mrf_number
             const on = selected?.id === r.id
-            const ini = (r.candidates?.full_name || '?').split(' ').filter(Boolean).slice(0,2).map((w:string)=>w[0]).join('').toUpperCase()
             const hike = r.hike_pct != null ? Number(r.hike_pct) : null
+            const open = () => { setSelected(r); setAction('approve'); setComment(''); setDecided(null) }
+            const pending = r.status === 'SUBMITTED'
             return (
-              <button key={r.id} type="button" onClick={()=>{ setSelected(r); setAction('approve'); setComment(''); setDecided(null) }} className="rx-lift"
-                style={{ textAlign:'left', font:'inherit', cursor:'pointer', background:TK.surface, color:TK.ink, border:`1px solid ${on ? TK.brand : TK.line}`, boxShadow: on ? `0 0 0 3px ${TK.brandTint}` : E.raised, borderRadius:16, padding:16, display:'flex', flexDirection:'column', gap:12, animation:`rxRise .5s ${.06 * Math.min(i, 8)}s cubic-bezier(.2,.8,.2,1) both` }}>
-                <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-                  <div style={{ width:42, height:42, borderRadius:13, background:`linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:14, flexShrink:0 }}>{ini}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                      <span style={{ fontSize:14.5, fontWeight:800, letterSpacing:'-.01em' }}>{r.candidates?.full_name}</span>
-                      {mn && <span className="rx-chip">{mn}</span>}
-                    </div>
-                    <div className="rx-meta" style={{ marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{[r.candidates?.designation, r.candidates?.experience_years != null ? `${r.candidates.experience_years} yrs` : null, r.candidates?.current_company].filter(Boolean).join(' · ') || '—'}</div>
-                  </div>
-                  <span style={{ fontSize:10.5, fontWeight:700, padding:'3px 9px', borderRadius:99, background: r.status==='SUBMITTED' ? TK.warningTint : TK.positiveTint, color: r.status==='SUBMITTED' ? TK.warning : TK.positive, whiteSpace:'nowrap' }}>{r.status==='SUBMITTED' ? 'Awaiting you' : 'Approved'}</span>
-                </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
-                  {[['Offered CTC', `₹${(Number(r.offered_ctc||0)/100000).toFixed(2)}L`], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '—'], ['DOJ', r.proposed_doj ? new Date(r.proposed_doj).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) : '—']].map(([k,v]) => (
-                    <div key={k} className="rx-tile" style={{ padding:'8px 10px' }}>
-                      <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted }}>{k}</div>
-                      <div style={{ fontSize:15, fontWeight:800, color: k==='Hike' && hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink, marginTop:2, ...numeric }}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:11.5, color:TK.faint }}>
-                  <span>Submitted {r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('en-IN', { day:'numeric', month:'short' }) : '—'}{r.notice_buyout ? ' · buyout' : ''}</span>
-                  <span style={{ color:TK.brandDeep, fontWeight:700 }}>{r.status==='SUBMITTED' ? 'Review & decide →' : 'View →'}</span>
-                </div>
-              </button>
+              <CandCard key={r.id} name={r.candidates?.full_name || '-'} mrf={mn} selected={on} onOpen={open}
+                label={`${pending ? 'Review' : 'View'} the offer for ${r.candidates?.full_name || 'this candidate'}`}
+                badges={pending ? <span className="rx-b b-warn">Awaiting you</span> : <span className="rx-b b-pos">Approved</span>}
+                meta={metaLine(r.candidates?.designation, r.candidates?.experience_years != null ? `${r.candidates.experience_years} yr exp` : null, r.candidates?.current_company)}
+                body={
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3, minmax(0, 1fr))', gap:8 }}>
+                    {[['CTC', r.offered_ctc ? `₹${(Number(r.offered_ctc)/100000).toFixed(2)}L` : '-'], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '-'], ['Joins', r.proposed_doj ? fullDate(r.proposed_doj).replace(/ \d{4}$/, '') : '-']].map(([k,v]) => (
+                      <div key={k} className="rx-tile" style={{ padding:'8px 10px', minWidth:0 }}>
+                        <div style={{ fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:TK.muted }}>{k}</div>
+                        <div style={{ fontSize:14.5, fontWeight:700, color: k==='Hike' && hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', ...numeric }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>}
+                status={pending ? null : <>Approved{r.hr_head_actioned_at ? ` ${fullDate(r.hr_head_actioned_at)}` : ''} · with the HR Manager in <b>Send Offers</b></>}
+                statusTone="pos"
+                actions={<>
+                  <span className="rx-meta">Submitted {r.submitted_at ? fullDate(r.submitted_at) : '-'}{r.notice_buyout ? ' · buyout' : ''}</span>
+                  <span className="sp" />
+                  <button type="button" className={pending ? 'rx-btn sm p' : 'rx-btn sm'} onClick={open}>{pending ? 'Review & decide' : 'View'}</button>
+                </>} />
             )
           })}
         </div>
       )}
+      </section>
+
+      {/* MRFs in approval: read-only tracker; the decision is made in the MRF tab review */}
+      <section style={{ display:'flex', flexDirection:'column', gap:10 }}>
+        <div className="rx-mod-h" style={{ marginBottom:0 }}><div className="rx-mod-t">MRFs in approval {fMrfs.length > 0 && <span className="rx-meta">{fMrfs.length} · {fMrfs.filter((m:any)=>!!employeeId && trackerStepsOf(m.approval_chain).find(st=>st.status==='PENDING')?.approverId===employeeId).length} waiting on you</span>}</div></div>
+        {fMrfs.length === 0 && (
+          <div className="rx-mod" style={{ textAlign:'center' as const, padding:16 }}><span className="rx-meta">{ql?'No matching MRF':'No requisitions in approval'}</span></div>
+        )}
+        {fMrfs.map(m => {
+          const n = Number(m.no_of_openings || m.openings || 0)
+          const steps = trackerStepsOf(m.approval_chain)
+          const pendingStep = steps.find(st => st.status === 'PENDING')
+          const mine = !!employeeId && pendingStep?.approverId === employeeId
+          return (
+          <div key={m.id} className="rx-card" style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ display:'flex', flexWrap:'wrap', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
+              <div style={{ minWidth:0, flex:'1 1 280px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                  <span className="rx-cc-n" title={m.designation || m.position || 'Untitled'}>{m.designation || m.position || 'Untitled'}</span>
+                  {m.mrf_number && <span className="rx-mrf">{m.mrf_number}</span>}
+                  {m.status === 'ON_HOLD' && <span className="rx-b b-warn">On hold</span>}
+                </div>
+                <div className="rx-cc-m" style={{ marginTop:3 }}>
+                  {metaLine(m.companies?.company_name, `${n} opening${n === 1 ? '' : 's'}`, m.employment_type, m.experience_required)}
+                </div>
+              </div>
+              {mine && onReviewMrf && (
+                <button type="button" className="rx-btn sm p" style={{ flexShrink:0 }} onClick={()=>onReviewMrf(m.id)}
+                  title="Open the requisition to approve (and assign the hiring manager), send back or reject">Review &amp; decide</button>
+              )}
+            </div>
+            {/* Read-only: who it is with now, and the whole chain on click. */}
+            <ApprovalTracker steps={steps} status={m.status} raisedAt={m.created_at} viewerId={employeeId} compact />
+          </div>
+        )})}
+      </section>
+
+      {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
+      <section style={{ display:'flex', flexDirection:'column', gap:10 }}>
+        <div className="rx-mod-h" style={{ marginBottom:0 }}><div className="rx-mod-t">Rehire rejected candidates <span className="rx-meta">{fRejected.length}</span></div></div>
+        {fRejected.length === 0 && (
+          <div className="rx-mod" style={{ textAlign:'center' as const, padding:16 }}><span className="rx-meta">{ql?'No matching candidate':'No rejected candidates'}</span></div>
+        )}
+        {(showAllRehire || ql ? fRejected : fRejected.slice(0, REHIRE_PREVIEW)).map(c => {
+          const mn = (mrfLookup||[]).find((m:any)=>m.id===c.mrf_id)?.mrf_number
+          return (
+          <div key={c.id} className="rx-card" style={{ display:'flex', /* see the MRF row above */ flexDirection:'row', flexWrap:'wrap', justifyContent:'space-between', alignItems:'center', gap:10, padding:'10px 13px' }}>
+            <div style={{ minWidth:0, flex:'1 1 220px', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              <span className="rx-cc-n" title={c.full_name}>{c.full_name}</span>
+              {mn && <span className="rx-mrf">{mn}</span>}
+              {c.blacklisted && <span className="rx-cc-tag crit">Blacklisted</span>}
+              {c.designation && <span className="rx-meta" style={{ fontSize:12 }}>{c.designation}</span>}
+            </div>
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
+              <select value={rehireStage[c.id] || ''} onChange={e=>setRehireStage(m=>({ ...m, [c.id]: e.target.value }))} className="rx-input" style={{ width:160, height:34, fontSize:13 }} aria-label={`Stage to place ${c.full_name} at`}>
+                <option value="">Place at stage…</option>
+                {REHIRE_STAGES.map(st => <option key={st} value={st}>{st}</option>)}
+              </select>
+              <button type="button" className="rx-btn sm" disabled={!rehireStage[c.id]} title={rehireStage[c.id] ? `Rehire at ${rehireStage[c.id]}` : 'Pick a stage first'} onClick={()=>rehire(c, rehireStage[c.id])}>Rehire</button>
+            </div>
+          </div>
+        )})}
+        {!ql && fRejected.length > REHIRE_PREVIEW && (
+          <button type="button" className="rx-btn sm g" style={{ alignSelf:'flex-start' }} onClick={()=>setShowAllRehire(v=>!v)}>
+            {showAllRehire ? 'Show fewer' : `Show all ${fRejected.length}`}
+          </button>
+        )}
+      </section>
 
       {selected && (
         <OfferReviewDrawer
-          req={selected} mrf={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id) || null} locations={locations || []}
+          req={selected} mrf={(mrfLookup||[]).find((m:any)=>m.id===(selected.mrf_id || selected.candidates?.mrf_id)) || null} locations={locations || []}
           processing={processing} decided={decided}
           onClose={()=>{ setSelected(null); setDecided(null); setComment('') }}
           onDecide={(act, note)=>processApproval(selected, act, note)}
@@ -853,9 +877,9 @@ function DocPreview({ requestId, doc, onClose, onDownload, load, hint }: {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); onClose() } }
     window.addEventListener('keydown', onKey, true); return () => window.removeEventListener('keydown', onKey, true)
   }, [onClose])
-  const note = hint || (doc.key === 'ctc' ? 'Password-protected — the password is the candidate’s registered mobile number.' : '')
+  const note = hint || (doc.key === 'ctc' ? 'Password-protected: the password is the candidate’s registered mobile number.' : '')
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={`Preview — ${doc.name}`}
+    <div role="dialog" aria-modal="true" aria-label={`Preview: ${doc.name}`}
       style={{ position:'fixed', inset:0, zIndex:Z.modal, background:TK.canvas, display:'flex', flexDirection:'column', animation:'rxFade .2s both' }}>
       <div style={{ padding:'12px 20px', borderBottom:`1px solid ${TK.line}`, background:TK.surface, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
         <button type="button" className="rx-btn sm g" onClick={onClose}>← Back</button>
@@ -993,7 +1017,7 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setEditErr(j.error || 'Could not save the revised offer'); setSaving(false); return }
       setSaving(false); onRevised(Number(j.notified || 0))
-    } catch { setEditErr('Network error — nothing was saved'); setSaving(false) }
+    } catch { setEditErr('Network error. Nothing was saved'); setSaving(false) }
   }
   const busyAny = processing || saving
   useEffect(() => {
@@ -1004,7 +1028,7 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
   if (typeof document === 'undefined') return null
   const c = req.candidates || {}
   const rs = (n: any) => `₹${fmt(Number(n || 0))}`
-  const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+  const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
   const ctc = Number(req.offered_ctc || 0), vp = Number(req.offered_variable_pct || 0), vAmt = ctc > 0 && vp > 0 ? Math.round(ctc * vp / 100) : 0
   const hike = req.hike_pct != null ? Number(req.hike_pct) : null
   const pending = req.status === 'SUBMITTED'
@@ -1056,7 +1080,7 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
             {req.revision_note && pending && (
               <div style={{ marginBottom:12 }}>
                 <Callout tone="warn">
-                  <b>Revision requested</b>{req.revision_requested_by ? ` by ${req.revision_requested_by}` : ''}{req.revision_requested_at ? ` on ${day(req.revision_requested_at)}` : ''}: “{req.revision_note}”. Edit the offer below and approve it — it goes back to Send Offers.
+                  <b>Revision requested</b>{req.revision_requested_by ? ` by ${req.revision_requested_by}` : ''}{req.revision_requested_at ? ` on ${day(req.revision_requested_at)}` : ''}: “{req.revision_note}”. Edit the offer below and approve it. It goes back to Send Offers.
                 </Callout>
               </div>
             )}
@@ -1064,14 +1088,14 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
             {overBudget && (
               <div style={{ marginBottom:12 }}>
                 <Callout tone="warn">
-                  This offer is above the requisition&rsquo;s budget — {rs(ctc)} against a ceiling of {rs(ceiling)}.
+                  This offer is above the requisition&rsquo;s budget: {rs(ctc)} against a ceiling of {rs(ceiling)}.
                   {monthlyBudget && ` The requisition is budgeted monthly (${rs(mrf?.budget_max)}/mo), shown here as a year.`}
                 </Callout>
               </div>
             )}
             {/* hero numbers */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
-              {[['Offered CTC', rs(ctc), 'per annum', TK.ink], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '—', Number(req.prev_total_ctc) > 0 ? `over ${rs(req.prev_total_ctc)}` : 'previous CTC unknown', hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink], ['Monthly in-hand', req.monthly_inhand ? rs(req.monthly_inhand) : '—', 'estimated · before TDS', TK.ink]].map(([k, v, sub, col], i) => (
+              {[['Offered CTC', rs(ctc), 'per annum', TK.ink], ['Hike', hike != null && isFinite(hike) ? `${hike > 0 ? '+' : ''}${hike.toFixed(1)}%` : '-', Number(req.prev_total_ctc) > 0 ? `over ${rs(req.prev_total_ctc)}` : 'previous CTC unknown', hike != null ? (hike < 0 ? TK.critical : TK.positive) : TK.ink], ['Monthly in-hand', req.monthly_inhand ? rs(req.monthly_inhand) : '-', 'estimated · before TDS', TK.ink]].map(([k, v, sub, col], i) => (
                 <div key={String(k)} className="rx-tile" style={{ animation:`rxRise .45s ${.05 * i}s cubic-bezier(.2,.8,.2,1) both` }}>
                   <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:TK.muted }}>{k}</div>
                   <div style={{ fontSize:20, fontWeight:800, letterSpacing:'-.02em', color: col as string, marginTop:3, ...numeric }}>{v}</div>
@@ -1099,7 +1123,7 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
             <Row k="Company" v={req.prev_company_name || c.current_company} />
             <Row k="Address" v={req.prev_company_address} />
             <Row k="Total CTC" v={Number(req.prev_total_ctc) > 0 ? `${rs(req.prev_total_ctc)} p.a.` : null} strong />
-            <Row k="Fixed / variable" v={(Number(req.prev_fixed_ctc) > 0 || Number(req.prev_variable) > 0) ? `${Number(req.prev_fixed_ctc) > 0 ? rs(req.prev_fixed_ctc) : '—'} / ${Number(req.prev_variable) > 0 ? rs(req.prev_variable) : '—'}` : null} />
+            <Row k="Fixed / variable" v={(Number(req.prev_fixed_ctc) > 0 || Number(req.prev_variable) > 0) ? `${Number(req.prev_fixed_ctc) > 0 ? rs(req.prev_fixed_ctc) : '-'} / ${Number(req.prev_variable) > 0 ? rs(req.prev_variable) : '-'}` : null} />
             <Row k="TA / DA (monthly)" v={Number(req.prev_ta_da) > 0 ? rs(req.prev_ta_da) : null} />
             <Row k="Additional" v={req.prev_additional} />
 
@@ -1145,13 +1169,13 @@ function OfferReviewDrawer({ req, mrf, locations, processing, decided, onClose, 
             {mode === 'reject' && (
               <div style={{ padding:14, borderRadius:14, border:`1px solid ${TK.criticalEdge}`, background:TK.criticalTint, display:'flex', flexDirection:'column', gap:8, animation:'rxRise .3s both' }}>
                 <div style={{ fontSize:12.5, fontWeight:700, color:TK.critical }}>Why are you rejecting this offer? The recruiter and the MRF raiser will read this.</div>
-                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. CTC is above the approved band for this grade — revise and resubmit." style={{ height:'auto', minHeight:72, resize:'vertical', padding:'10px 13px' }} />
+                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. CTC is above the approved band for this grade. Revise and resubmit." style={{ height:'auto', minHeight:72, resize:'vertical', padding:'10px 13px' }} />
               </div>
             )}
             {mode === 'approve' && (
               <div style={{ padding:14, borderRadius:14, border:`1px solid ${TK.positiveEdge}`, background:TK.positiveTint, display:'flex', flexDirection:'column', gap:8, animation:'rxRise .3s both' }}>
                 <div style={{ fontSize:12.5, fontWeight:700, color:TK.positive }}>Approve {rs(ctc)} for {c.full_name}? A note for the HR manager is optional.</div>
-                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional comment — goes with the approval notification." style={{ height:'auto', minHeight:56, resize:'vertical', padding:'10px 13px' }} />
+                <textarea autoFocus className="rx-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional comment (goes with the approval notification)." style={{ height:'auto', minHeight:56, resize:'vertical', padding:'10px 13px' }} />
               </div>
             )}
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -1209,7 +1233,7 @@ const whenShort = (v?: string | null) => v ? new Date(v).toLocaleString('en-IN',
 const OFFER_STEPS: { title: string; sub: string; sections?: string[]; salary?: boolean; extra?: 'review' }[] = [
   { title: 'Candidate', sub: 'Personal & contact details', sections: ['Personal', 'Contact'] },
   { title: 'Background', sub: 'Education, experience & previous employer', sections: ['Education & experience', 'Previous employer (as approved)', 'Source'] },
-  { title: 'Offer', sub: 'Position, joining & approved compensation', sections: ['Position & joining', 'Offered compensation (approved — locked)'], salary: true },
+  { title: 'Offer', sub: 'Position, joining & approved compensation', sections: ['Position & joining', 'Offered compensation (approved, locked)'], salary: true },
   { title: 'Interviews & documents', sub: 'Interview outcomes and the pre-negotiation documents', extra: 'review' },
 ]
 const draftOf = (r: FileRow) => r.raw == null ? '' : r.type === 'date' ? String(r.raw).slice(0, 10) : Array.isArray(r.raw) ? r.raw.join(', ') : String(r.raw)
@@ -1231,7 +1255,7 @@ function FormField({ row, editing, value, onChange }: { row: FileRow; editing: b
               type={row.type === 'number' ? 'number' : row.type === 'date' ? 'date' : row.type === 'email' ? 'email' : row.type === 'tel' ? 'tel' : 'text'} />
       ) : (
         <div style={{ minHeight:38, padding:'9px 12px', borderRadius:R.md, border:`1px solid ${TK.line}`, background: row.editable ? TK.surface : TK.sunken, fontSize:13.5, fontWeight:600, color: row.value ? TK.ink : TK.faint, whiteSpace:'pre-wrap', wordBreak:'break-word', boxSizing:'border-box' }}>
-          {row.value || '—'}
+          {row.value || '-'}
         </div>
       )}
     </div>
@@ -1310,7 +1334,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setErr(j.error || 'Failed'); return null }
       setFile(j); return j
-    } catch { setErr('Network error — nothing was saved'); return null }
+    } catch { setErr('Network error. Nothing was saved'); return null }
     finally { setBusy(false) }
   }
 
@@ -1366,7 +1390,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
   const card: React.CSSProperties = { background:TK.surface, border:`1px solid ${TK.line}`, borderRadius:R.lg, padding:'18px 20px', marginBottom:14 }
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={`Offer file — ${req.candidates?.full_name || ''}`}
+    <div role="dialog" aria-modal="true" aria-label={`Offer file: ${req.candidates?.full_name || ''}`}
       style={{ position:'fixed', inset:0, zIndex:Z.modal, background:TK.canvas, color:TK.ink, display:'flex', flexDirection:'column', animation:'rxFade .25s both' }}>
       {/* header */}
       <div style={{ background:TK.surface, borderBottom:`1px solid ${TK.line}` }}>
@@ -1409,7 +1433,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                 )}
               </div>
               {!!file.warnings?.length && cur.salary && <WarnList items={file.warnings} />}
-              {editing && verified && <div style={{ fontSize:12, color:TK.warning, background:TK.warningTint, borderRadius:R.md, padding:'8px 12px', marginBottom:12 }}>Saving a change withdraws the verification — you will confirm the file again in the last part.</div>}
+              {editing && verified && <div style={{ fontSize:12, color:TK.warning, background:TK.warningTint, borderRadius:R.md, padding:'8px 12px', marginBottom:12 }}>Saving a change withdraws the verification. You will confirm the file again in the last part.</div>}
 
               {(cur.sections || []).map(sec => {
                 const rows = stepRows(step).filter(r => r.section === sec)
@@ -1426,7 +1450,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
 
               {cur.salary && file.salary && (
                 <section style={card}>
-                  <div style={formHead}>{file.letter ? `${file.letter.annexA} (approved — locked)` : 'Salary break-up (approved — locked)'}</div>
+                  <div style={formHead}>{file.letter ? `${file.letter.annexA} (approved, locked)` : 'Salary break-up (approved, locked)'}</div>
                   <div style={{ overflowX:'auto' }}>
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
                       <thead><tr style={{ background:TK.sunken }}>{['Component', 'Basis', 'Monthly', file.salary.totalLabel || 'Annual'].map((h, i) => <th key={h} style={{ textAlign: i >= 2 ? 'right' : 'left', padding:'8px 12px', fontWeight:700, color:TK.muted, borderBottom:`1px solid ${TK.line}` }}>{h}</th>)}</tr></thead>
@@ -1504,7 +1528,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                     <div style={{ fontSize:15, fontWeight:800 }}>I have verified all the details of {req.candidates?.full_name}</div>
                     <div style={{ fontSize:12.5, color:TK.muted, marginTop:4, lineHeight:1.55 }}>
                       Personal, contact, education, experience, previous employer, position, {file.letter?.months ? 'period, ' : ''}joining and the approved {file.letter?.payNoun || 'compensation'} in parts 1–3, the {file.letter ? file.letter.annexA.toLowerCase() : 'salary break-up'},
-                      {` ${file.interviews.length} interview${file.interviews.length === 1 ? '' : 's'}`} and {file.documents.length} document{file.documents.length === 1 ? '' : 's'} — and they are correct.
+                      {` ${file.interviews.length} interview${file.interviews.length === 1 ? '' : 's'}`} and {file.documents.length} document{file.documents.length === 1 ? '' : 's'}, and they are correct.
                     </div>
                     {verified && <div style={{ fontSize:12, fontWeight:700, color:TK.positive, marginTop:8 }}>Verified by {verified.by} · {whenShort(verified.at)}</div>}
                   </div>
@@ -1521,7 +1545,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   )}
                   <div className="rx-meta" style={{ marginBottom:12, lineHeight:1.5 }}>
                     {!verified ? 'Tick the confirmation above to unlock this.'
-                      : letter ? `Generated by ${letter.by} · ${whenShort(letter.at)}.` : `Generate the ${(file.letter?.title || 'offer letter').toLowerCase()} on the company letterhead — letter, ${(file.letter?.annexA || 'salary break-up').toLowerCase()} (Annexure A) and terms (Annexure B).`}
+                      : letter ? `Generated by ${letter.by} · ${whenShort(letter.at)}.` : `Generate the ${(file.letter?.title || 'offer letter').toLowerCase()} on the company letterhead: letter, ${(file.letter?.annexA || 'salary break-up').toLowerCase()} (Annexure A) and terms (Annexure B).`}
                   </div>
                   <button type="button" className="rx-btn p" disabled={!verified || locked} onClick={generate} style={{ width:'100%', opacity: verified ? 1 : .5, cursor: verified ? 'pointer' : 'not-allowed' }}>
                     {generating ? 'Generating…' : !verified ? '🔒 Generate letter' : letter ? '↻ Regenerate letter' : `Generate ${file.letter?.kind === 'EMPLOYMENT' || !file.letter ? 'offer letter' : file.letter.title.toLowerCase()}`}
@@ -1547,7 +1571,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   <div style={{ fontSize:11.5, borderRadius:7, padding:'8px 12px', marginBottom:10, background: canSend ? TK.brandTint : TK.warningTint, color: canSend ? TK.brandDeep : TK.warning }}>
                     {!approved ? `Yet to be approved by the HR Head${headNames ? ` (${headNames})` : ''}. You can verify and generate meanwhile.`
                       : !verified ? 'Tick the confirmation above first.'
-                      : !letter ? 'Generate the letter first — it is attached to this mail.'
+                      : !letter ? 'Generate the letter first. It is attached to this mail.'
                       : 'Emails the candidate with the offer letter PDF attached, records it, and moves the candidate to Offer Sent.'}
                   </div>
                   <button type="button" className="rx-btn p" onClick={onSend} disabled={sending || !canSend || locked} style={{ width:'100%', opacity: canSend ? 1 : .5, cursor: canSend ? 'pointer' : 'not-allowed' }}>
@@ -1572,7 +1596,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
       )}
 
       {preview && <DocPreview requestId={req.id} doc={preview} onClose={() => setPreview(null)} onDownload={() => preview.downloadUrl && window.open(preview.downloadUrl, '_blank', 'noopener')} />}
-      {letterPreview && <DocPreview requestId={req.id} doc={{ key:'offer-letter', name:`${file?.letter?.title || 'Offer letter'} — ${req.candidates?.full_name || ''}` }} load={() => letterBlob(false)}
+      {letterPreview && <DocPreview requestId={req.id} doc={{ key:'offer-letter', name:`${file?.letter?.title || 'Offer letter'}: ${req.candidates?.full_name || ''}` }} load={() => letterBlob(false)}
         hint={`On the ${file?.company?.company_name || 'company'} letterhead`} onClose={() => setLetterPreview(false)} onDownload={downloadLetter} />}
     </div>,
     document.body,
@@ -1625,7 +1649,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         // keep the open one in sync — this is what flips the button from locked to live
         setSelected((sel: any) => sel ? (rows.find((r: any) => r.id === sel.id) || null) : sel)
         const ids = Array.from(new Set(rows.map((r: any) => r.company_id).filter(Boolean))) as string[]
-        if (ids.length) fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`).then(r => r.json()).then(j => setHrHeads(j.heads || {})).catch(() => null)
+        if (ids.length) authHeaders().then(h => fetch(`/api/recruitment/offer-approval?company_ids=${ids.join(',')}`, { headers: h })).then(r => r.json()).then(j => setHrHeads(j.heads || {})).catch(() => null)
       })
   }, [allowedMrfIds, tick])
 
@@ -1638,75 +1662,49 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
   const payLine = (r: any) => {
     const n = r.ctc_negotiations
     if (n?.is_stipend && Number(n.stipend_monthly) > 0) return `₹${fmt(n.stipend_monthly)}/month ${isFeesKind(kindOf(r)) ? 'fees' : 'stipend'}`
-    return `₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}${r.hike_pct ? ` · Hike ${Number(r.hike_pct).toFixed(1)}%` : ''}`
+    return `CTC ₹${r.offered_ctc ? fmt(r.offered_ctc) : '-'}${r.hike_pct ? ` · Hike ${Number(r.hike_pct).toFixed(1)}%` : ''}`
+  }
+  // The request's own mrf_id is empty on older rows; the candidate always carries it. Reading only
+  // the request is why one card showed its MRF chip and the next did not — and why the department /
+  // location filters silently dropped those rows.
+  const mrfIdOf = (r: any) => r?.mrf_id || r?.candidates?.mrf_id || null
+  const mrfNo = (r: any) => (mrfLookup||[]).find((m:any)=>m.id===mrfIdOf(r))?.mrf_number || null
+
+  // The e-mail that carries the letter. Its words are the engagement's Configuration template
+  // ("Offer email — Employment / Internship / NATS / NAPS / Contract / Consultant"), resolved for
+  // the offer's branch and company and fetched once when the offer file opens; it is re-filled
+  // whenever an edit in the offer file changes something it quotes, so the mail never disagrees
+  // with the letter. HR can still adjust the text before sending.
+  const [mailTpl, setMailTpl] = useState<{ forId: string; subject: string; body: string; source: string; version: number } | null>(null)
+  const [mailTplError, setMailTplError] = useState('')
+  const lastFacts = useRef<{ name?: string | null; designation?: string | null; doj?: string | null }>({})
+  function mailText(r: any, f: { name?: string | null; designation?: string | null; doj?: string | null } = {}, tpl = mailTpl) {
+    if (!tpl || tpl.forId !== r.id) return { subject: '', body: '' }
+    const v = offerMailVars(r, f)
+    return { subject: renderText(tpl.subject, v).text.replace(/\s*\n\s*/g, ' '), body: renderText(tpl.body, v).text }
   }
 
-  // The e-mail that carries the letter. Built from the row, then rebuilt whenever an edit in
-  // the offer file changes something it quotes, so the mail never disagrees with the letter.
-  // Its words follow the engagement: an intern is offered an internship and a stipend, an
-  // apprentice a place under NATS / NAPS, a contractor an engagement and fees — never "the
-  // position of … at an annual CTC".
-  function mailText(r: any, f: { name?: string | null; designation?: string | null; doj?: string | null } = {}) {
-    const company = r.companies?.company_name || 'our organization'
-    const role = f.designation || r.candidates?.designation || r.manpower_requisitions?.designation || 'the role'
-    const name = f.name || r.candidates?.full_name || 'Candidate'
-    const doj = f.doj !== undefined ? f.doj : r.proposed_doj
-    const kind = kindOf(r), spec = specOf(kind), months = monthsOfRow(r)
-    const n = r.ctc_negotiations
-    const monthly = n?.is_stipend && Number(n.stipend_monthly) > 0 ? Number(n.stipend_monthly) : (kind !== 'EMPLOYMENT' && r.offered_ctc ? Math.round(Number(r.offered_ctc) / 12) : 0)
-    const when = doj ? new Date(doj).toLocaleDateString('en-IN') : '—'
-    const periodLine = months ? `\n• Period: ${months} month${months === 1 ? '' : 's'}` : ''
-    const open: Record<string, string> = {
-      EMPLOYMENT: `Congratulations! We are delighted to offer you the position of ${role} at ${company}.`,
-      INTERNSHIP: `Congratulations! We are delighted to offer you an internship as ${role} at ${company}.`,
-      NATS: `Congratulations! We are pleased to offer you a place as an apprentice in ${role} at ${company} under the National Apprenticeship Training Scheme (NATS), governed by the Apprentices Act, 1961.`,
-      NAPS: `Congratulations! We are pleased to offer you an apprenticeship as ${role} at ${company} under the National Apprenticeship Promotion Scheme (NAPS), governed by the Apprentices Act, 1961.`,
-      CONTRACT: `We are pleased to engage you as an independent contractor to provide services as ${role} to ${company} for a fixed term.`,
-      CONSULTANT: `We are pleased to engage you as a consultant to provide services as ${role} to ${company}.`,
-    }
-    const pay = kind === 'EMPLOYMENT' ? `• Annual CTC: ₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}`
-      : `• Monthly ${spec.payNoun}: ₹${monthly ? fmt(monthly) : '—'}${n?.tds_applicable && Number(n?.tds_pct) > 0 ? ` (TDS ${Number(n.tds_pct)}%)` : ''}`
-    const startLabel = kind === 'EMPLOYMENT' ? 'Proposed Date of Joining' : kind === 'INTERNSHIP' ? 'Internship starts on' : kind === 'NATS' || kind === 'NAPS' ? 'Training commences on' : 'Engagement commences on'
-    const annexA = spec.annexA.toLowerCase()
-    const extra = kind === 'NATS' || kind === 'NAPS'
-      ? `\n\nThe Government of India's share of the stipend under the scheme is paid directly to your Aadhaar-seeded bank account by DBT; please complete your registration and e-KYC on the ${kind === 'NATS' ? 'NATS portal (nats.education.gov.in)' : 'apprenticeship portal (apprenticeshipindia.gov.in)'} before you join. This is apprenticeship training under the Apprentices Act, 1961 and not an offer of employment.`
-      : kind === 'INTERNSHIP' ? `\n\nThis is an internship for learning and training; it is not an offer of employment.`
-      : kind === 'CONTRACT' || kind === 'CONSULTANT' ? `\n\nThis is a contract for services, not employment. Fees are paid against your monthly invoice, with TDS under section 194J.` : ''
-    const docName = spec.kind === 'EMPLOYMENT' ? 'offer letter' : spec.title.toLowerCase()
-    const close = kind === 'EMPLOYMENT' ? 'We look forward to welcoming you to the team.' : kind === 'CONTRACT' || kind === 'CONSULTANT' ? 'We look forward to working with you.' : 'We look forward to having you with us.'
-    return {
-      subject: `${spec.mailSubject} — ${role} | ${company}`,
-      body: `Dear ${name},
-
-${open[kind]}
-
-Your ${docName} is attached to this email as a PDF. Please read it, including the ${annexA} in Annexure A and the terms in Annexure B.
-
-Key details:
-${pay}
-• ${startLabel}: ${when}${periodLine}
-
-This offer is valid for 7 days and is subject to verification and document submission. To accept, please sign the acceptance in Annexure B and send us a copy, or simply reply to this email confirming your acceptance.${extra}
-
-${close}
-
-Warm regards,
-${company} — Human Resources`,
-    }
-  }
-
-  function prepareOffer(r: any) {
+  async function prepareOffer(r: any) {
     setSelected(r)
     setToEmail(r.candidates?.email || '')
-    const m = mailText(r)
-    setSubject(m.subject); setBody(m.body)
+    setSubject(''); setBody(''); setMailTplError(''); lastFacts.current = {}
+    try {
+      const res = await fetch(`/api/recruitment/send-offer-email?request_id=${r.id}`, { cache: 'no-store', headers: await authHeaders() })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) { setMailTplError(d.error || `HTTP ${res.status}`); return }
+      const tpl = { forId: r.id, subject: d.subject || '', body: d.body || '', source: d.template?.source || 'DEFAULT', version: d.template?.version || 0 }
+      setMailTpl(tpl)
+      const m = mailText(r, lastFacts.current, tpl)
+      setSubject(m.subject); setBody(m.body)
+    } catch { setMailTplError('network error') }
   }
 
   function factsChanged(f: { email: string | null; name: string | null; designation: string | null; doj: string | null }) {
     if (!selected) return
     if (f.email) setToEmail(f.email)
+    lastFacts.current = f
     const m = mailText(selected, f)
-    setSubject(m.subject); setBody(m.body)
+    if (m.body) { setSubject(m.subject); setBody(m.body) }
   }
 
   async function sendOffer() {
@@ -1714,7 +1712,7 @@ ${company} — Human Resources`,
     // Never trust the button state alone — re-read the row so an offer the HR Head has not
     // approved (or has rejected since the screen loaded) cannot go out.
     const { data: live } = await supabase.from('offer_approval_requests').select('status').eq('id', selected.id).maybeSingle()
-    if (live?.status !== 'HR_HEAD_APPROVED') { alert(live?.status === 'SUBMITTED' ? 'The HR Head has not approved this offer yet. The Send Offer button unlocks once they do.' : `This offer is ${String(live?.status || 'unavailable').replace(/_/g, ' ').toLowerCase()} — it cannot be sent.`); setTick(t => t + 1); return }
+    if (live?.status !== 'HR_HEAD_APPROVED') { alert(live?.status === 'SUBMITTED' ? 'The HR Head has not approved this offer yet. The Send Offer button unlocks once they do.' : `This offer is ${String(live?.status || 'unavailable').replace(/_/g, ' ').toLowerCase()}. It cannot be sent.`); setTick(t => t + 1); return }
 
     // Validate the To + CC addresses, and warn if CC was left empty (easy to forget).
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -1815,15 +1813,15 @@ ${company} — Human Resources`,
 
   const sql = sq.trim().toLowerCase()
   const positionOpts = distinctSorted(approved.map((r:any)=>r.candidates?.designation || r.manpower_requisitions?.designation))
-  const fApproved = approved.filter((r:any)=>(!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation || r.manpower_requisitions?.designation }, mrfLookup, f))
+  const fApproved = approved.filter((r:any)=>(!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:mrfIdOf(r), position:r.candidates?.designation || r.manpower_requisitions?.designation }, mrfLookup, f))
   return (
     <RxPage header={
       <RecruitmentHeader
         title="Send offer letters"
-        subtitle="Every offer submitted to the HR Head. Open a candidate's offer file, check it part by part, confirm it, generate the letter, then send it."
+        subtitle="Every offer submitted to the HR Head. Open the offer file to verify it, generate the letter and send it."
         help={<Help label="How this works">
           <p>A candidate appears the moment the recruiter <b>submits the offer to the HR Head</b>.</p>
-          <p>Open the <b>offer file</b>: four parts — candidate, background, offer, interviews &amp; documents — read like a filled form, with <b>Next</b> to move on. Candidate and joining details can be edited; the approved compensation is locked.</p>
+          <p>Open the <b>offer file</b>: four parts (candidate, background, offer, interviews &amp; documents) read like a filled form, with <b>Next</b> to move on. Candidate and joining details can be edited; the approved compensation is locked.</p>
           <p>The letter follows the engagement on the MRF: an <b>Employee</b> gets an Offer of Employment with a CTC break-up; an <b>Intern</b> an Internship Offer with a stipend and period; <b>NATS</b> / <b>NAPS</b> an Offer of Apprenticeship under the Apprentices Act, 1961 (stipend, Government share by DBT, no PF/ESIC); <b>Contract</b> / <b>Consultant</b> an engagement letter with fees and TDS under s.194J. Each on its own company's letterhead.</p>
           <p>In the last part, one checkbox confirms the whole file. <b>Generate letter</b> then builds the multi-page letter on the company letterhead, and <b>Send</b> unlocks once the HR Head has approved; it emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
         </Help>}
@@ -1854,54 +1852,57 @@ ${company} — Human Resources`,
             {positionOpts.map((p:string)=><option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <div className="s12" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:SP.md, alignContent:'start' }}>
-          {fApproved.length === 0 && (
-            <div className="rx-mod" style={{ textAlign:'center' as const, padding:32 }}>
-              <span className="rx-meta">{sql ? 'No matching candidate' : 'No offers submitted to the HR Head yet'}</span>
-            </div>
-          )}
-          {/* No flexDirection here on purpose: this card's content really is
-              stacked, so .rx-card's own flex-direction:column is what we want.
-              The MRF/rehire rows in HR Head needed row and had to say so. */}
-          {fApproved.map(r => (
-            <div key={r.id} onClick={() => prepareOffer(r)} className="rx-card"
-              style={{ cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:undefined, background:selected?.id===r.id?TK.brandTint:undefined }}>
-              <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}{(()=>{ const mn=(mrfLookup||[]).find((m:any)=>m.id===r.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:TK.brandDeep, background:TK.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
-              <div style={{ fontSize:12, color:TK.faint }}>
-                {r.candidates?.experience_years != null ? `${r.candidates.experience_years}yr · ` : ''}{payLine(r)}{monthsOfRow(r) && kindOf(r) !== 'EMPLOYMENT' ? ` · ${monthsOfRow(r)} months` : ''}
-              </div>
-              {(kindOf(r) !== 'EMPLOYMENT' || r.manpower_requisitions?.is_confidential) && (
-                <div style={{ marginTop:5, display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {r.manpower_requisitions?.is_confidential && <span className="rx-chip" style={{ background:TK.warningTint, color:TK.warning, border:`1px solid ${TK.warningEdge}` }} title="Confidential hiring — self-approved by the HR Head">🔒 Confidential · self-approved</span>}
-                  {kindOf(r) !== 'EMPLOYMENT' && <span className="rx-chip" style={{ background:TK.infoTint, color:TK.info, border:`1px solid ${TK.infoEdge}` }}>{specOf(kindOf(r)).label} · {specOf(kindOf(r)).title}</span>}
-                </div>
-              )}
-              {isApproved(r) ? (
-                <div style={{ fontSize:11, color:TK.positive, marginTop:4, display:'flex', alignItems:'center', gap:6 }}>
-                  <span style={{ width:7, height:7, borderRadius:99, background:TK.positive, flexShrink:0 }} />
-                  HR Head approved on {r.hr_head_actioned_at ? new Date(r.hr_head_actioned_at).toLocaleDateString('en-IN') : '—'} · ready to send
-                </div>
-              ) : (
-                <div style={{ fontSize:11, color:TK.warning, marginTop:4, display:'flex', alignItems:'center', gap:6 }}>
-                  <span style={{ width:7, height:7, borderRadius:99, background:TK.warning, flexShrink:0, animation:'rxPulse 1.6s ease-in-out infinite' }} />
-                  Yet to be approved by HR Head{headNames(r) ? ` · ${headNames(r)}` : ''}
-                </div>
-              )}
-              <div style={{ display:'flex', gap:6, marginTop:8 }}>
-                <span className="rx-chip" style={{ background: isApproved(r) ? TK.positiveTint : TK.warningTint, color: isApproved(r) ? TK.positive : TK.warning, border:`1px solid ${isApproved(r) ? TK.positiveEdge : TK.warningEdge}` }}>{isApproved(r) ? 'Approved' : 'Awaiting approval'}</span>
-                <button className="rx-btn sm" onClick={e => { e.stopPropagation(); prepareOffer(r) }}
-                  title="Verify the candidate's details and documents, generate the offer letter, send it"
-                  style={{ marginLeft:'auto' }}>
-                  Open offer file →
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        {fApproved.length === 0 ? (
+          <div className="s12"><EmptyState title={sql ? 'No matching candidate' : 'No offers submitted to the HR Head yet'}
+            hint={sql ? 'Try another name, or clear the filters.' : 'A candidate appears here the moment the recruiter submits their offer from Offer Approval.'} /></div>
+        ) : (
+          /* One card grammar (CandCard): name + MRF, meta, tags, where the
+             approval sits, and the action pinned to the bottom so the buttons
+             of a row line up. The old card carried an "Approved" pill beside
+             "HR Head approved … ready to send" — the same fact twice — and a
+             d/m/yyyy date where the rest of the module says "28 Sep 2026". */
+          <div className="s12 rx-ccg">
+            {fApproved.map(r => {
+              const ok = isApproved(r)
+              const kind = kindOf(r)
+              const months = monthsOfRow(r)
+              const heads = headNames(r)
+              const approver = r.hr_head_email || heads
+              return (
+                <CandCard key={r.id} name={r.candidates?.full_name || '-'} mrf={mrfNo(r)}
+                  selected={selected?.id === r.id} onOpen={() => prepareOffer(r)} label={`Open the offer file for ${r.candidates?.full_name || 'this candidate'}`}
+                  meta={metaLine(r.candidates?.designation || r.manpower_requisitions?.designation,
+                    r.candidates?.experience_years != null ? `${r.candidates.experience_years} yr exp` : null,
+                    payLine(r), months && kind !== 'EMPLOYMENT' ? `${months} months` : null)}
+                  tags={(kind !== 'EMPLOYMENT' || r.manpower_requisitions?.is_confidential) ? <>
+                    {kind !== 'EMPLOYMENT' && <span className="rx-cc-tag info" title={specOf(kind).title}>{specOf(kind).label}</span>}
+                    {r.manpower_requisitions?.is_confidential && <span className="rx-cc-tag warn" title="Confidential hiring: self-approved by the HR Head">🔒 Confidential</span>}
+                  </> : null}
+                  body={<ApprovalTrail
+                    summary={ok
+                      ? <>Approved by <b>{approver || 'the HR Head'}</b>{r.hr_head_actioned_at ? ` on ${fullDate(r.hr_head_actioned_at)}` : ''} · ready to send</>
+                      : <>Waiting on <b>{heads || 'the HR Head'}</b> · HR Head</>}
+                    steps={[
+                      { label:'Offer raised', who: r.submitted_by && !/^[0-9a-f-]{36}$/i.test(r.submitted_by) ? r.submitted_by : 'Recruiter', when: r.submitted_at ? fullDate(r.submitted_at) : null, state:'done' },
+                      { label:'HR Head approval', who: ok ? approver : (heads || 'HR Head not set for this company'), when: ok && r.hr_head_actioned_at ? fullDate(r.hr_head_actioned_at) : null, state: ok ? 'done' : 'now' },
+                      { label:'Send the offer letter', who: r.hr_manager_email || 'HR Manager', state: ok ? 'now' : 'todo' },
+                    ]} />}
+                  actions={<>
+                    <span className="rx-meta">{r.proposed_doj ? `Joins ${fullDate(r.proposed_doj)}` : (r.submitted_at ? `Raised ${fullDate(r.submitted_at)}` : '')}</span>
+                    <span className="sp" />
+                    <button type="button" className={ok ? 'rx-btn sm p' : 'rx-btn sm'} onClick={() => prepareOffer(r)}
+                      title={ok ? 'Verify the file, generate the offer letter and send it' : 'Verify the file now; Send unlocks once the HR Head approves'}>
+                      Open offer file →
+                    </button>
+                  </>} />
+              )
+            })}
+          </div>
+        )}
 
         {/* The offer file: full screen, verify → generate → send. */}
         {selected && (
-          <OfferFileScreen req={selected} mrfNumber={(mrfLookup||[]).find((m:any)=>m.id===selected.mrf_id)?.mrf_number || null}
+          <OfferFileScreen req={selected} mrfNumber={mrfNo(selected)}
             headNames={headNames(selected)} sending={sending} onSend={sendOffer} onClose={() => setSelected(null)} onFactsChanged={factsChanged}
             mail={{ to: toEmail, cc: ccEmails, subject, body, setTo: setToEmail, setCc: setCcEmails, setSubject, setBody }} />
         )}

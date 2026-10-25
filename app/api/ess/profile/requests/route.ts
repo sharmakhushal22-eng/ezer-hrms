@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute } from '@/lib/ess/session'
+import { approversFor, waitingOn, COMPOSITE_KEYS, compositePatch } from '@/lib/profile/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +51,32 @@ export async function GET(req: NextRequest) {
   )
   if (rpcErr) return bad(notReady(rpcErr) ?? rpcErr.message, 500)
 
-  return NextResponse.json({ ok: true, scope, requests: data ?? [] })
+  const rows = (data ?? []) as Record<string, unknown>[]
+  if (scope === 'queue' || !rows.length) return NextResponse.json({ ok: true, scope, requests: rows })
+
+  // WHO IT IS WITH, BY NAME. 105's stage label says "With HR"; the person
+  // asking wants to know whom to chase. The stage is the database's, the name
+  // is the one the employee record assigns to that stage (lib/profile/server).
+  // And for a decided request, who decided it.
+  const [a, extra] = await Promise.all([
+    approversFor(me),
+    sb.from('profile_change_requests').select('id, route_to, approved_by, rejected_by')
+      .in('id', rows.map(r => String(r.id))),
+  ])
+  const ex = new Map(((extra.data ?? []) as Record<string, string | null>[]).map(r => [r.id, r]))
+  const deciders = [...new Set([...ex.values()].flatMap(r => [r.approved_by, r.rejected_by]).filter(Boolean))] as string[]
+  const names = new Map<string, string>()
+  if (deciders.length) {
+    const { data: ppl } = await sb.from('employees').select('id, full_name').in('id', deciders)
+    for (const p of (ppl ?? []) as { id: string; full_name: string }[]) names.set(p.id, p.full_name)
+  }
+  const requests = rows.map(r => {
+    const x = ex.get(String(r.id))
+    const by = x?.approved_by ?? x?.rejected_by ?? null
+    return { ...r, route_to: x?.route_to ?? null, waiting_on: waitingOn(String(r.status), a),
+             decided_by: by ? names.get(by) ?? null : null }
+  })
+  return NextResponse.json({ ok: true, scope, requests })
 }
 
 export async function POST(req: NextRequest) {
@@ -83,7 +109,21 @@ export async function POST(req: NextRequest) {
   // A rejection that says nothing is the complaint HR fields all day: the
   // employee sees "Not approved" and has no idea what to fix.
   if (action === 'reject' && !remarks) {
-    return bad('A reason is required when rejecting — the employee sees it.')
+    return bad('A reason is required when rejecting. The employee sees it.')
+  }
+
+  // COMPOSITE KEYS AT THEIR FINAL STAGE are applied here, not by 105.
+  // profile_change_decide writes new_value into ONE column; an address is five
+  // and a salary account four (lib/profile/server explains). Every other case
+  // — reject, cancel, the line-manager step, single-column fields — still goes
+  // to the database functions unchanged.
+  if (action === 'approve') {
+    const { data: rq } = await sb.from('profile_change_requests')
+      .select('id, employee_id, field_key, field_label, new_value, status').eq('id', id).maybeSingle()
+    const r = rq as Record<string, string> | null
+    if (r && COMPOSITE_KEYS.includes(r.field_key) && (r.status === 'pending_hr' || r.status === 'pending_payroll')) {
+      return applyComposite(me, r, remarks)
+    }
   }
 
   const { data, error: rpcErr } = action === 'cancel'
@@ -106,4 +146,35 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, ...(data as object ?? {}) })
+}
+
+/** Final approval of an address or salary account change.
+ *
+ *  Authority is NOT re-implemented: the request must be in the actor's own
+ *  queue, which 105 builds from profile_change_can_act() — the same rule
+ *  decide() checks. The status flip is guarded on the status read, so two
+ *  approvers clicking at once cannot both apply it. */
+async function applyComposite(me: string, r: Record<string, string>, remarks: string) {
+  const { data: q, error: qErr } = await sb.rpc('profile_change_queue', { p_actor: me })
+  if (qErr) return bad(notReady(qErr) ?? qErr.message, 500)
+  if (!((q ?? []) as { id: string }[]).some(x => x.id === r.id)) {
+    return bad('You are not the approver for this request at its current stage', 403)
+  }
+  const patch = compositePatch(r.field_key, r.new_value)
+  if (!patch) return bad(`This ${r.field_label.toLowerCase()} request is not in a form that can be applied. Reject it with a note so it can be raised again.`, 409)
+
+  const now = new Date().toISOString()
+  const { data: flipped, error: fErr } = await sb.from('profile_change_requests')
+    .update({ status: 'approved', approved_by: me, approved_at: now, applied_at: now, remarks: remarks || null })
+    .eq('id', r.id).eq('status', r.status).select('id')
+  if (fErr) return bad(fErr.message, 500)
+  if (!flipped?.length) return bad('This request was already decided, so it cannot be decided again', 409)
+
+  const { error: upErr } = await sb.from('employees').update(patch).eq('id', r.employee_id)
+  if (upErr) {
+    await sb.from('profile_change_requests')
+      .update({ status: r.status, approved_by: null, approved_at: null, applied_at: null }).eq('id', r.id)
+    return bad(`Could not apply the ${r.field_label.toLowerCase()}: ${upErr.message}`, 500)
+  }
+  return NextResponse.json({ ok: true, status: 'approved', applied: true })
 }

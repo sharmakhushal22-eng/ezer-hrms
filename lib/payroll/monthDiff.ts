@@ -114,9 +114,9 @@ export function buildChangeSheets(d: MonthDiff): ChangeSheets {
       'Employees Changed': c.comparable ? c.changed : 'Not frozen per month',
       'Columns Changed': c.comparable ? c.fields : '',
     })).concat([
-      { 'Category': '— New employees', 'Employees Changed': d.newRows, 'Columns Changed': '' },
-      { 'Category': '— Exited employees', 'Employees Changed': d.exitedRows, 'Columns Changed': '' },
-      { 'Category': '— Employees with no change', 'Employees Changed': d.unchangedRows, 'Columns Changed': '' },
+      { 'Category': 'New employees', 'Employees Changed': d.newRows, 'Columns Changed': '' },
+      { 'Category': 'Exited employees', 'Employees Changed': d.exitedRows, 'Columns Changed': '' },
+      { 'Category': 'Employees with no change', 'Employees Changed': d.unchangedRows, 'Columns Changed': '' },
     ]),
     exitedHeader: ['Employee Code', 'Employee Name', 'Company'],
     exited: d.exited.map(e => ({ 'Employee Code': e.emp_code, 'Employee Name': e.full_name, 'Company': e.company })),

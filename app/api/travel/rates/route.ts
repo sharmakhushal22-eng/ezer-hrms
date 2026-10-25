@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     return errorResponse(e, 'Failed to load the rate card',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     return errorResponse(e, 'Failed to set the rate',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -256,6 +256,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ type: data });
   } catch (e) {
     return errorResponse(e, 'Failed to update the expense type',
-      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
+      'The travel tables are not fully migrated. Check 049, 050 and 051 have all been run.');
   }
 }

@@ -8,7 +8,7 @@
 //     nobody left to approve it but themselves)
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { notify } from '@/lib/ess/session'
+import { notifyFromTemplate } from '@/lib/config/notify'
 import { roleHolders, lakh, type Person } from './offer-approval-notify'
 import { CONFIDENTIAL_VIEWER_CODES } from './confidential'
 
@@ -61,7 +61,7 @@ export async function autoApproveConfidentialOffer(sb: SupabaseClient, neg: any)
     hike_pct: neg.is_stipend ? null : (neg.hike_pct ?? null),
     proposed_doj: neg.proposed_doj || null, days_to_join: daysUntil(neg.proposed_doj), notice_period_days: neg.notice_period_days || null,
     notice_buyout: false,
-    template_content: `CONFIDENTIAL HIRING — offer self-approved by the HR Head\n\nCandidate: ${cand.full_name}${role ? ` — ${role}` : ''}\nMRF: ${mrf.mrf_number || '—'}\nOffered: ${pkg}${neg.proposed_doj ? `\nProposed joining: ${new Date(neg.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}\n\nThe candidate accepted the salary break-up on the link on ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}. No separate approval step: the search is confidential and was raised, run and priced by the HR Head.`,
+    template_content: `CONFIDENTIAL HIRING: offer self-approved by the HR Head\n\nCandidate: ${cand.full_name}${role ? ` (${role})` : ''}\nMRF: ${mrf.mrf_number || '-'}\nOffered: ${pkg}${neg.proposed_doj ? `\nProposed joining: ${new Date(neg.proposed_doj).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}\n\nThe candidate accepted the salary break-up on the link on ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}. No separate approval step: the search is confidential and was raised, run and priced by the HR Head.`,
     status: 'HR_HEAD_APPROVED', submitted_at: now, submitted_by: hrHead?.id || mrf.confidential_by || null,
     hr_head_action: 'APPROVED', hr_head_comments: 'Confidential hiring — self-approved by the HR Head', hr_head_actioned_at: now,
     recruiter_comments: 'Created automatically on the candidate\'s acceptance (confidential hiring).',
@@ -83,12 +83,10 @@ export async function autoApproveConfidentialOffer(sb: SupabaseClient, neg: any)
 
   // Only the HR Head and HR Manager(s) of the company hear about it.
   const audience = await confidentialAudience(sb, companyId)
-  await Promise.all(audience.map(p => notify(
-    p.id,
-    `Confidential offer ready to send — ${cand.full_name}`,
-    `${cand.full_name}${role ? ` (${role})` : ''}${mrf.mrf_number ? ` · ${mrf.mrf_number}` : ''} accepted the salary break-up of ${pkg}. The offer is self-approved (confidential hiring) and is on Send Offers — verify the offer file, generate the letter and send it.`,
-    '/ess/recruitment/sendoffer',
-    'APPROVAL',
-  ).catch(() => null)))
+  // Words: Configuration → Recruitment → Notifications → "Confidential offer ready to send".
+  const scope = { companyId, locationId: mrf.location_id || null }
+  await Promise.all(audience.map(p => notifyFromTemplate(p.id, 'notify.offer.confidential_ready', {
+    candidate_name: cand.full_name, role, mrf_number: mrf.mrf_number || '', package: pkg,
+  }, { scope, link: '/ess/recruitment/sendoffer' })))
   return { requestId, notified: audience.length }
 }

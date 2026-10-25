@@ -24,12 +24,12 @@ const T = {
 /** today + the previous n-1 days, said in words, so HR sees the consequence
  *  rather than the parameter. */
 function explain(n: number): string {
-  if (!n) return 'No backdating — only today and future dates can be selected.'
+  if (!n) return 'No backdating. Only today and future dates can be selected.'
   if (n === 1) return 'Today only.'
   const earliest = new Date()
   earliest.setDate(earliest.getDate() - (n - 1))
   const when = earliest.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-  return `Employees can claim absences back to ${when} — today and the previous ${n - 1} days.`
+  return `Employees can claim absences back to ${when} (today and the previous ${n - 1} days).`
 }
 
 export default function LeaveRulesTab({ companies, windows, onSave, saving }: {
@@ -56,7 +56,7 @@ export default function LeaveRulesTab({ companies, windows, onSave, saving }: {
       <div style={{ fontSize: 12, color: TK.muted, marginBottom: 14, lineHeight: 1.6, maxWidth: 680 }}>
         How many days back an employee may apply for leave, counted from today
         inclusive. This is what lets somebody claim an absence that has already
-        happened — set it to 0 and only today and future dates can be chosen.
+        happened. Set it to 0 and only today and future dates can be chosen.
         <br />
         The same number limits the ESS calendar <em>and</em> the server, so an
         employee is never offered a date their application would then be refused.

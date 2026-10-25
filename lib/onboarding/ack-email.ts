@@ -1,9 +1,14 @@
 // lib/onboarding/ack-email.ts
 // On final approval (employee code generation), email the new joiner their
-// Acknowledgement document (auto-filled details + acknowledged policies, with text)
-// via the existing Gmail / nodemailer setup. Non-fatal — never blocks code gen.
-import nodemailer from 'nodemailer'
+// Acknowledgement document (auto-filled details + acknowledged policies, with text).
+// The subject and the opening text come from Configuration → Onboarding → "Policy
+// acknowledgement — new joiner", for the joiner's company / branch; the details table, the
+// policies and the declaration are drawn here. Non-fatal — never blocks code gen.
 import { resolveLetterhead, letterheadHeaderHtml, letterheadFooterHtml } from '@/lib/letterheads'
+import { resolveTemplate } from '@/lib/config/store'
+import { renderText, renderLetterParagraphs, paragraphsToHtml, stripMarkup } from '@/lib/config/render'
+import { mailConfigured, sendMail } from '@/lib/mail/send'
+import { statutoryAttachments } from '@/lib/onboarding/statutory-forms'
 
 const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string))
 
@@ -13,8 +18,9 @@ function buildAckHtml(d: {
   acks: { policy_code: string; policy_title: string; policy_version: string }[]
   bodies: Record<string, string>
   ackById: Record<string, { policy_code: string; policy_title: string; policy_version: string }>
+  intro: string
 }): string {
-  const detail = (l: string, v: any) => `<tr><td style="padding:6px 10px;color:#6B7280;font-size:13px;border-bottom:1px solid #EEE">${l}</td><td style="padding:6px 10px;color:#111;font-weight:600;font-size:13px;border-bottom:1px solid #EEE">${esc(v) || '—'}</td></tr>`
+  const detail = (l: string, v: any) => `<tr><td style="padding:6px 10px;color:#6B7280;font-size:13px;border-bottom:1px solid #EEE">${l}</td><td style="padding:6px 10px;color:#111;font-weight:600;font-size:13px;border-bottom:1px solid #EEE">${esc(v) || '-'}</td></tr>`
   const policyBlocks = d.acks.map(a => `
     <div style="margin:14px 0;padding:12px 14px;border:1px solid #E5E5E5;border-radius:8px">
       <div style="font-weight:700;font-size:14px;color:#111">${esc(a.policy_title)} <span style="color:#999;font-weight:400;font-size:11px">${esc(a.policy_code)} · v${esc(a.policy_version)}</span> <span style="color:#059669;font-size:11px">✓ Acknowledged</span></div>
@@ -26,8 +32,7 @@ function buildAckHtml(d: {
       ${letterheadHeaderHtml(lh)}
       <div style="padding:20px 22px">
         <div style="font-size:16px;font-weight:700;color:${lh.accent};margin-bottom:4px">Employee Policy Handbook — Acknowledgement &amp; Declaration</div>
-        <p style="font-size:13px;color:#374151">Dear ${esc(d.employee_name)},</p>
-        <p style="font-size:13px;color:#374151;line-height:1.6">Welcome aboard! Your joining is confirmed and your Employee ID is <b>${esc(d.employee_code)}</b>. Below is your acknowledgement document with the policies you accepted during onboarding.</p>
+        ${d.intro}
         <table style="width:100%;border-collapse:collapse;margin:14px 0">
           ${detail('Employee Name', d.employee_name)}
           ${detail("Father's Name", d.father_name)}
@@ -51,8 +56,7 @@ function buildAckHtml(d: {
 }
 
 export async function sendAckEmail(supa: any, onboardingId: string, employeeCode: string): Promise<{ ok?: boolean; skipped?: string; error?: string }> {
-  const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
-  if (!user || !pass) return { skipped: 'email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)' }
+  if (!mailConfigured()) return { skipped: 'email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)' }
   try {
     const { data: c } = await supa.from('onboarding_candidates')
       .select('id, full_name, email, designation, department, date_of_joining, company_id, location_id, form_data')
@@ -60,10 +64,10 @@ export async function sendAckEmail(supa: any, onboardingId: string, employeeCode
     if (!c?.email) return { skipped: 'candidate has no email' }
 
     const { data: company } = await supa.from('companies').select('company_name').eq('id', c.company_id).maybeSingle()
-    let work_location = '—'
+    let work_location = '-'
     if (c.location_id) {
       const { data: loc } = await supa.from('locations').select('location_name, city').eq('id', c.location_id).maybeSingle()
-      work_location = [loc?.location_name, loc?.city].filter(Boolean).join(', ') || '—'
+      work_location = [loc?.location_name, loc?.city].filter(Boolean).join(', ') || '-'
     }
     const { data: acks } = await supa.from('onboarding_policy_acks')
       .select('policy_id, policy_code, policy_title, policy_version').eq('onboarding_id', c.id)
@@ -78,23 +82,27 @@ export async function sendAckEmail(supa: any, onboardingId: string, employeeCode
     }
 
     const fd: any = c.form_data || {}
-    const father = fd.step_3?.father_name || fd.step_5?.father_name || fd.step_7?.insurance?.father_name || '—'
+    const father = fd.step_3?.father_name || fd.step_5?.father_name || fd.step_7?.insurance?.father_name || '-'
     const aadhaar_last4 = fd.step_7?.aadhaar_last4 || fd.statutory?.aadhaar_last4 || '****'
-    const html = buildAckHtml({
+    const tpl = (await resolveTemplate('onboarding.welcome_ack', { companyId: c.company_id, locationId: c.location_id }))!
+    const vars = { employee_name: c.full_name, employee_code: employeeCode, company_name: company?.company_name || 'the team' }
+    const intro = paragraphsToHtml(renderLetterParagraphs(tpl.body, vars).paragraphs, {}, 'font-size:13px;color:#374151;line-height:1.6')
+    const html = buildAckHtml({ intro,
       employee_name: c.full_name, father_name: father, employee_code: employeeCode,
       designation: c.designation, department: c.department, doj: c.date_of_joining,
       company_name: company?.company_name || '', work_location, aadhaar_last4,
       acks: (acks || []) as any[], bodies, ackById,
     })
 
-    const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-    await transporter.sendMail({
-      from: `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`,
+    const sent = await sendMail({
       to: c.email,
-      subject: `Welcome to ${company?.company_name || 'the team'} — Documents & Policy Acknowledgement (${employeeCode})`,
+      subject: renderText(tpl.subject, vars).text.replace(/\s*\n\s*/g, ' '),
+      text: stripMarkup(renderText(tpl.body, vars).text),
       html,
-      attachments: [{ filename: `Acknowledgement_${employeeCode}.html`, content: Buffer.from(html, 'utf-8'), contentType: 'text/html' }],
+      // The acknowledgement, plus the filled statutory forms (EPF 11, EPF 2, ESIC 1 when it applies).
+      attachments: [{ filename: `Acknowledgement_${employeeCode}.html`, content: Buffer.from(html, 'utf-8'), contentType: 'text/html' }, ...(await statutoryAttachments(supa, c.id).catch(() => []))],
     })
+    if (!sent.sent) return { error: sent.error || sent.skipped || 'email failed' }
     // record that documents were emailed
     await supa.from('onboarding_esign_records').update({ hr_notified_at: new Date().toISOString() }).eq('onboarding_id', c.id)
     return { ok: true }

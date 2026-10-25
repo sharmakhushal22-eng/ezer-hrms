@@ -170,12 +170,12 @@ export function ComposeSheet({ open, initialQuery = '', folders, onClose, fetchD
         {failed && !busy && (
           <div className="empty">
             <h4>Could not load the directory</h4>
-            <p>{failed} Check your connection and try again — nothing has been sent.</p>
+            <p>{failed} Check your connection and try again. Nothing has been sent.</p>
           </div>
         )}
         {!dir && busy && <div className="booting"><span className="ring" />Loading the directory…</div>}
       </div>
-      <div className="foot">Only colleagues and desks your company’s reach policy allows are listed — nothing here will be refused on send.</div>
+      <div className="foot">Only colleagues and desks your company’s reach policy allows are listed. Nothing here will be refused on send.</div>
     </dialog>
   );
 }

@@ -130,7 +130,7 @@ export function groupTrips<T extends Pick<TeTrip, 'display' | 'start'>>(
  * quietly undid the whole point of adding colleagues to a trip: they were
  * stored, counted in `pax` and told "each claims their own expenses", and the
  * trip never appeared on their own screen. The server now sends them the trip
- * (migration 155); filtering it back out here would leave that invisible.
+ * (migration 161); filtering it back out here would leave that invisible.
  *
  * They are not separated into another group. A trip you are travelling on is a
  * trip you are travelling on, and it belongs under "Coming up" with the rest;

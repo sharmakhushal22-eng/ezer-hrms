@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   if (error) {
     const missing = /relation .* does not exist|schema cache/i.test(error.message)
     return NextResponse.json(
-      { error: missing ? 'Migration 132 has not been run — leave_backdate_config does not exist.' : error.message },
+      { error: missing ? 'Migration 132 has not been run: leave_backdate_config does not exist.' : error.message },
       { status: missing ? 503 : 500 },
     )
   }
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   if (error) {
     const missing = /relation .* does not exist|schema cache/i.test(error.message)
     return NextResponse.json(
-      { error: missing ? 'Migration 132 has not been run — leave_backdate_config does not exist.' : error.message },
+      { error: missing ? 'Migration 132 has not been run: leave_backdate_config does not exist.' : error.message },
       { status: missing ? 503 : 500 },
     )
   }

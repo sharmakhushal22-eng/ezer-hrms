@@ -16,15 +16,15 @@ export function Chip({ children, variant }: { children: React.ReactNode; variant
 
 /* Status → badge tone, shared by every screen so a colour always means the same thing */
 export const MRF_TONE: Record<string, 'pos' | 'warn' | 'crit' | 'info' | 'brand' | 'mute'> = {
-  DRAFT: 'brand', SUBMITTED: 'info', ON_HOLD: 'warn', APPROVED: 'pos', REJECTED: 'crit', CLOSED: 'mute',
+  DRAFT: 'brand', SUBMITTED: 'info', ON_HOLD: 'warn', APPROVED: 'pos', REJECTED: 'crit', CLOSED: 'mute', NEEDS_REVISION: 'warn',
 };
 /** One colour per MRF status (--st on cards, tiles and table dots). */
 export const MRF_COLOR: Record<string, string> = {
-  DRAFT: 'var(--ez-ramp-4)', SUBMITTED: 'var(--ez-info)', ON_HOLD: 'var(--ez-warning)', APPROVED: 'var(--ez-positive)', REJECTED: 'var(--ez-critical)', CLOSED: 'var(--ez-muted)',
+  DRAFT: 'var(--ez-ramp-4)', SUBMITTED: 'var(--ez-info)', ON_HOLD: 'var(--ez-warning)', APPROVED: 'var(--ez-positive)', REJECTED: 'var(--ez-critical)', CLOSED: 'var(--ez-muted)', NEEDS_REVISION: 'var(--ez-warning)',
 };
 
 export const MRF_LABEL: Record<string, string> = {
-  DRAFT: 'Draft', SUBMITTED: 'Submitted', ON_HOLD: 'On hold', APPROVED: 'Approved', REJECTED: 'Rejected', CLOSED: 'Closed',
+  DRAFT: 'Draft', SUBMITTED: 'Submitted', ON_HOLD: 'On hold', APPROVED: 'Approved', REJECTED: 'Rejected', CLOSED: 'Closed', NEEDS_REVISION: 'Sent back',
 };
 
 /* Module (card section) */

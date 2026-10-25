@@ -10,11 +10,12 @@ import {
   type LocationLite, type DeptLite,
 } from '@/lib/supabase-shift'
 import LeaveRulesTab from '@/components/attendance/LeaveRulesTab'
+import RequestsTab from '@/components/attendance/RequestsTab'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import { useGrant } from '@/lib/rms/client'
-import { canSeeScreen, scopedCompanies } from '@/lib/rms/resolve'
+import { canSeeScreen, scopedCompanies, canEdit } from '@/lib/rms/resolve'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
@@ -27,8 +28,8 @@ const T = {
   danger:{ padding:'6px 11px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
   tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:10, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
-const hrs = (m: number | null) => m == null ? '—' : `${Math.floor(m / 60)}h ${m % 60}m`
-const tm = (s: string | null) => s ? new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+const hrs = (m: number | null) => m == null ? '-' : `${Math.floor(m / 60)}h ${m % 60}m`
+const tm = (s: string | null) => s ? new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'
 const STATUS_COLOR: Record<string, [string, string]> = {
   PRESENT:[TK.positiveTint,TK.positive], HALF_DAY:[TK.warningTint,TK.warning], ABSENT:[TK.criticalTint,TK.critical],
   LEAVE:[TK.brandTint,TK.brandDeep], HOLIDAY:[TK.infoTint,TK.brand], WEEKLY_OFF:[TK.sunken,TK.muted], LWP:[TK.criticalTint,TK.critical],
@@ -48,15 +49,15 @@ function ShiftsTab({ companies, locations, departments, shifts, onCreate, onTogg
   const [busy, setBusy] = useState(false)
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }))
   const ready = f.company_id && f.in_time && f.late_allowed_till && f.out_time
-  const coName = (id: string) => companies.find(c => c.id === id)?.name || '—'
-  const brName = (id?: string | null) => id ? (locations.find(l => l.id === id)?.name || '—') : null
-  const deName = (id?: string | null) => id ? (departments.find(d => d.id === id)?.name || '—') : null
+  const coName = (id: string) => companies.find(c => c.id === id)?.name || '-'
+  const brName = (id?: string | null) => id ? (locations.find(l => l.id === id)?.name || '-') : null
+  const deName = (id?: string | null) => id ? (departments.find(d => d.id === id)?.name || '-') : null
   return (
     <>
       <div style={T.card}>
         <div style={T.sec}>New shift <span style={{ fontWeight:400, color:TK.faint, textTransform:'none' }}>· code auto-generates (e.g. GEN-SSM-001)</span></div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-          <div><label style={T.lbl}>Company</label><select style={T.input} value={f.company_id} onChange={e => { set('company_id', e.target.value); set('branch_id', ''); set('department_id', '') }}><option value="">— Select —</option><option value="ALL">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label style={T.lbl}>Company</label><select style={T.input} value={f.company_id} onChange={e => { set('company_id', e.target.value); set('branch_id', ''); set('department_id', '') }}><option value="">Select</option><option value="ALL">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={T.lbl}>Branch / Location</label><select style={T.input} value={f.branch_id} onChange={e => set('branch_id', e.target.value)} disabled={!f.company_id || f.company_id==='ALL'}><option value="">All branches</option>{locations.filter(l => l.company_id === f.company_id).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
           <div><label style={T.lbl}>Department</label><select style={T.input} value={f.department_id} onChange={e => set('department_id', e.target.value)} disabled={!f.company_id || f.company_id==='ALL'}><option value="">All departments</option>{departments.filter(d => d.company_id === f.company_id).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
           <div><label style={T.lbl}>Type</label><select style={T.input} value={f.shift_type} onChange={e => set('shift_type', e.target.value)}>{SHIFT_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
@@ -96,7 +97,7 @@ function ShiftsTab({ companies, locations, departments, shifts, onCreate, onTogg
                 <td style={{ padding:'8px 10px', color:TK.muted }}>{coName(s.company_id)}{s.branch_id ? ' · ' + brName(s.branch_id) : ''}{s.department_id ? ' · ' + deName(s.department_id) : ''}</td>
                 <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{s.in_time?.slice(0,5)} → {s.out_time?.slice(0,5)}</td>
                 <td style={{ padding:'8px 10px', color:TK.muted }}>{s.lunch_duration_mins}m</td>
-                <td style={{ padding:'8px 10px' }}>{s.overtime_applicable ? '' : '—'}</td>
+                <td style={{ padding:'8px 10px' }}>{s.overtime_applicable ? '' : '-'}</td>
                 <td style={{ padding:'8px 10px' }}>{s.is_active ? '' : ''}</td>
                 <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}><div style={{ display:'flex', gap:6 }}><button style={T.out} onClick={() => onToggle(s)}>{s.is_active ? 'Off' : 'On'}</button><button style={T.danger} onClick={() => onDelete(s)}>Del</button></div></td>
               </tr>
@@ -121,7 +122,7 @@ function AssignTab({ shifts, employees, assignments, onAssign }: {
   const shift = shifts.find(s => s.id === shiftId)
   const assignedEmpIds = new Set(assignments.map(a => a.employee_id))
   const shiftByEmp = new Map(assignments.map(a => [a.employee_id, a.shift_id]))
-  const codeOf = (id: string) => shifts.find(s => s.id === id)?.shift_code || '—'
+  const codeOf = (id: string) => shifts.find(s => s.id === id)?.shift_code || '-'
   const coEmps = employees.filter(e => !shift || e.company_id === shift.company_id)
   const filtered = coEmps.filter(e => !q || e.full_name.toLowerCase().includes(q.toLowerCase()) || (e.emp_code || '').toLowerCase().includes(q.toLowerCase()))
   const pending = employees.filter(e => !assignedEmpIds.has(e.id))
@@ -131,7 +132,7 @@ function AssignTab({ shifts, employees, assignments, onAssign }: {
     <>
       <div style={T.card}>
         <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:12, alignItems:'flex-end' }}>
-          <div><label style={T.lbl}>Shift</label><select style={T.input} value={shiftId} onChange={e => { setShiftId(e.target.value); setSel(new Set()) }}><option value="">— Select active shift —</option>{shifts.filter(s => s.is_active).map(s => <option key={s.id} value={s.id}>{s.shift_code} · {s.shift_type}</option>)}</select></div>
+          <div><label style={T.lbl}>Shift</label><select style={T.input} value={shiftId} onChange={e => { setShiftId(e.target.value); setSel(new Set()) }}><option value="">Select active shift</option>{shifts.filter(s => s.is_active).map(s => <option key={s.id} value={s.id}>{s.shift_code} · {s.shift_type}</option>)}</select></div>
           <div><label style={T.lbl}>Effective from</label><input type="date" style={T.input} value={eff} onChange={e => setEff(e.target.value)} /></div>
           <button disabled={!shiftId || sel.size === 0 || busy} style={{ ...T.pri, opacity: (shiftId && sel.size) ? 1 : 0.5 }} onClick={async () => { setBusy(true); await onAssign([...sel], shiftId, eff); setSel(new Set()); setBusy(false) }}>Assign {sel.size || ''}</button>
         </div>
@@ -144,7 +145,7 @@ function AssignTab({ shifts, employees, assignments, onAssign }: {
             {filtered.map(e => (
               <label key={e.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 6px', borderBottom: `1px solid ${TK.brandEdge}`, cursor:'pointer' }}>
                 <input type="checkbox" checked={sel.has(e.id)} onChange={() => toggle(e.id)} />
-                <div style={{ flex:1 }}><div style={{ fontSize:13, fontWeight:600 }}>{e.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{e.emp_code} · {e.dept_name || '—'}</div></div>
+                <div style={{ flex:1 }}><div style={{ fontSize:13, fontWeight:600 }}>{e.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{e.emp_code} · {e.dept_name || '-'}</div></div>
                 {assignedEmpIds.has(e.id) && <span style={{ fontSize:10, color:TK.muted }}>current: {codeOf(shiftByEmp.get(e.id) || '')}</span>}
               </label>
             ))}
@@ -153,7 +154,7 @@ function AssignTab({ shifts, employees, assignments, onAssign }: {
       )}
 
       <div style={T.card}>
-        <div style={T.sec}>Pending — no active shift ({pending.length})</div>
+        <div style={T.sec}>Pending: no active shift ({pending.length})</div>
         {pending.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>Every employee already has a shift assigned.</div> : (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:6 }}>
             {pending.slice(0, 120).map(e => <div key={e.id} style={{ fontSize:12, padding:'5px 8px', background:TK.sunken, borderRadius:7, border: `1px solid ${TK.brandEdge}` }}>{e.full_name} <span style={{ color:TK.faint, fontSize:10 }}>{e.emp_code}</span></div>)}
@@ -191,8 +192,8 @@ function RecordsTab({ employees, records, from, to, onFrom, onTo }: {
                   <td style={{ padding:'8px 10px' }}>{tm(r.work_in)}</td>
                   <td style={{ padding:'8px 10px' }}>{tm(r.work_out)}</td>
                   <td style={{ padding:'8px 10px' }}>{hrs(r.total_minutes)}</td>
-                  <td style={{ padding:'8px 10px', color: r.late_minutes ? TK.warning : TK.faint }}>{r.late_minutes ? `${r.late_minutes}m` : '—'}</td>
-                  <td style={{ padding:'8px 10px', color: r.overtime_minutes ? TK.positive : TK.faint }}>{r.overtime_minutes ? `${r.overtime_minutes}m` : '—'}</td>
+                  <td style={{ padding:'8px 10px', color: r.late_minutes ? TK.warning : TK.faint }}>{r.late_minutes ? `${r.late_minutes}m` : '-'}</td>
+                  <td style={{ padding:'8px 10px', color: r.overtime_minutes ? TK.positive : TK.faint }}>{r.overtime_minutes ? `${r.overtime_minutes}m` : '-'}</td>
                   <td style={{ padding:'8px 10px' }}><span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99, background:bg, color:c }}>{r.status}</span></td>
                 </tr>
               )
@@ -207,9 +208,10 @@ function RecordsTab({ employees, records, from, to, onFrom, onTo }: {
 // ══════════════════════════════════════════════════════════════════
 export default function AttendancePage() {
   const { grant } = useGrant()
-  const [tab, setTab] = useState<'shifts' | 'assign' | 'records' | 'leaverules'>('shifts')
+  // Requests first: it is the tab with work waiting in it.
+  const [tab, setTab] = useState<'requests' | 'shifts' | 'assign' | 'records' | 'leaverules'>('requests')
   useEffect(() => {
-    const vis = (['shifts','assign','records','leaverules'] as const).filter(k => canSeeScreen(grant, 'attendance.'+k))
+    const vis = (['requests','shifts','assign','records','leaverules'] as const).filter(k => canSeeScreen(grant, 'attendance.'+k))
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [loading, setLoading] = useState(true)
@@ -248,7 +250,7 @@ export default function AttendancePage() {
   async function doCreate(i: any) {
     const { error } = await createShift(i) as any
     if (error) return notify('Create failed: ' + error.message, 'error')
-    notify('Shift created — code auto-generated.'); reload()
+    notify('Shift created, code auto-generated.'); reload()
   }
   async function doToggle(s: Shift) { const { error } = await setShiftActive(s.id, !s.is_active); if (error) return notify('Failed', 'error'); reload() }
   async function doDelete(s: Shift) { if (!confirm(`Delete ${s.shift_code}?`)) return; const { error } = await deleteShift(s.id); if (error) return notify('Delete failed: ' + error.message + ' (shift may be assigned)', 'error'); notify('Deleted.'); reload() }
@@ -269,11 +271,11 @@ export default function AttendancePage() {
     if (error) return notify('Could not save: ' + error.message, 'error')
     notify(window_days > 0
       ? `Employees can now claim absences up to ${window_days} day${window_days === 1 ? '' : 's'} back.`
-      : 'Backdating turned off — only today and future dates.')
+      : 'Backdating turned off: only today and future dates.')
     reload()
   }
 
-  const tabs: [typeof tab, string][] = [['shifts', 'Shifts'], ['assign', 'Assign'], ['records', 'Attendance Records'], ['leaverules', 'Leave Rules']]
+  const tabs: [typeof tab, string][] = [['requests', 'Leave & Attendance Requests'], ['shifts', 'Shifts'], ['assign', 'Assign'], ['records', 'Attendance Records'], ['leaverules', 'Leave Rules']]
 
   return (
     <div style={{ ...T.page, padding:'20px 24px' }}>
@@ -285,6 +287,7 @@ export default function AttendancePage() {
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>{tabs.filter(([k]) => canSeeScreen(grant, 'attendance.'+k)).map(([k, l]) => <button key={k} style={T.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}</div>
         {loading ? <div style={{ ...T.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>
+            {tab === 'requests' && <RequestsTab companies={scopedCompanies(grant, companies)} canAct={canEdit(grant, 'Attendance')} notify={notify} />}
             {tab === 'shifts' && <ShiftsTab companies={companies} locations={locations} departments={departments} shifts={shifts} onCreate={doCreate} onToggle={doToggle} onDelete={doDelete} />}
             {tab === 'assign' && <AssignTab shifts={shifts} employees={employees} assignments={assignments} onAssign={doAssign} />}
             {tab === 'records' && <RecordsTab employees={employees} records={records} from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />}

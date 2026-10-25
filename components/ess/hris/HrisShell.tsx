@@ -125,8 +125,10 @@ function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, adminMode, notify
             <div className="hx-head-top">
               <div className="hx-mark" aria-hidden="true"><Ic k="doc" /></div>
               <div className="hx-title">
-                <h1>HRIS <span className="hx-badge">Partly available</span></h1>
-                <span className="desc">Directory, requests, approvals and the exit process</span>
+                {/* Matches the portal's sidebar label and its other page headings: no "HRIS"
+                    jargon, no build-status pill. */}
+                <h1>HR Services</h1>
+                <span className="desc">Find colleagues, raise a request, act on approvals, or start your exit</span>
               </div>
               <div className="hx-head-tools">
                 <label className="hx-search" title="Search the directory">

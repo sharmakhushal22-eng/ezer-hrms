@@ -85,7 +85,7 @@ export function RaiseRequest({ employeeId, onCount }: { employeeId: string; onCo
 
         <div className={`hx-reveal${def.confidential ? ' show' : ''}`}>
           <div className="hx-note d">
-            <Ic k="lock" /> This is confidential and routes only to the Internal Committee — not regular HR.
+            <Ic k="lock" /> This is confidential and routes only to the Internal Committee, not regular HR.
           </div>
         </div>
 
@@ -114,7 +114,7 @@ export function RaiseRequest({ employeeId, onCount }: { employeeId: string; onCo
                 {r.is_confidential && <span className="hx-lock" title="Confidential">🔒</span>}
               </div>
               <div className="mt">
-                {(r.request_data?.detail || '').slice(0, 60) || '—'} · {fmtDate(r.submitted_at)}
+                {(r.request_data?.detail || '').slice(0, 60) || '-'} · {fmtDate(r.submitted_at)}
               </div>
             </div>
             <span className={`hx-pill ${TONE[r.status] || 'mut'}`}>{STATUS[r.status] || r.status}</span>

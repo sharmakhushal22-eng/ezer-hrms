@@ -139,4 +139,4 @@ export function modeNote(mode: SendMode, allowShare: boolean): string {
  * deliberately not a conversation.
  */
 export const REPLY_RULE =
-  'They can reply once to say thanks. Notes are not a chat — there is no back-and-forth.'
+  'They can reply once to say thanks. Notes are not a chat. There is no back-and-forth.'

@@ -5,8 +5,13 @@
 // actions go through fn_resignation_act (071), which enforces the stage itself.
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
-import { essRoute, forbidden, notify, audit, fmtDate } from '@/lib/ess/session'
+import { essRoute, forbidden, audit, fmtDate } from '@/lib/ess/session'
+import { employeeScope } from '@/lib/config/store'
+import { notifyFromTemplate } from '@/lib/config/notify'
 import { buildPending } from '@/lib/ess/pending'
+import { revokeAccess } from '@/lib/offboarding/run'
+import { mailResignationStep, mailResignationApproved } from '@/lib/exit/mail'
+import { decideLeave, decideLeaveCancel, decideRegularisation, type Actor } from '@/lib/leave/workflow'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +21,10 @@ export async function GET(req: NextRequest) {
   const { ctx } = r
   // Everyone can open Approvals (for the MRF / hiring block); a non-approver just
   // has an empty leave/travel/resignation list.
-  const items = ctx.canApprovals ? await buildPending(ctx) : []
+  // Built for everyone: a delegate or a cancellation approver can have rows
+  // stamped to them without holding an approver role, and those must not be
+  // invisible. For anybody with nothing stamped this is a few empty queries.
+  const items = await buildPending(ctx)
   const id = req.nextUrl.searchParams.get('resignation_id')
   let chain: any[] | undefined
   if (id) {
@@ -54,41 +62,25 @@ export async function POST(req: NextRequest) {
   if (!kind || !id || !action) return NextResponse.json({ error: 'kind, id and action are required' }, { status: 400 })
   const { data: meRow } = await sb.from('employees').select('full_name').eq('id', me).maybeSingle()
 
-  if (kind === 'LEAVE') {
-    const { data: l } = await sb.from('leave_applications').select('id, employee_id, status, current_approver_id, approval_stage, from_date, to_date, days, leave_types(approval_by, name)').eq('id', id).maybeSingle()
-    if (!l) return NextResponse.json({ error: 'Leave request not found' }, { status: 404 })
-    if (l.current_approver_id !== me && !ctx.grant.isSuperAdmin) return forbidden('This request is not waiting on you.')
-    if (l.status !== 'PENDING') return NextResponse.json({ error: `Already ${String(l.status).toLowerCase()}.` }, { status: 409 })
-    const approve = action === 'Approve' || action === 'APPROVE'
-
-    // approval_by = 'BOTH' means L1 THEN HR (migration 121). An L1 approval on
-    // such a type is not a decision — it advances the request to its second
-    // leg. Writing approval_stage re-fires the stamping trigger, which
-    // re-points current_approver_id at the HR manager.
-    const mode = String((l as any).leave_types?.approval_by || 'L1').toUpperCase()
-    if (approve && mode === 'BOTH' && (l as any).approval_stage === 'L1') {
-      const { error: adv } = await sb.from('leave_applications').update({ approval_stage: 'HR' }).eq('id', id)
-      if (adv) return NextResponse.json({ error: adv.message }, { status: 500 })
-      const { data: next } = await sb.from('leave_applications').select('current_approver_id').eq('id', id).maybeSingle()
-      if (next?.current_approver_id) {
-        await notify(next.current_approver_id, 'Leave request awaiting you',
-          `A ${(l as any).leave_types?.name || 'leave'} request needs HR approval after the reporting manager signed off.`, '/ess?tab=approvals')
-      }
-      await notify(l.employee_id, 'Leave passed to HR',
-        `Your manager approved ${Number(l.days)} day${Number(l.days) === 1 ? '' : 's'} from ${fmtDate(l.from_date)}; it now needs HR approval.`)
-      await audit(ctx.caller, 'LEAVE_L1_APPROVED', l.employee_id, { leave_id: id, note: body.note || null })
-      return NextResponse.json({ ok: true, status: 'PENDING', stage: 'HR' })
-    }
-
-    const { error } = await sb.from('leave_applications').update({
-      status: approve ? 'APPROVED' : 'REJECTED', resolved_at: new Date().toISOString(),
-      approver: meRow?.full_name || null, approver_employee_id: me, remark: body.note || null,
-    }).eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    await notify(l.employee_id, approve ? 'Leave approved' : 'Leave declined',
-      `${Number(l.days)} day${Number(l.days) === 1 ? '' : 's'} from ${fmtDate(l.from_date)} — ${approve ? 'approved' : 'declined'} by ${meRow?.full_name || 'your manager'}${body.note ? ': ' + body.note : ''}.`)
-    await audit(ctx.caller, approve ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED', l.employee_id, { leave_id: id, note: body.note || null })
-    return NextResponse.json({ ok: true, status: approve ? 'APPROVED' : 'REJECTED' })
+  // Leave, cancellations of approved leave and attendance corrections all go
+  // through lib/leave/workflow.ts — the same functions HR's override uses, so
+  // the balance check, the attendance write and the notifications cannot drift
+  // between the two screens.
+  if (kind === 'LEAVE' || kind === 'LEAVE_CANCEL' || kind === 'REGULARISATION') {
+    const approve = /^approve/i.test(action)
+    if (!approve && !/^decline|^reject/i.test(action)) return NextResponse.json({ error: `Unknown action "${action}".` }, { status: 400 })
+    const note = typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null
+    const actor: Actor = { employeeId: me, name: meRow?.full_name || 'your manager', isSuperAdmin: ctx.grant.isSuperAdmin }
+    const out = kind === 'LEAVE' ? await decideLeave(id, actor, approve, note)
+      : kind === 'LEAVE_CANCEL' ? await decideLeaveCancel(id, actor, approve, note)
+      : await decideRegularisation(id, actor, approve, note)
+    if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })
+    const what = kind === 'LEAVE'
+      ? (out.stage === 'HR' ? 'LEAVE_L1_APPROVED' : approve ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED')
+      : kind === 'LEAVE_CANCEL' ? (approve ? 'LEAVE_CANCEL_APPROVED' : 'LEAVE_CANCEL_DECLINED')
+      : (approve ? 'REGULARISATION_APPROVED' : 'REGULARISATION_REJECTED')
+    await audit(ctx.caller, what, null, { id, note })
+    return NextResponse.json(out)
   }
 
   if (kind === 'RESIGNATION') {
@@ -100,13 +92,29 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message.replace(/^.*?: /, '') }, { status: 409 })
     const { data: res } = await sb.from('employee_resignation').select('employee_id, status, current_approver_id, current_stage, final_lwd').eq('id', id).maybeSingle()
     const actor = meRow?.full_name || 'your manager'
+    // Mail at every step: the employee hears what happened, the approver who acted gets a confirmation.
+    const base = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
+    await mailResignationStep(sb as any, { resignationId: id, stage: String((out as any)?.stage || res?.current_stage || ''), action: code, actorId: me, note: body.note || null, lwd: body.lwd || null, baseUrl: base }).catch(e => console.warn('resignation step mail failed', e))
     if (res) {
       const st = String(res.status)
-      if (st === 'RETENTION_HOLD') await notify(res.employee_id, 'Retention conversation requested', `${actor} has asked to discuss your resignation before it moves ahead.`)
+      // Words: Configuration → Employee lifecycle → Notifications, for the employee's company / branch.
+      const scope = await employeeScope(res.employee_id)
+      if (st === 'RETENTION_HOLD') await notifyFromTemplate(res.employee_id, 'notify.resignation.retention', { actor_name: actor }, { scope })
       else if (st.startsWith('PENDING_')) {
-        await notify(res.employee_id, 'Resignation moved ahead', `${actor} acknowledged your resignation. It is now with ${st.replace('PENDING_', '').replace('_', ' ')}.`)
-        await notify(res.current_approver_id, 'Resignation awaiting you', `A resignation in your chain needs your acknowledgement (stage ${res.current_stage}).`, '/ess?tab=approvals')
-      } else if (res.final_lwd) await notify(res.employee_id, 'Last working day confirmed', `HR has set your last working day as ${fmtDate(res.final_lwd)}.`)
+        await notifyFromTemplate(res.employee_id, 'notify.resignation.moved', { actor_name: actor, next_stage: st.replace('PENDING_', '').replace('_', ' ') }, { scope })
+        await notifyFromTemplate(res.current_approver_id, 'notify.resignation.awaiting', { stage: res.current_stage }, { scope, link: '/ess?tab=approvals' })
+      } else if (res.final_lwd) {
+        await notifyFromTemplate(res.employee_id, 'notify.resignation.lwd', { last_working_day: fmtDate(res.final_lwd) }, { scope })
+        // The chain is complete: "approved — download your documents before your last day".
+        await mailResignationApproved(sb as any, id, base).catch(e => console.warn('resignation approved mail failed', e))
+        // The final last working day goes on the employee record; on that day the daily
+        // offboarding run revokes roles, access and reporting lines — at once if it is already here.
+        const { data: cur } = await sb.from('employee_resignation').select('date_of_resignation').eq('id', id).maybeSingle()
+        await sb.from('employees').update({ last_working_date: res.final_lwd, date_of_resignation: cur?.date_of_resignation || null }).eq('id', res.employee_id)
+        if (String(res.final_lwd) <= new Date().toISOString().slice(0, 10)) {
+          await revokeAccess(sb as any, res.employee_id, { reason: `Last working day ${res.final_lwd} (set by HR)`, by: me, byName: actor, lastWorkingDay: res.final_lwd }).catch(e => console.error('revoke on final LWD failed', e))
+        }
+      }
     }
     await audit(ctx.caller, `RESIGNATION_${code}`, res?.employee_id || null, { resignation_id: id, note: body.note || null, lwd: body.lwd || null })
     return NextResponse.json({ ok: true, result: out })

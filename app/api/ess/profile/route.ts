@@ -27,6 +27,8 @@ import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute } from '@/lib/ess/session'
 import { MODEL } from '@/lib/profile/model'
 import type { FieldState } from '@/lib/profile/types'
+import { checkFieldValue } from '@/lib/profile/self-service'
+import { selfExtras, approversFor, waitingOn, notifyFirstApprover } from '@/lib/profile/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,7 +120,13 @@ export async function GET(req: NextRequest) {
   // may be READ — this only answers whose record it is.
   const isSelf = subject === me
 
-  return NextResponse.json({ ...(payload as object), ...extras, photoUrl, isSelf })
+  // Your own record also carries what the editors prefill from — structured
+  // addresses (the view flattens them), masked identifiers (the RPC strips
+  // them below HR) and who a request would reach, by name. Never attached to
+  // a colleague's profile.
+  const self = isSelf ? await selfExtras(subject) : null
+
+  return NextResponse.json({ ...(payload as object), ...extras, photoUrl, isSelf, self })
 }
 
 /** A signed URL for this employee's avatar, or null when they have none. */
@@ -223,6 +231,16 @@ export async function POST(req: NextRequest) {
         + 'Open your own portal to change your details.', 403)
   }
 
+  // Structured values have their own editors (POST /api/ess/profile/self-service),
+  // which keep the five address columns together. A free-text request here
+  // would arrive as one string in address line 1.
+  if (/^(present|permanent)_address$/.test(key) || /^emergency_contact_/.test(key)) {
+    return bad(`${spec.label} is changed through its own form on the profile.`)
+  }
+
+  const checked = checkFieldValue(key, value)
+  if (value.trim() && checked.error) return bad(checked.error)
+
   if (action === 'edit') {
     if (!value.trim()) return bad(`${spec.label} cannot be emptied here.`)
     // The explicit write column, never derived from the displayed source.
@@ -231,7 +249,7 @@ export async function POST(req: NextRequest) {
     // is alternate_mobile. A field with no column declared cannot be written.
     const column = spec.column
     if (!column) return bad(`${spec.label} cannot be edited directly.`, 400)
-    const { error: upErr } = await sb.from('employees').update({ [column]: value }).eq('id', me)
+    const { error: upErr } = await sb.from('employees').update({ [column]: checked.value }).eq('id', me)
     if (upErr) return bad(upErr.message, 500)
     return NextResponse.json({ ok: true, saved: spec.label })
   }
@@ -239,11 +257,11 @@ export async function POST(req: NextRequest) {
   // action === 'request'
   const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
   if (!value.trim()) return bad('What should it be changed to?')
-  if (!reason) return bad('A reason is required — HR sees it when they review this.')
+  if (!reason) return bad('A reason is required. HR sees it when they review this.')
 
   const { data, error: reqErr } = await sb.rpc('raise_profile_change_request', {
     p_employee_id: me, p_requested_by: me, p_field_key: key,
-    p_field_label: spec.label, p_new_value: value.trim(), p_reason: reason,
+    p_field_label: spec.label, p_new_value: checked.value, p_reason: reason,
   })
   if (reqErr) {
     // 091 raises this by name when the field has no row in profile_field_config,
@@ -254,5 +272,13 @@ export async function POST(req: NextRequest) {
     }
     return bad(reqErr.message, 500)
   }
-  return NextResponse.json({ ok: true, request_id: data })
+  // Say where it went, by name, and tell that person.
+  const { data: st } = await sb.from('profile_change_requests').select('status').eq('id', data as string).maybeSingle()
+  const status = String((st as { status?: string } | null)?.status ?? '')
+  const [a, who] = await Promise.all([
+    approversFor(me),
+    sb.from('employees').select('full_name').eq('id', me).maybeSingle(),
+  ])
+  await notifyFirstApprover(me, status, spec.label, String((who.data as { full_name?: string } | null)?.full_name ?? 'An employee'))
+  return NextResponse.json({ ok: true, request_id: data, status, waiting_on: waitingOn(status, a) })
 }

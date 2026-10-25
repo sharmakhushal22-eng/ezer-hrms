@@ -51,13 +51,20 @@ export interface ProfileField {
   hint?: string
   /** Full width — addresses and anything long. */
   wide?: boolean
+  /** A structured editor owns this field instead of the one-value modal —
+   *  addresses, emergency contacts, the salary account, identity numbers.
+   *  Keys are FixAction values from lib/profile/self-service. */
+  editor?: string
+  /** Locked once set, but the employee may ADD it while it is blank (PAN,
+   *  UAN, Aadhaar). */
+  addable?: boolean
 }
 
 export interface FieldGroup { title: string; fields: ProfileField[] }
 
 export type TabId =
-  | 'overview' | 'personal' | 'job' | 'statutory'
-  | 'payroll' | 'time' | 'growth' | 'records'
+  | 'overview' | 'personal' | 'family' | 'job' | 'statutory'
+  | 'payroll' | 'documents' | 'growth'
 
 export interface Employee {
   id: string
@@ -98,7 +105,21 @@ export interface ProfilePayload {
   /** Whether the viewer IS the subject. Distinct from viewer_role, which is a
    *  positional role and reads 'hr' for an HR person on their own record. */
   isSelf?: boolean
+  /** Your own profile only (route.ts selfExtras): what the editors prefill. */
+  self?: SelfInfo | null
   error?: string
+}
+
+export interface PersonRef { name: string; code: string | null }
+export interface AddressParts { line1: string; line2: string; city: string; state: string; pin: string }
+export interface EmergencyParts { name: string; relation: string; mobile: string }
+
+export interface SelfInfo {
+  addresses: { present: AddressParts | null; permanent: AddressParts | null }
+  emergency: { 1: EmergencyParts | null; 2: EmergencyParts | null }
+  ids: { has_pan: boolean; pan_masked: string | null; has_aadhaar: boolean; has_uan: boolean;
+         has_bank: boolean; bank_masked: string | null }
+  approvers: { l1: PersonRef | null; hr: PersonRef | null; payroll: PersonRef | null }
 }
 
 export type Row = Record<string, unknown>

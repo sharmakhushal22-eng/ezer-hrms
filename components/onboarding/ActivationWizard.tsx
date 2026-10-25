@@ -11,6 +11,7 @@ import {
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { authHeaders } from '@/lib/auth-headers'
 
 // ── EZER palette ───────────────────────────────────────────────────
 const T = {
@@ -130,11 +131,11 @@ function Step1Org({ cand, form, setF, employees, shifts, departments }: any) {
     <div>
       <div style={T.sectionH}>Organisation & Role</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:14 }}>
-        <Chip k="Company" v={cand?.company_id ? '✓ set' : '—'} />
-        <Chip k="Branch" v={cand?.location_id ? '✓ set' : '—'} />
-        <Chip k="Designation" v={cand?.designation || '—'} />
-        <Chip k="DOJ" v={cand?.date_of_joining || '—'} />
-        <Chip k="Employment" v={cand?.employment_type || '—'} />
+        <Chip k="Company" v={cand?.company_id ? '✓ set' : '-'} />
+        <Chip k="Branch" v={cand?.location_id ? '✓ set' : '-'} />
+        <Chip k="Designation" v={cand?.designation || '-'} />
+        <Chip k="DOJ" v={cand?.date_of_joining || '-'} />
+        <Chip k="Employment" v={cand?.employment_type || '-'} />
       </div>
 
       <div style={T.g2}>
@@ -154,7 +155,7 @@ function Step1Org({ cand, form, setF, employees, shifts, departments }: any) {
         <Field label="Shift">
           <select value={form.shift_id || ''} onChange={e => setF('shift_id', e.target.value)} style={T.input}>
             <option value="">Select…</option>
-            {shifts.map((s: ShiftLite) => <option key={s.id} value={s.id}>{s.shift_code} ({s.in_time || '—'}–{s.out_time || '—'})</option>)}
+            {shifts.map((s: ShiftLite) => <option key={s.id} value={s.id}>{s.shift_code} ({s.in_time || '-'}–{s.out_time || '-'})</option>)}
           </select>
         </Field>
         <Field label="Induction Date *"><input type="date" value={form.induction_date || ''} onChange={e => setF('induction_date', e.target.value)} style={T.input} /></Field>
@@ -166,7 +167,7 @@ function Step1Org({ cand, form, setF, employees, shifts, departments }: any) {
         </Field>
       </div>
       <div style={{ marginTop:6, fontSize:12, color:MUTED }}>
-        Confirmation date: <b style={{ color:TK.ink }}>{form.confirmation_date || '—'}</b> (DOJ + {form.probation_months ?? 6} months)
+        Confirmation date: <b style={{ color:TK.ink }}>{form.confirmation_date || '-'}</b> (DOJ + {form.probation_months ?? 6} months)
       </div>
     </div>
   )
@@ -413,7 +414,7 @@ export default function ActivationWizard({ candidate, genCode, setGenCode, codeT
     setSending(true); setEmailMsg('')
     try {
       const res = await fetch('/api/onboarding/activation-approval', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({ onboarding_id: candidate.id, roles: ['l1', 'payroll'] }),
       })
       const data = await res.json()
@@ -429,7 +430,7 @@ export default function ActivationWizard({ candidate, genCode, setGenCode, codeT
     <div style={T.overlay} onClick={onClose}>
       <div style={T.card} onClick={e => e.stopPropagation()}>
         <div style={T.header}>
-          <div style={T.hTitle}>HR Activation — {candidate.full_name}</div>
+          <div style={T.hTitle}>HR Activation: {candidate.full_name}</div>
           <button onClick={onClose} style={T.closeBtn}>×</button>
         </div>
 

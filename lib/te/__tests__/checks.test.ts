@@ -16,8 +16,16 @@ const ALL: string[] = ([['A', 6], ['B', 7], ['C', 11], ['D', 10], ['E', 4], ['F'
  *  a code is used. */
 const CATALOGUE_LINE = /\['[A-G]\d{1,2}', '[A-G]',/
 
-/** The two migrations that only seed the catalogue. Everything else is code. */
-const SEED_ONLY = (f: string) => f.includes('149_te_seed') || f.includes('156_te_journey_wording')
+/** The two migrations that only seed the catalogue. Everything else is code.
+ *
+ *  MATCHED WITHOUT THE NUMBER, because the number moves. te_journey_wording
+ *  was 156 on one branch and 162 on another, and merging renamed it: the guard
+ *  stopped matching, the file was scanned as code, and its catalogue
+ *  DECLARATIONS of C9, E4 and G6 made all three look evaluated — so this test
+ *  reported the list as stale when nothing about the checks had changed.
+ *  The trailing `\.sql$` keeps the backfill out of the pattern; it carries no
+ *  check codes either way, but the two files are not the same claim. */
+const SEED_ONLY = (f: string) => f.includes('149_te_seed') || /^\d+_te_journey_wording\.sql$/.test(f)
 
 function evaluatedCodes(): Set<string> {
   const root = join(import.meta.dirname, '..', '..', '..')

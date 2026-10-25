@@ -84,8 +84,8 @@ const TABS: { id: string; label: string; title: string; subtitle: string }[] = [
   { id: 'config', label: 'Configuration', title: 'Configuration', subtitle: 'Group setup, pay heads, statutory slabs & tax rules' },
   { id: 'attendance', label: 'Attendance', title: 'Attendance', subtitle: 'Upload attendance / leave / OT into the month snapshot' },
   { id: 'employees', label: 'Employees & CTC', title: 'Employees & CTC', subtitle: 'Payroll view of the workforce, CTC master and bank details' },
-  { id: 'run', label: 'Payroll Run', title: 'Payroll Run', subtitle: 'The heart — month create → sync → calculate → approve → disburse → lock' },
-  { id: 'statutory', label: 'Statutory & Tax', title: 'Statutory & Tax', subtitle: 'Compliance-by-design — PF, ESIC, PT, LWF, NPS and TDS' },
+  { id: 'run', label: 'Payroll Run', title: 'Payroll Run', subtitle: 'The heart: month create → sync → calculate → approve → disburse → lock' },
+  { id: 'statutory', label: 'Statutory & Tax', title: 'Statutory & Tax', subtitle: 'Compliance-by-design: PF, ESIC, PT, LWF, NPS and TDS' },
   { id: 'benefits', label: 'Benefits & Loans', title: 'Benefits & Loans', subtitle: 'Flexi benefits, NPS, insurance and the full loan lifecycle' },
   { id: 'offcycle', label: 'Off-cycle · Bonus · FNF', title: 'Off-cycle · Bonus · FNF', subtitle: 'Ad-hoc payments, bonus registers and full & final settlement' },
   { id: 'reports', label: 'Outputs & Reports', title: 'Outputs & Reports', subtitle: 'Payslips, registers, bank files, challans and dashboards' },
@@ -286,7 +286,7 @@ function PlannedPanel({ s }: { s: SubTab }) {
       </div>
       {s.desc && <div style={{ fontSize: 13, color: C.muted, maxWidth: 460, margin: '0 auto', lineHeight: 1.6 }}>{s.desc}</div>}
       {s.points && <Chips items={s.points} />}
-      <div style={{ fontSize: 11, color: C.muted, marginTop: 16, opacity: 0.8 }}>On the payroll roadmap — structure ready, wiring next.</div>
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 16, opacity: 0.8 }}>On the payroll roadmap: structure ready, wiring next.</div>
     </div>
   )
 }
@@ -409,7 +409,7 @@ function benefitsSubs(): SubTab[] {
   return [
     { id: 'flexi', label: 'Flexi Benefit Plan', icon: '', built: true, href: '/dashboard/flexi-policy', desc: 'FBP components, slabs and employee declarations (old vs new regime).' },
     { id: 'flexiclaims', label: 'Flexi Claims', icon: '', built: true, href: '/dashboard/flexi-claims', desc: 'Review reimbursement bills, manage the monthly submission window and per-employee limits. Approved claims flow into payroll.' },
-    { id: 'flexiinvoices', label: 'Flexi Invoices & Vouchers', icon: '', built: true, href: '/dashboard/flexi-invoices', desc: 'Generate reimbursement vouchers (PDF) for approved flexi claims — one per employee per month, with invoice number EZER-FLX-…' },
+    { id: 'flexiinvoices', label: 'Flexi Invoices & Vouchers', icon: '', built: true, href: '/dashboard/flexi-invoices', desc: 'Generate reimbursement vouchers (PDF) for approved flexi claims, one per employee per month, with invoice number EZER-FLX-…' },
     { id: 'nps', label: 'Corporate NPS', icon: '', built: true, href: '/dashboard/ess', desc: 'Employer NPS enrolment and monthly contribution.' },
     { id: 'insurance', label: 'Insurance / Meal Cards', icon: '', desc: 'GMC / GPA insurance, meal & fuel cards and other benefit heads.' },
     { id: 'loan', label: 'Loan Disbursal & Schedule', icon: '', built: true, href: '/dashboard/loans', desc: 'Loan requests, approval workflow, disbursal and the EMI amortisation schedule.' },
@@ -420,7 +420,7 @@ function benefitsSubs(): SubTab[] {
 
 function offcycleSubs(): SubTab[] {
   return [
-    { id: 'offcycle', label: 'Off-cycle Payments', icon: '', desc: 'Ad-hoc payments outside the monthly cycle — incentives, reimbursements, one-time payouts.' },
+    { id: 'offcycle', label: 'Off-cycle Payments', icon: '', desc: 'Ad-hoc payments outside the monthly cycle: incentives, reimbursements, one-time payouts.' },
     { id: 'bonuscalc', label: 'Bonus Calculation', icon: '', desc: 'Statutory (8.33–20%) and performance bonus computation with eligibility rules.' },
     { id: 'bonusreg', label: 'Bonus Register', icon: '', desc: 'Form C bonus register for statutory compliance.' },
     { id: 'fnfcreate', label: 'FNF Creation', icon: '', desc: 'Initiate full & final settlement for exited / resigned employees.' },
@@ -430,7 +430,7 @@ function offcycleSubs(): SubTab[] {
 
 function reportsSubs(): SubTab[] {
   return [
-    { id: 'register', label: 'Payroll Register', icon: '', built: true, desc: 'The full computed register for a run — export from Payroll Run → 📥 Register (one row per employee with every earning & deduction).' },
+    { id: 'register', label: 'Payroll Register', icon: '', built: true, desc: 'The full computed register for a run. Export from Payroll Run → 📥 Register (one row per employee with every earning & deduction).' },
     { id: 'payslip', label: 'Salary Slip Generator', icon: '', desc: 'Branded PDF payslips per employee on the Sharma Group letterhead, pushed to the ESS portal.' },
     { id: 'annual', label: 'Annual Salary', icon: '', desc: 'Year-to-date earnings & deductions statement per employee.' },
     { id: 'neft', label: 'Bank Transfer File (NEFT)', icon: '', desc: 'Bank-ready NEFT / RTGS salary file with UTF-8 BOM (IFSC, account, amount, narration).' },
@@ -575,7 +575,7 @@ function ConfigTab({ companyId }: { companyId: string }) {
         )}
       </div>
 
-      <div style={S.note}>Other config (FY/month, PT/LWF/min-wages slabs, tax config, perquisite, bonus) — planned.</div>
+      <div style={S.note}>Other config (FY/month, PT/LWF/min-wages slabs, tax config, perquisite, bonus): planned.</div>
     </div>
   )
 }
@@ -606,7 +606,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
     setDlKey(key); setErr('')
     try {
       const rows = await loadMonthMaster(list.map(r => ({ id: r.id, company_name: r.company_name, fy: r.fy })))
-      if (!rows.length) { setErr(`No month master rows for ${label} — sync the month first.`); return }
+      if (!rows.length) { setErr(`No month master rows for ${label}. Sync the month first.`); return }
       // Header is the union of every row's keys, passed explicitly — otherwise a column
       // absent from the first row would be silently dropped from the whole sheet.
       const header: string[] = []
@@ -654,12 +654,12 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
         if (e) failed.push(`${c.company_name}: ${e}`); else created++
       }
       return {
-        summary: `${MONTHS[m - 1]} ${fy} — month master created for ${created} compan${created === 1 ? 'y' : 'ies'}${skipped ? `, ${skipped} already existed` : ''}.`,
+        summary: `${MONTHS[m - 1]} ${fy}: month master created for ${created} compan${created === 1 ? 'y' : 'ies'}${skipped ? `, ${skipped} already existed` : ''}.`,
         error: failed.length ? failed.join('  ·  ') : undefined,
       }
     }
     const e = await createOne(companyId, m)
-    return { summary: e ? '' : `${MONTHS[m - 1]} ${fy} — month master created.`, error: e || undefined }
+    return { summary: e ? '' : `${MONTHS[m - 1]} ${fy}: month master created.`, error: e || undefined }
   }
   async function apply(run: PayrollRun, status: string) {
     setErr(''); setBusy(true)
@@ -684,11 +684,11 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
           {mode === 'create' ? 'Open a new payroll month so it can be processed.'
             : mode === 'freeze' ? 'Freezing locks the attendance snapshot so it can’t change while payroll is calculated.'
               : mode === 'unfreeze' ? 'Re-open a frozen month so attendance can be edited again (reverts it to OPEN).'
-                : 'Locking finalises the month — the payroll snapshot becomes immutable. Unlock to re-open it.'}
+                : 'Locking finalises the month: the payroll snapshot becomes immutable. Unlock to re-open it.'}
         </div>
         {mode === 'create' && (
           <>
-            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: TK.brandTint, borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
+            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: TK.brandTint, borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode: this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
             <div style={{ marginTop: 12 }}>
               <button style={{ ...S.btnPrimary }} onClick={() => setShowCreate(true)}>➕ {allCo ? 'Create for all companies' : 'Create month'}</button>
             </div>
@@ -761,7 +761,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
                   {mode === 'unfreeze' && !cancelled && (
                     run.status === 'ATTENDANCE_LOCKED'
                       ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'OPEN')}>Unfreeze</button>
-                      : <span style={{ fontSize: 11, color: C.muted }}>{frozen ? 'processed — can’t unfreeze' : 'not frozen'}</span>
+                      : <span style={{ fontSize: 11, color: C.muted }}>{frozen ? 'processed, can’t unfreeze' : 'not frozen'}</span>
                   )}
                   {mode === 'lock' && !cancelled && (
                     locked
@@ -886,7 +886,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
               Can&apos;t create {monthLabel} yet
             </div>
             <div style={{ fontSize: 12, color: C.muted, textAlign: 'center', marginBottom: 16 }}>
-              {blockers[0]?.prevLabel} has to be closed off first — attendance processed, month frozen and payroll locked.
+              {blockers[0]?.prevLabel} has to be closed off first: attendance processed, month frozen and payroll locked.
             </div>
             <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 18 }}>
               {blockers.map(b => (
@@ -898,7 +898,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
                     ['Payroll locked', b.locked, b.lockedDetail],
                   ].map(([label, ok, detail]: any) => (
                     <div key={label} style={{ fontSize: 12, color: ok ? C.success : C.red, padding: '2px 0' }}>
-                      {ok ? '' : ''} <b>{label}</b>{ok ? '' : ` — ${detail}`}
+                      {ok ? '' : ''} <b>{label}</b>{ok ? '' : `: ${detail}`}
                     </div>
                   ))}
                 </div>
@@ -979,7 +979,7 @@ function AuditCard({ companyId, refreshKey }: { companyId: string; refreshKey: n
           {rows.slice(0, 12).map((r, i) => (
             <div key={i} style={{ display: 'flex', gap: 10, fontSize: 12, alignItems: 'center', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`, paddingTop: i === 0 ? 0 : 6 }}>
               <span style={{ fontWeight: 600, color: C.purpleDark, minWidth: 150 }}>{r.action}</span>
-              <span style={{ color: C.muted }}>{r.performed_by || '—'}</span>
+              <span style={{ color: C.muted }}>{r.performed_by || '-'}</span>
               <span style={{ color: C.muted, marginLeft: 'auto' }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</span>
             </div>
           ))}
@@ -1016,7 +1016,7 @@ function BenefitsTab() {
           ))}
         </div>
       </div>
-      <div style={S.note}>Loans, salary advance &amp; recovery schedules — planned.</div>
+      <div style={S.note}>Loans, salary advance &amp; recovery schedules: planned.</div>
     </div>
   )
 }
@@ -1063,7 +1063,7 @@ function EmployeesTab({ companyId }: { companyId: string }) {
           </select>
           <button style={{ ...S.btnPrimary, marginLeft: 'auto' }} onClick={exportExcel}>Export Excel</button>
         </div>
-        {missingCtc > 0 && <div style={{ fontSize: 12, color: C.amber, marginTop: 8 }}>⚠ {missingCtc} employee(s) have no CTC in ctc_master — CTC/Basic show ₹0. Seed ctc_master to populate.</div>}
+        {missingCtc > 0 && <div style={{ fontSize: 12, color: C.amber, marginTop: 8 }}>⚠ {missingCtc} employee(s) have no CTC in ctc_master, so CTC/Basic show ₹0. Seed ctc_master to populate.</div>}
       </div>
       {loading ? <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div> : (
         <div style={{ ...S.card, overflowX: 'auto' }}>
@@ -1076,19 +1076,19 @@ function EmployeesTab({ companyId }: { companyId: string }) {
               {filtered.map(e => (
                 <tr key={e.id} style={{ borderTop: `1px solid ${C.border}` }}>
                   <td style={{ padding: '6px 8px', fontWeight: 600 }}>{e.emp_code}</td>
-                  <td style={{ padding: '6px 8px' }}>{e.full_name}<div style={{ fontSize: 10, color: C.muted }}>{e.designation || '—'}</div></td>
-                  {allCo && <td style={{ padding: '6px 8px', fontSize: 11 }}>{e.company || '—'}</td>}
-                  <td style={{ padding: '6px 8px' }}>{e.department || '—'}</td>
-                  <td style={{ padding: '6px 8px' }}>{e.tds_regime || '—'}</td>
-                  <td style={{ padding: '6px 8px', fontSize: 10 }}>{[e.pf_applicable && 'PF', e.esic_applicable && 'ESIC', e.pt_applicable && 'PT', e.lwf_applicable && 'LWF'].filter(Boolean).join(' · ') || '—'}</td>
-                  <td style={{ padding: '6px 8px', fontSize: 11 }}>{e.bank_name || '—'}{e.bank_account_last4 ? ` ••${e.bank_account_last4}` : ''}</td>
+                  <td style={{ padding: '6px 8px' }}>{e.full_name}<div style={{ fontSize: 10, color: C.muted }}>{e.designation || '-'}</div></td>
+                  {allCo && <td style={{ padding: '6px 8px', fontSize: 11 }}>{e.company || '-'}</td>}
+                  <td style={{ padding: '6px 8px' }}>{e.department || '-'}</td>
+                  <td style={{ padding: '6px 8px' }}>{e.tds_regime || '-'}</td>
+                  <td style={{ padding: '6px 8px', fontSize: 10 }}>{[e.pf_applicable && 'PF', e.esic_applicable && 'ESIC', e.pt_applicable && 'PT', e.lwf_applicable && 'LWF'].filter(Boolean).join(' · ') || '-'}</td>
+                  <td style={{ padding: '6px 8px', fontSize: 11 }}>{e.bank_name || '-'}{e.bank_account_last4 ? ` ••${e.bank_account_last4}` : ''}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <div style={S.note}>Source of truth is HRMS (employees + ctc_master). Versioned CTC (from_date/active_month), salary revision &amp; arrears — planned.</div>
+      <div style={S.note}>Source of truth is HRMS (employees + ctc_master). Versioned CTC (from_date/active_month), salary revision &amp; arrears: planned.</div>
     </div>
   )
 }

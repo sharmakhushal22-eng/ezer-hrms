@@ -15,15 +15,17 @@ import type { ChainRow, PendingItem } from './types'
 import { Ic, type IconKey } from './icons'
 import { CountUp, fmtDateTime, riseStyle, useToast } from './ui'
 import { MrfApprovals, InterviewInvites, OfferApprovals } from '@/components/ess/RoleTabs'
+import OnboardingApprovals from '@/components/ess/OnboardingApprovals'
 
-type Filter = 'MINE' | 'ALL' | 'LEAVE' | 'TRAVEL' | 'RESIGNATION'
+type Filter = 'MINE' | 'ALL' | 'LEAVE' | 'ATTENDANCE' | 'TRAVEL' | 'RESIGNATION'
 
 const CHIPS: [Filter, string][] = [
   ['MINE', 'Waiting on me'], ['ALL', 'Everything'],
-  ['LEAVE', 'Leave'], ['TRAVEL', 'Travel'], ['RESIGNATION', 'Resignation'],
+  ['LEAVE', 'Leave'], ['ATTENDANCE', 'Attendance'], ['TRAVEL', 'Travel'], ['RESIGNATION', 'Resignation'],
 ]
 const KIND: Record<PendingItem['kind'], [IconKey, string]> = {
-  LEAVE: ['clock', 'Leave'], TRAVEL: ['plane', 'Travel'], RESIGNATION: ['door', 'Resignation'],
+  LEAVE: ['clock', 'Leave'], LEAVE_CANCEL: ['x', 'Leave cancellation'], REGULARISATION: ['check', 'Attendance'],
+  TRAVEL: ['plane', 'Travel'], RESIGNATION: ['door', 'Resignation'],
 }
 /** Same four as the live screen — an action that collects input before it fires. */
 const needsInput = (a: string) => ['Accept with my date', 'Request retention', 'Set final LWD', 'Decline'].includes(a)
@@ -55,12 +57,16 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
   if (err) return <div className="hx-note d">{err}</div>
   if (!items) return <div style={{ fontSize: 12.5, color: 'var(--ez-faint)' }}>Loading…</div>
 
-  const shown = items.filter(i => filter === 'ALL' ? true : filter === 'MINE' ? i.mine : i.kind === filter)
+  // Leave covers its cancellations; Attendance is the correction requests.
+  const inFilter = (i: PendingItem) => filter === 'ALL' ? true : filter === 'MINE' ? i.mine
+    : filter === 'LEAVE' ? i.kind === 'LEAVE' || i.kind === 'LEAVE_CANCEL'
+    : filter === 'ATTENDANCE' ? i.kind === 'REGULARISATION' : i.kind === filter
+  const shown = items.filter(inFilter)
   const kpis: { k: string; v: number; tone?: string }[] = [
     { k: 'Waiting on you', v: mine, tone: mine ? 'warn' : 'ok' },
     { k: 'In your scope', v: items.length - mine },
     { k: 'Resignations', v: items.filter(i => i.kind === 'RESIGNATION').length },
-    { k: 'Leave & travel', v: items.filter(i => i.kind !== 'RESIGNATION').length },
+    { k: 'Leave, attendance & travel', v: items.filter(i => i.kind !== 'RESIGNATION').length },
   ]
   const runCount = !counted.current; counted.current = true
   const animate = !animated.current; animated.current = true
@@ -74,6 +80,8 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
       <MrfApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       <OfferApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       <InterviewInvites employeeId={employeeId} notify={(m) => toast(m)} />
+      {/* The four-team onboarding sign-off (IT / Admin / Payroll / HR Manager). */}
+      <OnboardingApprovals employeeId={employeeId} notify={(m) => toast(m)} />
 
       <div className="hx-kpis">
         {kpis.map(k => (
@@ -98,7 +106,7 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
         <div className="hx-appr">
           {shown.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--ez-muted)', padding: '6px 0' }}>
-              Nothing here — {filter === 'MINE' ? 'nothing is waiting on you.' : 'nothing in this view.'}
+              Nothing here: {filter === 'MINE' ? 'nothing is waiting on you.' : 'nothing in this view.'}
             </div>
           ) : shown.map((it, i) => (
             <PendingCard key={`${it.kind}:${it.id}`} item={it} api={api} go={go} animate={animate} i={i}
@@ -108,8 +116,8 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
 
         <div className="hx-foot">
           Items stamped to you can be actioned here. Items in your wider scope (HOD department, HR / Finance role)
-          are shown for oversight; the person they are stamped to acts on them. Travel claims are actioned from the
-          Travel Claims screen.
+          are shown for oversight; the person they are stamped to acts on them. Approving an attendance correction
+          updates the employee’s attendance for those days. Travel claims are actioned from the Travel Claims screen.
         </div>
       </div>
     </>
@@ -139,7 +147,11 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
       catch (e) { setErr((e as Error).message) }
       return
     }
-    if (needsInput(a) && ask !== a) { setAsk(a); return }
+    if (needsInput(a) && ask !== a) {
+      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
+      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      setAsk(a); return
+    }
     if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
     setBusy(true)
     try {
@@ -147,11 +159,11 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
         method: 'POST',
         body: JSON.stringify({ kind: item.kind, id: item.id, action: a, note: note || null, lwd: lwd || null, regrettable: regret }),
       })
-      onDone(`${a} — done`)
+      onDone(`${a}: done`)
     } catch (e) { setErr((e as Error)?.message || String(e)) } finally { setBusy(false) }
   }
 
-  const [icon, label] = KIND[item.kind]
+  const [icon, label] = KIND[item.kind] || ['info', item.kind]
   const noteLabel = ask === 'Request retention' ? 'What you plan to discuss'
     : ask === 'Decline' ? 'Reason (shown to the employee)' : 'Note (optional)'
 
@@ -168,6 +180,12 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
         </span>
       </div>
       {item.meta && <div className="meta">{item.meta}</div>}
+      {!!item.facts?.length && (
+        <ul className="meta" style={{ margin: '7px 0 0', paddingLeft: 16 }}>
+          {item.facts.map((f, idx) => <li key={idx}>{f}</li>)}
+        </ul>
+      )}
+      {item.alert && <div className="hx-note w" style={{ marginTop: 9 }}>{item.alert}</div>}
 
       <div className="hx-actions">
         {item.actions.map((a, idx) => {
@@ -186,13 +204,18 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
             <div>
               <label className="hx-label">{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label>
               <input type="date" className="hx-input" value={lwd} onChange={e => setLwd(e.target.value)} />
+              <div style={{ fontSize: 11.5, color: 'var(--ez-muted)', marginTop: 4 }}>
+                {item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.`
+                  : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.`
+                  : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''}
+              </div>
             </div>
           )}
           {ask === 'Set final LWD' && (
             <div>
               <label className="hx-label">Regrettable exit?</label>
               <div className="hx-toggle">
-                <button className={`hx-btn ${regret === true ? '' : 'o'} sm`} onClick={() => setRegret(true)}>Yes — regrettable</button>
+                <button className={`hx-btn ${regret === true ? '' : 'o'} sm`} onClick={() => setRegret(true)}>Yes, regrettable</button>
                 <button className={`hx-btn ${regret === false ? '' : 'o'} sm`} onClick={() => setRegret(false)}>No</button>
               </div>
             </div>
@@ -202,7 +225,7 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
             <textarea className="hx-area" style={{ minHeight: 60 }} value={note} onChange={e => setNote(e.target.value)} />
           </div>
           <div style={{ display: 'flex', gap: 7 }}>
-            <button className="hx-btn sm" disabled={busy} onClick={() => void fire(ask)}>Confirm — {ask}</button>
+            <button className="hx-btn sm" disabled={busy} onClick={() => void fire(ask)}>Confirm: {ask}</button>
             <button className="hx-btn o sm" onClick={() => { setAsk(null); setNote(''); setLwd('') }}>Cancel</button>
           </div>
         </div>

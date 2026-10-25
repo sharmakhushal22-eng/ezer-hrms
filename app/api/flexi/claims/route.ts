@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
       // Rule-based AI flag (OCR service can override later).
       const ai_flag = claim_amount > 15000 ? 'flag' : 'clear'
-      const ai_notes = ai_flag === 'flag' ? 'Amount above ₹15,000 — manual review recommended' : null
+      const ai_notes = ai_flag === 'flag' ? 'Amount above ₹15,000: manual review recommended' : null
 
       // agency_name is the vendor/agency; keep vendor_desc in sync for backward compat.
       const agency = agency_name || vendor_desc || null

@@ -84,7 +84,7 @@ export function TicTacToeVsBot({ onBack }: BackProp = {}) {
   const iWon = state.kind === 'won' && state.by === ME
   const status = state.kind === 'won'
     ? (state.by === ME ? 'You win.' : 'The computer wins.')
-    : state.kind === 'draw' ? "A draw — that's the game, not the bot."
+    : state.kind === 'draw' ? "A draw. That's the game, not the bot."
     : myTurn ? 'Your turn.' : 'Thinking…'
 
   return (
@@ -177,7 +177,7 @@ export function MemoryVsBot({ onBack }: BackProp = {}) {
 
   return (
     <Stage cat="memory" icon="🧩" title="Memory Match"
-           sub={`You ${state.scores.HOST} · Computer ${state.scores.GUEST} — ${MEM_CARDS / 2} pairs`}
+           sub={`You ${state.scores.HOST} · Computer ${state.scores.GUEST} · ${MEM_CARDS / 2} pairs`}
            onBack={onBack} confetti={iWon ? seed : 0}>
       <DifficultyBar level={level} onPick={d => { setLevel(d); restart() }} />
       <VsBar left={{ who: 'You', pts: state.scores.HOST }} right={{ who: 'Computer', pts: state.scores.GUEST }}
@@ -188,7 +188,7 @@ export function MemoryVsBot({ onBack }: BackProp = {}) {
         text={result
           ? result.draw ? 'A draw.'
             : result.winner === ME ? 'You win.' : 'The computer wins.'
-          : myTurn ? 'Your turn — turn over two.' : 'The computer is looking…'} />
+          : myTurn ? 'Your turn: turn over two.' : 'The computer is looking…'} />
       <div className="mem" key={seed}>
         {deck.map((face, i) => {
           const open = shown.has(i), done = state.matched.includes(i)

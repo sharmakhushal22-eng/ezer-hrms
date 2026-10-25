@@ -5,8 +5,9 @@
 // The candidate must own the exact email the recruiter sent the link to.
 
 import { NextRequest, NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
+import { renderEmail, mrfScope } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
 import { genOtp, hashOtp, signAccess, emailsMatch, OTP_TTL_MIN, OTP_MAX_ATTEMPTS } from '@/lib/recruitment/collect-auth'
 
 export const runtime = 'nodejs'
@@ -37,21 +38,11 @@ export async function POST(req: NextRequest) {
       .update({ otp_hash: hashOtp(token, otp), otp_expires_at: expires, otp_attempts: 0 }).eq('id', link.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD
-    let sent = false, debugOtp: string | undefined
-    if (user && pass) {
-      try {
-        const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-        await t.sendMail({
-          from: `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`,
-          to: link.candidate_email,
-          subject: `Your document upload verification code: ${otp}`,
-          text: `Your one-time verification code is ${otp}. It is valid for ${OTP_TTL_MIN} minutes.\n\nIf you did not request this, please ignore this email.`,
-          html: `<p>Your one-time verification code is:</p><p style="font-size:26px;font-weight:800;letter-spacing:4px;color:#7C3AED">${otp}</p><p>Valid for ${OTP_TTL_MIN} minutes. If you did not request this, please ignore this email.</p>`,
-        })
-        sent = true
-      } catch { /* fall through */ }
-    }
+    // Words: Configuration → "Document upload — verification code", for the link's company / branch.
+    const mail = await renderEmail('doc_collection.otp', await mrfScope(link.mrf_id, link.company_id), { otp, validity_minutes: OTP_TTL_MIN })
+    const res = await sendMail({ to: link.candidate_email, subject: mail.subject, text: mail.text, html: mail.html })
+    const sent = res.sent
+    let debugOtp: string | undefined
     // If email isn't configured (local/dev), return the code so the flow is testable.
     if (!sent && process.env.NODE_ENV !== 'production') debugOtp = otp
     return NextResponse.json({ ok: true, sent, sentTo: maskEmail(link.candidate_email), ...(debugOtp ? { debugOtp } : {}) })

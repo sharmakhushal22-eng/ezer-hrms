@@ -28,7 +28,7 @@
 -- Renaming any of those would be an API change dressed up as a wording change,
 -- and would break the screens this is meant to serve.
 --
--- te_claim_submit IS REPRODUCED FROM 155, NOT 147. 155 is the live definition
+-- te_claim_submit IS REPRODUCED FROM 161, NOT 147. 161 is the live definition
 -- and carries the co-traveller change. Had it been taken from 147 this file
 -- would have quietly reverted it, which is the kind of thing that is only
 -- noticed weeks later when somebody cannot claim a trip they were taken on.
@@ -39,7 +39,7 @@
 --
 -- STILL SAYING LEG AFTER THIS: the history rows already written. This file
 -- changes what is written from now on; it does not rewrite the past. See
--- 157 for that, which is optional and deliberately separate.
+-- 163 for that, which is optional and deliberately separate.
 -- ============================================================================
 
 -- ============================================================================

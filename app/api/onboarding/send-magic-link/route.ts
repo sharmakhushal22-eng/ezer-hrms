@@ -1,8 +1,14 @@
 // app/api/onboarding/send-magic-link/route.ts
-// Creates or updates onboarding candidate record, sends onboarding link
+// Creates or updates onboarding candidate record, sends onboarding link.
+// The email's words come from Configuration → 'Onboarding invitation' for the company.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import nodemailer from 'nodemailer'
+import { requireModule } from '@/lib/api-auth'
+import { renderEmail } from '@/lib/config/store'
+import { sendMail } from '@/lib/mail/send'
+import { trackOf } from '@/lib/onboarding/hiring-track'
+import { importCollectedDocs } from '@/lib/onboarding/import-docs'
+import { seedFormData } from '@/lib/onboarding/seed-form'
 
 export const runtime = 'nodejs' // nodemailer needs Node.js runtime, not Edge
 
@@ -15,15 +21,50 @@ const supa = createClient(
 const makeOtp = () => String(Math.floor(100000 + Math.random() * 900000))
 
 export async function POST(req: NextRequest) {
+  // Signed in and able to open Onboarding — the same people who see the Send link button.
+  const gate = await requireModule(req, 'Onboarding')
+  if (gate.error) return gate.error
+
   try {
     const body = await req.json()
     const {
       candidate_id, company_id, full_name, email, mobile,
       designation, department, department_id, employment_type, date_of_joining, offered_ctc,
+      hiring_track, work_country, payroll_currency, employing_entity, notice_period_days,
     } = body
+    // The notice period the joiner will serve: typed by HR, else the offer's (ctc_negotiations /
+    // offer_letters), else the company default. It lands on employees.notice_period_days at code
+    // generation — the number the resignation chain uses for the policy last working day.
+    let noticeDays: number | null = Number(notice_period_days) > 0 ? Math.round(Number(notice_period_days)) : null
+    if (!noticeDays && candidate_id) {
+      const [{ data: ol }, { data: neg }] = await Promise.all([
+        supa.from('offer_letters').select('notice_period_days').eq('candidate_id', candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supa.from('ctc_negotiations').select('notice_period_days').eq('candidate_id', candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      ])
+      noticeDays = Number(ol?.notice_period_days) > 0 ? Number(ol!.notice_period_days) : Number(neg?.notice_period_days) > 0 ? Number(neg!.notice_period_days) : null
+    }
+    if (!noticeDays) { const { data: co } = await supa.from('companies').select('notice_period_days').eq('id', company_id).maybeSingle(); noticeDays = Number(co?.notice_period_days) > 0 ? Number(co!.notice_period_days) : null }
+    // The hiring track (lib/onboarding/hiring-track.ts) decides the portal's steps, documents
+    // and statutory treatment. An overseas employee needs a work country.
+    const track = trackOf(hiring_track)
+    if (track === 'OVERSEAS' && !String(work_country || '').trim()) {
+      return NextResponse.json({ error: 'Pick the work country for an overseas employee.' }, { status: 400 })
+    }
 
     if (!company_id || !full_name || !mobile) {
       return NextResponse.json({ error: 'company_id, full_name, mobile required' }, { status: 400 })
+    }
+    // The joining date is on the link mail, the review sheet, the employee record (company_doj)
+    // and the ESS Today tab — a joiner without one once crashed the portal on first login.
+    if (!date_of_joining || Number.isNaN(new Date(date_of_joining).getTime())) {
+      return NextResponse.json({ error: 'Set the date of joining first (Edit on the card), then send the link.', needs_doj: true }, { status: 400 })
+    }
+    // The link, the corrections and the ESS login are all emailed — no address, no link.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email || '').trim())) {
+      return NextResponse.json({ error: 'Add a valid email for the candidate first (Edit on the card) — the link and the login go there.', needs_email: true }, { status: 400 })
+    }
+    if (!/^[6-9]\d{9}$/.test(String(mobile).replace(/\D/g, ''))) {
+      return NextResponse.json({ error: 'The mobile number must be a 10-digit Indian number.' }, { status: 400 })
     }
 
     // Insert a fresh onboarding candidate. (No upsert: candidate_id has no unique
@@ -43,6 +84,11 @@ export async function POST(req: NextRequest) {
         employment_type: employment_type || 'Employee',
         date_of_joining: date_of_joining || null,
         offered_ctc:     offered_ctc || null,
+        hiring_track:    track,
+        work_country:    track === 'DOMESTIC' ? 'India' : (String(work_country || '').trim() || (track === 'FOREIGN_IN_INDIA' ? 'India' : null)),
+        payroll_currency: String(payroll_currency || '').trim().toUpperCase() || (track === 'OVERSEAS' ? null : 'INR'),
+        employing_entity: String(employing_entity || '').trim() || null,
+        notice_period_days: noticeDays,
         status:          'INVITED',
         token_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         created_by:      body.created_by || null,
@@ -55,6 +101,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insertErr?.message || 'Failed to create record' }, { status: 500 })
     }
 
+    // What recruitment already knows goes into the form: the documents collected before the
+    // offer (view / replace / remove on the portal), and the details from the application.
+    let carried = 0
+    try {
+      carried = await importCollectedDocs(supa as any, candidate.id, candidate_id || null)
+      const seed = await seedFormData(supa as any, candidate_id || null, { full_name, email: email || null, mobile })
+      if (seed) await supa.from('onboarding_candidates').update({ form_data: seed }).eq('id', candidate.id)
+    } catch (e) { console.error('prefill failed', e) }
+
     // Generate onboarding link URL
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || 'http://localhost:3000'
     const magicLink = `${baseUrl}/onboarding/${candidate.magic_link_token}`
@@ -65,40 +120,31 @@ export async function POST(req: NextRequest) {
       action:        'MAGIC_LINK_SENT',
       actor_type:    'SYSTEM',
       details:       { email, mobile, link_sent: true },
-      ip_address:    req.headers.get('x-forwarded-for') || req.ip || null,
+      ip_address:    req.headers.get('x-forwarded-for') || null,
     })
 
-    // Actually email the link to the candidate (Gmail SMTP via nodemailer).
-    const user = process.env.GMAIL_USER
-    const pass = process.env.GMAIL_APP_PASSWORD
+    // Email the link to the candidate (Gmail SMTP, lib/mail/send.ts).
+    const { data: co } = await supa.from('companies').select('company_name').eq('id', company_id).maybeSingle()
+    const mail = await renderEmail('onboarding.invite', company_id, {
+      candidate_name:      full_name,
+      onboarding_link:     magicLink,
+      link_validity_hours: '24',
+      company_name:        co?.company_name || '',
+      designation:         designation || '',
+      joining_date:        date_of_joining ? new Date(date_of_joining).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : '',
+    })
+    const subject = mail.subject
     let emailed = false
     let emailError: string | null = null
-    const subject = `Welcome aboard! Complete your onboarding — ${full_name}`
-    const text =
-`Dear ${full_name},
-
-Welcome! Please complete your joining formalities by opening the secure link below:
-
-${magicLink}
-
-This link is valid for 24 hours. You'll verify your mobile via OTP, then fill in your details and upload documents.
-
-Warm regards,
-HR Team`
-    if (email && user && pass) {
-      try {
-        const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
-        const from = `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`
-        await transporter.sendMail({ from, to: email, subject, text, html: text.replace(/\n/g, '<br>') })
-        emailed = true
-      } catch (e: any) {
-        emailError = e?.message || 'send failed'
-        console.error('send-magic-link email failed:', e)
-      }
-    } else if (!email) {
+    if (!email) {
       emailError = 'candidate has no email on file'
     } else {
-      emailError = 'email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)'
+      const sent = await sendMail({ to: email, subject, text: mail.text, html: mail.html, fromName: 'HR Team' })
+      emailed = sent.sent
+      if (!sent.sent) {
+        emailError = sent.skipped ? 'email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)' : (sent.error || 'send failed')
+        if (sent.error) console.error('send-magic-link email failed:', sent.error)
+      }
     }
 
     // Notification record
@@ -119,6 +165,7 @@ HR Team`
       onboarding_id: candidate.id,
       emailed,
       email_error: emailError,
+      documents_carried: carried,
     })
 
   } catch (err: any) {

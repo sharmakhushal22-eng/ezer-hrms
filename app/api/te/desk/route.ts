@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
     if (book.error) throw rpcError(book.error, 'v_te_to_book')
     if (veh.error) throw rpcError(veh.error, 'te_employee_vehicles')
     if (done.error) throw rpcError(done.error, 'te_bookings')
-    // 42703 is "column does not exist": migration 158 adds stay_wanted and 159
+    // 42703 is "column does not exist": migration 164 adds stay_wanted and 165
     // adds stay_status. Until both are applied this half of the desk simply is
     // not there yet, and the desk's other two jobs must not go down with it.
     // Any OTHER error is a real fault and still throws.

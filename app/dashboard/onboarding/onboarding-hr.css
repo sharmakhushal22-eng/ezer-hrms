@@ -1,0 +1,45 @@
+/* app/dashboard/onboarding/onboarding-hr.css — the HR Onboarding module (overview, candidates,
+   pending actions, AI insights, compliance). Scoped under .ezob. Only what inline styles
+   cannot do: hover states, the table row hover, focus rings. Colours are theme tokens. */
+
+.ezob { --ezob-ring: 0 0 0 4px color-mix(in srgb, var(--ez-brand) 15%, transparent); }
+
+/* Cards and stat tiles lift slightly on hover — enough to say "this is clickable". */
+.ezob-lift { transition: transform .16s ease, box-shadow .2s ease, border-color .2s ease; }
+.ezob-lift:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(16,24,40,.04), 0 14px 30px -18px rgba(29,78,216,.45); border-color: var(--ez-brand-edge) !important; }
+
+/* Table rows: no zebra stripes, a soft hover wash instead */
+.ezob-table tbody tr { transition: background .12s ease; }
+.ezob-table tbody tr:hover { background: var(--ez-brand-tint) !important; }
+.ezob-table th { position: sticky; top: 0; }
+
+/* Small buttons in tables and lists */
+.ezob-btn { transition: background .15s ease, border-color .15s ease, color .15s ease, transform .12s ease; }
+.ezob-btn:not(:disabled):hover { transform: translateY(-1px); }
+.ezob-btn.is-ghost:not(:disabled):hover { border-color: var(--ez-brand-edge) !important; color: var(--ez-brand) !important; background: var(--ez-brand-tint) !important; }
+
+/* Inputs */
+.ezob input:not([type=checkbox]), .ezob select { transition: border-color .15s, box-shadow .15s; }
+.ezob input:not([type=checkbox]):focus, .ezob select:focus { border-color: var(--ez-brand) !important; box-shadow: var(--ezob-ring); outline: none; }
+.ezob input[type=checkbox] { accent-color: var(--ez-brand); width: 16px; height: 16px; cursor: pointer; }
+
+/* Segmented tab bar */
+.ezob-tabs { display: inline-flex; gap: 2px; padding: 4px; border-radius: 12px; background: var(--ez-sunken); border: 1px solid var(--ez-line); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.ezob-tabs::-webkit-scrollbar { display: none; }
+.ezob-tabs button { border: 0; background: transparent; color: var(--ez-muted); height: 36px; padding: 0 14px; border-radius: 9px !important; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
+.ezob-tabs button:hover { color: var(--ez-ink); }
+.ezob-tabs button[data-on="1"] { background: var(--ez-surface); color: var(--ez-ink); box-shadow: 0 1px 3px rgba(16,24,40,.12); }
+.ezob-tabs button[data-on="1"] svg { color: var(--ez-brand); }
+
+/* Pills for the joining-window filter */
+.ezob-pill { transition: background .15s, border-color .15s, color .15s; }
+.ezob-pill:hover { border-color: var(--ez-brand-edge) !important; color: var(--ez-brand) !important; }
+
+/* The "⋯" row menu and the approvals popover render into <body> (components/onboarding/
+   AnchoredPopover.tsx), outside .ezob, so their hover lives here unscoped. */
+.ob-mi:not(:disabled):hover, .ob-mi:focus-visible { background: var(--ez-sunken); outline: none; }
+.ob-mi:disabled { opacity: .5; }
+
+/* The candidates table drops its initials discs on a laptop-width screen so the actions column
+   fits without a sideways scroll. */
+@media (max-width: 1320px) { .ezob-table .ezob-av { display: none !important; } }

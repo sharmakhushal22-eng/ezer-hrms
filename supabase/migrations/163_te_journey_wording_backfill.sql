@@ -2,7 +2,7 @@
 --
 -- DECIDED ON 18 OCTOBER 2026: NOT APPLIED, DELIBERATELY. Khushal chose to skip
 -- it. Three rows in te_audit_log still say "leg" where everything written
--- since migration 156 says "journey", and that is accepted — the entries are
+-- since migration 162 says "journey", and that is accepted — the entries are
 -- cosmetic, nothing reads the word, and this is the only migration in the
 -- module that rewrites rows somebody has already seen.
 --
@@ -11,8 +11,12 @@
 -- the answer and the fix in one place. If it is ever run, back up te_audit_log
 -- first.
 --
--- OPTIONAL. 156 changed what the database writes from now on. It did not touch
--- the rows already in te_audit_log, so a trip planned before 156 still shows
+-- NUMBERED 163 HERE, 157 ON THE BRANCH THIS CAME FROM. The companion migration
+-- it refers to is 162 in this tree and was 156 there; the merge kept this
+-- branch's numbering so the pair is not carried twice under two numbers.
+--
+-- OPTIONAL. 162 changed what the database writes from now on. It did not touch
+-- the rows already in te_audit_log, so a trip planned before 162 still shows
 -- "Planned 1 leg, 42.8 km" under a screen that now says "Add a journey". This
 -- file rewrites those rows. SAFE TO RUN TWICE.
 --
@@ -20,7 +24,7 @@
 -- trail. Editing it after the fact is a different kind of act from changing a
 -- label, even when only the wording moves and no fact does. Some companies
 -- would rather the audit trail say exactly what the system said at the time.
--- If that is you, do not apply this file: 156 is complete without it, and only
+-- If that is you, do not apply this file: 162 is complete without it, and only
 -- rows written before it will carry the old word.
 --
 -- THE HAZARD THIS AVOIDS. A blanket

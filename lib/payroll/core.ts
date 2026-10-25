@@ -127,8 +127,8 @@ export async function checkMonthReadiness(
       attendanceDone,
       attendanceDetail: attendanceDone ? 'all employees processed'
         : (total || 0) === 0 ? 'month master is empty' : `${pending} of ${total} employees still not processed`,
-      frozen, frozenDetail: frozen ? 'frozen' : `status is ${run.status} — freeze the month first`,
-      locked, lockedDetail: locked ? 'locked' : `status is ${run.status} — payroll not locked yet`,
+      frozen, frozenDetail: frozen ? 'frozen' : `status is ${run.status}, freeze the month first`,
+      locked, lockedDetail: locked ? 'locked' : `status is ${run.status}, payroll not locked yet`,
       ok: attendanceDone && frozen && locked,
     })
   }
@@ -746,7 +746,10 @@ export interface PayrollEmployee {
 export async function loadPayrollEmployees(companyId: string): Promise<PayrollEmployee[]> {
   let q = supabase.from('employees')
     .select('id, emp_code, full_name, designation, tds_regime, pf_applicable, esic_applicable, pt_applicable, lwf_applicable, bank_name, ifsc_code, bank_account_last4, companies!employees_company_id_fkey(company_name), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
-    .eq('employment_status', 'Active').order('emp_code')
+    .eq('employment_status', 'Active')
+    // Overseas employees are paid by the foreign entity / EOR — never in the Indian run.
+    .or('paid_outside_india.is.null,paid_outside_india.eq.false')
+    .order('emp_code')
   if (companyId) q = q.eq('company_id', companyId)   // '' = all companies (Group Companies mode)
   const { data: emps } = await q
   const list = (emps as any[]) || []

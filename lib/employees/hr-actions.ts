@@ -1,5 +1,6 @@
 // lib/employees/hr-actions.ts — HR Employee Action Panel data + actions.
 import { supabase } from '@/lib/supabase'
+import { authHeaders } from '@/lib/auth-headers'
 
 export interface By { id?: string | null; name?: string | null }
 type Res = { ok?: true; error?: any; [k: string]: any }
@@ -262,7 +263,7 @@ export async function initiateResignation(employeeId: string, p: {
   let mailed = false, mailError: string | null = null
   if (recovery) {
     try {
-      const res = await fetch('/api/hr/recovery-mail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resignation_id: r.id }) })
+      const res = await fetch('/api/hr/recovery-mail', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ resignation_id: r.id }) })
       const d = await res.json()
       mailed = !!d.ok; if (!d.ok) mailError = d.error || 'mail failed'
     } catch (e: any) { mailError = e?.message || 'network error' }
@@ -395,11 +396,11 @@ export async function initiateLocationTransfer(
     if (tr?.id) {
       try {
         await fetch('/api/transfer/generate-letter', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: await authHeaders(),
           body: JSON.stringify({ transfer_id: tr.id, type: 'LOCATION' }),
         })
         await fetch('/api/transfer/notify', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: await authHeaders(),
           body: JSON.stringify({ transfer_id: tr.id }),
         })
       } catch { /* letter/notify best-effort */ }
@@ -521,11 +522,11 @@ export async function initiateInterCompanyTransfer(p: TransferInterCompany, by?:
   if (tr?.id) {
     try {
       await fetch('/api/transfer/generate-letter', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({ transfer_id: tr.id, type: 'INTER_COMPANY' }),
       })
       await fetch('/api/transfer/notify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({ transfer_id: tr.id }),
       })
     } catch { /* best-effort */ }

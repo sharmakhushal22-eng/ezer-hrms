@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     return errorResponse(e, 'Could not load the finance team',
-      'The finance tables do not exist yet — migration 053_finance_department.sql has not been run.');
+      'The finance tables do not exist yet: migration 053_finance_department.sql has not been run.');
   }
 }
 
@@ -77,6 +77,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ member: data });
   } catch (e) {
     return errorResponse(e, 'Could not update that member',
-      'The finance tables do not exist yet — migration 053_finance_department.sql has not been run.');
+      'The finance tables do not exist yet: migration 053_finance_department.sql has not been run.');
   }
 }

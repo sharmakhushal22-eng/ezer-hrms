@@ -19,13 +19,13 @@ const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 
 /** ₹8,04,000 — Indian digit grouping. Input in RUPEES. */
 export function formatINR(rupees: number | null | undefined): string {
-  if (rupees == null || Number.isNaN(rupees)) return '—';
+  if (rupees == null || Number.isNaN(rupees)) return '-';
   return '₹' + inr.format(Math.round(rupees));
 }
 
 /** ₹8.04L — compact lakh label. Input in RUPEES. */
 export function formatLakh(rupees: number | null | undefined, digits = 2): string {
-  if (rupees == null || Number.isNaN(rupees)) return '—';
+  if (rupees == null || Number.isNaN(rupees)) return '-';
   const l = rupees / 100000;
   const txt = l.toFixed(digits).replace(/\.?0+$/, ''); // 9.00 → 9, 8.20 → 8.2, 8.04 → 8.04
   return '₹' + txt + 'L';
@@ -43,12 +43,12 @@ export function laneFor(annualRupees: number, quickHireCap: number): 'Quick Hire
 }
 
 export function noticeLabel(days: number | null | undefined): string {
-  if (days == null) return '—';
+  if (days == null) return '-';
   return days === 0 ? 'Immediate' : `${days} days`;
 }
 
 export function experienceLabel(years: number | null | undefined): string {
-  if (years == null) return '—';
+  if (years == null) return '-';
   return `${years} yr${years === 1 ? '' : 's'}`;
 }
 
@@ -83,7 +83,23 @@ export function daysUntil(iso: string | null | undefined, today = new Date()): n
   return Math.round((b - a) / 86400000);
 }
 
-const dFmt = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' });
+// Month names spelled out by hand: en-IN prints September as "Sept", and so
+// does en-GB in current ICU, so Intl gave "28 Sep" in one browser and "28 Sept"
+// in the next. One fixed table keeps every recruitment date as "28 Sep 2026".
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dFmt = { format: (d: Date) => `${d.getDate()} ${MON[d.getMonth()]}` };
+/**
+ * The one date format for the recruitment pipeline: "28 Sep 2026".
+ * Accepts a date-only string or a timestamp; anything unparseable, empty, or
+ * outside a plausible range (bad data such as year 60920) prints the dash.
+ */
+export function fullDate(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const d = toLocalDate(iso);
+  const y = d.getFullYear();
+  if (Number.isNaN(d.getTime()) || y < 1900 || y > 2200) return '-';
+  return `${d.getDate()} ${MON[d.getMonth()]} ${y}`;
+}
 const tFmt = new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 export const shortDate = (iso: string) => dFmt.format(toLocalDate(iso));
 export const shortTime = (iso: string) => tFmt.format(toLocalDate(iso));
@@ -157,13 +173,20 @@ export function mrfNextStep(m: MrfVM, today = new Date()): NextStep {
   const left = Math.max(0, m.openings - m.filled);
   const d = daysUntil(m.targetDate, today);
   if (m.status === 'DRAFT') return { text: 'Draft. Finish the form and submit', tone: '', icon: 'edit' };
-  if (m.status === 'SUBMITTED' && waiting) return { text: `Waiting on ${waiting.approverName} to approve as ${waiting.role}`, tone: 'warn', icon: 'clock' };
+  if (m.status === 'SUBMITTED' && waiting) return { text: `Waiting on ${waiting.approverName} to approve as ${waiting.role === 'HR_HEAD' ? 'HR Head' : waiting.role}`, tone: 'warn', icon: 'clock' };
+  if (m.status === 'NEEDS_REVISION') return { text: 'Sent back to the raiser for changes', tone: 'warn', icon: 'edit' };
   if (m.status === 'ON_HOLD') return { text: refused ? `On hold after the ${refused.role} step` : 'On hold', tone: 'mute', icon: 'edit' };
   if (m.status === 'REJECTED') return { text: 'Rejected', tone: 'mute', icon: 'x' };
   if (m.status === 'CLOSED') return { text: 'Closed', tone: 'mute', icon: 'check' };
   if (left === 0) return { text: 'All openings filled', tone: 'pos', icon: 'check' };
   if (d !== null && d <= 7) return { text: `${d < 0 ? 'Past target date' : `${d} days left`}: move a candidate to offer`, tone: 'warn', icon: 'alert' };
   return { text: `${left} opening${left === 1 ? '' : 's'} left, ${m.candidates} candidate${m.candidates === 1 ? '' : 's'} in play`, tone: '', icon: 'flow' };
+}
+
+/** "A, B, C and 23 more" — a to-do line names a few, never the whole list. */
+export function briefList(items: string[], show = 3): string {
+  const uniq = Array.from(new Set(items.filter(Boolean)));
+  return uniq.length <= show ? uniq.join(', ') : `${uniq.slice(0, show).join(', ')} and ${uniq.length - show} more`;
 }
 
 /**
@@ -180,9 +203,17 @@ export function dashboardTodos(args: {
   const { mrfs, viewerName, offerRequestsPending, today = new Date() } = args;
   const out: TodoItem[] = [];
   const urgent = mrfs.filter((m) => m.status === 'APPROVED' && m.filled < m.openings && (daysUntil(m.targetDate, today) ?? 99) <= 7);
-  if (urgent.length) out.push({ count: urgent.length, title: urgent.length === 1 ? `Deadline in ${daysUntil(urgent[0].targetDate, today)} days` : 'Deadlines this week', detail: urgent.map((m) => m.title).join(', '), tone: 'crit', actionLabel: 'Open', tab: 'jobstatus' });
+  // `urgent` includes requisitions already PAST their date, so "Deadlines this week" over a list
+  // that was mostly a month overdue read wrong; and the detail listed every title (26 on the
+  // seeded data), which ran the card to a dozen lines. Say how many are overdue, name three.
+  const overdue = urgent.filter((m) => (daysUntil(m.targetDate, today) ?? 0) < 0).length;
+  const one = urgent.length === 1 ? daysUntil(urgent[0].targetDate, today) : null;
+  if (urgent.length) out.push({ count: urgent.length,
+    title: one !== null ? (one < 0 ? `Deadline passed ${-one} days ago` : `Deadline in ${one} days`)
+      : overdue === urgent.length ? 'Deadlines passed' : overdue ? `Deadlines due · ${overdue} overdue` : 'Deadlines this week',
+    detail: briefList(urgent.map((m) => m.title)), tone: 'crit', actionLabel: 'Open', tab: 'jobstatus' });
   const mine = mrfs.filter((m) => m.chain.some((s) => s.status === 'PENDING' && s.approverName === viewerName));
-  if (mine.length) out.push({ count: mine.length, title: mine.length === 1 ? 'Approve a requisition' : 'Approve requisitions', detail: mine.map((m) => m.title).join(', '), tone: 'warn', actionLabel: 'Review', tab: 'mrf' });
+  if (mine.length) out.push({ count: mine.length, title: mine.length === 1 ? 'Approve a requisition' : 'Approve requisitions', detail: briefList(mine.map((m) => m.title)), tone: 'warn', actionLabel: 'Review', tab: 'mrf' });
   if (offerRequestsPending) out.push({ count: offerRequestsPending, title: 'Offers awaiting HR Head', detail: 'Pending in Offer Approval', tone: 'warn', actionLabel: 'View', tab: 'offerapproval' });
   return out;
 }

@@ -111,7 +111,7 @@ async function drawPayslip(s: Sheet, d: PayslipData) {
   s.text(d.company.name, x0, s.y - 12, { bold: true, size: 11, align: 'c', w: width })
   s.y -= 15
   s.text(d.company.address, x0, s.y - 8, { size: 7, align: 'c', w: width }); s.y -= 9
-  s.text(`CIN: ${d.company.cin || '—'}   |   Branch: ${d.company.branch || '—'}`, x0, s.y - 8, { size: 7, align: 'c', w: width }); s.y -= 11
+  s.text(`CIN: ${d.company.cin || '-'}   |   Branch: ${d.company.branch || '-'}`, x0, s.y - 8, { size: 7, align: 'c', w: width }); s.y -= 11
   s.hline(x0, x0 + width, s.y)
   s.text('PAYSLIP', x0, s.y - 10, { bold: true, size: 9.5, align: 'c', w: width }); s.y -= 13
   s.hline(x0, x0 + width, s.y)
@@ -130,7 +130,7 @@ async function drawPayslip(s: Sheet, d: PayslipData) {
   const right: [string, string][] = [
     ['Location', e.location], ['IFSC Code', e.ifsc], ['Bank A/c No.', e.bankAccount], ['PAN', e.pan],
     ['PF No.', e.pfNumber], ['PF UAN.', e.uan], ['ESI No.', e.esiNumber],
-    ['Sub Department', e.subDepartment || '—'], ['Unit', e.unit],
+    ['Sub Department', e.subDepartment || '-'], ['Unit', e.unit],
   ]
   if (e.dol) right.push(['Date of Leaving', e.dol])
   const idCols: Col[] = [{ w: width * 0.14 }, { w: width * 0.36 }, { w: width * 0.14 }, { w: width * 0.36 }]
@@ -157,7 +157,7 @@ async function drawPayslip(s: Sheet, d: PayslipData) {
   s.header(ex, eCols, ['Description', 'Rate', 'Monthly', 'Arrear', 'Total'])
   for (let i = 0; i < rows; i++) {
     const r = d.earnings[i]
-    s.row(ex, eCols, r ? [r.label, r.rate === null ? '—' : inr2(r.rate), inr2(r.monthly), inr2(r.arrear), inr2(r.total)] : ['', '', '', '', ''])
+    s.row(ex, eCols, r ? [r.label, r.rate === null ? '-' : inr2(r.rate), inr2(r.monthly), inr2(r.arrear), inr2(r.total)] : ['', '', '', '', ''])
   }
   // Total row: the label spans Description+Rate+Monthly so it never elides.
   const eTotCols: Col[] = [{ w: halfW * 0.64 }, { w: halfW * 0.18, align: 'r' }, { w: halfW * 0.18, align: 'r' }]
@@ -187,7 +187,7 @@ async function drawPayslip(s: Sheet, d: PayslipData) {
     const p = d.perquisites
     const cell = (v: number | null) => v && v > 0 ? inr2(v) : 'NA'
     const line = p.car || p.driver
-      ? `Perquisites (taxable value, this month)   —   Car lease : ${cell(p.car)}      Driver : ${cell(p.driver)}`
+      ? `Perquisites (taxable value, this month): Car lease : ${cell(p.car)}      Driver : ${cell(p.driver)}`
       : 'Perquisites (Car lease / Driver) : NA'
     s.need(LH + 2)
     s.text(line, x0, s.y - LH + 2, { size: 7.5, align: 'c', w: width })
@@ -239,7 +239,7 @@ async function drawPayslip(s: Sheet, d: PayslipData) {
     for (const x of v.others) s.row(c2x, viaCols, [x.label, inr2(x.amount)])
     s.row(c2x, viaCols, ['Total Ded Under Ch. VI-A', inr2(v.total)], { bold: true })
   } else {
-    s.row(c2x, viaCols, ['New Regime — only 80CCD(2)', inr2(d.tax.chapterVIA)])
+    s.row(c2x, viaCols, ['New Regime: only 80CCD(2)', inr2(d.tax.chapterVIA)])
     s.row(c2x, viaCols, ['employer NPS is available', ''])
   }
   const yEnd2 = s.y
@@ -279,6 +279,6 @@ async function drawPayslip(s: Sheet, d: PayslipData) {
   for (const f of d.footnotes) { s.text(f, x0 + 2, s.y - LH + 3, { size: 7 }); s.y -= LH }
   s.y -= 2
   s.hline(x0, x0 + width, s.y)
-  s.text('This is a computer-generated payslip and does not require a signature. — EZER HRMS', x0, s.y - LH + 2, { size: 6.8, align: 'c', w: width })
+  s.text('This is a computer-generated payslip and does not require a signature. EZER HRMS', x0, s.y - LH + 2, { size: 6.8, align: 'c', w: width })
   s.y -= LH
 }

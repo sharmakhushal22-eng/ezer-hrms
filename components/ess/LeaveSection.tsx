@@ -35,10 +35,18 @@ interface LeaveType {
   id: string; short_name: string; name: string
   allow_half_day: boolean; allow_without_balance: boolean
   available: number | null; eligible: boolean; reason: string | null
+  /** available minus what is already pending — what a new request may use. */
+  bookable?: number | null; pending?: number
 }
+/** Who a request is waiting on, as the server names them. */
+interface Waiting { id: string; name: string; role: string }
+/** The over-balance offer from a 409: file the extra days as LWP. */
+interface SplitOffer { message: string; paid_days: number; lwp_days: number; lwp_type: string; key: string }
 interface Payload {
   year: string; fyLabel: string
   balances: any[]; types: LeaveType[]; applications: any[]; holidays: any[]
+  /** Sum of the headline balances (EL, CL, SL …), as Home and Today show it. */
+  balance_total?: number
   // The employee's own configured weekly offs, resolved server-side from
   // weekly_off_config. `weekly_offs` is exact for a rolling year from today;
   // `weekly_off_weekdays` is the weekday fallback beyond that window.
@@ -162,7 +170,15 @@ export default function LeaveSection({ emp, notify }: {
   const [hover, setHover] = useState('')
   const [focusDay, setFocusDay] = useState(() => iso(new Date()))
   const [confirmId, setConfirmId] = useState('')
+  // Cancelling an APPROVED request: which one is open, and the reason typed.
+  const [cancelId, setCancelId] = useState('')
+  const [cancelReason, setCancelReason] = useState('')
+  const [splitOffer, setSplitOffer] = useState<SplitOffer | null>(null)
   const [typeNote, setTypeNote] = useState('')
+  // The side lists show three each; the rest is one click away, so Upcoming
+  // holidays is not pushed below the fold by a long request history.
+  const [allReq, setAllReq] = useState(false)
+  const [allHol, setAllHol] = useState(false)
   // Motion state. `lit` flips one tick after the data lands so the balance
   // meters transition up from zero instead of appearing at full width; `dir`
   // is which way the month grid should slide in.
@@ -235,7 +251,7 @@ export default function LeaveSection({ emp, notify }: {
     isWeeklyOff(key) || holByDate.has(key), [isWeeklyOff, holByDate])
 
   const totalAvailable = useMemo(
-    () => (data?.balances || []).reduce((s: number, b: any) => s + avail(b), 0),
+    () => data?.balance_total ?? (data?.balances || []).reduce((s: number, b: any) => s + avail(b), 0),
     [data],
   )
 
@@ -269,9 +285,11 @@ export default function LeaveSection({ emp, notify }: {
     return { span, offs, hols, working }
   }, [form.from_date, form.to_date, form.half_day, holByDate, isWeeklyOff])
 
+  // Against what can be BOOKED — pending requests already hold their days.
   const balanceAfter = useMemo(() => {
-    if (!sel || sel.available == null || !estimate) return null
-    return sel.available - estimate.working
+    const base = sel?.bookable ?? sel?.available
+    if (!sel || base == null || !estimate) return null
+    return Math.round((base - estimate.working) * 10) / 10
   }, [sel, estimate])
 
   // ── Calendar grid — rows of weeks, so a week the selection touches can
@@ -310,7 +328,7 @@ export default function LeaveSection({ emp, notify }: {
     if (isNonWorking(key)) {
       const h = holByDate.get(key)
       const when = fromIso(key).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
-      setTypeNote(`${when} is ${h ? h.description : 'a weekly off'} — leave cannot start or end on it.`)
+      setTypeNote(`${when} is ${h ? h.description : 'a weekly off'}. Leave cannot start or end on it.`)
       return
     }
     setTypeNote('')
@@ -371,7 +389,7 @@ export default function LeaveSection({ emp, notify }: {
   }
 
   const chooseType = (t: LeaveType) => {
-    if (!t.eligible) { setTypeNote(`${t.name} — ${t.reason || 'not available to you'}.`); return }
+    if (!t.eligible) { setTypeNote(`${t.name}: ${t.reason || 'not available to you'}.`); return }
     setTypeNote('')
     // Unchanged: switching type clears any half-day flag, so a stale half-day
     // can never survive onto a type that forbids it.
@@ -379,7 +397,9 @@ export default function LeaveSection({ emp, notify }: {
   }
 
   // ── Submit — the payload is identical to the shipped component ───────────
-  const submit = async () => {
+  const formKey = `${form.leave_type_id}|${form.from_date}|${form.to_date}|${form.half_day}`
+
+  const submit = async (splitWithLwp = false) => {
     if (!form.leave_type_id || !form.from_date || !form.to_date) { notify('Select leave type and dates', 'error'); return }
     if (form.half_day && !form.half_session) { notify('Select 1st half or 2nd half', 'error'); return }
     setBusy(true)
@@ -392,14 +412,47 @@ export default function LeaveSection({ emp, notify }: {
           half_day: form.half_day,
           half_session: form.half_day ? form.half_session : '',
           reason: form.reason,
+          split_with_lwp: splitWithLwp,
         }),
       })
-      notify(`Leave request submitted — ${res.days} day${res.days === 1 ? '' : 's'} ✓`)
-      if (res.unrouted) notify('No approver is configured for you — please tell HR.', 'error')
+      const to: Waiting | null = res.waiting_on || null
+      if (res.split?.length) {
+        notify(`Sent as ${res.split.map((x: any) => `${x.days} day${x.days === 1 ? '' : 's'} ${x.leave_type}`).join(' + ')}${to ? ` to ${to.name}` : ''} ✓`)
+      } else {
+        notify(`${res.days} day${res.days === 1 ? '' : 's'} sent${to ? ` to ${to.name} (${to.role})` : ''} for approval ✓`)
+      }
+      if (res.unrouted) notify('No approver is configured for you — HR will see it in their Requests list. Please tell HR.', 'error')
       setForm(BLANK)
+      setSplitOffer(null)
       load()
     } catch (e: any) {
-      notify(e.message || 'Could not submit', 'error')
+      const b = e?.body
+      if (b?.can_split && b.split_preview) {
+        // Over balance: say so, and offer the usual remedy — the extra days as LWP.
+        setSplitOffer({ key: formKey, message: e.message, paid_days: b.split_preview.paid_days, lwp_days: b.split_preview.lwp_days, lwp_type: b.split_preview.lwp_type || 'Leave Without Pay' })
+      } else {
+        setSplitOffer(null)
+        notify(e.message || 'Could not submit', 'error')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // The over-balance offer belongs to the dates it was made for; change the
+  // form and it no longer shows.
+  const offer = splitOffer && splitOffer.key === formKey ? splitOffer : null
+
+  // Approved leave that has not started: ask the approver to cancel it.
+  const requestCancel = async (id: string) => {
+    setBusy(true)
+    try {
+      const res = await api('/api/ess/leave', emp.id, { method: 'PATCH', body: JSON.stringify({ id, action: 'cancel', reason: cancelReason }) })
+      notify(res.message || 'Cancellation requested')
+      setCancelId(''); setCancelReason('')
+      load()
+    } catch (e: any) {
+      notify(e.message || 'Could not request cancellation', 'error')
     } finally {
       setBusy(false)
     }
@@ -469,7 +522,7 @@ export default function LeaveSection({ emp, notify }: {
           <div>
             <p className="ezlv-hero-label" id="ezlv-bal-h">Leave balance · {data.fyLabel}</p>
             <p className="ezlv-hero-total">
-              <b>{data.balances.length ? heroTotal : '—'}</b>
+              <b>{data.balances.length ? heroTotal : '-'}</b>
               <span>{data.balances.length ? 'days available' : 'nothing loaded yet'}</span>
             </p>
           </div>
@@ -480,9 +533,8 @@ export default function LeaveSection({ emp, notify }: {
 
         {!data.balances.length ? (
           <div className="ezlv-hero-empty">
-            <b>No balances have been loaded for {data.fyLabel}.</b> Your entitlement is set by HR
-            from the leave upload. You can still apply below — requests go to your approver as
-            usual, and balances will appear here once they are uploaded.
+            <b>No paid leave entitlement is set up for you in {data.fyLabel}.</b> HR sets it in Leave
+            configuration. You can still apply for leave that needs no balance, such as Leave Without Pay.
           </div>
         ) : (
           <div className="ezlv-tiles">
@@ -491,13 +543,14 @@ export default function LeaveSection({ emp, notify }: {
               const av = avail(b)
               const pct = total > 0 ? Math.round(av / total * 100) : 0
               return (
-                <div className="ezlv-tile ezlv-in-pop" key={b.id}
+                <div className="ezlv-tile ezlv-in-pop" key={b.leave_type_id || b.id}
                   style={{ animationDelay: `${120 + i * 60}ms` }}>
                   <div className="ezlv-tile-head">
                     <span className="ezlv-code">{b.leave_types?.short_name}</span>
                     <span className="ezlv-tile-name" title={b.leave_types?.name}>{b.leave_types?.name}</span>
                   </div>
                   <div className="ezlv-tile-num">{av}<small> / {total}</small></div>
+                  {Number(b.pending) > 0 && <div className="ezlv-tile-name">{b.pending} pending approval</div>}
                   <div className="ezlv-meter" role="img" aria-label={`${av} of ${total} days left`}>
                     <i className={barClass(pct)}
                       style={{
@@ -536,7 +589,7 @@ export default function LeaveSection({ emp, notify }: {
                 </button>
               ))}
             </div>
-            {sel && <p className="ezlv-hint">{sel.name}{sel.available != null ? ` · ${sel.available} day${sel.available === 1 ? '' : 's'} left` : ''}</p>}
+            {sel && <p className="ezlv-hint">{sel.name}{sel.available != null ? ` · ${sel.available} day${sel.available === 1 ? '' : 's'} left` : ' · no balance needed'}{sel.pending ? ` · ${sel.pending} pending` : ''}</p>}
             {typeNote && <p className="ezlv-hint is-warn">{typeNote}</p>}
           </div>
 
@@ -636,7 +689,7 @@ export default function LeaveSection({ emp, notify }: {
                           style={{ '--lv-d': `${sel && !hover ? sweep(key) : 0}ms` } as React.CSSProperties}
                           tabIndex={key === focusDay ? 0 : -1}
                           aria-pressed={sel}
-                          aria-label={`${fromIso(key).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}${h ? ` — ${h.description}` : ''}${past ? ' — already passed' : ''}`}
+                          aria-label={`${fromIso(key).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}${h ? `, ${h.description}` : ''}${past ? ', already passed' : ''}`}
                           onFocus={() => setFocusDay(key)}
                           onMouseEnter={() => { if (!past && form.from_date) setHover(key) }}
                           onClick={() => pickDay(key)}
@@ -671,7 +724,7 @@ export default function LeaveSection({ emp, notify }: {
                 <div className="ezlv-summary-top">
                   <span className="ezlv-summary-range">{rangeLabel(form.from_date, form.to_date)}</span>
                   <span className="ezlv-summary-days">
-                    {estimate ? `${estimate.working} day${estimate.working === 1 ? '' : 's'}` : '—'}
+                    {estimate ? `${estimate.working} day${estimate.working === 1 ? '' : 's'}` : '-'}
                   </span>
                 </div>
                 {estimate && (
@@ -694,7 +747,7 @@ export default function LeaveSection({ emp, notify }: {
                       <p className="ezlv-summary-note is-alert">Every day here is a weekly-off or holiday, so there is nothing to apply for.</p>
                     )}
                     {balanceAfter != null && balanceAfter < 0 && sel && (
-                      <p className="ezlv-summary-note is-alert">That is {Math.abs(balanceAfter)} day{Math.abs(balanceAfter) === 1 ? '' : 's'} more {sel.short_name} than you have left.</p>
+                      <p className="ezlv-summary-note is-alert">That is {Math.abs(balanceAfter)} day{Math.abs(balanceAfter) === 1 ? '' : 's'} more {sel.short_name} than you can book{sel.pending ? ' (pending requests included)' : ''}. Submitting will offer to apply the extra days as Leave Without Pay.</p>
                     )}
                   </>
                 )}
@@ -725,7 +778,7 @@ export default function LeaveSection({ emp, notify }: {
           </div>
 
           <div className="ezlv-actions">
-            <button className="ezlv-submit" onClick={submit}
+            <button className="ezlv-submit" onClick={() => submit(false)}
               disabled={busy || !form.leave_type_id || !form.from_date || !form.to_date}>
               {busy ? <><i className="ezlv-spin" />Submitting…</> : 'Submit request'}
             </button>
@@ -734,6 +787,23 @@ export default function LeaveSection({ emp, notify }: {
                 onClick={() => { setForm(BLANK); setTypeNote('') }}>Clear</button>
             )}
           </div>
+
+          {offer && (
+            <div className="ezlv-notice" role="alert"><Warn />
+              <span>
+                {offer.message}{' '}
+                {offer.paid_days > 0
+                  ? <>You can apply <b>{offer.paid_days} day{offer.paid_days === 1 ? '' : 's'} as {sel?.short_name}</b> and the remaining <b>{offer.lwp_days} as {offer.lwp_type}</b> (unpaid).</>
+                  : <>You can apply all <b>{offer.lwp_days} day{offer.lwp_days === 1 ? '' : 's'} as {offer.lwp_type}</b> (unpaid) instead.</>}
+                <span style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <button className="ezlv-ghost" disabled={busy} onClick={() => submit(true)}>
+                    {offer.paid_days > 0 ? `Apply ${offer.paid_days} + ${offer.lwp_days} LWP` : `Apply as ${offer.lwp_type}`}
+                  </button>
+                  <button className="ezlv-ghost" onClick={() => setSplitOffer(null)}>Change dates</button>
+                </span>
+              </span>
+            </div>
+          )}
 
           {data.diagnostics.noApprover && (
             <div className="ezlv-notice"><Warn />
@@ -753,7 +823,7 @@ export default function LeaveSection({ emp, notify }: {
             </div>
             {!data.applications.length ? (
               <div className="ezlv-empty"><b>No requests yet.</b><br />Anything you apply for will show here with its status.</div>
-            ) : data.applications.map((a: any) => {
+            ) : <>{(allReq ? data.applications : data.applications.slice(0, PEEK)).map((a: any) => {
               const status = String(a.status || '').toUpperCase()
               const half = a.half_day
               return (
@@ -777,10 +847,54 @@ export default function LeaveSection({ emp, notify }: {
                       {status === 'PENDING' && a.approval_stage ? ` · stage ${a.approval_stage}` : ''}
                     </div>
 
+                    {/* Who it is with, by name — not just "PENDING" or "stage L1". */}
+                    {status === 'PENDING' && (
+                      <div className="ezlv-req-sub">
+                        {a.waiting_on
+                          ? <>Waiting on <b>{a.waiting_on.name}</b> · {a.waiting_on.role}</>
+                          : 'No approver is set for you — HR has been shown this request.'}
+                      </div>
+                    )}
+                    {(status === 'APPROVED' || status === 'REJECTED') && a.approver && (
+                      <div className="ezlv-req-sub">
+                        {status === 'APPROVED' ? 'Approved' : 'Declined'} by <b>{a.approver}</b>
+                        {a.resolved_at ? ` on ${new Date(a.resolved_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` : ''}
+                      </div>
+                    )}
                     {a.remark && (
                       <div className="ezlv-remark">
                         {a.approver && <b>{a.approver}</b>}
                         {a.remark}
+                      </div>
+                    )}
+                    {a.cancel_status === 'REQUESTED' && (
+                      <div className="ezlv-req-sub">
+                        Cancellation requested — waiting on <b>{a.cancel_waiting_on?.name || 'HR'}</b>
+                      </div>
+                    )}
+                    {a.cancel_status === 'DECLINED' && (
+                      <div className="ezlv-remark">
+                        <b>Cancellation declined{a.cancel_decided_by ? ` by ${a.cancel_decided_by}` : ''}</b>
+                        {a.cancel_remark || 'The leave stands.'}
+                      </div>
+                    )}
+                    {status === 'CANCELLED' && a.cancel_status === 'APPROVED' && (
+                      <div className="ezlv-req-sub">Cancelled{a.cancel_decided_by ? ` — approved by ${a.cancel_decided_by}` : ''}; the days are back in your balance.</div>
+                    )}
+
+                    {status === 'APPROVED' && a.cancel_status !== 'REQUESTED' && a.from_date > today && (
+                      <div className="ezlv-req-foot">
+                        {cancelId === a.id ? (
+                          <>
+                            <input className="ezlv-input" style={{ flex: '1 1 160px' }} value={cancelReason}
+                              placeholder="Why cancel? (your approver reads this)"
+                              onChange={e => setCancelReason(e.target.value)} />
+                            <button className="ezlv-ghost is-danger" disabled={busy} onClick={() => requestCancel(a.id)}>Send to approver</button>
+                            <button className="ezlv-ghost" onClick={() => { setCancelId(''); setCancelReason('') }}>Keep it</button>
+                          </>
+                        ) : (
+                          <button className="ezlv-ghost" disabled={busy} onClick={() => setCancelId(a.id)}>Request cancellation</button>
+                        )}
                       </div>
                     )}
 
@@ -801,6 +915,12 @@ export default function LeaveSection({ emp, notify }: {
                 </div>
               )
             })}
+            {data.applications.length > PEEK && (
+              <button type="button" className="ezlv-more" aria-expanded={allReq} onClick={() => setAllReq(v => !v)}>
+                {allReq ? 'Show fewer' : `Show all ${data.applications.length} requests`}
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ transform: allReq ? 'rotate(180deg)' : 'none' }}><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+            )}</>}
           </section>
 
           {/* ══ Holidays ══════════════════════════════════════════════════ */}
@@ -818,7 +938,7 @@ export default function LeaveSection({ emp, notify }: {
               </div>
             ) : (() => {
               let lastMonth = ''
-              return upcoming.map((h: any, i: number) => {
+              return <>{(allHol ? upcoming : upcoming.slice(0, PEEK)).map((h: any, i: number) => {
                 const d = fromIso(h.holiday_date)
                 const mon = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
                 const head = mon !== lastMonth ? (lastMonth = mon) : null
@@ -843,7 +963,13 @@ export default function LeaveSection({ emp, notify }: {
                     </div>
                   </div>
                 )
-              })
+              })}
+              {upcoming.length > PEEK && (
+                <button type="button" className="ezlv-more" aria-expanded={allHol} onClick={() => setAllHol(v => !v)}>
+                  {allHol ? 'Show fewer' : `Show all ${upcoming.length} holidays`}
+                  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ transform: allHol ? 'rotate(180deg)' : 'none' }}><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
+              )}</>
             })()}
           </section>
         </div>
@@ -853,6 +979,9 @@ export default function LeaveSection({ emp, notify }: {
 }
 
 // ── Scoped stylesheet ──────────────────────────────────────────────────────
+/** How many requests / holidays the side lists show before "Show all". */
+const PEEK = 3
+
 const CSS = `
 .ezlv {
   --lv-gap: 12px;
@@ -884,15 +1013,28 @@ const CSS = `
   --lv-info-tint: var(--ez-info-tint, #F0F9FF);
   --lv-font: var(--ez-font, "DM Sans", "Segoe UI", system-ui, sans-serif);
 
-  /* The hero is the one saturated object in the section. Two fixed gradients
-     rather than tokens, because brand-on-brand inverts in the dark theme and a
-     bright panel in a dark portal reads as a bug. */
-  --lv-hero: linear-gradient(135deg, #0E2470 0%, #1D4ED8 46%, #4189FB 100%);
-  --lv-hero-ink: #FFFFFF;
-  --lv-hero-sub: rgba(255, 255, 255, .84);
-  --lv-hero-fill: rgba(255, 255, 255, .17);
-  --lv-hero-edge: rgba(255, 255, 255, .26);
-  --lv-hero-shadow: 0 2px 4px rgba(10, 24, 66, .34), 0 18px 40px -14px rgba(23, 62, 175, .62);
+  /* The hero, LIGHT: the portal's soft hero surface (white into the brand tint,
+     ink text), the same one Home, Attendance and Profile open with. It was a
+     saturated blue slab — one of four different loud banners across the
+     portal. Dark keeps its own fixed navy below, because brand-on-brand
+     inverts there and a bright panel in a dark portal reads as a bug. */
+  --lv-hero:
+    radial-gradient(560px 240px at 100% 0%, rgba(99, 102, 241, .20) 0%, transparent 65%),
+    radial-gradient(380px 200px at 0% 100%, rgba(14, 165, 233, .16) 0%, transparent 65%),
+    linear-gradient(135deg, var(--ez-surface) 0%, color-mix(in srgb, var(--ez-brand) 7%, var(--ez-surface)) 100%);
+  --lv-hero-ink: var(--ez-ink);
+  --lv-hero-sub: var(--ez-muted);
+  --lv-hero-fill: var(--ez-surface);
+  --lv-hero-edge: rgba(255, 255, 255, .85);
+  --lv-hero-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 10px 28px -20px rgba(29, 78, 216, .45);
+  --lv-hero-hover: var(--ez-brand-tint);
+  --lv-hero-chip: var(--ez-brand-tint);
+  --lv-hero-chip-ink: var(--ez-brand);
+  --lv-hero-track: var(--ez-sunken);
+  --lv-hero-bar: var(--ez-brand);
+  --lv-hero-ok: var(--ez-positive);
+  --lv-hero-warn: var(--ez-warning);
+  --lv-hero-bad: var(--ez-critical);
 
   font-family: var(--lv-font);
   font-size: 13px;
@@ -909,6 +1051,14 @@ const CSS = `
     --lv-hero-fill: rgba(255, 255, 255, .085);
     --lv-hero-edge: rgba(255, 255, 255, .15);
     --lv-hero-shadow: 0 2px 4px rgba(0, 0, 0, .55), 0 18px 40px -14px rgba(0, 0, 0, .75);
+    --lv-hero-hover: rgba(255, 255, 255, .22);
+    --lv-hero-chip: rgba(255, 255, 255, .2);
+    --lv-hero-chip-ink: var(--lv-hero-ink);
+    --lv-hero-track: rgba(255, 255, 255, .18);
+    --lv-hero-bar: rgba(255, 255, 255, .95);
+    --lv-hero-ok: rgba(110, 231, 183, 1);
+    --lv-hero-warn: rgba(252, 211, 77, 1);
+    --lv-hero-bad: rgba(252, 165, 165, 1);
   }
 }
 :root[data-ez-theme="dark"] .ezlv {
@@ -918,6 +1068,14 @@ const CSS = `
   --lv-hero-fill: rgba(255, 255, 255, .085);
   --lv-hero-edge: rgba(255, 255, 255, .15);
   --lv-hero-shadow: 0 2px 4px rgba(0, 0, 0, .55), 0 18px 40px -14px rgba(0, 0, 0, .75);
+  --lv-hero-hover: rgba(255, 255, 255, .22);
+  --lv-hero-chip: rgba(255, 255, 255, .2);
+  --lv-hero-chip-ink: var(--lv-hero-ink);
+  --lv-hero-track: rgba(255, 255, 255, .18);
+  --lv-hero-bar: rgba(255, 255, 255, .95);
+  --lv-hero-ok: rgba(110, 231, 183, 1);
+  --lv-hero-warn: rgba(252, 211, 77, 1);
+  --lv-hero-bad: rgba(252, 165, 165, 1);
 }
 
 .ezlv *,
@@ -998,7 +1156,7 @@ const CSS = `
   cursor: pointer;
   transition: background .15s ease;
 }
-.ezlv-hero-jump:hover { background: rgba(255, 255, 255, .22); }
+.ezlv-hero-jump:hover { background: var(--lv-hero-hover); }
 
 .ezlv-tiles {
   display: grid;
@@ -1045,25 +1203,25 @@ const CSS = `
   letter-spacing: .04em;
   padding: 2px 6px;
   border-radius: var(--lv-pill);
-  background: rgba(255, 255, 255, .2);
-  color: var(--lv-hero-ink);
+  background: var(--lv-hero-chip);
+  color: var(--lv-hero-chip-ink);
 }
 .ezlv-meter {
   height: 4px;
   border-radius: var(--lv-pill);
-  background: rgba(255, 255, 255, .18);
+  background: var(--lv-hero-track);
   overflow: hidden;
 }
 .ezlv-meter > i {
   display: block;
   height: 100%;
   border-radius: var(--lv-pill);
-  background: #fff;
+  background: var(--lv-hero-bar);
   transition: width .35s cubic-bezier(.4, 0, .2, 1);
 }
-.ezlv-meter > i.is-ok { background: #6EE7B7; }
-.ezlv-meter > i.is-warn { background: #FCD34D; }
-.ezlv-meter > i.is-bad { background: #FCA5A5; }
+.ezlv-meter > i.is-ok { background: var(--lv-hero-ok); }
+.ezlv-meter > i.is-warn { background: var(--lv-hero-warn); }
+.ezlv-meter > i.is-bad { background: var(--lv-hero-bad); }
 
 .ezlv-hero-empty {
   margin-top: 14px;
@@ -1424,7 +1582,9 @@ const CSS = `
 
 .ezlv-day {
   position: relative;
-  aspect-ratio: 1 / 1;
+  /* A fixed height, not a square: on a wide panel square cells made each week 70px
+     tall and the month ran off the screen. */
+  height: 42px;
   min-height: 38px;
   display: grid;
   place-items: center;
@@ -1471,11 +1631,11 @@ const CSS = `
 .ezlv-day:disabled.is-past {
   background: transparent;
   color: var(--lv-faint);
-  opacity: .38;
+  /* Quiet, not crossed out: a struck-through month read as an error, and at .38 the
+     dates were unreadable. Disabled + muted is enough to say "not selectable". */
+  opacity: .55;
   font-weight: 500;
   cursor: not-allowed;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
 }
 .ezlv-day:disabled.is-past::before { background: var(--lv-faint); }
 .ezlv-day:disabled { cursor: not-allowed; }
@@ -1766,6 +1926,14 @@ const CSS = `
 .ezlv-ghost:hover { color: var(--lv-ink); border-color: var(--lv-faint); }
 .ezlv-ghost.is-danger { color: var(--lv-bad); border-color: var(--lv-bad); }
 .ezlv-ghost:disabled { opacity: .5; cursor: not-allowed; }
+.ezlv-more {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 34px; margin-top: 8px;
+  border: 1px dashed var(--lv-line-strong); border-radius: var(--lv-r-md); background: transparent;
+  color: var(--lv-brand); font: 600 12px var(--lv-font); cursor: pointer; transition: background .14s ease, border-color .14s ease;
+}
+.ezlv-more:hover { background: var(--lv-brand-tint); border-color: var(--lv-brand-edge); }
+.ezlv-more:focus-visible { outline: 2px solid var(--lv-brand); outline-offset: 2px; }
+.ezlv-more svg { transition: transform .18s ease; }
 .ezlv-confirm { font-size: 11px; color: var(--lv-bad); font-weight: 600; }
 
 /* ── Holidays ───────────────────────────────────────────────────────────── */
@@ -2013,10 +2181,13 @@ const CSS = `
 .ezlv-req::after {
   content: "";
   position: absolute;
-  inset: 2px -9px;
-  border-radius: var(--lv-r-sm);
-  background: linear-gradient(90deg, var(--lv-tint, transparent) 0%, transparent 58%);
+  inset: 3px -8px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--lv-tint, transparent) 0%, transparent 70%);
   pointer-events: none;
+  /* BEHIND the row's text. It had no z-index, so — being painted after the row's
+     children — it lay over them and every request read as faded. */
+  z-index: var(--ez-z-base);
 }
 
 .ezlv-req::before,
@@ -2033,7 +2204,11 @@ const CSS = `
 .ezlv-req:hover::before,
 .ezlv-hol:hover::before { opacity: 1; }
 .ezlv-req > *,
-.ezlv-hol > * { position: relative; }
+.ezlv-hol > * { position: relative; z-index: var(--ez-z-raised); }
+.ezlv-req::before, .ezlv-hol::before { z-index: var(--ez-z-base); }
+.ezlv-req { padding: 12px 0; }
+.ezlv-req-dates { font-size: 13.5px; }
+.ezlv-req-sub { font-size: 12px; color: var(--lv-soft); }
 
 /* ── Narrow ─────────────────────────────────────────────────────────────── */
 

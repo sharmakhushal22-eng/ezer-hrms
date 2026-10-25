@@ -18,7 +18,7 @@ test('rupees in words — the reference net pay and the edges', () => {
 
 test('dates and numbers print the way the reference does', () => {
   assert.equal(fmtDate('1991-11-18'), '18 Nov 1991')
-  assert.equal(fmtDate(null), '—')
+  assert.equal(fmtDate(null), '-')
   assert.equal(inr2(209867), '2,09,867.00')
   assert.equal(payslipFileName('SRS0512', '2026-27', 7), 'SRS0512_Oct2026_Payslip.pdf')
   assert.equal(payslipFileName('SRS0512', '2026-27', 12), 'SRS0512_Mar2027_Payslip.pdf')
@@ -69,7 +69,7 @@ test('Rahul Nair — deductions in the reference order, Income Tax first', () =>
 
 test('Rahul Nair — worksheet and tax working are read from the engine, to the rupee', () => {
   const p = assemblePayslip(RAHUL_NAIR)
-  assert.equal(p.tax.regimeNote, '*You have opted for the Old Regime — exemptions and deductions applied')
+  assert.equal(p.tax.regimeNote, '*You have opted for the Old Regime: exemptions and deductions applied')
   assert.equal(p.tax.worksheet.length, 9)
   assert.equal(p.tax.grossTotal, 2518404); assert.equal(p.tax.exemptTotal, 586404); assert.equal(p.tax.taxableTotal, 1932000)
   assert.equal(p.tax.standardDeduction, 50000)

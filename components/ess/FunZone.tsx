@@ -30,9 +30,9 @@ interface Tile { k: string; icon: string; name: string; desc: string; badge: str
 
 const GAMES: Tile[] = [
   { k:'ttt',   icon:'⭕', name:'Tic-Tac-Toe',    desc:'Against the computer, or a colleague',      badge:'Arcade', cat:'arcade', live:true, bot:true },
-  { k:'mem',   icon:'🧩', name:'Memory Match',   desc:'Find the pairs — alone or head to head',    badge:'Arcade', cat:'memory', live:true, bot:true },
+  { k:'mem',   icon:'🧩', name:'Memory Match',   desc:'Find the pairs, alone or head to head',    badge:'Arcade', cat:'memory', live:true, bot:true },
   { k:'quiz',  icon:'💡', name:'EZER Trivia',    desc:'Company policy, solo or against somebody',  badge:'Quiz',   cat:'quiz',   live:true, bot:true },
-  { k:'wheel', icon:'🎡', name:'Spin the Wheel', desc:'Daily spin — win a fun shoutout or a treat', badge:'Social', cat:'social' },
+  { k:'wheel', icon:'🎡', name:'Spin the Wheel', desc:'Daily spin: win a fun shoutout or a treat', badge:'Social', cat:'social' },
 ]
 
 const MIND_TILES: Tile[] = MIND_GAMES.map(g => ({
@@ -134,7 +134,7 @@ function MemoryMatch({ onBack }: { onBack: () => void }) {
   const done = pairs === MEM_FACES.length
   return (
     <Stage cat="memory" icon="🧩" title="Memory Match"
-           sub={done ? 'You found them all!' : `Find all 8 pairs — ${pairs} found`}
+           sub={done ? 'You found them all!' : `Find all 8 pairs · ${pairs} found`}
            aside={<><Stat label="pairs" value={`${pairs}/8`} hot bump /><Stat label="turns" value={turns} /></>}
            onBack={onBack} confetti={done ? deal : 0}>
       <div className="fz-progress" aria-hidden="true"><i style={{ '--p': `${pairs / 8 * 100}%` } as CSSProperties} /></div>
@@ -190,7 +190,7 @@ function Trivia({ onBack }: { onBack: () => void }) {
           <div className="fz-result">
             <span className="big">{score}/{QUIZ.length}</span>
             <span className="what">Quiz done! You scored {score}/{QUIZ.length}</span>
-            <span className="sub">{perfect ? 'Every one right.' : 'Play again — the questions stay the same.'}</span>
+            <span className="sub">{perfect ? 'Every one right.' : 'Play again. The questions stay the same.'}</span>
           </div>
           <button type="button" className="fz-key" onClick={restart}>Play Again</button>
         </>
@@ -298,12 +298,12 @@ const MODE_ICON: Record<Mode, string> = { bot: '🤖', solo: '🎮', live: '🤝
 
 const MODES: Record<string, ModeDef[]> = {
   ttt: [
-    { k: 'bot',  label: 'Against the computer', hint: 'Three difficulties. Hard is unbeatable — a draw is the best there is.' },
+    { k: 'bot',  label: 'Against the computer', hint: 'Three difficulties. Hard is unbeatable: a draw is the best there is.' },
     { k: 'solo', label: 'Two players, one screen', hint: 'Pass the device back and forth.' },
     { k: 'live', label: 'With a colleague', hint: 'Invite somebody and play on two screens.' },
   ],
   mem: [
-    { k: 'bot',  label: 'Against the computer', hint: 'It remembers what it has seen — more of it on harder settings.' },
+    { k: 'bot',  label: 'Against the computer', hint: 'It remembers what it has seen, more of it on harder settings.' },
     { k: 'solo', label: 'On your own', hint: 'Find all eight pairs. Nothing is timed.' },
     { k: 'live', label: 'With a colleague', hint: 'Take turns on two screens.' },
   ],
@@ -374,7 +374,7 @@ function Hub({ employeeId, onOpen }: { employeeId?: string; onOpen: (k: string) 
             </h1>
             <p className="fz-blurb">
               Take a break. Play on your own, against the computer, or with a colleague
-              on two screens — nothing here is scored towards anything.
+              on two screens. Nothing here is scored towards anything.
             </p>
           </div>
           <div>

@@ -2,19 +2,42 @@
 // Sends the offer-letter email to the candidate via Gmail (SMTP + App Password), with the
 // generated offer letter PDF (POST { to, cc, subject, body, request_id }).
 //
-// Required env vars (set in .env.local locally and in Vercel for production):
-//   GMAIL_USER          - the sending Gmail address, e.g. hr@yourco.com / you@gmail.com
-//   GMAIL_APP_PASSWORD  - a 16-char Google "App Password" (NOT the account password).
-//                         Create at: Google Account -> Security -> 2-Step Verification -> App passwords
-//   GMAIL_FROM_NAME     - (optional) display name on the From header, e.g. "EZER HR Team"
+//   GET ?request_id=…  -> { kind, subject, body, template }  the offer email TEMPLATE for this
+//                         offer's engagement (Employment / Internship / NATS / NAPS / Contract /
+//                         Consultant), resolved from Configuration for the offer's branch →
+//                         company → Global. The Send Offers screen fills it in the browser
+//                         (lib/config/offer-mail.ts) so it can refresh on every offer-file edit.
+//
+// Mail goes through lib/mail/send.ts (GMAIL_USER, GMAIL_APP_PASSWORD, optional
+// GMAIL_FROM_NAME — set in .env.local locally and in Vercel for production).
 import { NextRequest, NextResponse } from 'next/server'
 // Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
 import { requireModule } from '@/lib/api-auth'
-import nodemailer from 'nodemailer'
 import { loadDossier } from '@/lib/recruitment/offer-dossier'
 import { offerLetterPdf } from '@/lib/recruitment/offer-letter-pdf'
+import { rmsServiceClient as sb } from '@/lib/rms/server'
+import { resolveTemplate, isUuid } from '@/lib/config/store'
+import { offerKindOf, OFFER_EMAIL_KEY } from '@/lib/config/offer-mail'
+import { stripMarkup, toEmailHtml } from '@/lib/config/render'
+import { sendMail, mailConfigured } from '@/lib/mail/send'
 
 export const runtime = 'nodejs' // nodemailer needs the Node.js runtime, not Edge
+
+export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+  const id = req.nextUrl.searchParams.get('request_id')
+  if (!isUuid(id)) return NextResponse.json({ error: 'request_id is required' }, { status: 400 })
+  const { data: r, error } = await sb.from('offer_approval_requests')
+    .select('company_id, candidates(application_details), manpower_requisitions(employment_type, location_id)')
+    .eq('id', id).maybeSingle()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!r) return NextResponse.json({ error: 'Offer request not found' }, { status: 404 })
+  const row = r as any
+  const kind = offerKindOf(row)
+  const t = await resolveTemplate(OFFER_EMAIL_KEY[kind], { companyId: row.company_id, locationId: row.manpower_requisitions?.location_id })
+  return NextResponse.json({ kind, subject: t!.subject, body: t!.body, template: { key: t!.key, source: t!.source, version: t!.version } })
+}
 
 export async function POST(req: NextRequest) {
   const gate = await requireModule(req, 'Recruitment', 'EDIT')
@@ -27,9 +50,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing recipient, subject, or body' }, { status: 400 })
     }
 
-    const user = process.env.GMAIL_USER
-    const pass = process.env.GMAIL_APP_PASSWORD
-    if (!user || !pass) {
+    if (!mailConfigured()) {
       return NextResponse.json(
         { error: 'Email is not configured on the server. Set GMAIL_USER and GMAIL_APP_PASSWORD.' },
         { status: 502 },
@@ -54,23 +75,16 @@ export async function POST(req: NextRequest) {
     const pdf = await offerLetterPdf(d)
     const attachments = [{ filename: pdf.name, content: pdf.content, contentType: 'application/pdf' }]
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user, pass },
+    const sent = await sendMail({
+      to, cc: ccList, subject,
+      text: stripMarkup(String(body)),
+      // HTML part: escaped, line breaks kept (the offer letter goes as the PDF attachment).
+      html: toEmailHtml(String(body)),
+      attachments, fromName: 'HR Team',
     })
+    if (!sent.sent) return NextResponse.json({ error: sent.error || sent.skipped || 'Failed to send email' }, { status: 502 })
 
-    const info = await transporter.sendMail({
-      from: `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`,
-      to,
-      cc: ccList.length ? ccList : undefined,
-      subject,
-      text: body,
-      // Simple HTML version so line breaks render nicely (offer letter goes as the PDF attachment).
-      html: String(body).replace(/\n/g, '<br>'),
-      attachments,
-    })
-
-    return NextResponse.json({ ok: true, messageId: info.messageId })
+    return NextResponse.json({ ok: true, messageId: sent.messageId })
   } catch (err: any) {
     console.error('send-offer-email failed:', err)
     return NextResponse.json({ error: err?.message || 'Failed to send email' }, { status: 502 })

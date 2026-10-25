@@ -10,7 +10,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useGrant } from '@/lib/rms/client';
+import { useGrant, authToken } from '@/lib/rms/client';
+import { leaveYearOf } from '@/lib/ess/leave-year';
 import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve';
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -69,7 +70,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'emp_master',
     label: 'Employee Master',
-    description: 'Complete employee profile — identity, employment, contact, statutory details',
+    description: 'Complete employee profile: identity, employment, contact, statutory details',
     icon: '',
     category: 'Employee',
     scope: 'all',
@@ -155,7 +156,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'ctc_report',
     label: 'CTC Report',
-    description: 'Annual CTC breakup — fixed, variable, basic, HRA, EPF wage limit per employee',
+    description: 'Annual CTC breakup: fixed, variable, basic, HRA, EPF wage limit per employee',
     icon: '',
     category: 'Salary',
     join: 'ctc_master',
@@ -219,7 +220,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'bank_report',
     label: 'Bank Details Report',
-    description: 'Employee bank account details (masked) — for salary disbursement & NEFT file',
+    description: 'Employee bank account details (masked), for salary disbursement & NEFT file',
     icon: '',
     category: 'Employee',
     scope: 'all',
@@ -276,7 +277,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'blood_group',
     label: 'Blood Group Report',
-    description: 'Employee list with blood group — useful for emergency & medical records',
+    description: 'Employee list with blood group, useful for emergency & medical records',
     icon: '',
     category: 'Employee',
     scope: 'active',
@@ -302,7 +303,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'gender_report',
     label: 'Gender Diversity Report',
-    description: 'Employee count and list by gender — for diversity metrics & compliance',
+    description: 'Employee count and list by gender, for diversity metrics & compliance',
     icon: '🧑‍🤝‍🧑',
     category: 'Employee',
     scope: 'all',
@@ -328,7 +329,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'leave_report',
     label: 'Leave Report',
-    description: 'Leave balance, accrued, used & closing per employee — all leave types',
+    description: 'Leave balance, accrued, used & closing per employee (all leave types)',
     icon: '',
     category: 'Leave',
     join: 'leave_balances',
@@ -353,7 +354,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'flexi_report',
     label: 'Flexi Declaration Report',
-    description: 'Employee-wise flexi (FBP) component declarations — old & new regime amounts',
+    description: 'Employee-wise flexi (FBP) component declarations: old & new regime amounts',
     icon: '',
     category: 'Salary',
     join: 'flexi_tds_forms',
@@ -381,7 +382,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'investment_report',
     label: 'Investment Declaration Report',
-    description: 'Employee 80C, 80D, HRA, NPS declarations — for TDS computation',
+    description: 'Employee 80C, 80D, HRA, NPS declarations, for TDS computation',
     icon: '',
     category: 'Tax',
     join: 'tds_declarations',
@@ -472,7 +473,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'confirmation_due',
     label: 'Confirmation Due Report',
-    description: 'Active employees not yet confirmed — probation review pending',
+    description: 'Active employees not yet confirmed, probation review pending',
     icon: '',
     category: 'Employee',
     scope: 'confirmation_due',
@@ -582,7 +583,7 @@ const REPORTS: ReportConfig[] = [
   {
     id: 'nps_report',
     label: 'NPS Enrolment Report',
-    description: 'Employees enrolled in corporate NPS — PRAN, regime, monthly contribution',
+    description: 'Employees enrolled in corporate NPS: PRAN, regime, monthly contribution',
     icon: '',
     category: 'Statutory',
     join: 'nps_declarations',
@@ -639,7 +640,7 @@ const CATEGORIES = ['All', 'Employee', 'Salary', 'Leave', 'Tax', 'Statutory', 'R
 
 // ─── Helper: format cell ──────────────────────────────────────
 function formatCell(value: any, format?: string): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return '-';
   switch (format) {
     case 'date': {
       const d = new Date(value);
@@ -778,6 +779,18 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
   const ids = emps.map((e: any) => e.id);
   if (!ids.length) return [];
 
+  // The Leave Report reads leave_balances, which is only as current as its last
+  // write. Bring it up to date first — accrual to the last completed month and
+  // every approved day — so the report agrees with the employee's Leave tab.
+  if (report.id === 'leave_report') {
+    const t = await authToken();
+    await fetch('/api/leave/balances', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+      body: JSON.stringify({ company: companyId || null }),
+    }).catch(() => null);
+  }
+
   const rows: any[] = [];
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500);
@@ -874,7 +887,7 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
       const codes = Array.from(new Set([...Object.keys(o), ...Object.keys(n)])).filter(c => (Number(o[c]) || 0) > 0 || (Number(n[c]) || 0) > 0)
       const base = { ...empSubset(e), fy: f.fy, tds_regime: e.tds_regime || f.regime, status: f.status, submitted_at: f.submitted_at }
       if (codes.length === 0) {
-        out.push({ ...base, component_code: '—', old_regime_amt: null, new_regime_amt: null })
+        out.push({ ...base, component_code: '-', old_regime_amt: null, new_regime_amt: null })
         return
       }
       codes.forEach(code => out.push({
@@ -887,7 +900,33 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
     return out
   }
 
-  // vpf / nps / tds / leave — one row per secondary record.
+  if (report.id === 'leave_report') {
+    // This financial year only, with the type named and the closing worked out —
+    // the columns are leave_type / opening_balance / closing_balance, which the
+    // raw leave_balances row does not carry, so they used to print blank.
+    const year = leaveYearOf();
+    const { data: types } = await supabase.from('leave_types').select('id, name, short_name, sort_order, allow_without_balance');
+    const typeBy: Record<string, any> = {};
+    (types || []).forEach((t: any) => { typeBy[t.id] = t; });
+    return rows
+      .filter(rec => String(rec.year) === year && empById[rec.employee_id])
+      .map(rec => {
+        const t = typeBy[rec.leave_type_id] || {};
+        const opening = Number(rec.opening) || 0, accrued = Number(rec.accrued) || 0;
+        const used = Number(rec.used) || 0, encashed = Number(rec.encashed) || 0;
+        return {
+          ...empSubset(empById[rec.employee_id]), ...rec,
+          leave_type: t.short_name ? `${t.name} (${t.short_name})` : (t.name || '—'),
+          opening_balance: opening, accrued, used, encashed,
+          // LWP / Sabbatical carry no balance — their row is days taken, not a deficit.
+          closing_balance: t.allow_without_balance ? '—' : Math.round((opening + accrued - used - encashed) * 10) / 10,
+          _sort: t.sort_order ?? 99,
+        };
+      })
+      .sort((a, b) => String(a.emp_code).localeCompare(String(b.emp_code)) || a._sort - b._sort);
+  }
+
+  // vpf / nps / tds — one row per secondary record.
   return rows.map(rec => {
     const e = empById[rec.employee_id];
     return { ...(e ? empSubset(e) : {}), ...rec };

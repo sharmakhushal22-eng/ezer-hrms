@@ -1,5 +1,6 @@
 // lib/supabase-ess.ts — ESS data helpers (Phase 1: admin access & roles)
 import { supabase } from '@/lib/supabase'
+import { authHeaders } from '@/lib/auth-headers'
 
 export interface EssRole {
   id: string; role_code: string; role_name: string
@@ -352,6 +353,8 @@ export const PERM_MODULES = [
   'Employees', 'Attendance', 'Leave', 'Payroll', 'Compliance', 'HR Letters',
   'Recruitment', 'Onboarding', 'Approvals', 'Reports', 'Admin Setup',
   'Company Profile', 'Holidays',
+  // Letter & email templates. VIEW reads, EDIT edits — own company only (lib/config/access.ts).
+  'Configuration',
 ] as const
 
 // The 9 approval workflows. `live` = a request of this type is actually created
@@ -443,8 +446,8 @@ export async function loadPendingForRole(role_id: string): Promise<{ types: stri
       .in('status', ['SUBMITTED', 'Submitted']).order('created_at', { ascending: false })
     for (const m of (data || []) as any[]) items.push({
       source: 'mrf', id: m.id, approval_type: 'HIRING_MRF',
-      title: `MRF · ${m.position || m.designation || '—'}`,
-      subtitle: [m.companies?.company_name, m.locations?.location_name, m.departments?.dept_name].filter(Boolean).join(' · ') || '—',
+      title: `MRF · ${m.position || m.designation || '-'}`,
+      subtitle: [m.companies?.company_name, m.locations?.location_name, m.departments?.dept_name].filter(Boolean).join(' · ') || '-',
       meta: `${m.openings ?? m.no_of_openings ?? 0} opening(s)${m.mrf_number ? ' · ' + m.mrf_number : ''}`,
       submitted_at: m.created_at,
     })
@@ -458,7 +461,7 @@ export async function loadPendingForRole(role_id: string): Promise<{ types: stri
     for (const o of (data || []) as any[]) items.push({
       source: 'offer', id: o.id, approval_type: 'OFFER_LETTER',
       title: `Offer · ${o.candidates?.full_name || 'Candidate'}`,
-      subtitle: [o.companies?.company_name, o.submitted_by].filter(Boolean).join(' · ') || '—',
+      subtitle: [o.companies?.company_name, o.submitted_by].filter(Boolean).join(' · ') || '-',
       meta: o.offered_ctc ? `CTC ₹${Number(o.offered_ctc).toLocaleString('en-IN')}` : 'Offer approval',
       submitted_at: o.submitted_at,
     })
@@ -473,9 +476,9 @@ export async function loadPendingForRole(role_id: string): Promise<{ types: stri
       .order('submitted_at', { ascending: false })
     for (const r of (data || []) as any[]) items.push({
       source: 'ess', id: r.id, approval_type: r.request_type,
-      title: `${r.request_type} · ${r.employees?.full_name || '—'}`,
-      subtitle: [r.employees?.emp_code, r.employees?.departments?.dept_name].filter(Boolean).join(' · ') || '—',
-      meta: r.request_data?.detail || (r.request_data ? JSON.stringify(r.request_data).slice(0, 80) : '—'),
+      title: `${r.request_type} · ${r.employees?.full_name || '-'}`,
+      subtitle: [r.employees?.emp_code, r.employees?.departments?.dept_name].filter(Boolean).join(' · ') || '-',
+      meta: r.request_data?.detail || (r.request_data ? JSON.stringify(r.request_data).slice(0, 80) : '-'),
       submitted_at: r.submitted_at, confidential: r.is_confidential,
     })
   }
@@ -510,11 +513,12 @@ export async function resolveApproval(item: PendingItem, action: 'APPROVED' | 'R
   const now = new Date().toISOString()
   if (item.source === 'mrf') {
     if (action === 'APPROVED') {
-      return supabase.from('manpower_requisitions').update({
-        status: 'APPROVED', approved_at: now, remarks: remark || null,
-        assigned_recruiter_ids: recruiters?.length ? recruiters.map(r => r.id) : null,
-        assigned_recruiter: recruiters?.length ? recruiters.map(r => r.full_name).join(', ') : null,
-      }).eq('id', item.id)
+      // Approving opens the requisition, so it must be handed to a hiring manager of its own
+      // company — enforced by /api/recruitment/mrf-decision (lib/recruitment/mrf-approve.ts).
+      if (!recruiters?.length) return { error: { message: 'Assign at least one recruiter before approving this MRF.' } }
+      const r = await fetch('/api/recruitment/mrf-decision', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ id: item.id, assigned_hr_ids: recruiters.map(x => x.id), note: remark || null }) })
+      const j = await r.json().catch(() => ({}))
+      return { error: r.ok ? null : { message: j.error || r.statusText } }
     }
     return supabase.from('manpower_requisitions').update({ status: 'REJECTED', remarks: remark || null }).eq('id', item.id)
   }

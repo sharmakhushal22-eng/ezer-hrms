@@ -1,46 +1,63 @@
 'use client'
-// components/profile/Profile360.tsx — the ESS profile.
+// components/profile/Profile360.tsx — the ESS profile ("My Details").
 //
-// Follows EZER-ESS-Profile-360.html's layout, measured off the rendered
-// design rather than inferred from its source:
+// LAYOUT
 //
-//   a gradient cover with the identity card overlapping its lower edge
-//   a KPI strip, each stat with a mini bar
-//   a two-column shell — a 296px rail beside the tab panels
-//   the rail holds the completeness ring, the reporting chain, the ID card
-//   the tabs sit in their own rounded container with the legend beneath
+//   identity header   photo (click to change), name, role, chips, facts, and
+//                     the three things people come here to do: Edit profile,
+//                     Digital ID, Change history
+//   two columns       a short side column — completeness (top three, "Show
+//                     all"), the reporting chain, open requests — beside the
+//                     tabs. Kept short on purpose: it used to carry the ID card
+//                     and its download too and ran three screens long next to
+//                     a mostly empty right half.
+//   drawers           Edit profile, Digital ID, Change history, Documents open
+//                     on demand instead of all being on the page at once.
 //
-// Three things the field card does NOT have, because the design does not:
-// a filled pill for the state (plain coloured text at the top right), the
-// source column printed underneath, and a per-field button. Editing is
-// reached by clicking the card itself, and from "Edit profile" / "Request an
-// update" on the identity card — which is why those exist there.
+// The KPI strip is gone: its four tiles repeated the facts line (tenure), the
+// completeness ring (score, open items) and the chain (reportees), each with a
+// progress bar that measured nothing. So is the Direct / Request / Locked /
+// Event legend: each field now says what pressing it does ("Edit", "Add",
+// "Request change"), and the rule is one tap away under "How editing works".
 //
-// WHERE IT DEPARTS, AND WHY
+// EDITING
 //
-// The mockup carries its own data. Attendance percentages, the seven-day
-// punch chart, leave balances and the salary head table read from modules
-// this payload does not include. They are not faked: the KPI strip shows the
-// four stats that are real, and the tabs that would hold the rest say which
-// part of ESS owns them.
+// Every completeness item's Fix opens the editor for THAT item — the photo
+// cropper, an Aadhaar form, an address form, the nominee form — mapped from the
+// sentence by lib/profile/self-service fixActionFor(). It used to open Spouse
+// name for all of them. What saves straight away and what goes for approval
+// (and to whom, by name) is written at the top of that file.
 //
-// The distinction the whole file turns on:
+// After any save the payload is reloaded (ring, pending list, cards, ID card),
+// the request list refreshes, and 'ez:profile-updated' is fired on window so
+// the portal header's avatar follows.
+//
+// The distinction the whole file still turns on:
 //
 //   key MISSING from the payload  ->  "Restricted"  (not yours to see)
-//   key present but null/empty    ->  "—"           (nobody filled it in)
+//   key present but null/empty    ->  "-"           (nobody filled it in)
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { TABS, MODEL, RECORD_CARDS, CARD_COLUMNS } from '@/lib/profile/model'
-import ChangeRequests from '@/components/profile/ChangeRequests'
+import ChangeRequests, { RequestsSummary, useChangeRequests } from '@/components/profile/ChangeRequests'
 import { maySee, type ProfileField, type ProfilePayload, type Row, type TabId } from '@/lib/profile/types'
-import { loadProfile, editField, requestChange, setProfileOwner } from '@/lib/profile/client'
+import { loadProfile, setProfileOwner, announceProfileUpdate } from '@/lib/profile/client'
+import {
+  fixActionFor, FIX_TAB, FIX_MODE, addressOneLine, goesTo, SCHEME_LABEL, type Scheme,
+} from '@/lib/profile/self-service'
 import IdCard from '@/components/profile/IdCard'
 import IdCardDownload from '@/components/profile/IdCardDownload'
 import PhotoUploader from '@/components/profile/PhotoUploader'
+import {
+  Drawer, FieldEditor, IdentityEditor, AddressEditor, EmergencyEditor, NomineeEditor, BankEditor,
+  DocumentsPanel, Layer,
+} from '@/components/profile/editors'
 import '@/components/profile/profile.css'
 
+/** What an empty value reads as. A plain hyphen, as across the app (no em dashes in copy). */
+const NIL = '-'
 const val = (v: unknown): string => {
-  if (v === null || v === undefined || v === '') return '—'
+  if (v === null || v === undefined || v === '') return NIL
   if (typeof v === 'boolean') return v ? 'Yes' : 'No'
   return String(v)
 }
@@ -53,71 +70,117 @@ const pretty = (v: unknown): string => {
 }
 const money = (v: unknown): string => {
   const n = Number(v)
-  return Number.isFinite(n) ? '₹' + n.toLocaleString('en-IN') : val(v)
+  return v !== null && v !== undefined && v !== '' && Number.isFinite(n) ? '₹' + n.toLocaleString('en-IN') : val(v)
 }
 const titleise = (k: string) =>
   k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\bNo\b/, 'No.')
 const ini = (n: unknown) =>
   String(n || '?').split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
-/** Where a change actually goes, and what it sets off. The design puts this in
- *  the modal and it is the most useful thing on it: somebody changing an IFSC
- *  should read that it reaches Payroll and lands in the next salary batch. */
-function routeNote(key: string): string {
-  if (/^bank|ifsc/.test(key))
-    return 'Goes to Payroll, not HR. It applies from the next salary batch, and they may ask for a cancelled cheque in the same name.'
-  if (/address/.test(key))
-    return 'Goes to HR. An address change also moves your Professional Tax state and HRA exemption from the next payroll month.'
-  if (/marital|spouse/.test(key))
-    return 'Goes to HR. It opens the family, nominee and insurance steps behind it — a nomination must total exactly 100% before it can be filed.'
-  if (/passport/.test(key))
-    return 'Goes to HR. Passport details are readable only by HR and Payroll.'
-  return 'Goes to HR. You will see the outcome in your change history.'
+const ALL_FIELDS: ProfileField[] = Object.values(MODEL).flatMap(gs => (gs ?? []).flatMap(g => g.fields))
+const fieldByKey = (k: string) => ALL_FIELDS.find(f => f.key === k) ?? null
+
+type Editor =
+  | { kind: 'field'; field: ProfileField }
+  | { kind: 'identity'; which: 'aadhaar' | 'pan' | 'uan' }
+  | { kind: 'address'; which: 'present' | 'permanent' }
+  | { kind: 'emergency'; slot: 1 | 2 }
+  | { kind: 'nominee'; scheme: Scheme }
+  | { kind: 'bank' }
+
+type DrawerId = 'edit' | 'request' | 'id' | 'history' | 'docs'
+
+// ── what a field shows, and what pressing it does ────────────────────────
+
+const ID_HAS: Record<string, 'has_pan' | 'has_aadhaar' | 'has_uan'> = { pan: 'has_pan', aadhaar: 'has_aadhaar', uan: 'has_uan' }
+
+/** The value as a person should read it. The view flattens addresses to two
+ *  lines; your own profile carries the full one, city, state and PIN. */
+function shownValue(f: ProfileField, p: ProfilePayload): { text: string; restricted: boolean } {
+  const emp = p.employee
+  const present = Object.prototype.hasOwnProperty.call(emp, f.key)
+  if (f.key === 'pan' && !present && p.self?.ids?.pan_masked) return { text: p.self.ids.pan_masked, restricted: false }
+  if (!maySee(p.viewer_role, f.min) || !present) {
+    if (f.key === 'pan' && p.self && !p.self.ids.has_pan) return { text: NIL, restricted: false }
+    return { text: 'Restricted', restricted: true }
+  }
+  if ((f.key === 'present_address' || f.key === 'permanent_address') && p.self) {
+    const a = p.self.addresses[f.key === 'present_address' ? 'present' : 'permanent']
+    if (a) return { text: addressOneLine(a), restricted: false }
+  }
+  const raw = emp[f.key]
+  return { text: /ctc|gross/.test(f.key) ? money(raw) : pretty(raw), restricted: false }
 }
 
-// ── field ────────────────────────────────────────────────────────────────
-function Field({ f, payload, onAct }: {
-  f: ProfileField; payload: ProfilePayload; onAct: (f: ProfileField) => void
+interface Mode { kind: 'none' | 'edit' | 'add' | 'request'; label: string }
+
+function fieldMode(f: ProfileField, p: ProfilePayload, self: boolean): Mode {
+  const none: Mode = { kind: 'none', label: '' }
+  if (!self) return none
+  const { text, restricted } = shownValue(f, p)
+  const empty = text === NIL
+  if (f.addable && f.editor) {
+    // self.ids is authoritative (it sees PAN, which the payload strips below
+    // HR); without it — an older payload, the preview — go by what is shown.
+    const has = p.self?.ids ? p.self.ids[ID_HAS[f.editor]] : !empty
+    return has ? none : { kind: 'add', label: 'Add' }
+  }
+  if (restricted || f.state === 'locked') return none
+  if (f.editor === 'bank') return { kind: 'request', label: p.self?.ids?.has_bank ? 'Request change' : 'Add' }
+  if (f.editor === 'present_address' || f.editor === 'permanent_address') {
+    return empty ? { kind: 'add', label: 'Add' } : { kind: 'request', label: 'Request change' }
+  }
+  if (f.state === 'direct') return { kind: empty ? 'add' : 'edit', label: empty ? 'Add' : 'Edit' }
+  return { kind: 'request', label: 'Request change' }
+}
+
+const LockGlyph = () => (
+  <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6"
+       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+  </svg>
+)
+
+function FieldCard({ f, payload, self, onAct }: {
+  f: ProfileField; payload: ProfilePayload; self: boolean; onAct: (f: ProfileField) => void
 }) {
   const [shown, setShown] = useState(false)
-  const emp = payload.employee
-  const allowed = maySee(payload.viewer_role, f.min)
-  const present = Object.prototype.hasOwnProperty.call(emp, f.key)
-  const actionable = allowed && present && payload.viewer_role === 'self' && f.state !== 'locked'
-
-  let body: React.ReactNode
-  if (!allowed || !present) {
-    body = <span className="no">Restricted</span>
-  } else {
-    const raw = emp[f.key]
-    const text = /ctc|gross/.test(f.key) ? money(raw) : pretty(raw)
-    body = f.mask && !shown && text !== '—'
-      ? <>
-          <span className="msk">{'•'.repeat(Math.min(12, Math.max(4, text.length)))}</span>
-          <button className="eye" onClick={e => { e.stopPropagation(); setShown(true) }}>Reveal</button>
-        </>
-      : <>{text}{f.mask && shown &&
-          <button className="eye" onClick={e => { e.stopPropagation(); setShown(false) }}>Hide</button>}</>
-  }
+  const { text, restricted } = shownValue(f, payload)
+  const mode = fieldMode(f, payload, self)
+  const act = mode.kind !== 'none'
+  // Reveal only applies to the real value (HR's view). A masked PAN from
+  // self.ids is already safe to show.
+  const masked = f.mask && !shown && text !== NIL && !restricted && !text.includes('•')
 
   return (
-    <div className={`fld${f.wide ? ' span2' : ''}${actionable ? ' act' : ''}`}
-         onClick={actionable ? () => onAct(f) : undefined}
-         title={actionable ? (f.state === 'direct' ? 'Click to edit' : 'Click to request a change') : undefined}>
-      <span className={`st ${f.state}`}>
-        {f.state.charAt(0).toUpperCase() + f.state.slice(1)}
-      </span>
-      <div className="k">{f.label}</div>
-      <div className={`v${f.mono ? ' mono' : ''}`}>{body}</div>
+    <div className={`fld${f.wide ? ' span2' : ''}${act ? ' act' : ''}`}
+         onClick={act ? () => onAct(f) : undefined}
+         role={act ? 'button' : undefined} tabIndex={act ? 0 : undefined}
+         onKeyDown={act ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAct(f) } } : undefined}>
+      <div className="k">
+        <span>{f.label}</span>
+        {act ? <span className={`fa ${mode.kind}`}>{mode.label}</span>
+             : self && f.state === 'locked' && !restricted
+               ? <span className="lk" title="Maintained by HR. Ask HR to correct it."><LockGlyph /></span> : null}
+      </div>
+      <div className={`v${f.mono ? ' mono' : ''}`}>
+        {restricted ? <span className="no">Restricted</span>
+          : masked ? <>
+              <span className="msk">{'•'.repeat(Math.min(12, Math.max(4, text.length)))}</span>
+              <button className="eye" onClick={e => { e.stopPropagation(); setShown(true) }}>Reveal</button>
+            </>
+          : <>{text === NIL ? <span className="nil">Not added</span> : text}
+              {f.mask && shown && <button className="eye" onClick={e => { e.stopPropagation(); setShown(false) }}>Hide</button>}</>}
+      </div>
       {f.hint && <div className="hint">{f.hint}</div>}
     </div>
   )
 }
 
-const Card = ({ title, sub, right, children }: {
-  title?: string; sub?: string; right?: React.ReactNode; children: React.ReactNode
+const Card = ({ title, sub, right, children, className }: {
+  title?: string; sub?: string; right?: React.ReactNode; children: React.ReactNode; className?: string
 }) => (
-  <div className="card">
+  <div className={`card${className ? ` ${className}` : ''}`}>
     {(title || right) && (
       <div className="hd">
         <div>{title && <h3>{title}</h3>}{sub && <div className="sub">{sub}</div>}</div>
@@ -128,41 +191,32 @@ const Card = ({ title, sub, right, children }: {
   </div>
 )
 
-const Section = ({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) => (
+const Section = ({ title, sub, right, children }: {
+  title: string; sub?: string; right?: React.ReactNode; children: React.ReactNode
+}) => (
   <section className="sec">
-    <h4>{title}</h4>
-    {sub && <div className="sub">{sub}</div>}
+    <div className="sechd">
+      <div><h4>{title}</h4>{sub && <div className="sub">{sub}</div>}</div>
+      {right}
+    </div>
     {children}
   </section>
 )
 
-/** A block this profile genuinely does not hold. Named rather than left blank
- *  — "lives in Time & Attendance" is an answer; an empty panel is a bug
- *  report waiting to happen. */
-const Elsewhere = ({ title, owner }: { title: string; owner: string }) => (
-  <Section title={title}>
-    <div className="card"><div className="empty">
-      Kept in {owner}, which owns it. Named here so the profile does not look as though
-      it is missing something it never held.
-    </div></div>
-  </Section>
-)
-
 function Ring({ pc }: { pc: number }) {
-  const r = 32, c = 2 * Math.PI * r
+  const r = 26, c = 2 * Math.PI * r
   return (
     <div className="ez-ring">
-      <svg width="76" height="76" viewBox="0 0 76 76" aria-hidden="true">
-        <circle cx="38" cy="38" r={r} fill="none" strokeWidth="8" stroke="var(--ez-sunken)" />
-        <circle cx="38" cy="38" r={r} fill="none" strokeWidth="8" stroke="var(--ez-brand)"
+      <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r={r} fill="none" strokeWidth="7" stroke="var(--ez-sunken)" />
+        <circle cx="32" cy="32" r={r} fill="none" strokeWidth="7" stroke="var(--ez-brand)"
                 strokeLinecap="round" strokeDasharray={`${c * Math.max(0, Math.min(100, pc)) / 100} ${c}`} />
       </svg>
-      <div className="mid"><div><div className="num">{pc}%</div><div className="cap">complete</div></div></div>
+      <div className="mid"><div className="num">{pc}%</div></div>
     </div>
   )
 }
 
-// ── record table ─────────────────────────────────────────────────────────
 const RecordTable = ({ title, rows, columns, empty }: {
   title: string; rows: Row[]; columns: string[]; empty: string
 }) => (
@@ -182,52 +236,367 @@ const RecordTable = ({ title, rows, columns, empty }: {
   </Section>
 )
 
-// ── modal ────────────────────────────────────────────────────────────────
-function ChangeModal({ field, onClose, onDone }: {
-  field: ProfileField; onClose: () => void; onDone: (m: string) => void
-}) {
-  const [value, setValue] = useState('')
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const direct = field.state === 'direct'
+// ── side column ──────────────────────────────────────────────────────────
 
-  const submit = async () => {
-    setBusy(true); setErr(null)
-    const r = direct ? await editField(field.key, value) : await requestChange(field.key, value, reason)
-    setBusy(false)
-    if (r.error) { setErr(r.error.message); return }
-    onDone(direct ? `${field.label} saved.` : 'Sent. You will see the outcome in your change history.')
+/** A completeness sentence as shown. They come from the database and some
+ *  carry an em dash ("Add a gratuity nominee — the shares must total 100%");
+ *  the app's copy has none, so it reads as two sentences here. fixActionFor()
+ *  still gets the original. */
+const tidy = (s: string) => s.replace(/\s+[—–]\s+(\w)/g, (_, c: string) => `. ${c.toUpperCase()}`)
+
+const fixLabel = (a: string | null) =>
+  a === 'photo' || a === 'documents' ? 'Upload' : a && FIX_MODE[a as keyof typeof FIX_MODE] === 'payroll' ? 'Request' : 'Add'
+
+function Completeness({ score, pending, self, onFix }: {
+  score: number; pending: string[]; self: boolean; onFix: (sentence: string) => void
+}) {
+  const [all, setAll] = useState(false)
+  const list = all ? pending : pending.slice(0, 3)
+  return (
+    <Card title="Profile completeness"
+          right={pending.length ? <span className="pill warn">{pending.length} to do</span> : <span className="pill good">Complete</span>}>
+      <div className="ez-ringrow">
+        <Ring pc={score} />
+        <p>{pending.length
+          ? 'A complete profile keeps payroll, PF and tax filings right.'
+          : 'Everything payroll and statutory filings need is on file.'}</p>
+      </div>
+      {pending.length > 0 && (
+        <>
+          <ul className="todo">
+            {list.map(p => {
+              const a = fixActionFor(p)
+              return (
+                <li key={p}><i />
+                  <span className="tt">{tidy(p)}</span>
+                  {self && <button type="button" className="fix" onClick={() => onFix(p)}>{fixLabel(a)}</button>}
+                </li>
+              )
+            })}
+          </ul>
+          {pending.length > 3 && (
+            <button type="button" className="lnk more" onClick={() => setAll(x => !x)}>
+              {all ? 'Show fewer' : `Show all ${pending.length}`}
+            </button>
+          )}
+        </>
+      )}
+    </Card>
+  )
+}
+
+/** One row per PERSON, not per role. The same person often holds two slots —
+ *  your L1 is also the MD in a small company, a HOD is their own HOD — and
+ *  the chain used to list them twice. Matched on employee code. */
+function chainOf(emp: Row) {
+  const slots: [string, string][] = [['rm_l1', 'Reporting manager'], ['rm_l2', 'Second-level manager'],
+                                     ['hod', 'Head of department'], ['md', 'Managing director']]
+  const out: { key: string; name: string; roles: string[]; me: boolean }[] = []
+  const meCode = String(emp.employee_code ?? '')
+  for (const [k, role] of slots) {
+    const name = emp[`${k}_name`]
+    if (!name) continue
+    const code = String(emp[`${k}_code`] ?? '')
+    const key = code || String(name)
+    const me = !!code && code === meCode
+    const hit = out.find(x => x.key === key)
+    if (hit) hit.roles.push(role)
+    else out.push({ key, name: String(name), roles: [role], me })
+  }
+  return out
+}
+
+function Chain({ emp, self }: { emp: Row; self: boolean }) {
+  const people = chainOf(emp)
+  const above = people.filter(p => !p.me)
+  const myRoles = people.find(p => p.me)?.roles ?? []
+  const n = Number(emp.reportee_count) || 0
+  return (
+    <Card title="Reporting chain" right={n ? <span className="sub">{n} reportee{n === 1 ? '' : 's'}</span> : null}>
+      {!above.length && !myRoles.length ? <div className="empty">No reporting chain recorded.</div> : (
+        <ul className="chain">
+          {above.map(p => (
+            <li key={p.key}>
+              <span className="p">{ini(p.name)}</span>
+              <div><div className="n">{p.name}</div><div className="r">{p.roles.join(' · ')}</div></div>
+            </li>
+          ))}
+          <li className="me">
+            <span className="p">{ini(emp.full_name)}</span>
+            <div>
+              <div className="n">{val(emp.full_name)}</div>
+              <div className="r">{[self ? 'You' : val(emp.designation), ...myRoles].join(' · ')}</div>
+            </div>
+          </li>
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+function HowEditing({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="howpop" role="dialog" aria-label="How editing works">
+      <div className="hhd"><b>How editing works</b><button type="button" className="x" onClick={onClose} aria-label="Close">×</button></div>
+      <dl>
+        <dt className="edit">Edit · Add</dt><dd>Saves straight away: contact details, emergency contacts, blood group, nominees, a missing PAN, UAN, Aadhaar or address.</dd>
+        <dt className="request">Request change</dt><dd>Goes for approval and says to whom. Changing an address, spouse or marital status goes to HR; the salary account goes to Payroll.</dd>
+        <dt className="locked"><LockGlyph /> Locked</dt><dd>Maintained by HR: your name, date of birth, job details. Ask HR to correct these.</dd>
+      </dl>
+    </div>
+  )
+}
+
+// ── the Edit profile drawer ──────────────────────────────────────────────
+
+function HubRow({ label, value, action, sub, onClick }: {
+  label: string; value: string | null; action: string; sub?: string; onClick: () => void
+}) {
+  return (
+    <li className="hub">
+      <div className="hl">
+        <div className="hk">{label}</div>
+        {value !== null && (
+          <div className={`hv${value === NIL || !value ? ' nil' : ''}`}>{value && value !== NIL ? value : 'Not added'}</div>
+        )}
+        {sub && <div className="hs">{sub}</div>}
+      </div>
+      <button type="button" className="btn ghost sm" onClick={onClick}>{action}</button>
+    </li>
+  )
+}
+
+function EditHub({ payload, focus, onField, onAction, onFix }: {
+  payload: ProfilePayload; focus: 'edit' | 'request'
+  onField: (f: ProfileField) => void; onAction: (a: string) => void; onFix: (s: string) => void
+}) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focus === 'request') ref.current?.scrollIntoView({ block: 'start' })
+  }, [focus])
+  const ap = payload.self?.approvers
+  const pending = payload.completeness.pending ?? []
+  const nom = (s: Scheme) => {
+    const rows = payload.nominations.filter(n => String(n.scheme) === s)
+    return rows.length ? rows.map(r => `${val(r.nominee_name)} ${Number(r.share_percent)}%`).join(', ') : ''
+  }
+
+  const mine: ProfileField[] = [], approval: ProfileField[] = [], locked: ProfileField[] = []
+  for (const f of ALL_FIELDS) {
+    const m = fieldMode(f, payload, true)
+    if (m.kind === 'edit' || m.kind === 'add') mine.push(f)
+    else if (m.kind === 'request') { if (f.editor !== 'bank') approval.push(f) }
+    else if (f.state === 'locked' && maySee(payload.viewer_role, f.min)) locked.push(f)
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true"
-         onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal">
-        <h3>{direct ? `Edit ${field.label}` : `Request a change to ${field.label}`}</h3>
-        <div className="sub">{direct ? 'This saves straight away.'
-                                     : 'Nothing changes yet — somebody reviews this first.'}</div>
-        {!direct && <div className="note warn" style={{ marginTop: 10 }}>{routeNote(field.key)}</div>}
+    <div className="hubwrap">
+      {pending.length > 0 && (
+        <section className="hubsec">
+          <h4>To complete</h4>
+          <ul className="todo">
+            {pending.map(p => (
+              <li key={p}><i /><span className="tt">{tidy(p)}</span>
+                <button type="button" className="fix" onClick={() => onFix(p)}>{fixLabel(fixActionFor(p))}</button></li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-        <label htmlFor="pv">New value</label>
-        <input id="pv" value={value} onChange={e => setValue(e.target.value)} autoFocus />
+      <section className="hubsec">
+        <h4>Change it yourself</h4>
+        <div className="sub">Saves straight away.</div>
+        <ul className="hublist">
+          <HubRow label="Profile photo" value={payload.photoUrl ? 'Set' : ''} action={payload.photoUrl ? 'Change' : 'Upload'}
+                  onClick={() => onAction('photo')} />
+          {mine.map(f => (
+            <HubRow key={f.key} label={f.label} value={shownValue(f, payload).text}
+                    action={fieldMode(f, payload, true).label} onClick={() => onField(f)} />
+          ))}
+          {(['pf', 'gratuity'] as Scheme[]).map(s => (
+            <HubRow key={s} label={`${SCHEME_LABEL[s]} nominees`} value={nom(s)} action={nom(s) ? 'Edit' : 'Add'}
+                    onClick={() => onAction(s === 'pf' ? 'nominee_pf' : 'nominee_gratuity')} />
+          ))}
+          <HubRow label="Documents" value={null} action="Open" sub="Aadhaar, PAN, certificates. HR verifies each upload."
+                  onClick={() => onAction('documents')} />
+        </ul>
+      </section>
 
-        {!direct && (<>
-          <label htmlFor="pr">Reason</label>
-          <textarea id="pr" value={reason} onChange={e => setReason(e.target.value)}
-                    placeholder="Why is this changing? The approver reads this." />
-        </>)}
+      <section className="hubsec" ref={ref}>
+        <h4>Needs approval</h4>
+        <div className="sub">Nothing changes until the approver accepts it. Follow it in Change history.</div>
+        <ul className="hublist">
+          {approval.map(f => (
+            <HubRow key={f.key} label={f.label} value={shownValue(f, payload).text} action="Request change"
+                    sub={`Goes to ${goesTo(f.key, ap).summary}`} onClick={() => onField(f)} />
+          ))}
+          <HubRow label="Salary account"
+                  value={payload.self?.ids?.has_bank ? `${val(payload.employee.bank_name)} · ${payload.self.ids.bank_masked ?? ''}` : ''}
+                  action={payload.self?.ids?.has_bank ? 'Request change' : 'Add'}
+                  sub={`Goes to ${goesTo('salary_account', ap).summary}`} onClick={() => onAction('bank')} />
+        </ul>
+      </section>
 
-        {field.hint && <div className="note warn" style={{ marginTop: 10 }}>{field.hint}</div>}
-        {err && <div className="note bad" style={{ marginTop: 10 }}>{err}</div>}
+      {locked.length > 0 && (
+        <details className="hubsec lockd">
+          <summary>Maintained by HR ({locked.length})</summary>
+          <p className="sub">Your organisation keeps these. If one is wrong, ask HR to correct it.</p>
+          <div className="lockgrid">{locked.map(f => <span key={f.key}>{f.label}</span>)}</div>
+        </details>
+      )}
+    </div>
+  )
+}
 
-        <div className="row">
-          <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn" disabled={busy || !value.trim() || (!direct && !reason.trim())}
-                  onClick={submit}>{busy ? 'Sending…' : direct ? 'Save' : 'Send request'}</button>
+// ── tabs ─────────────────────────────────────────────────────────────────
+
+/** The next time a date's day and month come round, and how far off it is. */
+function nextOf(iso: unknown): { date: Date; days: number; years: number } | null {
+  const s = String(iso ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return null
+  const d = new Date(s); if (isNaN(d.getTime())) return null
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  const n = new Date(t.getFullYear(), d.getMonth(), d.getDate())
+  if (n < t) n.setFullYear(n.getFullYear() + 1)
+  return { date: n, days: Math.round((n.getTime() - t.getTime()) / 86400000), years: n.getFullYear() - d.getFullYear() }
+}
+const inDays = (n: number) => n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`
+const dm = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+
+function KV({ rows }: { rows: [string, React.ReactNode][] }) {
+  return (
+    <dl className="kv">
+      {rows.map(([k, v]) => <React.Fragment key={k}><dt>{k}</dt><dd>{v}</dd></React.Fragment>)}
+    </dl>
+  )
+}
+
+function NomineeCard({ scheme, rows, self, onEdit }: { scheme: Scheme; rows: Row[]; self: boolean; onEdit: () => void }) {
+  const total = Math.round(rows.reduce((a, r) => a + (Number(r.share_percent) || 0), 0) * 100) / 100
+  return (
+    <div className="nom">
+      <div className="top">
+        <div style={{ minWidth: 0 }}>
+          <div className="n">{SCHEME_LABEL[scheme]}</div>
+          <div className="s">{rows.length ? rows.map(r => `${val(r.nominee_name)} (${val(r.relation)}) ${Number(r.share_percent)}%`).join(' · ')
+                                          : 'No nominee yet.'}</div>
         </div>
+        {rows.length > 0 && <span className={total === 100 ? 'pc100' : 'pcbad'}>{total}%</span>}
+      </div>
+      <div className="meter"><i className={total === 100 ? 'ok' : ''} style={{ width: `${Math.min(100, total)}%` }} /></div>
+      <div className="foot">
+        <span>{!rows.length ? 'Required for the statutory form' : total === 100 ? (rows.some(r => r.is_filed) ? 'Filed' : 'Ready for HR to file') : `Adds up to ${total}%, not 100%`}</span>
+        {self && <button type="button" onClick={onEdit}>{rows.length ? 'Edit nominees' : 'Add nominee'}</button>}
       </div>
     </div>
+  )
+}
+
+function Overview({ p, self, onAction, openTab }: {
+  p: ProfilePayload; self: boolean; onAction: (a: string) => void; openTab: (t: TabId) => void
+}) {
+  const emp = p.employee
+  const ann = nextOf(emp.date_of_joining), bday = emp.date_of_birth ? nextOf(emp.date_of_birth) : null
+  const pf = p.nominations.filter(n => String(n.scheme) === 'pf')
+  const gr = p.nominations.filter(n => String(n.scheme) === 'gratuity')
+  const nomState = (rows: Row[]) => {
+    if (!rows.length) return <span className="tag warn">Not added</span>
+    const t = rows.reduce((a, r) => a + (Number(r.share_percent) || 0), 0)
+    return t === 100 ? <span className="tag good">{rows.length} nominee{rows.length === 1 ? '' : 's'} · 100%</span>
+                     : <span className="tag warn">{t}% assigned</span>
+  }
+  const e1 = emp.emergency_contact_1
+  return (
+    <div className="g2x">
+      <Card title="Contact" right={self ? <button type="button" className="lnk" onClick={() => openTab('personal')}>All details</button> : null}>
+        <KV rows={[
+          ['Work email', val(emp.official_email)],
+          ['Mobile', Object.prototype.hasOwnProperty.call(emp, 'mobile') ? val(emp.mobile) : 'Restricted'],
+          ['Personal email', Object.prototype.hasOwnProperty.call(emp, 'personal_email') ? val(emp.personal_email) : 'Restricted'],
+          ['Location', [emp.location_name, emp.workstation].filter(Boolean).map(String).join(' · ') || NIL],
+          ...(self ? [['Emergency', e1 ? String(e1)
+            : <button type="button" className="lnk" onClick={() => onAction('emergency')}>Add an emergency contact</button>] as [string, React.ReactNode]] : []),
+        ]} />
+      </Card>
+
+      <Card title="Key dates">
+        <KV rows={[
+          ['Joined', emp.date_of_joining ? `${pretty(emp.date_of_joining)} · ${val(emp.tenure_years)}y ${val(emp.tenure_months)}m` : NIL],
+          ...(ann && emp.date_of_joining ? [['Work anniversary', `${ann.years} year${ann.years === 1 ? '' : 's'} on ${dm(ann.date)} · ${inDays(ann.days)}`] as [string, string]] : []),
+          ...(bday ? [['Birthday', `${dm(bday.date)} · ${inDays(bday.days)}`] as [string, string]] : []),
+          ['Confirmed', emp.confirmation_date ? pretty(emp.confirmation_date) : emp.probation_months ? `On probation (${val(emp.probation_months)} months)` : NIL],
+        ]} />
+      </Card>
+
+      <Card title="Employment" right={<button type="button" className="lnk" onClick={() => openTab('job')}>More</button>}>
+        <KV rows={[
+          ['Type', [emp.employment_type, emp.employee_category].filter(Boolean).map(String).join(' · ') || NIL],
+          ['Grade', [emp.grade, emp.job_level].filter(Boolean).map(String).join(' · ') || NIL],
+          ['Notice period', emp.notice_period_days ? `${val(emp.notice_period_days)} days` : NIL],
+          ['Weekly off', val(emp.weekly_off)],
+        ]} />
+      </Card>
+
+      <Card title="Family & nominees" right={<button type="button" className="lnk" onClick={() => openTab('family')}>Open</button>}>
+        <KV rows={[
+          ['Family members', p.family.length ? `${p.family.length} recorded` : NIL],
+          ['PF nominee', <span key="pf" className="kvact">{nomState(pf)}{self && <button type="button" className="lnk" onClick={() => onAction('nominee_pf')}>{pf.length ? 'Edit' : 'Add'}</button>}</span>],
+          ['Gratuity nominee', <span key="gr" className="kvact">{nomState(gr)}{self && <button type="button" className="lnk" onClick={() => onAction('nominee_gratuity')}>{gr.length ? 'Edit' : 'Add'}</button>}</span>],
+          ['Insurance', p.insurance.length ? `${p.insurance.length} active polic${p.insurance.length === 1 ? 'y' : 'ies'}` : NIL],
+        ]} />
+      </Card>
+    </div>
+  )
+}
+
+function FamilyTab({ p, self, onAction }: { p: ProfilePayload; self: boolean; onAction: (a: string) => void }) {
+  return (
+    <>
+      <Section title="Nominations" sub="Who receives your PF and gratuity. Each must total exactly 100%; HR files the form from it.">
+        <div className="g2">
+          {(['pf', 'gratuity'] as Scheme[]).map(s => (
+            <NomineeCard key={s} scheme={s} rows={p.nominations.filter(n => String(n.scheme) === s)} self={self}
+                         onEdit={() => onAction(s === 'pf' ? 'nominee_pf' : 'nominee_gratuity')} />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Family" sub="Adding a nominee adds them here. HR verifies a member before insurance can cover them.">
+        {!p.family.length ? <div className="card"><div className="empty">No family members recorded.</div></div> : (
+          <div className="g2">
+            {p.family.map((m, i) => (
+              <div className="pc" key={String(m.id ?? i)}>
+                <div className="ph">{ini(m.member_name)}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="n">{val(m.member_name)}</div>
+                  <div className="s">{val(m.relation)}{m.date_of_birth ? ` · ${pretty(m.date_of_birth)}` : ''}</div>
+                  <div className="pl">
+                    {m.is_verified ? <span className="pill good">Verified</span> : <span className="pill warn">Proof pending</span>}
+                    {m.is_insured ? <span className="pill brand">Insured</span> : null}
+                    {m.is_dependent ? <span className="pill">Dependent</span> : null}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Insurance" sub="Enrolment is handled by HR during the policy window.">
+        {!p.insurance.length ? <div className="card"><div className="empty">No active policy recorded.</div></div> : (
+          <div className="g2">
+            {p.insurance.map((x, i) => (
+              <div className="pc" key={String(x.id ?? i)}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="n">{val(x.policy_type)}{x.policy_name ? ` · ${val(x.policy_name)}` : ''}</div>
+                  <div className="s">Sum insured {money(x.sum_insured)}{x.valid_to ? ` · valid to ${pretty(x.valid_to)}` : ''}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+    </>
   )
 }
 
@@ -243,11 +612,14 @@ export default function Profile360({ code, employeeId, initial }: {
   const [payload, setPayload] = useState<ProfilePayload | null>(initial ?? null)
   const [err, setErr] = useState<string | null>(null)
   const [tab, setTab] = useState<TabId>('overview')
-  const [editing, setEditing] = useState<ProfileField | null>(null)
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [drawer, setDrawer] = useState<DrawerId | null>(null)
+  const [howOpen, setHowOpen] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
-  // Held locally so a freshly uploaded picture appears at once. The payload is
-  // only refetched on mount, and waiting for that would make Save look inert.
-  const [photo, setPhoto] = useState<string | null>(null)
+  const [reqKey, setReqKey] = useState(0)
+  // Held locally so a freshly uploaded picture appears at once, before the
+  // reload lands.
+  const [photo, setPhoto] = useState<string | null>(initial?.photoUrl ?? null)
   const [photoOpen, setPhotoOpen] = useState(false)
 
   const load = useCallback(async () => {
@@ -259,60 +631,78 @@ export default function Profile360({ code, employeeId, initial }: {
   }, [code, employeeId, initial])
   useEffect(() => { load() }, [load])
 
-  const cardsFor = useMemo(() => (t: TabId) => RECORD_CARDS.filter(c => c.tab === t), [])
+  const isMine = payload ? (payload.isSelf ?? payload.viewer_role === 'self') : false
+  const req = useChangeRequests(isMine && !initial, reqKey)
+
+  useEffect(() => {
+    if (!flash) return
+    const t = setTimeout(() => setFlash(null), 5000)
+    return () => clearTimeout(t)
+  }, [flash])
+
+  /** Every save lands here: reload what the page shows, refresh the request
+   *  list, and tell the rest of the portal. */
+  const afterSave = useCallback((msg: string, photoUrl?: string | null) => {
+    setEditor(null)
+    setFlash(msg)
+    void load()
+    setReqKey(k => k + 1)
+    announceProfileUpdate(photoUrl !== undefined ? { photoUrl } : {})
+  }, [load])
+
+  const closeEditor = useCallback(() => setEditor(null), [])
+  const closeDrawer = useCallback(() => setDrawer(null), [])
 
   if (err) return <div className="ezp"><div className="card"><div className="note bad">{err}</div></div></div>
   if (!payload) return <div className="ezp"><div className="card"><div className="empty">Loading…</div></div></div>
 
   const emp = payload.employee
-  // Identity, not positional role. viewer_role is 'hr' for an HR person on
-  // their own profile, which used to hide their own ID card and photo button
-  // from them. Falls back to the old test for a payload without the flag.
-  const self = payload.isSelf ?? payload.viewer_role === 'self'
+  const self = isMine
   const groups = MODEL[tab] ?? []
   const pending = payload.completeness.pending ?? []
+  const pendingReqs = req.mine.filter(r => r.status.startsWith('pending')).length
 
-  const chain = ([['rm_l1_name', 'Reporting Manager L1'], ['rm_l2_name', 'Reporting Manager L2'],
-                  ['hod_name', 'Head of Department'], ['md_name', 'Managing Director']] as const)
-                .filter(([k]) => emp[k])
-
-  // Only the stats this payload can actually fill. The design also shows
-  // attendance and leave balance; those live in other modules and are not
-  // invented here.
-  const kpis: { k: string; v: string; unit?: string; pc: number }[] = [
-    { k: 'Tenure', v: String(emp.tenure_years ?? '—'), unit: 'yrs',
-      pc: Math.min(100, (Number(emp.tenure_years) || 0) * 10) },
-    { k: 'Profile score', v: String(payload.completeness.score), unit: '%',
-      pc: payload.completeness.score },
-    { k: 'Reportees', v: String(emp.reportee_count ?? 0), unit: 'people',
-      pc: Math.min(100, (Number(emp.reportee_count) || 0) * 20) },
-    { k: 'Open items', v: String(pending.length), unit: 'pending',
-      pc: pending.length ? Math.min(100, pending.length * 20) : 0 },
-  ]
-
-  const firstRequestable = () => {
-    for (const gs of Object.values(MODEL)) for (const g of gs ?? [])
-      for (const f of g.fields) if (f.state === 'request') return f
-    return null
+  /** One switchboard for Fix, the Edit drawer and the field cards. */
+  const openAction = (a: string) => {
+    switch (a) {
+      case 'photo': setPhotoOpen(true); return
+      case 'aadhaar': case 'pan': case 'uan': setEditor({ kind: 'identity', which: a }); return
+      case 'bank': setEditor({ kind: 'bank' }); return
+      case 'present_address': setEditor({ kind: 'address', which: 'present' }); return
+      case 'permanent_address': setEditor({ kind: 'address', which: 'permanent' }); return
+      case 'emergency': setEditor({ kind: 'emergency', slot: payload.self?.emergency?.[1] ? 2 : 1 }); return
+      case 'emergency1': setEditor({ kind: 'emergency', slot: 1 }); return
+      case 'emergency2': setEditor({ kind: 'emergency', slot: 2 }); return
+      case 'nominee_pf': setEditor({ kind: 'nominee', scheme: 'pf' }); return
+      case 'nominee_gratuity': setEditor({ kind: 'nominee', scheme: 'gratuity' }); return
+      case 'documents': setDrawer('docs'); return
+      case 'blood_group': { const f = fieldByKey('blood_group'); if (f) setEditor({ kind: 'field', field: f }); return }
+    }
+  }
+  const onFix = (sentence: string) => {
+    const a = fixActionFor(sentence)
+    // A sentence this screen does not know yet: land on the tab that holds it
+    // rather than opening something unrelated.
+    if (!a) { setDrawer(null); setTab('personal'); return }
+    if (a === 'documents') { setDrawer('docs'); return }
+    setDrawer(null)
+    openAction(a)
+    if (!['photo'].includes(a)) setTab(FIX_TAB[a] as TabId)
+  }
+  const onField = (f: ProfileField) => {
+    if (f.editor) { openAction(f.editor); return }
+    setEditor({ kind: 'field', field: f })
   }
 
   return (
     <div className="ezp">
-      {flash && <div className="note good" style={{ marginBottom: 12 }} role="status">{flash}</div>}
+      {flash && <Layer><div className="toast" role="status">{flash}</div></Layer>}
 
-      {/* ── cover + identity ── */}
-      <div className="cover">
-        <div className="coveracts">
-          <button onClick={() => setTab('records')}>Records</button>
-          <button onClick={() => setTab('statutory')}>Digital ID</button>
-          <button onClick={() => window.print()}>Print</button>
-        </div>
-      </div>
-
-      <div className="idcard">
-        {/* The avatar was initials and nothing else, with no way to set a
-            picture — PhotoUploader existed but nothing rendered it. Your own
-            profile gets an overlay button; a colleague's is just a face. */}
+      {/* ── identity ──
+          The portal's soft hero surface (components/ess/portal.css .ess-soft-hero),
+          the same one Home, Attendance and Leave open with, so My Details starts
+          the way the rest of ESS does. One card: there is no separate cover band. */}
+      <div className="idcard ess-soft-hero">
         <div className={'face' + (photo ? ' hasimg' : '')}>
           {photo
             /* eslint-disable-next-line @next/next/no-img-element */
@@ -331,7 +721,7 @@ export default function Profile360({ code, employeeId, initial }: {
           )}
         </div>
         <div className="who">
-          <h2>{val(emp.full_name)}</h2>
+          <h2>{val(emp.display_name && emp.display_name !== emp.full_name ? `${emp.full_name} (${emp.display_name})` : emp.full_name)}</h2>
           <div className="role">
             {val(emp.designation)}{emp.department_name ? <> · <b>{val(emp.department_name)}</b></> : null}
           </div>
@@ -346,114 +736,28 @@ export default function Profile360({ code, employeeId, initial }: {
             {emp.company_name ? <span><span className="k">Company</span> {val(emp.company_name)}</span> : null}
             {emp.location_name ? <span><span className="k">Location</span> {val(emp.location_name)}</span> : null}
             {emp.date_of_joining ? <span><span className="k">Joined</span> {pretty(emp.date_of_joining)}</span> : null}
-            {emp.tenure_years !== undefined
+            {emp.tenure_years !== undefined && emp.tenure_years !== null
               ? <span><span className="k">Tenure</span> {val(emp.tenure_years)}y {val(emp.tenure_months)}m</span> : null}
-            {emp.workstation ? <span><span className="k">Seat</span> {val(emp.workstation)}</span> : null}
           </div>
         </div>
-        {self && (
-          <div className="idacts">
-            <button className="btn" onClick={() => setTab('personal')}>Edit profile</button>
-            <button className="btn ghost" onClick={() => { const f = firstRequestable(); if (f) setEditing(f) }}>
-              Request an update
+        <div className="idacts">
+          {self && <button type="button" className="btn" onClick={() => setDrawer('edit')}>Edit profile</button>}
+          {self && <button type="button" className="btn ghost" onClick={() => setDrawer('request')}>Request a change</button>}
+          <button type="button" className="btn ghost" onClick={() => setDrawer('id')}>Digital ID</button>
+          {self && (
+            <button type="button" className="lnk" onClick={() => setDrawer('history')}>
+              Change history{pendingReqs ? ` · ${pendingReqs} open` : ''}
             </button>
-            <button className="lnk" onClick={() => setTab('records')}>Change history</button>
-          </div>
-        )}
-      </div>
-
-      {/* ── KPI strip ── */}
-      <div className="kpis">
-        {kpis.map(s => (
-          <div className="kpi" key={s.k}>
-            <div className="k">{s.k}</div>
-            <div className="v">{s.v}{s.unit && <small>{s.unit}</small>}</div>
-            <div className="bar"><i style={{ width: `${s.pc}%` }} /></div>
-          </div>
-        ))}
+          )}
+        </div>
       </div>
 
       {/* ── two columns ── */}
       <div className="shell">
         <aside className="rail">
-          <Card title="Profile completeness"
-                right={pending.length ? <span className="pill warn">{pending.length} pending</span> : null}>
-            <div className="ringrow">
-              <Ring pc={payload.completeness.score} />
-              <p>Finishing these keeps payroll and statutory records clean.</p>
-            </div>
-            {pending.length > 0 && (
-              <ul className="todo">
-                {pending.map((p, i) => (
-                  <li key={i}><i />{p}
-                    <button className="fix" onClick={() => { const f = firstRequestable(); if (f) setEditing(f) }}>
-                      Fix
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
-          <Card title="Reporting chain"
-                right={<span className="sub">{val(emp.reportee_count)} reportees</span>}>
-            {!chain.length ? <div className="empty">No reporting chain recorded.</div> : (
-              <ul className="chain">
-                {chain.map(([k, label]) => (
-                  <li key={k}>
-                    <span className="p">{ini(emp[k])}</span>
-                    <div><div className="n">{val(emp[k])}</div><div className="r">{label}</div></div>
-                  </li>
-                ))}
-                <li className="me">
-                  <span className="p">{ini(emp.full_name)}</span>
-                  <div>
-                    <div className="n">{val(emp.full_name)}</div>
-                    <div className="r">{self ? 'You' : 'Subject'} · {val(emp.designation)}</div>
-                  </div>
-                </li>
-              </ul>
-            )}
-          </Card>
-
-          {self ? (
-            <>
-            <IdCard
-              name={val(emp.full_name)} designation={val(emp.designation)}
-              company={val(emp.company_name)} code={val(emp.employee_code)}
-              doj={emp.date_of_joining as string | null}
-              blood={emp.blood_group as string | null}
-              emergency={emp.emergency_contact_1 as string | null} />
-            {/* The printable card. Only on your own profile — a colleague's
-                card is not yours to take away, the same rule the gate code
-                already follows. */}
-            <IdCardDownload
-              name={val(emp.full_name)}
-              code={val(emp.employee_code)}
-              company={val(emp.company_name)}
-              designation={emp.designation as string | null}
-              department={emp.department_name as string | null}
-              location={emp.location_name as string | null}
-              doj={emp.date_of_joining as string | null}
-              blood={emp.blood_group as string | null}
-              photoUrl={photo}
-            />
-            </>
-          ) : (
-            /* A colleague's gate code is not yours to mint, so their card is
-               shown as a face and nothing more. */
-            <div className="dig">
-              <div className="brandline"><span className="mark">EZ</span>{val(emp.company_name)}</div>
-              <div className="top">
-                <div className="ph">{ini(emp.full_name)}</div>
-                <div style={{ minWidth: 0 }}>
-                  <div className="nm">{val(emp.full_name)}</div>
-                  <div className="ds">{val(emp.designation)}</div>
-                </div>
-              </div>
-              <div className="note">A gate code can only be issued for your own card.</div>
-            </div>
-          )}
+          <Completeness score={payload.completeness.score} pending={pending} self={self} onFix={onFix} />
+          <Chain emp={emp} self={self} />
+          {self && <RequestsSummary req={req} onOpen={() => setDrawer('history')} />}
         </aside>
 
         <div className="main">
@@ -464,169 +768,64 @@ export default function Profile360({ code, employeeId, initial }: {
                         className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>{t.label}</button>
               ))}
             </div>
+            {self && (
+              <button type="button" className="howbtn" aria-expanded={howOpen} onClick={() => setHowOpen(o => !o)}
+                      title="How editing works" aria-label="How editing works">?</button>
+            )}
+            {howOpen && <HowEditing onClose={() => setHowOpen(false)} />}
           </div>
 
-          <div className="legend">
-            <span><b className="direct">Direct</b> — change it yourself</span>
-            <span><b className="request">Request</b> — goes for approval</span>
-            <span><b className="locked">Locked</b> — HR maintains it</span>
-            <span><b className="event">Event</b> — starts another workflow</span>
-          </div>
-
-          {tab === 'overview' && (
-            <>
-              <Section title="At a glance" sub="The things you would otherwise open four screens to find.">
-                <div className="g2">
-                  <Card title="Coming up">
-                    <ul className="chain">
-                      {emp.date_of_joining ? (
-                        <li><span className="p">🎉</span><div>
-                          <div className="n">Work anniversary</div>
-                          <div className="r">{pretty(emp.date_of_joining)} · {val(emp.tenure_years)} years</div>
-                        </div></li>) : null}
-                      {emp.date_of_birth ? (
-                        <li><span className="p">🎂</span><div>
-                          <div className="n">Birthday</div><div className="r">{pretty(emp.date_of_birth)}</div>
-                        </div></li>) : null}
-                      <li><span className="p">💰</span><div>
-                        <div className="n">Payroll cut-off</div><div className="r">25th of every month</div>
-                      </div></li>
-                    </ul>
-                  </Card>
-                  <Card title="Employment">
-                    <div className="g2">
-                      {([['Employment type', val(emp.employment_type)],
-                         ['Category', val(emp.employee_category)],
-                         ['Notice period', emp.notice_period_days ? `${val(emp.notice_period_days)} days` : '—'],
-                         ['Weekly off', val(emp.weekly_off)]] as const).map(([k, v]) => (
-                        <div className="fld" key={k}><div className="k">{k}</div><div className="v">{v}</div></div>
-                      ))}
-                    </div>
-                  </Card>
-                </div>
-              </Section>
-              <Elsewhere title="Attendance and leave" owner="Time & Attendance and the Leave section of ESS" />
-            </>
-          )}
+          {tab === 'overview' && <Overview p={payload} self={self} onAction={openAction} openTab={setTab} />}
 
           {groups.map(g => (
-            <Section title={g.title} key={g.title}>
+            <Section title={g.title} key={g.title}
+                     right={tab === 'payroll' && g.title === 'Salary account' && self
+                       ? <button type="button" className="btn ghost sm" onClick={() => openAction('bank')}>
+                           {payload.self?.ids?.has_bank ? 'Request change' : 'Add account'}</button> : undefined}>
               <div className="g3">
-                {g.fields.map(f => <Field key={f.key} f={f} payload={payload} onAct={setEditing} />)}
+                {g.fields.map(f => <FieldCard key={f.key} f={f} payload={payload} self={self} onAct={onField} />)}
               </div>
             </Section>
           ))}
 
-          {tab === 'personal' && (
+          {tab === 'family' && <FamilyTab p={payload} self={self} onAction={openAction} />}
+
+          {tab === 'job' && (
             <>
-              <Section title="Family"
-                       sub="A family member has to be verified before insurance or a nomination can point at them.">
-                {!payload.family.length ? <div className="card"><div className="empty">No family members recorded.</div></div> : (
-                  <div className="g2">
-                    {payload.family.map((m, i) => (
-                      <div className="pc" key={String(m.id ?? i)}>
-                        <div className="ph">{ini(m.member_name)}</div>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div className="n">{val(m.member_name)}</div>
-                          <div className="s">{val(m.relation)}{m.date_of_birth ? ` · ${pretty(m.date_of_birth)}` : ''}</div>
-                          <div className="pl">
-                            {m.is_verified ? <span className="pill good">Verified</span>
-                                           : <span className="pill warn">Proof pending</span>}
-                            {m.is_insured ? <span className="pill brand">Insured</span>
-                                          : <span className="pill">Not insured</span>}
-                            {m.is_dependent ? <span className="pill">Dependent</span> : null}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+              <Section title="Movement history">
+                <div className="card">
+                  {!emp.date_of_joining && !emp.confirmation_date ? <div className="empty">No dates recorded.</div> : (
+                    <ul className="chain">
+                      {emp.confirmation_date ? (
+                        <li><span className="p dot" /><div>
+                          <div className="n">Confirmed in service</div>
+                          <div className="r">{pretty(emp.confirmation_date)}</div>
+                        </div></li>) : null}
+                      {emp.date_of_joining ? (
+                        <li><span className="p dot" /><div>
+                          <div className="n">Joined {val(emp.company_name)}</div>
+                          <div className="r">{pretty(emp.date_of_joining)} · {val(emp.designation)}</div>
+                        </div></li>) : null}
+                    </ul>
+                  )}
+                </div>
+              </Section>
+              {(payload.app_access ?? []).length > 0 && (
+                <Section title="Application access">
+                  <div className="card">
+                    <KV rows={(payload.app_access ?? []).map(a => [val(a.app_name),
+                      `${val(a.access_role)}${a.granted_on ? ` · since ${pretty(a.granted_on)}` : ''}`] as [string, string])} />
                   </div>
-                )}
-              </Section>
-
-              <Section title="Nominations"
-                       sub="Each record is separate and must total exactly 100% before it can be filed.">
-                {!payload.nominations.length
-                  ? <div className="card"><div className="empty">No nominee recorded. PF and gratuity both need one.</div></div>
-                  : (() => {
-                      const by = new Map<string, Row[]>()
-                      for (const n of payload.nominations) {
-                        const k = String(n.scheme ?? 'Other')
-                        by.set(k, [...(by.get(k) ?? []), n])
-                      }
-                      return (
-                        <div className="g2">
-                          {[...by.entries()].map(([scheme, rows]) => {
-                            const total = rows.reduce((a, r) => a + (Number(r.share_percent) || 0), 0)
-                            return (
-                              <div className="nom" key={scheme}>
-                                <div className="top">
-                                  <div style={{ minWidth: 0 }}>
-                                    <div className="n">{scheme}</div>
-                                    <div className="s">
-                                      {rows.map(r => `${val(r.nominee_name)} ${val(r.share_percent)}%`).join(' · ')}
-                                    </div>
-                                  </div>
-                                  <span className={total === 100 ? 'pc100' : 'pcbad'}>{total}%</span>
-                                </div>
-                                <div className="meter"><i style={{ width: `${Math.min(100, total)}%` }} /></div>
-                                <div className="foot">
-                                  <span>{total === 100 ? 'Ready to file' : `Adds up to ${total}%, not 100%`}</span>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    })()}
-              </Section>
-
-              <Section title="Insurance" sub="Enrolment is separate from adding a family member.">
-                {!payload.insurance.length ? <div className="card"><div className="empty">No active policy recorded.</div></div> : (
-                  <div className="g3">
-                    {payload.insurance.map((p, i) => (
-                      <div className="pc" key={String(p.id ?? i)}>
-                        <div className="ph">🛡️</div>
-                        <div style={{ minWidth: 0 }}>
-                          <div className="n">{val(p.policy_type)}</div>
-                          <div className="s">{money(p.sum_insured)}</div>
-                          <div className="pl">
-                            {p.policy_name ? <span className="pill">{val(p.policy_name)}</span> : null}
-                            {p.valid_to ? <span className="pill good">to {pretty(p.valid_to)}</span> : null}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Section>
+                </Section>
+              )}
             </>
           )}
 
-          {tab === 'job' && (
-            <Section title="Movement history" sub="What the employee record itself holds.">
-              <div className="card">
-                <ul className="chain">
-                  {emp.confirmation_date ? (
-                    <li><span className="p">✓</span><div>
-                      <div className="n">Confirmed in service</div>
-                      <div className="r">{pretty(emp.confirmation_date)} · probation closed</div>
-                    </div></li>) : null}
-                  {emp.date_of_joining ? (
-                    <li><span className="p">→</span><div>
-                      <div className="n">Joined {val(emp.company_name)}</div>
-                      <div className="r">{pretty(emp.date_of_joining)} · {val(emp.designation)}</div>
-                    </div></li>) : null}
-                </ul>
-                {!emp.date_of_joining && <div className="empty">No dates recorded.</div>}
-              </div>
-            </Section>
-          )}
-
           {tab === 'statutory' && (
-            <div className="note warn">
-              Full PAN and passport are readable only by HR, Payroll and Admin. Everybody else
-              sees the last four digits — in reports and exports too, not just on this screen.
-            </div>
+            <p className="foot-note">
+              A missing PAN, UAN or Aadhaar you can add yourself; once on file they are kept by HR, because payroll and
+              statutory returns use them. Only HR and Payroll see a full PAN.
+            </p>
           )}
 
           {tab === 'payroll' && (
@@ -640,8 +839,8 @@ export default function Profile360({ code, employeeId, initial }: {
                     <tbody>
                       {([['Basic', 'basic_monthly'], ['House rent allowance', 'hra_monthly'],
                          ['Conveyance', 'conveyance'], ['Gratuity', 'gratuity_monthly'],
-                         ['Provident fund — employee', 'employee_pf'],
-                         ['Provident fund — employer', 'employer_pf']] as const)
+                         ['Provident fund (employee)', 'employee_pf'],
+                         ['Provident fund (employer)', 'employer_pf']] as const)
                         .filter(([, k]) => payload.salary?.[k] !== null && payload.salary?.[k] !== undefined)
                         .map(([label, k]) => (
                           <tr key={k}>
@@ -659,75 +858,53 @@ export default function Profile360({ code, employeeId, initial }: {
                   </table></div>
                 </div>
               </Section>
-            ) : <Elsewhere title="Salary structure" owner="the Payroll section of ESS" />
+            ) : <p className="foot-note">No salary structure is on file yet. Payslips and tax are in the Payroll section of ESS.</p>
           )}
-          {tab === 'time' && <Elsewhere title="Attendance, punches and leave" owner="Time & Attendance" />}
+
+          {tab === 'documents' && (
+            self
+              ? <Section title="Documents" sub="Upload what is asked for. HR verifies each one; you can replace an upload at any time.">
+                  <div className="card"><DocumentsPanel onChanged={m => afterSave(m)} /></div>
+                </Section>
+              : <RecordTable title="Documents" rows={payload.documents ?? []} columns={CARD_COLUMNS.documents} empty="Nothing uploaded yet." />
+          )}
 
           {tab === 'growth' && (
             <>
-              <Section title="Performance" sub="From the PMS cycle, not entered here.">
+              <Section title="Performance" sub="From the PMS cycle.">
                 <div className="card">
                   {!payload.performance ? <div className="empty">No appraisal recorded yet.</div> : (
-                    <div className="g3">
-                      {([['Cycle', val((payload.performance.period as Row | null)?.period_name)],
-                         ['Stage', val((payload.performance.period as Row | null)?.status)],
-                         ['Rating', payload.performance.final_rating_code
-                                      ? `${val(payload.performance.final_rating_code)} · ${val(payload.performance.final_rating)}`
-                                      : 'Not finalised'],
-                         ['Score', val(payload.performance.final_score)],
-                         ['KRAs', val(payload.performance.kra_count)],
-                         ['One to one', val(payload.performance.one_to_one_count)],
-                         ['Acknowledged', payload.performance.employee_ack ? 'Yes' : 'Not yet'],
-                         ['Finalised', pretty(payload.performance.finalised_at)]] as const)
-                        .map(([k, v]) => (
-                          <div className="fld" key={k}><div className="k">{k}</div><div className="v">{v}</div></div>
-                        ))}
-                    </div>
+                    <KV rows={([['Cycle', val((payload.performance.period as Row | null)?.period_name)],
+                       ['Stage', val((payload.performance.period as Row | null)?.status)],
+                       ['Rating', payload.performance.final_rating_code
+                                    ? `${val(payload.performance.final_rating_code)} · ${val(payload.performance.final_rating)}`
+                                    : 'Not finalised'],
+                       ['Score', val(payload.performance.final_score)],
+                       ['KRAs', val(payload.performance.kra_count)],
+                       ['One to ones', val(payload.performance.one_to_one_count)],
+                       ['Acknowledged', payload.performance.employee_ack ? 'Yes' : 'Not yet']] as [string, string][])} />
                   )}
                 </div>
               </Section>
-
-              <Section title="Recognition" sub="Shoutouts and awards from the Wall of Fame.">
-                {!(payload.recognition ?? []).length
-                  ? <div className="card"><div className="empty">Nothing on the wall yet.</div></div>
-                  : (
-                    <div className="g2">
-                      {(payload.recognition ?? []).map((r, i) => (
-                        <div className="pc" key={String(r.id ?? i)}>
-                          <div className="ph">🏆</div>
-                          <div style={{ minWidth: 0 }}>
-                            <div className="n">{val(r.kind)}{r.cycle_label ? ` · ${val(r.cycle_label)}` : ''}</div>
-                            <div className="s">{String(r.message ?? '').slice(0, 110) || '—'}</div>
-                            <div className="pl">
-                              <span className="pill">{pretty(r.created_at)}</span>
-                              {r.badge_ref ? <span className="pill brand">{val(r.badge_ref)}</span> : null}
-                            </div>
-                          </div>
+              {(payload.recognition ?? []).length > 0 && (
+                <Section title="Recognition">
+                  <div className="g2">
+                    {(payload.recognition ?? []).map((r, i) => (
+                      <div className="pc" key={String(r.id ?? i)}>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="n">{val(r.kind)}{r.cycle_label ? ` · ${val(r.cycle_label)}` : ''}</div>
+                          <div className="s">{String(r.message ?? '').slice(0, 110) || NIL}</div>
+                          <div className="pl"><span className="pill">{pretty(r.created_at)}</span></div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-              </Section>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
             </>
           )}
 
-          {tab === 'records' && (payload.app_access ?? []).length > 0 && (
-            <Section title="Application access" sub="What this person can sign in to.">
-              <div className="g3">
-                {(payload.app_access ?? []).map((a, i) => (
-                  <div className="fld" key={String(a.id ?? i)}>
-                    <span className="st locked">Locked</span>
-                    <div className="k">{val(a.app_name)}</div>
-                    <div className="v">{val(a.access_role)}</div>
-                    {a.granted_on ? <div className="hint" style={{ color: 'var(--ez-muted)' }}>
-                      Since {pretty(a.granted_on)}</div> : null}
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {cardsFor(tab).filter(c => c.key !== 'app_access').map(c => (
+          {RECORD_CARDS.filter(c => c.tab === tab).map(c => (
             <RecordTable key={c.key as string} title={c.title}
                          rows={(payload[c.key as keyof ProfilePayload] as Row[]) ?? []}
                          columns={CARD_COLUMNS[c.key as string] ?? []} empty={c.empty} />
@@ -735,33 +912,104 @@ export default function Profile360({ code, employeeId, initial }: {
         </div>
       </div>
 
-      {/* Below the shell rather than inside a panel: the 360 layout above is
-          measured off the design and stays exactly as it is. Own profile only
-          — a colleague's requests are not yours to read, and the queue that
-          matters to an approver is on their own page. */}
-      <ChangeRequests canSee={self} />
-
-      {editing && (
-        <ChangeModal field={editing} onClose={() => setEditing(null)}
-                     onDone={m => { setEditing(null); setFlash(m); load()
-                                    setTimeout(() => setFlash(null), 4500) }} />
+      {/* ── drawers ── */}
+      {(drawer === 'edit' || drawer === 'request') && self && (
+        <Drawer title="Edit profile" sub="Pick what to change. Each item says whether it saves at once or goes for approval."
+                onClose={closeDrawer}>
+          <EditHub payload={payload} focus={drawer} onFix={onFix}
+                   onField={f => { setDrawer(null); onField(f) }}
+                   onAction={a => { if (a !== 'documents') setDrawer(null); openAction(a) }} />
+        </Drawer>
       )}
 
-      {/* Inside .ezp deliberately: PhotoUploader's classes are un-namespaced,
-          so profile.css scopes them under .ezp and they only bite here. */}
-      {/* Mounted only while open, so every open starts from fresh state. It
-          used to be mounted permanently with `open` merely toggled, so state
-          survived closing — which is why no second photo could be chosen
-          after the first upload. */}
+      {drawer === 'id' && (
+        <Drawer title="Digital ID" sub={self ? 'Show the QR at the gate. The code refreshes every few seconds.' : undefined}
+                onClose={closeDrawer}>
+          {self ? (
+            <div className="idwrap">
+              <IdCard
+                name={val(emp.full_name)} designation={val(emp.designation)}
+                company={val(emp.company_name)} code={val(emp.employee_code)}
+                doj={emp.date_of_joining as string | null}
+                blood={emp.blood_group as string | null}
+                emergency={emp.emergency_contact_1 as string | null}
+                photoUrl={photo} />
+              <IdCardDownload
+                name={val(emp.full_name)} code={val(emp.employee_code)} company={val(emp.company_name)}
+                designation={emp.designation as string | null} department={emp.department_name as string | null}
+                location={emp.location_name as string | null} doj={emp.date_of_joining as string | null}
+                blood={emp.blood_group as string | null} photoUrl={photo} />
+            </div>
+          ) : (
+            <div className="dig">
+              <div className="brandline"><span className="mark">EZ</span>{val(emp.company_name)}</div>
+              <div className="top">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <div className="ph">{photo ? <img src={photo} alt="" /> : ini(emp.full_name)}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="nm">{val(emp.full_name)}</div>
+                  <div className="ds">{val(emp.designation)}</div>
+                </div>
+              </div>
+              <div className="note">A gate code can only be issued for your own card.</div>
+            </div>
+          )}
+        </Drawer>
+      )}
+
+      {drawer === 'history' && self && (
+        <Drawer title="Change history" sub="Everything you have asked to change, and who has it now." onClose={closeDrawer}>
+          <ChangeRequests req={req} />
+        </Drawer>
+      )}
+
+      {drawer === 'docs' && self && (
+        <Drawer title="Documents" sub="Uploads save straight away. HR verifies each one." onClose={closeDrawer}>
+          <DocumentsPanel onChanged={m => afterSave(m)} />
+        </Drawer>
+      )}
+
+      {/* ── editors ── */}
+      {editor?.kind === 'field' && (
+        <FieldEditor field={editor.field} current={payload.employee[editor.field.key]}
+                     approvers={payload.self?.approvers} onClose={closeEditor} onDone={m => afterSave(m)} />
+      )}
+      {editor?.kind === 'identity' && (
+        <IdentityEditor which={editor.which} onFile={!!payload.self?.ids?.[ID_HAS[editor.which]]}
+                        masked={editor.which === 'pan' ? payload.self?.ids?.pan_masked
+                          : editor.which === 'aadhaar' && emp.aadhar_last4 ? `•••• •••• ${String(emp.aadhar_last4)}` : val(emp.uan)}
+                        onClose={closeEditor} onDone={m => afterSave(m)} />
+      )}
+      {editor?.kind === 'address' && (
+        <AddressEditor which={editor.which} self={payload.self}
+                       onFile={!!payload.self?.addresses?.[editor.which] || !!emp[`${editor.which}_address`]}
+                       onClose={closeEditor} onDone={m => afterSave(m)} />
+      )}
+      {editor?.kind === 'emergency' && (
+        <EmergencyEditor slot={editor.slot} self={payload.self} onClose={closeEditor} onDone={m => afterSave(m)} />
+      )}
+      {editor?.kind === 'nominee' && (
+        <NomineeEditor scheme={editor.scheme} nominations={payload.nominations} family={payload.family}
+                       onClose={closeEditor} onDone={m => afterSave(m)} />
+      )}
+      {editor?.kind === 'bank' && (
+        <BankEditor self={payload.self} current={{ bank_name: emp.bank_name, ifsc: emp.ifsc }}
+                    onClose={closeEditor} onDone={m => afterSave(m)} />
+      )}
+
+      {/* In a Layer (its own .ezp on document.body): PhotoUploader's classes
+          are un-namespaced, so profile.css scopes them under .ezp and they only
+          bite here. Mounted only while open, so every open starts fresh. */}
       {self && photoOpen && (
-        <PhotoUploader
-          open
-          onClose={() => setPhotoOpen(false)}
-          onDone={url => {
-            setPhoto(url)
-            setFlash('Profile photo updated.')
-            setTimeout(() => setFlash(null), 4500)
-          }} />
+        <Layer>
+          <PhotoUploader
+            open
+            onClose={() => setPhotoOpen(false)}
+            onDone={url => {
+              setPhoto(url)
+              afterSave('Profile photo updated.', url)
+            }} />
+        </Layer>
       )}
     </div>
   )

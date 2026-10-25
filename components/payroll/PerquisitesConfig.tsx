@@ -203,7 +203,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
     try {
       await addPerquisiteType(args)
       setShowAddModal(false)
-      notify(`"${args.name}" added — configure its value below.`)
+      notify(`"${args.name}" added. Configure its value below.`)
       load()
     } catch (err: any) {
       notify('Could not create: ' + err.message)
@@ -310,7 +310,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
                   <div>
                     <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Unit</div>
                     <select value={unit} onChange={e => setUnit(e.target.value as PerquisiteUnit)} style={inputStyle}>
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {UNITS.map(u => <option key={u} value={u}>{u.replace('PER_', '/').toLowerCase()}</option>)}
                     </select>
                   </div>
@@ -339,8 +339,8 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
               {(selected.valuation_method === 'FMV_BASED' || selected.valuation_method === 'MANUAL') && (
                 <div style={{ fontSize: 11, color: C.muted, background: C.gray, padding: '8px 10px', borderRadius: 7, marginBottom: 10 }}>
                   {selected.valuation_method === 'FMV_BASED'
-                    ? 'Calculated per transaction (FMV at exercise minus exercise price) — no stored rate. Exemption limit and notes below still apply if relevant.'
-                    : 'Case-by-case — no single rate to store. Use notes below for guidance shown to payroll processors.'}
+                    ? 'Calculated per transaction (FMV at exercise minus exercise price), no stored rate. Exemption limit and notes below still apply if relevant.'
+                    : 'Case-by-case: no single rate to store. Use notes below for guidance shown to payroll processors.'}
                 </div>
               )}
 

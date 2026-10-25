@@ -102,13 +102,13 @@ export interface IdCardData {
 
 /** Not available, spelled the same way everywhere on the card. */
 const NA = 'Not available'
-const dash = (v?: string | null) => (v && String(v).trim()) || '—'
+const dash = (v?: string | null) => (v && String(v).trim()) || '-'
 
 const initials = (n: string) =>
   n.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
 export function prettyDate(v?: string | null): string {
-  if (!v) return '—'
+  if (!v) return '-'
   const d = new Date(v)
   if (Number.isNaN(d.getTime())) return String(v)
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -387,7 +387,7 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
   x.beginPath(); x.arc(bx, by, 64, 0, Math.PI * 2); x.fill()
   x.fillStyle = blood ? '#FFFFFF' : '#9C99B8'
   x.textAlign = 'center'; x.textBaseline = 'middle'
-  x.font = F(800, blood.length > 2 ? 34 : 40); x.fillText(blood || '—', bx, by + 2)
+  x.font = F(800, blood.length > 2 ? 34 : 40); x.fillText(blood || '-', bx, by + 2)
   x.textBaseline = 'alphabetic'
   x.fillStyle = '#9C99B8'; x.font = F(700, 14); x.fillText('BLOOD GROUP', bx, by + 94)
 
@@ -512,7 +512,7 @@ const PT_PER_MM = 72 / 25.4
 export async function buildIdCardPdf(d: IdCardData): Promise<Uint8Array> {
   const faces = [await drawFront(d), await drawBack(d)]
   const doc = await PDFDocument.create()
-  doc.setTitle(`ID Card — ${d.name} (${d.code})`)
+  doc.setTitle(`ID Card: ${d.name} (${d.code})`)
   doc.setProducer('EZER HRMS')
   const w = PAGE_MM.w * PT_PER_MM, h = PAGE_MM.h * PT_PER_MM
   for (const face of faces) {
@@ -542,8 +542,8 @@ export async function buildIdCardPdf(d: IdCardData): Promise<Uint8Array> {
 export async function buildIdCardsPdf(list: IdCardData[]): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   doc.setTitle(list.length === 1
-    ? `ID Card — ${list[0].name} (${list[0].code})`
-    : `ID Cards — ${list.length} employees`)
+    ? `ID Card: ${list[0].name} (${list[0].code})`
+    : `ID Cards: ${list.length} employees`)
   doc.setProducer('EZER HRMS')
   const w = PAGE_MM.w * PT_PER_MM, h = PAGE_MM.h * PT_PER_MM
 

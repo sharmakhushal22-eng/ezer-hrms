@@ -126,7 +126,7 @@ export default function IdCardDownload(props: {
           and in help text anyone can read. */}
       <div style={{ fontSize: 11.5, color: 'var(--ez-muted)', marginTop: 8, lineHeight: 1.55 }}>
         Two pages, front and back. Print at 100% and cut the rounded outline
-        for a 54 × 85.6 mm card. For identification only — scan at the gate
+        for a 54 × 85.6 mm card. For identification only. Scan at the gate
         from your digital ID above.
       </div>
       {err && (

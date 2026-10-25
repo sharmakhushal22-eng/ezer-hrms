@@ -3,10 +3,13 @@
 // Identifier = email OR employee code. Steps: identifier → login / set-password,
 // plus a forced change-password step when HR issued a temp password (= emp_code).
 import { useState, useEffect } from 'react'
+import { essToken } from '@/lib/ess-session-client'
+import { signOutEverywhere } from '@/components/SessionGuard'
+import { LOGIN_AT_KEY } from '@/lib/session-policy'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C as TK, IconUser, IconLock, IconEye, IconEyeOff, IconAlert, IconPayroll, IconCalendar, IconCard } from '@/lib/ui'
 
 type Step = 'email' | 'login' | 'setpw' | 'changepw'
 
@@ -20,7 +23,8 @@ function TextField({ label, value, onChange, placeholder, icon, autoFocus }: { l
     <div style={{ marginBottom: 16 }}>
       <label style={labelStyle}>{label}</label>
       <div style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple: TK.brandTint, fontSize: 15, lineHeight: 1 }}>{icon}</span>
+        {/* faint, not brandTint: the tint is the field's own fill, so the idle icon was invisible */}
+        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple : TK.faint, display: 'flex', lineHeight: 1 }}>{icon}</span>
         <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} autoCapitalize="characters"
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
           style={{ ...fieldStyle, paddingLeft: 38, borderColor: focus ? P.purple : P.border, boxShadow: focus ? '0 0 0 4px rgba(37,99,235,0.10)' : 'none' }} />
@@ -35,12 +39,12 @@ function PasswordField({ label, value, onChange, placeholder, autoFocus }: { lab
     <div style={{ marginBottom: 14 }}>
       <label style={labelStyle}>{label}</label>
       <div style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple: TK.brandTint, fontSize: 15, lineHeight: 1 }}></span>
+        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple : TK.faint, display: 'flex', lineHeight: 1 }}><IconLock size={17} /></span>
         <input type={show ? 'text' : 'password'} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus}
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
           style={{ ...fieldStyle, paddingLeft: 38, paddingRight: 44, borderColor: focus ? P.purple : P.border, boxShadow: focus ? '0 0 0 4px rgba(37,99,235,0.10)' : 'none' }} />
-        <button type="button" onClick={() => setShow(s => !s)} tabIndex={-1}
-          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: P.muted, fontSize: 15, padding: 6, lineHeight: 1 }}>{show ? '' : ''}</button>
+        <button type="button" onClick={() => setShow(s => !s)} tabIndex={-1} aria-label={show ? 'Hide password' : 'Show password'} title={show ? 'Hide password' : 'Show password'}
+          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: P.muted, padding: 6, lineHeight: 1, display: 'flex' }}>{show ? <IconEyeOff size={18} /> : <IconEye size={18} />}</button>
       </div>
     </div>
   )
@@ -53,7 +57,13 @@ export default function ESSLoginPage() {
   // Already signed in (Back from the portal, a bookmark): straight to the portal, replacing
   // this entry — the login form is not a screen a signed-in person should see.
   useEffect(() => {
-    try { const raw = localStorage.getItem('ezer_ess_session'); if (raw && JSON.parse(raw)?.employee_id) window.location.replace('/ess') } catch { /* no session */ }
+    // Only a LIVE session goes to the portal: an expired one is cleared here, or the
+    // two pages bounce an expired session back and forth (components/SessionGuard.tsx).
+    const expired = new URLSearchParams(window.location.search).get('expired') === '1'
+    let live = false
+    try { const raw = localStorage.getItem('ezer_ess_session'); const o = raw ? JSON.parse(raw) : null; live = !!o?.employee_id && (!o.token || !!essToken()) && !expired } catch { /* no session */ }
+    if (live) { window.location.replace('/ess'); return }
+    if (expired) { void signOutEverywhere(); setError('Your session expired. Please sign in again.') }
   }, [])
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')            // identifier (email or emp_code)
@@ -68,6 +78,7 @@ export default function ESSLoginPage() {
 
   const finish = (data: { employee_id: string; name: string; token?: string | null }) => {
     localStorage.setItem('ezer_ess_session', JSON.stringify({ employee_id: data.employee_id, name: data.name, email: idValue().toLowerCase(), token: data.token || null }))
+    try { localStorage.setItem(LOGIN_AT_KEY, String(Date.now())) } catch { /* private mode */ }
     window.location.replace('/ess')   // replace: Back must never return to the login form
   }
 
@@ -154,12 +165,12 @@ export default function ESSLoginPage() {
         <div style={{ position: 'relative' }}>
           <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.15, marginBottom: 14 }}>Your workday,<br />in one place.</div>
           <div style={{ fontSize: 15, color: TK.onAccentSoft, lineHeight: 1.6, maxWidth: 380, marginBottom: 28 }}>
-            Payslips, leave, attendance, flexi benefits &amp; more — all self-service, secure, and always with you.
+            Payslips, leave, attendance, flexi benefits &amp; more, all self-service, secure, and always with you.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {[['', 'Payslips & tax', 'Download anytime'], ['', 'Leave & attendance', 'Apply and track'], ['', 'Flexi & reimbursements', 'Submit bills in a tap']].map(([ic, t, s]) => (
+            {([[<IconPayroll key="p" size={20} />, 'Payslips & tax', 'Download anytime'], [<IconCalendar key="c" size={20} />, 'Leave & attendance', 'Apply and track'], [<IconCard key="f" size={20} />, 'Flexi & reimbursements', 'Submit bills in a tap']] as const).map(([ic, t, s]) => (
               <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 11, background: 'rgba(255,255,255,0.13)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>{ic}</div>
+                <div style={{ width: 42, height: 42, borderRadius: 11, background: 'rgba(255,255,255,0.13)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: TK.onAccent }}>{ic}</div>
                 <div><div style={{ fontSize: 14, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 13, color: TK.onAccentSoft }}>{s}</div></div>
               </div>
             ))}
@@ -192,7 +203,7 @@ export default function ESSLoginPage() {
 
             {step === 'email' && (
               <form onSubmit={onContinue}>
-                <TextField label="Email or Employee Code" value={email} onChange={setEmail} placeholder="you@company.com  ·  SRS0001" icon="👤" autoFocus />
+                <TextField label="Email or Employee Code" value={email} onChange={setEmail} placeholder="you@company.com · SRS0001" icon={<IconUser size={17} />} autoFocus />
                 {error && <ErrorBox msg={error} />}
                 <PrimaryBtn loading={loading} label="Continue →" loadingLabel="Checking…" />
               </form>
@@ -209,7 +220,7 @@ export default function ESSLoginPage() {
 
             {step === 'setpw' && (
               <form onSubmit={onSetPassword}>
-                <div style={infoBox}>First time here — create a password (min 6 characters) for your ESS account.</div>
+                <div style={infoBox}>First time here? Create a password (min 6 characters) for your ESS account.</div>
                 <PasswordField label="New Password" value={password} onChange={setPassword} placeholder="At least 6 characters" autoFocus />
                 <PasswordField label="Confirm Password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" />
                 {error && <ErrorBox msg={error} />}
@@ -266,7 +277,7 @@ function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label:
 }
 
 function ErrorBox({ msg }: { msg: string }) {
-  return <div style={{ background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, color: TK.critical, marginBottom: 14, display: 'flex', gap: 7, alignItems: 'flex-start' }}><span></span><span>{msg}</span></div>
+  return <div style={{ background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, color: TK.critical, marginBottom: 14, display: 'flex', gap: 8, alignItems: 'flex-start' }}><span style={{ display: 'flex', marginTop: 1 }}><IconAlert size={16} /></span><span>{msg}</span></div>
 }
 
 function BackLink({ onClick }: { onClick: () => void }) {

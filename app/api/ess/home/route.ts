@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, fyOf } from '@/lib/ess/session'
 import { buildPending } from '@/lib/ess/pending'
-import { leaveYearOf } from '@/lib/ess/leave-year'
+import { ledgerFor } from '@/lib/leave/ledger'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,16 +16,12 @@ export async function GET(req: NextRequest) {
   const { ctx } = r
   const me = ctx.caller.employeeId
   const fy = fyOf()
-  // The Leave tab queried leave_balances with the hardcoded string '2026' while
-  // this route used new Date().getFullYear() — a number. Both resolved to 2026
-  // in 2026, so the divergence was invisible; on 1 Jan 2027 this KPI would have
-  // silently moved to 2027 while the Leave tab stayed on 2026. leaveYearOf()
-  // derives the FY's starting year, so both agree and "FY 2026-27" is true.
-  const year = leaveYearOf()
 
-  const [pending, { data: bal }, { data: run }, { data: decl }, { data: proofLines }] = await Promise.all([
+  const [pending, ledger, { data: run }, { data: decl }, { data: proofLines }] = await Promise.all([
     buildPending(ctx),
-    sb.from('leave_balances').select('opening, accrued, used, encashed, leave_types(is_paid, is_active)').eq('employee_id', me).eq('year', year),
+    // The same figure the Leave tab shows (lib/leave/ledger.ts). This read the
+    // stored table, which nothing wrote, and said "0 days" to everybody.
+    ledgerFor(me),
     ctx.companyId
       ? sb.from('payroll_runs').select('period_label, status, fy, month').eq('company_id', ctx.companyId).neq('status', 'CANCELLED').order('fy', { ascending: false }).order('month', { ascending: false }).limit(1).maybeSingle()
       : Promise.resolve({ data: null } as any),
@@ -33,15 +29,14 @@ export async function GET(req: NextRequest) {
     sb.from('investment_declaration_lines').select('declared_amount, proof_status').eq('employee_id', me).eq('fy', fy),
   ])
 
-  const leaveBal = (bal || []).filter((b: any) => b.leave_types?.is_paid !== false)
-    .reduce((s: number, b: any) => s + Number(b.opening || 0) + Number(b.accrued || 0) - Number(b.used || 0) - Number(b.encashed || 0), 0)
+  const leaveBal = ledger?.headlineTotal ?? 0
   const declared = (proofLines || []).filter((l: any) => Number(l.declared_amount) > 0)
   const proven = declared.filter((l: any) => l.proof_status === 'VERIFIED').length
   const proofStatus = !declared.length ? 'Nothing declared' : proven === declared.length ? 'Verified' : proven ? `${proven} of ${declared.length} verified` : 'Not submitted'
 
   const kpis: Kpi[] = [
     { label: 'Leave balance', value: `${leaveBal % 1 ? leaveBal.toFixed(1) : leaveBal} days` },
-    { label: 'Latest payroll', value: run?.period_label || '—', note: run?.status ? run.status.toLowerCase().replace('_', ' ') : undefined },
+    { label: 'Latest payroll', value: run?.period_label || '-', note: run?.status ? run.status.toLowerCase().replace('_', ' ') : undefined },
     { label: 'Declaration', value: decl?.declaration_status ? decl.declaration_status.charAt(0) + decl.declaration_status.slice(1).toLowerCase() : 'Not started', note: decl?.regime ? `${decl.regime === 'OLD' ? 'Old' : 'New'} regime` : undefined },
     { label: 'Proof status', value: proofStatus, tone: proofStatus === 'Not submitted' ? 'warn' : undefined },
   ]
@@ -70,5 +65,5 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ kpis: kpis.slice(0, 8), pending, pending_title:
-    ctx.canCompany ? 'Needs your attention — company-wide' : ctx.menu.is_rm || ctx.menu.is_hod ? 'Pending on you — your team' : 'Your open items' })
+    ctx.canCompany ? 'Needs your attention (company-wide)' : ctx.menu.is_rm || ctx.menu.is_hod ? 'Pending on you (your team)' : 'Your open items' })
 }
