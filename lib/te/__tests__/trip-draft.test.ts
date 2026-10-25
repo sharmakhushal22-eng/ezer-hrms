@@ -122,6 +122,27 @@ describe('syncDraft keeps the shape', () => {
     for (const s of d.segs) assert.equal(s.bookedBy, 'self')
   })
 
+  // Found in the browser, on a domestic post-facto trip: the journey card read
+  // "Flight · Travel Desk books" while the panel one row below it read "You are
+  // booking this yourself". The card reads bookedBy; the panel worked the rule
+  // out for itself and knew about POST_FACTO. The card was the wrong copy.
+  it('nobody books a trip that already happened, flight or not', () => {
+    const past = newPlannerDraft({ scope: 'domestic', origin: 'POST_FACTO', lastWorkday: '2026-11-13' }, ctx())
+    const d = syncDraft({ ...past, segs: past.segs.map(s => ({ ...s, mode: 'flight', bookedBy: 'desk' as const })) }, ctx())
+    assert.ok(d.segs.length > 0, 'the fixture must have a journey to assert about')
+    for (const s of d.segs) {
+      assert.equal(s.mode, 'flight', 'the mode is left alone; only who books it changes')
+      assert.equal(s.bookedBy, 'self', 'there is no ticket left to buy on a journey already flown')
+    }
+  })
+
+  // The guard above must not take the desk off a trip that has not happened
+  // yet, which is the whole point of the desk.
+  it('still lets the desk book a flight on a trip yet to come', () => {
+    const d = syncDraft({ ...fresh('domestic'), segs: fresh('domestic').segs.map(s => ({ ...s, mode: 'flight', bookedBy: 'desk' as const })) }, ctx())
+    for (const s of d.segs) assert.equal(s.bookedBy, 'desk')
+  })
+
   it('mirrors the return point onto the start while retSame holds', () => {
     const d = fresh()
     const moved = syncDraft({ ...d, points: [{ ...d.points[0], place: 'plant', pt: 'factory' }, d.points[1], d.points[2]] }, ctx())

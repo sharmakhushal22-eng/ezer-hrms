@@ -298,7 +298,7 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
             <div className={draft.tried ? 'flag crit' : 'flag info'}>
               <TeIcon name="claims" />
               <div className="tx">
-                <b>{draft.tried ? `${blocking.length} things to fix` : 'Still to fill'}</b>
+                <b>{draft.tried ? `${plural(blocking.length, 'thing')} to fix` : 'Still to fill'}</b>
                 {/* The steps this plan actually has. Nothing routes a blocker
                     to step 4 today, so this changes nothing yet — but a list
                     that offers "Stay" on a plan with no Stay step is a trap

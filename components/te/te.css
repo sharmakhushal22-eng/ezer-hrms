@@ -606,6 +606,14 @@
 .te .dl header h2{font-size:18px}
 .te .dl .body{padding:16px 20px;overflow:auto;display:flex;flex-direction:column;gap:16px;flex:1}
 .te .dl footer{padding:12px 20px;border-top:1px solid var(--ez-line);display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap;background:var(--ez-sunken)}
+/* THE SENTENCE THAT SAYS WHY SAVE IS DEAD, kept readable beside the buttons.
+   The footer already wraps, but a bare .grow is flex:1 1 0 with min-width:0,
+   so the note shrank instead of wrapping: "1 thing to fix below before this
+   can be saved." was measured at 61px wide and 94px tall -- five lines, one
+   word each -- next to Cancel, Save as draft and Save expense in a 560px
+   drawer. A real basis makes it claim a row of its own when the buttons
+   leave it less than about twenty characters, which is what wrap is for. */
+.te .dl footer .grow{flex:1 1 22ch}
 .te .sec h4{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ez-muted);margin-bottom:8px}
 .te pre.file{background:var(--ez-sunken);border:1px solid var(--ez-line);border-radius:10px;padding:12px;overflow:auto;font-family:var(--te-f-mono);font-size:12px;margin:0;white-space:pre}
 .te .toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);z-index:calc(var(--ez-z-modal) + 1);display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}

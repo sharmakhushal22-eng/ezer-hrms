@@ -531,8 +531,17 @@ export function syncDraft(d: PlannerDraft, c: DraftContext): PlannerDraft {
       s.vehicleId = s.mode === 'own' ? firstVehicle(c) : ''
     }
     if (s.mode === 'own' && !s.vehicleId) s.vehicleId = firstVehicle(c)
-    // Nobody books a local trip for you.
-    if (d.scope === 'local') s.bookedBy = 'self'
+    // Nobody books these for you: a local trip, and a trip that already
+    // happened — there is no ticket left to buy on a journey already flown.
+    //
+    // POST_FACTO IS NORMALISED HERE RATHER THAN READ AT EACH PLACE THAT ASKS.
+    // SegRow works it out for itself (`md.basis === 'ticket' && origin !==
+    // 'POST_FACTO' && scope !== 'local'`) so its panel says "You are booking
+    // this yourself", while the journey card beside it reads only bookedBy and
+    // so said "Travel Desk books" on the same screen at the same moment. Two
+    // copies of one rule, and the incomplete copy was the one on the card.
+    // Setting it here makes every reader agree, including what is saved.
+    if (d.scope === 'local' || d.origin === 'POST_FACTO') s.bookedBy = 'self'
   }
 
   const destinations = points.filter((p, i) => i > 0 && !p.ret).length
