@@ -15,11 +15,10 @@ import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import {
-  C as TK, R, E, IconChevron, IconMail, IconPolicies, IconCompliance, IconAlert, IconUser, IconCheck,
+  C as TK, R, E, Z, IconChevron, IconMail, IconPolicies, IconCompliance, IconAlert, IconUser, IconCheck,
   IconAi, IconLetters, IconClock, IconHome, IconEmployees, IconCalendar, IconPlus,
 } from '@/lib/ui'
 import { ApprovalsCell, type Readiness } from '@/components/onboarding/ApprovalTrail'
-import { AnchoredPopover, MenuItem } from '@/components/onboarding/AnchoredPopover'
 import { approvalTrail, dayLabel, daysFromToday, relDays, type ApprovalRow, type Holder, type TrailTeam, type Trail } from '@/lib/onboarding/approval-trail'
 import './onboarding-hr.css'
 
@@ -216,30 +215,22 @@ function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
   )
 }
 
-type RowAction = { label: string; hint?: string; onClick: () => void; disabled?: boolean; kind?: 'primary' | 'ghost' }
+type RowAction = { label: string; hint?: string; onClick?: () => void; disabled?: boolean; kind?: 'primary' | 'ghost' | 'warn'; icon?: string; static?: boolean }
 
-/** A row's actions: one primary button, the rest behind "⋯", so every row stays one line high. */
-function RowActions({ name, primary, more }: { name: string; primary?: RowAction | null; more: RowAction[] }) {
+/** A row's actions, every one visible as its own button (two to a line), in the order HR uses
+ *  them. A `static` entry is a read-only chip, e.g. "L1 ✓ Anil Verma". */
+function RowActions({ actions }: { actions: RowAction[] }) {
+  if (!actions.length) return <span style={{ fontSize:12, color:TK.faint }}>-</span>
   return (
-    <div style={{ display:'flex', gap:6, alignItems:'center', justifyContent:'flex-end' }}>
-      {primary && (
-        <button type="button" className={`ezob-btn${primary.kind === 'ghost' ? ' is-ghost' : ''}`} onClick={primary.onClick} disabled={primary.disabled} title={primary.hint}
-          style={{ ...btnSm(primary.kind === 'ghost' ? 'ghost' : 'primary'), opacity: primary.disabled ? .5 : 1, cursor: primary.disabled ? 'not-allowed' : 'pointer' }}>
-          {primary.label}
+    <div style={{ display:'grid', gridTemplateColumns:'repeat(2,max-content)', gap:6 }}>
+      {actions.map(a => a.static ? (
+        <span key={a.label} className="ezob-btn is-ghost" title={a.hint} style={{ ...btnSm('ghost'), cursor:'default' }}>{a.label}</span>
+      ) : (
+        <button key={a.label} type="button" className={`ezob-btn${a.kind === 'ghost' || !a.kind ? ' is-ghost' : ''}`} onClick={a.onClick} disabled={a.disabled} title={a.hint}
+          style={{ ...btnSm(a.kind || 'ghost'), opacity: a.disabled ? .55 : 1, cursor: a.disabled ? 'not-allowed' : 'pointer' }}>
+          {a.icon && <Ti n={a.icon} s={11}/>}{a.label}
         </button>
-      )}
-      {more.length > 0 && (
-        <AnchoredPopover label={`More actions for ${name}`} width={240} align="end" triggerTitle="More actions"
-          triggerStyle={{ ...btnSm('ghost'), width:30, padding:0, justifyContent:'center', letterSpacing:'.08em' }}
-          trigger={<span aria-hidden="true">⋯</span>}>
-          {close => (
-            <div role="menu" style={{ padding:5 }}>
-              {more.map(a => <MenuItem key={a.label} hint={a.hint} disabled={a.disabled} onClick={() => { close(); a.onClick() }}>{a.label}</MenuItem>)}
-            </div>
-          )}
-        </AnchoredPopover>
-      )}
-      {!primary && !more.length && <span style={{ fontSize:12, color:TK.faint }}>-</span>}
+      ))}
     </div>
   )
 }
@@ -922,40 +913,48 @@ export default function OnboardingDashboard() {
     try { await navigator.clipboard.writeText(link); showToast('Link copied. Paste it to the candidate.') }
     catch { showToast(`Copy failed. The link is ${link}`, 'err') }
   }
-  const viewForm = (c: Candidate): RowAction => ({ label:'View form', kind:'ghost', onClick:()=>setReviewing({ id:c.id, readOnly:true }) })
-  const actionsFor = (c: Candidate): { primary: RowAction | null; more: RowAction[] } => {
-    const more: RowAction[] = []
+  const viewForm = (c: Candidate): RowAction => ({ label:'View form', onClick:()=>setReviewing({ id:c.id, readOnly:true }) })
+  // The same buttons, in the same order, as before the table was tidied; nothing is hidden.
+  const actionsFor = (c: Candidate): RowAction[] => {
+    const out: RowAction[] = []
+    const edit: RowAction = { label:'Edit', hint:'Joining date, email, mobile, notice, hiring track', onClick:()=>openDateEdit(c) }
     const assets = () => {
-      if (!c.laptop_issued) more.push({ label:'Mark laptop issued', hint:'IT usually confirms it on their checklist', onClick:()=>issueAsset(c.id,'LAPTOP') })
-      if (!c.id_card_issued) more.push({ label:'Mark ID card issued', hint:'Admin usually confirms it on their checklist', onClick:()=>issueAsset(c.id,'ID_CARD') })
+      if (!c.laptop_issued) out.push({ label:'Issue laptop', kind:'warn', hint:'IT usually confirms it on their checklist', onClick:()=>issueAsset(c.id,'LAPTOP') })
+      if (!c.id_card_issued) out.push({ label:'Issue ID card', hint:'Admin usually confirms it on their checklist', onClick:()=>issueAsset(c.id,'ID_CARD') })
     }
-    const edit: RowAction = { label:'Edit details', hint:'Joining date, email, mobile, notice, hiring track', onClick:()=>openDateEdit(c) }
     switch (c.status) {
       case 'NOT_INVITED':
-        more.push(edit)
-        return { primary:{ label:'Send link', onClick:()=>sendOnboardingFor(c), disabled:saving, hint:'Email the onboarding link to the candidate' }, more }
+        out.push({ label:'Send onboarding link', kind:'primary', icon:'send', onClick:()=>sendOnboardingFor(c), disabled:saving, hint:'Email the onboarding link to the candidate' }, edit)
+        break
       case 'INVITED':
       case 'IN_PROGRESS':
-        more.push({ label:'Copy link', onClick:()=>copyLink(c) })
-        more.push({ label:'Extend validity', hint:'+7 days, without mailing it again', onClick:()=>extendValidity(c) })
-        more.push(edit)
-        return { primary:{ label: resendingId===c.id ? 'Sending…' : 'Resend link', onClick:()=>resendLink(c), disabled:resendingId===c.id, kind: isReturned(c) ? 'primary' : 'ghost', hint: isReturned(c) ? 'Send the link again with the list of corrections' : 'Mail the link again' }, more }
+        out.push(
+          { label:'Link', icon:'copy', hint:'Copy the onboarding link', onClick:()=>copyLink(c) },
+          { label: resendingId===c.id ? 'Sending…' : 'Resend', kind:'primary', icon:'send', onClick:()=>resendLink(c), disabled:resendingId===c.id, hint: isReturned(c) ? 'Send the link again with the list of corrections' : 'Mail the link again' },
+          { label:'Extend', hint:'+7 days, without mailing it again', onClick:()=>extendValidity(c) },
+          edit)
+        break
       case 'SUBMITTED':
-        return { primary:{ label:'Review form', onClick:()=>setReviewing({ id:c.id, readOnly:false }) }, more }
+        out.push({ label:'Review', kind:'primary', icon:'checklist', onClick:()=>setReviewing({ id:c.id, readOnly:false }) })
+        break
       case 'HR_REVIEW':
-        return { primary:viewForm(c), more }
+        out.push(viewForm(c))
+        break
       case 'APPROVED': {
         const ahead = aheadOf(c)
-        more.push(viewForm(c))
+        out.push({ label: ahead.length ? `In queue · after ${ahead[0].full_name.split(' ')[0]}` : 'Generate code', kind:'primary', icon:'bolt', disabled: ahead.length > 0, onClick:()=>openCodeModal(c),
+          hint: ahead.length ? fifoTitle(c) : `IT, Admin and Payroll have approved: the team, ESS roles and the employee code${c.role_assignment?.managers?.l1_name ? ` · reports to ${c.role_assignment.managers.l1_name}` : ''}` })
+        if (c.role_assignment?.managers?.l1_name) out.push({ label:`L1 ✓ ${c.role_assignment.managers.l1_name}`, static:true, hint:'Assigned on the review sheet (View form, then Change)' })
+        out.push(viewForm(c))
         assets()
-        return { primary:{ label: ahead.length ? 'In queue' : 'Generate code', disabled: ahead.length > 0, onClick:()=>openCodeModal(c),
-          hint: ahead.length ? fifoTitle(c) : `IT, Admin and Payroll have approved: the team, ESS roles and the employee code${c.role_assignment?.managers?.l1_name ? ` · reports to ${c.role_assignment.managers.l1_name}` : ''}` }, more }
+        break
       }
       case 'EMPLOYEE_CREATED':
+        out.push(viewForm(c))
         assets()
-        return { primary:viewForm(c), more }
+        break
     }
-    return { primary:null, more }
+    return out
   }
   const clearFilters = () => { setFilterStage('ALL'); setFilterRisk('ALL'); setJoinWindow('all'); setSearchQ('') }
 
@@ -1025,17 +1024,20 @@ export default function OnboardingDashboard() {
             <thead>
               <tr style={{background:TK.sunken}}>
                 <th style={{...th,paddingLeft:16}}>Candidate</th>
-                <th style={th}>Stage</th>
+                <th style={th}>Stage · progress</th>
                 <th style={th}>Joining</th>
-                <th style={th}>Documents</th>
-                <th style={th} title="Hover or click a row's approvals to see who has it">Approvals</th>
+                <th style={th}>Docs</th>
+                <th style={th} title="Hover or click the approvals line to see who approved and who has it now">Statutory · approvals</th>
+                <th style={th}>BGV</th>
                 <th style={th}>Risk</th>
-                <th style={{...th,paddingRight:14}}><span style={{position:'absolute',width:1,height:1,overflow:'hidden',clip:'rect(0,0,0,0)'}}>Actions</span></th>
+                {/* Pinned right: with every column kept the table can be wider than a laptop,
+                    and the actions are the one thing a row must never scroll out of reach. */}
+                <th style={{...th,paddingRight:14,paddingLeft:12,right:0,zIndex:Z.sticky+1,boxShadow:`inset 1px 0 0 ${TK.line}`}}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={7}>
+                <tr><td colSpan={8}>
                   <Empty icon="users" text={candidates.length === 0 ? 'No onboarding candidates yet.' : 'No candidates match these filters.'}/>
                   {filtersOn && <div style={{textAlign:'center',marginTop:-14,paddingBottom:22}}><button type="button" className="ezob-btn is-ghost" onClick={clearFilters} style={btnSm('ghost')}>Clear filters</button></div>}
                 </td></tr>
@@ -1045,7 +1047,6 @@ export default function OnboardingDashboard() {
                 const sm  = returned ? RETURNED_META : STAGE_META[c.status]
                 const notInvited = c.status==='NOT_INVITED'
                 const done = c.status==='EMPLOYEE_CREATED'
-                const filling = c.status==='INVITED'||c.status==='IN_PROGRESS'
                 const days = daysLeft(c.date_of_joining)
                 const acts = actionsFor(c)
                 const reqHave = c.docs_required_have||0, reqTotal = c.docs_required_total||0
@@ -1070,11 +1071,18 @@ export default function OnboardingDashboard() {
                       <div style={{fontSize:11.5,color:returned?TK.critical:TK.muted,marginTop:4,fontWeight:returned?650:500}}>
                         {returned
                           ? `${(c.hr_review?.documents||[]).length} doc${(c.hr_review?.documents||[]).length===1?'':'s'} · ${(c.hr_review?.details||[]).length} detail${(c.hr_review?.details||[]).length===1?'':'s'} to fix`
-                          : filling ? `Step ${Math.max(1,Math.min(c.current_step||1,8))} of 8 · ${progressPct(c)}%`
                           : c.status==='SUBMITTED' && c.submitted_at ? `Since ${fmt(c.submitted_at)}`
                           : notInvited ? 'From recruitment' : ''}
                       </div>
-                      {filling && !returned && <div style={{width:104}}><ProgressBar pct={progressPct(c)} color={progressPct(c)>=60?P:TK.warning}/></div>}
+                      {!notInvited && (() => {
+                        const pct = progressPct(c)
+                        return <div style={{width:130,marginTop:5}}>
+                          <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,color:TK.muted,whiteSpace:'nowrap'}}>
+                            <span>Step {Math.max(1,Math.min(c.current_step||1,8))}/8</span><b style={{color:TK.ink,fontWeight:650}}>{pct}%</b>
+                          </div>
+                          <ProgressBar pct={pct} color={pct===100?TK.positive:pct>=60?P:TK.warning}/>
+                        </div>
+                      })()}
                     </td>
                     <td style={{...td,whiteSpace:'nowrap',fontSize:12.5}}>
                       {c.date_of_joining ? <>
@@ -1093,11 +1101,26 @@ export default function OnboardingDashboard() {
                       </>}
                     </td>
                     <td style={td}>
-                      {notInvited ? <span style={{fontSize:12,color:TK.faint}}>-</span> : approvalsCellFor(c)}
+                      {notInvited ? <span style={{fontSize:12,color:TK.faint}}>-</span> : (
+                        <div style={{display:'grid',gridTemplateColumns:'repeat(3,auto)',gap:4,justifyContent:'start'}}>
+                          {([['F11','EPF Form 11',c.form11],['F2','EPF Form 2',c.form2],['Bank','Bank details',c.bank],['Policy','Policy acknowledgement',c.policy_ack],['Laptop','Laptop',c.laptop_issued],['ID','ID card',c.id_card_issued]] as [string,string,boolean|undefined][]).map(([l,full,ok])=>(
+                            <span key={l} title={`${full}: ${ok?'done':'pending'}`} style={{fontSize:11,padding:'2px 7px',whiteSpace:'nowrap',borderRadius:7,fontWeight:650,display:'inline-flex',alignItems:'center',gap:3,
+                              background:ok?TK.positiveTint:TK.sunken,color:ok?TK.positive:TK.faint,border:`1px solid ${ok?TK.positiveEdge:TK.line}`}}>
+                              {ok && <IconCheck size={10} strokeWidth={3}/>}{l}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {/* Where the IT / Admin / Payroll / HR Mgr ticks used to be: the summary, with
+                          who approved and who has it now on hover or click. */}
+                      {(c.status==='SUBMITTED'||c.status==='HR_REVIEW'||c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && (
+                        <div style={{marginTop:6}}>{approvalsCellFor(c)}</div>
+                      )}
                     </td>
+                    <td style={td}><span style={{fontSize:12,color:TK.faint,whiteSpace:'nowrap'}}>Not started</span></td>
                     <td style={{...td,whiteSpace:'nowrap'}}>{done ? <span style={{fontSize:12,color:TK.faint}}>-</span> : <RiskBadge risk={c.ai_risk} reason={c.ai_risk_reason} short/>}</td>
-                    <td style={{...td,whiteSpace:'nowrap',paddingRight:14}}>
-                      <RowActions name={c.full_name} primary={acts.primary} more={acts.more}/>
+                    <td style={{...td,paddingRight:14,paddingLeft:12,position:'sticky',right:0,zIndex:Z.raised,background:TK.surface,boxShadow:`inset 1px 0 0 ${TK.line}`}}>
+                      <RowActions actions={acts}/>
                     </td>
                   </tr>
                 )
