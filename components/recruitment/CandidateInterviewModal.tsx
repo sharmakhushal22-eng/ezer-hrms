@@ -18,7 +18,8 @@
 //   • After three decided rounds a "Shortlist" button appears beside Add round;
 //     it asks for confirmation and marks the candidate Shortlisted.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { rescheduleProblems, peopleDiff, type RoundSchedule } from '@/lib/recruitment/reschedule'
 import { supabase } from '@/lib/supabase'
 // interview-invite reads and WRITES the candidate's stage, so it is guarded
 // server-side. authHeaders() reads whichever session exists — this modal opens
@@ -126,6 +127,7 @@ export default function CandidateInterviewModal({
   const [link, setLink] = useState('')
   const [passcode, setPasscode] = useState('')
   const [sending, setSending] = useState(false)
+  const [editRound, setEditRound] = useState<string | null>(null)   // the scheduled round being edited / rescheduled
 
   useEffect(() => { setStageNow(candidate.stage) }, [candidate.stage])
 
@@ -382,6 +384,10 @@ export default function CandidateInterviewModal({
                   </div>
                 </div>
                 <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statBg, color: statColor }}>{statLabel}</span>
+                {scheduled && !complete && !decision && !pipelineOver && !rows.some(i => i.status === 'submitted') && (
+                  <button onClick={() => setEditRound(r)} title="Change or remove interviewers, move the time, replace the meeting link"
+                    style={{ ...btn.small, background:C.card, color:C.purple, border:`1px solid ${C.line}` }}>✎ Edit / Reschedule</button>
+                )}
                 {!complete && direct && !scheduled ? (
                   <button onClick={() => setFbRound(r)} style={{ ...btn.small, background:C.purple, color:TK.onAccent, border:'none' }}>Give feedback</button>
                 ) : !complete && !scheduled ? (
@@ -455,6 +461,14 @@ export default function CandidateInterviewModal({
           shortlist without an interview. The stage follows the interview decisions only. */}
       <div style={{ fontSize:11, color:C.faint, marginTop:4 }}>The stage follows the interview decisions (Reject → Rejected, Hold → Hold, Shortlist → the round's stage). Every scheduled round needs the main interviewer's feedback before Shortlisted.</div>
 
+      {editRound && (
+        <EditRoundDialog round={editRound} rows={invitesByRound[editRound] || []} emps={emps}
+          candidateId={candidate.id} candidateName={candidate.full_name} schedulerId={schedulerId || null}
+          onClose={() => setEditRound(null)}
+          onSaved={async (msg: string) => { setEditRound(null); showNotify(msg); await loadInvites() }}
+          onError={(m: string) => showNotify(m, 'error')} />
+      )}
+
       {/* Add-round popup — name the round, then it opens straight into scheduling */}
       {showAddRound && (
         <Popup onClose={() => setShowAddRound(false)}>
@@ -488,6 +502,114 @@ export default function CandidateInterviewModal({
 }
 
 // ---- people picker (module scope: never re-mounts, so the search box keeps focus) ----
+/** Edit a scheduled round: change / remove interviewers, move the time, replace the link and
+ *  passcode (both REQUIRED to change — the old ones have gone out; lib/recruitment/reschedule.ts).
+ *  Saving re-mails the candidate and every interviewer, and the interviewers acknowledge again.
+ *  A native <dialog> (showModal) so it opens ABOVE the candidate modal, which is itself one. */
+function EditRoundDialog({ round, rows, emps, candidateId, candidateName, schedulerId, onClose, onSaved, onError }: {
+  round: string; rows: Invite[]; emps: Emp[]; candidateId: string; candidateName: string; schedulerId: string | null
+  onClose: () => void; onSaved: (msg: string) => void | Promise<void>; onError: (m: string) => void
+}) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => { const d = ref.current; if (d && !d.open) d.showModal(); return () => { if (d?.open) d.close() } }, [])
+  const asEmp = (i: Invite): Emp => emps.find(e => e.id === i.interviewer_id) || { id: i.interviewer_id || '', emp_code: i.interviewer_emp_code, full_name: i.interviewer_name || 'Interviewer', designation: null, company_id: null }
+  const mainRow = rows.find(isMain) || rows[0]
+  const prev: RoundSchedule = useMemo(() => ({
+    mainId: mainRow?.interviewer_id || null, panelIds: rows.filter(i => i !== mainRow).map(i => i.interviewer_id || ''),
+    scheduledAt: mainRow?.scheduled_at || null, link: mainRow?.meet_link || '', passcode: mainRow?.meet_passcode || '',
+  }), [rows, mainRow])
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const at = prev.scheduledAt ? new Date(prev.scheduledAt) : null
+  const [main, setMain] = useState<Emp[]>(mainRow ? [asEmp(mainRow)] : [])
+  const [panel, setPanel] = useState<Emp[]>(rows.filter(i => i !== mainRow).map(asEmp))
+  const [date, setDate] = useState(at ? `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}` : '')
+  const [time, setTime] = useState(at ? `${pad(at.getHours())}:${pad(at.getMinutes())}` : '10:00')
+  const [link, setLink] = useState('')
+  const [pass, setPass] = useState('')
+  const [busy, setBusy] = useState(false)
+  const next: RoundSchedule = {
+    mainId: main[0]?.id || null, panelIds: panel.map(p => p.id),
+    scheduledAt: date ? new Date(`${date}T${time || '10:00'}`).toISOString() : null, link, passcode: pass,
+  }
+  const problems = rescheduleProblems(prev, next)
+  const who = peopleDiff(prev, next)
+  const ackOf = (i: Invite) => i.status === 'acknowledged' || i.status === 'submitted'
+
+  async function save() {
+    if (problems.length || busy) return
+    setBusy(true)
+    try {
+      const r = await fetch('/api/recruitment/interview-invite', {
+        method: 'POST', headers: await authHeaders(),
+        body: JSON.stringify({ action: 'reschedule', candidate_id: candidateId, round, main_interviewer_id: next.mainId, panelist_ids: next.panelIds, scheduled_at: next.scheduledAt, meet_link: link.trim(), meet_passcode: pass.trim(), scheduled_by: schedulerId }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { onError(j.error || 'Could not update the interview'); setBusy(false); return }
+      await onSaved(`${round} updated (${j.changed}). ${j.emailSkipped ? 'Everyone notified in ESS (email off).' : `${j.emailed} email(s) sent.`} Interviewers must acknowledge again.`)
+    } catch { onError('Could not update the interview'); setBusy(false) }
+  }
+
+  return (
+    <dialog ref={ref} aria-label={`Edit ${round}`} onCancel={e => { e.preventDefault(); if (!busy) onClose() }}
+      style={{ padding:0, border:0, background:'transparent', maxWidth:'none', maxHeight:'none', width:'100vw', height:'100vh', margin:0, overflow:'hidden' }}>
+      <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }}
+        style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16, fontFamily:font }}>
+        <div style={{ background:C.card, borderRadius:14, width:'min(620px,100%)', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 70px rgba(0,0,0,.3)', overflow:'hidden' }}>
+          <div style={{ padding:'16px 20px 12px', borderBottom:`1px solid ${C.line}` }}>
+            <div style={{ fontSize:16, fontWeight:800, color:C.ink }}>Edit / reschedule: {round}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:3 }}>{candidateName}. Saving sends the new details to the candidate and every interviewer; interviewers must acknowledge again.</div>
+          </div>
+          <div style={{ padding:'14px 20px', overflowY:'auto', flex:1 }}>
+            <div style={{ fontSize:11, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.muted, marginBottom:6 }}>Currently scheduled</div>
+            <div style={{ background:C.sunken, borderRadius:10, padding:'8px 12px', marginBottom:14, fontSize:12.5, color:C.ink }}>
+              {rows.map(i => (
+                <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0' }}>
+                  <span style={{ flex:1 }}><b>{i.interviewer_name || 'Interviewer'}</b> <span style={{ color:C.muted }}>{i.interviewer_emp_code || ''}</span> <span style={{ fontSize:9.5, fontWeight:800, color: isMain(i) ? C.info : C.muted }}>{isMain(i) ? 'MAIN' : 'PANELIST'}</span></span>
+                  <span style={{ fontSize:10.5, fontWeight:700, color: ackOf(i) ? C.ok : C.warn }}>{ackOf(i) ? '✓ Acknowledged' : '⏳ Awaiting'}</span>
+                </div>
+              ))}
+              <div style={{ color:C.muted, marginTop:4, fontSize:12 }}>{prev.scheduledAt ? new Date(prev.scheduledAt).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : 'time TBC'}{prev.link ? ` · ${prev.link}` : ''}{prev.passcode ? ` · passcode ${prev.passcode}` : ''}</div>
+            </div>
+
+            <PeoplePicker label="Main interviewer" hint="(one person; they give the feedback)" single emps={emps} value={main} exclude={panel} onChange={setMain} placeholder="Search by name or emp code…" />
+            <div style={{ marginTop:10 }}>
+              <PeoplePicker label="Panelists" hint="(optional; × removes someone)" emps={emps} value={panel} exclude={main} onChange={setPanel} placeholder="Add panelists by name or emp code…" />
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:10 }}>
+              <div><label style={lbl}>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={inp} /></div>
+              <div><label style={lbl}>Time</label><input type="time" value={time} onChange={e => setTime(e.target.value)} style={inp} /></div>
+            </div>
+            <div style={{ marginTop:10 }}>
+              <label style={lbl}>New meeting link <span style={{ color:C.dang }}>*</span> <span style={{ color:C.faint, fontWeight:500 }}>(must be different from the one already sent)</span></label>
+              <input value={link} onChange={e => setLink(e.target.value)} placeholder="https://meet.google.com/…" style={inp} />
+            </div>
+            <div style={{ marginTop:10 }}>
+              <label style={lbl}>New meeting passcode <span style={{ color:C.dang }}>*</span> <span style={{ color:C.faint, fontWeight:500 }}>(must be different from the one already sent)</span></label>
+              <input value={pass} onChange={e => setPass(e.target.value)} placeholder="e.g. 4821" style={inp} />
+            </div>
+
+            {(who.added.length > 0 || who.removed.length > 0) && (
+              <div style={{ marginTop:12, fontSize:12, color:C.ink, background:C.brandTint, borderRadius:8, padding:'8px 11px' }}>
+                {who.added.length > 0 && <div>Adding: {who.added.map(id => [...main, ...panel].find(e => e.id === id)?.full_name).filter(Boolean).join(', ')}</div>}
+                {who.removed.length > 0 && <div>Removing: {who.removed.map(id => rows.find(i => i.interviewer_id === id)?.interviewer_name).filter(Boolean).join(', ')} (they are told they are off the panel)</div>}
+              </div>
+            )}
+            {problems.length > 0 && (
+              <ul style={{ margin:'12px 0 0', padding:'8px 12px 8px 28px', fontSize:12, color:C.dang, background:TK.criticalTint, borderRadius:8 }}>
+                {problems.map(p => <li key={p}>{p}</li>)}
+              </ul>
+            )}
+          </div>
+          <div style={{ display:'flex', gap:8, padding:'12px 20px', borderTop:`1px solid ${C.line}` }}>
+            <button onClick={onClose} disabled={busy} style={{ ...btn.ghost, flex:1 }}>Cancel</button>
+            <button onClick={save} disabled={busy || problems.length > 0} style={{ ...btn.pri, flex:1, opacity: busy || problems.length ? .55 : 1, cursor: busy || problems.length ? 'not-allowed' : 'pointer' }}>{busy ? 'Saving…' : 'Save & send new invite'}</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+  )
+}
+
 function PeoplePicker({ label, hint, single, emps, value, exclude, onChange, placeholder }: {
   label: string; hint?: string; single?: boolean; emps: Emp[]; value: Emp[]; exclude?: Emp[]
   onChange: (v: Emp[]) => void; placeholder?: string
