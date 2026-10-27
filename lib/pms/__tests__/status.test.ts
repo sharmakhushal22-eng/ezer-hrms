@@ -88,3 +88,20 @@ test('reached() walks the ladder and refuses to guess', () => {
   assert.equal(reached(null, WORKFLOW.NOT_STARTED), false)
   assert.equal(reached(undefined, WORKFLOW.KRA_DRAFT), false)
 })
+
+test('§3.5: being rated is not being published', () => {
+  // "Result publish hone se pehle rating, comments — kuch bhi visible nahi."
+  // The employee's result screen decided this with
+  // `visible_to_employee || final_rating != null`, so the second a HOD
+  // finalised, the rating, the weighted score and every rater's row appeared
+  // — before anybody chose to publish. Observed live on Shreya Singh's screen
+  // while her workflow_status was still FINALISED.
+  //
+  // Finalising and publishing are adjacent rungs and that is the whole point:
+  // the gap between them is where a manager holds the conversation.
+  assert.equal(reached(WORKFLOW.FINALISED, WORKFLOW.PUBLISHED), false)
+  assert.equal(reached(WORKFLOW.RM_L2_DONE, WORKFLOW.PUBLISHED), false)
+  assert.equal(reached(WORKFLOW.PUBLISHED, WORKFLOW.PUBLISHED), true)
+  // ACKNOWLEDGED is published plus the employee's own tick, so it still shows.
+  assert.equal(reached(WORKFLOW.ACKNOWLEDGED, WORKFLOW.PUBLISHED), true)
+})

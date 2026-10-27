@@ -49,6 +49,7 @@ import { type TeamMember } from '@/lib/pms/team'
 import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
 import { type Kra, type Category } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
+import { reached, WORKFLOW } from '@/lib/pms/status'
 import { bandsFromScale, type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
 import { stageStates, currentStage, settled, STAGES, DEFAULT_RULES,
          type Progress, type StageKey } from '@/lib/pms/cycle'
@@ -409,11 +410,13 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
    * Observed live: Shreya Singh's result was fully readable while
    * workflow_status was still FINALISED and visible_to_employee was false.
    *
-   * The workflow_status is the only thing that records the decision.
-   * ACKNOWLEDGED counts because it is PUBLISHED plus the employee's own tick.
+   * The workflow_status is the only thing that records the decision, and
+   * reached() is the module's own way of asking about it: the column is an
+   * ordered ladder, ACKNOWLEDGED is PUBLISHED plus the employee's tick, and
+   * an unrecognised value sorts to the bottom rather than reading as further
+   * along than it is — which is the right way for a visibility gate to fail.
    */
-  const published = overall?.workflow_status === 'PUBLISHED'
-                 || overall?.workflow_status === 'ACKNOWLEDGED'
+  const published = reached(overall?.workflow_status, WORKFLOW.PUBLISHED)
   // The feedback row carries its own flag, and it is not the same question:
   // the RM writes into this row during rating with visible_to_employee false,
   // so prose can exist long before anybody may read it. Both gates have to be
