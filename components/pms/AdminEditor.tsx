@@ -351,9 +351,19 @@ const WINDOWS: { from: string; to: string; label: string; hint: string }[] = [
     hint: 'When the final rating may be set' },
 ]
 
-function CyclePanel({ policies, periods, reload }: {
-  policies: Row[]; periods: Row[]; reload: () => Promise<void>
+function CyclePanel({ policies, periods, companies, reload }: {
+  policies: Row[]; periods: Row[]; companies: Row[]; reload: () => Promise<void>
 }) {
+  /** "Q2 2026-27" exists once per company, so the bare period name named three
+   *  different things. On the window editor that is confusing; on "Open a
+   *  period" it is dangerous, because opening enrols everybody and cannot be
+   *  undone from this screen. Every period option now says whose it is. */
+  const companyName = useMemo(
+    () => new Map(companies.map(c => [s(c.id), s(c.company_name)])), [companies])
+  const periodLabel = useCallback((p: Row) => {
+    const co = companyName.get(s(p.company_id))
+    return `${s(p.period_name)}${co ? ' · ' + co : ''} · ${s(p.status).toLowerCase()}`
+  }, [companyName])
   const gen = useSaver(reload)
   const open = useSaver(reload)
   const win = useSaver(reload)
@@ -419,7 +429,7 @@ function CyclePanel({ policies, periods, reload }: {
             <select value={periodId} onChange={e => { setPeriodId(e.target.value); setTyped('') }}>
               <option value="">Choose a period…</option>
               {openable.map(p => (
-                <option key={s(p.id)} value={s(p.id)}>{s(p.period_name)} · {s(p.status).toLowerCase()}</option>
+                <option key={s(p.id)} value={s(p.id)}>{periodLabel(p)}</option>
               ))}
             </select>
           </Field>
@@ -451,9 +461,7 @@ function CyclePanel({ policies, periods, reload }: {
             <select value={winId} onChange={e => setWinId(e.target.value)}>
               <option value="">Choose a period…</option>
               {periods.map(p => (
-                <option key={s(p.id)} value={s(p.id)}>
-                  {s(p.period_name)} · {s(p.status).toLowerCase()}
-                </option>
+                <option key={s(p.id)} value={s(p.id)}>{periodLabel(p)}</option>
               ))}
             </select>
           </Field>
@@ -587,7 +595,7 @@ export default function AdminEditor() {
       {section === 'policy'   && <PolicyPanel policies={snap.policies} reload={reload} />}
       {section === 'kra'      && <KraPanel kras={snap.kras} companyId={companyId} reload={reload} />}
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
-      {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} reload={reload} />}
+      {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
       {section === 'finalise' && <FinalisePanel periods={snap.periods} canAttribute={!!snap.actor.employeeId} reload={reload} />}
     </>
   )

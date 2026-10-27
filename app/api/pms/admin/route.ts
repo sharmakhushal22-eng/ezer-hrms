@@ -104,20 +104,28 @@ export async function GET(req: NextRequest) {
   const g = await gate(req)
   if ('error' in g) return g.error
 
-  const [policies, kras, scale, periods] = await Promise.all([
+  const [policies, kras, scale, periods, companies] = await Promise.all([
     sb.from('pms_policies').select('*').order('policy_name'),
     sb.from('pms_kra_master').select('*').order('kra_title').limit(500),
     sb.from('pms_rating_scale').select('*').order('sort_order'),
     sb.from('pms_periods').select('*').order('period_start', { ascending: true }).limit(200),
+    // EVERY COMPANY RUNS ITS OWN PERIODS, so "Q2 2026-27" appears once per
+    // company and the lists could not tell them apart. On the window editor
+    // that is confusing; on "Open a period" it is dangerous, because opening
+    // enrols everybody and cannot be undone from the screen. The name is what
+    // makes the choice legible.
+    sb.from('companies').select('id,company_name'),
   ])
   const firstError = [policies, kras, scale, periods].find(r => r.error)?.error
   if (firstError) return bad(firstError.message, 500)
+  if (companies.error) console.error('[pms] could not read company names:', companies.error)
 
   return NextResponse.json({
     policies: policies.data ?? [],
     kras:     kras.data ?? [],
     scale:    scale.data ?? [],
     periods:  periods.data ?? [],
+    companies: companies.data ?? [],
     // The UI hides attribution-only actions when there is no employee behind
     // the session, rather than letting the button fail on click.
     actor: { employeeId: g.actor.employeeId, name: g.actor.name, legacy: g.actor.legacy },
