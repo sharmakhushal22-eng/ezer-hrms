@@ -24,13 +24,7 @@ import {
 } from '@/lib/payroll/readiness'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK, F, W, S, Person, Th, Td, IconLock, IconDownload, IconBuilding } from '@/lib/ui'
-import {
-  SectionCard, InfoCallout, ChipTab, ChipTabs, FilterBar as KitFilterBar, FilterField, fieldStyle, ControlSelect,
-  ActionBar, ActionDivider, ActionGroup, PButton, EmptyState, ProcessStepper, runSteps, leastAdvanced, RunStatusPill,
-  DataTable, IconBank, IconTimer, IconSync, IconPause, IconIdCard, IconFile, IconPlay, IconMonth, IconCheckCircle,
-  type KitTone,
-} from '@/components/payroll/kit'
+import { C as TK } from '@/lib/ui'
 
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: TK.brandTint,
@@ -71,36 +65,35 @@ const TDS_CAT = SYNC_CATEGORIES.find(c => c.key === 'tds')
 // ── Tab strip button ───────────────────────────────────────────────────────
 // Defined outside the parent: a tab that re-mounts on every render loses its hover
 // state mid-click, and the whole strip re-renders each time the count refreshes.
-//
-// Each check reads as a status chip: a blocking check with people in it is critical,
-// a non-blocking one is a warning, an empty one is quiet. "Already Run" is the
-// exception — readiness.ts calls it a finished job, not a fault, so it is informational.
-const CHECK_ICON: Record<string, React.ReactNode> = {
-  locked: <IconLock size={15} />, bank: <IconBank size={15} />, days: <IconMonth size={15} />,
-  attendance: <IconTimer size={15} />, ctc: <IconSync size={15} />, hold: <IconPause size={15} />,
-  pan: <IconIdCard size={15} />, arrear: <IconFile size={15} />,
-}
-function checkTone(check: ReadinessCheck): KitTone {
-  const n = check.rows.length
-  if (!check.available) return 'neutral'
-  if (n === 0) return 'positive'
-  if (check.key === 'locked') return 'info'
-  return check.blocking ? 'critical' : 'warning'
-}
 function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean; onPick: () => void }) {
   const off = !check.available
   const n = check.rows.length
+  const blocked = check.blocking && n > 0
+  const clear = check.available && n === 0
+
+  const countStyle: React.CSSProperties = {
+    fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 999,
+    background: active
+      ? 'rgba(255,255,255,0.28)'
+      : blocked ? C.red : clear ? C.greenBg : 'rgba(0,0,0,0.08)',
+    color: active ? TK.surface : blocked ? TK.surface : clear ? C.green : C.navy,
+  }
   return (
-    <ChipTab
-      label={check.label}
-      icon={CHECK_ICON[check.key] || <span>{check.icon}</span>}
-      count={off ? '-' : n}
-      t={checkTone(check)}
-      active={active}
+    <button
+      onClick={off ? undefined : onPick}
       disabled={off}
-      title={off ? check.unavailableNote : check.blocking ? 'Blocking: people here are left out of the run' : 'Heads-up: does not stop anyone being paid'}
-      onClick={onPick}
-    />
+      title={off ? check.unavailableNote : undefined}
+      style={{
+        flexShrink: 0, background: active ? C.purple : C.card,
+        border: `1px solid ${active ? C.purple : C.border}`, borderRadius: 10,
+        padding: '10px 16px', cursor: off ? 'not-allowed' : 'pointer',
+        fontSize: 13, fontWeight: 600, color: active ? TK.surface : C.navy,
+        display: 'flex', alignItems: 'center', gap: 8, fontFamily: font,
+        opacity: off ? 0.45 : 1, transition: 'all .15s',
+      }}>
+      {check.icon} {check.label}
+      <span style={countStyle}>{off ? '-' : n}</span>
+    </button>
   )
 }
 
@@ -114,59 +107,101 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
 // closed again rather than carrying the previous tab's decision across.
 function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolean }) {
   const [shown, setShown] = useState(false)
-  const t = checkTone(check)
+  const th: React.CSSProperties = {
+    textAlign: 'left', fontSize: 11, color: C.muted, textTransform: 'uppercase',
+    letterSpacing: '0.03em', padding: 8, borderBottom: `1px solid ${C.border}`, fontWeight: 600,
+  }
+  const td: React.CSSProperties = { padding: '10px 8px', borderBottom: `1px solid ${C.border}`, verticalAlign: 'top' }
   return (
-    <SectionCard
-      icon={CHECK_ICON[check.key] || <span>{check.icon}</span>}
-      iconTone={t === 'neutral' ? 'brand' : t}
-      title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{check.label}
-        <span style={{ fontSize: F.micro, fontWeight: W.semi, color: check.blocking ? C.red : C.amber, textTransform: 'uppercase', letterSpacing: '.06em' }}>{check.blocking ? 'Blocking' : 'Non-blocking'}</span></span>}
-      hint={check.desc}
-      /* No button when there is nothing behind it — a View that reveals an empty state
-         is one more click for no answer. */
-      actions={check.rows.length > 0 ? (
-        <PButton size="sm" variant={shown ? 'secondary' : 'primary'} onClick={() => setShown(v => !v)}>
-          {shown ? 'Hide list' : `View list (${check.rows.length})`}
-        </PButton>
-      ) : undefined}
-      flush={check.rows.length > 0}
-      style={{ marginBottom: S.lg }}
-    >
-      {check.rows.length === 0 ? (
-        <EmptyState compact t="positive" icon={<IconCheckCircle size={22} />} title="Nobody in this month has this problem." />
-      ) : !shown ? (
-        <div style={{ padding: `${S.md}px ${S.lg}px`, fontSize: F.small, color: C.muted }}>
-          <b style={{ color: C.navy }}>{check.rows.length}</b> employee{check.rows.length === 1 ? '' : 's'} {check.blocking ? 'will be left out of this run' : 'flagged'}. Open the list to see who and why.
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+        <span style={{ fontSize: 17 }}>{check.icon}</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{check.label}</span>
+      </div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 16, marginLeft: 27 }}>{check.desc}</div>
+
+      {/* No button when there is nothing behind it — a View that reveals an empty state
+          is one more click for no answer. */}
+      {check.rows.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <button onClick={() => setShown(v => !v)}
+            style={{
+              fontFamily: font, fontSize: 12.5, fontWeight: 700,
+              color: shown ? C.purpleD : TK.onAccent,
+              background: shown ? TK.surface : C.purple,
+              border: shown ? `1px solid ${C.border}` : 'none',
+              borderRadius: 10, padding: '8px 16px', cursor: 'pointer',
+            }}>
+            {shown ? 'Hide list' : `View list (${check.rows.length})`}
+          </button>
         </div>
-      ) : (
-        <DataTable maxHeight={420}>
-          <thead>
-            <tr>
-              <Th>Employee</Th>
-              {isGroup && <Th>Company</Th>}
-              <Th>Impact if unresolved</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {check.rows.map(e => (
-              <tr key={e.code} className="ez-row">
-                <Td><Person name={e.name || '-'} meta={e.code} size={30} /></Td>
-                {isGroup && <Td style={{ color: C.muted, fontSize: 12 }}>{e.company || '-'}</Td>}
-                <Td style={{ color: check.blocking ? C.redDark : C.amber, fontSize: 12 }}>{e.impact}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
       )}
-    </SectionCard>
+
+      {check.rows.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: C.green }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}></div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Nobody in this month has this problem.</div>
+        </div>
+      ) : !shown ? null : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th style={th}>Employee</th>
+                {isGroup && <th style={th}>Company</th>}
+                <th style={th}>Impact if unresolved</th>
+              </tr>
+            </thead>
+            <tbody>
+              {check.rows.map(e => (
+                <tr key={e.code}>
+                  <td style={td}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 30, height: 30, borderRadius: '50%', background: C.purpleSoft, color: C.purpleD,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 700, flexShrink: 0,
+                      }}>{e.initials}</div>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{e.name || '-'}</div>
+                        <div style={{ fontSize: 11, color: C.muted }}>{e.code}</div>
+                      </div>
+                    </div>
+                  </td>
+                  {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{e.company || '-'}</td>}
+                  <td style={{ ...td, color: check.blocking ? C.redDark : C.amber, fontSize: 12 }}>{e.impact}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   )
 }
 
 // ── Banner ─────────────────────────────────────────────────────────────────
-// One status callout with a real icon disc (the old one drew an empty coloured square).
 function Banner({ tone, title, sub }: { tone: 'red' | 'green' | 'amber'; title: string; sub: string }) {
-  const t: KitTone = tone === 'red' ? 'critical' : tone === 'green' ? 'positive' : 'warning'
-  return <InfoCallout t={t} title={title} style={{ marginBottom: S.lg }}>{sub}</InfoCallout>
+  const t = tone === 'red'
+    ? { bg: `linear-gradient(135deg,${TK.criticalTint},${TK.criticalTint})`, bd: C.redBd, dot: C.red, fg: C.red, sub: C.redDark, ic: '' }
+    : tone === 'green'
+      ? { bg: `linear-gradient(135deg,${TK.positiveTint},${TK.positiveTint})`, bd: C.greenBd, dot: C.green, fg: C.green, sub: TK.positive, ic: '' }
+      : { bg: `linear-gradient(135deg,${TK.warningTint},${TK.warningTint})`, bd: C.amberBd, dot: C.amber, fg: C.amber, sub: TK.warning, ic: '' }
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12, borderRadius: 14, padding: '16px 20px',
+      marginBottom: 20, background: t.bg, border: `1px solid ${t.bd}`, boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center',
+        justifyContent: 'center', flexShrink: 0, fontSize: 18, background: t.dot, color: TK.onAccent,
+      }}>{t.ic}</div>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>{title}</div>
+        <div style={{ fontSize: 12, color: t.sub, marginTop: 1 }}>{sub}</div>
+      </div>
+    </div>
+  )
 }
 
 // ── Filter bar ─────────────────────────────────────────────────────────────
@@ -185,53 +220,75 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
 }) {
   const { companies, locations, departments, statuses } = filterOptions(rows)
   const on = isFiltered(filter)
-  const sel: React.CSSProperties = { ...fieldStyle, cursor: 'pointer' }
+  const inp: React.CSSProperties = {
+    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12,
+    background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
+  }
+  const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }
   return (
-    <KitFilterBar label="Run scope" active={on} onClear={onClear} clearLabel="Clear"
-      summaryTone={on && matched === 0 ? 'critical' : undefined}
-      summary={!on ? <>No filter: payroll will run on the <b>whole month</b> ({rows.length} employees).</>
-        : matched === 0
-          ? <b style={{ color: C.red }}>This filter matches no employees, so there is nothing to run.</b>
-          : <>Filter on: payroll will run on <b>only these {matched}</b> of {rows.length} employees. The other {rows.length - matched} payslips stay exactly as they are, and the month will <b>not be marked CALCULATED</b> until a full run happens.</>}>
-      {isGroup && companies.length > 1 && (
-        <FilterField label="Company" minWidth={180}>
-          <select style={sel} value={filter.company} onChange={e => onChange({ company: e.target.value })}>
-            <option value="">All companies</option>
-            {companies.map(c => <option key={c} value={c}>{c}</option>)}
+    <div style={{
+      background: on ? C.purpleSoft : TK.sunken, border: `1px solid ${on ? TK.brandEdge : C.border}`,
+      borderRadius: 14, padding: '10px 12px', marginBottom: 14,
+    }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
+        {isGroup && companies.length > 1 && (
+          <div>
+            <label style={lbl}>Company</label>
+            <select style={{ ...inp, minWidth: 170 }} value={filter.company} onChange={e => onChange({ company: e.target.value })}>
+              <option value="">All companies</option>
+              {companies.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        )}
+        <div>
+          <label style={lbl}>Location</label>
+          <select style={{ ...inp, minWidth: 150 }} value={filter.location} onChange={e => onChange({ location: e.target.value })}>
+            <option value="">All locations</option>
+            {locations.map(l => <option key={l} value={l}>{l}</option>)}
           </select>
-        </FilterField>
-      )}
-      <FilterField label="Location" minWidth={160}>
-        <select style={sel} value={filter.location} onChange={e => onChange({ location: e.target.value })}>
-          <option value="">All locations</option>
-          {locations.map(l => <option key={l} value={l}>{l}</option>)}
-        </select>
-      </FilterField>
-      <FilterField label="Department" minWidth={160}>
-        <select style={sel} value={filter.department} onChange={e => onChange({ department: e.target.value })}>
-          <option value="">All departments</option>
-          {departments.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-      </FilterField>
-      <FilterField label="Status" minWidth={150}>
-        <select style={sel} value={filter.status} onChange={e => onChange({ status: e.target.value })}>
-          <option value="">All statuses</option>
-          <option value="Active">Active</option>
-          <option value={NOT_ACTIVE}>Not active</option>
-          {/* The exact words in this month, for when "not active" is too broad. */}
-          {statuses.length > 0 && (
-            <optgroup label="Exactly">
-              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-            </optgroup>
-          )}
-        </select>
-      </FilterField>
-      <FilterField label="Employee (code or name, paste a list too)" grow minWidth={240}>
-        <input style={fieldStyle} value={filter.employee}
-          onChange={e => onChange({ employee: e.target.value })}
-          placeholder="SSM9001, SSM9002   ya   kavya" />
-      </FilterField>
-    </KitFilterBar>
+        </div>
+        <div>
+          <label style={lbl}>Department</label>
+          <select style={{ ...inp, minWidth: 150 }} value={filter.department} onChange={e => onChange({ department: e.target.value })}>
+            <option value="">All departments</option>
+            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>Status</label>
+          <select style={{ ...inp, minWidth: 140 }} value={filter.status} onChange={e => onChange({ status: e.target.value })}>
+            <option value="">All statuses</option>
+            <option value="Active">Active</option>
+            <option value={NOT_ACTIVE}>Not active</option>
+            {/* The exact words in this month, for when "not active" is too broad. */}
+            {statuses.length > 0 && (
+              <optgroup label="Exactly">
+                {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+              </optgroup>
+            )}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <label style={lbl}>Employee (code or name, paste a list too)</label>
+          <input style={{ ...inp, width: '100%' }} value={filter.employee}
+            onChange={e => onChange({ employee: e.target.value })}
+            placeholder="SSM9001, SSM9002   ya   kavya" />
+        </div>
+        {on && (
+          <button onClick={onClear} style={{
+            padding: '7px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface,
+            color: C.red, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer',
+          }}>Clear</button>
+        )}
+      </div>
+      <div style={{ fontSize: 11, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
+        {!on ? <>No filter: payroll will run on the <b>whole month</b> ({rows.length} employees).</>
+          : matched === 0
+            ? <b style={{ color: C.red }}>This filter matches no employees, so there is nothing to run.</b>
+            : <>Filter on: payroll will run on <b>only these {matched}</b> of {rows.length} employees. The other {rows.length - matched} payslips stay exactly as they are, and the month will <b>not be marked CALCULATED</b> until a full run happens.</>}
+      </div>
+    </div>
   )
 }
 
@@ -517,40 +574,25 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
                 ? `Only these ${shown.length}. The rest of the month is not touched`
                 : `Runs on all ${rdAll?.totalEmployees ?? 0} employees in this month`
 
-  const runLabel = busy ? 'Running…'
-    : willRun.length === 0 ? 'Run Payroll'
-      : (filtering || excluded.length)
-        ? `Run Payroll for ${willRun.length} employee${willRun.length === 1 ? '' : 's'}`
-        : calculated ? 'Re-run Payroll' : 'Run Payroll'
-  const hintTone: KitTone = !canRun && !busy ? (closed || (blockers.length === 1 && blockers[0]?.key === 'locked') ? 'neutral' : 'warning') : excluded.length ? 'warning' : 'neutral'
-  const monthStatus = leastAdvanced(monthRuns.map(r => r.status))
-
   return (
-    <div style={{ fontFamily: font, fontSize: 14, color: C.navy, maxWidth: 1080 }}>
-      {/* Context row: what is being run, for which month, and how far the month has got. */}
-      <SectionCard style={{ marginBottom: S.lg }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 0 }}>
-            <h1 style={{ fontSize: F.title, margin: '0 0 4px', letterSpacing: '-0.01em', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              Payroll Run
-              {sel && <RunStatusPill status={monthStatus} raw size="sm" />}
-            </h1>
-            <div style={{ fontSize: 13, color: C.muted, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <IconBuilding size={14} /> {isGroup ? `Group Companies${monthRuns.length ? ` · ${monthRuns.length} compan${monthRuns.length === 1 ? 'y' : 'ies'}` : ''}` : (sel?.company_name || 'Company')}
-            </div>
+    <div style={{ fontFamily: font, fontSize: 14, color: C.navy, maxWidth: 960 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: 26, margin: '0 0 4px', letterSpacing: '-0.02em', fontWeight: 700 }}>Payroll Run</h1>
+          <div style={{ fontSize: 13, color: C.muted }}>
+            🏢 {isGroup ? `Group Companies${monthRuns.length ? ` · ${monthRuns.length} compan${monthRuns.length === 1 ? 'y' : 'ies'}` : ''}` : (sel?.company_name || 'Company')}
           </div>
-          <ControlSelect label="Payroll month" icon={<IconMonth size={15} />} strong minWidth={180}
-            value={monthVal} onChange={e => { setMonthVal(e.target.value); setResult(null) }}>
-            {monthOpts.length === 0 && <option value="">No month created</option>}
-            {monthOpts.map(r => <option key={r.month} value={String(r.month)}>{periodLabel(r)}</option>)}
-          </ControlSelect>
         </div>
-        {monthRuns.length > 0 && (
-          <div style={{ marginTop: S.lg, paddingTop: S.md, borderTop: `1px solid ${TK.line}` }}>
-            <ProcessStepper steps={runSteps(monthStatus)} compact />
-          </div>
-        )}
-      </SectionCard>
+        <select value={monthVal} onChange={e => { setMonthVal(e.target.value); setResult(null) }}
+          style={{
+            background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '7px 16px',
+            fontSize: 13, fontWeight: 600, color: C.purpleD, fontFamily: font, cursor: 'pointer', outline: 'none',
+            boxShadow: 'var(--ez-shadow-flat)',
+          }}>
+          {monthOpts.length === 0 && <option value="">No month created</option>}
+          {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
+        </select>
+      </div>
 
       {rows && rows.length > 0 && (
         <FilterBar rows={rows} filter={filter} matched={shown.length} isGroup={isGroup}
@@ -562,56 +604,72 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
 
       {rd && (
         <>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: S.sm }}>
-            <span style={{ fontSize: F.micro, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: C.muted }}>Readiness checks</span>
-            <span style={{ fontSize: F.tiny, color: TK.faint }}>Red blocks pay for those people · amber is a heads-up · green is clear</span>
-          </div>
-          <ChipTabs>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 16, paddingBottom: 2 }}>
             {rd.checks.map(c => (
               <Tab key={c.key} check={c} active={active?.key === c.key} onPick={() => setTab(c.key)} />
             ))}
-          </ChipTabs>
+          </div>
 
-          {active && <CheckPanel key={active.key} check={active} isGroup={isGroup} />}
+          <div style={{
+            background: C.card, borderRadius: 14, padding: '22px 24px', marginBottom: 18,
+            boxShadow: 'var(--ez-shadow-flat)', border: `1px solid ${C.border}`,
+          }}>
+            {active && <CheckPanel key={active.key} check={active} isGroup={isGroup} />}
+          </div>
         </>
       )}
 
-      {err && <InfoCallout t="critical" compact>{err}</InfoCallout>}
+      {err && (
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>{err}</div>
+      )}
 
-      <ActionBar hint={hint} hintTone={hintTone}>
-        <PButton variant="primary" size="lg" onClick={run} disabled={!canRun}
-          icon={canRun || busy ? <IconPlay size={15} /> : <IconLock size={15} />}
-          title={!canRun ? hint : undefined}>
-          {runLabel}
-        </PButton>
-        <ActionDivider />
-        <ActionGroup label="Downloads">
-          {/* Available whenever the month has rows, not only after a clean run. The sheet
-              was previously produced only as the last step of a successful run, so any
-              failure earlier in the chain left HR with no numbers at all to look at. */}
-          {(rows?.length ?? 0) > 0 && (
-            <PButton icon={<IconDownload size={14} />}
-              onClick={() => downloadSheet(shownCodes).catch(e => setErr('Sheet download failed: ' + (e?.message === 'nothing to export' && shownCodes ? 'nobody in this filter is in the month yet' : (e?.message || e))))}
-              disabled={busy || (!!shownCodes && shownCodes.length === 0)}
-              title={shownCodes ? `Only the ${shownCodes.length} employee${shownCodes.length === 1 ? '' : 's'} matching the filter` : 'Every employee in the month'}
-            >Download sheet{shownCodes ? ` (${shownCodes.length})` : ''}</PButton>
-          )}
-          {calculated && (
-            <PButton icon={<IconFile size={14} />} onClick={() => downloadRegister(shownCodes)} disabled={busy || (!!shownCodes && shownCodes.length === 0)}
-              title={shownCodes ? `Only the ${shownCodes.length} employee${shownCodes.length === 1 ? '' : 's'} matching the filter` : 'Every employee in the month'}
-            >Register{shownCodes ? ` (${shownCodes.length})` : ''}</PButton>
-          )}
-          {/* Payslips exist only for a calculated month; the server confirms payroll_lines
-              are there and that the run is not older than its own inputs before anything
-              is rendered. Re-mounted per month AND per run result, so a stale preflight
-              never survives a month change or a re-run. */}
-          {monthRuns.length > 0 && (
-            <PayslipDownload key={`${monthRuns.map(r => r.id).join(',')}|${result ? `${result.processed}:${result.net}` : ''}`}
-              runs={monthRuns.map(r => ({ id: r.id, company_name: r.company_name }))}
-              enabled={calculated} busyOutside={busy} only={shownCodes} />
-          )}
-        </ActionGroup>
-      </ActionBar>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
+        <button onClick={run} disabled={!canRun}
+          style={{
+            fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
+            background: canRun ? C.purple: TK.brandTint, border: 'none', borderRadius: 14,
+            padding: '14px 28px', cursor: canRun ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center', gap: 8,
+            boxShadow: canRun ? '0 4px 14px rgba(37,99,235,0.25)' : 'none',
+          }}>
+          {busy ? 'Running…'
+            : willRun.length === 0 ? 'Run Payroll'
+              : (filtering || excluded.length)
+                ? `▶️ Run Payroll for ${willRun.length} employee${willRun.length === 1 ? '' : 's'}`
+                : calculated ? 'Re-run Payroll' : 'Run Payroll'}
+        </button>
+        {/* Available whenever the month has rows, not only after a clean run. The sheet
+            was previously produced only as the last step of a successful run, so any
+            failure earlier in the chain left HR with no numbers at all to look at. */}
+        {(rows?.length ?? 0) > 0 && (
+          <button onClick={() => downloadSheet(shownCodes).catch(e => setErr('Sheet download failed: ' + (e?.message === 'nothing to export' && shownCodes ? 'nobody in this filter is in the month yet' : (e?.message || e))))}
+            disabled={busy || (!!shownCodes && shownCodes.length === 0)}
+            title={shownCodes ? `Only the ${shownCodes.length} employee${shownCodes.length === 1 ? '' : 's'} matching the filter` : 'Every employee in the month'}
+            style={{
+              fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
+              border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px',
+              cursor: busy ? 'not-allowed' : 'pointer',
+            }}>Download sheet{shownCodes ? ` (${shownCodes.length})` : ''}</button>
+        )}
+        {calculated && (
+          <button onClick={() => downloadRegister(shownCodes)} disabled={busy || (!!shownCodes && shownCodes.length === 0)}
+            title={shownCodes ? `Only the ${shownCodes.length} employee${shownCodes.length === 1 ? '' : 's'} matching the filter` : 'Every employee in the month'}
+            style={{
+              fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
+              border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px', cursor: busy ? 'not-allowed' : 'pointer',
+            }}>Register{shownCodes ? ` (${shownCodes.length})` : ''}</button>
+        )}
+        {/* Payslips exist only for a calculated month; the server confirms payroll_lines
+            are there and that the run is not older than its own inputs before anything
+            is rendered. Re-mounted per month AND per run result, so a stale preflight
+            never survives a month change or a re-run. */}
+        {monthRuns.length > 0 && (
+          <PayslipDownload key={`${monthRuns.map(r => r.id).join(',')}|${result ? `${result.processed}:${result.net}` : ''}`}
+            runs={monthRuns.map(r => ({ id: r.id, company_name: r.company_name }))}
+            enabled={calculated} busyOutside={busy} only={shownCodes} />
+        )}
+        <span style={{ fontSize: 12, color: C.muted }}>{hint}</span>
+      </div>
     </div>
   )
 }

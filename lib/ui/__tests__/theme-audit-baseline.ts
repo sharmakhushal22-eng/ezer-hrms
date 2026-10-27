@@ -95,11 +95,13 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/payroll/AttendanceUpload.tsx': 2,
   'components/payroll/BankDetailsTab.tsx': 2,
   'components/payroll/BonusConfig.tsx': 1,
+  'components/payroll/LockUnlock.tsx': 2,
   'components/payroll/LwfConfig.tsx': 2,
   'components/payroll/ManualVoucher.tsx': 3,
   'components/payroll/MonthSync.tsx': 2,
   'components/payroll/NpsReport.tsx': 2,
   'components/payroll/OtUpload.tsx': 1,
+  'components/payroll/PayslipDownload.tsx': 4,
   'components/payroll/PerquisitesConfig.tsx': 1,
   'components/payroll/PtConfig.tsx': 2,
   'components/profile/IdCard.tsx': 2,
@@ -113,4 +115,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 188;
+export const THEME_AUDIT_TOTAL = 194;
