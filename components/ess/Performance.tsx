@@ -654,6 +654,8 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
         selfScore: d.self_score == null ? null : Number(d.self_score),
         rmL1Score: d.rm_l1_score == null ? null : Number(d.rm_l1_score),
         rmL2Score: d.rm_l2_score == null ? null : Number(d.rm_l2_score),
+        rmL1Id: (d.rm_l1_id as string | null) ?? null,
+        rmL2Id: (d.rm_l2_id as string | null) ?? null,
         finalRating: d.final_rating == null ? null : Number(d.final_rating),
         finalised: d.final_rating != null,
       }
@@ -702,21 +704,28 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
 
       // Their own rating per KRA, and the manager's own earlier one if this is
       // a revisit — a half-finished rating must come back as it was left.
+      // RM_L2 IS READ TOO. It used to ask only for SELF and RM_L1, so an RM L2
+      // returning to a half-finished rating saw an empty form and would have
+      // started again. And "mine" is matched on rater_id rather than on a role
+      // string: the row this person authored is theirs whichever rung of the
+      // chain they are on, which needs no guess about which that is.
       const r = await supabase.from('pms_reviews')
-        .select('goal_id,rater_role,rating,comments,achievement_value')
+        .select('goal_id,rater_id,rater_role,rating,comments,achievement_value')
         .eq('employee_id', picked).eq('period_id', period.id)
-        .in('rater_role', ['SELF', 'RM_L1'])
+        .in('rater_role', ['SELF', 'RM_L1', 'RM_L2'])
       if (r.error) console.error('[pms] could not read the ratings:', r.error)
       const byGoal = new Map<string, Record<string, Record<string, unknown>>>()
       for (const row of (r.data ?? []) as Record<string, unknown>[]) {
         const k = String(row.goal_id)
-        byGoal.set(k, { ...(byGoal.get(k) ?? {}), [String(row.rater_role)]: row })
+        const slot = String(row.rater_role) === 'SELF' ? 'SELF'
+          : String(row.rater_id) === employeeId ? 'MINE' : 'OTHER'
+        byGoal.set(k, { ...(byGoal.get(k) ?? {}), [slot]: row })
       }
 
       if (!live) return
       setRateRows(goalRows.map(gr => {
         const seen = byGoal.get(String(gr.id)) ?? {}
-        const self = seen.SELF, mine = seen.RM_L1
+        const self = seen.SELF, mine = seen.MINE
         return {
           goalId: String(gr.id),
           title: String(gr.kra_title ?? ''),
@@ -793,12 +802,34 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     reloadRoster()
   }
 
-  /** The manager's rating of one reportee, one row per KRA. rater_role is
-   *  RM_L1: pms_score reads it by that name, and the chain snapshot on
-   *  pms_overall_rating is what decides whose rating this counts as. */
+  /**
+   * The manager's rating of one reportee, one row per KRA.
+   *
+   * WHICH MANAGER, read from the frozen chain rather than assumed. This used
+   * to write rater_role: 'RM_L1' unconditionally. pms_reviews is keyed on
+   * (period, employee, goal, rater_role), so an RM L2 rating written under
+   * 'RM_L1' would not merely be mislabelled — the upsert would land on the
+   * L1's row and DESTROY their rating. The same hardcoding also meant
+   * pms_score(..., 'RM_L2') found nothing and the chain never advanced past
+   * L1, which is the symptom somebody would have noticed first.
+   *
+   * The snapshot decides, not a live lookup — same reason pms_finalise reads
+   * it: a reorg mid-cycle must not move half-rated appraisals.
+   */
+  const myRaterRole = useMemo(() => {
+    if (member?.rmL1Id && member.rmL1Id === employeeId) return 'RM_L1'
+    if (member?.rmL2Id && member.rmL2Id === employeeId) return 'RM_L2'
+    return null
+  }, [member, employeeId])
+
   const submitRating = async () => {
     if (!picked) return
     setSaving(true); setMsg(null)
+    if (!myRaterRole) {
+      setSaving(false)
+      setMsg('This period’s chain does not record you as either of their managers, so your rating has nowhere to go. Ask HR to check the chain for this period.')
+      return
+    }
     if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
     // An empty set would upsert nothing and report success, which is how a
     // screen comes to lie about having saved. Nothing loads rateRows yet —
@@ -817,7 +848,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     const { error } = await supabase.from('pms_reviews').upsert(
       rateRows.map(r => ({
         company_id: companyId, period_id: period!.id, employee_id: picked,
-        goal_id: r.goalId, rater_id: employeeId, rater_role: 'RM_L1',
+        goal_id: r.goalId, rater_id: employeeId, rater_role: myRaterRole,
         achievement_value: r.achievement || null, rating: r.myRating,
         comments: r.myComment || null, submitted: true,
         submitted_at: new Date().toISOString(),

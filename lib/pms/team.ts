@@ -39,6 +39,14 @@ export interface TeamMember extends Employment {
   selfScore: number | null
   rmL1Score: number | null
   rmL2Score: number | null
+  /** WHO THE FROZEN CHAIN SAYS THE TWO MANAGERS ARE.
+   *
+   *  Carried because a screen has to know WHICH of the two the viewer is. The
+   *  rating upsert keys on (period, employee, goal, rater_role), so writing an
+   *  RM L2's rating under 'RM_L1' does not merely mislabel it — it overwrites
+   *  the L1's rating. Comparing against these is how the role is decided. */
+  rmL1Id?: string | null
+  rmL2Id?: string | null
   finalRating: number | null
   finalised: boolean
 }
