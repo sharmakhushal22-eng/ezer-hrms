@@ -76,7 +76,7 @@ export async function createEnvelopes(i: CreateInput, base: string, req: NextReq
     let env: any = null
     for (let a = 0; a < 4 && !env; a++) {
       const { data, error } = await sb.from('esign_envelopes').insert({
-        envelope_no: newEnvelopeNo(), title: set.length && bulk ? i.title.trim() : i.title.trim(), message: i.message || null,
+        envelope_no: newEnvelopeNo(), title: i.title.trim(), message: i.message || null,
         company_id: i.companyId || null, category: i.category || 'GENERAL', source: bulk ? 'BULK' : (i.source || 'MANUAL'),
         source_ref: i.sourceRef || null, batch_id: batchId, status: 'SENT', signing_order: i.signingOrder || 'SEQUENTIAL',
         page_count: pageCount, original_path: 'pending', original_sha256: sha, original_name: i.originalName || null,

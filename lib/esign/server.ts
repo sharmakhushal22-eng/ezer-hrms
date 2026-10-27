@@ -116,7 +116,10 @@ export async function inviteActive(envelopeId: string, base: string, opts: { rem
   const open = signers.filter(s => s.status !== 'SIGNED' && s.status !== 'DECLINED')
   if (!open.length) return { invited: 0, failed: [], links: [] }
   const min = Math.min(...open.map(s => s.order_no))
-  const now = env.signing_order === 'PARALLEL' ? open : open.filter(s => s.order_no === min)
+  // Only people not yet invited get a new link — issuing one rotates the token, which would
+  // break the link already sitting in an inbox. A reminder deliberately re-mails everyone open.
+  const now = (env.signing_order === 'PARALLEL' ? open : open.filter(s => s.order_no === min))
+    .filter(s => opts.reminder || s.status === 'WAITING')
   let invited = 0
   const failed: string[] = []
   // When a mail could not go out, HR gets the link to pass on another way (it still needs
