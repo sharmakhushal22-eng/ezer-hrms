@@ -87,23 +87,6 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/ess/RoleTabs.tsx': 0,
   'components/ess/today/Toast.tsx': 1,
   'components/letters/LetterheadConfig.tsx': 2,
-  'components/payroll/Appraisal.tsx': 2,
-  'components/payroll/ArrearPayments.tsx': 2,
-  'components/payroll/AttendanceEdit.tsx': 1,
-  'components/payroll/AttendanceEditTab.tsx': 2,
-  'components/payroll/attendanceShared.tsx': 4,
-  'components/payroll/AttendanceUpload.tsx': 2,
-  'components/payroll/BankDetailsTab.tsx': 2,
-  'components/payroll/BonusConfig.tsx': 1,
-  'components/payroll/LockUnlock.tsx': 2,
-  'components/payroll/LwfConfig.tsx': 2,
-  'components/payroll/ManualVoucher.tsx': 3,
-  'components/payroll/MonthSync.tsx': 2,
-  'components/payroll/NpsReport.tsx': 2,
-  'components/payroll/OtUpload.tsx': 1,
-  'components/payroll/PayslipDownload.tsx': 4,
-  'components/payroll/PerquisitesConfig.tsx': 1,
-  'components/payroll/PtConfig.tsx': 2,
   'components/profile/IdCard.tsx': 2,
   'components/profile/PhotoUploader.tsx': 1,
   'components/profile/ProfileShell.tsx': 4,
@@ -115,4 +98,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 194;
+export const THEME_AUDIT_TOTAL = 159;

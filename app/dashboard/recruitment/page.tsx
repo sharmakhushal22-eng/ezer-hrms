@@ -22,6 +22,7 @@ import { computeCtc, inr, EPF_WAGE_CEILING, hraMaxFor } from '@/lib/recruitment/
 import { ctcStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
 import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+import MrfPicker, { mrfOptionLabel } from '@/components/recruitment/MrfPicker'
 import { isHandOff } from '@/lib/recruitment/mrf-handoff'
 // Every recruitment API route is guarded (docs/security/open-endpoints.md), so the
 // browser hands over whichever session it holds. uploadAuthHeaders() is the same
@@ -3299,7 +3300,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
 }
 
 // ── AI SCREENING ──────────────────────────────────────────────────
-function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail }:any) {
+function ScreeningTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   const [selMRF, setSelMRF] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [screening, setScreening] = useState(false)
@@ -3444,12 +3445,9 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16, marginBottom:14 }}>
             <div>
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Job opening <em>*</em></label>
-              <select className="rx-input" value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
-                <option value="">Select an approved MRF</option>
-                {mrfs.filter((m:MRF)=>m.status==='APPROVED').map((m:MRF)=>(
-                  <option key={m.id} value={m.id}>{m.designation||m.position} · {m.no_of_openings||m.openings||0} openings</option>
-                ))}
-              </select>
+              <MrfPicker className="rx-input" aria-label="Job opening" placeholder="Select an approved MRF"
+                mrfs={mrfs.filter((m:MRF)=>m.status==='APPROVED')} value={selMRF} onChange={setSelMRF}
+                departments={departments} locations={locations} companies={companies} />
             </div>
             <div>
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Resumes (PDF, Word or text)</label>
@@ -3849,7 +3847,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     <select className="rx-input" style={{ width:280, flex:'0 1 280px', maxWidth:300 }} title="Opening" value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
       <option value="all">All Openings ({candidates.length} candidates)</option>
       {approvedMRFs.map((m:MRF)=>(
-        <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
+        <option key={m.id} value={m.id}>{isConfidentialMrf(m)?'🔒 ':''}{mrfOptionLabel(m)} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
       ))}
     </select>
   )
@@ -3959,10 +3957,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <div style={{ ...T.g2, marginBottom:14 }}>
                 <div style={{ gridColumn:'1 / -1' }}>
                   <label className="rx-label" style={{ display:'block', marginBottom:6 }}>For Opening (MRF){reqMark}</label>
-                  <select className="rx-input" style={sel('mrf_id')} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
-                    <option value="">Select an approved opening</option>
-                    {addableMRFs.map((m:MRF)=><option key={m.id} value={m.id}>{isConfidentialMrf(m)?'🔒 ':''}{m.designation||m.position} ({m.no_of_openings||m.openings||0} openings){m.location_name?` · ${m.location_name}`:''}</option>)}
-                  </select>
+                  <MrfPicker className="rx-input" style={sel('mrf_id')} aria-label="For opening (MRF)" placeholder="Select an approved opening"
+                    mrfs={addableMRFs} value={cForm.mrf_id} onChange={(id:string)=>CF('mrf_id',id)}
+                    departments={departments} locations={locations} companies={companies} />
                   {addableMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet. Approve one in the MRF tab first.</div>}
                   {cForm.mrf_id && confidentialIds.has(cForm.mrf_id) && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>🔒 Confidential search: this candidate will be visible only to the HR Head and HR Manager.</div>}
                 </div>

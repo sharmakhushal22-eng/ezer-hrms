@@ -5,124 +5,138 @@
 // inline inside the Payroll → Configuration → "Group & Company" sub-tab (URL unchanged).
 import { useState, useEffect, useCallback } from 'react'
 import { loadHierarchy, type GroupTree, type Company, type Branch, type Registration } from '@/lib/supabase-company-profile'
-// Design tokens, aliased as TK — many of these files already declare
-// their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C as TK, F, W, S, R, E, numeric, eyebrow, IconBuilding, IconCompliance, IconFinance, IconCard, IconLetters } from '@/lib/ui'
 import { GroupHeader } from '@/components/company/GroupHeader'
+import { StatusPill, EmptyState, DataTable, dt, InfoCallout, CountChip, SubHead, IconTile, IconInfo, type KitTone } from '@/components/payroll/kit'
 
 const C = {
-  card:  { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
-  lbl:   { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em' } as React.CSSProperties,
-  val:   { fontSize:13, color:TK.ink, marginTop:2 } as React.CSSProperties,
-  sec:   { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:R.lg, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:S.lg, boxShadow:E.raised } as React.CSSProperties,
+  lbl:   { ...eyebrow, fontSize:F.micro } as React.CSSProperties,
+  val:   { fontSize:F.small, color:TK.ink, marginTop:3, fontWeight:W.medium, overflowWrap:'anywhere', ...numeric } as React.CSSProperties,
+  sec:   { marginBottom:S.sm + 2 } as React.CSSProperties,
 }
-const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF: TK.info, FACTORY:TK.critical }
+const REG_TONE: Record<string, KitTone> = { GST:'info', EPF:'brand', ESIC:'positive', PT:'warning', LWF:'info', FACTORY:'critical' }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'
 
 function StatusBadge({ status, days }: { status: string; days: number | null }) {
-  const map: Record<string, [string, string, string]> = {
-    ACTIVE:   [TK.positiveTint, TK.positive, 'Active'],
-    GRACE:    [TK.warningTint, TK.warning, 'Grace period'],
-    SUSPENDED:[TK.criticalTint, TK.critical, 'Suspended'],
+  const map: Record<string, [KitTone, string]> = {
+    ACTIVE:   ['positive', 'Active'],
+    GRACE:    ['warning', 'Grace period'],
+    SUSPENDED:['critical', 'Suspended'],
   }
-  const [bg, c, label] = map[status] || map.ACTIVE
+  const [t, label] = map[status] || map.ACTIVE
   let hint = ''
   if (status === 'ACTIVE' && days !== null) hint = ` · ${days}d to due`
   if (status === 'GRACE') hint = ' · pay before suspension'
-  return <span style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{label}{hint}</span>
+  return <StatusPill t={t} dot size="sm">{label}{hint}</StatusPill>
 }
 function ROField({ label, value, fmtFn }: { label: string; value: any; fmtFn?: (v: any) => string }) {
-  return <div><div style={C.lbl}>{label}</div><div style={C.val}>{fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '-' : String(value))}</div></div>
+  return <div style={{ minWidth:0 }}><div style={C.lbl}>{label}</div><div style={C.val}>{fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '-' : String(value))}</div></div>
+}
+/** A titled block inside the company card. */
+function Block({ title, icon, right, children }: { title: string; icon: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom:S.xl - 4 }}>
+      <SubHead right={right}><span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><span style={{ display:'inline-flex', color:TK.brand }}>{icon}</span>{title}</span></SubHead>
+      {children}
+    </div>
+  )
 }
 
 function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
   const lic = co.license
   return (
     <div style={{ ...C.card, padding:0, overflow:'hidden' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', background:TK.sunken, borderBottom: `1px solid ${TK.line}` }}>
-        <span style={{ fontSize:14, fontWeight:600 }}>{co.company_name}</span>
-        {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.brandTint, color:TK.brand, fontWeight:600 }}>{co.company_type}</span>}
-        <span style={{ fontSize:10, color:TK.faint }}>{co.company_code}</span>
+      <div style={{ display:'flex', alignItems:'center', gap:S.md, flexWrap:'wrap', padding:'14px 18px', borderBottom: `1px solid ${TK.line}` }}>
+        <IconTile icon={<IconBuilding size={17} />} t="brand" size={36} />
+        <div style={{ minWidth:0, flex:'1 1 220px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+            <span style={{ fontSize:F.lead, fontWeight:W.bold, color:TK.ink, letterSpacing:'-.01em' }}>{co.company_name}</span>
+            {co.company_type && <StatusPill t="brand" size="sm">{co.company_type}</StatusPill>}
+          </div>
+          <div style={{ fontSize:F.tiny, color:TK.muted, marginTop:2, ...numeric }}>{co.company_code}</div>
+        </div>
         <span style={{ marginLeft:'auto' }}><StatusBadge status={co.account_status} days={co.days_to_due} /></span>
       </div>
 
-      <div style={{ padding:'14px 16px' }}>
-          <div style={C.sec}>Company details</div>
-          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', marginBottom:18 }}>
-            <ROField label="Employer / Director" value={co.short_name} />
-            <ROField label="Industry" value={co.industry} />
-            <ROField label="PAN" value={co.pan} />
-            <ROField label="TAN" value={co.tan} />
-            <ROField label="CIN" value={co.cin} />
-            <ROField label="Incorporated" value={co.date_of_inc} fmtFn={fmt} />
-            <div style={{ gridColumn:'1 / -1' }}><ROField label="Registered office" value={co.reg_office} /></div>
-          </div>
+      <div style={{ padding:'16px 18px 4px' }}>
+          <Block title="Company details" icon={<IconLetters size={13} />}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,minmax(0,1fr))', gap:'14px 18px', background:TK.sunken, border:`1px solid ${TK.line}`, borderRadius:R.md, padding:'14px 16px' }}>
+              <ROField label="Employer / Director" value={co.short_name} />
+              <ROField label="Industry" value={co.industry} />
+              <ROField label="PAN" value={co.pan} />
+              <ROField label="TAN" value={co.tan} />
+              <ROField label="CIN" value={co.cin} />
+              <ROField label="Incorporated" value={co.date_of_inc} fmtFn={fmt} />
+              <div style={{ gridColumn:'1 / -1' }}><ROField label="Registered office" value={co.reg_office} /></div>
+            </div>
+          </Block>
 
-          <div style={C.sec}>Branches ({co.branches.length})</div>
-          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:8, marginBottom:18 }}>
-            {co.branches.map((b: Branch) => (
-              <div key={b.id} style={{ border: `1px solid ${TK.line}`, borderRadius:10, padding:'10px 12px' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                  <span style={{ fontSize:13, fontWeight:600 }}>{b.location_name}</span>
-                  <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:TK.sunken, color:TK.inkSoft }}>{b.location_type}</span>
+          <Block title={`Branches (${co.branches.length})`} icon={<IconBuilding size={13} />}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:S.sm + 2 }}>
+              {co.branches.map((b: Branch) => (
+                <div key={b.id} style={{ border: `1px solid ${TK.line}`, borderRadius:R.md, padding:'12px 14px', background:TK.surface, boxShadow:E.flat, minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
+                    <span style={{ fontSize:F.small, fontWeight:W.semi, color:TK.ink }}>{b.location_name}</span>
+                    <StatusPill size="sm">{b.location_type}</StatusPill>
+                  </div>
+                  <div style={{ fontSize:F.tiny, color:TK.muted, marginBottom:10, lineHeight:1.45 }}>
+                    {[b.address_line1, b.city, b.pin_code].filter(Boolean).join(', ') || '-'}
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px 12px', marginBottom:10 }}>
+                    <ROField label="District" value={b.district} />
+                    <ROField label="State" value={b.state} />
+                  </div>
+                  <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
+                    <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:F.tiny }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:F.tiny, fontWeight:W.semi }}>map</a></> : '-'}</div></div>
+                    <ROField label="Max employees" value={b.max_employees} />
+                  </div>
                 </div>
-                <div style={{ ...C.lbl, textTransform:'none', fontWeight:400, color:TK.muted, marginBottom:8 }}>
-                  {[b.address_line1, b.city, b.pin_code].filter(Boolean).join(', ') || '-'}
-                </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 12px', marginBottom:8 }}>
-                  <ROField label="District" value={b.district} />
-                  <ROField label="State" value={b.state} />
-                </div>
-                <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
-                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '-'}</div></div>
-                  <ROField label="Max employees" value={b.max_employees} />
-                </div>
-              </div>
-            ))}
-            {co.branches.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No branches.</div>}
-          </div>
+              ))}
+              {co.branches.length === 0 && <div style={{ fontSize:F.tiny, color:TK.faint }}>No branches.</div>}
+            </div>
+          </Block>
 
-          <div style={C.sec}>Statutory registrations</div>
-          <div style={{ overflowX:'auto', marginBottom:18 }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <Block title="Statutory registrations" icon={<IconCompliance size={13} />} right={<CountChip>{co.registrations.length}</CountChip>}>
+            <DataTable framed>
               <tbody>
                 {co.registrations.map((r: Registration) => (
-                  <tr key={r.id} style={{ borderBottom: `1px solid ${TK.line}` }}>
-                    <td style={{ padding:'7px 8px', width:60 }}><span style={{ fontSize:10, fontWeight:700, color:REG_COLOR[r.reg_type] || TK.inkSoft }}>{r.reg_type}</span></td>
-                    <td style={{ padding:'7px 8px', color:TK.ink }}>{r.reg_number || '-'}</td>
-                    <td style={{ padding:'7px 8px', color:TK.muted }}>{[r.state, r.district].filter(Boolean).join(' · ') || '-'}</td>
+                  <tr key={r.id} className={dt.rowClass}>
+                    <td style={{ ...dt.td, width:90 }}><StatusPill t={REG_TONE[r.reg_type] || 'neutral'} size="sm">{r.reg_type}</StatusPill></td>
+                    <td style={dt.tdMono}>{r.reg_number || '-'}</td>
+                    <td style={{ ...dt.td, color:TK.muted }}>{[r.state, r.district].filter(Boolean).join(' · ') || '-'}</td>
                   </tr>
                 ))}
-                {co.registrations.length === 0 && <tr><td style={{ padding:10, color:TK.faint }}>No registrations.</td></tr>}
+                {co.registrations.length === 0 && <tr><td style={{ ...dt.td, color:TK.faint }}>No registrations.</td></tr>}
               </tbody>
-            </table>
-          </div>
+            </DataTable>
+          </Block>
 
           {co.bank.length > 0 && (
-            <>
-              <div style={C.sec}>Bank accounts</div>
-              <div style={{ marginBottom:18 }}>
+            <Block title="Bank accounts" icon={<IconCard size={13} />}>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                 {co.bank.map(bk => (
-                  <div key={bk.id} style={{ fontSize:12, color:TK.inkSoft, padding:'4px 0' }}>
-                    <b>{bk.bank_name}</b> · A/c ••••{(bk.account_number || '').slice(-4)} · {bk.ifsc_code} · {bk.account_type}{bk.is_primary ? ' · primary' : ''}
+                  <div key={bk.id} style={{ fontSize:F.small, color:TK.inkSoft, padding:'9px 12px', border:`1px solid ${TK.line}`, borderRadius:R.md, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', ...numeric }}>
+                    <b style={{ color:TK.ink }}>{bk.bank_name}</b> · A/c ••••{(bk.account_number || '').slice(-4)} · {bk.ifsc_code} · {bk.account_type}{bk.is_primary ? <> · <StatusPill t="positive" size="sm">primary</StatusPill></> : ''}
                   </div>
                 ))}
               </div>
-            </>
+            </Block>
           )}
 
-          <div style={C.sec}>License &amp; billing</div>
-          {lic ? (
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', alignItems:'flex-end' }}>
-              <ROField label="Plan" value={lic.plan_name} />
-              <ROField label="Max employees" value={lic.max_employees} />
-              <div><div style={C.lbl}>Max locations</div><div style={C.val}>{lic.max_locations || '-'} <span style={{ color:TK.faint, fontSize:11 }}>({co.branches.length} used)</span></div></div>
-              <ROField label="Billing cycle" value={lic.billing_cycle || 'QUARTERLY'} />
-              <ROField label="Paid till" value={lic.paid_till} fmtFn={fmt} />
-              <ROField label="Grace" value={`${lic.grace_days ?? 30} days`} />
-              <div><div style={C.lbl}>Status</div><div style={{ marginTop:2 }}><StatusBadge status={co.account_status} days={co.days_to_due} /></div></div>
-            </div>
-          ) : <div style={{ fontSize:12, color:TK.faint }}>No license plan set.</div>}
+          <Block title="License & billing" icon={<IconFinance size={13} />}>
+            {lic ? (
+              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,minmax(0,1fr))', gap:'14px 18px', alignItems:'flex-end', background:TK.sunken, border:`1px solid ${TK.line}`, borderRadius:R.md, padding:'14px 16px' }}>
+                <ROField label="Plan" value={lic.plan_name} />
+                <ROField label="Max employees" value={lic.max_employees} />
+                <div><div style={C.lbl}>Max locations</div><div style={C.val}>{lic.max_locations || '-'} <span style={{ color:TK.faint, fontSize:F.tiny }}>({co.branches.length} used)</span></div></div>
+                <ROField label="Billing cycle" value={lic.billing_cycle || 'QUARTERLY'} />
+                <ROField label="Paid till" value={lic.paid_till} fmtFn={fmt} />
+                <ROField label="Grace" value={`${lic.grace_days ?? 30} days`} />
+                <div><div style={C.lbl}>Status</div><div style={{ marginTop:3 }}><StatusBadge status={co.account_status} days={co.days_to_due} /></div></div>
+              </div>
+            ) : <div style={{ fontSize:F.tiny, color:TK.faint }}>No license plan set.</div>}
+          </Block>
       </div>
     </div>
   )
@@ -146,14 +160,14 @@ export default function CompanyProfileView() {
   }, [])
   useEffect(() => { reload() }, [reload])
 
-  if (loading) return <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading company profile…</div>
-  if (groups.length === 0) return <div style={{ ...C.card, textAlign:'center', color:TK.faint, padding:40 }}>No group / company found yet. Add data from Company Setup first.</div>
+  if (loading) return <div style={C.card}><EmptyState compact t="neutral" icon={<IconBuilding size={20} />} title="Loading company profile…" /></div>
+  if (groups.length === 0) return <div style={C.card}><EmptyState compact t="neutral" icon={<IconBuilding size={20} />} title="No group / company found yet." hint="Add data from Company Setup first." /></div>
 
   return (
-    <div>
-      <div style={{ fontSize:12, color:TK.muted, marginBottom:12 }}>Group, companies, branches, statutory registrations, bank &amp; license (view only). To edit, open Company Profile from Admin.</div>
+    <div style={{ fontFamily:F.family, color:TK.ink, minWidth:0 }}>
+      <InfoCallout t="neutral" compact icon={<IconInfo size={14} />}>Group, companies, branches, statutory registrations, bank &amp; license (view only). To edit, open Company Profile from Admin.</InfoCallout>
       {groups.map(g => (
-        <div key={g.id} style={{ marginBottom:18 }}>
+        <div key={g.id} style={{ marginBottom:S.xl }}>
           <GroupHeader g={g} card={C.card} />
           {g.companies.map(co => <CompanyCard key={co.id} co={co} isMobile={isMobile} />)}
         </div>

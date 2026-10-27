@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ChainRow, ResignationRecord, ResignationState, StageApprover } from './types'
 import { Ic } from './icons'
+import { Z } from '@/lib/ui'
 import { fmtDate, fmtDateTime, riseStyle, useToast } from './ui'
 
 const STAGE_LABEL: Record<string, string> = {
@@ -31,7 +32,139 @@ const STAGE_LABEL: Record<string, string> = {
 const STAGE_ORDER = ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER']
 const CLOSED = ['SETTLED', 'WITHDRAWN']
 
+/** HR Services → Exit. The HR roles see "Exit an employee" above their own exit screen. */
 export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) => Promise<any> }) {
+  return (
+    <>
+      <HrExitPanel api={api} />
+      <OwnExit api={api} />
+    </>
+  )
+}
+
+type Match = { id: string; full_name: string; emp_code: string | null; designation: string | null; department: string | null; doj: string | null; lwd: string | null }
+type Reason = { code: string; category: string; label: string }
+
+/** For the hiring and HR roles (lib/exit/hr-exit.ts): tick "Exit an employee" to process
+ *  someone else's exit — reason, employee code, date of exit, additional information. The
+ *  server (app/api/ess/exit-employee) decides who may, and checks it all again. */
+function HrExitPanel({ api }: { api: (path: string, init?: RequestInit) => Promise<any> }) {
+  const [allowed, setAllowed] = useState(false)
+  const [reasons, setReasons] = useState<Reason[]>([])
+  const [on, setOn] = useState(false)
+  const [q, setQ] = useState('')
+  const [matches, setMatches] = useState<Match[]>([])
+  const [emp, setEmp] = useState<Match | null>(null)
+  const [reason, setReason] = useState('')
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [info, setInfo] = useState('')
+  const [confirm, setConfirm] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState('')
+  const toast = useToast()
+
+  useEffect(() => { api('/api/ess/exit-employee').then(d => { setAllowed(!!d.allowed); setReasons(d.reasons || []) }).catch(() => setAllowed(false)) }, [api])
+  useEffect(() => {
+    if (!on || emp || q.trim().length < 2) { setMatches([]); return }
+    const t = setTimeout(() => { api(`/api/ess/exit-employee?q=${encodeURIComponent(q.trim())}`).then(d => setMatches(d.matches || [])).catch(() => setMatches([])) }, 250)
+    return () => clearTimeout(t)
+  }, [q, on, emp, api])
+
+  if (!allowed) return null
+  const reset = () => { setEmp(null); setQ(''); setReason(''); setInfo(''); setConfirm(false); setDate(new Date().toISOString().slice(0, 10)) }
+  const ready = !!emp && !!reason && !!date
+  const company = reasons.filter(r => r.category === 'EMPLOYER'), own = reasons.filter(r => r.category !== 'EMPLOYER')
+
+  async function submit() {
+    if (!ready) return
+    setBusy(true)
+    try {
+      const j = await api('/api/ess/exit-employee', { method: 'POST', body: JSON.stringify({ employee_id: emp!.id, reason_code: reason, date_of_exit: date, remarks: info }) })
+      const msg = `Exit processed for ${j.employee}. Last working day ${fmtDate(j.last_working_day)}${j.revoked_now ? '; ESS access has ended' : '; ESS access ends on that day'}.${j.mailed ? ' The employee has been mailed.' : ''}`
+      toast(msg); setDone(msg); reset(); setOn(false)
+    } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="hx-card pad" style={{ marginBottom: 14 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13.5, fontWeight: 700, color: 'var(--ez-ink)' }}>
+        <input type="checkbox" checked={on} onChange={e => { setOn(e.target.checked); setDone(''); if (!e.target.checked) reset() }} style={{ width: 17, height: 17 }} />
+        Exit an employee
+        <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ez-muted)' }}>process another employee&apos;s exit (HR / Hiring Manager)</span>
+      </label>
+      {done && !on && <div className="hx-note" style={{ marginTop: 10 }}>{done}</div>}
+      {on && (
+        <div style={{ marginTop: 14 }}>
+          <div className="hx-grid2">
+            <div>
+              <label className="hx-label">Reason</label>
+              <select className="hx-select" value={reason} onChange={e => { setReason(e.target.value); setConfirm(false) }}>
+                <option value="">Select…</option>
+                {company.length > 0 && <optgroup label="Initiated by the company">{company.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}</optgroup>}
+                {own.length > 0 && <optgroup label="Resignation (recorded by HR)">{own.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}</optgroup>}
+              </select>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <label className="hx-label">Employee code</label>
+              {emp ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 38 }}>
+                  <span style={{ fontSize: 13, color: 'var(--ez-ink)' }}><b>{emp.emp_code}</b> · {emp.full_name}</span>
+                  <button className="hx-btn o" onClick={() => { setEmp(null); setQ(''); setConfirm(false) }}>Change</button>
+                </div>
+              ) : (
+                <>
+                  <input className="hx-input" value={q} onChange={e => setQ(e.target.value)} placeholder="Type the employee code or name…" autoComplete="off" />
+                  {matches.length > 0 && (
+                    <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', marginTop: 3, background: 'var(--ez-surface)', border: '1px solid var(--ez-line)', borderRadius: 9, boxShadow: '0 10px 28px rgba(0,0,0,.14)', overflow: 'hidden', zIndex: Z.raised }}>
+                      {matches.map(m => (
+                        <button key={m.id} type="button" onClick={() => { setEmp(m); setMatches([]); setConfirm(false) }}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 11px', border: 'none', borderBottom: '1px solid var(--ez-line)', background: 'var(--ez-surface)', color: 'var(--ez-ink)', cursor: 'pointer', fontSize: 12.5, fontFamily: 'inherit' }}>
+                          <b>{m.emp_code}</b> · {m.full_name} <span style={{ color: 'var(--ez-muted)' }}>{[m.designation, m.department].filter(Boolean).join(' · ')}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {q.trim().length >= 2 && matches.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--ez-faint)', marginTop: 4 }}>No active employee in your company matches.</div>}
+                </>
+              )}
+            </div>
+            <div>
+              <label className="hx-label">Date of exit (last working day)</label>
+              <input type="date" className="hx-input" value={date} onChange={e => { setDate(e.target.value); setConfirm(false) }} />
+            </div>
+            <div>
+              {emp && (
+                <div style={{ fontSize: 12, color: 'var(--ez-muted)', lineHeight: 1.6, paddingTop: 22 }}>
+                  {emp.designation || '-'}{emp.department ? ` · ${emp.department}` : ''}{emp.doj ? ` · joined ${fmtDate(emp.doj)}` : ''}
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <label className="hx-label">Additional information</label>
+            <textarea className="hx-area" value={info} maxLength={2000} onChange={e => setInfo(e.target.value)} placeholder="Anything the record should carry: notice served, recovery, handover, assets to return…" />
+          </div>
+          <div className="hx-note w" style={{ marginTop: 12 }}>
+            The employee gets a mail and a notification. On the date of exit their ESS access, roles and reporting lines end
+            {date && date <= new Date().toISOString().slice(0, 10) ? <b> (today or earlier: immediately)</b> : ''}; anyone reporting to them needs a new manager.
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            {!confirm ? (
+              <button className="hx-btn" disabled={!ready} onClick={() => setConfirm(true)}>Process exit</button>
+            ) : (
+              <>
+                <button className="hx-btn solidred" disabled={busy} onClick={() => void submit()}>{busy ? 'Processing…' : `Yes, exit ${emp?.full_name || ''}`}</button>
+                <button className="hx-btn o" disabled={busy} onClick={() => setConfirm(false)}>Not now</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OwnExit({ api }: { api: (path: string, init?: RequestInit) => Promise<any> }) {
   const [d, setD] = useState<ResignationState | null>(null)
   const [err, setErr] = useState('')
   const [reason, setReason] = useState('')

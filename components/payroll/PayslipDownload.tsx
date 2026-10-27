@@ -14,13 +14,15 @@ import { authToken } from '@/lib/rms/client'
 import { zipStore } from '@/lib/zip-store'
 import { wrapPayslipHtml } from '@/lib/payroll/payslip-html'
 import { combinedFileName, monthLabel } from '@/lib/payroll/payslip'
-import { C as TK } from '@/lib/ui'
+import { C as TK, IconDownload } from '@/lib/ui'
+import { btnStyle, InfoCallout, IconFile } from '@/components/payroll/kit'
 
 const font = '"DM Sans","Segoe UI",sans-serif'
+// Tokens, not the old purple literals: those stayed light in dark mode.
 const C = {
-  navy: '#1E1B4B', muted: '#6B7280', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
-  purple: '#7C3AED', purpleD: '#6D28D9', green: '#059669', amber: '#B45309', red: '#DC2626',
-  soft: 'rgba(124,58,237,0.08)',
+  navy: TK.ink, muted: TK.muted, border: TK.line, card: TK.surface,
+  purple: TK.brand, purpleD: TK.brandDeep, green: TK.positive, amber: TK.warning, red: TK.critical,
+  soft: TK.sunken,
 }
 
 interface Preflight {
@@ -68,11 +70,7 @@ function chunk<T>(list: T[], n: number): T[][] {
   return out
 }
 
-const outlineBtn = (disabled: boolean) => ({
-  fontFamily: font, fontSize: 13, fontWeight: 600 as const, color: C.purpleD, background: C.card,
-  border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px', cursor: disabled ? 'not-allowed' : 'pointer',
-  opacity: disabled ? 0.55 : 1,
-})
+const outlineBtn = (disabled: boolean): React.CSSProperties => ({ ...btnStyle('secondary', 'md', disabled), fontFamily: font })
 
 export default function PayslipDownload({ runs, enabled, busyOutside, only = null }: {
   runs: RunRef[]; enabled: boolean; busyOutside: boolean
@@ -195,13 +193,13 @@ export default function PayslipDownload({ runs, enabled, busyOutside, only = nul
     <>
       <button onClick={() => setOpen(o => !o)} disabled={!enabled || busy || !pre}
         title={!enabled ? 'Run payroll for this month first' : undefined}
-        style={outlineBtn(!enabled || busy || !pre)}>
-        🧾 {label}
+        className="ez-press" style={outlineBtn(!enabled || busy || !pre)}>
+        <IconFile size={14} /> {label}
       </button>
       {err && !open && <span style={{ fontSize: 12, color: C.red, maxWidth: 520 }}>{err}</span>}
 
       {open && pre && (
-        <div style={{ flexBasis: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginTop: 4, fontFamily: font }}>
+        <div className="ez-rise" style={{ flexBasis: '100%', background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', marginTop: 4, fontFamily: font }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>Payslips: {monthLabel(pre[0].run.fy, pre[0].run.month)}</div>
             <div style={{ fontSize: 12, color: C.muted }}>
@@ -211,14 +209,13 @@ export default function PayslipDownload({ runs, enabled, busyOutside, only = nul
           </div>
 
           {stale && stale.length > 0 && (
-            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', color: C.red, fontSize: 12.5 }}>
-              <b>Run is out of date. Payslips are blocked.</b>
-              {stale.map((s, i) => <div key={i} style={{ marginTop: 4 }}>{s}</div>)}
-            </div>
+            <InfoCallout t="critical" compact title="Run is out of date. Payslips are blocked." style={{ marginTop: 10, marginBottom: 0 }}>
+              {stale.map((s, i) => <div key={i} style={{ marginTop: 2 }}>{s}</div>)}
+            </InfoCallout>
           )}
 
           {blockingCount > 0 && (
-            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A', color: C.amber, fontSize: 12.5 }}>
+            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: TK.warningTint, border: `1px solid ${TK.warningEdge}`, color: C.amber, fontSize: 12.5 }}>
               {/* The reason differs per employee — figures that do not tie, a missing
                   tax worksheet, a negative net. Naming one cause here would be a guess;
                   the list below already carries the real one for each. */}
@@ -233,28 +230,28 @@ export default function PayslipDownload({ runs, enabled, busyOutside, only = nul
 
           <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={() => generate('combined')} disabled={!canGenerate}
-              style={{ fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: canGenerate ? C.purple : TK.brandTint, border: 'none', borderRadius: 10, padding: '11px 18px', cursor: canGenerate ? 'pointer' : 'not-allowed' }}>
-              📄 One PDF, all employees
+              className="ez-press" style={{ ...btnStyle('primary', 'md', !canGenerate), fontFamily: font }}>
+              <IconFile size={14} /> One PDF, all employees
             </button>
-            <button onClick={() => generate('zip')} disabled={!canGenerate} style={outlineBtn(!canGenerate)}>
-              🗜 ZIP (one PDF per employee)
+            <button onClick={() => generate('zip')} disabled={!canGenerate} className="ez-press" style={outlineBtn(!canGenerate)}>
+              ZIP (one PDF per employee)
             </button>
             {/* Same figures, different renderer — see lib/payroll/payslip-html.ts. HTML
                 opens in a browser without a PDF reader, reflows on a phone, and can be
                 pasted into an email body, which a PDF cannot. */}
-            <button onClick={() => generate('html')} disabled={!canGenerate} style={outlineBtn(!canGenerate)}>
-              🌐 HTML (all employees, one file)
+            <button onClick={() => generate('html')} disabled={!canGenerate} className="ez-press" style={outlineBtn(!canGenerate)}>
+              HTML (all employees, one file)
             </button>
             {progress && <span style={{ fontSize: 12, color: C.muted }}>{progress.phase} {progress.done}/{progress.total}…</span>}
             <span style={{ fontSize: 11.5, color: C.muted }}>Generated in batches of {pre[0].batch}. Every download is recorded in the payroll audit log.</span>
           </div>
           {err && <div style={{ marginTop: 8, fontSize: 12, color: C.red }}>{err}</div>}
           {ready && (
-            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#ECFDF5', border: '1px solid #A7F3D0', color: C.green, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span>✅ {ready.count} payslip{ready.count === 1 ? '' : 's'} ready: <b>{ready.name}</b> ({(ready.size / 1048576).toFixed(1)} MB).</span>
+            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: TK.positiveTint, border: `1px solid ${TK.positiveEdge}`, color: C.green, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>{ready.count} payslip{ready.count === 1 ? '' : 's'} ready: <b>{ready.name}</b> ({(ready.size / 1048576).toFixed(1)} MB).</span>
               <a href={ready.url} download={ready.name}
-                style={{ fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, background: C.green, borderRadius: 8, padding: '7px 14px', textDecoration: 'none' }}>
-                ⬇ Save file
+                className="ez-press" style={{ ...btnStyle('positive', 'sm'), fontFamily: font }}>
+                <IconDownload size={13} /> Save file
               </a>
               <span style={{ color: C.muted, fontSize: 11.5 }}>If the download did not start on its own, click Save file.</span>
             </div>
