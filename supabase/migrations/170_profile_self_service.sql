@@ -1,5 +1,5 @@
 -- =====================================================================
--- 167_profile_self_service.sql
+-- 170_profile_self_service.sql (shipped in PR #9 as 167; renumbered — 167 is international onboarding)
 -- "Upload your onboarding documents" clears when you upload them
 --
 -- NO SCHEMA CHANGE. One function replaced, same signature, same twelve
