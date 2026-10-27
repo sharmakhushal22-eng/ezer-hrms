@@ -43,13 +43,6 @@ import { parseEssPath, essHref, essPath, pushUrl, atEss, type EssLocation, type 
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
 import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/components/employees/EmployeeProfileView'
-import { PayrollHub, PayrollComingSoon } from '@/components/ess/payroll/PayrollHub'
-import {
-  ScreenIntro, SectionCard, InfoCallout, StatusPill as KitPill, PButton, ActionBar, ConsentCheck, LabeledField,
-  inputSkin, ChoiceCard, StatLine, PointList, TwoCol, Meter, KpiTile, KpiGrid, LoadingBlock, EmptyState, IconTile,
-  DataTable, dt, SegmentedTabs, btnStyle, type KitTone,
-  IconPiggyBank, IconUmbrella, IconPercent, IconCalculator, IconWallet, IconPen, IconTrendUp, IconFile, IconCheckCircle,
-} from '@/components/ess/payroll/kit'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -58,7 +51,7 @@ import {
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch, IconReceipt,
   IconOrgChart, IconBuilding, IconPerformance, IconLogout, IconChevron, IconChevronDown,
-  IconUser, IconHeart, IconAward, IconGame, IconMore, IconCheck, IconAlert, IconLoans,
+  IconUser, IconHeart, IconAward, IconGame, IconMore, IconCheck, IconAlert,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 // The shell's sidebar, top bar, headings and sub-tabs (hover states and the like).
@@ -2369,10 +2362,8 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
 }
 
 // ── Voluntary PF (VPF) — EPF wage base × percent ──
-// Design: components/ess/payroll/kit.tsx. Logic (state, load, the cap / alert /
-// 80C maths, submit and stop) is unchanged — only the presentation is.
-const VPF_PRESETS = [5, 10, 12, 20, 30]
 function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint, teal: C.positive }
   const MAX_PCT = 88, HIGH_ALERT = 50
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -2388,9 +2379,9 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   }, [emp.id])
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingBlock label="Loading your PF details…" />
+  if (loading) return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading…</div>
   const e = data?.employee
-  if (!e) return <InfoCallout t="critical" title="Salary data not found.">Your VPF figures need your salary structure. Please check with HR / Payroll.</InfoCallout>
+  if (!e) return <div style={{ padding: 20, color: V.red, fontSize: 13 }}>Salary data not found.</div>
   const base = e.epf_wage_base
   const current = data?.current_vpf
   let rawPct = parseFloat(pctInput) || 0
@@ -2414,159 +2405,96 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     const res = await fetch('/api/ess/vpf', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, stopped_reason: 'Employee requested', stopped_from_month: 4 }) })
     if (res.ok) { notify('VPF stopped'); load() } else notify('Failed to stop', 'error')
   }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }
+  const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '5px 0' }
 
   return (
     <div>
-      <ScreenIntro icon={<IconPiggyBank size={20} />} title="Voluntary PF (VPF)"
-        subtitle="Extra PF deducted from your EPF wages. Set your own percentage."
-        right={current
-          ? <KitPill t="positive" dot>Active · {current.vpf_percent}%</KitPill>
-          : <KitPill dot>Not enrolled</KitPill>} />
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Voluntary PF (VPF)</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages. Set your own percentage.</div>
+      </div>
 
       {!e.has_ctc && (
-        <InfoCallout t="warning" title="Your CTC is not configured yet">
-          Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master). Then VPF will calculate correctly.
-        </InfoCallout>
+        <div style={{ ...card, background: V.amberBg, border: `1px solid ${C.warningTint}` }}>
+          <span style={{ fontSize: 12, color: C.warning }}>Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master). Then VPF will calculate correctly.</span>
+        </div>
       )}
 
       {current && (
-        <InfoCallout t="positive" compact title={`Active VPF: ${current.vpf_percent}% (${inr(current.monthly_vpf_amount)}/mo)`}
-          action={<PButton size="sm" variant="danger" onClick={stop}>Stop VPF</PButton>}>
-          Modify below
-        </InfoCallout>
+        <div style={{ ...card, background: C.sunken, border: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: V.teal }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo). Modify below</span>
+          <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: C.surface, color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop VPF</button>
+        </div>
       )}
 
-      <TwoCol>
-        <div style={{ minWidth: 0 }}>
-          {/* EPF wages — the base every PF % is taken from */}
-          <SectionCard icon={<IconWallet size={16} />} title="Your EPF wages" hint="From your salary record (database)"
-            actions={<KitPill t={e.is_capped ? 'brand' : 'positive'} size="sm">{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</KitPill>}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: F.display + 4, fontWeight: W.bold, color: C.brandDeep, letterSpacing: '-.02em', lineHeight: 1.05, ...numeric }}>{inr(base)}</span>
-              <span style={{ fontSize: F.small, color: C.muted }}>a month</span>
-            </div>
-            <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 6, lineHeight: 1.55 }}>
-              {e.is_capped
-                ? 'Your PF wages are above the ₹15,000 statutory ceiling, so PF is worked out on ₹15,000.'
-                : 'Your PF wages are within the ₹15,000 statutory ceiling, so PF uses your actual wages (Gross − HRA).'}
-            </div>
-            <div style={{ marginTop: S.lg }}>
-              <Meter max={base || 1} ariaLabel="How your EPF wages are split" legend segments={[
-                { value: e.mandatory_epf_monthly, t: 'brand', label: <>Mandatory EPF 12% · {inr(e.mandatory_epf_monthly)}</> },
-                { value: vpfMonthly, t: 'info', label: <>VPF {Math.round(rawPct * 100) / 100}% · {inr(vpfMonthly)}</> },
-              ]} />
-            </div>
-            <div style={{ marginTop: S.md }}>
-              <StatLine first label="Current mandatory EPF (12%)" value={<>{inr(e.mandatory_epf_monthly)}/mo</>} />
-            </div>
-          </SectionCard>
-
-          {/* The one input */}
-          <SectionCard icon={<IconPercent size={16} />} title="VPF percentage" hint="Percentage of your EPF wages.">
-            <div style={{ position: 'relative' }}>
-              <input type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} placeholder="e.g. 25"
-                aria-label="VPF percentage" style={{ ...inputSkin({ big: true }), paddingRight: 44, ...numeric }} />
-              <span aria-hidden style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: F.title, fontWeight: W.semi, color: C.brandDeep }}>%</span>
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: S.md }}>
-              <span style={{ fontSize: F.tiny, color: C.muted, marginRight: 2 }}>Quick pick</span>
-              {VPF_PRESETS.map(p => {
-                const on = pctInput === String(p)
-                return (
-                  <button key={p} type="button" onClick={() => setPctInput(String(p))} className="ez-press" aria-pressed={on}
-                    style={{
-                      height: 30, minWidth: 48, padding: '0 10px', borderRadius: R.pill, fontFamily: 'inherit', cursor: 'pointer',
-                      fontSize: F.tiny, fontWeight: W.semi, ...numeric,
-                      background: on ? C.brandTint : C.surface, color: on ? C.brandDeep : C.inkSoft,
-                      border: `1px solid ${on ? C.brand : C.lineStrong}`,
-                    }}>{p}%</button>
-                )
-              })}
-            </div>
-            {(showHighAlert || capHit) && <div style={{ height: S.md }} />}
-            {showHighAlert && (
-              <InfoCallout t="critical" compact style={{ marginBottom: 0 }} title="That high?">
-                {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.
-              </InfoCallout>
-            )}
-            {capHit && (
-              <InfoCallout t="warning" compact style={{ marginBottom: 0 }} title={`Max ${MAX_PCT}% allowed`}>
-                Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.
-              </InfoCallout>
-            )}
-          </SectionCard>
+      <div style={{ ...card, background: C.brandTint }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: V.muted }}>Your EPF wages (from database)</span>
+          <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: e.is_capped ? C.brandTint: C.sunken, color: e.is_capped ? V.purpleDark : V.teal }}>{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</span>
         </div>
-
-        <div style={{ minWidth: 0 }}>
-          {/* Live impact */}
-          <SectionCard icon={<IconCalculator size={16} />} title="What this does to your pay" hint="Updates as you type">
-            <div style={{ background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius: R.md, padding: `${S.md}px ${S.lg}px`, marginBottom: S.sm }}>
-              <div style={{ ...eyebrow, color: C.brandDeep }}>VPF deduction (monthly)</div>
-              <div style={{ fontSize: F.display, fontWeight: W.bold, color: C.brandDeep, letterSpacing: '-.02em', marginTop: 4, ...numeric }}>{inr(vpfMonthly)}</div>
-            </div>
-            <StatLine first label="VPF (annual)" value={inr(vpfAnnual)} />
-            <StatLine label="Net in-hand impact" sub="Comes out of your take-home every month" t="critical" value={<>−{inr(vpfMonthly)}/mo</>} />
-          </SectionCard>
-
-          {/* 80C meter */}
-          <SectionCard icon={<IconTrendUp size={16} />} title="80C usage (₹1.5L max)"
-            hint="Section 80C lets up to ₹1.5 lakh of savings a year reduce your taxable income."
-            actions={<span style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, ...numeric }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>}>
-            <Meter max={e.c80_limit} height={12} ariaLabel="80C usage" legend segments={[
-              { value: e.epf_annual, t: 'brand', label: <>EPF {inr(e.epf_annual)}</> },
-              { value: vpfAnnual, t: over80c ? 'warning' : 'info', label: <>VPF {inr(vpfAnnual)}</> },
-            ]} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: S.sm, flexWrap: 'wrap', marginTop: S.md, fontSize: F.tiny, color: C.muted, lineHeight: 1.55, ...numeric }}>
-              <span>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` (no 80C benefit on ${inr(total80c - e.c80_limit)})` : ''}</span>
-              <span style={{ fontWeight: W.semi, color: over80c ? C.warning : C.inkSoft }}>{barPct}% used</span>
-            </div>
-          </SectionCard>
+        <div style={{ fontSize: 24, fontWeight: 600, color: V.purpleDark }}>{inr(base)}</div>
+        <div style={{ ...row, borderTop: `1px solid ${V.border}`, marginTop: 10, paddingTop: 8 }}>
+          <span style={{ fontSize: 12, color: V.muted }}>Current mandatory EPF (12%)</span>
+          <span style={{ fontSize: 13, color: V.navy }}>{inr(e.mandatory_epf_monthly)}/mo</span>
         </div>
-      </TwoCol>
+      </div>
 
-      <InfoCallout t="warning" title="Choose carefully">
-        <PointList t="warning" items={[
-          <>VPF will <strong>reduce your net in-hand salary</strong></>,
-          <>The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)</>,
-          <>It is deducted every month until you stop it</>,
-        ]} />
-      </InfoCallout>
-
-      <ActionBar hint={<>You are requesting <strong>{Math.round(rawPct * 100) / 100}%</strong> VPF: <strong>{inr(vpfMonthly)}</strong> a month.</>}>
-        <div style={{ width: '100%' }}>
-          <ConsentCheck checked={ack} onChange={setAck}>
-            I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.
-          </ConsentCheck>
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }}>VPF percentage</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${V.border}`, fontSize: 15, fontFamily: 'inherit' }} placeholder="e.g. 25" />
+          <span style={{ fontSize: 16, fontWeight: 500, color: V.purpleDark }}>%</span>
         </div>
-        <PButton variant="primary" size="lg" full disabled={!ack || saving} onClick={submit}>{saving ? 'Saving…' : 'Acknowledge & submit'}</PButton>
-      </ActionBar>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Percentage of your EPF wages.</div>
+      </div>
+
+      {showHighAlert && (
+        <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+          <span style={{ color: V.red }}></span>
+          <span style={{ fontSize: 12, color: C.critical, lineHeight: 1.6 }}><strong>That high?</strong> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</span>
+        </div>
+      )}
+      {capHit && (
+        <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+          <span style={{ color: V.amber }}></span>
+          <span style={{ fontSize: 12, color: C.warning, lineHeight: 1.6 }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</span>
+        </div>
+      )}
+
+      <div style={{ ...card, background: C.brandTint }}>
+        <div style={row}><span style={{ fontSize: 13, color: V.muted }}>VPF deduction (monthly)</span><span style={{ fontSize: 15, fontWeight: 500, color: V.purpleDark }}>{inr(vpfMonthly)}</span></div>
+        <div style={{ ...row, borderTop: `1px solid ${V.border}` }}><span style={{ fontSize: 13, color: V.muted }}>VPF (annual)</span><span style={{ fontSize: 13, color: V.navy }}>{inr(vpfAnnual)}</span></div>
+        <div style={{ ...row, borderTop: `1px solid ${V.border}` }}><span style={{ fontSize: 13, color: V.red }}>Net in-hand impact</span><span style={{ fontSize: 13, fontWeight: 500, color: V.red }}>−{inr(vpfMonthly)}/mo</span></div>
+      </div>
+
+      <div style={{ ...card, background: C.brandTint }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 13, color: V.muted }}>80C usage (₹1.5L max)</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: V.navy }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>
+        </div>
+        <div style={{ height: 8, background: C.line, borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` (no 80C benefit on ${inr(total80c - e.c80_limit)})` : ''}</div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+        <span style={{ color: V.red }}></span>
+        <div style={{ fontSize: 12, color: C.critical, lineHeight: 1.7 }}><strong>Choose carefully:</strong><br />• VPF will <strong>reduce your net in-hand salary</strong><br />• The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)<br />• It is deducted every month until you stop it</div>
+      </div>
+
+      <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
+        <input type="checkbox" checked={ack} onChange={e2 => setAck(e2.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: V.purple }} />
+        <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.</span>
+      </label>
+
+      <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 10, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : C.canvas, color: ack ? C.surface : C.muted, cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
     </div>
   )
 }
 
 // ── Corporate NPS enrolment (80CCD(2)) — % of Basic by regime ──
-// Presentation only changed; state, validation, submit / PRAN / stop are as before.
-function NpsRegimeTile({ label, pct, mine, amount }: { label: string; pct: string; mine: boolean; amount?: string }) {
-  return (
-    <div style={{
-      flex: '1 1 160px', minWidth: 0, padding: `${S.md}px ${S.lg}px`, borderRadius: R.md,
-      background: mine ? C.brandTint : C.surface, border: `1px solid ${mine ? C.brand : C.line}`,
-      boxShadow: mine ? `0 0 0 3px ${C.brandTint}` : 'none',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: F.small, fontWeight: W.semi, color: mine ? C.brandDeep : C.inkSoft }}>{label}</span>
-        {mine && <KitPill t="brand" size="sm" icon={<IconCheckCircle size={11} />}>Your regime</KitPill>}
-      </div>
-      <div style={{ marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span style={{ fontSize: F.display - 4, fontWeight: W.bold, color: mine ? C.brandDeep : C.ink, ...numeric }}>{pct}</span>
-        <span style={{ fontSize: F.tiny, color: C.muted }}>of Basic</span>
-      </div>
-      {amount && <div style={{ fontSize: F.tiny, color: C.inkSoft, marginTop: 2, ...numeric }}>{amount}</div>}
-    </div>
-  )
-}
-
 function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, amber: C.warning, amberBg: C.warningTint, blue: C.brand, blueBg: C.brandTint, teal: C.positive, bg:C.canvas }
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [hasPran, setHasPran] = useState(true)
@@ -2585,14 +2513,17 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   }, [emp.id])
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingBlock label="Loading your NPS details…" />
+  if (loading) return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading…</div>
   const e = data?.employee
-  if (!e) return <InfoCallout t="critical" title="Salary data not found.">Your NPS figures need your salary structure. Please check with HR / Payroll.</InfoCallout>
+  if (!e) return <div style={{ padding: 20, color: V.red, fontSize: 13 }}>Salary data not found.</div>
   const current = data?.current_nps
   const effFmt = new Date(e.effective_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
   const pranClean = pran.replace(/\D/g, '')
   const pranValid = pranClean.length === e.pran_length
   const canSubmit = ack && (!hasPran || pranValid)
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }
+  const label: React.CSSProperties = { fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }
+  const input: React.CSSProperties = { width: '100%', padding: 10, borderRadius: 10, border: `1px solid ${V.border}`, fontSize: 14, boxSizing: 'border-box', fontFamily: 'inherit' }
 
   const submit = async () => {
     setSaving(true)
@@ -2612,120 +2543,94 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     if (res.ok) { notify('NPS stopped'); load() } else notify('Failed to stop', 'error')
   }
 
-  const isOld = e.tax_regime === 'OLD'
-  const pranHintTone: KitTone = pran.length === 0 ? 'neutral' : pranValid ? 'positive' : 'warning'
-
   return (
     <div>
-      <ScreenIntro icon={<IconUmbrella size={20} />} title="Corporate NPS enrolment"
-        subtitle="Employer contributes to your NPS (Tier I). Extra tax benefit under Section 80CCD(2)."
-        right={current
-          ? (current.status === 'PENDING_PRAN'
-              ? <KitPill t="info" dot>PRAN pending</KitPill>
-              : <KitPill t="positive" dot>Active · {current.contribution_percent}%</KitPill>)
-          : <KitPill dot>Not enrolled</KitPill>} />
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Corporate NPS enrolment</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I). Extra tax benefit under Section 80CCD(2).</div>
+      </div>
 
       {!e.has_ctc && (
-        <InfoCallout t="warning" title="Your CTC is not configured yet">
-          Your CTC (Basic) isn&apos;t configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).
-        </InfoCallout>
+        <div style={{ ...card, background: V.amberBg, border: `1px solid ${C.warningTint}` }}>
+          <span style={{ fontSize: 12, color: C.warning }}>Your CTC (Basic) isn't configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).</span>
+        </div>
       )}
 
-      {current && (current.status === 'PENDING_PRAN' ? (
-        <InfoCallout t="info" title={`PRAN pending: generate & submit by ${current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '-'}.`}>
-          <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap', marginTop: S.sm }}>
-            <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`}
-              aria-label="PRAN number" style={{ ...inputSkin({ mono: true }), flex: '1 1 200px', width: 'auto' }} />
-            <PButton variant="primary" size="lg" onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length}>Submit PRAN</PButton>
-          </div>
-        </InfoCallout>
-      ) : (
-        <InfoCallout t="positive" compact title={`Active NPS: ${current.contribution_percent}% of Basic (${inr(current.monthly_nps_amount)}/mo)`}
-          action={<PButton size="sm" variant="danger" onClick={stop}>Stop NPS</PButton>} />
-      ))}
-
-      <TwoCol>
-        {/* What the company will put in */}
-        <SectionCard icon={<IconPercent size={16} />} title="Your contribution" hint="From your salary structure">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: S.sm }}>
-            {[
-              { l: 'Monthly Basic', v: inr(e.basic_monthly) },
-              { l: 'Tax regime', v: isOld ? 'Old' : 'New' },
-              { l: 'NPS rate', v: `${e.contribution_percent}%`, brand: true },
-            ].map(x => (
-              <div key={x.l} style={{ minWidth: 0, padding: `${S.sm + 2}px ${S.md}px`, background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.md }}>
-                <div style={{ ...eyebrow }}>{x.l}</div>
-                <div style={{ fontSize: F.lead, fontWeight: W.bold, color: x.brand ? C.brandDeep : C.ink, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...numeric }}>{x.v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius: R.md, padding: `${S.md}px ${S.lg}px`, marginTop: S.md, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: S.md, flexWrap: 'wrap' }}>
+      {current && (
+        <div style={{ ...card, background: current.status === 'PENDING_PRAN' ? V.blueBg: C.sunken, border: `1px solid ${current.status === 'PENDING_PRAN' ? '#B5D4F4' : '#C5E8DB'}` }}>
+          {current.status === 'PENDING_PRAN' ? (
             <div>
-              <div style={{ ...eyebrow, color: C.brandDeep }}>Monthly NPS contribution</div>
-              <div style={{ fontSize: F.display - 2, fontWeight: W.bold, color: C.brandDeep, marginTop: 3, letterSpacing: '-.02em', ...numeric }}>{inr(e.monthly_nps_amount)}<span style={{ fontSize: F.small, fontWeight: W.medium, color: C.muted }}>/mo</span></div>
+              <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending: generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '-'}.</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`} style={{ ...input, letterSpacing: 2 }} />
+                <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: V.purple, color: C.onAccent, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
+              </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ ...eyebrow }}>Effective from</div>
-              <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, marginTop: 3 }}>{effFmt}</div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: V.teal }}>Active NPS: {current.contribution_percent}% of Basic ({inr(current.monthly_nps_amount)}/mo)</span>
+              <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: C.surface, color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop NPS</button>
             </div>
-          </div>
-        </SectionCard>
-
-        {/* The regime comparison */}
-        <SectionCard icon={<IconTrendUp size={16} />} title="How the rate is set" hint="The company’s contribution follows your tax regime">
-          <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
-            <NpsRegimeTile label="Old regime" pct="10%" mine={isOld} amount={isOld ? `${inr(e.monthly_nps_amount)}/mo for you` : undefined} />
-            <NpsRegimeTile label="New regime" pct="14%" mine={!isOld} amount={!isOld ? `${inr(e.monthly_nps_amount)}/mo for you` : undefined} />
-          </div>
-          <div style={{ fontSize: F.tiny, color: C.muted, marginTop: S.md }}>Old regime = 10% of Basic · New regime = 14% of Basic</div>
-        </SectionCard>
-      </TwoCol>
-
-      {/* Enrolment */}
-      <SectionCard icon={<IconPen size={16} />} title="Enrol"
-        hint="PRAN is your Permanent Retirement Account Number: the ID of your NPS account.">
-        <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.inkSoft, marginBottom: S.sm }}>Do you already have an NPS account (PRAN)?</div>
-        <div role="radiogroup" aria-label="Do you already have an NPS account (PRAN)?" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: S.sm, marginBottom: S.lg }}>
-          <ChoiceCard selected={hasPran} onClick={() => setHasPran(true)} title="Yes, I have a PRAN" sub="Enter it below and we link the company contribution to it" />
-          <ChoiceCard selected={!hasPran} onClick={() => setHasPran(false)} title="No, I need one" sub="We email you the form to create one" />
+          )}
         </div>
+      )}
 
-        {hasPran ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
-            <LabeledField label={`PRAN number (${e.pran_length} digits)`} hintTone={pranHintTone}
-              hint={pran.length === 0 ? `Enter your ${e.pran_length}-digit PRAN` : pranValid ? `Valid ${e.pran_length}-digit PRAN` : `${e.pran_length - pranClean.length} more digit(s) needed`}>
-              <input type="text" value={pran} maxLength={e.pran_length} onChange={e2 => setPran(e2.target.value.replace(/\D/g, ''))} placeholder="e.g. 110012345678"
-                style={inputSkin({ mono: true })} />
-            </LabeledField>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: S.md }}>
-              <LabeledField label="Name as per PRAN"><input type="text" value={pranName} onChange={e2 => setPranName(e2.target.value)} style={inputSkin()} /></LabeledField>
-              <LabeledField label="Account tier"><select value={tier} onChange={e2 => setTier(e2.target.value)} style={{ ...inputSkin(), cursor: 'pointer' }}><option>Tier I</option><option>Tier II</option></select></LabeledField>
-            </div>
-          </div>
-        ) : (
-          <InfoCallout t="info" style={{ marginBottom: 0 }} title="A new PRAN will be created for you.">
-            On submit, we&apos;ll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.
-          </InfoCallout>
-        )}
-      </SectionCard>
-
-      <InfoCallout t="warning" title="Please read carefully">
-        <PointList t="warning" items={[
-          <>NPS is a long-term retirement product, locked in until age 60 (limited early withdrawal)</>,
-          <>Employer contribution is over &amp; above your ₹1.5L 80C limit (Section 80CCD(2))</>,
-          <>Recurring monthly contribution, reflects in your salary structure</>,
-          <>Rate follows your tax regime (10% old / 14% new of Basic)</>,
-        ]} />
-      </InfoCallout>
-
-      <ActionBar hint={hasPran ? (pranValid ? 'Ready when you are: tick the box and submit.' : `Enter your ${e.pran_length}-digit PRAN and tick the box to submit.`) : 'We will email you the PRAN form after you submit.'}>
-        <div style={{ width: '100%' }}>
-          <ConsentCheck checked={ack} onChange={setAck}>
-            I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.
-          </ConsentCheck>
+      <div style={{ ...card, background: C.brandTint }}>
+        <div style={{ fontSize: 12, color: V.muted, marginBottom: 8 }}>Your contribution (from salary structure)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div><div style={{ fontSize: 11, color: V.muted }}>Monthly Basic</div><div style={{ fontSize: 15, fontWeight: 500, color: V.navy }}>{inr(e.basic_monthly)}</div></div>
+          <div><div style={{ fontSize: 11, color: V.muted }}>Tax regime</div><div style={{ fontSize: 15, fontWeight: 500, color: V.navy }}>{e.tax_regime === 'OLD' ? 'Old' : 'New'}</div></div>
+          <div><div style={{ fontSize: 11, color: V.muted }}>NPS rate</div><div style={{ fontSize: 15, fontWeight: 500, color: V.purpleDark }}>{e.contribution_percent}%</div></div>
         </div>
-        <PButton variant="primary" size="lg" full disabled={!canSubmit || saving} onClick={submit}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</PButton>
-      </ActionBar>
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${V.border}`, marginTop: 10, paddingTop: 8 }}>
+          <span style={{ fontSize: 12, color: V.muted }}>Monthly NPS contribution</span><span style={{ fontSize: 14, fontWeight: 500, color: V.purpleDark }}>{inr(e.monthly_nps_amount)}/mo</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
+          <span style={{ fontSize: 12, color: V.muted }}>Effective from</span><span style={{ fontSize: 13, color: V.navy }}>{effFmt}</span>
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Old regime = 10% of Basic · New regime = 14% of Basic</div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: V.muted, marginBottom: 8 }}>Do you already have an NPS account (PRAN)?</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setHasPran(true)} style={{ flex: 1, padding: 10, borderRadius: 10, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: hasPran ? V.bg: C.surface, color: hasPran ? V.purpleDark : V.navy }}>Yes, I have a PRAN</button>
+          <button onClick={() => setHasPran(false)} style={{ flex: 1, padding: 10, borderRadius: 10, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: !hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: !hasPran ? V.bg: C.surface, color: !hasPran ? V.purpleDark : V.navy }}>No, I need one</button>
+        </div>
+      </div>
+
+      {hasPran ? (
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <label style={label}>PRAN number ({e.pran_length} digits)</label>
+            <input type="text" value={pran} maxLength={e.pran_length} onChange={e2 => setPran(e2.target.value.replace(/\D/g, ''))} placeholder="e.g. 110012345678" style={{ ...input, letterSpacing: 2 }} />
+            <div style={{ fontSize: 11, marginTop: 4, color: pran.length === 0 ? V.muted : pranValid ? V.teal : V.amber }}>{pran.length === 0 ? `Enter your ${e.pran_length}-digit PRAN` : pranValid ? `Valid ${e.pran_length}-digit PRAN` : `${e.pran_length - pranClean.length} more digit(s) needed`}</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div><label style={label}>Name as per PRAN</label><input type="text" value={pranName} onChange={e2 => setPranName(e2.target.value)} style={input} /></div>
+            <div><label style={label}>Account tier</label><select value={tier} onChange={e2 => setTier(e2.target.value)} style={input}><option>Tier I</option><option>Tier II</option></select></div>
+          </div>
+        </>
+      ) : (
+        <div style={{ background: V.blueBg, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <span style={{ color: V.blue }}></span>
+            <div style={{ fontSize: 12, color: C.brand, lineHeight: 1.7 }}><strong>A new PRAN will be created for you.</strong><br />On submit, we'll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.</div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+        <span style={{ color: V.amber }}></span>
+        <div style={{ fontSize: 12, color: C.warning, lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product, locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
+      </div>
+
+      <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
+        <input type="checkbox" checked={ack} onChange={e2 => setAck(e2.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: V.purple }} />
+        <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.</span>
+      </label>
+
+      <button disabled={!canSubmit || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 10, fontWeight: 500, fontFamily: 'inherit', border: canSubmit ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: canSubmit ? V.purple : C.canvas, color: canSubmit ? C.surface : C.muted, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
     </div>
   )
 }
@@ -2733,6 +2638,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 // ════════════════════════════════════════════════════════════════
 // LOANS (ESS) — apply, track requests, sign agreement, manage loans
 // ════════════════════════════════════════════════════════════════
+const LOAN_V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint, teal: C.positive, tealBg: C.sunken, bg:C.canvas }
 const loanInr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 // reducing-balance EMI
 function loanEmi(P: number, ratePct: number, n: number): number {
@@ -2742,21 +2648,21 @@ function loanEmi(P: number, ratePct: number, n: number): number {
   const f = Math.pow(1 + r, n)
   return Math.round(P * r * f / (f - 1))
 }
-/** Loan / request status → pill tone. Same buckets as before: waiting, in review, good, stopped, finished. */
-const LOAN_TONE: Record<string, KitTone> = {
-  SUBMITTED:'warning', IN_APPROVAL:'warning', REQUESTED:'warning', GENERATED:'warning', UNDER_REVIEW:'brand', PENDING_PRAN:'brand',
-  APPROVED:'positive', RECOVERING:'positive', DISBURSED:'positive', SIGNED:'positive',
-  REJECTED:'critical', CANCELLED:'critical', EXIT_RECOVERY:'critical',
-  CLOSED:'neutral', FORECLOSED:'neutral',
-}
 function LoanStatusBadge({ status }: { status: string }) {
   const s = (status || '').toUpperCase()
-  const text = s.replace(/_/g,' ')
-  return <KitPill t={LOAN_TONE[s] || 'brand'} dot size="sm" title={s}>{text.charAt(0) + text.slice(1).toLowerCase()}</KitPill>
+  const map: Record<string, [string, string]> = {
+    SUBMITTED:[C.warningTint,C.warning], IN_APPROVAL:[C.warningTint,C.warning], REQUESTED:[C.warningTint,C.warning], GENERATED:[C.warningTint,C.warning], UNDER_REVIEW:[C.brandTint,C.brand], PENDING_PRAN:[C.brandTint,C.brand],
+    APPROVED:[C.sunken,C.positive], RECOVERING:[C.sunken,C.positive], DISBURSED:[C.sunken,C.positive], SIGNED:[C.sunken,C.positive],
+    REJECTED:[C.criticalTint,C.critical], CANCELLED:[C.criticalTint,C.critical], EXIT_RECOVERY:[C.criticalTint,C.critical],
+    CLOSED:[C.sunken,C.muted], FORECLOSED:[C.sunken,C.muted],
+  }
+  const [bg, c] = map[s] || [C.brandTint,C.brandDeep]
+  return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{s.replace(/_/g,' ')}</span>
 }
 
 // Inline agreement signing panel
 function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: { requestId: string; employeeId: string; notify: (m: string, t?: 'success'|'error') => void; onClose: () => void; onDone: () => void }) {
+  const V = LOAN_V
   const [agr, setAgr] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<'ESIGN'|'UPLOAD'>('ESIGN')
@@ -2769,6 +2675,8 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       setAgr(d?.agreement || null); setLoading(false)
     }).catch(() => setLoading(false))
   }, [requestId])
+  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:14, padding:16, marginBottom:14 }
+  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:10, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
 
   const submit = async () => {
     if (!agr) return
@@ -2785,63 +2693,68 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
     else notify('Failed: ' + (d.error || ''), 'error')
   }
 
-  if (loading) return <SectionCard icon={<IconPen size={16} />} title="Sign agreement"><div style={{ color:C.muted, fontSize:F.small }}>Loading agreement…</div></SectionCard>
+  if (loading) return <div style={{ ...card }}><div style={{ color:V.muted, fontSize:13 }}>Loading agreement…</div></div>
   if (!agr) return (
-    <SectionCard icon={<IconPen size={16} />} title="Sign agreement" actions={<PButton size="sm" onClick={onClose}>Close</PButton>}>
-      <InfoCallout t="warning" compact style={{ marginBottom: 0 }} title="No agreement found yet. Please check back shortly." />
-    </SectionCard>
+    <div style={card}>
+      <div style={{ fontSize:13, color:V.red, marginBottom:8 }}>No agreement found yet. Please check back shortly.</div>
+      <button onClick={onClose} style={{ padding:'7px 13px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:12 }}>Close</button>
+    </div>
   )
   const schedule: any[] = Array.isArray(agr.schedule_snapshot) ? agr.schedule_snapshot : (typeof agr.schedule_snapshot === 'string' ? (() => { try { return JSON.parse(agr.schedule_snapshot) } catch { return [] } })() : [])
+  const th: React.CSSProperties = { fontSize:10, textAlign:'right', padding:'6px 8px', color:V.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }
+  const td: React.CSSProperties = { fontSize:11, textAlign:'right', padding:'6px 8px', color:V.navy, whiteSpace:'nowrap' }
   return (
-    <SectionCard icon={<IconPen size={16} />} title={`Sign agreement: ${agr.agreement_number}`}
-      hint="Check the repayment schedule, then sign below"
-      style={{ borderColor: C.brandEdge, boxShadow: `0 0 0 3px ${C.brandTint}, ${E.raised}` }}
-      actions={<>
-        <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" className="ez-press" style={btnStyle('secondary', 'sm')}><IconFile size={14} />View / print</a>
-        <PButton size="sm" variant="ghost" onClick={onClose}>Close</PButton>
-      </>}>
-      <DataTable framed minWidth={520} maxHeight={320} style={{ marginBottom: S.lg }}>
-        <thead><tr>
-          <th style={dt.th}>#</th><th style={dt.thNum}>Due</th><th style={dt.thNum}>EMI</th><th style={dt.thNum}>Principal</th><th style={dt.thNum}>Interest</th><th style={dt.thNum}>Closing</th>
-        </tr></thead>
-        <tbody>
-          {schedule.map((s, i) => (
-            <tr key={i} className={dt.rowClass}>
-              <td style={dt.tdMono}>{s.installment_number}</td>
-              <td style={dt.tdNum}>{s.due_date || s.month || '-'}</td>
-              <td style={{ ...dt.tdNum, fontWeight: W.semi }}>{loanInr(s.emi_amount)}</td>
-              <td style={dt.tdNum}>{loanInr(s.principal_component)}</td>
-              <td style={dt.tdNum}>{loanInr(s.interest_component)}</td>
-              <td style={dt.tdNum}>{loanInr(s.closing_balance)}</td>
-            </tr>
-          ))}
-          {schedule.length === 0 && <tr><td colSpan={6} style={{ ...dt.td, textAlign:'center', color:C.muted }}>No schedule rows.</td></tr>}
-        </tbody>
-      </DataTable>
-      <SegmentedTabs<'ESIGN'|'UPLOAD'> value={mode} onChange={setMode} items={[
-        { key: 'ESIGN', label: 'E-sign', icon: <IconPen size={14} /> },
-        { key: 'UPLOAD', label: 'Upload signed PDF', icon: <IconFile size={14} /> },
-      ]} />
+    <div style={{ ...card, borderColor:V.purple }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement: {agr.agreement_number}</div>
+        <div style={{ display:'flex', gap:8 }}>
+          <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, textDecoration:'none', fontSize:11 }}>View / print</a>
+          <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
+        </div>
+      </div>
+      <div style={{ overflowX:'auto', border:`1px solid ${V.border}`, borderRadius:10, marginBottom:14 }}>
+        <table style={{ borderCollapse:'collapse', width:'100%', minWidth:520 }}>
+          <thead><tr style={{ background: C.brandTint }}>
+            <th style={{ ...th, textAlign:'left' }}>#</th><th style={th}>Due</th><th style={th}>EMI</th><th style={th}>Principal</th><th style={th}>Interest</th><th style={th}>Closing</th>
+          </tr></thead>
+          <tbody>
+            {schedule.map((s, i) => (
+              <tr key={i} style={{ borderTop:`1px solid ${V.border}` }}>
+                <td style={{ ...td, textAlign:'left' }}>{s.installment_number}</td>
+                <td style={td}>{s.due_date || s.month || '-'}</td>
+                <td style={td}>{loanInr(s.emi_amount)}</td>
+                <td style={td}>{loanInr(s.principal_component)}</td>
+                <td style={td}>{loanInr(s.interest_component)}</td>
+                <td style={td}>{loanInr(s.closing_balance)}</td>
+              </tr>
+            ))}
+            {schedule.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign:'center', color:V.muted }}>No schedule rows.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+        <button onClick={() => setMode('ESIGN')} style={{ flex:1, padding:9, borderRadius:10, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='ESIGN' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='ESIGN' ? V.bg: C.surface, color: mode==='ESIGN' ? V.purpleDark : V.navy }}>E-sign</button>
+        <button onClick={() => setMode('UPLOAD')} style={{ flex:1, padding:9, borderRadius:10, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='UPLOAD' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='UPLOAD' ? V.bg: C.surface, color: mode==='UPLOAD' ? V.purpleDark : V.navy }}>Upload signed PDF</button>
+      </div>
       {mode === 'ESIGN' ? (
-        <div style={{ marginBottom: S.lg }}>
-          <LabeledField label="Type your full legal name to sign">
-            <input value={esignName} onChange={e => setEsignName(e.target.value)} placeholder="e.g. Rahul Sharma" style={inputSkin()} />
-          </LabeledField>
-          {esignName.trim() && <div style={{ marginTop:S.sm, padding:'12px 16px', border:`1px dashed ${C.brand}`, borderRadius:R.md, background: C.brandTint, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:24, color:C.brandDeep }}>{esignName}</div>}
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:12, color:V.muted, display:'block', marginBottom:6 }}>Type your full legal name to sign</label>
+          <input value={esignName} onChange={e => setEsignName(e.target.value)} placeholder="e.g. Rahul Sharma" style={input} />
+          {esignName.trim() && <div style={{ marginTop:8, padding:'10px 14px', border:`1px dashed ${V.purple}`, borderRadius:10, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:22, color:V.purpleDark }}>{esignName}</div>}
         </div>
       ) : (
-        <div style={{ marginBottom: S.lg }}>
-          <LabeledField label="URL of your signed agreement PDF">
-            <input value={pdfUrl} onChange={e => setPdfUrl(e.target.value)} placeholder="https://…/signed-agreement.pdf" style={inputSkin()} />
-          </LabeledField>
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:12, color:V.muted, display:'block', marginBottom:6 }}>URL of your signed agreement PDF</label>
+          <input value={pdfUrl} onChange={e => setPdfUrl(e.target.value)} placeholder="https://…/signed-agreement.pdf" style={input} />
         </div>
       )}
-      <PButton variant="primary" size="lg" full disabled={saving} onClick={submit} style={saving ? { cursor: 'wait' } : undefined}>{saving ? 'Submitting…' : 'Submit signed agreement'}</PButton>
-    </SectionCard>
+      <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:10, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
+    </div>
   )
 }
 
 function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = LOAN_V
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [typeId, setTypeId] = useState('')
@@ -2860,7 +2773,11 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   }, [emp.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingBlock label="Loading your loans…" />
+  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:14, padding:16, marginBottom:14 }
+  const label: React.CSSProperties = { fontSize:12, color:V.muted, display:'block', marginBottom:6 }
+  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:10, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
+
+  if (loading) return <div style={{ padding:20, color:V.muted, fontSize:13 }}>Loading…</div>
 
   const loanTypes: any[] = data?.loan_types || []
   const myLoans: any[] = data?.my_loans || []
@@ -2900,166 +2817,109 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     else notify(d.error || 'Failed', 'error')
   }
 
-  // Read-only summaries of what was loaded — display only.
-  const maxEligible = loanTypes.reduce((m: number, t: any) => Math.max(m, Number(t.max_eligible) || 0), 0)
-  const totalOutstanding = myLoans.reduce((s: number, l: any) => s + (Number(l.outstanding_principal) || 0), 0)
-  const totalEmi = myLoans.filter((l: any) => (l.status || '').toUpperCase() === 'RECOVERING').reduce((s: number, l: any) => s + (Number(l.emi_amount) || 0), 0)
-  const amountOver = !!sel && amtNum > Number(sel.max_eligible)
-  const tenureOut = !!sel && tenNum > 0 && (tenNum < sel.min_tenure_months || tenNum > sel.max_tenure_months)
-  const totalRepay = indicativeEmi * tenNum
+  const row: React.CSSProperties = { display:'flex', justifyContent:'space-between', gap:10, padding:'8px 0', borderBottom:`1px solid ${V.border}`, fontSize:13, alignItems:'center', flexWrap:'wrap' }
 
   return (
     <div>
-      <ScreenIntro icon={<IconLoans size={20} />} title="Loans"
-        subtitle="Apply for a company loan, track approvals, sign your agreement, and manage repayments."
-        right={pending.length > 0 ? <KitPill t="warning" dot>{pending.length} pending</KitPill> : undefined} />
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:18, fontWeight:600, color:V.navy }}>Loans</div>
+        <div style={{ fontSize:13, color:V.muted, marginTop:2 }}>Apply for a company loan, track approvals, sign your agreement, and manage repayments.</div>
+      </div>
 
       {!hasCtc && (
-        <InfoCallout t="warning" compact title="CTC not configured: eligibility shows ₹0; ask HR to set CTC." />
+        <div style={{ ...card, background:V.amberBg, border: `1px solid ${C.warningTint}` }}>
+          <span style={{ fontSize:12, color: C.warning }}>CTC not configured: eligibility shows ₹0; ask HR to set CTC.</span>
+        </div>
       )}
 
-      <KpiGrid min={150}>
-        <KpiTile emphasis label="You can borrow up to" value={loanInr(maxEligible)} icon={<IconWallet size={15} />}
-          sub={loanTypes.length ? `Across ${loanTypes.length} loan type${loanTypes.length === 1 ? '' : 's'}` : 'No loan types yet'} />
-        <KpiTile label="My loans" value={myLoans.length} icon={<IconLoans size={15} />} sub={totalEmi ? `${loanInr(totalEmi)}/mo in EMIs` : 'No EMIs running'} />
-        <KpiTile label="Outstanding" value={loanInr(totalOutstanding)} icon={<IconTrendUp size={15} />} sub="Principal left to repay" />
-        <KpiTile label="Pending requests" value={pending.length} t={pending.length ? 'warning' : 'neutral'} icon={<IconFile size={15} />} sub={pending.length ? 'Waiting on approval or signature' : 'Nothing waiting'} />
-      </KpiGrid>
-
       {/* Apply for a loan */}
-      <SectionCard icon={<IconPen size={16} />} title="Apply for a loan" hint="Pick a loan, set the amount and tenure, and see your EMI before you submit">
-        {loanTypes.length === 0 ? (
-          <EmptyState compact icon={<IconLoans size={20} />} title="No loan types configured for your company." hint="When HR sets up a loan policy, it will appear here." />
-        ) : (
+      <div style={card}>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy, marginBottom:12 }}>Apply for a loan</div>
+        {loanTypes.length === 0 ? <div style={{ fontSize:12, color:V.muted }}>No loan types configured for your company.</div> : (
           <>
-            <div style={{ ...eyebrow, marginBottom: S.sm }}>Available loans</div>
-            <div role="radiogroup" aria-label="Available loans" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: S.sm, marginBottom: S.lg }}>
-              {loanTypes.map((t: any) => (
-                <ChoiceCard key={t.id} selected={t.id === typeId} onClick={() => setTypeId(t.id)} title={t.name}
-                  badge={<KitPill size="sm" t="info">{Number(t.interest_rate) || 0}%{t.interest_type ? ` ${String(t.interest_type).toLowerCase()}` : ''}</KitPill>}
-                  sub={<>Up to <strong style={{ color: C.ink }}>{loanInr(t.max_eligible)}</strong> · {t.min_tenure_months}–{t.max_tenure_months} months</>} />
-              ))}
+            <div style={{ marginBottom:12 }}>
+              <label style={label}>Loan type</label>
+              <select value={typeId} onChange={e => setTypeId(e.target.value)} style={input}>
+                {loanTypes.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              {sel && <div style={{ fontSize:11, color:V.purpleDark, marginTop:6 }}>Max eligible {loanInr(sel.max_eligible)} · {Number(sel.interest_rate) || 0}% {sel.interest_type ? `(${sel.interest_type})` : ''} · tenure {sel.min_tenure_months}–{sel.max_tenure_months} months</div>}
             </div>
-
-            <TwoCol min={300} gap={S.xl}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: S.md, minWidth: 0 }}>
-                <LabeledField label="Loan type" hintTone="brand"
-                  hint={sel ? <>Max eligible {loanInr(sel.max_eligible)} · {Number(sel.interest_rate) || 0}% {sel.interest_type ? `(${sel.interest_type})` : ''} · tenure {sel.min_tenure_months}–{sel.max_tenure_months} months</> : undefined}>
-                  <select value={typeId} onChange={e => setTypeId(e.target.value)} style={{ ...inputSkin(), cursor: 'pointer' }}>
-                    {loanTypes.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </LabeledField>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: S.md }}>
-                  <LabeledField label="Amount (₹)" hintTone="critical" hint={sel && amtNum > Number(sel.max_eligible) ? `Max eligible is ${loanInr(sel.max_eligible)}` : undefined}>
-                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 100000" style={{ ...inputSkin({ invalid: amountOver }), ...numeric }} />
-                  </LabeledField>
-                  <LabeledField label="Tenure (months)" hintTone="critical" hint={sel && tenNum > 0 && (tenNum < sel.min_tenure_months || tenNum > sel.max_tenure_months) ? `Tenure must be ${sel.min_tenure_months}–${sel.max_tenure_months} months` : undefined}>
-                    <input type="number" value={tenure} onChange={e => setTenure(e.target.value)} placeholder={sel ? `${sel.min_tenure_months}–${sel.max_tenure_months}` : 'months'} style={{ ...inputSkin({ invalid: tenureOut }), ...numeric }} />
-                  </LabeledField>
-                </div>
-                <LabeledField label="Reason">
-                  <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Purpose of the loan…" style={{ ...inputSkin(), height: 'auto', minHeight:84, padding: '10px 14px', resize:'vertical', lineHeight: 1.5 }} />
-                </LabeledField>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+              <div>
+                <label style={label}>Amount (₹)</label>
+                <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 100000" style={input} />
+                {sel && amtNum > Number(sel.max_eligible) && <div style={{ fontSize:11, color:V.red, marginTop:4 }}>Max eligible is {loanInr(sel.max_eligible)}</div>}
               </div>
-
-              {/* EMI preview */}
-              <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: S.md }}>
-                <div style={{ background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.lg, padding: S.lg }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ display: 'inline-flex', color: C.brand }}><IconCalculator size={15} /></span>
-                    <span style={{ ...eyebrow }}>Indicative EMI (reducing balance)</span>
-                  </div>
-                  <div style={{ marginTop: S.sm, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span style={{ fontSize: F.display + 4, fontWeight: W.bold, color: indicativeEmi ? C.brandDeep : C.faint, letterSpacing: '-.02em', ...numeric }}>{loanInr(indicativeEmi)}</span>
-                    <span style={{ fontSize: F.small, color: C.muted }}>/mo</span>
-                  </div>
-                  <div style={{ marginTop: S.md }}>
-                    <StatLine first label="Loan amount" value={amtNum ? loanInr(amtNum) : '—'} />
-                    <StatLine label="Tenure" value={tenNum ? `${tenNum} months` : '—'} />
-                    <StatLine label="Interest rate" value={sel ? `${rate}%${sel.interest_type ? ` ${String(sel.interest_type).toLowerCase()}` : ''}` : '—'} />
-                    <StatLine label="Total you repay" sub={indicativeEmi && tenNum ? `Interest about ${loanInr(Math.max(0, totalRepay - amtNum))}` : 'Enter an amount and tenure'} value={indicativeEmi && tenNum ? loanInr(totalRepay) : '—'} />
-                  </div>
-                </div>
-                <PButton variant="primary" size="lg" full disabled={saving} onClick={submit} style={saving ? { cursor: 'wait' } : undefined}>{saving ? 'Submitting…' : 'Submit loan request'}</PButton>
-                <div style={{ fontSize: F.tiny, color: C.muted, lineHeight: 1.5, textAlign: 'center' }}>Your request goes for approval. Once approved, you sign the agreement here.</div>
+              <div>
+                <label style={label}>Tenure (months)</label>
+                <input type="number" value={tenure} onChange={e => setTenure(e.target.value)} placeholder={sel ? `${sel.min_tenure_months}–${sel.max_tenure_months}` : 'months'} style={input} />
+                {sel && tenNum > 0 && (tenNum < sel.min_tenure_months || tenNum > sel.max_tenure_months) && <div style={{ fontSize:11, color:V.red, marginTop:4 }}>Tenure must be {sel.min_tenure_months}–{sel.max_tenure_months} months</div>}
               </div>
-            </TwoCol>
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <label style={label}>Reason</label>
+              <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Purpose of the loan…" style={{ ...input, minHeight:70, resize:'vertical' }} />
+            </div>
+            <div style={{ ...card, background: C.brandTint, marginBottom:12 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:12, color:V.muted }}>Indicative EMI (reducing balance)</span>
+                <span style={{ fontSize:18, fontWeight:600, color:V.purpleDark }}>{loanInr(indicativeEmi)}<span style={{ fontSize:11, color:V.muted, fontWeight:400 }}>/mo</span></span>
+              </div>
+            </div>
+            <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:10, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
           </>
         )}
-      </SectionCard>
+      </div>
 
       {/* Inline agreement signing */}
       {signingReq && <LoanAgreementPanel requestId={signingReq} employeeId={emp.id} notify={notify} onClose={() => setSigningReq(null)} onDone={() => { setSigningReq(null); load() }} />}
 
       {/* Pending requests */}
-      <SectionCard icon={<IconFile size={16} />} title="Pending requests" actions={pending.length ? <KitPill size="sm" t="warning">{pending.length}</KitPill> : undefined} pad={pending.length ? 0 : S.lg}>
-        {pending.length === 0 ? <EmptyState compact t="positive" title="No pending requests." /> : pending.map((p: any, i: number) => {
+      <div style={card}>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy, marginBottom:10 }}>Pending requests</div>
+        {pending.length === 0 ? <div style={{ fontSize:12, color:V.muted }}>No pending requests.</div> : pending.map((p: any) => {
           const t = loanTypes.find((x: any) => x.id === p.loan_type_id)
-          const approved = (p.status || '').toUpperCase() === 'APPROVED'
           return (
-            <div key={p.id} className="ez-row" style={{ display:'flex', gap:S.md, alignItems:'center', flexWrap:'wrap', padding:`${S.md}px ${S.lg}px`, borderTop: i ? `1px solid ${C.line}` : 'none' }}>
-              <IconTile icon={<IconLoans size={16} />} t={approved ? 'positive' : 'warning'} size={36} />
-              <div style={{ minWidth:0, flex:'1 1 220px' }}>
-                <div style={{ fontSize:F.body, fontWeight:W.semi, color:C.ink, ...numeric }}>{t?.name || 'Loan'} · {loanInr(p.requested_amount)}</div>
-                <div style={{ fontSize:F.tiny, color:C.muted, marginTop:2, ...numeric }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '-'}</div>
+            <div key={p.id} style={row}>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:V.navy }}>{t?.name || 'Loan'} · {loanInr(p.requested_amount)}</div>
+                <div style={{ fontSize:11, color:V.muted, marginTop:2 }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '-'}</div>
               </div>
-              <div style={{ display:'flex', gap:S.sm, alignItems:'center' }}>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 <LoanStatusBadge status={p.status} />
-                {approved && <PButton size="sm" variant="primary" icon={<IconPen size={13} />} onClick={() => setSigningReq(p.id)}>Sign agreement</PButton>}
+                {(p.status || '').toUpperCase() === 'APPROVED' && <button onClick={() => setSigningReq(p.id)} style={{ padding:'6px 12px', borderRadius:7, border:'none', background:V.purple, color:C.onAccent, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Sign agreement</button>}
               </div>
             </div>
           )
         })}
-      </SectionCard>
+      </div>
 
       {/* My loans */}
-      <SectionCard icon={<IconLoans size={16} />} title="My loans" actions={myLoans.length ? <KitPill size="sm">{myLoans.length}</KitPill> : undefined}>
-        {myLoans.length === 0 ? <EmptyState compact title="No active loans." hint="Loans you take will show here with their EMIs and how much is left to repay." /> : (
-          <div style={{ display:'flex', flexDirection:'column', gap:S.md }}>
-            {myLoans.map((l: any) => {
-              const isRecovering = (l.status || '').toUpperCase() === 'RECOVERING'
-              const paid = l.paid_installments ?? 0
-              const remaining = l.remaining_installments ?? 0
-              const total = paid + remaining
-              return (
-                <div key={l.id} style={{ border:`1px solid ${C.line}`, borderRadius:R.lg, padding:S.lg, background:C.surface }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', gap:S.md, alignItems:'center', flexWrap:'wrap' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:S.sm, minWidth:0 }}>
-                      <span style={{ fontSize:F.lead, fontWeight:W.bold, color:C.ink, ...numeric }}>{l.loan_number}</span>
-                      <LoanStatusBadge status={l.status} />
-                    </div>
-                    {isRecovering && (
-                      <div style={{ display:'flex', gap:S.sm }}>
-                        <PButton size="sm" variant="secondary" onClick={() => manage(l, 'PART_PAYMENT')}>Part-payment</PButton>
-                        <PButton size="sm" variant="danger" onClick={() => manage(l, 'CLOSURE')}>Foreclose</PButton>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(130px, 100%), 1fr))', gap:S.sm, marginTop:S.md }}>
-                    {[
-                      { l:'Principal', v: loanInr(l.principal) },
-                      { l:'EMI', v: <>{loanInr(l.emi_amount)}<span style={{ fontSize:F.tiny, color:C.muted, fontWeight:W.medium }}>/mo</span></> },
-                      { l:'Outstanding', v: loanInr(l.outstanding_principal), strong: true },
-                    ].map(x => (
-                      <div key={x.l} style={{ padding:`${S.sm + 2}px ${S.md}px`, background:C.sunken, border:`1px solid ${C.line}`, borderRadius:R.md, minWidth:0 }}>
-                        <div style={{ ...eyebrow }}>{x.l}</div>
-                        <div style={{ fontSize:F.lead, fontWeight:W.bold, color: x.strong ? C.brandDeep : C.ink, marginTop:3, ...numeric }}>{x.v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ marginTop:S.md }}>
-                    <Meter max={total || 1} height={8} ariaLabel="Instalments paid" segments={[{ value: paid, t:'positive' }]} />
-                    <div style={{ display:'flex', justifyContent:'space-between', gap:S.sm, flexWrap:'wrap', marginTop:6, fontSize:F.tiny, color:C.muted, ...numeric }}>
-                      <span>Paid <strong style={{ color:C.ink }}>{paid}</strong> / {total} installments · {remaining} remaining</span>
-                      {l.disbursement_date ? <span>Disbursed {fmt(l.disbursement_date)}</span> : null}
-                    </div>
-                  </div>
+      <div style={card}>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy, marginBottom:10 }}>My loans</div>
+        {myLoans.length === 0 ? <div style={{ fontSize:12, color:V.muted }}>No active loans.</div> : myLoans.map((l: any) => {
+          const isRecovering = (l.status || '').toUpperCase() === 'RECOVERING'
+          return (
+            <div key={l.id} style={{ padding:'10px 0', borderBottom:`1px solid ${V.border}` }}>
+              <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+                <div style={{ fontSize:13, fontWeight:600, color:V.navy }}>{l.loan_number}</div>
+                <LoanStatusBadge status={l.status} />
+              </div>
+              <div style={{ fontSize:12, color:V.muted, marginTop:4, lineHeight:1.7 }}>
+                Principal {loanInr(l.principal)} · EMI {loanInr(l.emi_amount)}/mo · Outstanding <b style={{ color:V.navy }}>{loanInr(l.outstanding_principal)}</b><br />
+                Paid {l.paid_installments ?? 0} / {(l.paid_installments ?? 0) + (l.remaining_installments ?? 0)} installments · {l.remaining_installments ?? 0} remaining
+                {l.disbursement_date ? ` · disbursed ${fmt(l.disbursement_date)}` : ''}
+              </div>
+              {isRecovering && (
+                <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                  <button onClick={() => manage(l, 'CLOSURE')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.red}`, background:C.surface, color:V.red, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Foreclose</button>
+                  <button onClick={() => manage(l, 'PART_PAYMENT')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.purple}`, background:C.surface, color:V.purpleDark, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Part-payment</button>
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </SectionCard>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -4205,11 +4065,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       // lib/today/schema.ts — now say 'tab:social'.
       case 'social':        return <Social employeeId={emp.id} />
       case 'funzone':       return <FunZone employeeId={emp.id} />
-      // Inside Payroll (Salary Slip, Statutory) the placeholder says what the tab will
-      // hold and what it waits on; everywhere else keeps the plain one.
-      default:              return m.section === 'payroll'
-                              ? <PayrollComingSoon viewKey={m.k} title={m.label} phase={m.phase || 4} needs={m.needs || '-'} go={go} />
-                              : <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '-'} />
+      default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '-'} />
     }
   }
 
@@ -4370,23 +4226,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
             // its shape from tab to tab. Home has no heading — its hero is the heading —
             // and on a phone it opens with the feature search the top bar has no room for.
             <div className="ez-page-enter" key={section.k} style={{ padding: isMobile ? '16px 14px' : '24px 28px 40px' }}>
-              {section.k === 'payroll' ? (
-                // Payroll draws its own hub: title, the employee's pay snapshot and the
-                // tabs grouped by purpose (components/ess/payroll/PayrollHub.tsx). Same
-                // items, same go(), so URLs and deep links are unchanged. Pay figures are
-                // never loaded when someone else is viewing this portal (adminMode).
-                <PayrollHub employeeId={emp.id} regime={(emp as any).tds_regime}
-                  title={section.label} desc={section.desc}
-                  items={sectionItems} view={view} go={go}
-                  showPay={!adminMode} isMobile={isMobile} />
-              ) : (
-                <>
-                  {section.k === 'home'
-                    ? (isMobile ? <FeatureSearch entries={searchEntries} /> : null)
-                    : <TabHeader s={section} />}
-                  <SubTabs items={sectionItems} view={view} go={go} />
-                </>
-              )}
+              {section.k === 'home'
+                ? (isMobile ? <FeatureSearch entries={searchEntries} /> : null)
+                : <TabHeader s={section} />}
+              <SubTabs items={sectionItems} view={view} go={go} />
               {renderView()}
             </div>
           )

@@ -9,15 +9,13 @@ import { loadSalary, type SalaryStructure } from '@/lib/employees/hr-actions'
 import * as XLSX from 'xlsx'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import {
-  C as TK, F, W, S, R as RAD, E, M, tone, numeric, eyebrow,
-  IconCheck, IconLock, IconDownload, IconUser, IconPayroll, IconCard, IconCalendar, IconEmployees,
-  IconSliders, IconBuilding, IconFinance, IconHeart, IconAward, IconReceipt,
-} from '@/lib/ui'
-import {
-  SectionCard, SubHead, KpiTile, KpiGrid, KeyValueGrid, StatusPill, InfoCallout, EmptyState,
-  PButton, ActionBar, IconTile, DataTable, dt, IconArrowRight, IconCheckCircle, IconFile, IconLayers,
-} from '@/components/ess/payroll/kit'
+import { C as TK } from '@/lib/ui'
+
+const P = {
+  navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
+  bg: TK.canvas, card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, amber: TK.warning, amberBg: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, teal: TK.positive, tealBg: TK.sunken, purpleBg: TK.brandTint,
+}
 
 // ── Policy constants (OFB flexi + FY 2026-27 tax) ──
 const SLAB_LABELS = ['≤5 LPA', '5.1–7.99 LPA', '8–11.99 LPA', '12–17.99 LPA', '18–24.99 LPA', '25–29.99 LPA', '30–39.99 LPA', '40–49.99 LPA', '50+ LPA']
@@ -71,243 +69,19 @@ function hraCalcPeriod(monthlyHRA: number, basic: number, rentM: number, fromM: 
 
 const MONTHS = ['April 2026', 'May 2026', 'June 2026', 'July 2026', 'August 2026', 'September 2026', 'October 2026', 'November 2026', 'December 2026', 'January 2027', 'February 2027', 'March 2027']
 
-// ── styles (tokens only: light and dark both repaint through lib/ui/theme.css) ──
+// ── styles ──
 const s = {
-  label: { display: 'block', fontSize: F.tiny, fontWeight: W.semi, color: TK.inkSoft, marginBottom: 5, lineHeight: 1.35 } as React.CSSProperties,
-  input: { width: '100%', height: 38, padding: '0 12px', background: TK.surface, border: `1px solid ${TK.lineStrong}`, borderRadius: RAD.md, color: TK.ink, fontSize: F.small, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', ...numeric } as React.CSSProperties,
-  well: { background: TK.sunken, border: `1px solid ${TK.line}`, borderRadius: RAD.md, padding: S.md } as React.CSSProperties,
-  sumRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: S.sm, padding: '10px 12px', borderRadius: RAD.md, fontSize: F.small, fontWeight: W.bold, ...numeric } as React.CSSProperties,
-}
-/** Responsive grid that collapses to one column on a phone instead of squeezing. */
-const grid = (min: number, gap: number = S.md): React.CSSProperties => ({ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}px, 100%), 1fr))`, gap })
-
-function Fg({ label, hint, children }: { label: React.ReactNode; hint?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: S.md, minWidth: 0 }}>
-      <label style={s.label}>{label}</label>
-      {children}
-      {hint}
-    </div>
-  )
+  card: { background: P.card, border: `1px solid ${P.border}`, borderRadius: 14, padding: 16, marginBottom: 14 } as React.CSSProperties,
+  label: { fontSize: 11, color: P.muted, fontWeight: 600, display: 'block', marginBottom: 4 } as React.CSSProperties,
+  input: { width: '100%', padding: '9px 11px', background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, color: P.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
+  g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
+  btn: { padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: P.purple, color: TK.onAccent } as React.CSSProperties,
+  ghost: { padding: '9px 16px', borderRadius: 10, border: `1px solid ${P.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.surface, color: P.navy } as React.CSSProperties,
+  sec: { fontSize: 11, fontWeight: 700, color: P.purpleDark, textTransform: 'uppercase' as const, letterSpacing: '.04em', margin: '14px 0 8px' } as React.CSSProperties,
 }
 
-/** Thin "used of limit" meter under a capped deduction. Display only: the caps themselves live in the tax computation. */
-function LimitMeter({ used, limit }: { used: number; limit: number }) {
-  const pct = limit > 0 ? Math.min(1, used / limit) : 0
-  const full = limit > 0 && used >= limit
-  return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ height: 4, borderRadius: RAD.pill, background: TK.sunken, overflow: 'hidden' }}>
-        <div style={{ width: `${pct * 100}%`, height: '100%', borderRadius: RAD.pill, background: full ? TK.positive : TK.brand, transition: `width ${M.slow}` }} />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: S.sm, fontSize: F.micro, color: TK.muted, marginTop: 3, ...numeric }}>
-        <span>{used > limit ? `${R(limit)} counted (cap reached)` : `${R(used)} used`}</span>
-        <span>of {R(limit)}</span>
-      </div>
-    </div>
-  )
-}
-
-// ── Wizard stepper ──
-const STEP_META = [
-  { label: 'Employee & Salary', hint: 'Your pay on record' },
-  { label: 'Flexi Declaration', hint: 'Tax-free allowances' },
-  { label: 'Investments', hint: 'Rent, 80C, 80D & more' },
-  { label: 'TDS Report', hint: 'Old vs New verdict' },
-]
-
-function WizardStepper({ step, onGo, locked }: { step: number; onGo: (n: number) => void; locked: boolean[] }) {
-  return (
-    <nav aria-label="Calculator steps" className="ez-scroll" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: S.lg }}>
-      <ol style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(140px, 1fr))', gap: S.sm, listStyle: 'none', margin: 0, padding: 0 }}>
-        {STEP_META.map((m, i) => {
-          const n = i + 1, active = step === n, done = step > n, reachable = n <= step
-          const accent = done ? TK.positive : active ? TK.brand : TK.line
-          return (
-            <li key={m.label} style={{ minWidth: 0 }}>
-              <button onClick={() => n <= step && onGo(n)} aria-current={active ? 'step' : undefined} className={reachable && !active ? 'ez-press' : undefined} style={{
-                width: '100%', height: '100%', textAlign: 'left', fontFamily: 'inherit', cursor: reachable ? 'pointer' : 'default',
-                background: active ? TK.surface : done ? TK.surface : TK.sunken, borderRadius: RAD.lg, padding: `${S.md}px ${S.md + 2}px ${S.md}px`,
-                border: `1px solid ${active ? TK.brandEdge : TK.line}`, boxShadow: active ? E.raised : 'none', position: 'relative', overflow: 'hidden',
-                transition: `box-shadow ${M.quick}, border-color ${M.quick}`,
-              }}>
-                <span aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 3, background: accent }} />
-                <span style={{ display: 'flex', alignItems: 'center', gap: S.sm }}>
-                  <span style={{
-                    width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: F.micro, fontWeight: W.bold, boxSizing: 'border-box', ...numeric,
-                    background: done ? TK.positive : active ? TK.brand : TK.surface, color: done || active ? TK.onAccent : TK.muted,
-                    border: done || active ? 'none' : `1.5px solid ${TK.lineStrong}`,
-                  }}>{done ? <IconCheck size={13} strokeWidth={2.4} /> : n}</span>
-                  <span style={{ fontSize: F.small, fontWeight: active ? W.bold : W.semi, color: active || done ? TK.ink : TK.muted, lineHeight: 1.25, minWidth: 0 }}>{m.label}</span>
-                </span>
-                <span style={{ display: 'block', fontSize: F.micro, color: TK.muted, marginTop: 6, lineHeight: 1.35 }}>{m.hint}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: F.micro, fontWeight: W.semi, color: locked[i] ? TK.muted : done ? TK.positive : active ? TK.brandDeep : TK.faint }}>
-                  {locked[i] ? <><IconLock size={11} /> Locked</> : done ? 'Done' : active ? 'You are here' : `Step ${n} of 4`}
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ol>
-    </nav>
-  )
-}
-
-// ── Step 1 pieces ──
-type SalaryRowKind = 'sub' | 'net' | 'total'
-function SalaryRow({ label, m, kind }: { label: string; m: number; kind?: SalaryRowKind }) {
-  const bg = kind === 'total' ? TK.brandTint : kind === 'net' ? TK.positiveTint : kind === 'sub' ? TK.sunken : undefined
-  const col = kind === 'total' ? TK.brandDeep : kind === 'net' ? TK.positive : TK.ink
-  const cell: React.CSSProperties = { ...dt.tdNum, background: bg, color: col, fontWeight: kind ? W.bold : W.regular }
-  return (
-    <tr className={kind ? undefined : dt.rowClass}>
-      <td style={{ ...dt.td, background: bg, color: kind ? col : TK.inkSoft, fontWeight: kind ? W.bold : W.regular }}>{label}</td>
-      <td style={cell}>{R(m)}</td>
-      <td style={cell}>{R(m * 12)}</td>
-    </tr>
-  )
-}
-function GroupRow({ children, t = 'neutral' }: { children: React.ReactNode; t?: 'neutral' | 'critical' }) {
-  return (
-    <tr><td colSpan={3} style={{ ...eyebrow, padding: '7px 12px', borderBottom: `1px solid ${TK.line}`, background: t === 'critical' ? TK.criticalTint : TK.surface, color: t === 'critical' ? TK.critical : TK.muted }}>{children}</td></tr>
-  )
-}
-
-/** Stacked bar of where a month's CTC goes, with a legend. Widths are each part's share of the parts shown. */
-function CompositionBar({ parts }: { parts: { l: string; v: number; c: string }[] }) {
-  const total = parts.reduce((a, p) => a + p.v, 0)
-  if (!total) return null
-  return (
-    <div style={{ marginBottom: S.lg }}>
-      <div style={{ ...eyebrow, marginBottom: S.sm }}>Where your monthly CTC goes</div>
-      <div style={{ display: 'flex', height: 12, borderRadius: RAD.pill, overflow: 'hidden', background: TK.sunken, gap: 2 }}>
-        {parts.map(p => <span key={p.l} title={`${p.l}: ${R(p.v)}`} style={{ width: `${p.v / total * 100}%`, background: p.c, minWidth: 3 }} />)}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: `${S.xs}px ${S.lg}px`, marginTop: S.sm }}>
-        {parts.map(p => (
-          <span key={p.l} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: F.tiny, color: TK.inkSoft, ...numeric }}>
-            <span aria-hidden style={{ width: 8, height: 8, borderRadius: 2, background: p.c, flexShrink: 0 }} />
-            {p.l} <b style={{ color: TK.ink, fontWeight: W.semi }}>{R(p.v)}</b>
-            <span style={{ color: TK.faint }}>{Math.round(p.v / total * 100)}%</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Step 2 pieces ──
-function WalletMeter({ title, used, budget, regimeNote }: { title: string; used: number; budget: number; regimeNote: string }) {
-  const pctv = budget > 0 ? Math.min(used / budget * 100, 100) : 0, ov = used > budget + 1
-  const col = ov ? TK.critical : pctv > 80 ? TK.warning : TK.brand
-  return (
-    <div style={{ background: TK.surface, border: `1px solid ${ov ? TK.criticalEdge : TK.line}`, borderRadius: RAD.lg, boxShadow: E.raised, padding: `${S.md + 2}px ${S.lg}px`, minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: S.sm, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ ...eyebrow }}>{title}</div>
-          <div style={{ fontSize: F.micro, color: TK.faint, marginTop: 2 }}>{regimeNote}</div>
-        </div>
-        <StatusPill t={ov ? 'critical' : pctv > 80 ? 'warning' : 'positive'} size="sm" dot>{ov ? 'EXCEEDED!' : R(Math.max(0, budget - used)) + ' left'}</StatusPill>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: S.sm, ...numeric }}>
-        <span style={{ fontSize: F.title + 4, fontWeight: W.bold, color: ov ? TK.critical : TK.ink, letterSpacing: '-.02em' }}>{R(used)}</span>
-        <span style={{ fontSize: F.tiny, color: TK.muted }}>declared of {R(budget)}</span>
-      </div>
-      <div style={{ height: 8, background: TK.sunken, borderRadius: RAD.pill, overflow: 'hidden', marginTop: S.sm }}>
-        <div style={{ width: pctv + '%', height: '100%', borderRadius: RAD.pill, background: col, transition: `width ${M.slow}` }} />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: F.micro, color: TK.muted, marginTop: 6, ...numeric }}><span>Used: {R(used)}</span><span>Budget: {R(budget)}</span></div>
-      {ov && <InfoCallout t="critical" compact style={{ marginTop: S.sm, marginBottom: 0 }}>Flexi wallet limit exceeded. Remove some allowances.</InfoCallout>}
-    </div>
-  )
-}
-
-function LimitSelect({ lim, val, onPick }: { lim: number; val: number; onPick: (v: number) => void }) {
-  if (!lim) return <span style={{ fontSize: F.tiny, color: TK.faint, fontWeight: W.medium }}>Not eligible</span>
-  return (
-    <select style={{ ...s.input, height: 34, width: 'auto', minWidth: 112, fontWeight: val > 0 ? W.semi : W.regular, color: val > 0 ? TK.brandDeep : TK.ink, borderColor: val > 0 ? TK.brandEdge : TK.lineStrong }} value={val} onChange={e => onPick(+e.target.value)}>
-      <option value={0}>₹0</option><option value={lim}>{R(lim)}</option>
-    </select>
-  )
-}
-
-function FlexiCard({ label, perq, oL, nL, oV, nV, onOld, onNew }: {
-  label: string; perq?: boolean; oL: number; nL: number; oV: number; nV: number; onOld: (v: number) => void; onNew: (v: number) => void
-}) {
-  const on = oV > 0 || nV > 0
-  const line = (rg: string, lim: number, val: number, pick: (v: number) => void) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: S.sm, padding: '8px 0', borderTop: `1px solid ${TK.line}` }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: F.tiny, fontWeight: W.semi, color: TK.inkSoft }}>{rg}</div>
-        <div style={{ fontSize: F.micro, color: TK.muted, ...numeric }}>{lim ? `Limit ${R(lim)} / yr` : 'Not offered in your slab'}</div>
-      </div>
-      <LimitSelect lim={lim} val={val} onPick={pick} />
-    </div>
-  )
-  return (
-    <div style={{ background: TK.surface, border: `1px solid ${on ? TK.brandEdge : TK.line}`, boxShadow: on ? `inset 3px 0 0 ${TK.brand}` : E.flat, borderRadius: RAD.lg, padding: `${S.md}px ${S.md + 2}px ${S.xs}px`, minWidth: 0, transition: `border-color ${M.quick}` }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.sm, marginBottom: S.sm, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: F.small, fontWeight: W.semi, color: TK.ink, flex: '1 1 140px', minWidth: 0, lineHeight: 1.35 }}>{label}</div>
-        {perq && <StatusPill t="warning" size="sm">Perquisite Tax</StatusPill>}
-        {on && <StatusPill t="positive" size="sm" icon={<IconCheck size={10} strokeWidth={2.4} />}>Declared</StatusPill>}
-      </div>
-      {line('Old Regime', oL, oV, onOld)}
-      {line('New Regime', nL, nV, onNew)}
-    </div>
-  )
-}
-
-// ── Step 3 pieces ──
-function RegimeHead({ title, sub, note, t }: { title: string; sub: string; note: string; t: 'info' | 'brand' }) {
-  const k = tone(t)
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.md, padding: `${S.md}px ${S.lg}px`, marginBottom: S.md, background: k.bg, border: `1px solid ${k.edge}`, borderRadius: RAD.lg }}>
-      <IconTile icon={<IconFinance size={16} />} t={t} size={32} solid />
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: F.lead, fontWeight: W.bold, color: TK.ink }}>{title}</div>
-        <div style={{ fontSize: F.tiny, fontWeight: W.semi, color: k.fg, marginTop: 2, ...numeric }}>{sub}</div>
-        <div style={{ fontSize: F.tiny, color: TK.muted, marginTop: 4, lineHeight: 1.5 }}>{note}</div>
-      </div>
-    </div>
-  )
-}
-
-// ── Step 4 pieces ──
-function CompareBar({ label, tax, mo, pct, best }: { label: string; tax: number; mo: number; pct: number; best: boolean }) {
-  return (
-    <div style={{ marginBottom: S.md }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: S.sm, marginBottom: 5, flexWrap: 'wrap' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: F.small, fontWeight: W.semi, color: TK.ink }}>
-          {label}{best && <StatusPill t="positive" size="sm">Lower tax</StatusPill>}
-        </span>
-        <span style={{ fontSize: F.small, fontWeight: W.bold, color: best ? TK.positive : TK.ink, ...numeric }}>{R(tax)} <span style={{ fontWeight: W.regular, color: TK.muted, fontSize: F.tiny }}>· {R(mo)}/mo</span></span>
-      </div>
-      <div style={{ height: 10, borderRadius: RAD.pill, background: TK.sunken, overflow: 'hidden' }}>
-        <div style={{ width: `${Math.max(2, pct * 100)}%`, height: '100%', borderRadius: RAD.pill, background: best ? TK.positive : TK.lineStrong, transition: `width ${M.slow}` }} />
-      </div>
-    </div>
-  )
-}
-
-function BreakRow({ label, o, n, exempt, indent }: { label: React.ReactNode; o: string; n: string; exempt?: boolean; indent?: boolean }) {
-  const col = exempt ? TK.positive : TK.inkSoft
-  return (
-    <tr className={dt.rowClass}>
-      <td style={{ ...dt.td, color: exempt ? TK.positive : TK.inkSoft, paddingLeft: indent ? 28 : 12 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{exempt && indent && <IconCheck size={12} strokeWidth={2.4} />}{label}</span>
-      </td>
-      <td style={{ ...dt.tdNum, color: col }}>{o}</td>
-      <td style={{ ...dt.tdNum, color: col }}>{n}</td>
-    </tr>
-  )
-}
-function TotalRow({ label, o, n, bg, col }: { label: string; o: string; n: string; bg: string; col: string }) {
-  const c: React.CSSProperties = { ...dt.tdNum, background: bg, color: col, fontWeight: W.bold, fontSize: F.body }
-  return <tr><td style={{ ...dt.td, background: bg, color: col, fontWeight: W.bold, fontSize: F.body }}>{label}</td><td style={c}>{o}</td><td style={c}>{n}</td></tr>
-}
-function SecRow({ children }: { children: React.ReactNode }) {
-  return <tr><td colSpan={3} style={{ ...eyebrow, padding: '8px 12px', background: TK.sunken, color: TK.brandDeep, borderBottom: `1px solid ${TK.line}` }}>{children}</td></tr>
+function Fg({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div style={{ marginBottom: 10 }}><label style={s.label}>{label}</label>{children}</div>
 }
 
 /** `sandbox`: the Help → TDS Calculator for HR. Nothing is saved and no declaration is read —
@@ -558,177 +332,212 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandb
     if (recRegime && !userPicked && !isSubmitted) setChosenRegime(recRegime)
   }, [recRegime, userPicked, isSubmitted])
 
+  // ── Stepper ──
+  const STEPS = ['Employee & Salary', 'Flexi Declaration', 'Investments', 'TDS Report']
+  const Stepper = () => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+      {STEPS.map((lbl, i) => {
+        const n = i + 1, active = step === n, done = step > n
+        return (
+          <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={() => n <= step && setStep(n)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, border: `1px solid ${active ? P.purple : P.border}`, background: active ? P.purple : done ? P.purpleBg: TK.surface, color: active ? TK.surface : done ? P.purpleDark : P.muted, fontSize: 12, fontWeight: 600, cursor: n <= step ? 'pointer' : 'default', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+              <span style={{ width: 18, height: 18, borderRadius: 99, background: active ? TK.surface : done ? P.purple : P.border, color: active ? P.purple: TK.surface, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{done ? '' : n}</span>
+              {lbl}
+            </button>
+            {i < 3 && <span style={{ width: 14, height: 2, background: step > n ? P.purple : P.border, borderRadius: 2 }} />}
+          </div>
+        )
+      })}
+    </div>
+  )
+
   // ── STEP 1 — Employee & salary ──
-  const dojLabel = f.doj ? new Date(f.doj + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not on record'
   const step1 = (
     <div>
-      {/* An employee's CTC, variable and DOJ are HR's record, not inputs — the declaration and
-          the TDS projection must be worked on the pay payroll will actually run. Only the
-          Help → TDS Calculator sandbox (a what-if for hiring managers / HR) edits them. */}
-      <SectionCard
-        title="Employee Information"
-        icon={<IconUser size={16} />}
-        hint={sandbox ? 'Prefilled from the record when an employee is picked. Adjust CTC / variable to try a different package.' : 'From your salary record. If any of this is wrong, raise it with HR — it cannot be changed here.'}
-        actions={sandbox
-          ? <StatusPill t="info" size="sm">What-if figures</StatusPill>
-          : <StatusPill t="neutral" size="sm" icon={<IconLock size={11} />}>HR record · read-only</StatusPill>}
-      >
-        {sandbox ? <>
-          <KeyValueGrid min={180} dense items={[
-            { label: 'Employee Name', value: empName || '—' },
-            { label: 'Employee Code', value: empCode || '—', mono: true },
-          ]} />
-          <div style={{ ...grid(200), marginTop: S.md }}>
+      <div style={s.card}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Employee Information</div>
+        {/* An employee's CTC, variable and DOJ are HR's record, not inputs — the declaration and
+            the TDS projection must be worked on the pay payroll will actually run. Only the
+            Help → TDS Calculator sandbox (a what-if for hiring managers / HR) edits them. */}
+        <div style={{ fontSize: 12, color: P.muted, marginBottom: 12 }}>{sandbox ? 'Prefilled from the record when an employee is picked. Adjust CTC / variable to try a different package.' : 'From your salary record. If any of this is wrong, raise it with HR — it cannot be changed here.'}</div>
+        <div style={s.g2}>
+          <Fg label="Employee Name"><input style={{ ...s.input, background: TK.sunken }} value={empName || ''} readOnly /></Fg>
+          <Fg label="Employee Code"><input style={{ ...s.input, background: TK.sunken }} value={empCode || ''} readOnly /></Fg>
+          {sandbox ? <>
             <Fg label="Annual CTC (₹)"><input style={s.input} type="number" value={f.ctc} onChange={e => set('ctc', e.target.value)} placeholder="e.g. 1500000" /></Fg>
             <Fg label="Date of Joining"><input style={s.input} type="date" value={f.doj} onChange={e => set('doj', e.target.value)} /></Fg>
             <Fg label="Annual Variable Pay (₹)"><input style={s.input} type="number" value={f.variable} onChange={e => set('variable', e.target.value)} placeholder="0 if none" /></Fg>
-          </div>
-        </> : (
-          <KeyValueGrid min={180} items={[
-            { label: 'Employee Name', value: empName || '—' },
-            { label: 'Employee Code', value: empCode || '—', mono: true },
-            { label: 'Annual CTC (₹)', value: f.ctc ? R(N(f.ctc)) : 'Not on record', mono: true, t: f.ctc ? 'brand' : undefined },
-            { label: 'Date of Joining', value: dojLabel },
-            { label: 'Annual Variable Pay (₹)', value: f.ctc ? R(N(f.variable)) : 'Not on record', mono: true },
-          ]} />
-        )}
-      </SectionCard>
-
+          </> : <>
+            <Fg label="Annual CTC (₹)"><input style={{ ...s.input, background: TK.sunken, cursor: 'default' }} value={f.ctc ? R(N(f.ctc)) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+            <Fg label="Date of Joining"><input style={{ ...s.input, background: TK.sunken, cursor: 'default' }} value={f.doj ? new Date(f.doj + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+            <Fg label="Annual Variable Pay (₹)"><input style={{ ...s.input, background: TK.sunken, cursor: 'default' }} value={f.ctc ? R(N(f.variable)) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+          </>}
+        </div>
+      </div>
       {/* Actual salary structure — identical rows, order and figures to
           Employee Master → View → Salary, because both read one loader. */}
       {rd && (
-        <SectionCard
-          title="Your Salary Structure"
-          icon={<IconPayroll size={16} />}
-          hint="FY 2026-27 salary structure: the same figures shown in your HR record."
-          actions={<>
-            <StatusPill t="positive" size="sm" icon={<IconCheck size={10} strokeWidth={2.4} />}>as per your record</StatusPill>
-            {rd.payType && rd.payType !== 'Regular' && <StatusPill t="brand" size="sm">{rd.payType}</StatusPill>}
-          </>}
-        >
-          <KpiGrid min={170}>
-            <KpiTile label="Annual CTC" value={R(rd.totalCtc || rd.annualCtc)} emphasis sub="Cost to company, per year" />
-            <KpiTile label="Net Take-home / mo" value={R(rd.net)} t="positive" sub="Lands in your bank each month" />
-            <KpiTile label="Fixed / mo" value={R(rd.fixedMonthly)} sub="Before variable pay" />
-          </KpiGrid>
-          <CompositionBar parts={[
-            { l: 'Basic', v: rd.basic, c: TK.brandDeep },
-            { l: 'HRA', v: rd.hra, c: TK.brand },
-            { l: 'Allowances', v: (rd.statBonus || 0) + (rd.conveyance || 0) + (rd.special || 0), c: TK.info },
-            { l: 'Flexi', v: rd.flexiMonthly || 0, c: TK.positive },
-            { l: 'Employer contributions', v: (rd.erPf || 0) + (rd.erEsic || 0) + (rd.gratuity || 0), c: TK.lineStrong },
-            { l: 'Variable', v: Math.round((rd.variableAnnual || 0) / 12), c: TK.warning },
-          ].filter(p => p.v > 0)} />
-          <DataTable framed minWidth={420}>
-            <thead><tr><th style={dt.th}>Component</th><th style={dt.thNum}>Monthly</th><th style={dt.thNum}>Annual</th></tr></thead>
-            <tbody>
-              <GroupRow>Earnings</GroupRow>
-              <SalaryRow label="Basic" m={rd.basic} />
-              <SalaryRow label="HRA" m={rd.hra} />
-              {rd.statBonus > 0 && <SalaryRow label="Statutory Bonus" m={rd.statBonus} />}
-              {rd.conveyance > 0 && <SalaryRow label="Conveyance" m={rd.conveyance} />}
-              {rd.special > 0 && <SalaryRow label="Special Allowance" m={rd.special} />}
-              {rd.flexiMonthly > 0 && <SalaryRow label="Flexi (declared)" m={rd.flexiMonthly} />}
-              <SalaryRow label="Gross" m={rd.gross} kind="sub" />
-              {(rd.erPf > 0 || rd.erEsic > 0 || rd.gratuity > 0) && <GroupRow>Employer contributions</GroupRow>}
-              {rd.erPf > 0 && <SalaryRow label="Employer PF" m={rd.erPf} />}
-              {rd.erEsic > 0 && <SalaryRow label="Employer ESIC" m={rd.erEsic} />}
-              {rd.gratuity > 0 && <SalaryRow label="Gratuity" m={rd.gratuity} />}
-              {(rd.eePf > 0 || rd.eeEsic > 0 || rd.pt > 0 || rd.lwf > 0) && <GroupRow t="critical">Deductions</GroupRow>}
-              {rd.eePf > 0 && <SalaryRow label="Employee PF" m={rd.eePf} />}
-              {rd.eeEsic > 0 && <SalaryRow label="Employee ESIC" m={rd.eeEsic} />}
-              {rd.pt > 0 && <SalaryRow label="Professional Tax" m={rd.pt} />}
-              {rd.lwf > 0 && <SalaryRow label="LWF" m={rd.lwf} />}
-              <SalaryRow label="Net Take-home" m={rd.net} kind="net" />
-              <SalaryRow label="Fixed" m={rd.fixedMonthly} kind="sub" />
-              {rd.variableAnnual > 0 && <SalaryRow label="Variable" m={Math.round(rd.variableAnnual / 12)} />}
-              <SalaryRow label="Total CTC" m={Math.round(rd.totalCtc / 12)} kind="total" />
-            </tbody>
-          </DataTable>
-          <div style={{ fontSize: F.micro, color: TK.muted, marginTop: S.sm, lineHeight: 1.5 }}>
+        <div style={s.card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Your Salary Structure</div>
+            <span style={{ fontSize: 11, background: TK.positiveTint, color: TK.positive, padding: '2px 10px', borderRadius: 99, fontWeight: 700, border: `1px solid ${TK.positiveTint}` }}>
+              ✓ as per your record
+            </span>
+            {rd.payType && rd.payType !== 'Regular' && (
+              <span style={{ fontSize: 11, background: P.purpleBg, color: P.purpleDark, padding: '2px 10px', borderRadius: 99, fontWeight: 700 }}>{rd.payType}</span>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 12 }}>
+            {[
+              { l: 'Annual CTC', v: rd.totalCtc || rd.annualCtc, c: TK.brand, bg: TK.canvas },
+              { l: 'Net Take-home / mo', v: rd.net, c: TK.positive, bg: TK.positiveTint },
+              { l: 'Fixed / mo', v: rd.fixedMonthly, c: TK.ink, bg: TK.sunken },
+            ].map(x => (
+              <div key={x.l} style={{ background: x.bg, border: `1px solid ${TK.line}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, color: TK.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{x.l}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: x.c }}>{R(x.v)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ border: `1px solid ${TK.line}`, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.dark, fontSize: 11, fontWeight: 700, color: TK.onDark, letterSpacing: '.03em' }}>
+              <span>COMPONENT</span><span style={{ textAlign: 'right' }}>MONTHLY</span><span style={{ textAlign: 'right' }}>ANNUAL</span>
+            </div>
+            {(() => {
+              const M = (v: number) => v * 12
+              const Row = ({ label, m, kind }: { label: string; m: number; kind?: 'sub' | 'net' | 'total' }) => (
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '8px 12px', borderTop: `1px solid ${TK.line}`,
+                  background: kind === 'total' ? TK.canvas : kind === 'net' ? TK.positiveTint : kind === 'sub' ? TK.sunken: TK.surface,
+                  fontWeight: kind ? 700 : 400,
+                  color: kind === 'total' ? TK.brand : kind === 'net' ? TK.positive : TK.ink,
+                }}>
+                  <span style={{ fontSize: 13 }}>{label}</span>
+                  <span style={{ fontSize: 13, textAlign: 'right' }}>{R(m)}</span>
+                  <span style={{ fontSize: 13, textAlign: 'right' }}>{R(M(m))}</span>
+                </div>
+              )
+              return (
+                <>
+                  <Row label="Basic" m={rd.basic} />
+                  <Row label="HRA" m={rd.hra} />
+                  {rd.statBonus > 0 && <Row label="Statutory Bonus" m={rd.statBonus} />}
+                  {rd.conveyance > 0 && <Row label="Conveyance" m={rd.conveyance} />}
+                  {rd.special > 0 && <Row label="Special Allowance" m={rd.special} />}
+                  {rd.flexiMonthly > 0 && <Row label="Flexi (declared)" m={rd.flexiMonthly} />}
+                  <Row label="Gross" m={rd.gross} kind="sub" />
+                  {rd.erPf > 0 && <Row label="Employer PF" m={rd.erPf} />}
+                  {rd.erEsic > 0 && <Row label="Employer ESIC" m={rd.erEsic} />}
+                  {rd.gratuity > 0 && <Row label="Gratuity" m={rd.gratuity} />}
+                  {(rd.eePf > 0 || rd.eeEsic > 0 || rd.pt > 0 || rd.lwf > 0) && (
+                    <div style={{ padding: '6px 12px', background: TK.criticalTint, fontSize: 10, fontWeight: 700, color: TK.critical, letterSpacing: '.04em', borderTop: `1px solid ${TK.line}` }}>DEDUCTIONS</div>
+                  )}
+                  {rd.eePf > 0 && <Row label="Employee PF" m={rd.eePf} />}
+                  {rd.eeEsic > 0 && <Row label="Employee ESIC" m={rd.eeEsic} />}
+                  {rd.pt > 0 && <Row label="Professional Tax" m={rd.pt} />}
+                  {rd.lwf > 0 && <Row label="LWF" m={rd.lwf} />}
+                  <Row label="Net Take-home" m={rd.net} kind="net" />
+                  <Row label="Fixed" m={rd.fixedMonthly} kind="sub" />
+                  {rd.variableAnnual > 0 && <Row label="Variable" m={Math.round(rd.variableAnnual / 12)} />}
+                  <Row label="Total CTC" m={Math.round(rd.totalCtc / 12)} kind="total" />
+                </>
+              )
+            })()}
+          </div>
+          <div style={{ fontSize: 10, color: TK.faint, marginTop: 6 }}>
             FY 2026-27 salary structure: the same figures shown in your HR record. Monthly amounts are pro-rated on actual paid days during payroll.
           </div>
-        </SectionCard>
+        </div>
       )}
 
       {sal.ctc > 0 && (
-        <SectionCard
-          title={rd ? 'Flexi Wallet Basis' : 'Salary Breakup'}
-          icon={<IconCard size={16} />}
-          hint="The budget you can split across tax-free flexi allowances in the next step."
-          actions={<StatusPill t="brand" size="sm">Slab: {SLAB_LABELS[sal.si]}</StatusPill>}
-        >
+        <div style={s.card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{rd ? 'Flexi Wallet Basis' : 'Salary Breakup'}</div>
+            <span style={{ fontSize: 11, background: P.purpleBg, color: P.purpleDark, padding: '2px 10px', borderRadius: 99, fontWeight: 600 }}>Slab: {SLAB_LABELS[sal.si]}</span>
+          </div>
           {/* Monthly is shown first and largest because that is the figure the HR record
               (Employee Master → Salary) displays. The annual number sits beside it, labelled,
               so the wallet budget can't be mistaken for a different Special Allowance. */}
-          <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: RAD.lg, padding: `${S.lg}px ${S.lg + 2}px` }}>
-            <div style={{ ...eyebrow, color: TK.brandDeep }}>Flexi Wallet {rd ? '(funded by Special Allowance)' : '(Other Reimbursement)'}</div>
+          <div style={{ marginTop: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, borderRadius: 10, padding: '14px 16px', color: TK.onAccent }}>
+            <div style={{ fontSize: 11, opacity: .85 }}>Flexi Wallet {rd ? '(funded by Special Allowance)' : '(Other Reimbursement)'}</div>
             {rd ? (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: S.lg, flexWrap: 'wrap', margin: '6px 0 4px', ...numeric }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', margin: '4px 0 2px' }}>
                 <div>
-                  <span style={{ fontSize: F.display, fontWeight: W.bold, color: TK.brandDeep, letterSpacing: '-.02em' }}>{R(rd.specialGross || rd.special)}</span>
-                  <span style={{ fontSize: F.tiny, color: TK.muted, marginLeft: 6 }}>per month</span>
+                  <span style={{ fontSize: 24, fontWeight: 800 }}>{R(rd.specialGross || rd.special)}</span>
+                  <span style={{ fontSize: 12, opacity: .85, marginLeft: 5 }}>per month</span>
                 </div>
-                <span aria-hidden style={{ width: 1, height: 22, background: TK.brandEdge }} />
+                <div style={{ opacity: .55 }}>|</div>
                 <div>
-                  <span style={{ fontSize: F.title, fontWeight: W.bold, color: TK.ink }}>{R(sal.other)}</span>
-                  <span style={{ fontSize: F.tiny, color: TK.muted, marginLeft: 6 }}>per year</span>
+                  <span style={{ fontSize: 17, fontWeight: 700 }}>{R(sal.other)}</span>
+                  <span style={{ fontSize: 12, opacity: .85, marginLeft: 5 }}>per year</span>
                 </div>
               </div>
             ) : (
               <>
-                <div style={{ fontSize: F.display, fontWeight: W.bold, color: TK.brandDeep, margin: '6px 0 2px', letterSpacing: '-.02em', ...numeric }}>{R(sal.other)}</div>
-                <div style={{ fontSize: F.tiny, color: TK.muted }}>Fixed − Basic − HRA − PF</div>
+                <div style={{ fontSize: 24, fontWeight: 800 }}>{R(sal.other)}</div>
+                <div style={{ fontSize: 11, opacity: .8 }}>Fixed − Basic − HRA − PF</div>
               </>
             )}
-            {rd && (rd.specialGross || rd.special) > 0 && rd.flexiMonthly > 0 && (
-              <div style={{ height: 6, borderRadius: RAD.pill, background: TK.surface, overflow: 'hidden', margin: `${S.sm}px 0 6px`, maxWidth: 420 }}>
-                <div style={{ width: `${Math.min(1, rd.flexiMonthly / (rd.specialGross || rd.special)) * 100}%`, height: '100%', background: TK.brand, borderRadius: RAD.pill }} />
-              </div>
-            )}
-            {rd && <div style={{ fontSize: F.tiny, color: TK.inkSoft, ...numeric }}>Your full Special Allowance: {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
+            {rd && <div style={{ fontSize: 11, opacity: .8 }}>Your full Special Allowance: {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
           </div>
-          <InfoCallout t="neutral" compact style={{ marginTop: S.md, marginBottom: 0 }}>
+          <div style={{ marginTop: 10, background: P.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.amber }}>
             {rd
               ? <><b>Source:</b> full Special Allowance <b>{R(rd.specialGross || rd.special)}/month</b> × 12 = <b>{R(sal.other)} annual wallet</b>. Declared flexi is deducted from the Special Allowance paid as salary.</>
               : <><b>Formula:</b> {R(sal.fixed)} − {R(sal.basic)} (Basic) − {R(sal.hra)} (HRA) − {R(sal.epf)} (PF) = <b>Flexi Wallet {R(sal.other)}</b></>}
-          </InfoCallout>
-        </SectionCard>
+          </div>
+        </div>
       )}
       {sal.ctc > 0 && join.mid && (
-        <InfoCallout t="info" icon={<IconCalendar size={17} />} title="Mid-year joining: pro-rata applies">
-          You are with the company for <b>{join.months} month{join.months === 1 ? '' : 's'}</b> of FY 2026-27, so your salary income is earned for ≈<b>{Math.round(join.pr * 100)}%</b> of the year. Tax is computed on this pro-rated income and the <b>monthly TDS is spread over the {join.months} remaining pay month{join.months === 1 ? '' : 's'}</b>. (Employees who joined on/before 1 Apr 2026 are taxed on the full 12 months.)
-        </InfoCallout>
+        <div style={{ ...s.card, background: TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: TK.info, marginBottom: 4 }}>Mid-year joining: pro-rata applies</div>
+          <div style={{ fontSize: 12, color: TK.brand, lineHeight: 1.65 }}>You are with the company for <b>{join.months} month{join.months === 1 ? '' : 's'}</b> of FY 2026-27, so your salary income is earned for ≈<b>{Math.round(join.pr * 100)}%</b> of the year. Tax is computed on this pro-rated income and the <b>monthly TDS is spread over the {join.months} remaining pay month{join.months === 1 ? '' : 's'}</b>. (Employees who joined on/before 1 Apr 2026 are taxed on the full 12 months.)</div>
+        </div>
       )}
       {sal.ctc > 0 && !join.mid && f.doj && (
-        <InfoCallout t="positive" compact>Joined on/before 1 Apr 2026: taxed on the full financial year.</InfoCallout>
+        <div style={{ fontSize: 12, color: P.muted, margin: '0 4px 12px' }}>Joined on/before 1 Apr 2026: taxed on the full financial year.</div>
       )}
     </div>
   )
 
   // ── STEP 2 — Flexi declaration ──
   const carSel = (oFlexi.car || 0) > 0 || (nFlexi.car || 0) > 0
+  const WalletBar = ({ title, used, io }: { title: string; used: number; io: boolean }) => {
+    const bud = sal.other, pctv = bud > 0 ? Math.min(used / bud * 100, 100) : 0, ov = used > bud + 1
+    const col = ov ? P.red : pctv > 80 ? P.amber : io ? TK.warning : P.green
+    return (
+      <div style={{ ...s.card, marginBottom: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
+          <span>{io ? '' : ''} {title}</span>
+          <span style={{ color: col }}>{ov ? 'EXCEEDED!' : R(Math.max(0, bud - used)) + ' left'}</span>
+        </div>
+        <div style={{ height: 8, background: TK.sunken, borderRadius: 99, overflow: 'hidden' }}><div style={{ width: pctv + '%', height: '100%', background: col, transition: 'width .2s' }} /></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: P.muted, marginTop: 6 }}><span>Used: {R(used)}</span><span>Budget: {R(bud)}</span></div>
+        {ov && <div style={{ marginTop: 8, background: P.redBg, color: P.red, borderRadius: 10, padding: '7px 10px', fontSize: 11 }}>Flexi wallet limit exceeded. Remove some allowances.</div>}
+      </div>
+    )
+  }
   const step2 = (
     <div>
       {carSel && (
-        <InfoCallout t="warning" title="Car Lease + Driver: Perquisite Tax Applied">
-          <div style={{ ...grid(140, S.sm), margin: `${S.sm}px 0` }}>
+        <div style={{ ...s.card, background: P.amberBg, border: `1px solid ${TK.warningTint}` }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Car Lease + Driver: Perquisite Tax Applied</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
             {[['Car Lease Perq', '₹7,000', 'per month'], ['Driver Perq', '₹3,000', 'per month'], ['Total Perquisite', '₹10,000', '₹1,20,000/yr → taxable']].map(([l, v, sub]) => (
-              <div key={l} style={{ background: TK.surface, borderRadius: RAD.md, padding: '9px 11px', border: `1px solid ${TK.warningEdge}` }}>
-                <div style={{ fontSize: F.micro, color: TK.muted }}>{l}</div><div style={{ fontSize: F.lead, fontWeight: W.bold, color: TK.warning, ...numeric }}>{v}</div><div style={{ fontSize: F.micro, color: TK.muted }}>{sub}</div>
+              <div key={l} style={{ background: TK.surface, borderRadius: 10, padding: '9px 11px', border: `1px solid ${TK.warningTint}` }}>
+                <div style={{ fontSize: 11, color: P.muted }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700, color: P.amber }}>{v}</div><div style={{ fontSize: 10, color: P.muted }}>{sub}</div>
               </div>
             ))}
           </div>
-          <div>Car lease is tax-exempt; Car + Driver are always selected together.</div>
-        </InfoCallout>
+          <div style={{ fontSize: 11, color: TK.critical, marginTop: 8 }}>Car lease is tax-exempt; Car + Driver are always selected together.</div>
+        </div>
       )}
-      <SectionCard
-        title="Children Details"
-        icon={<IconEmployees size={16} />}
-        hint="Affects Children's Education & Hostel Allowance limits"
-        actions={<StatusPill t="warning" size="sm">Old Regime only</StatusPill>}
-      >
-        <div style={{ maxWidth: 260 }}>
+      <div style={s.card}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>👨‍👩‍👧 Children Details <small style={{ color: P.amber, fontWeight: 400, fontSize: 11 }}>(Old Regime only)</small></div>
+        <div style={{ fontSize: 12, color: P.muted, marginBottom: 10 }}>Affects Children&apos;s Education &amp; Hostel Allowance limits</div>
+        <div style={{ maxWidth: 240 }}>
           <Fg label="Number of Children">
             <select style={s.input} value={child.count} onChange={e => setChild(c => ({ ...c, count: +e.target.value }))}>
               <option value={0}>0 children</option><option value={1}>1 child</option><option value={2}>2 children (max)</option>
@@ -736,56 +545,43 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandb
           </Fg>
         </div>
         {child.count > 0 && (
-          <div style={grid(220)}>
+          <div style={s.g2}>
             {[1, 2].slice(0, child.count).map(n => {
               const cd = n === 1 ? child.c1 : child.c2
               const upd = (patch: any) => setChild(c => ({ ...c, [n === 1 ? 'c1' : 'c2']: { ...cd, ...patch } }))
               return (
-                <div key={n} style={s.well}>
-                  <div style={{ fontSize: F.small, fontWeight: W.bold, color: TK.ink, marginBottom: S.sm }}>Child {n}</div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: F.small, color: TK.inkSoft, marginBottom: 6, cursor: 'pointer' }}><input type="checkbox" checked={cd.school} onChange={e => upd({ school: e.target.checked })} style={{ accentColor: TK.brand }} /> Going to school?</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: F.small, color: TK.inkSoft, cursor: 'pointer' }}><input type="checkbox" checked={cd.hostel} onChange={e => upd({ hostel: e.target.checked })} style={{ accentColor: TK.brand }} /> Staying in hostel?</label>
+                <div key={n} style={{ background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Child {n}</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 6, cursor: 'pointer' }}><input type="checkbox" checked={cd.school} onChange={e => upd({ school: e.target.checked })} /> Going to school?</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={cd.hostel} onChange={e => upd({ hostel: e.target.checked })} /> Staying in hostel?</label>
                 </div>
               )
             })}
           </div>
         )}
-      </SectionCard>
-      <div style={{ ...grid(260), marginBottom: S.lg }}>
-        <WalletMeter title="Old Regime Wallet" used={oTot} budget={sal.other} regimeNote="If you file under the Old Regime" />
-        <WalletMeter title="New Regime Wallet" used={nTot} budget={sal.other} regimeNote="If you file under the New Regime" />
       </div>
-      <SectionCard
-        title="Flexi components"
-        icon={<IconSliders size={16} />}
-        hint="For each allowance, pick ₹0 or the full limit under each regime. Declared amounts are paid against bills and are exempt from tax."
-        actions={<StatusPill t="brand" size="sm">Slab: {SLAB_LABELS[sal.si]}</StatusPill>}
-      >
-        <div style={grid(250)}>
-          {COMPS.map(({ k, l, perq }) => (
-            <FlexiCard key={k} label={l} perq={perq}
-              oL={getOldLimit(k)} nL={getNewLimit(k)} oV={oFlexi[k] || 0} nV={nFlexi[k] || 0}
-              onOld={v => setFlexi('old', k, v)} onNew={v => setFlexi('new', k, v)} />
-          ))}
+      <div style={s.g2}><WalletBar title="Old Regime Wallet" used={oTot} io={true} /><WalletBar title="New Regime Wallet" used={nTot} io={false} /></div>
+      <div style={{ ...s.card, padding: 0, overflow: 'hidden', marginTop: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', background: P.navy, color: TK.onAccent, fontSize: 11, fontWeight: 700, padding: '10px 14px' }}>
+          <span>Component</span><span style={{ textAlign: 'center' }}>Old Regime</span><span style={{ textAlign: 'center' }}>New Regime</span>
         </div>
-        <div style={{ marginTop: S.lg, borderTop: `1px solid ${TK.line}`, paddingTop: S.md }}>
-          <div style={{ ...eyebrow, marginBottom: S.sm }}>Total Selected</div>
-          <div style={grid(200, S.sm)}>
-            {([['Old Regime', oTot, T?.oClaim], ['New Regime', nTot, T?.nClaim]] as [string, number, number | undefined][]).map(([lbl, tot, exempt]) => {
-              const over = tot > sal.other
-              return (
-                <div key={lbl} style={{ ...s.well, background: over ? TK.criticalTint : TK.sunken, borderColor: over ? TK.criticalEdge : TK.line }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: S.sm }}>
-                    <span style={{ fontSize: F.tiny, fontWeight: W.semi, color: TK.inkSoft }}>{lbl}</span>
-                    <span style={{ fontSize: F.title, fontWeight: W.bold, color: over ? TK.critical : TK.ink, ...numeric }}>{R(tot)}</span>
-                  </div>
-                  {exempt != null && <div style={{ fontSize: F.micro, color: TK.positive, marginTop: 4, ...numeric }}>Tax-exempt this FY{T?.mid ? ' (pro-rated)' : ''}: <b>{R(exempt)}</b></div>}
-                </div>
-              )
-            })}
-          </div>
+        {COMPS.map(({ k, l, perq }) => {
+          const oL = getOldLimit(k), nL = getNewLimit(k)
+          const drop = (lim: number, val: number, rg: 'old' | 'new') => lim
+            ? <select style={{ ...s.input, padding: '6px 8px', width: 'auto', minWidth: 92 }} value={val} onChange={e => setFlexi(rg, k, +e.target.value)}><option value={0}>₹0</option><option value={lim}>{R(lim)}</option></select>
+            : <span style={{ fontSize: 11, color: P.muted }}>Not eligible</span>
+          return (
+            <div key={k} style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', alignItems: 'center', padding: '9px 14px', borderTop: `1px solid ${P.border}`, background: perq ? TK.warningTint: TK.surface }}>
+              <div><div style={{ fontSize: 13, color: P.navy }}>{l}</div>{perq && <span style={{ fontSize: 9, background: P.amberBg, color: P.amber, padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Perquisite Tax</span>}</div>
+              <div style={{ textAlign: 'center' }}>{drop(oL, oFlexi[k] || 0, 'old')}</div>
+              <div style={{ textAlign: 'center' }}>{drop(nL, nFlexi[k] || 0, 'new')}</div>
+            </div>
+          )
+        })}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', padding: '10px 14px', borderTop: `2px solid ${P.border}`, fontWeight: 700, fontSize: 13 }}>
+          <span>Total Selected</span><span style={{ textAlign: 'center', color: oTot > sal.other ? P.red: TK.warning }}>{R(oTot)}</span><span style={{ textAlign: 'center', color: nTot > sal.other ? P.red : P.green }}>{R(nTot)}</span>
         </div>
-      </SectionCard>
+      </div>
     </div>
   )
 
@@ -793,95 +589,82 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandb
   const numIn = (k: string, ph = '0') => <input style={s.input} type="number" value={f[k]} onChange={e => set(k, e.target.value)} placeholder={ph} />
   const c80Total = Math.min(N(f.lic) + N(f.ppf) + N(f.elss) + sal.epf + N(f.tuit) + N(f.hlP), 150000)
   const addITotal = N(f.oi) + N(f.bon) + N(f.iinc) + N(f.varEx) + N(f.iInc)
-  const monthSelect = (k: string) => <select style={s.input} value={f[k]} onChange={e => set(k, e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
   const step3 = (
-    <div style={{ ...grid(340, S.lg), alignItems: 'start' }}>
-      {/* OLD */}
-      <div style={{ minWidth: 0 }}>
-        <RegimeHead t="info" title="Old Regime Declaration" sub="Std Deduction ₹50,000 | 80C max ₹1,50,000"
-          note="These deductions lower your tax only if you choose the Old Regime." />
-
-        <SectionCard title="HRA Exemption (Old Regime only)" icon={<IconBuilding size={16} />} hint="If you pay rent, part of your HRA becomes tax-free.">
+    <div>
+      <div style={s.g2}>
+        {/* OLD */}
+        <div style={{ ...s.card, borderLeft: `3px solid #C05621` }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: TK.critical }}>Old Regime Declaration</div>
+          <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Std Deduction ₹50,000 | 80C max ₹1,50,000</div>
           {sal.hra > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: S.sm, flexWrap: 'wrap', background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: RAD.md, padding: `${S.sm + 2}px ${S.md}px`, marginBottom: S.md }}>
-              <div style={{ fontSize: F.tiny, fontWeight: W.semi, color: TK.brandDeep, ...numeric }}>Your HRA: Annual {R(sal.hra)} · Monthly {R(sal.hra / 12)}</div>
-              <PButton size="sm" variant="primary" iconRight={<IconArrowRight size={13} />} onClick={() => setF(p => ({ ...p, rentM: String(Math.round(sal.hra / 12)), hra1From: '1', hra1To: '12' }))}>Apply suggested rent</PButton>
+            <div style={{ background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: P.purpleDark, marginBottom: 6 }}>Your HRA: Annual {R(sal.hra)} · Monthly {R(sal.hra / 12)}</div>
+              <button style={{ ...s.btn, padding: '5px 12px', fontSize: 11 }} onClick={() => setF(p => ({ ...p, rentM: String(Math.round(sal.hra / 12)), hra1From: '1', hra1To: '12' }))}>Apply suggested rent →</button>
             </div>
           )}
-          <div style={{ ...s.well, marginBottom: S.md }}>
-            <SubHead>Period 1: Rent Paid</SubHead>
-            <div style={grid(150, S.sm)}>
-              <Fg label="From Month">{monthSelect('hra1From')}</Fg>
-              <Fg label="To Month">{monthSelect('hra1To')}</Fg>
+          <div style={s.sec}>HRA Exemption (Old Regime only)</div>
+          <div style={{ background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Period 1: Rent Paid</div>
+            <div style={s.g2}>
+              <Fg label="From Month"><select style={s.input} value={f.hra1From} onChange={e => set('hra1From', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
+              <Fg label="To Month"><select style={s.input} value={f.hra1To} onChange={e => set('hra1To', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
             </div>
             <Fg label="Monthly Rent Paid (₹)">{numIn('rentM')}</Fg>
             <Fg label="City Type"><select style={s.input} value={f.cityType} onChange={e => set('cityType', e.target.value)}><option value="nonmetro">Non-Metro (40% of Basic)</option><option value="metro">Metro (50% of Basic)</option></select></Fg>
             <Fg label="Landlord PAN (required if annual rent > ₹1,00,000)"><input style={{ ...s.input, textTransform: 'uppercase' }} value={f.landlordPAN} onChange={e => set('landlordPAN', e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></Fg>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: F.tiny, fontWeight: W.semi, color: TK.brandDeep, marginBottom: S.md, padding: '10px 12px', background: TK.surface, border: `1px dashed ${TK.brandEdge}`, borderRadius: RAD.md, cursor: 'pointer' }}>
-            <input type="checkbox" checked={!!f.showHra2} onChange={e => set('showHra2', e.target.checked ? 'y' : '')} style={{ accentColor: TK.brand }} /> Changed residence mid-year? Add second HRA period
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: P.purpleDark, marginBottom: 10, padding: '9px 12px', background: P.purpleBg, borderRadius: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!f.showHra2} onChange={e => set('showHra2', e.target.checked ? 'y' : '')} /> Changed residence mid-year? Add second HRA period
           </label>
           {f.showHra2 && (
-            <div style={{ ...s.well, marginBottom: S.md }}>
-              <SubHead>Period 2</SubHead>
-              <div style={grid(150, S.sm)}>
-                <Fg label="From Month">{monthSelect('hra2From')}</Fg>
-                <Fg label="To Month">{monthSelect('hra2To')}</Fg>
+            <div style={{ background: P.tealBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Period 2</div>
+              <div style={s.g2}>
+                <Fg label="From Month"><select style={s.input} value={f.hra2From} onChange={e => set('hra2From', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
+                <Fg label="To Month"><select style={s.input} value={f.hra2To} onChange={e => set('hra2To', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
               </div>
               <Fg label="Monthly Rent Paid (₹)">{numIn('rentM2')}</Fg>
               <Fg label="City Type"><select style={s.input} value={f.cityType2} onChange={e => set('cityType2', e.target.value)}><option value="nonmetro">Non-Metro (40%)</option><option value="metro">Metro (50%)</option></select></Fg>
             </div>
           )}
-          {N(f.rentM) > 0 && <div style={{ ...s.sumRow, background: TK.positiveTint, color: TK.positive, border: `1px solid ${TK.positiveEdge}` }}><span>Total HRA Exempt</span><span>{R(hraExempt)}</span></div>}
-        </SectionCard>
+          {N(f.rentM) > 0 && <div style={{ background: P.greenBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 10, padding: '8px 11px', fontSize: 12, color: P.teal, marginBottom: 10 }}>Total HRA Exempt: <b>{R(hraExempt)}</b></div>}
 
-        <SectionCard title="Section 80C (Max ₹1,50,000)" icon={<IconFinance size={16} />}
-          hint="Tax-saving investments and payments: your PF, LIC, PPF, ELSS, children's tuition and home-loan principal, together capped at ₹1.5 lakh."
-          actions={<StatusPill t={c80Total >= 150000 ? 'positive' : 'brand'} size="sm">{Math.round(c80Total / 150000 * 100)}% used</StatusPill>}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 12px', background: TK.sunken, borderRadius: RAD.md, fontSize: F.tiny, marginBottom: S.md, border: `1px solid ${TK.line}`, ...numeric }}><span style={{ color: TK.muted }}>Employee PF (auto)</span><span style={{ fontWeight: W.bold, color: TK.ink }}>{R(sal.epf)}</span></div>
-          <div style={grid(170, S.sm)}>
-            <Fg label="LIC Premium">{numIn('lic')}</Fg><Fg label="PPF">{numIn('ppf')}</Fg><Fg label="ELSS / Mutual Funds">{numIn('elss')}</Fg>
-            <Fg label="Tuition Fees">{numIn('tuit')}</Fg><Fg label="Home Loan Principal">{numIn('hlP')}</Fg>
-          </div>
-          <div style={{ ...s.sumRow, background: c80Total >= 150000 ? TK.positiveTint : TK.warningTint, color: c80Total >= 150000 ? TK.positive : TK.warning, border: `1px solid ${c80Total >= 150000 ? TK.positiveEdge : TK.warningEdge}` }}><span>Total 80C</span><span>{R(c80Total)} / ₹1,50,000</span></div>
-          <LimitMeter used={c80Total} limit={150000} />
-        </SectionCard>
+          <div style={s.sec}>Section 80C (Max ₹1,50,000)</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', background: TK.sunken, borderRadius: 10, fontSize: 11, marginBottom: 8, border: `1px solid ${P.border}` }}><span style={{ color: P.muted }}>Employee PF (auto)</span><span style={{ fontWeight: 700 }}>{R(sal.epf)}</span></div>
+          <Fg label="LIC Premium">{numIn('lic')}</Fg><Fg label="PPF">{numIn('ppf')}</Fg><Fg label="ELSS / Mutual Funds">{numIn('elss')}</Fg>
+          <Fg label="Tuition Fees">{numIn('tuit')}</Fg><Fg label="Home Loan Principal">{numIn('hlP')}</Fg>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 10, fontSize: 12, fontWeight: 700, background: c80Total >= 150000 ? P.greenBg : P.amberBg, color: c80Total >= 150000 ? P.teal : P.amber }}><span>Total 80C</span><span>{R(c80Total)} / ₹1,50,000</span></div>
 
-        <SectionCard title="80D, Home Loan & NPS" icon={<IconHeart size={16} />} hint="Health-insurance premiums, home-loan interest and your own NPS contribution.">
-          <Fg label="80D Self + Family (max ₹25,000)" hint={<LimitMeter used={N(f.medSelf)} limit={25000} />}>{numIn('medSelf')}</Fg>
-          <Fg label="80D Parents (max ₹50,000)" hint={<LimitMeter used={N(f.medParents)} limit={50000} />}>{numIn('medParents')}</Fg>
-          <Fg label="Home Loan Interest Sec 24(b) (max ₹2,00,000)" hint={<LimitMeter used={N(f.hlInt)} limit={200000} />}>{numIn('hlInt')}</Fg>
+          <div style={s.sec}>80D, Home Loan &amp; NPS</div>
+          <Fg label="80D Self + Family (max ₹25,000)">{numIn('medSelf')}</Fg>
+          <Fg label="80D Parents (max ₹50,000)">{numIn('medParents')}</Fg>
+          <Fg label="Home Loan Interest Sec 24(b) (max ₹2,00,000)">{numIn('hlInt')}</Fg>
           <Fg label="NPS Self 80CCD(1B) (max ₹50,000)"><select style={s.input} value={f.npsSelf} onChange={e => set('npsSelf', e.target.value)}><option value="0">₹0: Not investing</option><option value="50000">₹50,000: Max benefit</option></select></Fg>
           <Fg label="Employer NPS 80CCD(2): 10% of Basic (fully exempt)"><select style={s.input} value={f.emplrNpsOld} onChange={e => set('emplrNpsOld', e.target.value)}><option value="0">₹0: Not applicable</option><option value="on">{R(Math.round(sal.basic * .1))} (Basic × 10%)</option></select></Fg>
-        </SectionCard>
 
-        <SectionCard title="Other Deductions (80E · 80DD · 80DDB · 80G)" icon={<IconAward size={16} />} hint="Education-loan interest, a disabled dependant, specified-disease treatment and PM relief donations.">
-          <Fg label="80E: Education Loan Interest (max ₹2,00,000)" hint={<LimitMeter used={N(f.eduLoan)} limit={200000} />}>{numIn('eduLoan')}</Fg>
+          <div style={s.sec}>Other Deductions (80E · 80DD · 80DDB · 80G)</div>
+          <Fg label="80E: Education Loan Interest (max ₹2,00,000)">{numIn('eduLoan')}</Fg>
           <Fg label="80DD: Dependent Disability (fixed)"><select style={s.input} value={f.dep80dd} onChange={e => set('dep80dd', e.target.value)}><option value="0">₹0: Not applicable</option><option value="75000">₹75,000: 40–80% (Normal)</option><option value="125000">₹1,25,000: 80%+ Severe</option></select></Fg>
-          <Fg label="80DDB: Specified Disease (max ₹1,00,000)" hint={<LimitMeter used={N(f.dis80ddb)} limit={100000} />}>{numIn('dis80ddb')}</Fg>
-          <Fg label="80G: PM Relief / PM CARES (100%, max ₹2,00,000)" hint={<LimitMeter used={N(f.pmFund)} limit={200000} />}>{numIn('pmFund')}</Fg>
-        </SectionCard>
-      </div>
-
-      {/* NEW */}
-      <div style={{ minWidth: 0 }}>
-        <RegimeHead t="brand" title="New Regime Declaration" sub="Std Deduction ₹75,000 | No HRA / 80C / 80D"
-          note="Lower slab rates with fewer deductions. Only the items below count." />
-        <SectionCard title="Standard Deduction & Employer NPS" icon={<IconCheckCircle size={16} />} iconTone="positive">
-          <div style={{ ...s.well, background: TK.positiveTint, borderColor: TK.positiveEdge, marginBottom: S.md }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: F.small, marginBottom: 4, ...numeric }}><span style={{ color: TK.positive, fontWeight: W.semi }}>Standard Deduction (auto)</span><span style={{ fontWeight: W.bold, color: TK.ink }}>₹75,000</span></div>
-            <div style={{ fontSize: F.micro, color: TK.muted }}>HRA · LTA · 80C · 80D · Home Loan: Not applicable</div>
+          <Fg label="80DDB: Specified Disease (max ₹1,00,000)">{numIn('dis80ddb')}</Fg>
+          <Fg label="80G: PM Relief / PM CARES (100%, max ₹2,00,000)">{numIn('pmFund')}</Fg>
+        </div>
+        {/* NEW */}
+        <div style={{ ...s.card, borderLeft: `3px solid ${P.green}` }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: TK.ink }}>New Regime Declaration</div>
+          <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Std Deduction ₹75,000 | No HRA / 80C / 80D</div>
+          <div style={{ background: P.greenBg, borderRadius: 10, padding: 12, marginBottom: 13, border: `1px solid ${TK.lineStrong}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span style={{ color: P.teal, fontWeight: 500 }}>Standard Deduction (auto)</span><span style={{ fontWeight: 700 }}>₹75,000</span></div>
+            <div style={{ fontSize: 10, color: P.green }}>HRA · LTA · 80C · 80D · Home Loan: Not applicable</div>
           </div>
           <Fg label="Employer NPS 80CCD(2): 14% of Basic (fully exempt)"><select style={s.input} value={f.emplrNpsNew} onChange={e => set('emplrNpsNew', e.target.value)}><option value="0">₹0: Not applicable</option><option value="on">{R(Math.round(sal.basic * .14))} (Basic × 14%)</option></select></Fg>
-        </SectionCard>
-        <SectionCard title="Additional Income (FY 2026-27)" icon={<IconReceipt size={16} />} hint="Income outside this salary. It is added to your taxable income under both regimes.">
+          <div style={s.sec}>Additional Income (FY 2026-27)</div>
           <Fg label="Other Income (rental, freelance)">{numIn('oi')}</Fg>
           <Fg label="Bonus / Commission">{numIn('bon')}</Fg>
           <Fg label="Incentive / Award">{numIn('iinc')}</Fg>
           <Fg label="Variable Pay Expected (rest of year)">{numIn('varEx')}</Fg>
           <Fg label="Interest Income (FD / Savings)">{numIn('iInc')}</Fg>
-          <div style={{ ...s.sumRow, background: TK.sunken, color: TK.ink, border: `1px solid ${TK.line}` }}><span>Total Additional Income</span><span>{R(addITotal)}</span></div>
-        </SectionCard>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: P.greenBg, borderRadius: 10, fontSize: 12, fontWeight: 700, color: P.teal, border: `1px solid ${TK.lineStrong}` }}><span>Total Additional Income</span><span>{R(addITotal)}</span></div>
+        </div>
       </div>
     </div>
   )
@@ -988,7 +771,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandb
       .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #2563EB;padding-bottom:14px;margin-bottom:16px}
       .brand{font-size:22px;font-weight:800;color:#2563EB}.title{text-align:right;font-size:14px;font-weight:800;letter-spacing:.05em}
       .title .sub{font-size:11px;color:#2563EB}
-      .badge{display:inline-block;padding:4px 14px;border-radius:99px;font-weight:800;font-size:13px;background:${isOld ? '#FEF3C7' : '#DCFCE7'};color:${isOld ? '#B45309' : '#047857'};border:2px solid ${isOld ? '#F59E0B' : '#10B981'}}
+      .badge{display:inline-block;padding:4px 14px;border-radius:99px;font-weight:800;font-size:13px;background:${isOld ? TK.warningTint : TK.positiveTint};color:${isOld ? TK.warning : TK.positive};border:2px solid ${isOld ? TK.warningTint : TK.positive}}
       h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#3C3489;margin:20px 0 6px}
       table{width:100%;border-collapse:collapse;font-size:13px}
       td,th{padding:7px 10px;border-bottom:1px solid #F1F0FA;text-align:left}
@@ -1075,246 +858,203 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandb
   }
 
   // ── STEP 4 — TDS report ──
-  // saveDraft prefixes its failure message with ⚠; anything else is a success note.
-  const draftIsError = draftMsg.startsWith('⚠')
   const step4 = (() => {
-    if (!T) return <SectionCard><EmptyState icon={<IconReceipt size={20} />} title="Complete Steps 1–3 first." hint="Your Old vs New regime comparison appears here once an Annual CTC is available." /></SectionCard>
+    if (!T) return <div style={{ ...s.card, textAlign: 'center', padding: 40, color: P.muted }}>Complete Steps 1–3 first.</div>
     const rec = T.fO <= T.fN ? 'OLD' : 'NEW', save = Math.abs(T.fO - T.fN)
-    const recName = rec === 'OLD' ? 'Old' : 'New'
-    const maxTax = Math.max(T.fO, T.fN, 1)
-    const metrics: { l: string; v: string; s: string; t?: 'positive' | 'brand'; e?: boolean }[] = [
+    const metrics = [
       { l: 'Annual CTC', v: R(sal.ctc), s: SLAB_LABELS[sal.si] }, { l: T.mid ? 'Earned Salary' : 'Flexi Wallet', v: R(T.mid ? sal.ctc * T.pr : sal.other), s: T.mid ? `${T.months} mo · ${Math.round(T.pr * 100)}%` : 'Other Reimb.' },
       { l: 'Old Regime Tax', v: R(T.fO), s: 'Eff ' + T.efO + '%' }, { l: 'New Regime Tax', v: R(T.fN), s: 'Eff ' + T.efN + '%' },
-      { l: 'HRA Exemption', v: R(T.hE), s: T.hE ? 'Old only' : 'No rent' }, { l: 'Tax Savings', v: R(save), s: rec + ' wins', t: 'positive' },
-      { l: 'Monthly TDS', v: R(rec === 'OLD' ? T.moO : T.moN), s: 'Recommended', e: true }, { l: 'Best Regime', v: rec, s: 'For you', t: 'positive' },
+      { l: 'HRA Exemption', v: R(T.hE), s: T.hE ? 'Old only' : 'No rent' }, { l: 'Tax Savings', v: R(save), s: rec + ' wins' },
+      { l: 'Monthly TDS', v: R(rec === 'OLD' ? T.moO : T.moN), s: 'Recommended' }, { l: 'Best Regime', v: rec, s: 'For you' },
     ]
+    const row = (l: string, oV: string, nV: string, exempt = false) => (
+      <tr style={{ background: exempt ? P.greenBg : 'transparent' }}>
+        <td style={{ padding: '7px 10px', fontSize: 12, color: exempt ? P.teal : P.navy }} dangerouslySetInnerHTML={{ __html: l }} />
+        <td style={{ padding: '7px 10px', fontSize: 12, textAlign: 'right', color: exempt ? P.teal : P.navy }}>{oV}</td>
+        <td style={{ padding: '7px 10px', fontSize: 12, textAlign: 'right', color: exempt ? P.teal : P.navy }}>{nV}</td>
+      </tr>
+    )
+    const bold = (l: string, oV: string, nV: string, bg: string, col = P.navy) => (
+      <tr style={{ background: bg }}><td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 700, color: col }}>{l}</td><td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 700, textAlign: 'right', color: col }}>{oV}</td><td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 700, textAlign: 'right', color: col }}>{nV}</td></tr>
+    )
+    const sec = (t: string) => <tr><td colSpan={3} style={{ padding: '8px 10px', fontSize: 11, fontWeight: 700, color: P.purpleDark, background: TK.brandTint, letterSpacing: '.03em' }}>{t}</td></tr>
     return (
       <div>
-        {/* ── Verdict ── */}
-        <section className="ez-rise" style={{ background: TK.surface, border: `1px solid ${TK.line}`, borderRadius: RAD.lg, boxShadow: E.raised, marginBottom: S.lg, overflow: 'hidden', position: 'relative' }}>
-          <span aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 3, background: TK.positive }} />
-          <div style={{ padding: `${S.xl}px ${S.xl}px ${S.lg}px`, display: 'flex', flexWrap: 'wrap', gap: S.xl, alignItems: 'flex-start' }}>
-            <div style={{ flex: '1 1 300px', minWidth: 0 }}>
-              <StatusPill t="positive" icon={<IconCheck size={11} strokeWidth={2.4} />}>Recommended: {recName} Regime</StatusPill>
-              <div style={{ fontSize: F.title + 6, fontWeight: W.bold, color: TK.ink, letterSpacing: '-.02em', lineHeight: 1.2, marginTop: S.md, ...numeric }}>
-                {save > 0 ? <>{recName} regime saves you <span style={{ color: TK.positive }}>{R(save)}</span> a year</> : <>Both regimes cost you the same</>}
-              </div>
-              <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6, lineHeight: 1.55, ...numeric }}>You save <b style={{ color: TK.ink }}>{R(save)}</b> annually with the {recName} Regime, based on everything you declared in Steps 1–3.</div>
-            </div>
-            <div style={{ flex: '0 1 240px', minWidth: 0, background: TK.sunken, border: `1px solid ${TK.line}`, borderRadius: RAD.lg, padding: `${S.md}px ${S.lg}px` }}>
-              <div style={{ ...eyebrow }}>Annual Tax · {recName} Regime</div>
-              <div style={{ fontSize: F.display + 4, fontWeight: W.bold, color: TK.ink, letterSpacing: '-.02em', marginTop: 4, ...numeric }}>{R(rec === 'OLD' ? T.fO : T.fN)}</div>
-              <div style={{ fontSize: F.tiny, color: TK.muted, marginTop: 2, ...numeric }}>Monthly TDS <b style={{ color: TK.brandDeep }}>{R(rec === 'OLD' ? T.moO : T.moN)}</b></div>
-            </div>
-          </div>
-          <div style={{ padding: `0 ${S.xl}px ${S.md}px` }}>
-            <CompareBar label="Old Regime" tax={T.fO} mo={T.moO} pct={T.fO / maxTax} best={rec === 'OLD'} />
-            <CompareBar label="New Regime" tax={T.fN} mo={T.moN} pct={T.fN / maxTax} best={rec === 'NEW'} />
-          </div>
-        </section>
+        <div style={{ ...s.card, background: rec === 'OLD' ? 'linear-gradient(135deg,#B45309,#C2410C)' : 'linear-gradient(135deg,#059669,#047857)', color: TK.onAccent, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div><div style={{ fontSize: 17, fontWeight: 700 }}>Recommended: {rec === 'OLD' ? 'Old' : 'New'} Regime</div><div style={{ fontSize: 12, opacity: .9 }}>You save <b>{R(save)}</b> annually</div></div>
+          <div style={{ textAlign: 'right' }}><div style={{ fontSize: 32, fontWeight: 800 }}>{R(rec === 'OLD' ? T.fO : T.fN)}</div><div style={{ fontSize: 11, opacity: .85 }}>Annual Tax · Monthly TDS {R(rec === 'OLD' ? T.moO : T.moN)}</div></div>
+        </div>
 
         {/* ── Save & Submit: choose Old / New regime, save draft, or submit (locks) ── */}
-        {!sandbox && <>
-          <SectionCard
-            title="Save & Submit: Tax Regime"
-            icon={<IconFile size={16} />}
-            hint="Payroll deducts TDS every month on the regime you submit."
-            actions={<>
-              {isSubmitted && !editMode && <StatusPill t="positive" size="sm" icon={<IconLock size={10} />}>Submitted &amp; locked</StatusPill>}
-              {editMode && <StatusPill t="warning" size="sm" dot>Editing {editMode === 'all' ? 'flexi + investments' : 'flexi only'}</StatusPill>}
-              {status === 'DRAFT' && <StatusPill t="info" size="sm" dot>Draft saved</StatusPill>}
-            </>}
-          >
-            {!userPicked && !isSubmitted && recRegime && (
-              <InfoCallout t="info" compact>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. It gives you the <b>lower annual tax</b>. You can change it below before submitting.</InfoCallout>
-            )}
-            {isSubmitted && !editMode && (
-              <InfoCallout t="brand" compact icon={<IconLock size={13} />}>You submitted the <b>{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. Your regime is locked. {chosenRegime === 'OLD' ? 'Use Edit to change your flexi & investment declarations.' : 'Use Edit to change your flexi declaration (investment sections don’t apply to the New Regime).'}</InfoCallout>
-            )}
-            <div role="radiogroup" aria-label="Tax regime" style={grid(220)}>
-              {(['OLD', 'NEW'] as const).map(rg => {
-                const sel = chosenRegime === rg
-                const isOld = rg === 'OLD'
-                const tax = isOld ? T.fO : T.fN, mo = isOld ? T.moO : T.moN
-                return (
-                  <button key={rg} role="radio" aria-checked={sel} className={regimeLocked ? undefined : 'ez-press'} onClick={() => { if (!regimeLocked) { setChosenRegime(rg); setUserPicked(true); setSaved(false) } }} disabled={regimeLocked} style={{
-                    textAlign: 'left', padding: `${S.md + 2}px ${S.lg}px`, borderRadius: RAD.lg, cursor: regimeLocked ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                    border: `2px solid ${sel ? TK.brand : TK.line}`, boxShadow: sel ? `0 0 0 3px ${TK.brandTint}` : E.flat,
-                    background: sel ? TK.brandTint : TK.surface, opacity: regimeLocked && !sel ? .45 : 1, transition: `border-color ${M.quick}, box-shadow ${M.quick}`,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
-                      <span aria-hidden style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${sel ? TK.brand : TK.lineStrong}`, background: TK.surface, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxSizing: 'border-box' }}>
-                        {sel && <span style={{ width: 8, height: 8, borderRadius: '50%', background: TK.brand }} />}
-                      </span>
-                      <span style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>{isOld ? 'Old Regime' : 'New Regime'}</span>
-                      {rec === rg && <StatusPill t="positive" size="sm">Recommended</StatusPill>}
-                      {regimeLocked && sel && <span style={{ marginLeft: 'auto', display: 'inline-flex', color: TK.muted }}><IconLock size={13} /></span>}
-                    </div>
-                    <div style={{ fontSize: F.tiny, color: TK.muted, marginTop: S.sm, ...numeric }}>Annual tax <b style={{ color: TK.ink }}>{R(tax)}</b> · Monthly TDS <b style={{ color: TK.ink }}>{R(mo)}</b></div>
-                  </button>
-                )
-              })}
+        {!sandbox && <div style={s.card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Save &amp; Submit: Tax Regime</div>
+            {isSubmitted && !editMode && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: P.greenBg, color: P.green }}>Submitted &amp; locked</span>}
+            {editMode && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: P.amberBg, color: P.amber }}>Editing {editMode === 'all' ? 'flexi + investments' : 'flexi only'}</span>}
+            {status === 'DRAFT' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: TK.infoTint, color: TK.info }}>Draft saved</span>}
+          </div>
+          {!userPicked && !isSubmitted && recRegime && (
+            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: TK.brand, marginBottom: 10 }}>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. It gives you the <b>lower annual tax</b>. You can change it below before submitting.
             </div>
-          </SectionCard>
-          <ActionBar
-            hint={isSubmitted && !editMode
-              ? `Your ${chosenRegime === 'OLD' ? 'Old' : 'New'} Regime is locked. Edit reopens ${chosenRegime === 'OLD' ? 'flexi & investments' : 'flexi'}; the regime itself stays as submitted.`
-              : editMode ? 'Save & re-submit stores your changes and downloads an updated declaration.'
-              : 'Submitting locks your regime and downloads your declaration. Save Draft keeps your work without submitting.'}
-          >
+          )}
+          {isSubmitted && !editMode && (
+            <div style={{ background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.purpleDark, marginBottom: 10 }}>You submitted the <b>{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. Your regime is locked. {chosenRegime === 'OLD' ? 'Use Edit to change your flexi & investment declarations.' : 'Use Edit to change your flexi declaration (investment sections don’t apply to the New Regime).'}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            {(['OLD', 'NEW'] as const).map(rg => {
+              const sel = chosenRegime === rg
+              const isOld = rg === 'OLD'
+              const tax = isOld ? T.fO : T.fN, mo = isOld ? T.moO : T.moN
+              return (
+                <button key={rg} onClick={() => { if (!regimeLocked) { setChosenRegime(rg); setUserPicked(true); setSaved(false) } }} disabled={regimeLocked} style={{
+                  textAlign: 'left', padding: '12px 14px', borderRadius: 10, cursor: regimeLocked ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                  border: `2px solid ${sel ? (isOld ? TK.warningTint : P.green) : P.border}`,
+                  background: sel ? (isOld ? TK.warningTint : P.greenBg) : TK.surface, opacity: regimeLocked && !sel ? .45 : 1,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 16, height: 16, borderRadius: 99, border: `2px solid ${sel ? (isOld ? '#C05621' : P.green) : P.border}`, background: sel ? (isOld ? '#C05621' : P.green) : TK.surface, display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: isOld ? '#9b2c2c' : '#1c4532' }}>{isOld ? 'Old Regime' : 'New Regime'}</span>
+                    {rec === rg && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: P.purpleBg, color: P.purpleDark }}>Recommended</span>}
+                    {regimeLocked && sel && <span style={{ fontSize: 10 }}></span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: P.muted, marginTop: 6 }}>Annual tax <b style={{ color: P.navy }}>{R(tax)}</b> · Monthly TDS <b style={{ color: P.navy }}>{R(mo)}</b></div>
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {(!isSubmitted || editMode) && (
-              <PButton variant="primary" onClick={submitRegime} disabled={!chosenRegime || saving} icon={<IconCheckCircle size={15} />}>
+              <button onClick={submitRegime} disabled={!chosenRegime || saving} style={{ ...s.btn, opacity: (!chosenRegime || saving) ? .6 : 1 }}>
                 {saving ? 'Saving…' : editMode ? 'Save & re-submit' : `Submit ${chosenRegime || ''} declaration`}
-              </PButton>
+              </button>
             )}
             {!isSubmitted && (
-              <PButton onClick={saveDraft} disabled={saving}>Save Draft</PButton>
+              <button onClick={saveDraft} disabled={saving} style={{ ...s.ghost, opacity: saving ? .6 : 1 }}>Save Draft</button>
             )}
             {isSubmitted && !editMode && (
-              <PButton variant="primary" onClick={() => setEditMode(chosenRegime === 'OLD' ? 'all' : 'flexi')}>Edit {chosenRegime === 'OLD' ? 'flexi & investments' : 'flexi'}
-              </PButton>
+              <button onClick={() => setEditMode(chosenRegime === 'OLD' ? 'all' : 'flexi')} style={s.btn}>Edit {chosenRegime === 'OLD' ? 'flexi & investments' : 'flexi'}
+              </button>
             )}
             {isSubmitted && !editMode && (
               <>
-                <PButton onClick={downloadDeclarationPdf} icon={<IconDownload size={14} />}>Download PDF</PButton>
-                <PButton onClick={downloadDeclaration} icon={<IconDownload size={14} />}>Excel</PButton>
+                <button onClick={downloadDeclarationPdf} style={s.ghost}>⬇ Download PDF</button>
+                <button onClick={downloadDeclaration} style={s.ghost}>⬇ Excel</button>
               </>
             )}
-            {editMode && <PButton variant="ghost" onClick={() => { setEditMode(null); setStatus('SUBMITTED') }}>Cancel edit</PButton>}
-            {draftMsg && <span style={{ fontSize: F.tiny, color: draftIsError ? TK.critical : TK.positive, fontWeight: W.semi }}>{draftMsg}</span>}
-          </ActionBar>
-        </>}
+            {editMode && <button onClick={() => { setEditMode(null); setStatus('SUBMITTED') }} style={s.ghost}>Cancel edit</button>}
+            {draftMsg && <span style={{ fontSize: 11, color: draftMsg.startsWith('') ? P.red : P.teal, fontWeight: 600 }}>{draftMsg}</span>}
+          </div>
+        </div>}
 
         {T.mid && (
-          <InfoCallout t="info" icon={<IconCalendar size={17} />} title="Pro-rated for mid-year joining">
-            Salary income taxed for <b>{T.months} of 12 months</b> (≈{Math.round(T.pr * 100)}%). Annual tax above is spread over the <b>{T.months} remaining pay month{T.months === 1 ? '' : 's'}</b>: Monthly TDS = Annual Tax ÷ {T.months}. Standard deduction &amp; your actual investment declarations are counted in full.
-          </InfoCallout>
+          <div style={{ ...s.card, background: TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>
+            <div style={{ fontSize: 12, color: TK.brand, lineHeight: 1.65 }}>📅 <b>Pro-rated for mid-year joining:</b> salary income taxed for <b>{T.months} of 12 months</b> (≈{Math.round(T.pr * 100)}%). Annual tax above is spread over the <b>{T.months} remaining pay month{T.months === 1 ? '' : 's'}</b>Monthly TDS = Annual Tax ÷ {T.months}. Standard deduction &amp; your actual investment declarations are counted in full.</div>
+          </div>
         )}
-        <KpiGrid min={230}>
-          {metrics.map(m => <KpiTile key={m.l} label={m.l} value={m.v} sub={m.s} t={m.t} emphasis={m.e} />)}
-        </KpiGrid>
-        <div style={{ ...grid(280), marginBottom: S.lg }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8, marginBottom: 14 }}>
+          {metrics.map(m => <div key={m.l} style={{ ...s.card, marginBottom: 0, padding: 12 }}><div style={{ fontSize: 10, color: P.muted, fontWeight: 600 }}>{m.l}</div><div style={{ fontSize: 16, fontWeight: 700, margin: '2px 0' }}>{m.v}</div><div style={{ fontSize: 10, color: P.muted }}>{m.s}</div></div>)}
+        </div>
+        <div style={s.g2}>
           {(['OLD', 'NEW'] as const).map(rg => {
             const io = rg === 'OLD', ir = rec === rg
             const tax = io ? T.fO : T.fN, gr = io ? T.gO : T.gN, ded = io ? T.dO : T.dN, tx2 = io ? T.tO : T.tN, mo = io ? T.moO : T.moN, eff = io ? T.efO : T.efN
             return (
-              <div key={rg} style={{ background: TK.surface, border: `1px solid ${ir ? TK.positiveEdge : TK.line}`, borderRadius: RAD.lg, boxShadow: ir ? `0 0 0 3px ${TK.positiveTint}, ${E.raised}` : E.raised, padding: `${S.lg}px ${S.lg + 2}px`, minWidth: 0 }}>
-                <div style={{ display: 'flex', gap: S.sm, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ ...eyebrow, color: TK.inkSoft }}>{io ? 'Old' : 'New'} Regime</span>
-                  {ir && <StatusPill t="positive" size="sm" solid>Recommended</StatusPill>}
-                </div>
-                <div style={{ fontSize: F.display, fontWeight: W.bold, color: ir ? TK.positive : TK.ink, margin: '6px 0 2px', letterSpacing: '-.02em', ...numeric }}>{R(tax)}</div>
-                <div style={{ fontSize: F.tiny, color: TK.muted, marginBottom: S.md, ...numeric }}>Effective {eff}% · Monthly TDS {R(mo)}</div>
-                {[['Gross Income', R(gr)], ['(–) Deductions', R(ded)], ['= Net Taxable', R(tx2)], ['Annual Tax', R(tax)], ['Monthly TDS', R(mo)]].map(([l, v], i) => (
-                  <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', fontSize: F.small, borderTop: `1px solid ${TK.line}`, fontWeight: i >= 3 ? W.semi : W.regular, ...numeric }}>
-                    <span style={{ color: TK.muted }}>{l}</span><span style={{ fontWeight: W.semi, color: TK.ink }}>{v}</span>
-                  </div>
-                ))}
+              <div key={rg} style={{ ...s.card, marginBottom: 0, borderLeft: `3px solid ${io ? '#C05621' : P.green}`, boxShadow: ir ? `0 0 0 2px ${P.purple}` : undefined }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: io ? '#9b2c2c' : '#1c4532', display: 'flex', gap: 8, alignItems: 'center' }}>{io ? 'Old' : 'New'} Regime {ir && <span style={{ fontSize: 9, background: P.purple, color: TK.onAccent, padding: '2px 7px', borderRadius: 99 }}>Recommended</span>}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: io ? '#C05621' : P.green, margin: '4px 0' }}>{R(tax)}</div>
+                <div style={{ fontSize: 11, color: P.muted, marginBottom: 8 }}>Effective {eff}% · Monthly TDS {R(mo)}</div>
+                {[['Gross Income', R(gr)], ['(–) Deductions', R(ded)], ['= Net Taxable', R(tx2)], ['Annual Tax', R(tax)], ['Monthly TDS', R(mo)]].map(([l, v]) => <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12, borderBottom: `1px solid ${P.border}` }}><span style={{ color: P.muted }}>{l}</span><span style={{ fontWeight: 600 }}>{v}</span></div>)}
               </div>
             )
           })}
         </div>
-        <SectionCard flush title="Taxable Income Breakup (Component-wise)" icon={<IconLayers size={16} />} hint="What is taxable, what is exempt, and how TDS is computed">
-          <DataTable minWidth={460}>
-            <thead><tr><th style={dt.th}>Component</th><th style={dt.thNum}>Old (₹)</th><th style={dt.thNum}>New (₹)</th></tr></thead>
-            <tbody>
-              <SecRow>{T.mid ? `INCOME (${T.months} months · pro-rated ${Math.round(T.pr * 100)}%)` : 'INCOME'}</SecRow>
-              <BreakRow label="Basic Salary (100% taxable)" o={R(T.eBasic)} n={R(T.eBasic)} />
-              <BreakRow label={'HRA Received (' + R(T.eHra) + ')'} o="" n="" />
-              {T.hE > 0 && <BreakRow indent exempt label="HRA Exemption" o={`(${R(T.hE)})`} n="N/A" />}
-              <BreakRow indent label="= Net Taxable HRA" o={R(T.eHra - T.hE)} n={R(T.eHra)} />
-              <BreakRow label={'Flexi Wallet: Total ' + R(T.eOther)} o="" n="" />
-              {(T.oClaim > 0 || T.nClaim > 0) && <BreakRow indent exempt label="Flexi Claimed (exempt on bills)" o={T.oClaim ? `(${R(T.oClaim)})` : '-'} n={T.nClaim ? `(${R(T.nClaim)})` : '-'} />}
-              <BreakRow indent label="= Wallet Balance (taxable)" o={R(T.walBalO)} n={R(T.walBalN)} />
-              {T.eVari > 0 && <BreakRow label="Variable Pay" o={R(T.eVari)} n={R(T.eVari)} />}
-              {T.addI > 0 && <BreakRow label="Additional Income" o={R(T.addI)} n={R(T.addI)} />}
-              {(T.oPerq > 0 || T.nPerq > 0) && <BreakRow label="Car+Driver Perquisite (₹10,000/mo)" o={T.oPerq ? `+${R(T.oPerq)}` : '-'} n={T.nPerq ? `+${R(T.nPerq)}` : '-'} />}
-              <TotalRow label="Gross Taxable Income" o={R(T.grossO)} n={R(T.grossN)} bg={TK.sunken} col={TK.ink} />
-              <SecRow>DEDUCTIONS</SecRow>
-              <BreakRow exempt label="Standard Deduction" o="(₹50,000)" n="(₹75,000)" />
-              {T.ltaAmt > 0 && <BreakRow exempt label="Leave Travel Allowance" o={`(${R(T.ltaAmt)})`} n="N/A" />}
-              {T.c80 > 0 && <BreakRow exempt label="80C: EPF + Investments" o={`(${R(T.c80)})`} n="N/A" />}
-              {T.medS > 0 && <BreakRow exempt label="80D Self + Family" o={`(${R(T.medS)})`} n="N/A" />}
-              {T.medP > 0 && <BreakRow exempt label="80D Parents" o={`(${R(T.medP)})`} n="N/A" />}
-              {T.hlI > 0 && <BreakRow exempt label="Home Loan Interest 24(b)" o={`(${R(T.hlI)})`} n="N/A" />}
-              {T.dep80dd > 0 && <BreakRow exempt label="80DD: Dependent Disability" o={`(${R(T.dep80dd)})`} n="N/A" />}
-              {T.dis80ddb > 0 && <BreakRow exempt label="80DDB: Disease Treatment" o={`(${R(T.dis80ddb)})`} n="N/A" />}
-              {T.pmFund > 0 && <BreakRow exempt label="80G: PM Relief Fund" o={`(${R(T.pmFund)})`} n="N/A" />}
-              {T.eduLoan > 0 && <BreakRow exempt label="80E: Education Loan" o={`(${R(T.eduLoan)})`} n="N/A" />}
-              {T.npsS > 0 && <BreakRow exempt label="NPS Self 80CCD(1B)" o={`(${R(T.npsS)})`} n="N/A" />}
-              {(T.eNpsO > 0 || T.eNpsN > 0) && <BreakRow exempt label="Employer NPS 80CCD(2)" o={T.eNpsO ? `(${R(T.eNpsO)})` : '-'} n={T.eNpsN ? `(${R(T.eNpsN)})` : '-'} />}
-              <TotalRow label="Net Taxable Income" o={R(T.tO)} n={R(T.tN)} bg={TK.brandTint} col={TK.brandDeep} />
-              <SecRow>TAX</SecRow>
-              <BreakRow label="Tax on income (slab)" o={R(T.bO)} n={R(T.bN)} />
-              <BreakRow exempt label="Rebate u/s 87A" o={T.tO <= 500000 ? `(${R(Math.min(T.bO, 12500))})` : '-'} n={T.tN <= 1200000 ? `(${R(T.bN)})` : '-'} />
-              <BreakRow label="Add: 4% Health & Edu Cess" o={R(Math.round(T.fO / 1.04 * .04))} n={R(Math.round(T.fN / 1.04 * .04))} />
-              <TotalRow label="TOTAL ANNUAL TAX" o={R(T.fO)} n={R(T.fN)} bg={TK.dark} col={TK.onDark} />
-              <TotalRow label={`MONTHLY TDS (÷${T.months})`} o={R(T.moO)} n={R(T.moN)} bg={TK.brandTint} col={TK.brandDeep} />
-            </tbody>
-          </DataTable>
-        </SectionCard>
-        <InfoCallout t="neutral" title="Important Disclaimer">
-          This is an <b>estimate</b> for comparison &amp; investment planning only. Actual TDS may vary with final proofs, payroll processing, mid-year changes or tax-law amendments. Please confirm with your HR / Finance team and file your full investment declaration on the HRMS portal for accurate TDS. Not tax or financial advice. FY 2026-27 (AY 2027-28).
-        </InfoCallout>
-        <PButton onClick={() => setStep(3)} icon={<span aria-hidden style={{ display: 'inline-flex', transform: 'scaleX(-1)' }}><IconArrowRight size={14} /></span>}>Back</PButton>
+        <div style={{ ...s.card, padding: 0, overflow: 'hidden', marginTop: 14 }}>
+          <div style={{ padding: '12px 14px', borderBottom: `1px solid ${P.border}` }}><div style={{ fontSize: 13, fontWeight: 700 }}>Taxable Income Breakup (Component-wise)</div><div style={{ fontSize: 11, color: P.muted }}>What is taxable, what is exempt, and how TDS is computed</div></div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr style={{ background: TK.brandTint }}><th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: P.muted }}>Component</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: TK.warning }}>Old (₹)</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: P.green }}>New (₹)</th></tr></thead>
+              <tbody>
+                {sec(T.mid ? `📌 INCOME (${T.months} months · pro-rated ${Math.round(T.pr * 100)}%)` : 'INCOME')}
+                {row('Basic Salary (100% taxable)', R(T.eBasic), R(T.eBasic))}
+                {row('HRA Received (' + R(T.eHra) + ')', '', '')}
+                {T.hE > 0 && row('&nbsp;&nbsp;✓ HRA Exemption', `(${R(T.hE)})`, 'N/A', true)}
+                {row('&nbsp;&nbsp;= Net Taxable HRA', R(T.eHra - T.hE), R(T.eHra))}
+                {row('Flexi Wallet: Total ' + R(T.eOther), '', '')}
+                {(T.oClaim > 0 || T.nClaim > 0) && row('&nbsp;&nbsp;✓ Flexi Claimed (exempt on bills)', T.oClaim ? `(${R(T.oClaim)})` : '-', T.nClaim ? `(${R(T.nClaim)})` : '-', true)}
+                {row('&nbsp;&nbsp;= Wallet Balance (taxable)', R(T.walBalO), R(T.walBalN))}
+                {T.eVari > 0 && row('Variable Pay', R(T.eVari), R(T.eVari))}
+                {T.addI > 0 && row('Additional Income', R(T.addI), R(T.addI))}
+                {(T.oPerq > 0 || T.nPerq > 0) && row('Car+Driver Perquisite (₹10,000/mo)', T.oPerq ? `+${R(T.oPerq)}` : '-', T.nPerq ? `+${R(T.nPerq)}` : '-')}
+                {bold('Gross Taxable Income', R(T.grossO), R(T.grossN), TK.warningTint, TK.critical)}
+                {sec('DEDUCTIONS')}
+                {row('Standard Deduction', '(₹50,000)', '(₹75,000)', true)}
+                {T.ltaAmt > 0 && row('Leave Travel Allowance', `(${R(T.ltaAmt)})`, 'N/A', true)}
+                {T.c80 > 0 && row('80C: EPF + Investments', `(${R(T.c80)})`, 'N/A', true)}
+                {T.medS > 0 && row('80D Self + Family', `(${R(T.medS)})`, 'N/A', true)}
+                {T.medP > 0 && row('80D Parents', `(${R(T.medP)})`, 'N/A', true)}
+                {T.hlI > 0 && row('Home Loan Interest 24(b)', `(${R(T.hlI)})`, 'N/A', true)}
+                {T.dep80dd > 0 && row('80DD: Dependent Disability', `(${R(T.dep80dd)})`, 'N/A', true)}
+                {T.dis80ddb > 0 && row('80DDB: Disease Treatment', `(${R(T.dis80ddb)})`, 'N/A', true)}
+                {T.pmFund > 0 && row('80G: PM Relief Fund', `(${R(T.pmFund)})`, 'N/A', true)}
+                {T.eduLoan > 0 && row('80E: Education Loan', `(${R(T.eduLoan)})`, 'N/A', true)}
+                {T.npsS > 0 && row('NPS Self 80CCD(1B)', `(${R(T.npsS)})`, 'N/A', true)}
+                {(T.eNpsO > 0 || T.eNpsN > 0) && row('Employer NPS 80CCD(2)', T.eNpsO ? `(${R(T.eNpsO)})` : '-', T.eNpsN ? `(${R(T.eNpsN)})` : '-', true)}
+                {bold('Net Taxable Income', R(T.tO), R(T.tN), P.purpleBg, P.purpleDark)}
+                {sec('TAX')}
+                {row('Tax on income (slab)', R(T.bO), R(T.bN))}
+                {row('Rebate u/s 87A', T.tO <= 500000 ? `(${R(Math.min(T.bO, 12500))})` : '-', T.tN <= 1200000 ? `(${R(T.bN)})` : '-', true)}
+                {row('Add: 4% Health & Edu Cess', R(Math.round(T.fO / 1.04 * .04)), R(Math.round(T.fN / 1.04 * .04)))}
+                {bold('TOTAL ANNUAL TAX', R(T.fO), R(T.fN), P.navy, TK.surface)}
+                {bold(`MONTHLY TDS (÷${T.months})`, R(T.moO), R(T.moN), TK.warningTint, TK.critical)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style={{ ...s.card, background: P.amberBg, border: `1px solid ${TK.warningTint}` }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 6 }}>Important Disclaimer</div>
+          <div style={{ fontSize: 12, color: TK.warning, lineHeight: 1.7 }}>
+            This is an <b>estimate</b> for comparison &amp; investment planning only. Actual TDS may vary with final proofs, payroll processing, mid-year changes or tax-law amendments. Please confirm with your HR / Finance team and file your full investment declaration on the HRMS portal for accurate TDS. Not tax or financial advice. FY 2026-27 (AY 2027-28).
+          </div>
+        </div>
+        <button style={s.ghost} onClick={() => setStep(3)}>Back</button>
       </div>
     )
   })()
 
-  const statusPill = sandbox
-    ? <StatusPill t="info" size="sm" dot>Sandbox · nothing is saved</StatusPill>
-    : editMode ? <StatusPill t="warning" size="sm" dot>Editing</StatusPill>
-    : isSubmitted ? <StatusPill t="positive" size="sm" icon={<IconLock size={10} />}>Submitted &amp; locked</StatusPill>
-    : status === 'DRAFT' ? <StatusPill t="info" size="sm" dot>Draft saved</StatusPill>
-    : <StatusPill t="neutral" size="sm" dot>Not submitted yet</StatusPill>
-  const backIcon = <span aria-hidden style={{ display: 'inline-flex', transform: 'scaleX(-1)' }}><IconArrowRight size={14} /></span>
-
   return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.md, flexWrap: 'wrap', marginBottom: S.lg }}>
-        <IconTile icon={<IconFinance size={18} />} t="brand" size={40} />
-        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-          <div style={{ fontSize: F.title, fontWeight: W.bold, color: TK.ink, letterSpacing: '-.01em', lineHeight: 1.25 }}>{sandbox ? 'TDS Calculator' : <>Flexi &amp; TDS Calculator</>}</div>
-          <div style={{ fontSize: F.small, color: TK.muted, marginTop: 3, lineHeight: 1.5 }}>{sandbox
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: P.navy, marginBottom: 2 }}>{sandbox ? 'TDS Calculator' : <>Flexi &amp; TDS Calculator</>}</div>
+          <div style={{ fontSize: 12, color: P.muted }}>{sandbox
             ? <>Work out flexi, deductions and Old vs New regime tax for any figures · FY 2026-27 · <b>nothing here is saved</b> and no one&apos;s declaration changes</>
             : 'Plan your flexi benefit declaration and compare Old vs New tax regime · FY 2026-27'}</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: S.sm }}>
-            <StatusPill t="neutral" size="sm">FY 2026-27</StatusPill>
-            {statusPill}
-            {!sandbox && chosenRegime && <StatusPill t="brand" size="sm">{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime{isSubmitted ? '' : ' selected'}</StatusPill>}
-          </div>
         </div>
-        <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
-          {sandbox && sal.ctc > 0 && step === 4 && (
-            <PButton onClick={downloadDeclaration} icon={<IconDownload size={14} />}>Download Excel</PButton>
-          )}
-          {/* Save Draft from any step (pre-submit) — data is stored and returns pre-filled */}
-          {!isSubmitted && !sandbox && (
-            <PButton onClick={saveDraft} disabled={saving}>Save Draft</PButton>
-          )}
-        </div>
+        {sandbox && sal.ctc > 0 && step === 4 && (
+          <button onClick={downloadDeclaration} style={{ ...s.ghost, whiteSpace: 'nowrap' }}>Download Excel</button>
+        )}
+        {/* Save Draft from any step (pre-submit) — data is stored and returns pre-filled */}
+        {!isSubmitted && !sandbox && (
+          <button onClick={saveDraft} disabled={saving} style={{ ...s.ghost, opacity: saving ? .6 : 1, whiteSpace: 'nowrap' }}>Save Draft</button>
+        )}
       </div>
-      {draftMsg && <InfoCallout t={draftIsError ? 'critical' : 'positive'} compact>{draftMsg}</InfoCallout>}
+      {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? TK.critical : TK.positive}`, borderRadius: 10, padding: '8px 12px' }}>{draftMsg}</div>}
       {defaultedByRule && !isSubmitted && (
-        <InfoCallout t="warning" title="New Regime applied by default">
-          No regime was chosen by the 4th of the month{/^\d{4}-/.test(defaultedByRule) ? ` (set on ${new Date(defaultedByRule).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Payroll is taxing you on the New Regime. You can still submit your own choice here; submitting replaces the default.
-        </InfoCallout>
+        <div style={{ marginBottom: 12, fontSize: 12, color: P.amber, background: P.amberBg, border: `1px solid ${P.amber}`, borderRadius: 10, padding: '9px 12px' }}>
+          <b>New Regime applied by default</b>: no regime was chosen by the 4th of the month{/^\d{4}-/.test(defaultedByRule) ? ` (set on ${new Date(defaultedByRule).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Payroll is taxing you on the New Regime. You can still submit your own choice here; submitting replaces the default.
+        </div>
       )}
-      {viewLocked && (
-        <InfoCallout t="brand" icon={<IconLock size={16} />} title={`Submitted & locked · ${chosenRegime === 'OLD' ? 'Old' : 'New'} Regime`}
-          action={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: F.tiny, color: TK.muted }}><IconLock size={12} /> Regime can&apos;t change after submit</span>}>
-          This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.
-        </InfoCallout>
-      )}
-      <WizardStepper step={step} onGo={setStep} locked={[!basicRW, !flexiRW, !investRW, false]} />
+      {viewLocked && <div style={{ marginBottom: 12, fontSize: 12, color: P.purpleDark, background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px' }}>This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}
+      <Stepper />
       {step === 1 && <fieldset disabled={!basicRW} style={fsReset}>{step1}</fieldset>}
       {step === 2 && <fieldset disabled={!flexiRW} style={fsReset}>{step2}</fieldset>}
       {step === 3 && <fieldset disabled={!investRW} style={fsReset}>{step3}</fieldset>}
       {step === 4 && step4}
       {/* Step navigation — kept OUTSIDE the disabled fieldsets so a submitted (locked) employee can still page through and view all steps. */}
-      {step === 1 && sal.ctc > 0 && <ActionBar><span style={{ flex: 1 }} /><PButton variant="primary" onClick={() => setStep(2)} iconRight={<IconArrowRight size={14} />}>Next: Flexi Declaration</PButton></ActionBar>}
-      {step === 2 && <ActionBar><PButton onClick={() => setStep(1)} icon={backIcon}>Back</PButton><span style={{ flex: 1 }} /><PButton variant="primary" onClick={() => setStep(3)} iconRight={<IconArrowRight size={14} />}>Next: Investments</PButton></ActionBar>}
-      {step === 3 && <ActionBar><PButton onClick={() => setStep(2)} icon={backIcon}>Back</PButton><span style={{ flex: 1 }} /><PButton variant="primary" onClick={() => setStep(4)} iconRight={<IconArrowRight size={14} />}>Calculate TDS</PButton></ActionBar>}
+      {step === 1 && sal.ctc > 0 && <div style={{ textAlign: 'right', marginTop: 6 }}><button style={s.btn} onClick={() => setStep(2)}>Next: Flexi Declaration →</button></div>}
+      {step === 2 && <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}><button style={s.ghost} onClick={() => setStep(1)}>Back</button><button style={s.btn} onClick={() => setStep(3)}>Next: Investments →</button></div>}
+      {step === 3 && <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}><button style={s.ghost} onClick={() => setStep(2)}>Back</button><button style={s.btn} onClick={() => setStep(4)}>Calculate TDS →</button></div>}
     </div>
   )
 }

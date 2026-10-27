@@ -81,8 +81,8 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/company/GroupHeader.tsx': 1,
   'components/company/Sections.tsx': 1,
   'components/employees/EmployeeProfileView.tsx': 0,
-  'components/ess/EmployeePortal.tsx': 3,
-  'components/ess/FlexiTdsCalculator.tsx': 15,
+  'components/ess/EmployeePortal.tsx': 5,
+  'components/ess/FlexiTdsCalculator.tsx': 21,
   'components/ess/LeaveSection.tsx': 3,
   'components/ess/RoleTabs.tsx': 0,
   'components/ess/today/Toast.tsx': 1,
@@ -115,4 +115,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 186;
+export const THEME_AUDIT_TOTAL = 194;

@@ -57,14 +57,8 @@ import { measureTrail, isValidPoint, type GpsPoint } from '@/lib/travel/gps'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
 // Local S / Field names exist here, so spacing is imported as SP.
 import {
-  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle, type Tone,
-  IconTravel, IconReceipt, IconUpload, IconPlus, IconClose, IconCheck, IconAlert,
+  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
-import {
-  SectionCard, KpiGrid, KpiTile, StatusPill, InfoCallout, EmptyState, PButton, IconTile, ProcessStepper, type Step,
-  IconFile, IconInfo, IconTimer, IconCheckCircle,
-} from '@/components/ess/payroll/kit'
-import { Figure, FormStep, FormDivider, fieldLabel } from '@/components/ess/payroll/claimsKit'
 
 // Bound to the design system — see lib/ui/tokens.ts.
 const V = {
@@ -148,16 +142,16 @@ const CATEGORY_ORDER = ['CONVEYANCE', 'OUTSTATION', 'STAY', 'ALLOWANCE',
 
 // Where the claim is, in the employee's language. The chain is
 // RM → HR Head → Finance, and any stage with nobody mapped is skipped.
-const CLAIM_STATUS: Record<string, [Tone, string]> = {
-  DRAFT:           ['brand',    'Draft'],
-  SUBMITTED:       ['warning',  'Submitted'],
-  PENDING_RM:      ['warning',  'With your manager'],
-  PENDING_HR:      ['warning',  'With HR Head'],
-  PENDING_FINANCE: ['info',     'With Finance'],
-  APPROVED:        ['positive', 'Approved'],
-  SENT_BACK:       ['critical', 'Sent back to you'],
-  REJECTED:        ['critical', 'Rejected'],
-  PAID:            ['positive', 'Paid'],
+const CLAIM_STATUS: Record<string, [string, string, string]> = {
+  DRAFT:           [V.purpleBg, V.purpleDark, 'Draft'],
+  SUBMITTED:       [V.amberBg,  V.amber,      'Submitted'],
+  PENDING_RM:      [V.amberBg,  V.amber,      'With your manager'],
+  PENDING_HR:      [V.amberBg,  V.amber,      'With HR Head'],
+  PENDING_FINANCE: [V.purpleBg, V.purpleDark, 'With Finance'],
+  APPROVED:        [V.greenBg,  V.green,      'Approved'],
+  SENT_BACK:       [V.redBg,    V.red,        'Sent back to you'],
+  REJECTED:        [V.redBg,    V.red,        'Rejected'],
+  PAID:            [V.greenBg,  V.green,      'Paid'],
 }
 
 // ---------------------------------------------------------------------------
@@ -278,20 +272,38 @@ function useJourneyRecorder() {
 // Sub-components live outside the parent — defined inside, they remount on
 // every keystroke and the form loses focus mid-word.
 // ---------------------------------------------------------------------------
-const lbl: React.CSSProperties = fieldLabel
+const lbl: React.CSSProperties = { ...eyebrow, display: 'block', marginBottom: 5 }
 const inp: React.CSSProperties = { ...inputStyle() }
+const card: React.CSSProperties = {
+  background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
+  padding: '16px 18px', marginBottom: SP.lg, boxShadow: E.raised,
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div style={{ minWidth: 0 }}><label style={lbl}>{label}</label>{children}</div>
+  return <div><label style={lbl}>{label}</label>{children}</div>
 }
 
-const BANNER_TONE: Record<'ok' | 'warn' | 'err', Tone> = { ok: 'positive', warn: 'warning', err: 'critical' }
-function Banner({ tone: t, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
-  return <InfoCallout compact t={BANNER_TONE[t]} style={{ marginBottom: SP.md }}>{children}</InfoCallout>
+function Pill({ bg, fg, text }: { bg: string; fg: string; text: string }) {
+  return (
+    <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 99, background: bg,
+                   color: fg, fontWeight: 600, whiteSpace: 'nowrap' }}>{text}</span>
+  )
 }
 
-function Empty({ text, icon }: { text: string; icon?: React.ReactNode }) {
-  return <EmptyState compact t="neutral" icon={icon} title={text} />
+function Banner({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
+  const [bg, fg] = tone === 'ok' ? [V.greenBg, V.green]
+                 : tone === 'warn' ? [V.amberBg, V.amber]
+                 : [V.redBg, V.red]
+  return (
+    <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 10,
+                  padding: '10px 13px', fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
+      {children}
+    </div>
+  )
+}
+
+function Empty({ text }: { text: string }) {
+  return <div style={{ textAlign: 'center', padding: '28px 0', color: V.muted, fontSize: 13 }}>{text}</div>
 }
 
 /** The recorder panel shown for bill-less modes. */
@@ -304,70 +316,70 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
   const amount = rate != null ? liveKm * rate : null
 
   return (
-    <div style={{ border: `1px solid ${tracking ? C.brandEdge : recorded ? C.positiveEdge : V.border}`, borderRadius: R.lg,
-                  padding: '14px 16px', marginBottom: SP.md,
-                  background: tracking ? V.purpleBg : recorded ? C.positiveTint : V.field }}>
-      <div style={{ display: 'flex', gap: SP.md, alignItems: 'flex-start', marginBottom: SP.md }}>
-        <IconTile icon={<IconTravel size={16} />} t={tracking ? 'brand' : recorded ? 'positive' : 'neutral'} size={32} solid={tracking} />
-        <div style={{ fontSize: F.tiny, color: C.inkSoft, lineHeight: 1.55, flex: 1, minWidth: 0 }}>
-          <b style={{ color: V.navy }}>{typeName}</b> has no bill to attach, so the journey is
-          recorded and paid on distance. Start before you set off and end when you arrive,
-          and keep this screen open while you travel.
-        </div>
+    <div style={{ border: `1px solid ${tracking ? V.purple : V.border}`, borderRadius: 10,
+                  padding: '14px 16px', marginBottom: 12,
+                  background: tracking ? V.purpleBg : V.field }}>
+      <div style={{ fontSize: 12, color: V.muted, marginBottom: 10, lineHeight: 1.55 }}>
+        <b style={{ color: V.navy }}>{typeName}</b> has no bill to attach, so the journey is
+        recorded and paid on distance. Start before you set off and end when you arrive,
+        and keep this screen open while you travel.
       </div>
 
       {journey.error && <Banner tone={journey.state === 'IDLE' ? 'err' : 'warn'}>{journey.error}</Banner>}
 
       {(tracking || recorded) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px,100%),1fr))', gap: SP.sm + 2,
-                      marginBottom: SP.md }}>
-          <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.md, padding: '10px 12px' }}>
-            <div style={{ ...eyebrow, marginBottom: 4 }}>Distance</div>
-            <div style={{ fontSize: 26, fontWeight: W.bold, color: V.navy, lineHeight: 1, ...numeric }}>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'baseline',
+                      padding: '10px 0 12px' }}>
+          <div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: V.navy, lineHeight: 1 }}>
               {liveKm.toFixed(2)} <span style={{ fontSize: 14, color: V.muted }}>km</span>
             </div>
-            <div style={{ fontSize: 11, color: V.muted, marginTop: 4, ...numeric }}>
+            <div style={{ fontSize: 11, color: V.muted, marginTop: 3 }}>
               {journey.points.length} location {journey.points.length === 1 ? 'point' : 'points'}
               {journey.accuracy != null && ` · ±${Math.round(journey.accuracy)} m`}
             </div>
           </div>
           {amount != null && (
-            <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.md, padding: '10px 12px' }}>
-              <div style={{ ...eyebrow, marginBottom: 4 }}>Fare so far</div>
-              <div style={{ fontSize: 22, fontWeight: W.bold, color: V.green, lineHeight: 1.1, ...numeric }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: V.green, lineHeight: 1 }}>
                 {inr(amount)}
               </div>
-              <div style={{ fontSize: 11, color: V.muted, marginTop: 4, ...numeric }}>
+              <div style={{ fontSize: 11, color: V.muted, marginTop: 3 }}>
                 at {inr(rate!)}/km
               </div>
             </div>
           )}
           {tracking && (
-            <div style={{ alignSelf: 'center' }}>
-              <StatusPill t="brand" dot solid>Recording</StatusPill>
-            </div>
+            <span style={{ fontSize: 11, color: V.purpleDark, fontWeight: 600 }}>Recording</span>
           )}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {journey.state === 'IDLE' && (
-          <PButton variant="primary" icon={<IconTravel size={15} />} onClick={onStart}>
+          <button onClick={onStart}
+                  style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: V.purple,
+                           color: C.onAccent, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
             Start travel
-          </PButton>
+          </button>
         )}
         {tracking && (
-          <PButton variant="positive" icon={<IconCheck size={15} />} onClick={onEnd}>
+          <button onClick={onEnd}
+                  style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: V.green,
+                           color: C.onAccent, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
             End travel
-          </PButton>
+          </button>
         )}
         {recorded && (
           <>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: V.green, fontWeight: 600 }}><IconCheck size={14} /> Journey recorded. Add the details below and save.
+            <span style={{ fontSize: 12, color: V.green, fontWeight: 600, alignSelf: 'center' }}>Journey recorded. Add the details below and save.
             </span>
-            <PButton size="sm" variant="secondary" onClick={onReset}>
+            <button onClick={onReset}
+                    style={{ padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.border}`,
+                             background: C.surface, color: V.muted, fontSize: 12,
+                             fontFamily: 'inherit', cursor: 'pointer' }}>
               Discard
-            </PButton>
+            </button>
           </>
         )}
       </div>
@@ -419,44 +431,43 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
 
   const gps = log.distance_source === 'GPS_TRACKED' || log.distance_source === 'GPS_SNAPPED'
   return (
-    <div className="ez-rise" style={{ border: `1px solid ${checked ? C.brandEdge : V.border}`, borderRadius: R.lg,
-                  background: checked ? V.purpleBg : V.card, marginBottom: SP.sm,
-                  padding: '11px 13px', boxShadow: checked ? 'none' : E.flat, transition: 'background .15s, border-color .15s' }}>
+    <div style={{ border: `1px solid ${checked ? V.purple : V.border}`, borderRadius: 10,
+                  background: checked ? V.purpleBg : V.card, marginBottom: 7,
+                  padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-      <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select ${log.purpose}`}
-             style={{ width: 16, height: 16, accentColor: V.purple, cursor: 'pointer', flexShrink: 0 }} />
-      <IconTile icon={gps ? <IconTravel size={14} /> : <IconReceipt size={14} />} t={gps ? 'info' : 'brand'} size={30} />
+      <input type="checkbox" checked={checked} onChange={onToggle}
+             style={{ width: 15, height: 15, accentColor: V.purple, cursor: 'pointer', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: V.navy,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {log.purpose}
         </div>
-        <div style={{ fontSize: 11, color: V.muted, marginTop: 2, ...numeric }}>
+        <div style={{ fontSize: 11, color: V.muted, marginTop: 2 }}>
           {typeName} · {dmy(log.log_date)}
           {log.city ? ` · ${log.city}` : ''}
           {log.distance_claimed ? ` · ${log.distance_claimed} km` : ''}
-          {gps && <span style={{ color: V.purpleDark }}> · recorded</span>}
+          {gps && <span style={{ color: V.purpleDark }}> · 📍 recorded</span>}
           {log.rate_applied ? ` @ ${inr(log.rate_applied)}/km` : ''}
         </div>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: V.navy, flexShrink: 0, ...numeric }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, flexShrink: 0 }}>
         {inr(log.total_amount)}
       </div>
-      <button onClick={onDelete} title="Remove this entry" aria-label="Remove this entry" className="ez-press"
-              style={{ background: 'none', border: `1px solid transparent`, borderRadius: R.sm, color: V.muted, cursor: 'pointer',
-                       width: 26, height: 26, padding: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><IconClose size={14} /></button>
+      <button onClick={onDelete} title="Remove this entry"
+              style={{ background: 'none', border: 'none', color: V.muted, cursor: 'pointer',
+                       fontSize: 17, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
       </div>
 
       {/* A recorded journey is its own proof; a billed one needs the slip. */}
       {!gps && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                      paddingLeft: 68, marginTop: 6 }}>
+                      paddingLeft: 26, marginTop: 2 }}>
           {bills.map(b => (
             <span key={b.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
                                       fontSize: 11, background: V.greenBg, color: V.green,
-                                      border: `1px solid ${C.positiveEdge}`, borderRadius: 99,
+                                      border: `1px solid ${V.green}33`, borderRadius: 99,
                                       padding: '3px 9px' }}>
-              <IconFile size={12} />
+              {b.mime_type === 'application/pdf' ? '' : ''}
               {b.url
                 ? <a href={b.url} target="_blank" rel="noreferrer"
                      style={{ color: V.green, textDecoration: 'underline' }}>
@@ -464,9 +475,9 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
                   </a>
                 : (b.file_name || 'bill')}
               <span style={{ color: V.muted }}>{kb(b.file_size)}</span>
-              <button onClick={() => removeBill(b.id)} disabled={busy} title="Remove this bill" aria-label="Remove this bill"
+              <button onClick={() => removeBill(b.id)} disabled={busy} title="Remove this bill"
                       style={{ background: 'none', border: 'none', cursor: 'pointer',
-                               color: V.muted, lineHeight: 1, padding: 0, display: 'inline-flex' }}><IconClose size={12} /></button>
+                               color: V.muted, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
             </span>
           ))}
 
@@ -474,15 +485,15 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
                  onChange={e => pick(e.target.files?.[0] ?? null)} />
           <button onClick={() => fileRef.current?.click()} disabled={busy}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
-                           fontSize: 11, fontWeight: 600, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4,
+                           fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
                            color: busy ? V.muted : V.purpleDark }}>
-            {!busy && <IconUpload size={12} />}{busy ? 'Uploading…' : bills.length ? '+ another bill' : 'Attach bill slip'}
+            {busy ? 'Uploading…' : bills.length ? '+ another bill' : 'Attach bill slip'}
           </button>
 
           {loaded && bills.length === 0 && needsBill !== false && (
-            <StatusPill size="sm" t="warning" icon={<IconAlert size={11} />}>
+            <span style={{ fontSize: 11, color: V.amber }}>
               Needs a slip: {typeName} above {inr(needsBill)} must show a bill
-            </StatusPill>
+            </span>
           )}
         </div>
       )}
@@ -490,62 +501,33 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
   )
 }
 
-// The approval rail a claim walks: submitted → manager → HR Head → Finance → paid.
-// Read-only: derived from the status the API already returns.
-const RAIL = ['Submitted', 'Manager', 'HR Head', 'Finance', 'Paid'] as const
-function claimSteps(status: string): Step[] {
-  const at: Record<string, number> = {
-    DRAFT: 0, SUBMITTED: 1, PENDING_RM: 1, PENDING_HR: 2, PENDING_FINANCE: 3, APPROVED: 4, PAID: 5,
-  }
-  if (status === 'SENT_BACK') {
-    return RAIL.map((l, i) => ({ key: l, label: i === 0 ? 'Sent back' : l, state: i === 0 ? 'blocked' : 'todo' }))
-  }
-  if (status === 'REJECTED') {
-    return RAIL.map((l, i) => ({
-      key: l, label: i === RAIL.length - 1 ? 'Rejected' : l,
-      state: i === 0 ? 'done' : i === RAIL.length - 1 ? 'blocked' : 'todo',
-    }))
-  }
-  const cur = at[status] ?? 0
-  return RAIL.map((l, i) => ({
-    key: l, label: l,
-    state: i < cur ? 'done' : i === cur ? 'current' : 'todo',
-  }))
-}
-
 function ClaimRow({ claim }: { claim: Claim }) {
-  const [t, text] = CLAIM_STATUS[claim.status] ?? (['brand', claim.status] as [Tone, string])
+  const [bg, fg, text] = CLAIM_STATUS[claim.status] ?? [V.purpleBg, V.purpleDark, claim.status]
   const settled = claim.status === 'PAID' || claim.status === 'APPROVED'
   return (
-    <div className="ez-rise" style={{ border: `1px solid ${V.border}`, borderLeft: `3px solid ${tone(t).fg}`,
-                  borderRadius: R.lg, padding: '14px 16px', marginBottom: SP.md, background: C.surface, boxShadow: E.flat }}>
+    <div style={{ border: `1px solid ${V.border}`, borderLeft: `3px solid ${fg}`,
+                  borderRadius: 10, padding: '12px 14px', marginBottom: 9 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: 10, marginBottom: SP.md, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: SP.sm + 2, minWidth: 0 }}>
-          <IconTile icon={<IconReceipt size={15} />} t={t} size={32} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, ...numeric }}>{claim.claim_no}</div>
-            <div style={{ fontSize: 11, color: V.muted, marginTop: 1, ...numeric }}>
-              {claim.line_count} {claim.line_count === 1 ? 'expense' : 'expenses'} · {dmy(claim.period_from)} – {dmy(claim.period_to)}
-            </div>
-          </div>
-        </div>
-        <StatusPill t={t} dot>{text}</StatusPill>
+                    gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>{claim.claim_no}</div>
+        <Pill bg={bg} fg={fg} text={text} />
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(140px,100%),1fr))', gap: SP.sm, marginBottom: SP.md }}>
-        <Figure label="Claimed" value={inr(claim.total_claimed)} />
-        {settled && <Figure label="Approved" value={inr(claim.total_approved)} t="positive" />}
-        {claim.flag_count > 0 && <Figure label="To review" value={`${claim.flag_count} flag${claim.flag_count === 1 ? '' : 's'}`} t="warning" />}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: V.muted }}>
+        <span>{claim.line_count} {claim.line_count === 1 ? 'expense' : 'expenses'}</span>
+        <span>{dmy(claim.period_from)} – {dmy(claim.period_to)}</span>
+        <span>Claimed <b style={{ color: V.navy }}>{inr(claim.total_claimed)}</b></span>
+        {settled && (
+          <span>Approved <b style={{ color: V.green }}>{inr(claim.total_approved)}</b></span>
+        )}
+        {claim.flag_count > 0 && (
+          <span style={{ color: V.amber }}>⚑ {claim.flag_count} to review</span>
+        )}
       </div>
-
-      <ProcessStepper compact steps={claimSteps(claim.status)} />
-
       {settled && num(claim.total_approved) < num(claim.total_claimed) && (
-        <InfoCallout compact t="warning" style={{ marginTop: SP.md, marginBottom: 0 }}>
+        <div style={{ fontSize: 11, color: V.amber, marginTop: 6 }}>
           {inr(num(claim.total_claimed) - num(claim.total_approved))} was not approved. Open the
           claim with Finance if you need the reason.
-        </InfoCallout>
+        </div>
       )}
     </div>
   )
@@ -837,10 +819,15 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
   if (blocked) {
     return (
-      <SectionCard>
-        <EmptyState t="warning" icon={<IconTravel size={20} />}
-          title="Travel claims are not available" hint={blocked} />
-      </SectionCard>
+      <div style={{ ...card, textAlign: 'center', padding: '38px 22px' }}>
+        <div style={{ fontSize: 30, marginBottom: 10 }}></div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, marginBottom: 6 }}>
+          Travel claims are not available
+        </div>
+        <div style={{ fontSize: 13, color: V.muted, maxWidth: 420, margin: '0 auto', lineHeight: 1.6 }}>
+          {blocked}
+        </div>
+      </div>
     )
   }
 
@@ -864,64 +851,54 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     .map(cat => ({ cat, items: types.filter(t => (t.category ?? 'OTHER') === cat) }))
     .filter(g => g.items.length > 0)
 
-  // Display-only running total for the entry form. For a recorded journey this is
-  // the live estimate; the server re-measures the trail and that figure is paid.
-  const formTotal = needsGps
-    ? (liveRate != null ? liveKm * liveRate * (roundTrip ? 2 : 1) : 0) + num(toll) + num(parking)
-    : num(amount) + num(toll) + num(parking)
-  const awaiting = inFlight.reduce((s, c) => s + num(c.total_claimed), 0)
-  const readyTotal = unclaimed.reduce((s, l) => s + num(l.total_amount), 0)
-  const paidTotal = claims.filter(c => c.status === 'PAID').reduce((s, c) => s + num(c.net_payable), 0)
-
   return (
-    <div style={{ fontFamily: F.family, color: C.ink }}>
-      {/* ---- header ---- */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginBottom: SP.lg, flexWrap: 'wrap' }}>
-        <IconTile icon={<IconTravel size={18} />} t="brand" size={40} />
-        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <div style={{ fontSize: F.title, fontWeight: W.bold, letterSpacing: '-.01em' }}>Travel Claims</div>
-          <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>
-            Log each journey or expense as it happens, then bundle them into one claim.
-          </div>
-        </div>
-      </div>
-
+    <div>
       {/* ---- summary strip ---- */}
-      <KpiGrid min={150}>
-        <KpiTile label="Ready to claim" value={inr(readyTotal)} emphasis icon={<IconReceipt size={15} />}
-          sub={`${unclaimed.length} ${unclaimed.length === 1 ? 'expense' : 'expenses'} not yet claimed`} />
-        <KpiTile label="Awaiting approval" value={inr(awaiting)} t="warning" icon={<IconTimer size={15} />}
-          sub={`${inFlight.length} ${inFlight.length === 1 ? 'claim' : 'claims'} in review`} />
-        <KpiTile label="Paid this year" value={inr(paidTotal)} t="positive" icon={<IconCheckCircle size={15} />}
-          sub="Credited with salary" />
-      </KpiGrid>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
+                    gap: 10, marginBottom: 14 }}>
+        {[
+          ['Ready to claim', inr(unclaimed.reduce((s, l) => s + num(l.total_amount), 0)), V.purpleDark],
+          ['Awaiting approval', inr(inFlight.reduce((s, c) => s + num(c.total_claimed), 0)), V.amber],
+          ['Paid this year', inr(claims.filter(c => c.status === 'PAID')
+                                       .reduce((s, c) => s + num(c.net_payable), 0)), V.green],
+        ].map(([label, value, colour]) => (
+          <div key={label} style={{ ...card, marginBottom: 0, padding: '13px 15px' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: V.muted,
+                          textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+            <div style={{ fontSize: 19, fontWeight: 700, color: colour as string, marginTop: 3 }}>{value}</div>
+          </div>
+        ))}
+      </div>
 
       {msg && <Banner tone={msg.tone}>{msg.text}</Banner>}
 
       {/* Flags are notes for the approver, not errors — the expense saved. */}
       {flags.length > 0 && (
-        <InfoCallout t="warning" title={`Saved, with ${flags.length === 1 ? 'a note' : 'notes'} for your approver:`}>
-          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+        <Banner tone="warn">
+          <b>Saved, with {flags.length === 1 ? 'a note' : 'notes'} for your approver:</b>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
             {flags.map((f, i) => <li key={i} style={{ marginBottom: 2 }}>{f.message}</li>)}
           </ul>
-        </InfoCallout>
+        </Banner>
       )}
 
       {/* ---- log an expense ---- */}
-      <SectionCard title="Log a travel expense" icon={<IconPlus size={16} />}
-        hint="What and when, how much, and the bill if the expense has one.">
+      <div style={card}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: V.navy, marginBottom: 12 }}>
+          Log a travel expense
+        </div>
+
         {preview && (
-          <InfoCallout compact t="warning" title="Admin preview." style={{ marginBottom: SP.lg }}>
-            You are seeing this employee&apos;s portal from the dashboard,
+          <Banner tone="warn">
+            <b>Admin preview.</b> You are seeing this employee&apos;s portal from the dashboard,
             so their claims are visible but nothing can be filed from here. An expense is
             always entered by the employee themselves. To add one, sign in at{' '}
             <a href="/ess-login" style={{ color: 'inherit', textDecoration: 'underline' }}>/ess-login</a>{' '}
             as them.
-          </InfoCallout>
+          </Banner>
         )}
 
-        <FormStep n={1} title="Journey details" hint="When it happened, what kind of expense, and why." />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(180px,100%),1fr))',
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))',
                       gap: 11, marginBottom: 11 }}>
           <Field label="Date">
             <input type="date" value={date} max={today()}
@@ -949,22 +926,17 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
           </Field>
         </div>
 
-        <div>
+        <div style={{ marginBottom: 11 }}>
           <Field label="What was it for">
             <input value={purpose} onChange={e => setPurpose(e.target.value)}
                    placeholder="e.g. Client meeting at Andheri" style={inp} />
           </Field>
         </div>
 
-        <FormDivider />
-
         {/* Recorded modes get the tracker and no distance field at all —
             offering one would imply a typed figure is acceptable. */}
         {needsGps ? (
           <>
-            <FormStep n={2} title="Record the journey"
-              hint="Paid on distance at the rate HR has set. Toll and parking are added on top."
-              right={<StatusPill size="sm" t="info" icon={<IconTravel size={11} />}>Recorded</StatusPill>} />
             {selectedType?.requires_vehicle && vehicles.length === 0 && (
               <Banner tone="warn">
                 No vehicle is registered against your record, so mileage cannot be priced.
@@ -989,7 +961,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
             )}
             {route && <RouteMap route={route} title="Your route" height={260} />}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px,100%),1fr))',
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
                           gap: 11, marginBottom: 11 }}>
               {selectedType?.requires_vehicle && (
                 <Field label="Vehicle">
@@ -1006,116 +978,113 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
               )}
               <Field label="Toll (₹)">
                 <input type="number" min="0" value={toll}
-                       onChange={e => setToll(e.target.value)} placeholder="0" style={{ ...inp, ...numeric }} />
+                       onChange={e => setToll(e.target.value)} placeholder="0" style={inp} />
               </Field>
               <Field label="Parking (₹)">
                 <input type="number" min="0" value={parking}
-                       onChange={e => setParking(e.target.value)} placeholder="0" style={{ ...inp, ...numeric }} />
+                       onChange={e => setParking(e.target.value)} placeholder="0" style={inp} />
               </Field>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-                            color: V.navy, cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13,
+                            color: V.navy, cursor: 'pointer', marginBottom: 12 }}>
               <input type="checkbox" checked={roundTrip} onChange={e => setRoundTrip(e.target.checked)}
-                     style={{ width: 15, height: 15, accentColor: V.purple, cursor: 'pointer' }} />
+                     style={{ width: 14, height: 14, accentColor: V.purple, cursor: 'pointer' }} />
               Return journey (double the recorded distance)
             </label>
           </>
         ) : (
-          <>
-            <FormStep n={2} title="Amount" hint="What you actually spent, as on the bill." />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px,100%),1fr))',
-                          gap: 11 }}>
-              <Field label="Amount (₹)">
-                <input type="number" min="0" value={amount}
-                       onChange={e => setAmount(e.target.value)} placeholder="0" style={{ ...inp, ...numeric }} />
-              </Field>
-              {num(selectedType?.bill_threshold) > 0 && (
-                <div style={{ alignSelf: 'end', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: V.muted, paddingBottom: 10 }}>
-                  <IconInfo size={14} /> A bill is required above {inr(num(selectedType?.bill_threshold))}.
-                </div>
-              )}
-            </div>
-          </>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
+                        gap: 11, marginBottom: 12 }}>
+            <Field label="Amount (₹)">
+              <input type="number" min="0" value={amount}
+                     onChange={e => setAmount(e.target.value)} placeholder="0" style={inp} />
+            </Field>
+            {num(selectedType?.bill_threshold) > 0 && (
+              <div style={{ alignSelf: 'end', fontSize: 12, color: V.muted, paddingBottom: 9 }}>
+                A bill is required above {inr(num(selectedType?.bill_threshold))}.
+              </div>
+            )}
+          </div>
         )}
 
         {/* Attach the receipt here, with the expense, rather than having to
             find the entry again afterwards. A recorded journey is its own
             proof and gets no picker. */}
         {!needsGps && selectedType?.bill_required !== false && (
-          <>
-            <FormDivider />
-            <FormStep n={3} title="Bill slip" hint="A photo or the PDF the app emails you. Up to 10 MB." />
-            <input ref={newBillRef} type="file" accept="image/*,application/pdf" hidden
-                   onChange={e => setPendingBill(e.target.files?.[0] ?? null)} />
-            {pendingBill ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, flexWrap: 'wrap',
-                            border: `1px solid ${C.positiveEdge}`, background: V.greenBg, borderRadius: R.lg, padding: '10px 14px' }}>
-                <IconTile icon={<IconFile size={15} />} t="positive" size={32} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: V.green, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{'✓ ' + pendingBill.name}</div>
-                  <div style={{ fontSize: 11, color: V.muted, ...numeric }}>{kb(pendingBill.size)} · attaches when you add the expense</div>
-                </div>
-                <PButton size="sm" variant="secondary" onClick={() => newBillRef.current?.click()}>Change</PButton>
-                <PButton size="sm" variant="ghost"
-                        onClick={() => { setPendingBill(null); if (newBillRef.current) newBillRef.current.value = '' }}>
-                  remove
-                </PButton>
-              </div>
-            ) : (
-              <button type="button" onClick={() => newBillRef.current?.click()} className="ez-press"
-                      style={{ width: '100%', padding: '18px 14px', borderRadius: R.lg,
-                               border: `1.5px dashed ${C.lineStrong}`, background: V.field,
-                               color: V.purpleDark, fontFamily: 'inherit', cursor: 'pointer',
-                               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                <IconTile icon={<IconUpload size={16} />} t="brand" size={34} />
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Choose Uber / Ola / taxi bill</span>
-                <span style={{ fontSize: 11, color: V.muted }}>JPG, PNG or PDF</span>
+          <div style={{ marginBottom: 12 }}>
+            <label style={lbl}>Bill slip</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <input ref={newBillRef} type="file" accept="image/*,application/pdf" hidden
+                     onChange={e => setPendingBill(e.target.files?.[0] ?? null)} />
+              <button type="button" onClick={() => newBillRef.current?.click()}
+                      style={{ padding: '8px 15px', borderRadius: 7,
+                               border: `1px dashed ${pendingBill ? V.green : V.border}`,
+                               background: pendingBill ? V.greenBg : V.field,
+                               color: pendingBill ? V.green : V.purpleDark,
+                               fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                {pendingBill ? '✓ ' + pendingBill.name : 'Choose Uber / Ola / taxi bill'}
               </button>
-            )}
 
-            {!pendingBill && num(selectedType?.bill_threshold) > 0
-              && num(amount) > num(selectedType?.bill_threshold) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: V.amber, marginTop: SP.sm }}>
-                <IconAlert size={14} /> This amount needs a bill. Attach it now or from the list below.
-              </div>
-            )}
-          </>
-        )}
+              {pendingBill && (
+                <>
+                  <span style={{ fontSize: 11, color: V.muted }}>{kb(pendingBill.size)}</span>
+                  <button type="button"
+                          onClick={() => { setPendingBill(null); if (newBillRef.current) newBillRef.current.value = '' }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer',
+                                   color: V.muted, fontSize: 12, fontFamily: 'inherit' }}>
+                    remove
+                  </button>
+                </>
+              )}
 
-        {/* ---- live total + primary action ---- */}
-        <div style={{ marginTop: SP.lg, display: 'flex', alignItems: 'center', gap: SP.md, flexWrap: 'wrap',
-                      background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.lg, padding: '12px 16px' }}>
-          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-            <div style={{ ...eyebrow }}>{needsGps ? 'Estimated total' : 'Total'}</div>
-            <div style={{ fontSize: 22, fontWeight: W.bold, color: C.ink, letterSpacing: '-.01em', ...numeric }}>{inr(formTotal)}</div>
-            <div style={{ fontSize: 11, color: C.muted, ...numeric }}>
-              {needsGps
-                ? (liveRate != null ? `${(liveKm * (roundTrip ? 2 : 1)).toFixed(2)} km × ${inr(liveRate)}/km` : 'Rate not set yet') + (num(toll) + num(parking) > 0 ? ` + ${inr(num(toll) + num(parking))} toll & parking` : '') + ' · final figure from the server'
-                : `${inr(num(amount))} amount${num(toll) + num(parking) > 0 ? ` + ${inr(num(toll) + num(parking))} toll & parking` : ''}`}
+              {!pendingBill && num(selectedType?.bill_threshold) > 0
+                && num(amount) > num(selectedType?.bill_threshold) && (
+                <span style={{ fontSize: 12, color: V.amber }}>
+                  This amount needs a bill. Attach it now or from the list below.
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: V.muted, marginTop: 5 }}>
+              A photo or the PDF the app emails you. Up to 10 MB.
             </div>
           </div>
-          <PButton variant="primary" size="lg" onClick={addExpense} disabled={saving || preview} icon={<IconPlus size={16} />}
-                  title={preview ? 'Only the employee can file their own expense' : undefined}>
-            {saving ? 'Saving…' : preview ? 'Add expense (employee only)' : 'Add expense'}
-          </PButton>
-        </div>
-      </SectionCard>
+        )}
+
+        <button onClick={addExpense} disabled={saving || preview}
+                title={preview ? 'Only the employee can file their own expense' : undefined}
+                style={{ padding: '9px 20px', borderRadius: 7, border: 'none',
+                         background: saving || preview ? V.muted : V.purple, color: C.onAccent,
+                         fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                         cursor: saving || preview ? 'not-allowed' : 'pointer' }}>
+          {saving ? 'Saving…' : preview ? 'Add expense (employee only)' : 'Add expense'}
+        </button>
+      </div>
 
       {/* ---- unclaimed, ready to submit ---- */}
-      <SectionCard
-        title={<>Ready to claim{unclaimed.length > 0 && <span style={{ color: V.muted, fontWeight: 500 }}> · {unclaimed.length}</span>}</>}
-        icon={<IconReceipt size={16} />}
-        hint="Expenses logged this month that are not in a claim yet. Tick the ones to bundle."
-        actions={unclaimed.length > 0 ? (
-          <PButton size="sm" variant="secondary"
-            onClick={() => setPicked(picked.size === unclaimed.length
-              ? new Set()
-              : new Set(unclaimed.map(l => l.id)))}>
-            {picked.size === unclaimed.length ? 'Clear selection' : 'Select all'}
-          </PButton>
-        ) : undefined}>
+      <div style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>
+            Ready to claim
+            {unclaimed.length > 0 && (
+              <span style={{ color: V.muted, fontWeight: 500 }}> · {unclaimed.length}</span>
+            )}
+          </div>
+          {unclaimed.length > 0 && (
+            <button
+              onClick={() => setPicked(picked.size === unclaimed.length
+                ? new Set()
+                : new Set(unclaimed.map(l => l.id)))}
+              style={{ padding: '6px 13px', borderRadius: 7, border: `1px solid ${V.border}`,
+                       background: V.card, color: V.purpleDark, fontSize: 12,
+                       fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer' }}>
+              {picked.size === unclaimed.length ? 'Clear selection' : 'Select all'}
+            </button>
+          )}
+        </div>
+
         {unclaimed.length === 0 ? (
-          <Empty text="Nothing logged yet this month. Add an expense above." icon={<IconReceipt size={18} />} />
+          <Empty text="Nothing logged yet this month. Add an expense above." />
         ) : (
           <>
             {unclaimed.map(l => (
@@ -1135,27 +1104,34 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           gap: 12, marginTop: 13, paddingTop: 13,
                           borderTop: `1px solid ${V.border}`, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 13, color: V.muted, ...numeric }}>
+              <div style={{ fontSize: 13, color: V.muted }}>
                 {picked.size === 0
                   ? 'Select the expenses you want to claim.'
-                  : <>Claiming <b style={{ color: V.navy, fontSize: 16 }}>{inr(pickedTotal)}</b> across {picked.size}
+                  : <>Claiming <b style={{ color: V.navy }}>{inr(pickedTotal)}</b> across {picked.size}
                      {picked.size === 1 ? ' expense' : ' expenses'}</>}
               </div>
-              <PButton variant="primary" onClick={submitClaim} disabled={picked.size === 0 || submitting}>
+              <button onClick={submitClaim} disabled={picked.size === 0 || submitting}
+                      style={{ padding: '9px 20px', borderRadius: 7, border: 'none',
+                               background: picked.size === 0 || submitting ? V.border : V.green,
+                               color: picked.size === 0 || submitting ? V.muted: C.surface,
+                               fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                               cursor: picked.size === 0 || submitting ? 'default' : 'pointer' }}>
                 {submitting ? 'Submitting…' : 'Submit claim'}
-              </PButton>
+              </button>
             </div>
           </>
         )}
-      </SectionCard>
+      </div>
 
       {/* ---- history ---- */}
-      <SectionCard title="My claims" icon={<IconCheckCircle size={16} />}
-        hint="Each claim goes to your manager (if your company uses that stage), then HR Head, then Finance. Stages with nobody mapped are skipped.">
+      <div style={card}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: V.navy, marginBottom: 12 }}>
+          My claims
+        </div>
         {claims.length === 0
-          ? <Empty text="You have not submitted a travel claim yet." icon={<IconCheckCircle size={18} />} />
+          ? <Empty text="You have not submitted a travel claim yet." />
           : claims.map(c => <ClaimRow key={c.id} claim={c} />)}
-      </SectionCard>
+      </div>
     </div>
   )
 }
