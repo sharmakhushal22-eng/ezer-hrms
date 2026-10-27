@@ -114,7 +114,19 @@ function nextForRm(m: TeamMember, flag: Flag): string | null {
   if (!m.oneToOneDone) return 'Hold the KRA one-to-one and acknowledge it, so the weightage can lock.'
   if (!m.selfSubmitted) return 'Waiting on their self rating. You cannot rate first.'
   if (m.rmL1Score === null) return 'Your rating is owed.'
-  if (m.rmL2Score === null) return 'With RM L2 now.'
+  // ONLY WHEN THERE IS AN RM L2 TO WAIT FOR. This used to say "With RM L2 now"
+  // on the strength of rmL2Score being null, which is also true when the chain
+  // has no second rung at all — and pms_resolve_chain collapses it on purpose:
+  //
+  //   -- Same person at L1 and L2: drop L2, keep them as L1 reviewer
+  //   IF v_l2 IS NOT NULL AND v_l2 = v_l1 THEN v_l2 := NULL; END IF;
+  //
+  // So for anybody whose manager is their own L1 and L2 — which is every
+  // reportee of a small company's top of chain — rm_l2_score could never be
+  // filled, and the queue said "With RM L2 now" for ever, pointing at nobody.
+  // The snapshot's own rm_l2_id is the honest test, and it is per employee,
+  // which the policy's chain shape is not.
+  if (m.rmL2Id && m.rmL2Score === null) return 'With RM L2 now.'
   return 'Ready to be finalised.'
 }
 

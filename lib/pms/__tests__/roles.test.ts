@@ -269,13 +269,33 @@ test('each row names the ONE next thing, in the order the flow requires', () => 
     [{ oneToOneDone: false }, /one-to-one/i],
     [{ selfSubmitted: false, selfScore: null }, /self rating/i],
     [{ rmL1Score: null }, /your rating is owed/i],
-    [{ rmL1Score: 4, rmL2Score: null }, /rm l2/i],
-    [{ rmL1Score: 4, rmL2Score: 4 }, /finalis/i],
+    [{ rmL1Score: 4, rmL2Score: null, rmL2Id: 'm2' }, /rm l2/i],
+    [{ rmL1Score: 4, rmL2Score: 4, rmL2Id: 'm2' }, /finalis/i],
   ]
   for (const [patch, want] of cases) {
     const r = teamQueue([member({ employeeId: 'e', name: 'E', ...patch })], TODAY)[0]
     assert.match(r.next, want, `wrong next step for ${JSON.stringify(patch)}`)
   }
+})
+
+test('a chain with no second rung does not wait for a rating nobody can give', () => {
+  // pms_resolve_chain (067) drops L2 when it resolves to the same person as
+  // L1 — the common shape in a small company, where one manager is both.
+  // rm_l2_score then stays null for ever. The queue used to read that null as
+  // "With RM L2 now" and park the row there permanently, pointing the manager
+  // at a stage that did not exist. Observed live: Sanjay Kapoor is both rungs
+  // for Shreya Singh, submitted, was told it was sent, and the row did not move.
+  const collapsed = teamQueue([member({
+    employeeId: 'e', name: 'E', rmL1Id: 'm1', rmL2Id: null, rmL1Score: 4,
+  })], TODAY)[0]
+  assert.match(collapsed.next, /finalis/i)
+
+  // And the real two-rung chain is untouched — this is the half that proves
+  // the fix reads rmL2Id rather than just dropping the stage altogether.
+  const twoRung = teamQueue([member({
+    employeeId: 'e', name: 'E', rmL1Id: 'm1', rmL2Id: 'm2', rmL1Score: 4,
+  })], TODAY)[0]
+  assert.match(twoRung.next, /rm l2/i)
 })
 
 test('a finalised row asks nothing further of anybody', () => {

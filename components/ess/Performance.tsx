@@ -816,9 +816,33 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    * The snapshot decides, not a live lookup — same reason pms_finalise reads
    * it: a reorg mid-cycle must not move half-rated appraisals.
    */
+  /** ONE PERSON CAN HOLD BOTH RUNGS. In a small company the chain collapses:
+   *  SRS9009 is RM L1, RM L2 and HOD for his whole team. Checking L1 first and
+   *  stopping there meant he would write RM_L1 twice and the queue would say
+   *  "With RM L2 now" for ever, because pms_score(..., 'RM_L2') had nothing to
+   *  read. So the rung is the first one this person holds that is still
+   *  unscored; once both are in, further edits land on whichever they hold,
+   *  preferring L1, rather than being refused. */
+  /**
+   * WHICH RUNG THE VIEWER IS ON, decided against the frozen chain and not
+   * against a guess, because the rating upsert keys on rater_role and writing
+   * an L2's rating under 'RM_L1' overwrites the L1's.
+   *
+   * No both-rungs case to handle. pms_resolve_chain (067) will not store the
+   * same person twice:
+   *
+   *   -- Same person at L1 and L2: drop L2, keep them as L1 reviewer
+   *   IF v_l2 IS NOT NULL AND v_l2 = v_l1 THEN v_l2 := NULL; END IF;
+   *
+   * so a manager who is both is recorded as L1 alone, and the first match is
+   * the only match. An earlier version here ordered the two tests by which
+   * score was still unfilled, to let such a manager rate twice — that was
+   * answering a question the database had already closed.
+   */
   const myRaterRole = useMemo(() => {
-    if (member?.rmL1Id && member.rmL1Id === employeeId) return 'RM_L1'
-    if (member?.rmL2Id && member.rmL2Id === employeeId) return 'RM_L2'
+    if (!member) return null
+    if (member.rmL1Id && member.rmL1Id === employeeId) return 'RM_L1'
+    if (member.rmL2Id && member.rmL2Id === employeeId) return 'RM_L2'
     return null
   }, [member, employeeId])
 
@@ -880,7 +904,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       const fb = await supabase.from('pms_feedback').upsert({
         company_id: companyId, period_id: period!.id, employee_id: picked,
         appreciation_remark: overall.trim(),
-        given_by: employeeId, given_by_role: 'RM_L1',
+        given_by: employeeId, given_by_role: myRaterRole,
         visible_to_employee: false,
       }, { onConflict: 'period_id,employee_id' })
       if (fb.error) {
