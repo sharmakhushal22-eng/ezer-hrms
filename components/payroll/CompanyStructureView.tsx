@@ -4,14 +4,23 @@
 // (or all companies in Group mode). Not employee-level.
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { C, F, W, S, IconOrgChart, IconSliders, IconBuilding } from '@/lib/ui'
-import { SectionCard, CountChip, EmptyState, InfoCallout, IconInfo } from '@/components/payroll/kit'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
-function StructCard({ icon, title, count, children }: { icon: React.ReactNode; title: string; count: number; children: React.ReactNode }) {
+const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted, purpleBg: TK.brandTint, teal: TK.positive, amber: TK.warning }
+const font = '"DM Sans","Segoe UI",sans-serif'
+
+function SectionCard({ icon, title, count, children }: { icon: string; title: string; count: number; children: React.ReactNode }) {
   return (
-    <SectionCard icon={icon} title={title} actions={<CountChip t="brand">{count}</CountChip>} style={{ marginBottom: 0 }} bodyStyle={{ padding: `4px ${S.lg}px ${S.sm}px` }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', boxShadow: 'var(--ez-shadow-flat)', minWidth: 260, flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div style={{ width: 30, height: 30, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{icon}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.navy }}>{title}</div>
+        <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 9px' }}>{count}</span>
+      </div>
       {children}
-    </SectionCard>
+    </div>
   )
 }
 
@@ -42,37 +51,37 @@ export default function CompanyStructureView({ companyId }: { companyId: string 
   }, [companyId])
 
   const deptName: Record<string, string> = {}; depts.forEach(d => { deptName[d.id] = d.dept_name })
-  const co = (id: string) => allCo ? <span style={{ fontSize: F.tiny, color: C.muted }}> · {comps[id] || '-'}</span> : null
+  const co = (id: string) => allCo ? <span style={{ fontSize: 10, color: C.muted }}> · {comps[id] || '-'}</span> : null
   const item = (main: React.ReactNode, sub: React.ReactNode) => (
-    <div className="ez-row" style={{ padding: '9px 6px', margin: '0 -6px', borderBottom: `1px solid ${C.line}`, borderRadius: 6 }}>
-      <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink }}>{main}</div>
-      {sub && <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2 }}>{sub}</div>}
+    <div style={{ padding: '7px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.navy }}>{main}</div>
+      {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}
     </div>
   )
-  const empty = (t: string) => <div style={{ fontSize: F.tiny, color: C.faint, padding: '10px 0' }}>{t}</div>
+  const empty = (t: string) => <div style={{ fontSize: 12, color: TK.faint }}>{t}</div>
 
   return (
-    <div style={{ fontFamily: F.family, color: C.ink, minWidth: 0 }}>
-      <InfoCallout t="neutral" compact icon={<IconInfo size={14} />}>Company-wise organisation structure {allCo ? '(all companies)' : ''}: departments, sub-departments and locations. Manage the values in <b>Admin Setup</b>.</InfoCallout>
-      {loading ? <SectionCard><EmptyState compact t="neutral" icon={<IconOrgChart size={20} />} title="Loading…" /></SectionCard> : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: S.lg, alignItems: 'start' }}>
-          <StructCard icon={<IconOrgChart size={16} />} title="Departments" count={depts.length}>
+    <div style={{ fontFamily: font }}>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Company-wise organisation structure {allCo ? '(all companies)' : ''}: departments, sub-departments and locations. Manage the values in <b>Admin Setup</b>.</div>
+      {loading ? <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div> : (
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <SectionCard icon="🗂️" title="Departments" count={depts.length}>
             {depts.length === 0 ? empty('No departments.') : depts.map(d => (
-              <div key={d.id}>{item(<>{d.dept_name}{d.dept_code ? <span style={{ color: C.muted, fontWeight: W.regular }}> · {d.dept_code}</span> : null}</>, co(d.company_id))}</div>
+              <div key={d.id}>{item(<>{d.dept_name}{d.dept_code ? <span style={{ color: C.muted, fontWeight: 400 }}> · {d.dept_code}</span> : null}</>, co(d.company_id))}</div>
             ))}
-          </StructCard>
+          </SectionCard>
 
-          <StructCard icon={<IconSliders size={16} />} title="Sub-departments" count={subs.length}>
+          <SectionCard icon="🧩" title="Sub-departments" count={subs.length}>
             {subs.length === 0 ? empty('No sub-departments yet. Add them in Admin Setup.') : subs.map(s => (
-              <div key={s.id}>{item(<>{s.name}{s.code ? <span style={{ color: C.muted, fontWeight: W.regular }}> · {s.code}</span> : null}</>, <>{s.department_id && deptName[s.department_id] ? `under ${deptName[s.department_id]}` : ''}{co(s.company_id)}</>)}</div>
+              <div key={s.id}>{item(<>{s.name}{s.code ? <span style={{ color: C.muted, fontWeight: 400 }}> · {s.code}</span> : null}</>, <>{s.department_id && deptName[s.department_id] ? `under ${deptName[s.department_id]}` : ''}{co(s.company_id)}</>)}</div>
             ))}
-          </StructCard>
+          </SectionCard>
 
-          <StructCard icon={<IconBuilding size={16} />} title="Locations / Branches" count={locs.length}>
+          <SectionCard icon="📍" title="Locations / Branches" count={locs.length}>
             {locs.length === 0 ? empty('No locations.') : locs.map(l => (
-              <div key={l.id}>{item(<>{l.location_name}{l.location_code ? <span style={{ color: C.muted, fontWeight: W.regular }}> · {l.location_code}</span> : null}</>, <>{l.location_type || ''}{co(l.company_id)}</>)}</div>
+              <div key={l.id}>{item(<>{l.location_name}{l.location_code ? <span style={{ color: C.muted, fontWeight: 400 }}> · {l.location_code}</span> : null}</>, <>{l.location_type || ''}{co(l.company_id)}</>)}</div>
             ))}
-          </StructCard>
+          </SectionCard>
         </div>
       )}
     </div>

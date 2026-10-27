@@ -14,16 +14,17 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { authHeaders } from '@/lib/auth-headers'
-import {
-  C, F, W, S, R, numeric,
-  IconEmployees, IconUser, IconCheck, IconClose, IconMail, IconDownload, IconSearch, IconLoans, IconCalendar, IconAlert,
-} from '@/lib/ui'
-import {
-  SectionCard, KpiTile, KpiGrid, InfoCallout, PButton, StatusPill as KitPill, EmptyState, FilterBar, FilterField, fieldStyle,
-  DataTable, dt, IconSync, IconInfo, type KitTone,
-} from '@/components/payroll/kit'
-import { RuleSummary, RefChip, Modal, OptionCard, CheckRow, cfgInput, cfgTextarea } from '@/components/payroll/configKit'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
+const C = {
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
+}
+const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 const fmtDate = (d?: string | null) =>
   d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
@@ -51,6 +52,15 @@ function npsEffectiveDate(doj: string | null, mStart: string): string {
   return doj > mStart ? doj : mStart
 }
 
+const S = {
+  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' } as React.CSSProperties,
+  sel: { padding: '8px 10px', border: `1px solid #DDD6FE`, borderRadius: 7, fontSize: 13, fontFamily: font, background: TK.sunken, color: C.navy, outline: 'none', minWidth: 150 } as React.CSSProperties,
+  btnP: { padding: '9px 16px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  btnO: { padding: '8px 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  th: { padding: '9px 10px', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase' as const, letterSpacing: '.04em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const, background: C.gray, borderBottom: `1px solid ${C.border}` },
+  td: { padding: '8px 10px', fontSize: 12, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' as const, color: C.navy },
+}
+
 export interface NpsRow {
   id: string
   company: string
@@ -70,24 +80,31 @@ export interface NpsRow {
   nps_regime: string      // the regime the contribution % was worked out on
 }
 
+function Stat({ label, value, color }: { label: string; value: string | number; color?: string }) {
+  return (
+    <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 14px', minWidth: 92 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+      <div style={{ fontSize: 17, fontWeight: 800, color: color || C.navy, marginTop: 2 }}>{value}</div>
+    </div>
+  )
+}
+
 function YesNo({ yes }: { yes: boolean }) {
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: 34, height: 22, padding: '0 8px',
-      borderRadius: R.pill, fontSize: F.micro, fontWeight: W.bold, boxSizing: 'border-box',
-      background: yes ? C.positiveTint : C.sunken, color: yes ? C.positive : C.muted, border: `1px solid ${yes ? C.positiveEdge : C.line}`,
-    }}>
-      {yes ? <IconCheck size={11} strokeWidth={2.6} /> : null}{yes ? 'Y' : 'N'}
+    <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 99, background: yes ? C.greenBg : TK.sunken, color: yes ? C.green : TK.muted }}>
+      {yes ? 'Y' : 'N'}
     </span>
   )
 }
 
-const STATUS_TONE: Record<string, KitTone> = {
-  ACTIVE: 'positive', PENDING_PRAN: 'info', STOPPED: 'critical', SUPERSEDED: 'neutral',
+const STATUS_STYLE: Record<string, [string, string]> = {
+  ACTIVE: [C.greenBg, C.green], PENDING_PRAN: [TK.infoTint, TK.info],
+  STOPPED: [C.redBg, C.red], SUPERSEDED: [TK.sunken, TK.muted],
 }
 function StatusPill({ s }: { s: string }) {
-  if (!s || s === '-') return <span style={{ color: C.faint }}>-</span>
-  return <KitPill t={STATUS_TONE[s] || 'brand'} size="sm" dot>{s.replace('_', ' ')}</KitPill>
+  if (!s || s === '-') return <span style={{ color: C.muted }}>-</span>
+  const [bg, fg] = STATUS_STYLE[s] || [TK.brandTint, C.purpleD]
+  return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: bg, color: fg }}>{s.replace('_', ' ')}</span>
 }
 
 // ── Enrolment dialog ───────────────────────────────────────────────────────
@@ -109,45 +126,31 @@ const initials = (n: string) =>
 
 function DetailRow({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: `1px solid ${C.line}`, fontSize: F.small }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
       <span style={{ color: C.muted }}>{k}</span>
-      <span style={{ fontWeight: W.semi, textAlign: 'right', color: C.ink, ...numeric }}>{v}</span>
+      <span style={{ fontWeight: 600, textAlign: 'right', color: C.navy }}>{v}</span>
     </div>
-  )
-}
-
-function Monogram({ name, opted, size = 36 }: { name: string; opted: boolean; size?: number }) {
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontWeight: W.bold, fontSize: size >= 40 ? F.small : F.tiny,
-      background: opted ? C.positiveTint : C.brandTint, color: opted ? C.positive : C.brandDeep,
-      border: `1px solid ${opted ? C.positiveEdge : C.brandEdge}`,
-    }}>{initials(name)}</div>
   )
 }
 
 function SearchResult({ r, onPick }: { r: NpsRow; onPick: (r: NpsRow) => void }) {
   return (
-    <button onClick={() => onPick(r)} className="ez-row ez-press"
-      style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: R.md, border: `1px solid ${C.line}`, background: C.surface, cursor: 'pointer', fontFamily: 'inherit' }}>
-      <Monogram name={r.full_name} opted={r.opted} />
+    <button onClick={() => onPick(r)}
+      style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', borderRadius: 10, border: `1px solid ${C.border}`, marginTop: 7, background: TK.surface, cursor: 'pointer', fontFamily: font }}>
+      <div style={{ width: 36, height: 36, borderRadius: '50%', background: r.opted ? C.greenBg : C.purpleBg, color: r.opted ? C.green : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>
+        {initials(r.full_name)}
+      </div>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {r.full_name} <span style={{ color: C.muted, fontWeight: W.medium, ...numeric }}>· {r.emp_code}</span>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.navy, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {r.full_name} <span style={{ color: C.muted, fontWeight: 500 }}>· {r.emp_code}</span>
         </div>
-        <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {r.department} · {r.location}
         </div>
       </div>
       <YesNo yes={r.opted} />
     </button>
   )
-}
-
-/** Small uppercase label between dialog sections. */
-function DlgLabel({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: F.micro, fontWeight: W.bold, color: C.muted, textTransform: 'uppercase', letterSpacing: '.09em', marginTop: 4 }}>{children}</div>
 }
 
 function NpsDialog({ rows, onClose, onDone }: {
@@ -217,141 +220,184 @@ function NpsDialog({ rows, onClose, onDone }: {
     } catch (x: any) { setErr(x?.message || String(x)); setBusy(false) }
   }
 
+  const seg = (v: 'y' | 'n', label: string, on: boolean, disabled: boolean) => (
+    <button key={v} onClick={() => !disabled && setMode(v)} disabled={disabled}
+      style={{ flex: 1, padding: '10px 8px', borderRadius: 10, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: font, fontSize: 13, fontWeight: 700,
+        border: on ? `2px solid ${v === 'y' ? C.green : C.red}` : `1px solid ${C.border}`,
+        background: on ? (v === 'y' ? C.greenBg : C.redBg) : TK.surface,
+        color: disabled ? TK.lineStrong : on ? (v === 'y' ? C.green : C.red) : C.navy, opacity: disabled ? .6 : 1 }}>
+      {label}
+    </button>
+  )
+
   return (
-    <Modal onBackdrop={onClose} onClose={onClose} icon={<IconLoans size={17} />} title="Corporate NPS"
-      subtitle={sel ? 'Turn NPS on or off for this employee' : 'Find an employee to begin'} maxWidth={560}
-      footer={sel ? <>
-        <PButton variant="secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</PButton>
-        <PButton variant={mode === 'y' ? 'positive' : 'danger'} onClick={save} disabled={!canSave} style={{ flex: 1.4 }}
-          icon={mode === 'y' ? <IconCheck size={14} /> : <IconClose size={14} />}>
-          {busy ? 'Saving…' : mode === 'y' ? 'Enrol in NPS' : 'Stop NPS'}
-        </PButton>
-      </> : undefined}>
-      {!sel ? (
-        <>
-          <div style={{ position: 'relative' }}>
-            <span aria-hidden style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.muted, display: 'inline-flex' }}><IconSearch size={15} /></span>
-            <input autoFocus value={q} onChange={ev => setQ(ev.target.value)}
-              placeholder="Employee code or name, e.g. SRS9008, Nisha"
-              style={{ ...cfgInput, height: 42, paddingLeft: 36, fontSize: F.body }} />
-          </div>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.5)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={ev => ev.stopPropagation()} style={{ background: TK.surface, borderRadius: 14, width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,0.35)', fontFamily: font, overflow: 'hidden' }}>
 
-          {terms.length < 2 ? (
-            <EmptyState compact t="neutral" icon={<IconSearch size={20} />} title="Type at least two characters to search."
-              hint={`${rows.length} employees on record.`} />
-          ) : results.length === 0 ? (
-            <EmptyState compact t="neutral" title={`Nobody matched “${q.trim()}”.`} />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {results.map(r => <SearchResult key={r.emp_code} r={r} onPick={pick} />)}
-              {results.length === 25 && (
-                <div style={{ fontSize: F.tiny, color: C.muted, padding: '6px 2px 0' }}>Showing the first 25. Narrow the search to see more.</div>
-              )}
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          {/* employee card */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: C.sunken, borderRadius: R.md, border: `1px solid ${C.line}` }}>
-            <Monogram name={sel.full_name} opted={sel.opted} size={42} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: F.body, fontWeight: W.bold, color: C.ink }}>{sel.full_name}</div>
-              <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 1 }}>{sel.emp_code} · {sel.department} · {sel.location}</div>
-            </div>
-            <PButton size="sm" variant="secondary" onClick={() => { setSel(null); setInfo(null); setErr('') }}>Change</PButton>
-          </div>
-
-          <div>
-            <DetailRow k="Company" v={sel.company} />
-            <DetailRow k="Date of Joining" v={fmtDate(sel.doj)} />
-            {sel.dol && <DetailRow k="Date of Leaving" v={<span style={{ color: C.critical }}>{fmtDate(sel.dol)}</span>} />}
-            <DetailRow k="Current NPS" v={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><YesNo yes={sel.opted} /> {sel.status !== '-' && <StatusPill s={sel.status} />}</span>} />
-            {loading ? <DetailRow k="Salary figures" v={<span style={{ color: C.muted }}>loading…</span>} /> : e && (
-              <>
-                <DetailRow k="Tax regime" v={e.tax_regime} />
-                <DetailRow k="Monthly Basic" v={e.has_ctc ? inr(e.basic_monthly) : <span style={{ color: C.warning }}>no CTC set</span>} />
-                <DetailRow k="NPS rate" v={`${e.contribution_percent}% of Basic`} />
-                <DetailRow k="Monthly contribution" v={<span style={{ color: C.brandDeep, fontWeight: W.bold, fontSize: F.lead }}>{inr(e.monthly_nps_amount)}</span>} />
-              </>
-            )}
-          </div>
-
-          {/* Y / N */}
-          <DlgLabel>Set NPS</DlgLabel>
-          <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
-            <OptionCard label="Yes, enrol" t="positive" active={mode === 'y'} disabled={sel.opted} onClick={() => !sel.opted && setMode('y')} />
-            <OptionCard label="No, stop" t="critical" active={mode === 'n'} disabled={!sel.opted} onClick={() => sel.opted && setMode('n')} />
-          </div>
-          <div style={{ fontSize: F.tiny, color: C.muted, lineHeight: 1.5, marginTop: -4 }}>
-            {sel.opted
-              ? 'Already enrolled. Only “No” does anything here.'
-              : 'Not enrolled. Only “Yes” does anything here.'}
-          </div>
-
-          {mode === 'y' && !sel.opted && (
-            <>
-              <DlgLabel>PRAN</DlgLabel>
-              <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
-                {[[true, 'Has a PRAN'], [false, 'Needs one']].map(([v, lbl]) => (
-                  <OptionCard key={String(v)} label={lbl as string} active={hasPran === v} onClick={() => setHasPran(v as boolean)} />
-                ))}
+        {/* header */}
+        <div style={{ background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, padding: '16px 20px', color: TK.onAccent, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 20 }}></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>Corporate NPS</div>
+              <div style={{ fontSize: 12, opacity: .8, marginTop: 1 }}>
+                {sel ? 'Turn NPS on or off for this employee' : 'Find an employee to begin'}
               </div>
-              {hasPran ? (
-                <div>
-                  <input value={pran} maxLength={pranLen} placeholder={`${pranLen}-digit PRAN`}
-                    onChange={ev => setPran(ev.target.value.replace(/\D/g, ''))}
-                    style={{ ...cfgInput, letterSpacing: 2, borderColor: pran && !pranOk ? C.critical : C.lineStrong }} />
-                  {pran && !pranOk && <div style={{ fontSize: F.tiny, color: C.critical, marginTop: 4 }}>{pranLen - pranClean.length} more digit(s) needed</div>}
+            </div>
+            <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: TK.onAccent, width: 28, height: 28, borderRadius: 10, cursor: 'pointer', fontSize: 16, lineHeight: 1, fontFamily: font }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '16px 20px', flex: 1 }}>
+          {!sel ? (
+            <>
+              <input autoFocus value={q} onChange={ev => setQ(ev.target.value)}
+                placeholder="Employee code or name, e.g. SRS9008, Nisha"
+                style={{ ...S.sel, width: '100%', padding: '11px 13px', fontSize: 14, borderRadius: 10 }} />
+
+              {terms.length < 2 ? (
+                <div style={{ textAlign: 'center', padding: '34px 20px', color: C.muted }}>
+                  <div style={{ fontSize: 30, marginBottom: 8 }}></div>
+                  <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                    Type at least two characters to search.<br />
+                    <span style={{ fontSize: 12, opacity: .8 }}>{rows.length} employees on record.</span>
+                  </div>
+                </div>
+              ) : results.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 20px', color: C.muted, fontSize: 13 }}>
+                  Nobody matched “{q.trim()}”.
                 </div>
               ) : (
-                <InfoCallout t="brand" compact icon={<IconMail size={14} />} style={{ marginBottom: 0 }}>
-                  A PRAN creation form is emailed to the employee and the enrolment stays
-                  <b> PRAN pending</b> until they submit it. It does not go active on its own.
-                </InfoCallout>
+                <>
+                  {results.map(r => <SearchResult key={r.emp_code} r={r} onPick={pick} />)}
+                  {results.length === 25 && (
+                    <div style={{ fontSize: 11, color: C.muted, padding: '10px 2px 0' }}>Showing the first 25. Narrow the search to see more.</div>
+                  )}
+                </>
               )}
-
-              <select value={tier} onChange={ev => setTier(ev.target.value)} style={{ ...cfgInput, cursor: 'pointer' }}>
-                <option>Tier I</option><option>Tier II</option>
-              </select>
-
-              {e && !e.has_ctc && (
-                <InfoCallout t="warning" compact style={{ marginBottom: 0 }}>
-                  No CTC in ctc_master, so Basic reads ₹0 and the contribution would be ₹0.
-                  Set their CTC first. Enrolling now records a contribution of nothing.
-                </InfoCallout>
-              )}
-
-              <CheckRow well checked={ack} onChange={ev => setAck(ev.target.checked)}>
-                I am enrolling this employee on their behalf, with their consent on record.
-                The contribution starts from the 1st of next month and repeats monthly.
-              </CheckRow>
             </>
-          )}
-
-          {mode === 'n' && sel.opted && (
+          ) : (
             <>
-              <InfoCallout t="critical" compact style={{ marginBottom: 0 }}>
-                Stopping NPS ends the employer contribution from next month. The employee&apos;s
-                take-home goes up, their retirement contribution stops, and the 80CCD(2)
-                benefit ends with it.
-              </InfoCallout>
-              <DlgLabel>Reason *</DlgLabel>
-              <div>
-                <textarea value={reason} onChange={ev => setReason(ev.target.value)} rows={3}
-                  placeholder="Why is this being stopped? The employee and any later audit will see this."
-                  style={{ ...cfgTextarea, minHeight: 72 }} />
-                {reason.trim().length > 0 && reason.trim().length < 3 && (
-                  <div style={{ fontSize: F.tiny, color: C.critical, marginTop: 4 }}>Write a real reason, not a placeholder.</div>
+              {/* employee card */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: C.gray, borderRadius: 11, border: `1px solid ${C.border}` }}>
+                <div style={{ width: 42, height: 42, borderRadius: '50%', background: C.purpleBg, color: C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
+                  {initials(sel.full_name)}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>{sel.full_name}</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{sel.emp_code} · {sel.department} · {sel.location}</div>
+                </div>
+                <button onClick={() => { setSel(null); setInfo(null); setErr('') }} style={{ ...S.btnO, padding: '6px 11px', fontSize: 11 }}>Change</button>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <DetailRow k="Company" v={sel.company} />
+                <DetailRow k="Date of Joining" v={fmtDate(sel.doj)} />
+                {sel.dol && <DetailRow k="Date of Leaving" v={<span style={{ color: C.red }}>{fmtDate(sel.dol)}</span>} />}
+                <DetailRow k="Current NPS" v={<><YesNo yes={sel.opted} /> {sel.status !== '-' && <span style={{ marginLeft: 6 }}><StatusPill s={sel.status} /></span>}</>} />
+                {loading ? <DetailRow k="Salary figures" v={<span style={{ color: C.muted }}>loading…</span>} /> : e && (
+                  <>
+                    <DetailRow k="Tax regime" v={e.tax_regime} />
+                    <DetailRow k="Monthly Basic" v={e.has_ctc ? inr(e.basic_monthly) : <span style={{ color: C.amber }}>no CTC set</span>} />
+                    <DetailRow k="NPS rate" v={`${e.contribution_percent}% of Basic`} />
+                    <DetailRow k="Monthly contribution" v={<span style={{ color: C.purpleD, fontWeight: 800 }}>{inr(e.monthly_nps_amount)}</span>} />
+                  </>
                 )}
               </div>
+
+              {/* Y / N */}
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 7px' }}>Set NPS</div>
+              <div style={{ display: 'flex', gap: 9 }}>
+                {seg('y', 'Yes, enrol', mode === 'y', sel.opted)}
+                {seg('n', 'No, stop', mode === 'n', !sel.opted)}
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+                {sel.opted
+                  ? 'Already enrolled. Only “No” does anything here.'
+                  : 'Not enrolled. Only “Yes” does anything here.'}
+              </div>
+
+              {mode === 'y' && !sel.opted && (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 7px' }}>PRAN</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[[true, 'Has a PRAN'], [false, 'Needs one']].map(([v, lbl]) => (
+                      <button key={String(v)} onClick={() => setHasPran(v as boolean)}
+                        style={{ flex: 1, padding: '9px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: font, fontSize: 13, fontWeight: 600,
+                          border: hasPran === v ? `2px solid ${C.purple}` : `1px solid ${C.border}`,
+                          background: hasPran === v ? C.purpleBg: TK.surface, color: hasPran === v ? C.purpleD : C.navy }}>
+                        {lbl as string}
+                      </button>
+                    ))}
+                  </div>
+                  {hasPran ? (
+                    <>
+                      <input value={pran} maxLength={pranLen} placeholder={`${pranLen}-digit PRAN`}
+                        onChange={ev => setPran(ev.target.value.replace(/\D/g, ''))}
+                        style={{ ...S.sel, width: '100%', marginTop: 9, letterSpacing: 2, borderColor: pran && !pranOk ? C.red : TK.brandEdge }} />
+                      {pran && !pranOk && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>{pranLen - pranClean.length} more digit(s) needed</div>}
+                    </>
+                  ) : (
+                    <div style={{ marginTop: 9, fontSize: 12, color: TK.brand, background: TK.brandTint, borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
+                      A PRAN creation form is emailed to the employee and the enrolment stays
+                      <b> PRAN pending</b> until they submit it. It does not go active on its own.
+                    </div>
+                  )}
+
+                  <select value={tier} onChange={ev => setTier(ev.target.value)} style={{ ...S.sel, width: '100%', marginTop: 9 }}>
+                    <option>Tier I</option><option>Tier II</option>
+                  </select>
+
+                  {e && !e.has_ctc && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
+                      No CTC in ctc_master, so Basic reads ₹0 and the contribution would be ₹0.
+                      Set their CTC first. Enrolling now records a contribution of nothing.
+                    </div>
+                  )}
+
+                  <label style={{ display: 'flex', gap: 9, marginTop: 13, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={ack} onChange={ev => setAck(ev.target.checked)} style={{ marginTop: 2, width: 15, height: 15, accentColor: C.purple }} />
+                    <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
+                      I am enrolling this employee on their behalf, with their consent on record.
+                      The contribution starts from the 1st of next month and repeats monthly.
+                    </span>
+                  </label>
+                </>
+              )}
+
+              {mode === 'n' && sel.opted && (
+                <>
+                  <div style={{ marginTop: 14, fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
+                    Stopping NPS ends the employer contribution from next month. The employee&apos;s
+                    take-home goes up, their retirement contribution stops, and the 80CCD(2)
+                    benefit ends with it.
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '14px 0 6px' }}>Reason *</div>
+                  <textarea value={reason} onChange={ev => setReason(ev.target.value)} rows={3}
+                    placeholder="Why is this being stopped? The employee and any later audit will see this."
+                    style={{ ...S.sel, width: '100%', resize: 'vertical', minHeight: 68, lineHeight: 1.5 }} />
+                  {reason.trim().length > 0 && reason.trim().length < 3 && (
+                    <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>Write a real reason, not a placeholder.</div>
+                  )}
+                </>
+              )}
+
+              {err && <div style={{ marginTop: 12, fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 12px' }}>{err}</div>}
             </>
           )}
+        </div>
 
-          {err && <InfoCallout t="critical" compact style={{ marginBottom: 0 }}>{err}</InfoCallout>}
-        </>
-      )}
-    </Modal>
+        {sel && (
+          <div style={{ display: 'flex', gap: 10, padding: '12px 20px 16px', borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <button onClick={onClose} style={{ ...S.btnO, flex: 1, padding: '10px 14px' }}>Cancel</button>
+            <button onClick={save} disabled={!canSave}
+              style={{ ...S.btnP, flex: 1.4, padding: '10px 14px', background: mode === 'y' ? C.green : C.red, opacity: canSave ? 1 : 0.45, cursor: canSave ? 'pointer' : 'not-allowed' }}>
+              {busy ? 'Saving…' : mode === 'y' ? 'Enrol in NPS' : 'Stop NPS'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -509,145 +555,145 @@ export default function NpsReport({ fy }: { fy: string }) {
     XLSX.writeFile(wb, `NPS_Report_FY${fy}.xlsx`)
   }
 
-  const anyFilter = !!(fCompany || fDept || fLoc || fOpt !== 'all' || q)
-  const sel: React.CSSProperties = { ...fieldStyle, cursor: 'pointer' }
-
   return (
-    <div style={{ fontFamily: F.family, color: C.ink, minWidth: 0 }}>
-      <RuleSummary icon={<IconLoans size={20} />} eyebrow="Statutory · NPS" title="Corporate NPS: Enrolment Report"
-        rule={<>FY {fy} · who is enrolled in the corporate NPS and who is not. Employer contribution
-          is 80CCD(2), over and above the ₹1.5L 80C limit.</>}
-        meta={<><RefChip t="brand" icon={<IconCalendar size={12} />}>FY {fy}</RefChip><RefChip>Sec 80CCD(2)</RefChip></>}
-        actions={<>
-          <PButton variant="positive" icon={<IconUser size={14} />} onClick={() => setPicker(true)}>Set NPS for an employee</PButton>
-          <PButton variant="primary" icon={<IconDownload size={14} />} onClick={download} disabled={!shown.length}>Download Excel ({shown.length})</PButton>
-          <PButton variant="secondary" icon={<IconSync size={14} />} onClick={load}>Refresh</PButton>
-        </>} />
+    <div style={{ fontFamily: font, color: C.navy }}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.1 }}>Corporate NPS: Enrolment Report</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+          FY {fy} · who is enrolled in the corporate NPS and who is not. Employer contribution
+          is 80CCD(2), over and above the ₹1.5L 80C limit.
+        </div>
+      </div>
 
-      {err && <InfoCallout t="critical" compact>{err}</InfoCallout>}
+      {err && <div style={{ ...S.card, background: C.redBg, border: `1px solid ${TK.criticalTint}`, color: C.red, fontSize: 13 }}>{err}</div>}
 
-      <KpiGrid min={150}>
-        <KpiTile label="Employees" value={shown.length} icon={<IconEmployees size={15} />} />
-        <KpiTile label="NPS opted" value={optedCount} t={optedCount ? 'positive' : 'neutral'} icon={<IconCheck size={15} />}
-          progress={shown.length ? optedCount / shown.length : 0} progressTone="positive" />
-        <KpiTile label="Not opted" value={shown.length - optedCount} icon={<IconUser size={15} />} />
-        {pending > 0 && <KpiTile label="PRAN pending" value={pending} t="info" icon={<IconMail size={15} />} />}
-        {stopped > 0 && <KpiTile label="Stopped" value={stopped} t="critical" icon={<IconClose size={15} />} />}
-        <KpiTile label="Monthly NPS" value={inr(monthlyTotal)} emphasis icon={<IconLoans size={15} />} />
-      </KpiGrid>
+      <div style={S.card}>
+        <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
+          <Stat label="Employees" value={shown.length} />
+          <Stat label="NPS opted" value={optedCount} color={optedCount ? C.green : C.muted} />
+          <Stat label="Not opted" value={shown.length - optedCount} color={C.muted} />
+          {pending > 0 && <Stat label="PRAN pending" value={pending} color={TK.info} />}
+          {stopped > 0 && <Stat label="Stopped" value={stopped} color={C.red} />}
+          <Stat label="Monthly NPS" value={inr(monthlyTotal)} color={C.purpleD} />
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setPicker(true)} style={{ ...S.btnP, alignSelf: 'center', background: C.green }}>Set NPS for an employee
+          </button>
+          <button onClick={download} disabled={!shown.length} style={{ ...S.btnP, alignSelf: 'center', opacity: shown.length ? 1 : 0.5 }}>Download Excel ({shown.length})
+          </button>
+          <button onClick={load} style={{ ...S.btnO, alignSelf: 'center' }}>Refresh</button>
+        </div>
 
-      <FilterBar label="Filter" active={anyFilter}
-        onClear={() => { setFCompany(''); setFDept(''); setFLoc(''); setFOpt('all'); setQ('') }} clearLabel="Clear"
-        summary={<>Showing <b>{shown.length}</b> of {rows.length} employees. The Excel download follows these filters.</>}>
-        <FilterField label="Company" minWidth={170}>
-          <select style={sel} value={fCompany} onChange={e => setFCompany(e.target.value)}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <select style={S.sel} value={fCompany} onChange={e => setFCompany(e.target.value)}>
             <option value="">All companies</option>{companies.map(c => <option key={c}>{c}</option>)}
           </select>
-        </FilterField>
-        <FilterField label="Department" minWidth={170}>
-          <select style={sel} value={fDept} onChange={e => setFDept(e.target.value)}>
+          <select style={S.sel} value={fDept} onChange={e => setFDept(e.target.value)}>
             <option value="">All departments</option>{depts.map(d => <option key={d}>{d}</option>)}
           </select>
-        </FilterField>
-        <FilterField label="Location" minWidth={160}>
-          <select style={sel} value={fLoc} onChange={e => setFLoc(e.target.value)}>
+          <select style={S.sel} value={fLoc} onChange={e => setFLoc(e.target.value)}>
             <option value="">All locations</option>{locs.map(l => <option key={l}>{l}</option>)}
           </select>
-        </FilterField>
-        <FilterField label="Payroll month" minWidth={140}>
-          <select style={sel} value={pMonth} onChange={e => setPMonth(Number(e.target.value))}
+          <select style={S.sel} value={pMonth} onChange={e => setPMonth(Number(e.target.value))}
             title="The payroll month the effective date is worked out against">
             {FY_MONTHS.map((m, i) => <option key={m} value={i + 1}>{m} {String(Number(fy.split('-')[0]) + (i + 1 <= 9 ? 0 : 1)).slice(2)}</option>)}
           </select>
-        </FilterField>
-        <FilterField label="NPS" minWidth={170}>
-          <select style={sel} value={fOpt} onChange={e => setFOpt(e.target.value as any)}>
+          <select style={S.sel} value={fOpt} onChange={e => setFOpt(e.target.value as any)}>
             <option value="all">NPS: all</option>
             <option value="y">NPS opted only (Y)</option>
             <option value="n">Not opted only (N)</option>
           </select>
-        </FilterField>
-        <FilterField label="Search" grow minWidth={200}>
-          <input style={fieldStyle} placeholder="Employee code or name" value={q} onChange={e => setQ(e.target.value)} />
-        </FilterField>
-      </FilterBar>
+          <input style={{ ...S.sel, flex: 1, minWidth: 200 }} placeholder="Employee code or name" value={q} onChange={e => setQ(e.target.value)} />
+          {(fCompany || fDept || fLoc || fOpt !== 'all' || q) && (
+            <button onClick={() => { setFCompany(''); setFDept(''); setFLoc(''); setFOpt('all'); setQ('') }} style={S.btnO}>Clear</button>
+          )}
+        </div>
 
-      {pending > 0 && (
-        <InfoCallout t="info" icon={<IconMail size={16} />}
-          title={`${pending} employee${pending === 1 ? ' is' : 's are'} enrolled but waiting on a PRAN.`}
-          action={<PButton variant="secondary" icon={<IconMail size={14} />} onClick={sendReminders} disabled={mailing}>{mailing ? 'Sending…' : 'Send PRAN reminder'}</PButton>}>
-          Nothing is being deducted or credited for {pending === 1 ? 'them' : 'them'} until it is submitted:{' '}
-          {pendingRows.slice(0, 6).map(r => r.emp_code).join(', ')}{pending > 6 ? `, …and ${pending - 6} more` : ''}.
-        </InfoCallout>
-      )}
+        {pending > 0 && (
+          <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', fontSize: 12, color: TK.brand, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <b>{pending} employee{pending === 1 ? ' is' : 's are'} enrolled but waiting on a PRAN.</b> Nothing
+              is being deducted or credited for {pending === 1 ? 'them' : 'them'} until it is submitted:{' '}
+              {pendingRows.slice(0, 6).map(r => r.emp_code).join(', ')}{pending > 6 ? `, …and ${pending - 6} more` : ''}.
+            </div>
+            <button onClick={sendReminders} disabled={mailing}
+              style={{ ...S.btnP, background: TK.info, whiteSpace: 'nowrap', opacity: mailing ? 0.6 : 1, cursor: mailing ? 'wait' : 'pointer' }}>
+              {mailing ? 'Sending…' : 'Send PRAN reminder'}
+            </button>
+          </div>
+        )}
 
-      {regimeMismatch.length > 0 && (
-        <InfoCallout t="warning" icon={<IconAlert size={16} />}
-          title={`${regimeMismatch.length} employee${regimeMismatch.length === 1 ? '' : 's'} changed tax regime after enrolling.`}>
-          The NPS rate follows the regime (10% of Basic on old, 14% on new), so the percent on
-          file was worked out for the other one and the contribution is stale:{' '}
-          {regimeMismatch.slice(0, 6).map(r => `${r.emp_code} (${r.nps_regime}→${r.regime})`).join(', ')}
-          {regimeMismatch.length > 6 ? `, …and ${regimeMismatch.length - 6} more` : ''}.
-        </InfoCallout>
-      )}
+        {regimeMismatch.length > 0 && (
+          <div style={{ marginTop: 11, fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '10px 12px', lineHeight: 1.55 }}>
+            <b>{regimeMismatch.length} employee{regimeMismatch.length === 1 ? '' : 's'} changed tax regime after enrolling.</b> The
+            NPS rate follows the regime (10% of Basic on old, 14% on new), so the percent on
+            file was worked out for the other one and the contribution is stale:{' '}
+            {regimeMismatch.slice(0, 6).map(r => `${r.emp_code} (${r.nps_regime}→${r.regime})`).join(', ')}
+            {regimeMismatch.length > 6 ? `, …and ${regimeMismatch.length - 6} more` : ''}.
+          </div>
+        )}
+      </div>
 
-      <SectionCard flush>
+      <div style={{ ...S.card, padding: 0, overflow: 'auto' }}>
         {loading ? (
-          <EmptyState compact t="neutral" icon={<IconEmployees size={20} />} title="Loading…" />
+          <div style={{ padding: 30, textAlign: 'center', color: C.muted, fontSize: 13 }}>Loading…</div>
         ) : shown.length === 0 ? (
-          <EmptyState compact t="neutral" icon={<IconSearch size={20} />} title={rows.length === 0 ? 'No employees found.' : 'Nothing matched this filter.'} />
+          <div style={{ padding: 30, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+            {rows.length === 0 ? 'No employees found.' : 'Nothing matched this filter.'}
+          </div>
         ) : (
-          <DataTable minWidth={1500} maxHeight="70vh">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
                 {['Company', 'Emp Code', 'Employee Name', 'Department', 'Location', 'DOJ', 'DOL', 'Effective Date', 'Regime', 'NPS', 'Status', 'PRAN', 'Tier', '%', 'Monthly'].map(h => (
-                  <th key={h} style={h === '%' || h === 'Monthly' ? dt.thNum : dt.th}>{h}</th>
+                  <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {shown.map(r => (
-                <tr key={r.emp_code} className={dt.rowClass}>
-                  <td style={{ ...dt.td, whiteSpace: 'nowrap' }}>{r.company}</td>
-                  <td style={dt.tdMono}>{r.emp_code}</td>
-                  <td style={{ ...dt.tdStrong, whiteSpace: 'nowrap' }}>{r.full_name}</td>
-                  <td style={{ ...dt.td, whiteSpace: 'nowrap' }}>{r.department}</td>
-                  <td style={{ ...dt.td, whiteSpace: 'nowrap' }}>{r.location}</td>
-                  <td style={{ ...dt.td, whiteSpace: 'nowrap', ...numeric }}>{fmtDate(r.doj)}</td>
-                  <td style={{ ...dt.td, whiteSpace: 'nowrap', ...numeric, color: r.dol ? C.critical : C.faint }}>{fmtDate(r.dol)}</td>
+                <tr key={r.emp_code} style={{ background: r.opted ? '#FCFDFF' : '#fff' }}>
+                  <td style={S.td}>{r.company}</td>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{r.emp_code}</td>
+                  <td style={S.td}>{r.full_name}</td>
+                  <td style={S.td}>{r.department}</td>
+                  <td style={S.td}>{r.location}</td>
+                  <td style={S.td}>{fmtDate(r.doj)}</td>
+                  <td style={{ ...S.td, color: r.dol ? C.red : C.muted }}>{fmtDate(r.dol)}</td>
                   {/* Bold when it is their joining date rather than the 1st — that is the row
                       where a part-month contribution is owed, and the one worth noticing. */}
-                  <td style={{ ...dt.td, whiteSpace: 'nowrap', ...numeric, fontWeight: effOf(r) === mStart ? W.regular : W.bold, color: effOf(r) === mStart ? C.ink : C.brandDeep }}>
+                  <td style={{ ...S.td, fontWeight: effOf(r) === mStart ? 400 : 700, color: effOf(r) === mStart ? C.navy : C.purpleD }}>
                     {fmtDate(effOf(r))}
                   </td>
-                  <td style={dt.td}>{r.regime}</td>
-                  <td style={dt.td}><YesNo yes={r.opted} /></td>
-                  <td style={dt.td}><StatusPill s={r.status} /></td>
-                  <td style={{ ...dt.tdMono, fontWeight: W.regular, fontSize: F.tiny, letterSpacing: '.03em' }}>{r.pran || '-'}</td>
-                  <td style={{ ...dt.td, whiteSpace: 'nowrap' }}>{r.tier || '-'}</td>
-                  <td style={dt.tdNum}>{r.percent == null ? '-' : `${r.percent}%`}</td>
-                  <td style={{ ...dt.tdNum, fontWeight: W.bold }}>{r.monthly == null ? '-' : inr(r.monthly)}</td>
+                  <td style={S.td}>{r.regime}</td>
+                  <td style={S.td}><YesNo yes={r.opted} /></td>
+                  <td style={S.td}><StatusPill s={r.status} /></td>
+                  <td style={{ ...S.td, fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{r.pran || '-'}</td>
+                  <td style={S.td}>{r.tier || '-'}</td>
+                  <td style={S.td}>{r.percent == null ? '-' : `${r.percent}%`}</td>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{r.monthly == null ? '-' : inr(r.monthly)}</td>
                 </tr>
               ))}
             </tbody>
-          </DataTable>
+          </table>
         )}
-      </SectionCard>
+      </div>
 
-      {msg && <InfoCallout t="positive" compact><b style={{ color: C.positive }}>{msg}</b></InfoCallout>}
+      {msg && (
+        <div style={{ ...S.card, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, color: C.green, fontSize: 13, fontWeight: 700 }}>✓ {msg}</div>
+      )}
 
       {picker && (
         <NpsDialog rows={rows} onClose={() => setPicker(false)}
           onDone={m => { setPicker(false); setMsg(m); load() }} />
       )}
 
-      <InfoCallout t="neutral" icon={<IconInfo size={18} />} title="How to read Y and N">
+      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
         <b>Y</b> means a live enrolment: ACTIVE, or PENDING_PRAN where the employee has enrolled
         but not yet submitted their PRAN. <b>N</b> covers both never enrolled and enrolled-then-stopped;
         the Status column separates the two, so a stopped enrolment is never mistaken for someone
         who was simply never asked.
         <br />Enrolment happens in the employee&apos;s ESS portal. This screen reports it. It does not change it.
-      </InfoCallout>
+      </div>
     </div>
   )
 }

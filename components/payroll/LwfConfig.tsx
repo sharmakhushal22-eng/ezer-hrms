@@ -16,23 +16,70 @@ import { getCurrentLwfRates, reviseLwfConfig, calculateLwfDeduction } from '@/li
 import { MONTH_NAMES } from '@/lib/lwf/types'
 import type { LwfConfig as LwfRow } from '@/lib/lwf/types'
 import { INDIAN_STATES } from '@/lib/geo/india-states-districts'
-import { C, F, W, S, R, Z, numeric, IconPlus, IconCompliance, IconSearch, IconUser, IconBuilding, IconCalendar } from '@/lib/ui'
-import { SectionCard, InfoCallout, PButton, StatusPill, EmptyState, KpiTile, DataTable, dt, IconInfo } from '@/components/payroll/kit'
-import { RuleSummary, CField, FormGrid, Modal, StateSelect, CheckRow, QuickButton, cfgInput } from '@/components/payroll/configKit'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
+
+const C = {
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
+  red: TK.critical, redBg: TK.criticalTint,
+}
+const font = '"DM Sans","Segoe UI",sans-serif'
+const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
+const labelStyle: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }
+
+// ── Searchable dropdown ─────────────────────────────────────────────
+function SearchSelect({ value, options, placeholder, onChange }: {
+  value: string; options: string[]; placeholder: string; onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  // One click, not two: a document listener lets the click through to whatever
+  // is under it, so moving straight to another trigger opens that one.
+  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
+  const [q, setQ] = useState('')
+  const filtered = (q.trim() ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options).slice(0, 100)
+  return (
+    <div ref={pop} style={{ position: 'relative' }}>
+      <div onClick={() => { setOpen(o => !o); setQ('') }}
+        style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, color: value ? C.navy : TK.faint }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || placeholder}</span>
+        <span style={{ color: TK.faint, fontSize: 11 }}></span>
+      </div>
+      {open && (
+        <>
+          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
+            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
+              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
+              {filtered.map(o => (
+                <div key={o} onClick={() => { onChange(o); setOpen(false) }}
+                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
+                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
+                  style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
+                  {o}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 function MonthPicker({ selected, onToggle }: { selected: number[]; onToggle: (m: number) => void }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6 }}>
       {MONTH_NAMES.map((name, i) => {
         const m = i + 1
         const active = selected.includes(m)
         return (
-          <button key={m} onClick={() => onToggle(m)} type="button" aria-pressed={active} className="ez-press"
-            style={{
-              height: 34, borderRadius: R.sm, fontFamily: 'inherit', fontSize: F.tiny, fontWeight: W.semi, cursor: 'pointer',
-              border: `1px solid ${active ? C.brand : C.lineStrong}`, background: active ? C.brand : C.surface,
-              color: active ? C.onAccent : C.inkSoft,
-            }}>
+          <button key={m} onClick={() => onToggle(m)} type="button"
+            style={{ padding: '7px 4px', borderRadius: 7, border: `1px solid ${active ? C.purple : C.border}`, background: active ? 'linear-gradient(135deg,#2563EB,#5B21B6)' : TK.surface, color: active ? TK.surface : C.navy, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
             {name}
           </button>
         )
@@ -76,108 +123,66 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
     }
   }
 
-  return (
-    <Modal icon={<IconCompliance size={17} />} title={preset ? 'Revise LWF config' : 'Add LWF state'} subtitle="Applicable months + contributions" maxWidth={540}
-      footer={<>
-        <PButton variant="primary" onClick={handleSave} disabled={!valid || saving} style={{ flex: 1 }}>{saving ? 'Saving…' : 'Save'}</PButton>
-        <PButton variant="secondary" onClick={onClose}>Cancel</PButton>
-      </>}>
-      <CField as="div" label="State" required>
-        <StateSelect value={state} options={INDIAN_STATES} placeholder="Select state" onChange={setState} />
-      </CField>
+  const quick = (label: string, fn: () => void) => (
+    <button type="button" onClick={fn} style={{ fontSize: 10, padding: '3px 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', color: C.purpleD, fontWeight: 700 }}>{label}</button>
+  )
 
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: S.sm, flexWrap: 'wrap', marginBottom: 7 }}>
-          <span style={{ fontSize: F.tiny, fontWeight: W.semi, color: C.inkSoft }}>Applicable months<span style={{ color: C.critical, marginLeft: 3 }}>*</span></span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <QuickButton onClick={() => setMonths([1,2,3,4,5,6,7,8,9,10,11,12])}>Monthly</QuickButton>
-            <QuickButton onClick={() => setMonths([6, 12])}>Jun + Dec</QuickButton>
-            <QuickButton onClick={() => setMonths([12])}>Dec only</QuickButton>
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: font }}>
+      <div style={{ background: TK.surface, borderRadius: 14, padding: 22, width: '100%', maxWidth: 500, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(30,27,75,0.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise LWF config' : 'Add LWF state'}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>Applicable months + contributions</div>
           </div>
         </div>
-        <MonthPicker selected={months} onToggle={toggleMonth} />
+
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>State *</label>
+          <SearchSelect value={state} options={INDIAN_STATES} placeholder="Select state" onChange={setState} />
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <label style={labelStyle}>Applicable months *</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {quick('Monthly', () => setMonths([1,2,3,4,5,6,7,8,9,10,11,12]))}
+              {quick('Jun + Dec', () => setMonths([6, 12]))}
+              {quick('Dec only', () => setMonths([12]))}
+            </div>
+          </div>
+          <MonthPicker selected={months} onToggle={toggleMonth} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div><label style={labelStyle}>Employee contribution (₹) *</label><input type="number" value={empContrib} onChange={e => setEmpContrib(e.target.value)} style={inputStyle} /></div>
+          <div><label style={labelStyle}>Employer contribution (₹) *</label><input type="number" value={erContrib} onChange={e => setErContrib(e.target.value)} style={inputStyle} /></div>
+        </div>
+
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: C.gray, borderRadius: 10, padding: '10px 11px', marginBottom: 10, cursor: 'pointer' }}>
+          <input type="checkbox" checked={exitExemption} onChange={e => setExitExemption(e.target.checked)} style={{ marginTop: 2, accentColor: C.purple }} />
+          <span style={{ fontSize: 12, color: C.navy, lineHeight: 1.5 }}>
+            Exempt employees who left before the last day of an applicable month (Haryana-style rule, also fits half-yearly states like Maharashtra, exempting anyone who resigned before the 30 Jun / 31 Dec cutoff).
+          </span>
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+          <div><label style={labelStyle}>Effective from *</label><input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} style={inputStyle} /></div>
+          <div><label style={labelStyle}>Notification reference</label><input value={notificationRef} onChange={e => setNotificationRef(e.target.value)} placeholder="LWF/2026/…" style={inputStyle} /></div>
+        </div>
+
+        {err && <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginBottom: 10 }}>{err}</div>}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button disabled={!valid || saving} onClick={handleSave}
+            style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
+        </div>
       </div>
-
-      <FormGrid min={180}>
-        <CField label="Employee contribution (₹)" required><input type="number" value={empContrib} onChange={e => setEmpContrib(e.target.value)} style={cfgInput} /></CField>
-        <CField label="Employer contribution (₹)" required><input type="number" value={erContrib} onChange={e => setErContrib(e.target.value)} style={cfgInput} /></CField>
-      </FormGrid>
-
-      <CheckRow well checked={exitExemption} onChange={e => setExitExemption(e.target.checked)}>
-        Exempt employees who left before the last day of an applicable month (Haryana-style rule, also fits half-yearly states like Maharashtra, exempting anyone who resigned before the 30 Jun / 31 Dec cutoff).
-      </CheckRow>
-
-      <FormGrid min={180}>
-        <CField label="Effective from" required><input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} style={cfgInput} /></CField>
-        <CField label="Notification reference"><input value={notificationRef} onChange={e => setNotificationRef(e.target.value)} placeholder="LWF/2026/…" style={cfgInput} /></CField>
-      </FormGrid>
-
-      {err && <InfoCallout t="critical" compact style={{ marginBottom: 0 }}>{err}</InfoCallout>}
-    </Modal>
-  )
-}
-
-// One grid, rendered twice — once for each side of the contribution. A dash rather
-// than a zero in the off months: zero reads as "we calculated nothing", a dash reads
-// as "this month is not a deduction month", which is what it actually means.
-// Top-level (not nested in LwfConfig) so it is a stable component between renders.
-function LwfGrid({ side, rows, loading, hitState, onRevise }: {
-  side: 'employee' | 'employer'; rows: LwfRow[]; loading: boolean
-  /** The state the Quick check last resolved — its row is highlighted. '' for none. */
-  hitState: string
-  onRevise: (r: LwfRow) => void
-}) {
-  const isEmp = side === 'employee'
-  const stateCol: React.CSSProperties = { position: 'sticky', left: 0, zIndex: Z.raised }
-  return (
-    <SectionCard flush
-      icon={isEmp ? <IconUser size={16} /> : <IconBuilding size={16} />} iconTone={isEmp ? 'brand' : 'positive'}
-      title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <StatusPill t={isEmp ? 'brand' : 'positive'} size="sm">{isEmp ? 'EMPLOYEE' : 'EMPLOYER'}</StatusPill>Contribution Table
-      </span>}
-      hint={isEmp
-        ? 'Deducted from the employee’s salary, by state and month. “-” means no deduction that month.'
-        : 'Paid by the company on top, by state and month. Usually the larger of the two.'}>
-      <DataTable minWidth={900} maxHeight={520}>
-        <thead>
-          <tr>
-            <th style={{ ...dt.th, ...stateCol, zIndex: Z.sticky }}>State</th>
-            <th style={dt.th}>Exit Exempt?</th>
-            {MONTH_NAMES.map(m => <th key={m} style={{ ...dt.thNum, padding: '9px 8px' }}>{m}</th>)}
-            <th style={dt.th}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => {
-            const amt = Number(isEmp ? r.employee_contribution : r.employer_contribution) || 0
-            const hit = !!hitState && hitState === r.state
-            const bg = hit ? C.warningTint : C.surface
-            return (
-              <tr key={r.id} className={dt.rowClass} style={{ background: hit ? C.warningTint : undefined, outline: hit ? `2px solid ${C.warning}` : 'none', outlineOffset: -2 }}>
-                <td style={{ ...dt.tdStrong, ...stateCol, background: bg, whiteSpace: 'nowrap' }}>{r.state}</td>
-                <td style={dt.td}>
-                  <StatusPill size="sm" t={r.exit_exemption_if_before_period_end ? 'positive' : 'neutral'}>{r.exit_exemption_if_before_period_end ? 'Yes' : 'No'}</StatusPill>
-                </td>
-                {MONTH_NAMES.map((m, mi) => {
-                  const on = (r.applicable_months || []).includes(mi + 1)
-                  return (
-                    <td key={m} style={{ ...dt.tdNum, padding: '9px 8px', color: on ? C.ink : C.faint, fontWeight: on ? W.bold : W.regular }}>
-                      {on ? amt : '-'}
-                    </td>
-                  )
-                })}
-                <td style={{ ...dt.td, textAlign: 'center' }}>
-                  <PButton size="sm" variant="ghost" onClick={() => onRevise(r)} title="Revise this state" style={{ height: 26 }}>Revise</PButton>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </DataTable>
-      {!loading && rows.length === 0 && (
-        <EmptyState compact title="No LWF states configured yet." hint="Click + Add / revise state to add the first one." />
-      )}
-    </SectionCard>
+    </div>
   )
 }
 
@@ -226,37 +231,139 @@ export default function LwfConfig() {
 
   const sorted = [...rates].sort((a, b) => a.state.localeCompare(b.state))
 
-  return (
-    <div style={{ fontFamily: F.family, fontSize: F.small, color: C.ink, minWidth: 0 }}>
-      <RuleSummary icon={<IconCompliance size={20} />} eyebrow="Statutory · Labour Welfare Fund" title="Labour Welfare Fund Configuration"
-        rule={loading ? 'Loading…' : `${sorted.length} states · employee and employer contribution shown separately`}
-        actions={<PButton variant="primary" icon={<IconPlus size={15} />} onClick={() => setModal({ open: true, preset: null })}>Add / revise state</PButton>} />
+  const card: React.CSSProperties = {
+    background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+    padding: '16px 18px', marginBottom: 16, boxShadow: 'var(--ez-shadow-flat)',
+  }
+  const th: React.CSSProperties = {
+    background: C.navy, color: TK.brand, padding: '7px 6px', textAlign: 'right',
+    fontSize: 9, textTransform: 'uppercase', position: 'sticky', top: 0, whiteSpace: 'nowrap',
+  }
+  const td: React.CSSProperties = {
+    padding: '6px 6px', textAlign: 'right', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap',
+  }
 
-      {error && <InfoCallout t="warning" compact>{error}</InfoCallout>}
+  // One grid, rendered twice — once for each side of the contribution. A dash rather
+  // than a zero in the off months: zero reads as "we calculated nothing", a dash reads
+  // as "this month is not a deduction month", which is what it actually means.
+  function Grid({ side }: { side: 'employee' | 'employer' }) {
+    const isEmp = side === 'employee'
+    return (
+      <div style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <span style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: '.05em', padding: '2px 8px', borderRadius: 99,
+            background: isEmp ? C.purpleBg : TK.positiveTint, color: isEmp ? C.purpleD : C.green,
+          }}>{isEmp ? 'EMPLOYEE' : 'EMPLOYER'}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>Contribution Table</span>
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>
+          {isEmp
+            ? 'Deducted from the employee’s salary, by state and month. “-” means no deduction that month.'
+            : 'Paid by the company on top, by state and month. Usually the larger of the two.'}
+        </div>
+        <div style={{ overflowX: 'auto', border: `1px solid ${C.border}`, borderRadius: 10 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, textAlign: 'left' }}>State</th>
+                <th style={{ ...th, textAlign: 'left' }}>Exit Exempt?</th>
+                {MONTH_NAMES.map(m => <th key={m} style={th}>{m}</th>)}
+                <th style={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((r, i) => {
+                const amt = Number(isEmp ? r.employee_contribution : r.employer_contribution) || 0
+                const hit = qRes && qState === r.state
+                return (
+                  <tr key={r.id} style={{
+                    background: hit ? C.amberBg : i % 2 ? C.gray : 'transparent',
+                    outline: hit ? `2px solid ${C.amber}` : 'none',
+                  }}>
+                    <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: C.navy }}>{r.state}</td>
+                    <td style={{ ...td, textAlign: 'left' }}>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+                        background: r.exit_exemption_if_before_period_end ? TK.positiveTint : C.gray,
+                        color: r.exit_exemption_if_before_period_end ? C.green : C.muted,
+                      }}>{r.exit_exemption_if_before_period_end ? 'Yes' : 'No'}</span>
+                    </td>
+                    {MONTH_NAMES.map((m, mi) => {
+                      const on = (r.applicable_months || []).includes(mi + 1)
+                      return (
+                        <td key={m} style={{ ...td, color: on ? C.navy: TK.line, fontWeight: on ? 700 : 400 }}>
+                          {on ? amt : '-'}
+                        </td>
+                      )
+                    })}
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <button onClick={() => setModal({ open: true, preset: r })} title="Revise this state"
+                        style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>Revise</button>
+                    </td>
+                  </tr>
+                )
+              })}
+              {!loading && sorted.length === 0 && (
+                <tr><td colSpan={16} style={{ padding: 24, textAlign: 'center', color: C.muted }}>
+                  No LWF states configured yet. Click <b>+ Add / revise state</b> to add the first one.
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1200 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Labour Welfare Fund Configuration</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+            {loading ? 'Loading…' : `${sorted.length} states · employee and employer contribution shown separately`}
+          </div>
+        </div>
+        <button onClick={() => setModal({ open: true, preset: null })}
+          style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
+          + Add / revise state
+        </button>
+      </div>
+
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
 
       {/* ── Quick check ─────────────────────────────────────────── */}
-      <SectionCard title="Quick check" icon={<IconSearch size={16} />}
-        hint="Pick a state and month, optionally mark a mid-month exit. Same function the payroll run calls."
-        style={{ overflow: 'visible' }} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: S.md + 2 }}>
-        <div style={{ display: 'flex', gap: S.md, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <CField as="div" label="State" style={{ flex: '1 1 200px' }}>
-            <StateSelect value={qState} options={sorted.map(r => r.state)} placeholder="Select state"
+      <div style={card}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 3 }}>Quick check</div>
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 13 }}>
+          Pick a state and month, optionally mark a mid-month exit. Same function the payroll run calls.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr)) auto auto', gap: 10, alignItems: 'end' }}>
+          <div>
+            <label style={labelStyle}>State</label>
+            <SearchSelect value={qState} options={sorted.map(r => r.state)} placeholder="Select state"
               onChange={v => { setQState(v); setQRes(null) }} />
-          </CField>
-          <CField label="Month" style={{ flex: '1 1 150px' }}>
-            <select style={{ ...cfgInput, cursor: 'pointer' }} value={qMonth} onChange={e => { setQMonth(Number(e.target.value)); setQRes(null) }}>
+          </div>
+          <div>
+            <label style={labelStyle}>Month</label>
+            <select style={inputStyle} value={qMonth} onChange={e => { setQMonth(Number(e.target.value)); setQRes(null) }}>
               {MONTH_NAMES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
-          </CField>
-          <div style={{ paddingBottom: 9 }}>
-            <CheckRow checked={qExit} onChange={e => { setQExit(e.target.checked); setQRes(null) }}><span style={{ whiteSpace: 'nowrap', color: C.ink }}>Exiting mid-month</span></CheckRow>
           </div>
-          <PButton variant="primary" onClick={runCheck} disabled={qBusy || !qState} style={{ height: 38 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: C.navy, cursor: 'pointer', paddingBottom: 9, whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={qExit} onChange={e => { setQExit(e.target.checked); setQRes(null) }}
+              style={{ accentColor: C.purple, width: 15, height: 15 }} />
+            Exiting mid-month
+          </label>
+          <button onClick={runCheck} disabled={qBusy || !qState}
+            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: !qState ? TK.brandTint : C.purple, cursor: !qState ? 'not-allowed' : 'pointer' }}>
             {qBusy ? 'Checking…' : 'Check LWF'}
-          </PButton>
+          </button>
         </div>
 
-        {qErr && <InfoCallout t="critical" compact style={{ marginBottom: 0 }}>{qErr}</InfoCallout>}
+        {qErr && <div style={{ marginTop: 12, fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '9px 11px' }}>{qErr}</div>}
 
         {qRes && (() => {
           const found = !!qRes.rate_found
@@ -266,34 +373,45 @@ export default function LwfConfig() {
             : qRes.is_exempt_due_to_exit ? `Exempt: left before the period ended, and ${qState} allows that.`
               : !qRes.is_month_applicable ? `${qState} has no LWF deduction in ${MONTH_NAMES[qMonth - 1]}.`
                 : `${MONTH_NAMES[qMonth - 1]} is a deduction month in ${qState}.`
+          const box: React.CSSProperties = {
+            flex: 1, minWidth: 150, borderRadius: 10, padding: '13px 15px',
+            background: found ? TK.positiveTint : C.amberBg,
+            border: `1px solid ${found ? TK.positiveTint : TK.warningTint}`,
+          }
           return (
-            <div className="ez-rise" style={{ display: 'flex', flexDirection: 'column', gap: S.sm + 2 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: S.md }}>
-                <KpiTile label="Employee contribution" value={found ? `₹${ee}` : '-'} t={found ? 'positive' : 'warning'} icon={<IconUser size={15} />} />
-                <KpiTile label="Employer contribution" value={found ? `₹${er}` : '-'} t={found ? 'positive' : 'warning'} icon={<IconBuilding size={15} />} />
+            <div style={{ marginTop: 13 }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div style={box}>
+                  <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employee contribution</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${ee}` : '-'}</div>
+                </div>
+                <div style={box}>
+                  <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employer contribution</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${er}` : '-'}</div>
+                </div>
               </div>
-              <InfoCallout t={found ? 'positive' : 'warning'} compact style={{ marginBottom: 0 }}>{why}</InfoCallout>
+              <div style={{ fontSize: 12, color: found ? '#047857' : TK.warning, marginTop: 8 }}>{why}</div>
             </div>
           )
         })()}
-      </SectionCard>
+      </div>
 
       {loading ? (
-        <SectionCard><EmptyState compact t="neutral" icon={<IconCalendar size={20} />} title="Loading…" /></SectionCard>
+        <div style={{ fontSize: 12, color: C.purple, padding: 8 }}>Loading…</div>
       ) : (
         <>
-          <LwfGrid side="employee" rows={sorted} loading={loading} hitState={qRes ? qState : ''} onRevise={r => setModal({ open: true, preset: r })} />
-          <LwfGrid side="employer" rows={sorted} loading={loading} hitState={qRes ? qState : ''} onRevise={r => setModal({ open: true, preset: r })} />
+          <Grid side="employee" />
+          <Grid side="employer" />
         </>
       )}
 
-      <InfoCallout t="info" icon={<IconInfo size={18} />} title="This table is payroll's only source.">
-        Run Payroll reads every employee&apos;s LWF from here, by their
+      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
+        <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s LWF from here, by their
         <b> lwf_state</b> and that month. Note that LWF state and PT state are <b>different</b> things, and for
         300 of your 302 employees they genuinely differ.
         <br />LWF is a <b>flat monthly</b> amount. Gross and paid days make no difference to it. Revising does not
         delete the old row, it closes it; so re-running an earlier month applies the rate that was in force then.
-      </InfoCallout>
+      </div>
 
       {modal.open && <ReviseModal preset={modal.preset} onClose={() => setModal({ open: false })} onSaved={() => { setModal({ open: false }); load() }} />}
     </div>

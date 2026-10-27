@@ -6,12 +6,9 @@
 import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { loadBankDetails, type BankRow } from '@/lib/payroll/core'
-import { font, fmtDate, ScreenIntro } from './attendanceShared'
+import { C, font, fmtDate } from './attendanceShared'
 // Design tokens, aliased as TK — this file declares its own C.
-import { C as TK, F, W, S as SP, R, numeric, IconDownload, IconSearch } from '@/lib/ui'
-import {
-  SectionCard, FilterBar, FilterField, fieldStyle, PButton, DataTable, EmptyState, StatusPill, CountChip, IconBank, dt,
-} from '@/components/payroll/kit'
+import { C as TK } from '@/lib/ui'
 
 export default function BankDetailsTab({ companyId }: { companyId: string }) {
   const [rows, setRows] = useState<BankRow[]>([])
@@ -59,87 +56,75 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
     XLSX.writeFile(wb, 'Bank_Details.xlsx')
   }
 
-  const filtering = !!(terms.length || dept || loc || onlyActive)
-  const exitedCount = rows.filter(r => r.dol).length
+  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
+  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 10, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
+  const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
 
   return (
-    <div style={{ fontFamily: font, fontSize: F.small, color: TK.ink, maxWidth: 1180 }}>
-      <ScreenIntro icon={<IconBank size={20} />} title="Bank Details"
-        subtitle="Salary account per employee, maintained in the Employee Master, shown here for payroll"
-        meta={<>
-          <StatusPill t="neutral" size="sm" dot>Read-only view</StatusPill>
-          {!loading && <StatusPill t="brand" size="sm">{rows.length} employees</StatusPill>}
-          {!loading && exitedCount > 0 && <StatusPill t="critical" size="sm" dot>{exitedCount} exited</StatusPill>}
-        </>}
-        actions={
-          <PButton variant="primary" icon={<IconDownload size={15} />} onClick={exportXlsx} disabled={!filtered.length}>
-            Export ({filtered.length})
-          </PButton>
-        } />
+    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1100 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Bank Details</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Salary account per employee, maintained in the Employee Master, shown here for payroll</div>
+        </div>
+      </div>
 
-      <FilterBar label="Find accounts" active={filtering}
-        summary={loading ? 'Loading…' : `${filtered.length} of ${rows.length} employees`}>
-        <FilterField label="Search" grow minWidth={260}>
-          <span style={{ position: 'relative', display: 'block' }}>
-            <span aria-hidden style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: TK.muted, display: 'inline-flex', pointerEvents: 'none' }}><IconSearch size={14} /></span>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search or paste codes, e.g. SRS0001, SRS0002" style={{ ...fieldStyle, paddingLeft: 32, fontFamily: font }} />
-          </span>
-        </FilterField>
-        <FilterField label="Department" minWidth={170}>
-          <select value={dept} onChange={e => setDept(e.target.value)} style={{ ...fieldStyle, fontFamily: font, cursor: 'pointer' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: 'var(--ez-shadow-flat)' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search or paste codes, e.g. SRS0001, SRS0002" style={{ ...inp, flex: 1, minWidth: 260 }} />
+          <select value={dept} onChange={e => setDept(e.target.value)} style={{ ...inp, minWidth: 160 }}>
             <option value="">All departments</option>
             {depts.sort().map(d => <option key={d} value={d}>{d}</option>)}
           </select>
-        </FilterField>
-        <FilterField label="Location" minWidth={170}>
-          <select value={loc} onChange={e => setLoc(e.target.value)} style={{ ...fieldStyle, fontFamily: font, cursor: 'pointer' }}>
+          <select value={loc} onChange={e => setLoc(e.target.value)} style={{ ...inp, minWidth: 160 }}>
             <option value="">All locations</option>
             {locs.sort().map(l => <option key={l} value={l}>{l}</option>)}
           </select>
-        </FilterField>
-        <label style={{
-          display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 12px', boxSizing: 'border-box',
-          border: `1px solid ${onlyActive ? TK.brandEdge : TK.lineStrong}`, borderRadius: R.md,
-          background: onlyActive ? TK.brandTint : TK.surface, fontSize: F.small, fontWeight: W.medium,
-          color: onlyActive ? TK.brandDeep : TK.ink, cursor: 'pointer', whiteSpace: 'nowrap',
-        }}>
-          <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)} style={{ accentColor: TK.brand, width: 15, height: 15 }} /> Hide exited
-        </label>
-      </FilterBar>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.navy, cursor: 'pointer' }}>
+            <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)} /> Hide exited
+          </label>
+          <button onClick={exportXlsx} disabled={!filtered.length}
+            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>
+            ⬇ Export ({filtered.length})
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>
+          {loading ? 'Loading…' : `${filtered.length} of ${rows.length} employees`}
+        </div>
+      </div>
 
-      <SectionCard icon={<IconBank size={15} />} title="Salary accounts" flush
-        hint="Export keeps account numbers as text, so leading zeros survive in Excel."
-        actions={<CountChip t="brand">{filtered.length}</CountChip>}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
         {loading
-          ? <EmptyState compact t="neutral" icon={<IconBank size={20} />} title="Loading bank details…" />
+          ? <div style={{ fontSize: 12, color: C.muted, padding: '18px 0', textAlign: 'center' }}>Loading bank details…</div>
           : filtered.length === 0
-            ? <EmptyState compact t="neutral" icon={<IconSearch size={20} />} title="No employees match these filters." />
+            ? <div style={{ fontSize: 12, color: C.muted, padding: '18px 0', textAlign: 'center' }}>No employees match these filters.</div>
             : (
-              <DataTable minWidth={980}>
-                <thead><tr>
-                  {['Emp Code', 'Name', 'Department', 'Location', 'DOJ', 'DOL', 'Bank Name', 'Account Number', 'IFSC', 'Type'].map(h => <th key={h} style={dt.th}>{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {filtered.map((r, i) => (
-                    <tr key={r.emp_code + i} className={dt.rowClass}>
-                      <td style={dt.tdMono}>{r.emp_code}</td>
-                      <td style={{ ...dt.tdStrong, whiteSpace: 'nowrap' }}>{r.full_name}</td>
-                      <td style={{ ...dt.td, whiteSpace: 'nowrap' }}>{r.department || '-'}</td>
-                      <td style={{ ...dt.td, whiteSpace: 'nowrap' }}>{r.location || '-'}</td>
-                      <td style={{ ...dt.td, whiteSpace: 'nowrap', ...numeric }}>{fmtDate(r.doj) || '-'}</td>
-                      <td style={{ ...dt.td, whiteSpace: 'nowrap', ...numeric }}>
-                        {r.dol ? <StatusPill t="critical" size="sm" dot>{fmtDate(r.dol)}</StatusPill> : <span style={{ color: TK.faint }}>-</span>}
-                      </td>
-                      <td style={{ ...dt.td, whiteSpace: 'nowrap' }}>{r.bank_name || '-'}</td>
-                      <td style={{ ...dt.tdMono, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: W.medium, letterSpacing: '.02em' }}>{r.account_number || (r.account_last4 ? `•••• ${r.account_last4}` : '-')}</td>
-                      <td style={{ ...dt.td, whiteSpace: 'nowrap', ...numeric }}>{r.ifsc_code || '-'}</td>
-                      <td style={{ ...dt.td, whiteSpace: 'nowrap' }}>{r.account_type ? <StatusPill t="neutral" size="sm">{r.account_type}</StatusPill> : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </DataTable>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+                  <thead><tr style={{ background: C.navy }}>
+                    {['Emp Code', 'Name', 'Department', 'Location', 'DOJ', 'DOL', 'Bank Name', 'Account Number', 'IFSC', 'Type'].map(h => <th key={h} style={th}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {filtered.map((r, i) => (
+                      <tr key={r.emp_code + i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
+                        <td style={{ ...td, fontWeight: 700 }}>{r.emp_code}</td>
+                        <td style={td}>{r.full_name}</td>
+                        <td style={td}>{r.department || '-'}</td>
+                        <td style={td}>{r.location || '-'}</td>
+                        <td style={td}>{fmtDate(r.doj) || '-'}</td>
+                        <td style={{ ...td, color: r.dol ? C.red : C.muted }}>{fmtDate(r.dol) || '-'}</td>
+                        <td style={td}>{r.bank_name || '-'}</td>
+                        <td style={{ ...td, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{r.account_number || (r.account_last4 ? `•••• ${r.account_last4}` : '-')}</td>
+                        <td style={td}>{r.ifsc_code || '-'}</td>
+                        <td style={td}>{r.account_type || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-      </SectionCard>
+      </div>
     </div>
   )
 }

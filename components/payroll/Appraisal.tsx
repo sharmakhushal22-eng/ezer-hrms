@@ -13,18 +13,30 @@ import {
 } from '@/lib/payroll/appraisal'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK, F, W, S as SP, R, numeric, IconPerformance, IconUser, IconSearch, IconUpload, IconReports, IconCheck } from '@/lib/ui'
-import {
-  SectionCard, InfoCallout, PButton, SegmentedTabs, DataTable, EmptyState, StatusPill, ActionBar, KeyValueGrid,
-  fieldStyle, IconSync, dt,
-} from '@/components/payroll/kit'
-import { ScreenIntro } from './attendanceShared'
+import { C as TK } from '@/lib/ui'
 
+const C = {
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
+}
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 
-const inp: React.CSSProperties = { ...fieldStyle, fontFamily: font }
-const lbl: React.CSSProperties = { fontSize: F.tiny, fontWeight: W.semi, color: TK.inkSoft, display: 'block', marginBottom: 5 }
+const inp: React.CSSProperties = {
+  width: '100%', padding: '9px 11px', border: `1px solid #DDD6FE`, borderRadius: 7,
+  fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none',
+  background: TK.sunken, color: C.navy,
+}
+const lbl: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase',
+  letterSpacing: '.04em', display: 'block', marginBottom: 4,
+}
+const card: React.CSSProperties = {
+  background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+  padding: '16px 18px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)',
+}
 
 // ── Live breakup table ─────────────────────────────────────────────────────
 // Outside the parent so typing a hike percent does not re-mount it on every keystroke.
@@ -44,42 +56,39 @@ function BreakupTable({ prev, next }: { prev: AppraisalBreakup | null; next: App
     ['Employer ESIC', prev?.employer_esic_monthly, next.employer_esic_monthly],
     ['Fixed CTC / month', prev?.fixed_monthly, next.fixed_monthly],
   ]
-  // Gross pay and Fixed CTC are the two lines people compare — set them apart.
-  const strongRow = (label: string) => label === 'Gross pay' || label === 'Fixed CTC / month'
+  const td: React.CSSProperties = { padding: '7px 10px', borderBottom: `1px solid ${C.border}`, textAlign: 'right' }
   return (
-    <div style={{ marginTop: SP.lg, border: `1px solid ${TK.line}`, borderRadius: R.md, overflow: 'hidden' }}>
-      <DataTable>
+    <div style={{ marginTop: 14, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
-          <tr>
-            <th style={dt.th}>Component</th>
-            <th style={dt.thNum}>Current</th>
-            <th style={dt.thNum}>Revised</th>
-            <th style={dt.thNum}>Difference</th>
+          <tr style={{ background: C.gray }}>
+            <th style={{ ...td, textAlign: 'left', fontSize: 10, color: C.muted, textTransform: 'uppercase' }}>Component</th>
+            <th style={{ ...td, fontSize: 10, color: C.muted, textTransform: 'uppercase' }}>Current</th>
+            <th style={{ ...td, fontSize: 10, color: C.muted, textTransform: 'uppercase' }}>Revised</th>
+            <th style={{ ...td, fontSize: 10, color: C.muted, textTransform: 'uppercase' }}>Difference</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(([label, p, n]) => {
             const d = n - (p ?? 0)
-            const strong = strongRow(label)
-            const bg = strong ? { background: TK.sunken } : null
             return (
-              <tr key={label} className={dt.rowClass}>
-                <td style={{ ...dt.tdStrong, ...bg, fontWeight: strong ? W.bold : W.semi }}>{label}</td>
-                <td style={{ ...dt.tdNum, ...bg, color: TK.muted }}>{p == null ? '-' : inr(p)}</td>
-                <td style={{ ...dt.tdNum, ...bg, fontWeight: W.bold }}>{inr(n)}</td>
-                <td style={{ ...dt.tdNum, ...bg, fontWeight: W.bold, color: d > 0 ? TK.positive : d < 0 ? TK.critical : TK.muted }}>
+              <tr key={label}>
+                <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: C.navy }}>{label}</td>
+                <td style={{ ...td, color: C.muted }}>{p == null ? '-' : inr(p)}</td>
+                <td style={{ ...td, fontWeight: 700, color: C.navy }}>{inr(n)}</td>
+                <td style={{ ...td, fontWeight: 700, color: d > 0 ? C.green : d < 0 ? C.red : C.muted }}>
                   {p == null ? '-' : (d > 0 ? '+' : '') + inr(d)}
                 </td>
               </tr>
             )
           })}
         </tbody>
-      </DataTable>
+      </table>
       {next.special_allowance_monthly < 0 && (
-        <InfoCallout t="critical" compact style={{ margin: 0, borderRadius: 0, border: 'none', borderTop: `1px solid ${TK.criticalEdge}` }}>
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, padding: '9px 12px' }}>
           Special Allowance is negative: Basic, HRA and Flexi together already exceed the fixed
           monthly. Raise the CTC or reduce the flexi declaration before saving.
-        </InfoCallout>
+        </div>
       )}
     </div>
   )
@@ -178,67 +187,72 @@ export default function Appraisal() {
     } finally { setRepBusy(false) }
   }
 
-  const pickTab = (id: typeof tab) => { setTab(id); if (id === 'report' && !report.length) loadReport() }
+  const tabBtn = (id: typeof tab, label: string) => (
+    <button key={id} onClick={() => { setTab(id); if (id === 'report' && !report.length) loadReport() }}
+      style={{
+        padding: '9px 16px', borderRadius: 10, fontFamily: font, fontSize: 13, fontWeight: 700,
+        cursor: 'pointer', border: `1px solid ${tab === id ? C.purple : C.border}`,
+        background: tab === id ? C.purple: TK.surface, color: tab === id ? TK.surface : C.navy,
+      }}>{label}</button>
+  )
 
   return (
-    <div style={{ fontFamily: font, fontSize: F.small, color: TK.ink, maxWidth: 1040 }}>
-      <ScreenIntro icon={<IconPerformance size={20} />} title={<>Appraisal &amp; Arrear</>}
-        subtitle="Revise CTC with an effective date. Back months become head-wise arrear in the pay-out month"
-        meta={<>
-          <StatusPill t="neutral" size="sm" dot>With effect from</StatusPill>
-          <span style={{ color: TK.faint, fontSize: F.tiny }}>→</span>
-          <StatusPill t="neutral" size="sm" dot>Pay-out month</StatusPill>
-          <span style={{ color: TK.faint, fontSize: F.tiny }}>=</span>
-          <StatusPill t="warning" size="sm" dot>Head-wise arrear</StatusPill>
-        </>} />
+    <div style={{ fontFamily: font, fontSize: 13, color: C.navy, maxWidth: 1000 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>Appraisal &amp; Arrear</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+            Revise CTC with an effective date. Back months become head-wise arrear in the pay-out month
+          </div>
+        </div>
+      </div>
 
-      <SegmentedTabs<typeof tab> value={tab} onChange={pickTab} items={[
-        { key: 'employee', label: 'Employee Wise', icon: <IconUser size={14} /> },
-        { key: 'bulk', label: 'Bulk Upload', icon: <IconUpload size={14} /> },
-        { key: 'report', label: 'Report', icon: <IconReports size={14} />, count: report.length || undefined },
-      ]} />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {tabBtn('employee', 'Employee Wise')}
+        {tabBtn('bulk', 'Bulk Upload')}
+        {tabBtn('report', 'Report')}
+      </div>
 
-      {err && <InfoCallout t="critical" compact>{err}</InfoCallout>}
+      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>{err}</div>}
 
       {tab === 'employee' && (
         <>
-          <SectionCard icon={<IconUser size={15} />} title="Employee" hint="Load the employee by code to see the current structure.">
-            <div style={{ display: 'flex', gap: SP.sm + 2, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div style={card}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Employee</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <label style={lbl}>Employee code</label>
-                <span style={{ position: 'relative', display: 'block' }}>
-                  <span aria-hidden style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: TK.muted, display: 'inline-flex', pointerEvents: 'none' }}><IconSearch size={14} /></span>
-                  <input style={{ ...inp, paddingLeft: 32 }} value={code} placeholder="e.g. SRS9004"
-                    onChange={e => setCode(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') lookup() }} />
-                </span>
+                <input style={inp} value={code} placeholder="e.g. SRS9004"
+                  onChange={e => setCode(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') lookup() }} />
               </div>
-              <PButton variant="primary" onClick={lookup} disabled={busy || !code.trim()}>
+              <button onClick={lookup} disabled={busy || !code.trim()}
+                style={{ padding: '9px 18px', borderRadius: 10, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: !code.trim() ? TK.brandTint : C.purple, cursor: !code.trim() ? 'not-allowed' : 'pointer' }}>
                 {busy ? 'Loading…' : 'Load'}
-              </PButton>
+              </button>
             </div>
-            {lookupErr && <InfoCallout t="critical" compact style={{ marginTop: SP.md, marginBottom: 0 }}>{lookupErr}</InfoCallout>}
+            {lookupErr && <div style={{ fontSize: 12, color: C.red, marginTop: 8 }}>{lookupErr}</div>}
             {emp && (
-              <div style={{ marginTop: SP.md }}>
-                <KeyValueGrid min={170} dense items={[
-                  { label: 'Employee', value: <>{emp.full_name} <span style={{ color: TK.muted, fontWeight: W.medium }}>· {emp.emp_code}</span></> },
-                  { label: 'Company', value: emp.company_name },
-                  { label: 'Designation', value: emp.designation || '-' },
-                  { label: 'Current CTC', value: <>{inr(emp.annual_ctc)}<span style={{ color: TK.muted, fontWeight: W.medium }}>/yr</span></>, mono: true, t: 'brand' },
-                ]} />
+              <div style={{ marginTop: 12, background: C.gray, borderRadius: 10, padding: '11px 13px', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
+                <span><b>{emp.full_name}</b> · {emp.emp_code}</span>
+                <span style={{ color: C.muted }}>{emp.company_name}</span>
+                <span style={{ color: C.muted }}>{emp.designation || '-'}</span>
+                <span style={{ marginLeft: 'auto' }}>Current CTC <b>{inr(emp.annual_ctc)}</b>/yr</span>
               </div>
             )}
-          </SectionCard>
+          </div>
 
           {emp && (
-            <SectionCard icon={<IconPerformance size={15} />} title="Revision" hint="Hike % and New CTC drive each other. Type whichever you were given.">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(160px, 100%),1fr))', gap: SP.md }}>
+            <div style={card}>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Revision</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
                 <div><label style={lbl}>Hike %</label>
-                  <input style={{ ...inp, ...numeric }} type="number" value={hike} onChange={e => onHike(e.target.value)} placeholder="e.g. 12" /></div>
+                  <input style={inp} type="number" value={hike} onChange={e => onHike(e.target.value)} placeholder="e.g. 12" /></div>
                 <div><label style={lbl}>New CTC / year</label>
-                  <input style={{ ...inp, ...numeric }} type="number" value={newCtc} onChange={e => onCtc(e.target.value)} placeholder="e.g. 900000" /></div>
+                  <input style={inp} type="number" value={newCtc} onChange={e => onCtc(e.target.value)} placeholder="e.g. 900000" /></div>
                 <div><label style={lbl}>Variable / year</label>
-                  <input style={{ ...inp, ...numeric }} type="number" value={newVar} onChange={e => setNewVar(e.target.value)} /></div>
+                  <input style={inp} type="number" value={newVar} onChange={e => setNewVar(e.target.value)} /></div>
                 <div><label style={lbl}>Designation</label>
                   <input style={inp} value={desig} onChange={e => setDesig(e.target.value)} /></div>
                 <div><label style={lbl}>With effect from</label>
@@ -252,93 +266,106 @@ export default function Appraisal() {
               {/* The whole point of the screen — say which months become arrear BEFORE Save,
                   not after somebody questions the payslip. */}
               {months.length > 0 && (
-                <InfoCallout t="warning" title={`${months.length} back month${months.length === 1 ? '' : 's'} → arrear: ${months.join(', ')}.`} style={{ marginTop: SP.md, marginBottom: 0 }}>
-                  All of those months were already paid at the old rate. The difference is
+                <div style={{ marginTop: 12, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '11px 13px', fontSize: 12, color: TK.warning, lineHeight: 1.6 }}>
+                  <b>{months.length} back month{months.length === 1 ? '' : 's'} → arrear:</b> {months.join(', ')}.
+                  <br />All of those months were already paid at the old rate. The difference is
                   worked out head-wise (Basic / HRA / Special) and lands in the arrear columns of
                   the <b>{payOut.slice(0, 7)}</b> salary. The pay-out month itself is not in that
                   list: it gets the new rate as regular salary.
-                </InfoCallout>
+                </div>
               )}
               {effFrom && payOut && months.length === 0 && (
-                <InfoCallout t="positive" compact style={{ marginTop: SP.md, marginBottom: 0 }}>
+                <div style={{ marginTop: 12, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '11px 13px', fontSize: 12, color: TK.positive }}>
                   No back months: the raise takes effect in the pay-out month itself, so there is no arrear.
-                </InfoCallout>
+                </div>
               )}
 
-              <ActionBar style={{ marginTop: SP.lg, marginBottom: 0, boxShadow: 'none', background: TK.sunken }}
-                hint={!canSave && emp ? 'New CTC, effective date and pay-out month are all needed.' : undefined}>
-                <PButton variant="primary" size="lg" icon={<IconCheck size={15} />} onClick={save} disabled={!canSave}>
+              <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
+                <button onClick={save} disabled={!canSave}
+                  style={{ padding: '11px 24px', borderRadius: 10, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: canSave ? 'linear-gradient(120deg,#2563EB,#5B21B6)' : TK.brandTint, cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(37,99,235,0.22)' : 'none' }}>
                   {busy ? 'Saving…' : 'Save appraisal'}
-                </PButton>
-              </ActionBar>
-              {msg && <InfoCallout t="positive" compact style={{ marginTop: SP.md, marginBottom: 0 }}>{msg}</InfoCallout>}
-            </SectionCard>
+                </button>
+                {!canSave && emp && <span style={{ fontSize: 11, color: C.muted }}>New CTC, effective date and pay-out month are all needed.</span>}
+              </div>
+              {msg && <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 13px', lineHeight: 1.6 }}>✓ {msg}</div>}
+            </div>
           )}
         </>
       )}
 
       {tab === 'bulk' && (
-        <SectionCard>
-          <EmptyState t="neutral" icon={<IconUpload size={20} />} title="Bulk Upload"
-            hint={<>Not built yet. One appraisal at a time goes through Employee Wise, which validates the
-              breakup and shows the back months before saving. A bulk sheet has to reproduce both of
-              those checks per row, and doing it without them would push arrear into payroll unseen.</>} />
-        </SectionCard>
+        <div style={{ ...card, textAlign: 'center', padding: '38px 24px' }}>
+          <div style={{ fontSize: 30, marginBottom: 10 }}></div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Bulk Upload</div>
+          <div style={{ fontSize: 12, color: C.muted, maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>
+            Not built yet. One appraisal at a time goes through Employee Wise, which validates the
+            breakup and shows the back months before saving. A bulk sheet has to reproduce both of
+            those checks per row, and doing it without them would push arrear into payroll unseen.
+          </div>
+        </div>
       )}
 
       {tab === 'report' && (
-        <SectionCard icon={<IconReports size={15} />} title="Saved appraisals" flush={report.length > 0}
-          actions={
-            <PButton size="sm" icon={<IconSync size={14} />} onClick={loadReport} disabled={repBusy}>
-              {repBusy ? 'Loading…' : 'Refresh'}
-            </PButton>
-          }>
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Saved appraisals</div>
+            <button onClick={loadReport} disabled={repBusy}
+              style={{ marginLeft: 'auto', padding: '6px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font }}>
+              {repBusy ? 'Loading…' : '⟳ Refresh'}
+            </button>
+          </div>
           {report.length === 0 ? (
-            <EmptyState compact t="neutral" icon={<IconReports size={20} />} title={repBusy ? 'Loading…' : 'No appraisals saved yet.'} />
+            <div style={{ fontSize: 12, color: C.muted, padding: '20px 0', textAlign: 'center' }}>
+              {repBusy ? 'Loading…' : 'No appraisals saved yet.'}
+            </div>
           ) : (
-            <DataTable minWidth={760}>
-              <thead>
-                <tr>
-                  {['Employee', 'Previous CTC', 'New CTC', 'Hike', 'Effective', 'Pay out', 'Back months', 'Status'].map(h => (
-                    <th key={h} style={h === 'Employee' ? dt.th : dt.thNum}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {report.map(r => {
-                  const bm = backMonths(r.effective_from, r.pay_out_month)
-                  const td: React.CSSProperties = dt.tdNum
-                  return (
-                    <tr key={r.id} className={dt.rowClass}>
-                      <td style={dt.tdMono}>{r.employee_code}</td>
-                      <td style={{ ...td, color: TK.muted }}>{inr(r.previous_ctc)}</td>
-                      <td style={{ ...td, fontWeight: W.bold }}>{inr(r.new_ctc)}</td>
-                      <td style={{ ...td, color: TK.positive, fontWeight: W.bold }}>{r.hike_percent != null ? `${r.hike_percent}%` : '-'}</td>
-                      <td style={td}>{r.effective_from}</td>
-                      <td style={td}>{r.pay_out_month}</td>
-                      <td style={{ ...td, color: bm.length ? TK.warning : TK.muted, fontWeight: bm.length ? W.bold : W.regular, whiteSpace: 'normal' }}>
-                        {bm.length ? bm.join(', ') : '-'}
-                      </td>
-                      <td style={td}>
-                        <StatusPill size="sm" t={r.status === 'ARREAR_PROCESSED' ? 'positive' : 'brand'}>{r.status}</StatusPill>
-                        {r.requires_data_sync && <div style={{ fontSize: F.micro, color: TK.warning, marginTop: 3, fontWeight: W.semi }}>needs Data Sync</div>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </DataTable>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: C.gray }}>
+                    {['Employee', 'Previous CTC', 'New CTC', 'Hike', 'Effective', 'Pay out', 'Back months', 'Status'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', fontSize: 10, color: C.muted, textTransform: 'uppercase', textAlign: h === 'Employee' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.map(r => {
+                    const bm = backMonths(r.effective_from, r.pay_out_month)
+                    const td: React.CSSProperties = { padding: '8px 10px', textAlign: 'right', borderBottom: `1px solid ${C.border}` }
+                    return (
+                      <tr key={r.id}>
+                        <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.employee_code}</td>
+                        <td style={{ ...td, color: C.muted }}>{inr(r.previous_ctc)}</td>
+                        <td style={{ ...td, fontWeight: 700 }}>{inr(r.new_ctc)}</td>
+                        <td style={{ ...td, color: C.green, fontWeight: 700 }}>{r.hike_percent != null ? `${r.hike_percent}%` : '-'}</td>
+                        <td style={td}>{r.effective_from}</td>
+                        <td style={td}>{r.pay_out_month}</td>
+                        <td style={{ ...td, color: bm.length ? C.amber : C.muted, fontWeight: bm.length ? 700 : 400 }}>
+                          {bm.length ? bm.join(', ') : '-'}
+                        </td>
+                        <td style={td}>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: r.status === 'ARREAR_PROCESSED' ? C.greenBg : C.purpleBg, color: r.status === 'ARREAR_PROCESSED' ? C.green : C.purpleD }}>
+                            {r.status}
+                          </span>
+                          {r.requires_data_sync && <div style={{ fontSize: 10, color: C.amber, marginTop: 2 }}>needs Data Sync</div>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
-        </SectionCard>
+        </div>
       )}
 
-      <InfoCallout t="info" title="The effective date and the pay-out month can differ.">
-        The months in between were
+      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
+        <b>The effective date and the pay-out month can differ.</b> The months in between were
         already paid at the old rate, so their difference becomes <b>head-wise arrear</b> and is
         added to the pay-out month&apos;s salary: Basic, HRA and Special each in their own arrear column.
         <br />Every back month&apos;s difference is worked out from <b>that month&apos;s actual frozen figures</b>,
         not an estimate, and is pro-rated by <b>that month&apos;s paid days</b>.
-      </InfoCallout>
+      </div>
     </div>
   )
 }
