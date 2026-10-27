@@ -64,6 +64,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { group: 'Compliance & Docs', items: [
     { key: 'compliance',        label: 'Compliance',              href: '/dashboard/compliance',      module: 'Compliance' },
     { key: 'letters',           label: 'HR Letters',              href: '/dashboard/letters',         module: 'HR Letters' },
+    { key: 'esign',             label: 'E-Sign',                  href: '/dashboard/esign',           module: 'HR Letters' },
     { key: 'policies',          label: 'Company Policies',        href: '/dashboard/policies',        module: 'Policies' },
     { key: 'reports',           label: 'Reports',                 href: '/dashboard/reports',         module: 'Reports' },
   ]},
