@@ -78,6 +78,12 @@ function usePeriod(employeeId: string) {
   const [period, setPeriod] = useState<Period | null>(null)
   const [overall, setOverall] = useState<Overall | null>(null)
   const [loading, setLoading] = useState(true)
+  /** The employee's company, resolved here because the period lookup already
+   *  needs it — and kept, because writing a KRA needs it too. pms_employee_goals
+   *  declares company_id NOT NULL with no default, so an insert without it is
+   *  refused by the database; the row was being resolved and then dropped on
+   *  the floor. See submitKras. */
+  const [companyId, setCompanyId] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -91,6 +97,7 @@ function usePeriod(employeeId: string) {
     const me = await supabase.from('employees')
       .select('company_id').eq('id', employeeId).maybeSingle()
     const companyId = (me.data as { company_id?: string } | null)?.company_id ?? null
+    setCompanyId(companyId)
 
     let q = supabase.from('pms_periods')
       .select('id,period_code,status')
@@ -108,7 +115,7 @@ function usePeriod(employeeId: string) {
   }, [employeeId])
 
   useEffect(() => { reload() }, [reload])
-  return { period, overall, loading, reload }
+  return { period, overall, loading, reload, companyId }
 }
 
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
@@ -256,7 +263,7 @@ export default function Performance({ employeeId }: { employeeId: string }) {
 // ── the employee's own side ──────────────────────────────────────────────
 
 function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
-  const { period, overall, loading, reload } = usePeriod(employeeId)
+  const { period, overall, loading, reload, companyId } = usePeriod(employeeId)
   const [who, setWho] = useState<Who>({ name: '', code: '' })
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
   const [logs, setLogs] = useState<Log[]>([])
@@ -371,16 +378,31 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
 
   const submitKras = async () => {
     setSaving(true); setMsg(null)
-    // period_id was missing here before, so a saved set could never be read
-    // back: every other query filters on it. The KRAs went in and vanished.
+    // EVERY NOT-NULL COLUMN HAS TO BE NAMED HERE, and two of them were learned
+    // the hard way. period_id was missing first, so a saved set could never be
+    // read back: every other query filters on it, and the KRAs went in and
+    // vanished. company_id was missing after that, and it is NOT NULL with no
+    // default, so the insert was refused outright — which is why
+    // pms_employee_goals held zero rows for the whole life of the module while
+    // the window sat open across three companies. Nobody saw a reason to look,
+    // because the form validated perfectly right up to the moment it failed.
+    if (!companyId) {
+      setSaving(false)
+      setMsg('We could not tell which company your record belongs to, so this was not sent. Ask HR to check your employee record.')
+      return
+    }
     const { error } = await supabase.from('pms_employee_goals').insert(
-      kras.map(k => ({ ...k, employee_id: employeeId, period_id: period.id,
-                       status: 'PENDING_RM_APPROVAL' })))
+      kras.map(k => ({ ...k, company_id: companyId, employee_id: employeeId,
+                       period_id: period.id, status: 'PENDING_RM_APPROVAL' })))
     setSaving(false)
     setMsg(error
       ? ((error as { code?: string }).code === MISSING_TABLE
           ? 'The performance module is not live yet: migration 066 has not been applied.'
-          : error.message)
+          // A constraint message is written for whoever maintains the database,
+          // not for the person who just filled in four KRAs. Say what happened
+          // and what to do; the raw text stays in the console for us.
+          : (console.error('[pms] KRA insert refused:', error),
+             'Your KRAs could not be saved. Nothing was lost — try again, and tell HR if it keeps happening.'))
       : 'Sent to your reporting manager.')
     if (!error) { setDraftKras(null); loadPeriodData() }
   }
