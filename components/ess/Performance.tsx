@@ -55,6 +55,22 @@ import { type Flag } from '@/lib/pms/employment'
 
 const MISSING_TABLE = 'PGRST205'
 
+/** WHAT A REFUSAL SAYS TO THE PERSON WHO HIT IT.
+ *
+ *  Every write here used to put `error.message` on the screen, so somebody who
+ *  had just written four KRAs was shown
+ *
+ *      null value in column "company_id" of relation "pms_employee_goals"
+ *      violates not-null constraint
+ *
+ *  which names a relation and a constraint and offers nothing to do about
+ *  either. The real error still goes to the console, because whoever maintains
+ *  this needs the constraint name that the employee does not. */
+const NO_COMPANY =
+  'We could not tell which company your record belongs to, so this was not sent. Ask HR to check your employee record.'
+const SAVE_FAILED = (what: string) =>
+  `Your ${what} could not be saved. Nothing was lost — try again, and tell HR if it keeps happening.`
+
 interface Period { id: string; period_code: string; status: string }
 interface Overall {
   workflow_status?: string | null
@@ -78,12 +94,18 @@ function usePeriod(employeeId: string) {
   const [period, setPeriod] = useState<Period | null>(null)
   const [overall, setOverall] = useState<Overall | null>(null)
   const [loading, setLoading] = useState(true)
-  /** The employee's company, resolved here because the period lookup already
-   *  needs it — and kept, because writing a KRA needs it too. pms_employee_goals
-   *  declares company_id NOT NULL with no default, so an insert without it is
-   *  refused by the database; the row was being resolved and then dropped on
-   *  the floor. See submitKras. */
+  /** The employee's company and reporting manager, resolved here because the
+   *  period lookup already reads this row — and KEPT, because every write in
+   *  the module needs one or both.
+   *
+   *  EVERY pms_* TABLE DECLARES company_id NOT NULL WITH NO DEFAULT, and not
+   *  one of the client writes supplied it. The value was being fetched a line
+   *  above and thrown away. pms_one_to_one additionally requires manager_id,
+   *  which was never fetched at all. Measured, not guessed: the required
+   *  columns of all six tables were read out of 066 and compared against each
+   *  call site. */
   const [companyId, setCompanyId] = useState<string | null>(null)
+  const [managerId, setManagerId] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -95,9 +117,11 @@ function usePeriod(employeeId: string) {
     // sorted first, so two employees out of three were shown a period that
     // was not theirs, and every read hung off it did the same.
     const me = await supabase.from('employees')
-      .select('company_id').eq('id', employeeId).maybeSingle()
-    const companyId = (me.data as { company_id?: string } | null)?.company_id ?? null
+      .select('company_id,l1_manager_id').eq('id', employeeId).maybeSingle()
+    const row = me.data as { company_id?: string; l1_manager_id?: string } | null
+    const companyId = row?.company_id ?? null
     setCompanyId(companyId)
+    setManagerId(row?.l1_manager_id ?? null)
 
     let q = supabase.from('pms_periods')
       .select('id,period_code,status')
@@ -115,7 +139,7 @@ function usePeriod(employeeId: string) {
   }, [employeeId])
 
   useEffect(() => { reload() }, [reload])
-  return { period, overall, loading, reload, companyId }
+  return { period, overall, loading, reload, companyId, managerId }
 }
 
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
@@ -263,7 +287,7 @@ export default function Performance({ employeeId }: { employeeId: string }) {
 // ── the employee's own side ──────────────────────────────────────────────
 
 function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
-  const { period, overall, loading, reload, companyId } = usePeriod(employeeId)
+  const { period, overall, loading, reload, companyId, managerId } = usePeriod(employeeId)
   const [who, setWho] = useState<Who>({ name: '', code: '' })
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
   const [logs, setLogs] = useState<Log[]>([])
@@ -386,11 +410,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     // pms_employee_goals held zero rows for the whole life of the module while
     // the window sat open across three companies. Nobody saw a reason to look,
     // because the form validated perfectly right up to the moment it failed.
-    if (!companyId) {
-      setSaving(false)
-      setMsg('We could not tell which company your record belongs to, so this was not sent. Ask HR to check your employee record.')
-      return
-    }
+    if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
     const { error } = await supabase.from('pms_employee_goals').insert(
       kras.map(k => ({ ...k, company_id: companyId, employee_id: employeeId,
                        period_id: period.id, status: 'PENDING_RM_APPROVAL' })))
@@ -398,18 +418,16 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     setMsg(error
       ? ((error as { code?: string }).code === MISSING_TABLE
           ? 'The performance module is not live yet: migration 066 has not been applied.'
-          // A constraint message is written for whoever maintains the database,
-          // not for the person who just filled in four KRAs. Say what happened
-          // and what to do; the raw text stays in the console for us.
-          : (console.error('[pms] KRA insert refused:', error),
-             'Your KRAs could not be saved. Nothing was lost — try again, and tell HR if it keeps happening.'))
+          : (console.error('[pms] KRA insert refused:', error), SAVE_FAILED('KRAs')))
       : 'Sent to your reporting manager.')
     if (!error) { setDraftKras(null); loadPeriodData() }
   }
 
   const submitSelf = async () => {
     setSaving(true); setMsg(null)
+    if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
     const rows = selfRows.map(r => ({
+      company_id: companyId,
       period_id: period.id, employee_id: employeeId, goal_id: r.goalId,
       rater_id: employeeId, rater_role: 'SELF',
       achievement_value: r.achievement || null, rating: r.rating,
@@ -419,20 +437,33 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     const { error } = await supabase.from('pms_reviews')
       .upsert(rows, { onConflict: 'period_id,employee_id,goal_id,rater_role' })
     setSaving(false)
-    if (error) { setMsg(error.message); return }
+    if (error) { console.error('[pms] self rating refused:', error); setMsg(SAVE_FAILED('self rating')); return }
     setSelfDraft(null); reload(); loadPeriodData()
   }
 
   const logDiscussion = async (l: Log) => {
-    setSaving(true)
+    setSaving(true); setMsg(null)
+    if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
+    // manager_id IS NOT NULL TOO. The discussion is a record of two people
+    // talking, so the table will not take it without naming the other one —
+    // which is why fixing company_id alone would simply have failed one column
+    // later. It is the L1 manager: the one-to-one that settles KRAs is held
+    // with whoever approves them.
+    if (!managerId) {
+      setSaving(false)
+      setMsg('Your record does not say who your reporting manager is, and a one-to-one is a record of two people. Ask HR to set your manager, then log it again.')
+      return
+    }
     const { error } = await supabase.from('pms_one_to_one').insert({
+      company_id: companyId, manager_id: managerId,
       period_id: period.id, employee_id: employeeId,
       discussion_type: l.discussion_type, discussion_date: l.discussion_date,
       mode: l.mode, discussion_points: l.discussion_points,
       employee_ack: true, employee_ack_at: new Date().toISOString(),
     })
     setSaving(false)
-    if (error) setMsg(error.message); else loadPeriodData()
+    if (error) { console.error('[pms] one-to-one insert refused:', error); setMsg(SAVE_FAILED('discussion')); return }
+    loadPeriodData()
   }
 
   return (
