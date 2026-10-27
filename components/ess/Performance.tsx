@@ -680,6 +680,60 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     () => rows.find(r => r.employeeId === picked) ?? null, [rows, picked])
 
   /**
+   * The reportee's KRAs and their own ratings, side by side, for the one
+   * person being rated.
+   *
+   * THIS IS WHAT MADE THE TAB A DEAD END. rateRows started as [] and nothing
+   * ever filled it, so even reaching the screen showed a manager an empty
+   * rating form — and submitRating had to refuse an empty set to avoid
+   * upserting nothing and reporting success. Two reads: the goals, and the
+   * SELF reviews keyed to them.
+   */
+  useEffect(() => {
+    if (!picked || !period) { setRateRows([]); return }
+    let live = true
+    ;(async () => {
+      const g = await supabase.from('pms_employee_goals')
+        .select('id,seq_no,kra_title,category,weightage')
+        .eq('employee_id', picked).eq('period_id', period.id)
+        .neq('status', 'SENT_BACK').order('seq_no')
+      if (g.error) { console.error('[pms] could not read the KRAs to rate:', g.error); return }
+      const goalRows = (g.data ?? []) as Record<string, unknown>[]
+
+      // Their own rating per KRA, and the manager's own earlier one if this is
+      // a revisit — a half-finished rating must come back as it was left.
+      const r = await supabase.from('pms_reviews')
+        .select('goal_id,rater_role,rating,comments,achievement_value')
+        .eq('employee_id', picked).eq('period_id', period.id)
+        .in('rater_role', ['SELF', 'RM_L1'])
+      if (r.error) console.error('[pms] could not read the ratings:', r.error)
+      const byGoal = new Map<string, Record<string, Record<string, unknown>>>()
+      for (const row of (r.data ?? []) as Record<string, unknown>[]) {
+        const k = String(row.goal_id)
+        byGoal.set(k, { ...(byGoal.get(k) ?? {}), [String(row.rater_role)]: row })
+      }
+
+      if (!live) return
+      setRateRows(goalRows.map(gr => {
+        const seen = byGoal.get(String(gr.id)) ?? {}
+        const self = seen.SELF, mine = seen.RM_L1
+        return {
+          goalId: String(gr.id),
+          title: String(gr.kra_title ?? ''),
+          category: String(gr.category ?? 'BUSINESS') as Category,
+          weightage: Number(gr.weightage) || 0,
+          achievement: String(self?.achievement_value ?? mine?.achievement_value ?? ''),
+          selfRating: self?.rating == null ? null : Number(self.rating),
+          selfComment: String(self?.comments ?? ''),
+          myRating: mine?.rating == null ? null : Number(mine.rating),
+          myComment: String(mine?.comments ?? ''),
+        }
+      }))
+    })()
+    return () => { live = false }
+  }, [picked, period])
+
+  /**
    * The manager's half of the one-to-one, and the lock that follows it.
    *
    * BOTH SIDES HAVE TO ACKNOWLEDGE, and the database is the one that insists:
@@ -769,8 +823,43 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
         submitted_at: new Date().toISOString(),
       })),
       { onConflict: 'period_id,employee_id,goal_id,rater_role' })
+    if (error) {
+      setSaving(false)
+      console.error('[pms] manager rating refused:', error); setMsg(SAVE_FAILED('rating')); return
+    }
+
+    // THE OVERALL COMMENT HAD NOWHERE TO GO, and was being collected and
+    // dropped — the manager believed the words their reportee would read had
+    // been saved.
+    //
+    // pms_reviews holds one row per KRA, so a comment about the whole
+    // appraisal does not belong there. pms_feedback is the only table that
+    // takes prose, and it is UNIQUE (period_id, employee_id) — ONE row per
+    // person per period, with given_by and given_by_role recording the author.
+    // So the schema's own design is a single feedback record passed along the
+    // chain, and this writes the RM's half of it.
+    //
+    // visible_to_employee stays false: §3.5 says nothing is shown before the
+    // result is published, and that flag is what holds it back.
+    //
+    // WORTH FLAGGING: §5.2 has the HOD writing an appreciation remark into
+    // this same column. One row means the later author wins. If RM and HOD
+    // remarks must both survive, that needs a column, not a workaround.
+    if (overall.trim()) {
+      const fb = await supabase.from('pms_feedback').upsert({
+        company_id: companyId, period_id: period!.id, employee_id: picked,
+        appreciation_remark: overall.trim(),
+        given_by: employeeId, given_by_role: 'RM_L1',
+        visible_to_employee: false,
+      }, { onConflict: 'period_id,employee_id' })
+      if (fb.error) {
+        setSaving(false)
+        console.error('[pms] overall comment refused:', fb.error)
+        setMsg('The ratings were saved, but your overall comment was not. Try sending it again.')
+        return
+      }
+    }
     setSaving(false)
-    if (error) { console.error('[pms] manager rating refused:', error); setMsg(SAVE_FAILED('rating')); return }
     setMsg('Your rating has been sent.')
     reloadRoster()
   }
@@ -786,6 +875,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                         onAcknowledge={acknowledge} onSendBack={sendBack} />}
       {tab === 'rate' && (
         <RateTab bands={bands.length ? bands : undefined}
+                 members={rows} onPick={setPicked} today={today}
                  member={member} rows={rateRows} onChange={setRateRows}
                  onSubmit={submitRating} saving={saving} overallComment={overall}
                  onOverallComment={setOverall} />

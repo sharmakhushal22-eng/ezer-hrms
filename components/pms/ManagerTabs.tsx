@@ -281,7 +281,7 @@ export interface RateRow {
 }
 
 export function RateTab({ member, rows, onChange, onSubmit, saving, overallComment,
-                          onOverallComment, bands = DEFAULT_BANDS }: {
+                          onOverallComment, bands = DEFAULT_BANDS, members, onPick, today }: {
   member: TeamMember | null
   rows: RateRow[]
   onChange: (next: RateRow[]) => void
@@ -291,12 +291,40 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
   onOverallComment: (s: string) => void
   /** The configured rating scale; falls back to the built-in list. */
   bands?: Band[]
+  /** THE TAB CHOOSES ITS OWN SUBJECT. It used to say "choose a team member
+   *  from the dashboard" and the dashboard had nothing to click, so this tab
+   *  could never show anybody. Given the roster it asks here instead. */
+  members?: TeamMember[]
+  onPick?: (employeeId: string) => void
+  today?: string
 }) {
   if (!member) {
-    return <Card title="Pick somebody to rate">
-      <div className="k">Choose a team member from the dashboard. Their KRAs and their own
-      ratings appear here beside yours.</div>
-    </Card>
+    // The same queue the Team Dashboard shows, with one column added, rather
+    // than a second table that could drift from it — exit and notice rows stay
+    // highlighted and pinned here too.
+    const pickable = members && today ? teamQueue(members, today) : []
+    return (
+      <Card title="Who are you rating?"
+            sub="Their KRAs and their own ratings appear beside yours once you choose.">
+        {!onPick
+          ? <div className="k">Picking is not available on this screen.</div>
+          : <QueueTable
+              rows={pickable}
+              empty="Nobody is with you yet. A rating opens once their weightages are locked and they have submitted their own rating."
+              extraHead={<th />}
+              extraCell={r => (
+                <td>
+                  <button type="button" className="btn sm"
+                          onClick={() => onPick(r.member.employeeId)}
+                          title={r.member.selfSubmitted
+                            ? `Rate ${r.member.name}`
+                            : `Open ${r.member.name} — they have not submitted their own rating yet`}>
+                    {r.member.selfSubmitted ? 'Rate' : 'Open'}
+                  </button>
+                </td>
+              )} />}
+      </Card>
+    )
   }
 
   const canRate = canManagerRate(member.selfSubmitted)
