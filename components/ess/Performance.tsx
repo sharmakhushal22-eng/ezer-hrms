@@ -398,7 +398,27 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const locked = goals.length > 0 && goals.every(g => g.status === 'LOCKED')
   const selfSubmitted = !!(overall?.workflow_status && overall.workflow_status !== 'NOT_STARTED'
     && overall.self_score != null)
-  const published = !!feedback?.visible_to_employee || overall?.final_rating != null
+  /**
+   * PUBLICATION IS AN EVENT, NOT A SIDE EFFECT OF BEING RATED.
+   *
+   * §3.5: "Result publish hone se pehle rating, comments — kuch bhi visible
+   * nahi." This read `|| overall.final_rating != null`, so the instant a HOD
+   * finalised, the employee's result screen said "✓ Published" and showed the
+   * rating, the whole KRA-by-KRA chain and the appreciation remark — before
+   * anybody had decided to publish, and before the feedback was written.
+   * Observed live: Shreya Singh's result was fully readable while
+   * workflow_status was still FINALISED and visible_to_employee was false.
+   *
+   * The workflow_status is the only thing that records the decision.
+   * ACKNOWLEDGED counts because it is PUBLISHED plus the employee's own tick.
+   */
+  const published = overall?.workflow_status === 'PUBLISHED'
+                 || overall?.workflow_status === 'ACKNOWLEDGED'
+  // The feedback row carries its own flag, and it is not the same question:
+  // the RM writes into this row during rating with visible_to_employee false,
+  // so prose can exist long before anybody may read it. Both gates have to be
+  // open, or the remark leaks the moment the result does.
+  const feedbackVisible = published && !!feedback?.visible_to_employee
 
   const ratingOf = (goalId: string, role: string) => {
     const row = reviews.find(r => String(r.goal_id) === goalId && r.rater_role === role)
@@ -576,8 +596,8 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           published={published} lines={lines}
           finalRating={overall?.final_rating ?? null}
           finalisedBy={null} finalisedOn={null} deptAverage={null}
-          appreciation={feedback?.appreciation_remark as string | undefined}
-          improvement={feedback?.improvement_feedback as string | undefined}
+          appreciation={feedbackVisible ? feedback?.appreciation_remark as string | undefined : undefined}
+          improvement={feedbackVisible ? feedback?.improvement_feedback as string | undefined : undefined}
           benefits={[]} publishGate={publishGate} />
       )}
       {tab === 'analytics' && (
@@ -975,14 +995,16 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     // visible_to_employee stays false: §3.5 says nothing is shown before the
     // result is published, and that flag is what holds it back.
     //
-    // WORTH FLAGGING: §5.2 has the HOD writing an appreciation remark into
-    // this same column. One row means the later author wins. If RM and HOD
-    // remarks must both survive, that needs a column, not a workaround.
+    // IT GETS ITS OWN COLUMN (189). This used to write appreciation_remark,
+    // which §5.2 gives to the HOD. Same row, same conflict target, so whoever
+    // saved last erased the other — and since the RM comments first and the
+    // HOD publishes afterwards, the RM always lost, silently. given_by stays
+    // the HOD's; rm_overall_by records who wrote this half.
     if (overall.trim()) {
       const fb = await supabase.from('pms_feedback').upsert({
         company_id: companyId, period_id: period!.id, employee_id: picked,
-        appreciation_remark: overall.trim(),
-        given_by: employeeId, given_by_role: myRaterRole,
+        rm_overall_comment: overall.trim(),
+        rm_overall_by: employeeId, given_by_role: myRaterRole,
         visible_to_employee: false,
       }, { onConflict: 'period_id,employee_id' })
       if (fb.error) {
@@ -1025,13 +1047,52 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
 }
 
 function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
-  const { period, loading: pLoading, bands, policy } = usePeriod(employeeId)
+  const { period, loading: pLoading, bands, policy, companyId } = usePeriod(employeeId)
   const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'hod')
-  const [picked] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const today = localToday()
   const member = rows.find(r => r.employeeId === picked) ?? null
+
+  /** What the HOD is writing, and the one-to-ones that decide whether it can
+   *  be published. Reloaded whenever the picked person changes — keeping one
+   *  draft across two employees is how feedback ends up on the wrong record. */
+  type Draft = { appreciation: string; improvement: string
+                 benefits: { type: BenefitType; note: string }[] }
+  const EMPTY_DRAFT: Draft = { appreciation: '', improvement: '', benefits: [] }
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
+  const [logs, setLogs] = useState<Log[]>([])
+
+  useEffect(() => {
+    let live = true
+    if (!picked || !period) { setDraft(EMPTY_DRAFT); setLogs([]); return }
+    ;(async () => {
+      const [fb, oo, ben] = await Promise.all([
+        supabase.from('pms_feedback')
+          .select('appreciation_remark,improvement_feedback')
+          .eq('employee_id', picked).eq('period_id', period.id).maybeSingle(),
+        supabase.from('pms_one_to_one')
+          .select('discussion_type,discussion_date,mode,discussion_points,employee_ack,manager_ack')
+          .eq('employee_id', picked).eq('period_id', period.id),
+        supabase.from('pms_additional_benefits')
+          .select('benefit_type,benefit_note')
+          .eq('employee_id', picked).eq('period_id', period.id),
+      ])
+      if (!live) return
+      setDraft({
+        appreciation: String(fb.data?.appreciation_remark ?? ''),
+        improvement: String(fb.data?.improvement_feedback ?? ''),
+        benefits: (ben.data ?? []).map(b => ({
+          type: (b as { benefit_type: BenefitType }).benefit_type,
+          note: String((b as { benefit_note?: string }).benefit_note ?? ''),
+        })),
+      })
+      setLogs((oo.data ?? []) as Log[])
+    })()
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked, period?.id])
 
   /**
    * §5.1 — the HOD signs off. This is the last gate in the cycle and the one
@@ -1068,6 +1129,68 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
     reloadRoster()
   }
 
+  /**
+   * §5.2 — publishing the result, which is the event §3.5 hangs all employee
+   * visibility on: before it, "rating, comments — kuch bhi visible nahi".
+   *
+   * Three writes, in the order that fails safe. The feedback row goes first
+   * and carries visible_to_employee, so if the status update were to fail the
+   * employee still sees nothing — pms_overall_rating.workflow_status is what
+   * the result screen reads. Doing it the other way round would open the
+   * result and leave the remarks hidden, which is the worse half to show.
+   *
+   * Benefits are deleted and re-inserted rather than diffed: the table has no
+   * natural key per row (awarded_at is a timestamp, not an identity), so there
+   * is nothing to upsert on, and a handful of recognition rows is not worth
+   * inventing one for.
+   */
+  const publishResult = async () => {
+    if (!period || !picked || !member) return
+    if (!companyId) { setMsg(NO_COMPANY); return }
+    setSaving(true); setMsg(null)
+
+    const fb = await supabase.from('pms_feedback').upsert({
+      company_id: companyId, period_id: period.id, employee_id: picked,
+      appreciation_remark: draft.appreciation.trim() || null,
+      improvement_feedback: draft.improvement.trim() || null,
+      given_by: employeeId, given_by_role: 'HOD',
+      visible_to_employee: true,
+    }, { onConflict: 'period_id,employee_id' })
+    if (fb.error) {
+      setSaving(false)
+      console.error('[pms] feedback publish refused:', fb.error)
+      setMsg(SAVE_FAILED('feedback')); return
+    }
+
+    const kept = draft.benefits.filter(b => b.note.trim())
+    await supabase.from('pms_additional_benefits')
+      .delete().eq('period_id', period.id).eq('employee_id', picked)
+    if (kept.length) {
+      const ben = await supabase.from('pms_additional_benefits').insert(
+        kept.map(b => ({
+          company_id: companyId, period_id: period.id, employee_id: picked,
+          benefit_type: b.type, benefit_note: b.note.trim(), awarded_by: employeeId,
+        })))
+      if (ben.error) {
+        setSaving(false)
+        console.error('[pms] recognition refused:', ben.error)
+        setMsg('The feedback saved, but the recognition rows did not. Add them again before telling them it is published.')
+        return
+      }
+    }
+
+    const st = await supabase.from('pms_overall_rating')
+      .update({ workflow_status: 'PUBLISHED', published_at: new Date().toISOString() })
+      .eq('employee_id', picked).eq('period_id', period.id)
+    setSaving(false)
+    if (st.error) {
+      console.error('[pms] publish status refused:', st.error)
+      setMsg('The feedback saved but the result was not opened to them. Try publishing again.'); return
+    }
+    setMsg(`Published. ${member.name} can see their rating and feedback now.`)
+    reloadRoster()
+  }
+
   if (pLoading || loading) return <div className="k">Loading…</div>
   if (!period) return <NoPeriod />
 
@@ -1084,11 +1207,42 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
                      onFinalise={finalise} saving={saving} />
       )}
       {tab === 'feedback' && (
-        <FeedbackTab bands={bands.length ? bands : undefined}
-                     member={member} rating={member?.finalRating ?? null}
-                     appreciation="" improvement=""
-                     benefits={[] as { type: BenefitType; note: string }[]}
-                     logs={[]} onChange={() => {}} />
+        <>
+          {/* FeedbackTab writes about ONE person and has no way to choose
+              them; the finalisation queue is a different tab. Without this
+              the tab rendered its "Pick somebody" empty state permanently,
+              because nothing could ever set picked. Only finalised people are
+              offered: there is no result to publish before there is a rating,
+              and §3.5 makes publication the moment everything becomes
+              visible. */}
+          <div className="card" style={{ marginBottom: 10 }}>
+            <div className="fld">
+              <label htmlFor="fb-who">Whose result</label>
+              <select id="fb-who" value={picked ?? ''}
+                      onChange={e => setPicked(e.target.value || null)}>
+                <option value="">Choose somebody…</option>
+                {rows.filter(r => r.finalised).map(r => (
+                  <option key={r.employeeId} value={r.employeeId}>
+                    {r.code} · {r.name} — rated {r.finalRating}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {!rows.some(r => r.finalised) && (
+              <div className="k" style={{ marginTop: 6, lineHeight: 1.6 }}>
+                Nobody in your department has been finalised yet. Settle a rating on
+                Review &amp; Finalise first — feedback is published with the result,
+                not before it.
+              </div>
+            )}
+          </div>
+          <FeedbackTab bands={bands.length ? bands : undefined}
+                       member={member} rating={member?.finalRating ?? null}
+                       appreciation={draft.appreciation} improvement={draft.improvement}
+                       benefits={draft.benefits} logs={logs}
+                       onChange={patch => setDraft(d => ({ ...d, ...patch }))}
+                       onPublish={publishResult} saving={saving} />
+        </>
       )}
       {tab === 'deptAnalytics' && (
         <TeamAnalyticsTab bands={bands.length ? bands : undefined}
