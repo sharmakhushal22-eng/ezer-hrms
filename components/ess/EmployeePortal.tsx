@@ -36,6 +36,7 @@ import Today from '@/components/ess/today/Today'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
+import PayStyles from '@/components/ess/payroll/PayStyles'
 import { useEssMenu, PendingOnYou, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, MODULE_TABS, roleEntryOpen, type NavEntry } from '@/lib/rms/nav'
 // The address bar as the portal's "where am I": /ess/leave, /ess/recruitment/mrf … (lib/ess/routes.ts)
@@ -43,13 +44,6 @@ import { parseEssPath, essHref, essPath, pushUrl, atEss, type EssLocation, type 
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
 import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/components/employees/EmployeeProfileView'
-import { PayrollHub, PayrollComingSoon } from '@/components/ess/payroll/PayrollHub'
-import {
-  ScreenIntro, SectionCard, InfoCallout, StatusPill as KitPill, PButton, ActionBar, ConsentCheck, LabeledField,
-  inputSkin, ChoiceCard, StatLine, PointList, TwoCol, Meter, KpiTile, KpiGrid, LoadingBlock, EmptyState, IconTile,
-  DataTable, dt, SegmentedTabs, btnStyle, type KitTone,
-  IconPiggyBank, IconUmbrella, IconPercent, IconCalculator, IconWallet, IconPen, IconTrendUp, IconFile, IconCheckCircle,
-} from '@/components/ess/payroll/kit'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -58,7 +52,7 @@ import {
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch, IconReceipt,
   IconOrgChart, IconBuilding, IconPerformance, IconLogout, IconChevron, IconChevronDown,
-  IconUser, IconHeart, IconAward, IconGame, IconMore, IconCheck, IconAlert, IconLoans,
+  IconUser, IconHeart, IconAward, IconGame, IconMore, IconCheck, IconAlert,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 // The shell's sidebar, top bar, headings and sub-tabs (hover states and the like).
@@ -2370,10 +2364,8 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
 }
 
 // ── Voluntary PF (VPF) — EPF wage base × percent ──
-// Design: components/ess/payroll/kit.tsx. Logic (state, load, the cap / alert /
-// 80C maths, submit and stop) is unchanged — only the presentation is.
-const VPF_PRESETS = [5, 10, 12, 20, 30]
 function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint, teal: C.positive }
   const MAX_PCT = 88, HIGH_ALERT = 50
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -2389,9 +2381,9 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   }, [emp.id])
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingBlock label="Loading your PF details…" />
+  if (loading) return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading…</div>
   const e = data?.employee
-  if (!e) return <InfoCallout t="critical" title="Salary data not found.">Your VPF figures need your salary structure. Please check with HR / Payroll.</InfoCallout>
+  if (!e) return <div style={{ padding: 20, color: V.red, fontSize: 13 }}>Salary data not found.</div>
   const base = e.epf_wage_base
   const current = data?.current_vpf
   let rawPct = parseFloat(pctInput) || 0
@@ -2415,159 +2407,96 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     const res = await fetch('/api/ess/vpf', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, stopped_reason: 'Employee requested', stopped_from_month: 4 }) })
     if (res.ok) { notify('VPF stopped'); load() } else notify('Failed to stop', 'error')
   }
-
+  void V
   return (
-    <div>
-      <ScreenIntro icon={<IconPiggyBank size={20} />} title="Voluntary PF (VPF)"
-        subtitle="Extra PF deducted from your EPF wages. Set your own percentage."
-        right={current
-          ? <KitPill t="positive" dot>Active · {current.vpf_percent}%</KitPill>
-          : <KitPill dot>Not enrolled</KitPill>} />
+    <div className="ezp">
+      <PayStyles />
+      <div className="ezp-title">
+        <div>
+          <h2>Voluntary PF (VPF)</h2>
+          <p>Extra PF deducted from your EPF wages. Set your own percentage.</p>
+        </div>
+        {current && <span className="ezp-chip is-ok">Active · {current.vpf_percent}%</span>}
+      </div>
 
       {!e.has_ctc && (
-        <InfoCallout t="warning" title="Your CTC is not configured yet">
-          Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master). Then VPF will calculate correctly.
-        </InfoCallout>
+        <div className="ezp-note is-warn">Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master). Then VPF will calculate correctly.</div>
       )}
 
       {current && (
-        <InfoCallout t="positive" compact title={`Active VPF: ${current.vpf_percent}% (${inr(current.monthly_vpf_amount)}/mo)`}
-          action={<PButton size="sm" variant="danger" onClick={stop}>Stop VPF</PButton>}>
-          Modify below
-        </InfoCallout>
+        <div className="ezp-note is-ok" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span>Active VPF: <b>{current.vpf_percent}%</b> ({inr(current.monthly_vpf_amount)}/mo). Modify below</span>
+          <button className="ezp-ghost is-danger" onClick={stop}>Stop VPF</button>
+        </div>
       )}
 
-      <TwoCol>
-        <div style={{ minWidth: 0 }}>
-          {/* EPF wages — the base every PF % is taken from */}
-          <SectionCard icon={<IconWallet size={16} />} title="Your EPF wages" hint="From your salary record (database)"
-            actions={<KitPill t={e.is_capped ? 'brand' : 'positive'} size="sm">{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</KitPill>}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: F.display + 4, fontWeight: W.bold, color: C.brandDeep, letterSpacing: '-.02em', lineHeight: 1.05, ...numeric }}>{inr(base)}</span>
-              <span style={{ fontSize: F.small, color: C.muted }}>a month</span>
-            </div>
-            <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 6, lineHeight: 1.55 }}>
-              {e.is_capped
-                ? 'Your PF wages are above the ₹15,000 statutory ceiling, so PF is worked out on ₹15,000.'
-                : 'Your PF wages are within the ₹15,000 statutory ceiling, so PF uses your actual wages (Gross − HRA).'}
-            </div>
-            <div style={{ marginTop: S.lg }}>
-              <Meter max={base || 1} ariaLabel="How your EPF wages are split" legend segments={[
-                { value: e.mandatory_epf_monthly, t: 'brand', label: <>Mandatory EPF 12% · {inr(e.mandatory_epf_monthly)}</> },
-                { value: vpfMonthly, t: 'info', label: <>VPF {Math.round(rawPct * 100) / 100}% · {inr(vpfMonthly)}</> },
-              ]} />
-            </div>
-            <div style={{ marginTop: S.md }}>
-              <StatLine first label="Current mandatory EPF (12%)" value={<>{inr(e.mandatory_epf_monthly)}/mo</>} />
-            </div>
-          </SectionCard>
+      <section className="ezp-hero">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <p className="ezp-hero-label">Your EPF wages (from database)</p>
+            <p className="ezp-hero-num"><b>{inr(base)}</b><span>a month</span></p>
+          </div>
+          <span className={`ezp-chip ${e.is_capped ? 'is-brand' : 'is-ok'}`}>{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</span>
+        </div>
+        <div className="ezp-tiles">
+          <div className="ezp-tile"><div className="ezp-tile-name">Current mandatory EPF (12%)</div><div className="ezp-tile-num">{inr(e.mandatory_epf_monthly)}<small> /mo</small></div></div>
+          <div className="ezp-tile"><div className="ezp-tile-name">VPF at {Math.round(rawPct)}%</div><div className="ezp-tile-num">{inr(vpfMonthly)}<small> /mo</small></div></div>
+        </div>
+      </section>
 
-          {/* The one input */}
-          <SectionCard icon={<IconPercent size={16} />} title="VPF percentage" hint="Percentage of your EPF wages.">
-            <div style={{ position: 'relative' }}>
-              <input type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} placeholder="e.g. 25"
-                aria-label="VPF percentage" style={{ ...inputSkin({ big: true }), paddingRight: 44, ...numeric }} />
-              <span aria-hidden style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: F.title, fontWeight: W.semi, color: C.brandDeep }}>%</span>
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: S.md }}>
-              <span style={{ fontSize: F.tiny, color: C.muted, marginRight: 2 }}>Quick pick</span>
-              {VPF_PRESETS.map(p => {
-                const on = pctInput === String(p)
-                return (
-                  <button key={p} type="button" onClick={() => setPctInput(String(p))} className="ez-press" aria-pressed={on}
-                    style={{
-                      height: 30, minWidth: 48, padding: '0 10px', borderRadius: R.pill, fontFamily: 'inherit', cursor: 'pointer',
-                      fontSize: F.tiny, fontWeight: W.semi, ...numeric,
-                      background: on ? C.brandTint : C.surface, color: on ? C.brandDeep : C.inkSoft,
-                      border: `1px solid ${on ? C.brand : C.lineStrong}`,
-                    }}>{p}%</button>
-                )
-              })}
-            </div>
-            {(showHighAlert || capHit) && <div style={{ height: S.md }} />}
-            {showHighAlert && (
-              <InfoCallout t="critical" compact style={{ marginBottom: 0 }} title="That high?">
-                {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.
-              </InfoCallout>
-            )}
-            {capHit && (
-              <InfoCallout t="warning" compact style={{ marginBottom: 0 }} title={`Max ${MAX_PCT}% allowed`}>
-                Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.
-              </InfoCallout>
-            )}
-          </SectionCard>
+      <div className="ezp-cols">
+        <div className="ezp-panel">
+          <div className="ezp-head"><h3>VPF percentage</h3></div>
+          <div style={{ position: 'relative' }}>
+            <input className="ezp-input" type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} placeholder="e.g. 25" style={{ height: 44, fontSize: 16, fontWeight: 600, paddingRight: 36 }} />
+            <span style={{ position: 'absolute', right: 13, top: 11, fontSize: 15, fontWeight: 700, color: C.brand }}>%</span>
+          </div>
+          <p className="ezp-hint">Percentage of your EPF wages.</p>
+          {showHighAlert && (
+            <div className="ezp-note is-bad" style={{ margin: '12px 0 0' }}><b>That high?</b> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</div>
+          )}
+          {capHit && (
+            <div className="ezp-note is-warn" style={{ margin: '12px 0 0' }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</div>
+          )}
         </div>
 
-        <div style={{ minWidth: 0 }}>
-          {/* Live impact */}
-          <SectionCard icon={<IconCalculator size={16} />} title="What this does to your pay" hint="Updates as you type">
-            <div style={{ background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius: R.md, padding: `${S.md}px ${S.lg}px`, marginBottom: S.sm }}>
-              <div style={{ ...eyebrow, color: C.brandDeep }}>VPF deduction (monthly)</div>
-              <div style={{ fontSize: F.display, fontWeight: W.bold, color: C.brandDeep, letterSpacing: '-.02em', marginTop: 4, ...numeric }}>{inr(vpfMonthly)}</div>
-            </div>
-            <StatLine first label="VPF (annual)" value={inr(vpfAnnual)} />
-            <StatLine label="Net in-hand impact" sub="Comes out of your take-home every month" t="critical" value={<>−{inr(vpfMonthly)}/mo</>} />
-          </SectionCard>
-
-          {/* 80C meter */}
-          <SectionCard icon={<IconTrendUp size={16} />} title="80C usage (₹1.5L max)"
-            hint="Section 80C lets up to ₹1.5 lakh of savings a year reduce your taxable income."
-            actions={<span style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, ...numeric }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>}>
-            <Meter max={e.c80_limit} height={12} ariaLabel="80C usage" legend segments={[
-              { value: e.epf_annual, t: 'brand', label: <>EPF {inr(e.epf_annual)}</> },
-              { value: vpfAnnual, t: over80c ? 'warning' : 'info', label: <>VPF {inr(vpfAnnual)}</> },
-            ]} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: S.sm, flexWrap: 'wrap', marginTop: S.md, fontSize: F.tiny, color: C.muted, lineHeight: 1.55, ...numeric }}>
-              <span>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` (no 80C benefit on ${inr(total80c - e.c80_limit)})` : ''}</span>
-              <span style={{ fontWeight: W.semi, color: over80c ? C.warning : C.inkSoft }}>{barPct}% used</span>
-            </div>
-          </SectionCard>
+        <div className="ezp-panel">
+          <div className="ezp-head"><h3>Effect on your pay</h3></div>
+          <div className="ezp-row"><span>VPF deduction (monthly)</span><b className="ezp-brand">{inr(vpfMonthly)}</b></div>
+          <div className="ezp-row"><span>VPF (annual)</span><span>{inr(vpfAnnual)}</span></div>
+          <div className="ezp-row"><span className="ezp-bad">Net in-hand impact</span><b className="ezp-bad">−{inr(vpfMonthly)}/mo</b></div>
         </div>
-      </TwoCol>
+      </div>
 
-      <InfoCallout t="warning" title="Choose carefully">
-        <PointList t="warning" items={[
-          <>VPF will <strong>reduce your net in-hand salary</strong></>,
-          <>The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)</>,
-          <>It is deducted every month until you stop it</>,
-        ]} />
-      </InfoCallout>
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>80C usage (₹1.5L max)</h3><span className="ezp-head-meta ezp-num">{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span></div>
+        <div className="ezp-meter"><i className={over80c ? 'is-warn' : ''} style={{ width: `${barPct}%` }} /></div>
+        <div className="ezp-meter-cap"><span>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` (no 80C benefit on ${inr(total80c - e.c80_limit)})` : ''}</span><span>{barPct}%</span></div>
+      </div>
 
-      <ActionBar hint={<>You are requesting <strong>{Math.round(rawPct * 100) / 100}%</strong> VPF: <strong>{inr(vpfMonthly)}</strong> a month.</>}>
-        <div style={{ width: '100%' }}>
-          <ConsentCheck checked={ack} onChange={setAck}>
-            I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.
-          </ConsentCheck>
-        </div>
-        <PButton variant="primary" size="lg" full disabled={!ack || saving} onClick={submit}>{saving ? 'Saving…' : 'Acknowledge & submit'}</PButton>
-      </ActionBar>
+      <div className="ezp-note is-warn">
+        <span className="ezp-note-t">Choose carefully</span>
+        <ul>
+          <li>VPF will <strong>reduce your net in-hand salary</strong></li>
+          <li>The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)</li>
+          <li>It is deducted every month until you stop it</li>
+        </ul>
+      </div>
+
+      <div className="ezp-panel">
+        <label className="ezp-check">
+          <input type="checkbox" checked={ack} onChange={e2 => setAck(e2.target.checked)} />
+          <span>I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.</span>
+        </label>
+        <button className="ezp-btn is-block" style={{ marginTop: 12 }} disabled={!ack || saving} onClick={submit}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
+      </div>
     </div>
   )
 }
 
 // ── Corporate NPS enrolment (80CCD(2)) — % of Basic by regime ──
-// Presentation only changed; state, validation, submit / PRAN / stop are as before.
-function NpsRegimeTile({ label, pct, mine, amount }: { label: string; pct: string; mine: boolean; amount?: string }) {
-  return (
-    <div style={{
-      flex: '1 1 160px', minWidth: 0, padding: `${S.md}px ${S.lg}px`, borderRadius: R.md,
-      background: mine ? C.brandTint : C.surface, border: `1px solid ${mine ? C.brand : C.line}`,
-      boxShadow: mine ? `0 0 0 3px ${C.brandTint}` : 'none',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: F.small, fontWeight: W.semi, color: mine ? C.brandDeep : C.inkSoft }}>{label}</span>
-        {mine && <KitPill t="brand" size="sm" icon={<IconCheckCircle size={11} />}>Your regime</KitPill>}
-      </div>
-      <div style={{ marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span style={{ fontSize: F.display - 4, fontWeight: W.bold, color: mine ? C.brandDeep : C.ink, ...numeric }}>{pct}</span>
-        <span style={{ fontSize: F.tiny, color: C.muted }}>of Basic</span>
-      </div>
-      {amount && <div style={{ fontSize: F.tiny, color: C.inkSoft, marginTop: 2, ...numeric }}>{amount}</div>}
-    </div>
-  )
-}
-
 function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, amber: C.warning, amberBg: C.warningTint, blue: C.brand, blueBg: C.brandTint, teal: C.positive, bg:C.canvas }
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [hasPran, setHasPran] = useState(true)
@@ -2586,9 +2515,10 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   }, [emp.id])
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingBlock label="Loading your NPS details…" />
+  void V
+  if (loading) return <div className="ezp"><PayStyles /><div className="ezp-empty">Loading…</div></div>
   const e = data?.employee
-  if (!e) return <InfoCallout t="critical" title="Salary data not found.">Your NPS figures need your salary structure. Please check with HR / Payroll.</InfoCallout>
+  if (!e) return <div className="ezp"><PayStyles /><div className="ezp-note is-bad">Salary data not found.</div></div>
   const current = data?.current_nps
   const effFmt = new Date(e.effective_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
   const pranClean = pran.replace(/\D/g, '')
@@ -2613,120 +2543,95 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     if (res.ok) { notify('NPS stopped'); load() } else notify('Failed to stop', 'error')
   }
 
-  const isOld = e.tax_regime === 'OLD'
-  const pranHintTone: KitTone = pran.length === 0 ? 'neutral' : pranValid ? 'positive' : 'warning'
-
   return (
-    <div>
-      <ScreenIntro icon={<IconUmbrella size={20} />} title="Corporate NPS enrolment"
-        subtitle="Employer contributes to your NPS (Tier I). Extra tax benefit under Section 80CCD(2)."
-        right={current
-          ? (current.status === 'PENDING_PRAN'
-              ? <KitPill t="info" dot>PRAN pending</KitPill>
-              : <KitPill t="positive" dot>Active · {current.contribution_percent}%</KitPill>)
-          : <KitPill dot>Not enrolled</KitPill>} />
+    <div className="ezp">
+      <PayStyles />
+      <div className="ezp-title">
+        <div>
+          <h2>Corporate NPS enrolment</h2>
+          <p>Employer contributes to your NPS (Tier I). Extra tax benefit under Section 80CCD(2).</p>
+        </div>
+      </div>
 
       {!e.has_ctc && (
-        <InfoCallout t="warning" title="Your CTC is not configured yet">
-          Your CTC (Basic) isn&apos;t configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).
-        </InfoCallout>
+        <div className="ezp-note is-warn">Your CTC (Basic) isn't configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).</div>
       )}
 
-      {current && (current.status === 'PENDING_PRAN' ? (
-        <InfoCallout t="info" title={`PRAN pending: generate & submit by ${current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '-'}.`}>
-          <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap', marginTop: S.sm }}>
-            <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`}
-              aria-label="PRAN number" style={{ ...inputSkin({ mono: true }), flex: '1 1 200px', width: 'auto' }} />
-            <PButton variant="primary" size="lg" onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length}>Submit PRAN</PButton>
-          </div>
-        </InfoCallout>
-      ) : (
-        <InfoCallout t="positive" compact title={`Active NPS: ${current.contribution_percent}% of Basic (${inr(current.monthly_nps_amount)}/mo)`}
-          action={<PButton size="sm" variant="danger" onClick={stop}>Stop NPS</PButton>} />
-      ))}
-
-      <TwoCol>
-        {/* What the company will put in */}
-        <SectionCard icon={<IconPercent size={16} />} title="Your contribution" hint="From your salary structure">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: S.sm }}>
-            {[
-              { l: 'Monthly Basic', v: inr(e.basic_monthly) },
-              { l: 'Tax regime', v: isOld ? 'Old' : 'New' },
-              { l: 'NPS rate', v: `${e.contribution_percent}%`, brand: true },
-            ].map(x => (
-              <div key={x.l} style={{ minWidth: 0, padding: `${S.sm + 2}px ${S.md}px`, background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.md }}>
-                <div style={{ ...eyebrow }}>{x.l}</div>
-                <div style={{ fontSize: F.lead, fontWeight: W.bold, color: x.brand ? C.brandDeep : C.ink, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...numeric }}>{x.v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius: R.md, padding: `${S.md}px ${S.lg}px`, marginTop: S.md, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: S.md, flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ ...eyebrow, color: C.brandDeep }}>Monthly NPS contribution</div>
-              <div style={{ fontSize: F.display - 2, fontWeight: W.bold, color: C.brandDeep, marginTop: 3, letterSpacing: '-.02em', ...numeric }}>{inr(e.monthly_nps_amount)}<span style={{ fontSize: F.small, fontWeight: W.medium, color: C.muted }}>/mo</span></div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ ...eyebrow }}>Effective from</div>
-              <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, marginTop: 3 }}>{effFmt}</div>
-            </div>
-          </div>
-        </SectionCard>
-
-        {/* The regime comparison */}
-        <SectionCard icon={<IconTrendUp size={16} />} title="How the rate is set" hint="The company’s contribution follows your tax regime">
-          <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
-            <NpsRegimeTile label="Old regime" pct="10%" mine={isOld} amount={isOld ? `${inr(e.monthly_nps_amount)}/mo for you` : undefined} />
-            <NpsRegimeTile label="New regime" pct="14%" mine={!isOld} amount={!isOld ? `${inr(e.monthly_nps_amount)}/mo for you` : undefined} />
-          </div>
-          <div style={{ fontSize: F.tiny, color: C.muted, marginTop: S.md }}>Old regime = 10% of Basic · New regime = 14% of Basic</div>
-        </SectionCard>
-      </TwoCol>
-
-      {/* Enrolment */}
-      <SectionCard icon={<IconPen size={16} />} title="Enrol"
-        hint="PRAN is your Permanent Retirement Account Number: the ID of your NPS account.">
-        <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.inkSoft, marginBottom: S.sm }}>Do you already have an NPS account (PRAN)?</div>
-        <div role="radiogroup" aria-label="Do you already have an NPS account (PRAN)?" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: S.sm, marginBottom: S.lg }}>
-          <ChoiceCard selected={hasPran} onClick={() => setHasPran(true)} title="Yes, I have a PRAN" sub="Enter it below and we link the company contribution to it" />
-          <ChoiceCard selected={!hasPran} onClick={() => setHasPran(false)} title="No, I need one" sub="We email you the form to create one" />
-        </div>
-
-        {hasPran ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
-            <LabeledField label={`PRAN number (${e.pran_length} digits)`} hintTone={pranHintTone}
-              hint={pran.length === 0 ? `Enter your ${e.pran_length}-digit PRAN` : pranValid ? `Valid ${e.pran_length}-digit PRAN` : `${e.pran_length - pranClean.length} more digit(s) needed`}>
-              <input type="text" value={pran} maxLength={e.pran_length} onChange={e2 => setPran(e2.target.value.replace(/\D/g, ''))} placeholder="e.g. 110012345678"
-                style={inputSkin({ mono: true })} />
-            </LabeledField>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: S.md }}>
-              <LabeledField label="Name as per PRAN"><input type="text" value={pranName} onChange={e2 => setPranName(e2.target.value)} style={inputSkin()} /></LabeledField>
-              <LabeledField label="Account tier"><select value={tier} onChange={e2 => setTier(e2.target.value)} style={{ ...inputSkin(), cursor: 'pointer' }}><option>Tier I</option><option>Tier II</option></select></LabeledField>
+      {current && (
+        current.status === 'PENDING_PRAN' ? (
+          <div className="ezp-note">
+            <div style={{ marginBottom: 8 }}>PRAN pending: generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '-'}.</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input className="ezp-input" value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`} style={{ flex: '1 1 200px', width: 'auto', letterSpacing: 2 }} />
+              <button className="ezp-btn" onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length}>Submit PRAN</button>
             </div>
           </div>
         ) : (
-          <InfoCallout t="info" style={{ marginBottom: 0 }} title="A new PRAN will be created for you.">
-            On submit, we&apos;ll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.
-          </InfoCallout>
-        )}
-      </SectionCard>
+          <div className="ezp-note is-ok" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span>Active NPS: <b>{current.contribution_percent}%</b> of Basic ({inr(current.monthly_nps_amount)}/mo)</span>
+            <button className="ezp-ghost is-danger" onClick={stop}>Stop NPS</button>
+          </div>
+        )
+      )}
 
-      <InfoCallout t="warning" title="Please read carefully">
-        <PointList t="warning" items={[
-          <>NPS is a long-term retirement product, locked in until age 60 (limited early withdrawal)</>,
-          <>Employer contribution is over &amp; above your ₹1.5L 80C limit (Section 80CCD(2))</>,
-          <>Recurring monthly contribution, reflects in your salary structure</>,
-          <>Rate follows your tax regime (10% old / 14% new of Basic)</>,
-        ]} />
-      </InfoCallout>
-
-      <ActionBar hint={hasPran ? (pranValid ? 'Ready when you are: tick the box and submit.' : `Enter your ${e.pran_length}-digit PRAN and tick the box to submit.`) : 'We will email you the PRAN form after you submit.'}>
-        <div style={{ width: '100%' }}>
-          <ConsentCheck checked={ack} onChange={setAck}>
-            I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.
-          </ConsentCheck>
+      <section className="ezp-hero">
+        <p className="ezp-hero-label">Your contribution (from salary structure)</p>
+        <div className="ezp-tiles" style={{ marginTop: 8 }}>
+          <div className="ezp-tile"><div className="ezp-tile-name">Monthly Basic</div><div className="ezp-tile-num">{inr(e.basic_monthly)}</div></div>
+          <div className="ezp-tile"><div className="ezp-tile-name">Tax regime</div><div className="ezp-tile-num">{e.tax_regime === 'OLD' ? 'Old' : 'New'}</div></div>
+          <div className="ezp-tile"><div className="ezp-tile-name">NPS rate</div><div className="ezp-tile-num">{e.contribution_percent}%</div></div>
         </div>
-        <PButton variant="primary" size="lg" full disabled={!canSubmit || saving} onClick={submit}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</PButton>
-      </ActionBar>
+        <div className="ezp-tile" style={{ marginTop: 8, padding: '4px 12px' }}>
+          <div className="ezp-row"><span>Monthly NPS contribution</span><b>{inr(e.monthly_nps_amount)}/mo</b></div>
+          <div className="ezp-row"><span>Effective from</span><span>{effFmt}</span></div>
+        </div>
+        <p className="ezp-hint" style={{ color: 'var(--p-hero-sub)' }}>Old regime = 10% of Basic · New regime = 14% of Basic</p>
+      </section>
+
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>Do you already have an NPS account (PRAN)?</h3></div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          <button onClick={() => setHasPran(true)} style={ezpSeg(hasPran)}>Yes, I have a PRAN</button>
+          <button onClick={() => setHasPran(false)} style={ezpSeg(!hasPran)}>No, I need one</button>
+        </div>
+
+        {hasPran ? (
+          <>
+            <div className="ezp-field">
+              <label className="ezp-label">PRAN number ({e.pran_length} digits)</label>
+              <input className="ezp-input" type="text" value={pran} maxLength={e.pran_length} onChange={e2 => setPran(e2.target.value.replace(/\D/g, ''))} placeholder="e.g. 110012345678" style={{ letterSpacing: 2 }} />
+              <p className={`ezp-hint ${pran.length === 0 ? '' : pranValid ? 'ezp-ok' : 'ezp-warn'}`}>{pran.length === 0 ? `Enter your ${e.pran_length}-digit PRAN` : pranValid ? `Valid ${e.pran_length}-digit PRAN` : `${e.pran_length - pranClean.length} more digit(s) needed`}</p>
+            </div>
+            <div className="ezp-grid2">
+              <div><label className="ezp-label">Name as per PRAN</label><input className="ezp-input" type="text" value={pranName} onChange={e2 => setPranName(e2.target.value)} /></div>
+              <div><label className="ezp-label">Account tier</label><select className="ezp-input" value={tier} onChange={e2 => setTier(e2.target.value)}><option>Tier I</option><option>Tier II</option></select></div>
+            </div>
+          </>
+        ) : (
+          <div className="ezp-note" style={{ marginBottom: 0 }}>
+            <span className="ezp-note-t">A new PRAN will be created for you.</span>
+            On submit, we'll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.
+          </div>
+        )}
+      </div>
+
+      <div className="ezp-note is-warn">
+        <span className="ezp-note-t">Please read carefully</span>
+        <ul>
+          <li>NPS is a long-term retirement product, locked in until age 60 (limited early withdrawal)</li>
+          <li>Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))</li>
+          <li>Recurring monthly contribution, reflects in your salary structure</li>
+          <li>Rate follows your tax regime (10% old / 14% new of Basic)</li>
+        </ul>
+      </div>
+
+      <div className="ezp-panel">
+        <label className="ezp-check">
+          <input type="checkbox" checked={ack} onChange={e2 => setAck(e2.target.checked)} />
+          <span>I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.</span>
+        </label>
+        <button className="ezp-btn is-block" style={{ marginTop: 12 }} disabled={!canSubmit || saving} onClick={submit}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
+      </div>
     </div>
   )
 }
@@ -2734,7 +2639,14 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 // ════════════════════════════════════════════════════════════════
 // LOANS (ESS) — apply, track requests, sign agreement, manage loans
 // ════════════════════════════════════════════════════════════════
+const LOAN_V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint, teal: C.positive, tealBg: C.sunken, bg:C.canvas }
 const loanInr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+// Two-way choice buttons on the NPS / loan-agreement forms (selected = brand wash).
+const ezpSeg = (on: boolean): React.CSSProperties => ({
+  flex: 1, height: 38, padding: '0 12px', borderRadius: R.md, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+  border: `1px solid ${on ? C.brand : C.lineStrong}`, background: on ? C.brandTint : C.surface, color: on ? C.brandDeep : C.inkSoft,
+  boxShadow: on ? `inset 0 0 0 1px ${C.brand}` : 'none',
+})
 // reducing-balance EMI
 function loanEmi(P: number, ratePct: number, n: number): number {
   if (!P || !n) return 0
@@ -2743,21 +2655,21 @@ function loanEmi(P: number, ratePct: number, n: number): number {
   const f = Math.pow(1 + r, n)
   return Math.round(P * r * f / (f - 1))
 }
-/** Loan / request status → pill tone. Same buckets as before: waiting, in review, good, stopped, finished. */
-const LOAN_TONE: Record<string, KitTone> = {
-  SUBMITTED:'warning', IN_APPROVAL:'warning', REQUESTED:'warning', GENERATED:'warning', UNDER_REVIEW:'brand', PENDING_PRAN:'brand',
-  APPROVED:'positive', RECOVERING:'positive', DISBURSED:'positive', SIGNED:'positive',
-  REJECTED:'critical', CANCELLED:'critical', EXIT_RECOVERY:'critical',
-  CLOSED:'neutral', FORECLOSED:'neutral',
-}
 function LoanStatusBadge({ status }: { status: string }) {
   const s = (status || '').toUpperCase()
-  const text = s.replace(/_/g,' ')
-  return <KitPill t={LOAN_TONE[s] || 'brand'} dot size="sm" title={s}>{text.charAt(0) + text.slice(1).toLowerCase()}</KitPill>
+  const map: Record<string, string> = {
+    SUBMITTED:'is-warn', IN_APPROVAL:'is-warn', REQUESTED:'is-warn', GENERATED:'is-warn', UNDER_REVIEW:'is-brand', PENDING_PRAN:'is-brand',
+    APPROVED:'is-ok', RECOVERING:'is-ok', DISBURSED:'is-ok', SIGNED:'is-ok',
+    REJECTED:'is-bad', CANCELLED:'is-bad', EXIT_RECOVERY:'is-bad',
+    CLOSED:'', FORECLOSED:'',
+  }
+  const tone = s in map ? map[s] : 'is-brand'
+  return <span className={`ezp-chip ${tone}`}>{s.replace(/_/g,' ')}</span>
 }
 
 // Inline agreement signing panel
 function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: { requestId: string; employeeId: string; notify: (m: string, t?: 'success'|'error') => void; onClose: () => void; onDone: () => void }) {
+  const V = LOAN_V
   const [agr, setAgr] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<'ESIGN'|'UPLOAD'>('ESIGN')
@@ -2770,6 +2682,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       setAgr(d?.agreement || null); setLoading(false)
     }).catch(() => setLoading(false))
   }, [requestId])
+  void V
 
   const submit = async () => {
     if (!agr) return
@@ -2786,63 +2699,66 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
     else notify('Failed: ' + (d.error || ''), 'error')
   }
 
-  if (loading) return <SectionCard icon={<IconPen size={16} />} title="Sign agreement"><div style={{ color:C.muted, fontSize:F.small }}>Loading agreement…</div></SectionCard>
+  if (loading) return <div className="ezp-panel"><div className="ezp-muted">Loading agreement…</div></div>
   if (!agr) return (
-    <SectionCard icon={<IconPen size={16} />} title="Sign agreement" actions={<PButton size="sm" onClick={onClose}>Close</PButton>}>
-      <InfoCallout t="warning" compact style={{ marginBottom: 0 }} title="No agreement found yet. Please check back shortly." />
-    </SectionCard>
+    <div className="ezp-panel">
+      <div className="ezp-note is-bad" style={{ marginBottom:10 }}>No agreement found yet. Please check back shortly.</div>
+      <button className="ezp-ghost" onClick={onClose}>Close</button>
+    </div>
   )
   const schedule: any[] = Array.isArray(agr.schedule_snapshot) ? agr.schedule_snapshot : (typeof agr.schedule_snapshot === 'string' ? (() => { try { return JSON.parse(agr.schedule_snapshot) } catch { return [] } })() : [])
   return (
-    <SectionCard icon={<IconPen size={16} />} title={`Sign agreement: ${agr.agreement_number}`}
-      hint="Check the repayment schedule, then sign below"
-      style={{ borderColor: C.brandEdge, boxShadow: `0 0 0 3px ${C.brandTint}, ${E.raised}` }}
-      actions={<>
-        <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" className="ez-press" style={btnStyle('secondary', 'sm')}><IconFile size={14} />View / print</a>
-        <PButton size="sm" variant="ghost" onClick={onClose}>Close</PButton>
-      </>}>
-      <DataTable framed minWidth={520} maxHeight={320} style={{ marginBottom: S.lg }}>
-        <thead><tr>
-          <th style={dt.th}>#</th><th style={dt.thNum}>Due</th><th style={dt.thNum}>EMI</th><th style={dt.thNum}>Principal</th><th style={dt.thNum}>Interest</th><th style={dt.thNum}>Closing</th>
-        </tr></thead>
-        <tbody>
-          {schedule.map((s, i) => (
-            <tr key={i} className={dt.rowClass}>
-              <td style={dt.tdMono}>{s.installment_number}</td>
-              <td style={dt.tdNum}>{s.due_date || s.month || '-'}</td>
-              <td style={{ ...dt.tdNum, fontWeight: W.semi }}>{loanInr(s.emi_amount)}</td>
-              <td style={dt.tdNum}>{loanInr(s.principal_component)}</td>
-              <td style={dt.tdNum}>{loanInr(s.interest_component)}</td>
-              <td style={dt.tdNum}>{loanInr(s.closing_balance)}</td>
-            </tr>
-          ))}
-          {schedule.length === 0 && <tr><td colSpan={6} style={{ ...dt.td, textAlign:'center', color:C.muted }}>No schedule rows.</td></tr>}
-        </tbody>
-      </DataTable>
-      <SegmentedTabs<'ESIGN'|'UPLOAD'> value={mode} onChange={setMode} items={[
-        { key: 'ESIGN', label: 'E-sign', icon: <IconPen size={14} /> },
-        { key: 'UPLOAD', label: 'Upload signed PDF', icon: <IconFile size={14} /> },
-      ]} />
+    <div className="ezp-panel" style={{ borderColor:C.brandEdge }}>
+      <div className="ezp-head">
+        <h3>Sign agreement: {agr.agreement_number}</h3>
+        <div style={{ display:'flex', gap:8, marginLeft:'auto' }}>
+          <a className="ezp-ghost" href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ textDecoration:'none' }}>View / print</a>
+          <button className="ezp-ghost" onClick={onClose}>Close</button>
+        </div>
+      </div>
+      <div className="ezp-table-wrap" style={{ marginBottom:14 }}>
+        <table className="ezp-table" style={{ minWidth:520 }}>
+          <thead><tr>
+            <th>#</th><th className="num">Due</th><th className="num">EMI</th><th className="num">Principal</th><th className="num">Interest</th><th className="num">Closing</th>
+          </tr></thead>
+          <tbody>
+            {schedule.map((s, i) => (
+              <tr key={i}>
+                <td className="ezp-num">{s.installment_number}</td>
+                <td className="num">{s.due_date || s.month || '-'}</td>
+                <td className="num">{loanInr(s.emi_amount)}</td>
+                <td className="num">{loanInr(s.principal_component)}</td>
+                <td className="num">{loanInr(s.interest_component)}</td>
+                <td className="num">{loanInr(s.closing_balance)}</td>
+              </tr>
+            ))}
+            {schedule.length === 0 && <tr><td colSpan={6} className="ezp-muted" style={{ textAlign:'center' }}>No schedule rows.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+        <button onClick={() => setMode('ESIGN')} style={ezpSeg(mode==='ESIGN')}>E-sign</button>
+        <button onClick={() => setMode('UPLOAD')} style={ezpSeg(mode==='UPLOAD')}>Upload signed PDF</button>
+      </div>
       {mode === 'ESIGN' ? (
-        <div style={{ marginBottom: S.lg }}>
-          <LabeledField label="Type your full legal name to sign">
-            <input value={esignName} onChange={e => setEsignName(e.target.value)} placeholder="e.g. Rahul Sharma" style={inputSkin()} />
-          </LabeledField>
-          {esignName.trim() && <div style={{ marginTop:S.sm, padding:'12px 16px', border:`1px dashed ${C.brand}`, borderRadius:R.md, background: C.brandTint, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:24, color:C.brandDeep }}>{esignName}</div>}
+        <div className="ezp-field">
+          <label className="ezp-label">Type your full legal name to sign</label>
+          <input className="ezp-input" value={esignName} onChange={e => setEsignName(e.target.value)} placeholder="e.g. Rahul Sharma" />
+          {esignName.trim() && <div style={{ marginTop:8, padding:'10px 14px', border:`1px dashed ${C.brandEdge}`, borderRadius:R.md, background:C.sunken, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:22, color:C.brandDeep }}>{esignName}</div>}
         </div>
       ) : (
-        <div style={{ marginBottom: S.lg }}>
-          <LabeledField label="URL of your signed agreement PDF">
-            <input value={pdfUrl} onChange={e => setPdfUrl(e.target.value)} placeholder="https://…/signed-agreement.pdf" style={inputSkin()} />
-          </LabeledField>
+        <div className="ezp-field">
+          <label className="ezp-label">URL of your signed agreement PDF</label>
+          <input className="ezp-input" value={pdfUrl} onChange={e => setPdfUrl(e.target.value)} placeholder="https://…/signed-agreement.pdf" />
         </div>
       )}
-      <PButton variant="primary" size="lg" full disabled={saving} onClick={submit} style={saving ? { cursor: 'wait' } : undefined}>{saving ? 'Submitting…' : 'Submit signed agreement'}</PButton>
-    </SectionCard>
+      <button className="ezp-btn is-block" disabled={saving} onClick={submit}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
+    </div>
   )
 }
 
 function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = LOAN_V
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [typeId, setTypeId] = useState('')
@@ -2861,7 +2777,9 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   }, [emp.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
 
-  if (loading) return <LoadingBlock label="Loading your loans…" />
+  void V
+
+  if (loading) return <div className="ezp"><PayStyles /><div className="ezp-empty">Loading…</div></div>
 
   const loanTypes: any[] = data?.loan_types || []
   const myLoans: any[] = data?.my_loans || []
@@ -2901,166 +2819,106 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     else notify(d.error || 'Failed', 'error')
   }
 
-  // Read-only summaries of what was loaded — display only.
-  const maxEligible = loanTypes.reduce((m: number, t: any) => Math.max(m, Number(t.max_eligible) || 0), 0)
-  const totalOutstanding = myLoans.reduce((s: number, l: any) => s + (Number(l.outstanding_principal) || 0), 0)
-  const totalEmi = myLoans.filter((l: any) => (l.status || '').toUpperCase() === 'RECOVERING').reduce((s: number, l: any) => s + (Number(l.emi_amount) || 0), 0)
-  const amountOver = !!sel && amtNum > Number(sel.max_eligible)
-  const tenureOut = !!sel && tenNum > 0 && (tenNum < sel.min_tenure_months || tenNum > sel.max_tenure_months)
-  const totalRepay = indicativeEmi * tenNum
-
   return (
-    <div>
-      <ScreenIntro icon={<IconLoans size={20} />} title="Loans"
-        subtitle="Apply for a company loan, track approvals, sign your agreement, and manage repayments."
-        right={pending.length > 0 ? <KitPill t="warning" dot>{pending.length} pending</KitPill> : undefined} />
+    <div className="ezp">
+      <PayStyles />
+      <div className="ezp-title">
+        <div>
+          <h2>Loans</h2>
+          <p>Apply for a company loan, track approvals, sign your agreement, and manage repayments.</p>
+        </div>
+      </div>
 
       {!hasCtc && (
-        <InfoCallout t="warning" compact title="CTC not configured: eligibility shows ₹0; ask HR to set CTC." />
+        <div className="ezp-note is-warn">CTC not configured: eligibility shows ₹0; ask HR to set CTC.</div>
       )}
 
-      <KpiGrid min={150}>
-        <KpiTile emphasis label="You can borrow up to" value={loanInr(maxEligible)} icon={<IconWallet size={15} />}
-          sub={loanTypes.length ? `Across ${loanTypes.length} loan type${loanTypes.length === 1 ? '' : 's'}` : 'No loan types yet'} />
-        <KpiTile label="My loans" value={myLoans.length} icon={<IconLoans size={15} />} sub={totalEmi ? `${loanInr(totalEmi)}/mo in EMIs` : 'No EMIs running'} />
-        <KpiTile label="Outstanding" value={loanInr(totalOutstanding)} icon={<IconTrendUp size={15} />} sub="Principal left to repay" />
-        <KpiTile label="Pending requests" value={pending.length} t={pending.length ? 'warning' : 'neutral'} icon={<IconFile size={15} />} sub={pending.length ? 'Waiting on approval or signature' : 'Nothing waiting'} />
-      </KpiGrid>
-
       {/* Apply for a loan */}
-      <SectionCard icon={<IconPen size={16} />} title="Apply for a loan" hint="Pick a loan, set the amount and tenure, and see your EMI before you submit">
-        {loanTypes.length === 0 ? (
-          <EmptyState compact icon={<IconLoans size={20} />} title="No loan types configured for your company." hint="When HR sets up a loan policy, it will appear here." />
-        ) : (
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>Apply for a loan</h3></div>
+        {loanTypes.length === 0 ? <div className="ezp-empty">No loan types configured for your company.</div> : (
           <>
-            <div style={{ ...eyebrow, marginBottom: S.sm }}>Available loans</div>
-            <div role="radiogroup" aria-label="Available loans" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: S.sm, marginBottom: S.lg }}>
-              {loanTypes.map((t: any) => (
-                <ChoiceCard key={t.id} selected={t.id === typeId} onClick={() => setTypeId(t.id)} title={t.name}
-                  badge={<KitPill size="sm" t="info">{Number(t.interest_rate) || 0}%{t.interest_type ? ` ${String(t.interest_type).toLowerCase()}` : ''}</KitPill>}
-                  sub={<>Up to <strong style={{ color: C.ink }}>{loanInr(t.max_eligible)}</strong> · {t.min_tenure_months}–{t.max_tenure_months} months</>} />
-              ))}
+            <div className="ezp-field">
+              <label className="ezp-label">Loan type</label>
+              <select className="ezp-input" value={typeId} onChange={e => setTypeId(e.target.value)}>
+                {loanTypes.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              {sel && <p className="ezp-hint ezp-num">Max eligible <b className="ezp-brand">{loanInr(sel.max_eligible)}</b> · {Number(sel.interest_rate) || 0}% {sel.interest_type ? `(${sel.interest_type})` : ''} · tenure {sel.min_tenure_months}–{sel.max_tenure_months} months</p>}
             </div>
-
-            <TwoCol min={300} gap={S.xl}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: S.md, minWidth: 0 }}>
-                <LabeledField label="Loan type" hintTone="brand"
-                  hint={sel ? <>Max eligible {loanInr(sel.max_eligible)} · {Number(sel.interest_rate) || 0}% {sel.interest_type ? `(${sel.interest_type})` : ''} · tenure {sel.min_tenure_months}–{sel.max_tenure_months} months</> : undefined}>
-                  <select value={typeId} onChange={e => setTypeId(e.target.value)} style={{ ...inputSkin(), cursor: 'pointer' }}>
-                    {loanTypes.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </LabeledField>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: S.md }}>
-                  <LabeledField label="Amount (₹)" hintTone="critical" hint={sel && amtNum > Number(sel.max_eligible) ? `Max eligible is ${loanInr(sel.max_eligible)}` : undefined}>
-                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 100000" style={{ ...inputSkin({ invalid: amountOver }), ...numeric }} />
-                  </LabeledField>
-                  <LabeledField label="Tenure (months)" hintTone="critical" hint={sel && tenNum > 0 && (tenNum < sel.min_tenure_months || tenNum > sel.max_tenure_months) ? `Tenure must be ${sel.min_tenure_months}–${sel.max_tenure_months} months` : undefined}>
-                    <input type="number" value={tenure} onChange={e => setTenure(e.target.value)} placeholder={sel ? `${sel.min_tenure_months}–${sel.max_tenure_months}` : 'months'} style={{ ...inputSkin({ invalid: tenureOut }), ...numeric }} />
-                  </LabeledField>
-                </div>
-                <LabeledField label="Reason">
-                  <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Purpose of the loan…" style={{ ...inputSkin(), height: 'auto', minHeight:84, padding: '10px 14px', resize:'vertical', lineHeight: 1.5 }} />
-                </LabeledField>
+            <div className="ezp-grid2" style={{ marginBottom:14 }}>
+              <div>
+                <label className="ezp-label">Amount (₹)</label>
+                <input className="ezp-input" type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 100000" />
+                {sel && amtNum > Number(sel.max_eligible) && <p className="ezp-hint ezp-bad">Max eligible is {loanInr(sel.max_eligible)}</p>}
               </div>
-
-              {/* EMI preview */}
-              <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: S.md }}>
-                <div style={{ background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.lg, padding: S.lg }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ display: 'inline-flex', color: C.brand }}><IconCalculator size={15} /></span>
-                    <span style={{ ...eyebrow }}>Indicative EMI (reducing balance)</span>
-                  </div>
-                  <div style={{ marginTop: S.sm, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span style={{ fontSize: F.display + 4, fontWeight: W.bold, color: indicativeEmi ? C.brandDeep : C.faint, letterSpacing: '-.02em', ...numeric }}>{loanInr(indicativeEmi)}</span>
-                    <span style={{ fontSize: F.small, color: C.muted }}>/mo</span>
-                  </div>
-                  <div style={{ marginTop: S.md }}>
-                    <StatLine first label="Loan amount" value={amtNum ? loanInr(amtNum) : '—'} />
-                    <StatLine label="Tenure" value={tenNum ? `${tenNum} months` : '—'} />
-                    <StatLine label="Interest rate" value={sel ? `${rate}%${sel.interest_type ? ` ${String(sel.interest_type).toLowerCase()}` : ''}` : '—'} />
-                    <StatLine label="Total you repay" sub={indicativeEmi && tenNum ? `Interest about ${loanInr(Math.max(0, totalRepay - amtNum))}` : 'Enter an amount and tenure'} value={indicativeEmi && tenNum ? loanInr(totalRepay) : '—'} />
-                  </div>
-                </div>
-                <PButton variant="primary" size="lg" full disabled={saving} onClick={submit} style={saving ? { cursor: 'wait' } : undefined}>{saving ? 'Submitting…' : 'Submit loan request'}</PButton>
-                <div style={{ fontSize: F.tiny, color: C.muted, lineHeight: 1.5, textAlign: 'center' }}>Your request goes for approval. Once approved, you sign the agreement here.</div>
+              <div>
+                <label className="ezp-label">Tenure (months)</label>
+                <input className="ezp-input" type="number" value={tenure} onChange={e => setTenure(e.target.value)} placeholder={sel ? `${sel.min_tenure_months}–${sel.max_tenure_months}` : 'months'} />
+                {sel && tenNum > 0 && (tenNum < sel.min_tenure_months || tenNum > sel.max_tenure_months) && <p className="ezp-hint ezp-bad">Tenure must be {sel.min_tenure_months}–{sel.max_tenure_months} months</p>}
               </div>
-            </TwoCol>
+            </div>
+            <div className="ezp-field">
+              <label className="ezp-label">Reason</label>
+              <textarea className="ezp-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="Purpose of the loan…" style={{ minHeight:70 }} />
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', padding:'11px 13px', marginBottom:14, borderRadius:R.md, background:C.brandTint, border:`1px solid ${C.brandEdge}` }}>
+              <span style={{ fontSize:12.5, color:C.inkSoft }}>Indicative EMI (reducing balance)</span>
+              <span className="ezp-num" style={{ fontSize:18, fontWeight:700, color:C.brandDeep }}>{loanInr(indicativeEmi)}<span className="ezp-muted" style={{ fontSize:11, fontWeight:500 }}>/mo</span></span>
+            </div>
+            <button className="ezp-btn is-block" disabled={saving} onClick={submit}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
           </>
         )}
-      </SectionCard>
+      </div>
 
       {/* Inline agreement signing */}
       {signingReq && <LoanAgreementPanel requestId={signingReq} employeeId={emp.id} notify={notify} onClose={() => setSigningReq(null)} onDone={() => { setSigningReq(null); load() }} />}
 
       {/* Pending requests */}
-      <SectionCard icon={<IconFile size={16} />} title="Pending requests" actions={pending.length ? <KitPill size="sm" t="warning">{pending.length}</KitPill> : undefined} pad={pending.length ? 0 : S.lg}>
-        {pending.length === 0 ? <EmptyState compact t="positive" title="No pending requests." /> : pending.map((p: any, i: number) => {
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>Pending requests</h3></div>
+        {pending.length === 0 ? <div className="ezp-empty">No pending requests.</div> : pending.map((p: any) => {
           const t = loanTypes.find((x: any) => x.id === p.loan_type_id)
-          const approved = (p.status || '').toUpperCase() === 'APPROVED'
           return (
-            <div key={p.id} className="ez-row" style={{ display:'flex', gap:S.md, alignItems:'center', flexWrap:'wrap', padding:`${S.md}px ${S.lg}px`, borderTop: i ? `1px solid ${C.line}` : 'none' }}>
-              <IconTile icon={<IconLoans size={16} />} t={approved ? 'positive' : 'warning'} size={36} />
-              <div style={{ minWidth:0, flex:'1 1 220px' }}>
-                <div style={{ fontSize:F.body, fontWeight:W.semi, color:C.ink, ...numeric }}>{t?.name || 'Loan'} · {loanInr(p.requested_amount)}</div>
-                <div style={{ fontSize:F.tiny, color:C.muted, marginTop:2, ...numeric }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '-'}</div>
+            <div key={p.id} className="ezp-row" style={{ alignItems:'center', flexWrap:'wrap', padding:'10px 0' }}>
+              <div style={{ minWidth:0 }}>
+                <div className="ezp-num" style={{ fontSize:13, fontWeight:600, color:C.ink }}>{t?.name || 'Loan'} · {loanInr(p.requested_amount)}</div>
+                <div className="ezp-muted ezp-num" style={{ fontSize:11.5, marginTop:2 }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '-'}</div>
               </div>
-              <div style={{ display:'flex', gap:S.sm, alignItems:'center' }}>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 <LoanStatusBadge status={p.status} />
-                {approved && <PButton size="sm" variant="primary" icon={<IconPen size={13} />} onClick={() => setSigningReq(p.id)}>Sign agreement</PButton>}
+                {(p.status || '').toUpperCase() === 'APPROVED' && <button className="ezp-btn" style={{ height:32, padding:'0 12px', fontSize:12 }} onClick={() => setSigningReq(p.id)}>Sign agreement</button>}
               </div>
             </div>
           )
         })}
-      </SectionCard>
+      </div>
 
       {/* My loans */}
-      <SectionCard icon={<IconLoans size={16} />} title="My loans" actions={myLoans.length ? <KitPill size="sm">{myLoans.length}</KitPill> : undefined}>
-        {myLoans.length === 0 ? <EmptyState compact title="No active loans." hint="Loans you take will show here with their EMIs and how much is left to repay." /> : (
-          <div style={{ display:'flex', flexDirection:'column', gap:S.md }}>
-            {myLoans.map((l: any) => {
-              const isRecovering = (l.status || '').toUpperCase() === 'RECOVERING'
-              const paid = l.paid_installments ?? 0
-              const remaining = l.remaining_installments ?? 0
-              const total = paid + remaining
-              return (
-                <div key={l.id} style={{ border:`1px solid ${C.line}`, borderRadius:R.lg, padding:S.lg, background:C.surface }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', gap:S.md, alignItems:'center', flexWrap:'wrap' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:S.sm, minWidth:0 }}>
-                      <span style={{ fontSize:F.lead, fontWeight:W.bold, color:C.ink, ...numeric }}>{l.loan_number}</span>
-                      <LoanStatusBadge status={l.status} />
-                    </div>
-                    {isRecovering && (
-                      <div style={{ display:'flex', gap:S.sm }}>
-                        <PButton size="sm" variant="secondary" onClick={() => manage(l, 'PART_PAYMENT')}>Part-payment</PButton>
-                        <PButton size="sm" variant="danger" onClick={() => manage(l, 'CLOSURE')}>Foreclose</PButton>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(130px, 100%), 1fr))', gap:S.sm, marginTop:S.md }}>
-                    {[
-                      { l:'Principal', v: loanInr(l.principal) },
-                      { l:'EMI', v: <>{loanInr(l.emi_amount)}<span style={{ fontSize:F.tiny, color:C.muted, fontWeight:W.medium }}>/mo</span></> },
-                      { l:'Outstanding', v: loanInr(l.outstanding_principal), strong: true },
-                    ].map(x => (
-                      <div key={x.l} style={{ padding:`${S.sm + 2}px ${S.md}px`, background:C.sunken, border:`1px solid ${C.line}`, borderRadius:R.md, minWidth:0 }}>
-                        <div style={{ ...eyebrow }}>{x.l}</div>
-                        <div style={{ fontSize:F.lead, fontWeight:W.bold, color: x.strong ? C.brandDeep : C.ink, marginTop:3, ...numeric }}>{x.v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ marginTop:S.md }}>
-                    <Meter max={total || 1} height={8} ariaLabel="Instalments paid" segments={[{ value: paid, t:'positive' }]} />
-                    <div style={{ display:'flex', justifyContent:'space-between', gap:S.sm, flexWrap:'wrap', marginTop:6, fontSize:F.tiny, color:C.muted, ...numeric }}>
-                      <span>Paid <strong style={{ color:C.ink }}>{paid}</strong> / {total} installments · {remaining} remaining</span>
-                      {l.disbursement_date ? <span>Disbursed {fmt(l.disbursement_date)}</span> : null}
-                    </div>
-                  </div>
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>My loans</h3></div>
+        {myLoans.length === 0 ? <div className="ezp-empty">No active loans.</div> : myLoans.map((l: any) => {
+          const isRecovering = (l.status || '').toUpperCase() === 'RECOVERING'
+          return (
+            <div key={l.id} className="ezp-row" style={{ display:'block', padding:'11px 0' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+                <div className="ezp-num" style={{ fontSize:13, fontWeight:600, color:C.ink }}>{l.loan_number}</div>
+                <LoanStatusBadge status={l.status} />
+              </div>
+              <div className="ezp-muted ezp-num" style={{ fontSize:12, marginTop:4, lineHeight:1.7 }}>
+                Principal {loanInr(l.principal)} · EMI {loanInr(l.emi_amount)}/mo · Outstanding <b style={{ color:C.ink }}>{loanInr(l.outstanding_principal)}</b><br />
+                Paid {l.paid_installments ?? 0} / {(l.paid_installments ?? 0) + (l.remaining_installments ?? 0)} installments · {l.remaining_installments ?? 0} remaining
+                {l.disbursement_date ? ` · disbursed ${fmt(l.disbursement_date)}` : ''}
+              </div>
+              {isRecovering && (
+                <div style={{ display:'flex', gap:8, marginTop:10 }}>
+                  <button className="ezp-ghost is-danger" onClick={() => manage(l, 'CLOSURE')}>Foreclose</button>
+                  <button className="ezp-ghost" onClick={() => manage(l, 'PART_PAYMENT')}>Part-payment</button>
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </SectionCard>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -3072,13 +2930,18 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
  *  record of what each one waits on. */
 function Placeholder({ title }: { title: string; phase: number; needs: string }) {
   return (
-    <div style={{ ...T.card, textAlign:'center', padding:'48px 24px' }}>
-      <div style={{ width:56, height:56, borderRadius:16, margin:'0 auto 14px', display:'grid', placeItems:'center', background:C.brandTint, color:C.brand, border:`1px solid ${C.brandEdge}` }}>
-        <IconCalendar size={26} strokeWidth={1.7} />
-      </div>
-      <div style={{ fontSize:17, fontWeight:700 }}>{title} is coming soon</div>
-      <div style={{ fontSize:13.5, color:C.muted, marginTop:6, lineHeight:1.6, maxWidth:420, marginInline:'auto' }}>
-        We’re getting this ready for you. It will appear here as soon as your HR team switches it on.
+    <div className="ezp">
+      <PayStyles />
+      <div className="ezp-panel">
+        <div className="ezp-empty" style={{ padding:'40px 20px' }}>
+          <div style={{ width:52, height:52, borderRadius:R.lg, margin:'0 auto 14px', display:'grid', placeItems:'center', background:C.brandTint, color:C.brand, border:`1px solid ${C.brandEdge}` }}>
+            <IconCalendar size={24} strokeWidth={1.7} />
+          </div>
+          <b style={{ fontSize:16, fontWeight:700, color:C.ink }}>{title} is coming soon</b>
+          <div style={{ marginTop:6, maxWidth:420, marginInline:'auto' }}>
+            We’re getting this ready for you. It will appear here as soon as your HR team switches it on.
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -4208,11 +4071,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       // lib/today/schema.ts — now say 'tab:social'.
       case 'social':        return <Social employeeId={emp.id} />
       case 'funzone':       return <FunZone employeeId={emp.id} />
-      // Inside Payroll (Salary Slip, Statutory) the placeholder says what the tab will
-      // hold and what it waits on; everywhere else keeps the plain one.
-      default:              return m.section === 'payroll'
-                              ? <PayrollComingSoon viewKey={m.k} title={m.label} phase={m.phase || 4} needs={m.needs || '-'} go={go} />
-                              : <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '-'} />
+      default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '-'} />
     }
   }
 
@@ -4373,23 +4232,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
             // its shape from tab to tab. Home has no heading — its hero is the heading —
             // and on a phone it opens with the feature search the top bar has no room for.
             <div className="ez-page-enter" key={section.k} style={{ padding: isMobile ? '16px 14px' : '24px 28px 40px' }}>
-              {section.k === 'payroll' ? (
-                // Payroll draws its own hub: title, the employee's pay snapshot and the
-                // tabs grouped by purpose (components/ess/payroll/PayrollHub.tsx). Same
-                // items, same go(), so URLs and deep links are unchanged. Pay figures are
-                // never loaded when someone else is viewing this portal (adminMode).
-                <PayrollHub employeeId={emp.id} regime={(emp as any).tds_regime}
-                  title={section.label} desc={section.desc}
-                  items={sectionItems} view={view} go={go}
-                  showPay={!adminMode} isMobile={isMobile} />
-              ) : (
-                <>
-                  {section.k === 'home'
-                    ? (isMobile ? <FeatureSearch entries={searchEntries} /> : null)
-                    : <TabHeader s={section} />}
-                  <SubTabs items={sectionItems} view={view} go={go} />
-                </>
-              )}
+              {section.k === 'home'
+                ? (isMobile ? <FeatureSearch entries={searchEntries} /> : null)
+                : <TabHeader s={section} />}
+              <SubTabs items={sectionItems} view={view} go={go} />
               {renderView()}
             </div>
           )

@@ -55,16 +55,9 @@ function isPreview(): boolean {
 import { supabase } from '@/lib/supabase'
 import { measureTrail, isValidPoint, type GpsPoint } from '@/lib/travel/gps'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
-// Local S / Field names exist here, so spacing is imported as SP.
-import {
-  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle, type Tone,
-  IconTravel, IconReceipt, IconUpload, IconPlus, IconClose, IconCheck, IconAlert,
-} from '@/lib/ui'
-import {
-  SectionCard, KpiGrid, KpiTile, StatusPill, InfoCallout, EmptyState, PButton, IconTile, ProcessStepper, type Step,
-  IconFile, IconInfo, IconTimer, IconCheckCircle,
-} from '@/components/ess/payroll/kit'
-import { Figure, FormStep, FormDivider, fieldLabel } from '@/components/ess/payroll/claimsKit'
+// Surfaces are finished by PayStyles (components/ess/payroll/PayStyles.tsx).
+import { C, R } from '@/lib/ui'
+import PayStyles from '@/components/ess/payroll/PayStyles'
 
 // Bound to the design system — see lib/ui/tokens.ts.
 const V = {
@@ -148,16 +141,17 @@ const CATEGORY_ORDER = ['CONVEYANCE', 'OUTSTATION', 'STAY', 'ALLOWANCE',
 
 // Where the claim is, in the employee's language. The chain is
 // RM → HR Head → Finance, and any stage with nobody mapped is skipped.
-const CLAIM_STATUS: Record<string, [Tone, string]> = {
-  DRAFT:           ['brand',    'Draft'],
-  SUBMITTED:       ['warning',  'Submitted'],
-  PENDING_RM:      ['warning',  'With your manager'],
-  PENDING_HR:      ['warning',  'With HR Head'],
-  PENDING_FINANCE: ['info',     'With Finance'],
-  APPROVED:        ['positive', 'Approved'],
-  SENT_BACK:       ['critical', 'Sent back to you'],
-  REJECTED:        ['critical', 'Rejected'],
-  PAID:            ['positive', 'Paid'],
+// [chip tone (PayStyles .ezp-chip), edge colour, label]
+const CLAIM_STATUS: Record<string, [string, string, string]> = {
+  DRAFT:           ['is-brand', V.purpleDark, 'Draft'],
+  SUBMITTED:       ['is-warn',  V.amber,      'Submitted'],
+  PENDING_RM:      ['is-warn',  V.amber,      'With your manager'],
+  PENDING_HR:      ['is-warn',  V.amber,      'With HR Head'],
+  PENDING_FINANCE: ['is-brand', V.purpleDark, 'With Finance'],
+  APPROVED:        ['is-ok',    V.green,      'Approved'],
+  SENT_BACK:       ['is-bad',   V.red,        'Sent back to you'],
+  REJECTED:        ['is-bad',   V.red,        'Rejected'],
+  PAID:            ['is-ok',    V.green,      'Paid'],
 }
 
 // ---------------------------------------------------------------------------
@@ -278,20 +272,21 @@ function useJourneyRecorder() {
 // Sub-components live outside the parent — defined inside, they remount on
 // every keystroke and the form loses focus mid-word.
 // ---------------------------------------------------------------------------
-const lbl: React.CSSProperties = fieldLabel
-const inp: React.CSSProperties = { ...inputStyle() }
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div style={{ minWidth: 0 }}><label style={lbl}>{label}</label>{children}</div>
+  return <div><label className="ezp-label">{label}</label>{children}</div>
 }
 
-const BANNER_TONE: Record<'ok' | 'warn' | 'err', Tone> = { ok: 'positive', warn: 'warning', err: 'critical' }
-function Banner({ tone: t, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
-  return <InfoCallout compact t={BANNER_TONE[t]} style={{ marginBottom: SP.md }}>{children}</InfoCallout>
+function Pill({ cls, text }: { cls: string; text: string }) {
+  return <span className={`ezp-chip ${cls}`}>{text}</span>
 }
 
-function Empty({ text, icon }: { text: string; icon?: React.ReactNode }) {
-  return <EmptyState compact t="neutral" icon={icon} title={text} />
+function Banner({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
+  const cls = tone === 'ok' ? 'is-ok' : tone === 'warn' ? 'is-warn' : 'is-bad'
+  return <div className={`ezp-note ${cls}`}>{children}</div>
+}
+
+function Empty({ text }: { text: string }) {
+  return <div className="ezp-empty">{text}</div>
 }
 
 /** The recorder panel shown for bill-less modes. */
@@ -304,70 +299,64 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
   const amount = rate != null ? liveKm * rate : null
 
   return (
-    <div style={{ border: `1px solid ${tracking ? C.brandEdge : recorded ? C.positiveEdge : V.border}`, borderRadius: R.lg,
-                  padding: '14px 16px', marginBottom: SP.md,
-                  background: tracking ? V.purpleBg : recorded ? C.positiveTint : V.field }}>
-      <div style={{ display: 'flex', gap: SP.md, alignItems: 'flex-start', marginBottom: SP.md }}>
-        <IconTile icon={<IconTravel size={16} />} t={tracking ? 'brand' : recorded ? 'positive' : 'neutral'} size={32} solid={tracking} />
-        <div style={{ fontSize: F.tiny, color: C.inkSoft, lineHeight: 1.55, flex: 1, minWidth: 0 }}>
-          <b style={{ color: V.navy }}>{typeName}</b> has no bill to attach, so the journey is
-          recorded and paid on distance. Start before you set off and end when you arrive,
-          and keep this screen open while you travel.
-        </div>
+    <div style={{ border: `1px solid ${tracking ? C.brandEdge : C.line}`, borderRadius: R.lg,
+                  padding: '14px 16px', marginBottom: 12,
+                  background: tracking ? V.purpleBg : V.field }}>
+      <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 12, lineHeight: 1.6 }}>
+        <b style={{ color: V.navy }}>{typeName}</b> has no bill to attach, so the journey is
+        recorded and paid on distance. Start before you set off and end when you arrive,
+        and keep this screen open while you travel.
       </div>
 
       {journey.error && <Banner tone={journey.state === 'IDLE' ? 'err' : 'warn'}>{journey.error}</Banner>}
 
       {(tracking || recorded) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px,100%),1fr))', gap: SP.sm + 2,
-                      marginBottom: SP.md }}>
-          <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.md, padding: '10px 12px' }}>
-            <div style={{ ...eyebrow, marginBottom: 4 }}>Distance</div>
-            <div style={{ fontSize: 26, fontWeight: W.bold, color: V.navy, lineHeight: 1, ...numeric }}>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'baseline',
+                      padding: '10px 0 12px' }}>
+          <div>
+            <div className="ezp-num" style={{ fontSize: 26, fontWeight: 700, color: V.navy, lineHeight: 1 }}>
               {liveKm.toFixed(2)} <span style={{ fontSize: 14, color: V.muted }}>km</span>
             </div>
-            <div style={{ fontSize: 11, color: V.muted, marginTop: 4, ...numeric }}>
+            <div style={{ fontSize: 11, color: V.muted, marginTop: 3 }}>
               {journey.points.length} location {journey.points.length === 1 ? 'point' : 'points'}
               {journey.accuracy != null && ` · ±${Math.round(journey.accuracy)} m`}
             </div>
           </div>
           {amount != null && (
-            <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.md, padding: '10px 12px' }}>
-              <div style={{ ...eyebrow, marginBottom: 4 }}>Fare so far</div>
-              <div style={{ fontSize: 22, fontWeight: W.bold, color: V.green, lineHeight: 1.1, ...numeric }}>
+            <div>
+              <div className="ezp-num" style={{ fontSize: 20, fontWeight: 700, color: V.green, lineHeight: 1 }}>
                 {inr(amount)}
               </div>
-              <div style={{ fontSize: 11, color: V.muted, marginTop: 4, ...numeric }}>
+              <div style={{ fontSize: 11, color: V.muted, marginTop: 3 }}>
                 at {inr(rate!)}/km
               </div>
             </div>
           )}
           {tracking && (
-            <div style={{ alignSelf: 'center' }}>
-              <StatusPill t="brand" dot solid>Recording</StatusPill>
-            </div>
+            <span className="ezp-chip is-brand">Recording</span>
           )}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {journey.state === 'IDLE' && (
-          <PButton variant="primary" icon={<IconTravel size={15} />} onClick={onStart}>
+          <button className="ezp-btn" onClick={onStart}>
             Start travel
-          </PButton>
+          </button>
         )}
         {tracking && (
-          <PButton variant="positive" icon={<IconCheck size={15} />} onClick={onEnd}>
+          <button className="ezp-btn" onClick={onEnd}
+                  style={{ background: V.green, borderColor: V.green }}>
             End travel
-          </PButton>
+          </button>
         )}
         {recorded && (
           <>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: V.green, fontWeight: 600 }}><IconCheck size={14} /> Journey recorded. Add the details below and save.
+            <span style={{ fontSize: 12.5, color: V.green, fontWeight: 600, alignSelf: 'center' }}>Journey recorded. Add the details below and save.
             </span>
-            <PButton size="sm" variant="secondary" onClick={onReset}>
+            <button className="ezp-ghost" onClick={onReset}>
               Discard
-            </PButton>
+            </button>
           </>
         )}
       </div>
@@ -419,54 +408,50 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
 
   const gps = log.distance_source === 'GPS_TRACKED' || log.distance_source === 'GPS_SNAPPED'
   return (
-    <div className="ez-rise" style={{ border: `1px solid ${checked ? C.brandEdge : V.border}`, borderRadius: R.lg,
-                  background: checked ? V.purpleBg : V.card, marginBottom: SP.sm,
-                  padding: '11px 13px', boxShadow: checked ? 'none' : E.flat, transition: 'background .15s, border-color .15s' }}>
+    <div style={{ border: `1px solid ${checked ? C.brandEdge : C.line}`, borderRadius: R.md,
+                  background: checked ? V.purpleBg : V.card, marginBottom: 8,
+                  padding: '11px 13px', transition: 'background .14s ease, border-color .14s ease' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-      <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select ${log.purpose}`}
-             style={{ width: 16, height: 16, accentColor: V.purple, cursor: 'pointer', flexShrink: 0 }} />
-      <IconTile icon={gps ? <IconTravel size={14} /> : <IconReceipt size={14} />} t={gps ? 'info' : 'brand'} size={30} />
+      <input type="checkbox" checked={checked} onChange={onToggle}
+             style={{ width: 15, height: 15, accentColor: V.purple, cursor: 'pointer', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: V.navy,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {log.purpose}
         </div>
-        <div style={{ fontSize: 11, color: V.muted, marginTop: 2, ...numeric }}>
+        <div style={{ fontSize: 11, color: V.muted, marginTop: 2 }}>
           {typeName} · {dmy(log.log_date)}
           {log.city ? ` · ${log.city}` : ''}
           {log.distance_claimed ? ` · ${log.distance_claimed} km` : ''}
-          {gps && <span style={{ color: V.purpleDark }}> · recorded</span>}
+          {gps && <span style={{ color: V.purpleDark }}> · 📍 recorded</span>}
           {log.rate_applied ? ` @ ${inr(log.rate_applied)}/km` : ''}
         </div>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: V.navy, flexShrink: 0, ...numeric }}>
+      <div className="ezp-num" style={{ fontSize: 14, fontWeight: 700, color: V.navy, flexShrink: 0 }}>
         {inr(log.total_amount)}
       </div>
-      <button onClick={onDelete} title="Remove this entry" aria-label="Remove this entry" className="ez-press"
-              style={{ background: 'none', border: `1px solid transparent`, borderRadius: R.sm, color: V.muted, cursor: 'pointer',
-                       width: 26, height: 26, padding: 0, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><IconClose size={14} /></button>
+      <button onClick={onDelete} title="Remove this entry"
+              style={{ background: 'none', border: 'none', color: V.muted, cursor: 'pointer',
+                       fontSize: 17, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
       </div>
 
       {/* A recorded journey is its own proof; a billed one needs the slip. */}
       {!gps && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                      paddingLeft: 68, marginTop: 6 }}>
+                      paddingLeft: 26, marginTop: 2 }}>
           {bills.map(b => (
-            <span key={b.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
-                                      fontSize: 11, background: V.greenBg, color: V.green,
-                                      border: `1px solid ${C.positiveEdge}`, borderRadius: 99,
-                                      padding: '3px 9px' }}>
-              <IconFile size={12} />
+            <span key={b.id} className="ezp-chip is-ok" style={{ fontWeight: 500 }}>
+              {b.mime_type === 'application/pdf' ? '' : ''}
               {b.url
                 ? <a href={b.url} target="_blank" rel="noreferrer"
-                     style={{ color: V.green, textDecoration: 'underline' }}>
+                     style={{ color: 'inherit', textDecoration: 'underline' }}>
                     {b.file_name || 'bill'}
                   </a>
                 : (b.file_name || 'bill')}
               <span style={{ color: V.muted }}>{kb(b.file_size)}</span>
-              <button onClick={() => removeBill(b.id)} disabled={busy} title="Remove this bill" aria-label="Remove this bill"
+              <button onClick={() => removeBill(b.id)} disabled={busy} title="Remove this bill"
                       style={{ background: 'none', border: 'none', cursor: 'pointer',
-                               color: V.muted, lineHeight: 1, padding: 0, display: 'inline-flex' }}><IconClose size={12} /></button>
+                               color: V.muted, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
             </span>
           ))}
 
@@ -474,15 +459,15 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
                  onChange={e => pick(e.target.files?.[0] ?? null)} />
           <button onClick={() => fileRef.current?.click()} disabled={busy}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
-                           fontSize: 11, fontWeight: 600, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 4,
+                           fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
                            color: busy ? V.muted : V.purpleDark }}>
-            {!busy && <IconUpload size={12} />}{busy ? 'Uploading…' : bills.length ? '+ another bill' : 'Attach bill slip'}
+            {busy ? 'Uploading…' : bills.length ? '+ another bill' : 'Attach bill slip'}
           </button>
 
           {loaded && bills.length === 0 && needsBill !== false && (
-            <StatusPill size="sm" t="warning" icon={<IconAlert size={11} />}>
+            <span className="ezp-warn" style={{ fontSize: 11.5 }}>
               Needs a slip: {typeName} above {inr(needsBill)} must show a bill
-            </StatusPill>
+            </span>
           )}
         </div>
       )}
@@ -490,62 +475,33 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
   )
 }
 
-// The approval rail a claim walks: submitted → manager → HR Head → Finance → paid.
-// Read-only: derived from the status the API already returns.
-const RAIL = ['Submitted', 'Manager', 'HR Head', 'Finance', 'Paid'] as const
-function claimSteps(status: string): Step[] {
-  const at: Record<string, number> = {
-    DRAFT: 0, SUBMITTED: 1, PENDING_RM: 1, PENDING_HR: 2, PENDING_FINANCE: 3, APPROVED: 4, PAID: 5,
-  }
-  if (status === 'SENT_BACK') {
-    return RAIL.map((l, i) => ({ key: l, label: i === 0 ? 'Sent back' : l, state: i === 0 ? 'blocked' : 'todo' }))
-  }
-  if (status === 'REJECTED') {
-    return RAIL.map((l, i) => ({
-      key: l, label: i === RAIL.length - 1 ? 'Rejected' : l,
-      state: i === 0 ? 'done' : i === RAIL.length - 1 ? 'blocked' : 'todo',
-    }))
-  }
-  const cur = at[status] ?? 0
-  return RAIL.map((l, i) => ({
-    key: l, label: l,
-    state: i < cur ? 'done' : i === cur ? 'current' : 'todo',
-  }))
-}
-
 function ClaimRow({ claim }: { claim: Claim }) {
-  const [t, text] = CLAIM_STATUS[claim.status] ?? (['brand', claim.status] as [Tone, string])
+  const [cls, fg, text] = CLAIM_STATUS[claim.status] ?? ['is-brand', V.purpleDark, claim.status]
   const settled = claim.status === 'PAID' || claim.status === 'APPROVED'
   return (
-    <div className="ez-rise" style={{ border: `1px solid ${V.border}`, borderLeft: `3px solid ${tone(t).fg}`,
-                  borderRadius: R.lg, padding: '14px 16px', marginBottom: SP.md, background: C.surface, boxShadow: E.flat }}>
+    <div style={{ border: `1px solid ${C.line}`, borderLeft: `3px solid ${fg}`,
+                  borderRadius: R.md, padding: '12px 14px', marginBottom: 9, background: V.card }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: 10, marginBottom: SP.md, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: SP.sm + 2, minWidth: 0 }}>
-          <IconTile icon={<IconReceipt size={15} />} t={t} size={32} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, ...numeric }}>{claim.claim_no}</div>
-            <div style={{ fontSize: 11, color: V.muted, marginTop: 1, ...numeric }}>
-              {claim.line_count} {claim.line_count === 1 ? 'expense' : 'expenses'} · {dmy(claim.period_from)} – {dmy(claim.period_to)}
-            </div>
-          </div>
-        </div>
-        <StatusPill t={t} dot>{text}</StatusPill>
+                    gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>{claim.claim_no}</div>
+        <Pill cls={cls} text={text} />
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(140px,100%),1fr))', gap: SP.sm, marginBottom: SP.md }}>
-        <Figure label="Claimed" value={inr(claim.total_claimed)} />
-        {settled && <Figure label="Approved" value={inr(claim.total_approved)} t="positive" />}
-        {claim.flag_count > 0 && <Figure label="To review" value={`${claim.flag_count} flag${claim.flag_count === 1 ? '' : 's'}`} t="warning" />}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: V.muted }}>
+        <span>{claim.line_count} {claim.line_count === 1 ? 'expense' : 'expenses'}</span>
+        <span>{dmy(claim.period_from)} – {dmy(claim.period_to)}</span>
+        <span>Claimed <b className="ezp-num" style={{ color: V.navy }}>{inr(claim.total_claimed)}</b></span>
+        {settled && (
+          <span>Approved <b className="ezp-num" style={{ color: V.green }}>{inr(claim.total_approved)}</b></span>
+        )}
+        {claim.flag_count > 0 && (
+          <span className="ezp-warn">⚑ {claim.flag_count} to review</span>
+        )}
       </div>
-
-      <ProcessStepper compact steps={claimSteps(claim.status)} />
-
       {settled && num(claim.total_approved) < num(claim.total_claimed) && (
-        <InfoCallout compact t="warning" style={{ marginTop: SP.md, marginBottom: 0 }}>
+        <div className="ezp-warn" style={{ fontSize: 11.5, marginTop: 6 }}>
           {inr(num(claim.total_claimed) - num(claim.total_approved))} was not approved. Open the
           claim with Finance if you need the reason.
-        </InfoCallout>
+        </div>
       )}
     </div>
   )
@@ -830,17 +786,24 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
   // -------------------------------------------------------------------------
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: V.purple, fontSize: 13 }}>
+    return <div className="ezp ezp-brand" style={{ padding: 40, textAlign: 'center' }}>
       Loading your travel claims…
     </div>
   }
 
   if (blocked) {
     return (
-      <SectionCard>
-        <EmptyState t="warning" icon={<IconTravel size={20} />}
-          title="Travel claims are not available" hint={blocked} />
-      </SectionCard>
+      <div className="ezp">
+        <PayStyles />
+        <div className="ezp-panel" style={{ textAlign: 'center', padding: '38px 22px' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, marginBottom: 6 }}>
+            Travel claims are not available
+          </div>
+          <div className="ezp-muted" style={{ fontSize: 13, maxWidth: 420, margin: '0 auto', lineHeight: 1.6 }}>
+            {blocked}
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -864,73 +827,56 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     .map(cat => ({ cat, items: types.filter(t => (t.category ?? 'OTHER') === cat) }))
     .filter(g => g.items.length > 0)
 
-  // Display-only running total for the entry form. For a recorded journey this is
-  // the live estimate; the server re-measures the trail and that figure is paid.
-  const formTotal = needsGps
-    ? (liveRate != null ? liveKm * liveRate * (roundTrip ? 2 : 1) : 0) + num(toll) + num(parking)
-    : num(amount) + num(toll) + num(parking)
-  const awaiting = inFlight.reduce((s, c) => s + num(c.total_claimed), 0)
-  const readyTotal = unclaimed.reduce((s, l) => s + num(l.total_amount), 0)
-  const paidTotal = claims.filter(c => c.status === 'PAID').reduce((s, c) => s + num(c.net_payable), 0)
-
   return (
-    <div style={{ fontFamily: F.family, color: C.ink }}>
-      {/* ---- header ---- */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginBottom: SP.lg, flexWrap: 'wrap' }}>
-        <IconTile icon={<IconTravel size={18} />} t="brand" size={40} />
-        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <div style={{ fontSize: F.title, fontWeight: W.bold, letterSpacing: '-.01em' }}>Travel Claims</div>
-          <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>
-            Log each journey or expense as it happens, then bundle them into one claim.
-          </div>
-        </div>
-      </div>
-
+    <div className="ezp">
+      <PayStyles />
       {/* ---- summary strip ---- */}
-      <KpiGrid min={150}>
-        <KpiTile label="Ready to claim" value={inr(readyTotal)} emphasis icon={<IconReceipt size={15} />}
-          sub={`${unclaimed.length} ${unclaimed.length === 1 ? 'expense' : 'expenses'} not yet claimed`} />
-        <KpiTile label="Awaiting approval" value={inr(awaiting)} t="warning" icon={<IconTimer size={15} />}
-          sub={`${inFlight.length} ${inFlight.length === 1 ? 'claim' : 'claims'} in review`} />
-        <KpiTile label="Paid this year" value={inr(paidTotal)} t="positive" icon={<IconCheckCircle size={15} />}
-          sub="Credited with salary" />
-      </KpiGrid>
+      <section className="ezp-hero">
+        <p className="ezp-hero-label">Ready to claim</p>
+        <p className="ezp-hero-num"><b>{inr(unclaimed.reduce((s, l) => s + num(l.total_amount), 0))}</b></p>
+        <div className="ezp-tiles">
+          <div className="ezp-tile"><div className="ezp-tile-name">Awaiting approval</div><div className="ezp-tile-num ezp-warn">{inr(inFlight.reduce((s, c) => s + num(c.total_claimed), 0))}</div></div>
+          <div className="ezp-tile"><div className="ezp-tile-name">Paid this year</div><div className="ezp-tile-num ezp-ok">{inr(claims.filter(c => c.status === 'PAID')
+                                       .reduce((s, c) => s + num(c.net_payable), 0))}</div></div>
+        </div>
+      </section>
 
       {msg && <Banner tone={msg.tone}>{msg.text}</Banner>}
 
       {/* Flags are notes for the approver, not errors — the expense saved. */}
       {flags.length > 0 && (
-        <InfoCallout t="warning" title={`Saved, with ${flags.length === 1 ? 'a note' : 'notes'} for your approver:`}>
-          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-            {flags.map((f, i) => <li key={i} style={{ marginBottom: 2 }}>{f.message}</li>)}
+        <Banner tone="warn">
+          <span className="ezp-note-t">Saved, with {flags.length === 1 ? 'a note' : 'notes'} for your approver:</span>
+          <ul>
+            {flags.map((f, i) => <li key={i}>{f.message}</li>)}
           </ul>
-        </InfoCallout>
+        </Banner>
       )}
 
       {/* ---- log an expense ---- */}
-      <SectionCard title="Log a travel expense" icon={<IconPlus size={16} />}
-        hint="What and when, how much, and the bill if the expense has one.">
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>Log a travel expense</h3></div>
+
         {preview && (
-          <InfoCallout compact t="warning" title="Admin preview." style={{ marginBottom: SP.lg }}>
-            You are seeing this employee&apos;s portal from the dashboard,
+          <Banner tone="warn">
+            <b>Admin preview.</b> You are seeing this employee&apos;s portal from the dashboard,
             so their claims are visible but nothing can be filed from here. An expense is
             always entered by the employee themselves. To add one, sign in at{' '}
             <a href="/ess-login" style={{ color: 'inherit', textDecoration: 'underline' }}>/ess-login</a>{' '}
             as them.
-          </InfoCallout>
+          </Banner>
         )}
 
-        <FormStep n={1} title="Journey details" hint="When it happened, what kind of expense, and why." />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(180px,100%),1fr))',
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))',
                       gap: 11, marginBottom: 11 }}>
           <Field label="Date">
             <input type="date" value={date} max={today()}
-                   onChange={e => setDate(e.target.value)} style={inp} />
+                   onChange={e => setDate(e.target.value)} className="ezp-input" />
           </Field>
           <Field label="Expense type">
             <select value={typeCode}
                     onChange={e => { setTypeCode(e.target.value); reset() }}
-                    style={inp}>
+                    className="ezp-input">
               {types.length === 0 && <option value="">No expense types configured</option>}
               {grouped.map(g => (
                 <optgroup key={g.cat} label={CATEGORY_LABEL[g.cat] ?? g.cat}>
@@ -945,26 +891,21 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
           </Field>
           <Field label="City">
             <input value={city} onChange={e => setCity(e.target.value)}
-                   placeholder="e.g. Mumbai" style={inp} />
+                   placeholder="e.g. Mumbai" className="ezp-input" />
           </Field>
         </div>
 
-        <div>
+        <div style={{ marginBottom: 11 }}>
           <Field label="What was it for">
             <input value={purpose} onChange={e => setPurpose(e.target.value)}
-                   placeholder="e.g. Client meeting at Andheri" style={inp} />
+                   placeholder="e.g. Client meeting at Andheri" className="ezp-input" />
           </Field>
         </div>
-
-        <FormDivider />
 
         {/* Recorded modes get the tracker and no distance field at all —
             offering one would imply a typed figure is acceptable. */}
         {needsGps ? (
           <>
-            <FormStep n={2} title="Record the journey"
-              hint="Paid on distance at the rate HR has set. Toll and parking are added on top."
-              right={<StatusPill size="sm" t="info" icon={<IconTravel size={11} />}>Recorded</StatusPill>} />
             {selectedType?.requires_vehicle && vehicles.length === 0 && (
               <Banner tone="warn">
                 No vehicle is registered against your record, so mileage cannot be priced.
@@ -983,17 +924,17 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                           onStart={start} onEnd={end} onReset={reset} />
 
             {routeLoading && (
-              <div style={{ fontSize: 12, color: V.muted, padding: '4px 0 12px' }}>
+              <div className="ezp-muted" style={{ fontSize: 12, padding: '4px 0 12px' }}>
                 Working out the route you took…
               </div>
             )}
             {route && <RouteMap route={route} title="Your route" height={260} />}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px,100%),1fr))',
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
                           gap: 11, marginBottom: 11 }}>
               {selectedType?.requires_vehicle && (
                 <Field label="Vehicle">
-                  <select value={vehicleId} onChange={e => setVehicleId(e.target.value)} style={inp}>
+                  <select value={vehicleId} onChange={e => setVehicleId(e.target.value)} className="ezp-input">
                     <option value="">Use my default</option>
                     {vehicles.map(v => (
                       <option key={v.id} value={v.id}>
@@ -1006,116 +947,103 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
               )}
               <Field label="Toll (₹)">
                 <input type="number" min="0" value={toll}
-                       onChange={e => setToll(e.target.value)} placeholder="0" style={{ ...inp, ...numeric }} />
+                       onChange={e => setToll(e.target.value)} placeholder="0" className="ezp-input ezp-num" />
               </Field>
               <Field label="Parking (₹)">
                 <input type="number" min="0" value={parking}
-                       onChange={e => setParking(e.target.value)} placeholder="0" style={{ ...inp, ...numeric }} />
+                       onChange={e => setParking(e.target.value)} placeholder="0" className="ezp-input ezp-num" />
               </Field>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-                            color: V.navy, cursor: 'pointer' }}>
-              <input type="checkbox" checked={roundTrip} onChange={e => setRoundTrip(e.target.checked)}
-                     style={{ width: 15, height: 15, accentColor: V.purple, cursor: 'pointer' }} />
-              Return journey (double the recorded distance)
+            <label className="ezp-check" style={{ marginBottom: 14 }}>
+              <input type="checkbox" checked={roundTrip} onChange={e => setRoundTrip(e.target.checked)} />
+              <span>Return journey (double the recorded distance)</span>
             </label>
           </>
         ) : (
-          <>
-            <FormStep n={2} title="Amount" hint="What you actually spent, as on the bill." />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px,100%),1fr))',
-                          gap: 11 }}>
-              <Field label="Amount (₹)">
-                <input type="number" min="0" value={amount}
-                       onChange={e => setAmount(e.target.value)} placeholder="0" style={{ ...inp, ...numeric }} />
-              </Field>
-              {num(selectedType?.bill_threshold) > 0 && (
-                <div style={{ alignSelf: 'end', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: V.muted, paddingBottom: 10 }}>
-                  <IconInfo size={14} /> A bill is required above {inr(num(selectedType?.bill_threshold))}.
-                </div>
-              )}
-            </div>
-          </>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
+                        gap: 11, marginBottom: 12 }}>
+            <Field label="Amount (₹)">
+              <input type="number" min="0" value={amount}
+                     onChange={e => setAmount(e.target.value)} placeholder="0" className="ezp-input ezp-num" />
+            </Field>
+            {num(selectedType?.bill_threshold) > 0 && (
+              <div className="ezp-muted" style={{ alignSelf: 'end', fontSize: 12, paddingBottom: 10 }}>
+                A bill is required above {inr(num(selectedType?.bill_threshold))}.
+              </div>
+            )}
+          </div>
         )}
 
         {/* Attach the receipt here, with the expense, rather than having to
             find the entry again afterwards. A recorded journey is its own
             proof and gets no picker. */}
         {!needsGps && selectedType?.bill_required !== false && (
-          <>
-            <FormDivider />
-            <FormStep n={3} title="Bill slip" hint="A photo or the PDF the app emails you. Up to 10 MB." />
-            <input ref={newBillRef} type="file" accept="image/*,application/pdf" hidden
-                   onChange={e => setPendingBill(e.target.files?.[0] ?? null)} />
-            {pendingBill ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, flexWrap: 'wrap',
-                            border: `1px solid ${C.positiveEdge}`, background: V.greenBg, borderRadius: R.lg, padding: '10px 14px' }}>
-                <IconTile icon={<IconFile size={15} />} t="positive" size={32} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: V.green, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{'✓ ' + pendingBill.name}</div>
-                  <div style={{ fontSize: 11, color: V.muted, ...numeric }}>{kb(pendingBill.size)} · attaches when you add the expense</div>
-                </div>
-                <PButton size="sm" variant="secondary" onClick={() => newBillRef.current?.click()}>Change</PButton>
-                <PButton size="sm" variant="ghost"
-                        onClick={() => { setPendingBill(null); if (newBillRef.current) newBillRef.current.value = '' }}>
-                  remove
-                </PButton>
-              </div>
-            ) : (
-              <button type="button" onClick={() => newBillRef.current?.click()} className="ez-press"
-                      style={{ width: '100%', padding: '18px 14px', borderRadius: R.lg,
-                               border: `1.5px dashed ${C.lineStrong}`, background: V.field,
-                               color: V.purpleDark, fontFamily: 'inherit', cursor: 'pointer',
-                               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                <IconTile icon={<IconUpload size={16} />} t="brand" size={34} />
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Choose Uber / Ola / taxi bill</span>
-                <span style={{ fontSize: 11, color: V.muted }}>JPG, PNG or PDF</span>
+          <div style={{ marginBottom: 12 }}>
+            <label className="ezp-label">Bill slip</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <input ref={newBillRef} type="file" accept="image/*,application/pdf" hidden
+                     onChange={e => setPendingBill(e.target.files?.[0] ?? null)} />
+              <button type="button" className="ezp-ghost" onClick={() => newBillRef.current?.click()}
+                      style={{ height: 38, padding: '0 15px', fontSize: 13, borderStyle: 'dashed',
+                               borderColor: pendingBill ? C.positiveEdge : C.lineStrong,
+                               background: pendingBill ? V.greenBg : V.field,
+                               color: pendingBill ? V.green : V.purpleDark }}>
+                {pendingBill ? '✓ ' + pendingBill.name : 'Choose Uber / Ola / taxi bill'}
               </button>
-            )}
 
-            {!pendingBill && num(selectedType?.bill_threshold) > 0
-              && num(amount) > num(selectedType?.bill_threshold) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: V.amber, marginTop: SP.sm }}>
-                <IconAlert size={14} /> This amount needs a bill. Attach it now or from the list below.
-              </div>
-            )}
-          </>
-        )}
+              {pendingBill && (
+                <>
+                  <span className="ezp-muted" style={{ fontSize: 11.5 }}>{kb(pendingBill.size)}</span>
+                  <button type="button"
+                          onClick={() => { setPendingBill(null); if (newBillRef.current) newBillRef.current.value = '' }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer',
+                                   color: V.muted, fontSize: 12, fontFamily: 'inherit' }}>
+                    remove
+                  </button>
+                </>
+              )}
 
-        {/* ---- live total + primary action ---- */}
-        <div style={{ marginTop: SP.lg, display: 'flex', alignItems: 'center', gap: SP.md, flexWrap: 'wrap',
-                      background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.lg, padding: '12px 16px' }}>
-          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-            <div style={{ ...eyebrow }}>{needsGps ? 'Estimated total' : 'Total'}</div>
-            <div style={{ fontSize: 22, fontWeight: W.bold, color: C.ink, letterSpacing: '-.01em', ...numeric }}>{inr(formTotal)}</div>
-            <div style={{ fontSize: 11, color: C.muted, ...numeric }}>
-              {needsGps
-                ? (liveRate != null ? `${(liveKm * (roundTrip ? 2 : 1)).toFixed(2)} km × ${inr(liveRate)}/km` : 'Rate not set yet') + (num(toll) + num(parking) > 0 ? ` + ${inr(num(toll) + num(parking))} toll & parking` : '') + ' · final figure from the server'
-                : `${inr(num(amount))} amount${num(toll) + num(parking) > 0 ? ` + ${inr(num(toll) + num(parking))} toll & parking` : ''}`}
+              {!pendingBill && num(selectedType?.bill_threshold) > 0
+                && num(amount) > num(selectedType?.bill_threshold) && (
+                <span className="ezp-warn" style={{ fontSize: 12 }}>
+                  This amount needs a bill. Attach it now or from the list below.
+                </span>
+              )}
+            </div>
+            <div className="ezp-hint">
+              A photo or the PDF the app emails you. Up to 10 MB.
             </div>
           </div>
-          <PButton variant="primary" size="lg" onClick={addExpense} disabled={saving || preview} icon={<IconPlus size={16} />}
-                  title={preview ? 'Only the employee can file their own expense' : undefined}>
-            {saving ? 'Saving…' : preview ? 'Add expense (employee only)' : 'Add expense'}
-          </PButton>
-        </div>
-      </SectionCard>
+        )}
+
+        <button className="ezp-btn" onClick={addExpense} disabled={saving || preview}
+                title={preview ? 'Only the employee can file their own expense' : undefined}>
+          {saving ? 'Saving…' : preview ? 'Add expense (employee only)' : 'Add expense'}
+        </button>
+      </div>
 
       {/* ---- unclaimed, ready to submit ---- */}
-      <SectionCard
-        title={<>Ready to claim{unclaimed.length > 0 && <span style={{ color: V.muted, fontWeight: 500 }}> · {unclaimed.length}</span>}</>}
-        icon={<IconReceipt size={16} />}
-        hint="Expenses logged this month that are not in a claim yet. Tick the ones to bundle."
-        actions={unclaimed.length > 0 ? (
-          <PButton size="sm" variant="secondary"
-            onClick={() => setPicked(picked.size === unclaimed.length
-              ? new Set()
-              : new Set(unclaimed.map(l => l.id)))}>
-            {picked.size === unclaimed.length ? 'Clear selection' : 'Select all'}
-          </PButton>
-        ) : undefined}>
+      <div className="ezp-panel">
+        <div className="ezp-head">
+          <h3>
+            Ready to claim
+            {unclaimed.length > 0 && (
+              <span style={{ color: V.muted, fontWeight: 500 }}> · {unclaimed.length}</span>
+            )}
+          </h3>
+          {unclaimed.length > 0 && (
+            <button className="ezp-ghost"
+              onClick={() => setPicked(picked.size === unclaimed.length
+                ? new Set()
+                : new Set(unclaimed.map(l => l.id)))}
+              style={{ marginLeft: 'auto' }}>
+              {picked.size === unclaimed.length ? 'Clear selection' : 'Select all'}
+            </button>
+          )}
+        </div>
+
         {unclaimed.length === 0 ? (
-          <Empty text="Nothing logged yet this month. Add an expense above." icon={<IconReceipt size={18} />} />
+          <Empty text="Nothing logged yet this month. Add an expense above." />
         ) : (
           <>
             {unclaimed.map(l => (
@@ -1134,28 +1062,28 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           gap: 12, marginTop: 13, paddingTop: 13,
-                          borderTop: `1px solid ${V.border}`, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 13, color: V.muted, ...numeric }}>
+                          borderTop: `1px solid ${C.line}`, flexWrap: 'wrap' }}>
+              <div className="ezp-muted" style={{ fontSize: 13 }}>
                 {picked.size === 0
                   ? 'Select the expenses you want to claim.'
-                  : <>Claiming <b style={{ color: V.navy, fontSize: 16 }}>{inr(pickedTotal)}</b> across {picked.size}
+                  : <>Claiming <b className="ezp-num" style={{ color: V.navy }}>{inr(pickedTotal)}</b> across {picked.size}
                      {picked.size === 1 ? ' expense' : ' expenses'}</>}
               </div>
-              <PButton variant="primary" onClick={submitClaim} disabled={picked.size === 0 || submitting}>
+              <button className="ezp-btn" onClick={submitClaim} disabled={picked.size === 0 || submitting}>
                 {submitting ? 'Submitting…' : 'Submit claim'}
-              </PButton>
+              </button>
             </div>
           </>
         )}
-      </SectionCard>
+      </div>
 
       {/* ---- history ---- */}
-      <SectionCard title="My claims" icon={<IconCheckCircle size={16} />}
-        hint="Each claim goes to your manager (if your company uses that stage), then HR Head, then Finance. Stages with nobody mapped are skipped.">
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>My claims</h3></div>
         {claims.length === 0
-          ? <Empty text="You have not submitted a travel claim yet." icon={<IconCheckCircle size={18} />} />
+          ? <Empty text="You have not submitted a travel claim yet." />
           : claims.map(c => <ClaimRow key={c.id} claim={c} />)}
-      </SectionCard>
+      </div>
     </div>
   )
 }
