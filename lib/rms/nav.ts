@@ -18,6 +18,20 @@ export interface NavEntry {
   href: string
   /** The permission that opens it. null = everyone (Home). */
   module: Module | null
+  /** Opened by ROLE instead of a module: shown to whoever holds any of these role codes
+   *  (and the super admin). Set together with `module: null`. */
+  roles?: string[]
+}
+
+/** Who gets the Help → TDS Calculator: the hiring and HR roles (Hiring Manager / Recruiter,
+ *  HR Executive, Branch HR, HR Manager, HR Head, CHRO). */
+export const TDS_CALCULATOR_ROLES = ['RECRUITER', 'HR_EXECUTIVE', 'BRANCH_HR', 'HR_MANAGER', 'HR_HEAD', 'CHRO']
+
+/** May someone holding these role codes open this entry? Module entries are decided by the
+ *  caller's module check; this answers only for role-gated ones. */
+export function roleEntryOpen(e: Pick<NavEntry, 'roles'>, roleCodes: string[], superAdmin: boolean): boolean {
+  if (!e.roles) return false
+  return superAdmin || roleCodes.some(c => e.roles!.includes(String(c).toUpperCase()))
 }
 export interface NavGroupDef { group: string; items: NavEntry[] }
 
@@ -64,6 +78,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { group: 'Help', items: [
     { key: 'ai',                label: 'Ezer AI',                 href: '/dashboard/ai',              module: 'Ezer AI' },
     { key: 'support',           label: 'Support',                 href: '/dashboard/support',         module: 'Support' },
+    // A calculator for checking someone's TDS — the same Flexi & TDS engine employees declare
+    // with, in a mode that saves nothing. Role-gated, not module-gated.
+    { key: 'tds-calculator',    label: 'TDS Calculator',          href: '/dashboard/tds-calculator',  module: null, roles: TDS_CALCULATOR_ROLES },
   ]},
 ]
 

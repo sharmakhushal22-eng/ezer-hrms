@@ -37,7 +37,7 @@ import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
 import { useEssMenu, PendingOnYou, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
-import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, MODULE_TABS, type NavEntry } from '@/lib/rms/nav'
+import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, MODULE_TABS, roleEntryOpen, type NavEntry } from '@/lib/rms/nav'
 // The address bar as the portal's "where am I": /ess/leave, /ess/recruitment/mrf … (lib/ess/routes.ts)
 import { parseEssPath, essHref, essPath, pushUrl, atEss, type EssLocation, type EssKeys } from '@/lib/ess/routes'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
@@ -3943,7 +3943,9 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // is right for the dashboard's roll-out and wrong here: a portal must never offer
   // a module its owner was not granted.
   const adminGroups = ADMIN_NAV_GROUPS
-    .map(g => ({ group: g.group, items: g.items.filter(i => essMenu.super_admin || (!!i.module && atLeast(essMenu.modules[i.module] as AccessLevel, 'VIEW'))) }))
+    .map(g => ({ group: g.group, items: g.items.filter(i => i.roles
+      ? roleEntryOpen(i, essMenu.roles.map(r => r.code), !!essMenu.super_admin)   // role-gated (Help → TDS Calculator)
+      : essMenu.super_admin || (!!i.module && atLeast(essMenu.modules[i.module] as AccessLevel, 'VIEW'))) }))
     .filter(g => g.items.length > 0)
 
   const meta = viewMeta(view)

@@ -23,7 +23,7 @@ import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useGrant } from '@/lib/rms/client';
 import { moduleForPath, type Module } from '@/lib/rms/modules';
-import { NAV_GROUPS } from '@/lib/rms/nav';
+import { NAV_GROUPS, roleEntryOpen } from '@/lib/rms/nav';
 import { canSee, hasAdminAccess, type Grant } from '@/lib/rms/resolve';
 import { C, F, W, S, R, E, M, UIKeyframes } from '@/lib/ui';
 import { ThemeToggle } from '@/lib/ui/ThemeToggle';
@@ -39,7 +39,7 @@ import {
   IconChevron, IconLogout, type IconProps,
 } from '@/lib/ui/icons';
 
-interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.ReactElement; module: Module | null }
+interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.ReactElement; module: Module | null; roles?: string[] }
 
 // ── One hue per destination ─────────────────────────────────────────────────
 // Twenty-seven rows all drawn in C.railMuted on a transparent ground is why
@@ -85,7 +85,7 @@ const ICON: Record<string, (p: IconProps) => React.ReactElement> = {
   expenses: IconReceipt, loans: IconLoans,
   compliance: IconCompliance, letters: IconLetters, policies: IconPolicies, reports: IconReports,
   ess: IconMobile, admin: IconAdmin, configuration: IconTemplates, 'flexi-policy': IconSliders, 'company-profile': IconBuilding, 'db-export': IconDatabase,
-  ai: IconAi, support: IconSupport,
+  ai: IconAi, support: IconSupport, 'tds-calculator': IconPayroll,
 }
 
 // Every href here is identical to the previous flat list. Nothing moved except
@@ -96,7 +96,7 @@ const NAV: NavGroup[] = NAV_GROUPS.map(g => ({
   // so one nav key missing from ICON above throws inside EVERY row and takes the
   // whole dashboard down, not just its own. That is what adding `expenses` to
   // lib/rms/nav.ts without an icon did.
-  items: g.items.map(i => ({ label: i.label, href: i.href, module: i.module, Icon: ICON[i.key] ?? IconDot })),
+  items: g.items.map(i => ({ label: i.label, href: i.href, module: i.module, roles: i.roles, Icon: ICON[i.key] ?? IconDot })),
 }));
 
 const OPEN_W = 244;
@@ -892,7 +892,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               typed straight into the address bar. A group with nothing left
               in it does not render its own empty divider. */}
           {NAV.map((g, i) => {
-            const items = g.items.filter(item => canSee(grant, item.module));
+            const items = g.items.filter(item => item.roles
+              ? roleEntryOpen(item, grant.roles.map(r => r.role_code), grant.isSuperAdmin || grant.legacy)
+              : canSee(grant, item.module));
             if (!items.length) return null;
             return (
               <GroupBlock key={g.group || 'root'} group={g.group} index={i}

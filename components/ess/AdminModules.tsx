@@ -67,6 +67,7 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   // Help
   ai:                   lazy(() => import('@/app/dashboard/ai/page')),
   support:              lazy(() => import('@/app/dashboard/support/page')),
+  'tds-calculator':     lazy(() => import('@/app/dashboard/tds-calculator/page')),
 }
 
 export function AdminModuleHost({ moduleKey }: { moduleKey: string }) {

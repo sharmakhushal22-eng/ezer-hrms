@@ -84,7 +84,10 @@ function Fg({ label, children }: { label: string; children: React.ReactNode }) {
   return <div style={{ marginBottom: 10 }}><label style={s.label}>{label}</label>{children}</div>
 }
 
-export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { employeeId: string; empName?: string; empCode?: string }) {
+/** `sandbox`: the Help → TDS Calculator for HR. Nothing is saved and no declaration is read —
+ *  only the chosen employee's CTC and joining date are prefilled (or nothing, with no employee),
+ *  and every figure stays editable. The employee's own Flexi section is the non-sandbox use. */
+export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandbox = false }: { employeeId: string; empName?: string; empCode?: string; sandbox?: boolean }) {
   const [step, setStep] = useState(1)
   const [f, setF] = useState<Record<string, string>>({
     ctc: '', variable: '', doj: '',
@@ -129,6 +132,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
   // Prefill CTC / variable + DOJ, restore any saved draft/submission, set the default regime.
   useEffect(() => {
+    if (!employeeId) return   // sandbox with nobody chosen: a blank calculator
     (async () => {
       const [{ data: cm }, { data: emp }, declRes, formRes] = await Promise.all([
         supabase.from('ctc_master').select('annual_ctc, annual_variable').eq('employee_id', employeeId).order('effective_from', { ascending: false }).limit(1),
@@ -138,6 +142,12 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       ])
       setCompanyId((emp as any)?.company_id || null)
       const doj = (emp as any)?.company_doj || (emp as any)?.group_doj
+      if (sandbox) {
+        // A calculation, not this employee's declaration: CTC + DOJ only, nothing restored.
+        if (cm?.[0]) setF(p => ({ ...p, ctc: String(Math.round(cm[0].annual_ctc || 0)) || '', variable: String(Math.round(cm[0].annual_variable || 0)) }))
+        if (doj) setF(p => ({ ...p, doj: String(doj).slice(0, 10) }))
+        return
+      }
 
       // ── Restore a previously saved form (draft or submitted) — every field comes back ──
       const savedForm: any = (formRes as any)?.data
@@ -175,6 +185,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
   // Persist the full calculator state to flexi_tds_forms (draft or submitted).
   async function persistForm(newStatus: 'DRAFT' | 'SUBMITTED') {
+    if (sandbox) return { error: { message: 'The Help calculator does not save.' } }
     const payload = {
       employee_id: employeeId, company_id: companyId, fy: FY,
       regime: chosenRegime, status: newStatus,
@@ -781,6 +792,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
   // Submit the chosen regime → store in DB + LOCK + download. Confirms first (Yes/No).
   async function submitRegime() {
+    if (sandbox) return
     if (!chosenRegime || !T) return
     const isOldR = chosenRegime === 'OLD'
     const emplrNps = f.emplrNpsOld === 'on' || f.emplrNpsNew === 'on'
@@ -864,7 +876,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         </div>
 
         {/* ── Save & Submit: choose Old / New regime, save draft, or submit (locks) ── */}
-        <div style={s.card}>
+        {!sandbox && <div style={s.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Save &amp; Submit: Tax Regime</div>
             {isSubmitted && !editMode && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: P.greenBg, color: P.green }}>Submitted &amp; locked</span>}
@@ -923,7 +935,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             {editMode && <button onClick={() => { setEditMode(null); setStatus('SUBMITTED') }} style={s.ghost}>Cancel edit</button>}
             {draftMsg && <span style={{ fontSize: 11, color: draftMsg.startsWith('') ? P.red : P.teal, fontWeight: 600 }}>{draftMsg}</span>}
           </div>
-        </div>
+        </div>}
 
         {T.mid && (
           <div style={{ ...s.card, background: TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>
@@ -1004,11 +1016,16 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: P.navy, marginBottom: 2 }}>Flexi &amp; TDS Calculator</div>
-          <div style={{ fontSize: 12, color: P.muted }}>Plan your flexi benefit declaration and compare Old vs New tax regime · FY 2026-27</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: P.navy, marginBottom: 2 }}>{sandbox ? 'TDS Calculator' : <>Flexi &amp; TDS Calculator</>}</div>
+          <div style={{ fontSize: 12, color: P.muted }}>{sandbox
+            ? <>Work out flexi, deductions and Old vs New regime tax for any figures · FY 2026-27 · <b>nothing here is saved</b> and no one&apos;s declaration changes</>
+            : 'Plan your flexi benefit declaration and compare Old vs New tax regime · FY 2026-27'}</div>
         </div>
+        {sandbox && sal.ctc > 0 && step === 4 && (
+          <button onClick={downloadDeclaration} style={{ ...s.ghost, whiteSpace: 'nowrap' }}>Download Excel</button>
+        )}
         {/* Save Draft from any step (pre-submit) — data is stored and returns pre-filled */}
-        {!isSubmitted && (
+        {!isSubmitted && !sandbox && (
           <button onClick={saveDraft} disabled={saving} style={{ ...s.ghost, opacity: saving ? .6 : 1, whiteSpace: 'nowrap' }}>Save Draft</button>
         )}
       </div>
