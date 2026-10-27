@@ -207,7 +207,7 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
           <span style={{ fontSize: 11, color: C.muted }}>{filtered.length} claims · Clear: {filtered.filter(c => c.ai_flag === 'clear').length} · Flagged: {filtered.filter(c => c.ai_flag === 'flag').length}</span>
           <div style={{ display: 'flex', gap: 6 }}>
             {selected.size === 0 && pending.filter(c => c.ai_flag === 'clear').length > 0 && <button style={S.green} onClick={() => approve(pending.filter(c => c.ai_flag === 'clear').map(c => c.id))}>Bulk approve AI-clear ({pending.filter(c => c.ai_flag === 'clear').length})</button>}
-            <button style={S.sec} onClick={exportCsv}>⬇ Export CSV</button>
+            <button style={S.sec} onClick={exportCsv} disabled={!filtered.length}>⬇ Export CSV ({filtered.length})</button>
           </div>
         </div>
       </div>

@@ -712,12 +712,21 @@ function empSubset(e: any) {
 
 // Load & flatten all employees for a company (or all companies when companyId empty).
 async function loadEmployees(companyId: string) {
-  let q = supabase.from('employees')
-    .select('*, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, state), companies!employees_company_id_fkey(company_name)')
-    .order('emp_code');
-  if (companyId) q = q.eq('company_id', companyId);
-  const { data } = await q.limit(5000);
-  const emps = data || [];
+  const build = () => {
+    let q = supabase.from('employees')
+      .select('*, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, state), companies!employees_company_id_fkey(company_name)')
+      .order('emp_code');
+    if (companyId) q = q.eq('company_id', companyId);
+    return q;
+  };
+  // The API returns at most 1,000 rows a request whatever .limit() asks for, so read
+  // page by page — a report (and its export) must cover every employee, not the first 1,000.
+  const emps: any[] = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    const { data } = await build().range(from, from + 999);
+    emps.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
   const nameById: Record<string, string> = {};
   emps.forEach((e: any) => { nameById[e.id] = e.full_name; });
   return emps.map((e: any) => flattenEmp(e, nameById));
@@ -1137,7 +1146,7 @@ export default function ReportsPage() {
             {Object.keys(filters).length > 0 && (
               <button onClick={() => setFilters({})} style={s.secBtn}>Clear</button>
             )}
-            {data.length > 0 && <button onClick={exportCSV} style={s.priBtn}>⬇ Export CSV</button>}
+            {data.length > 0 && <button onClick={exportCSV} style={s.priBtn} title={data.length < rawRows.length ? `Only the ${data.length} of ${rawRows.length} records matching the filters` : undefined}>⬇ Export CSV ({data.length})</button>}
           </div>
         </div>
 

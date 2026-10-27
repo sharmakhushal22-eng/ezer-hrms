@@ -1061,7 +1061,7 @@ function EmployeesTab({ companyId }: { companyId: string }) {
           <select style={{ ...S.input, width: 180 }} value={dept} onChange={e => setDept(e.target.value)}>
             <option value="">All departments</option>{depts.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
-          <button style={{ ...S.btnPrimary, marginLeft: 'auto' }} onClick={exportExcel}>Export Excel</button>
+          <button style={{ ...S.btnPrimary, marginLeft: 'auto' }} onClick={exportExcel} title={filtered.length < emps.length ? `Only the ${filtered.length} employees matching the search / department` : undefined}>Export Excel ({filtered.length})</button>
         </div>
         {missingCtc > 0 && <div style={{ fontSize: 12, color: C.amber, marginTop: 8 }}>⚠ {missingCtc} employee(s) have no CTC in ctc_master, so CTC/Basic show ₹0. Seed ctc_master to populate.</div>}
       </div>
