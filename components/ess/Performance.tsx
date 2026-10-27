@@ -48,7 +48,7 @@ import {
 import { type TeamMember } from '@/lib/pms/team'
 import { type Kra, type Category } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
-import { type Line } from '@/lib/pms/scoring'
+import { bandsFromScale, type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
 import { stageStates, currentStage, settled, STAGES, DEFAULT_RULES,
          type Progress, type StageKey } from '@/lib/pms/cycle'
 import { type Flag } from '@/lib/pms/employment'
@@ -106,6 +106,12 @@ function usePeriod(employeeId: string) {
    *  call site. */
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [managerId, setManagerId] = useState<string | null>(null)
+  /** The rating bands this company actually configured. Empty until loaded, and
+   *  empty if the table cannot be read — callers fall back to DEFAULT_BANDS
+   *  rather than blanking the screen. See scoring.ts for why this is not a
+   *  constant: the hardcoded list and pms_rating_scale disagreed, and the
+   *  hardcoded one was winning. */
+  const [bands, setBands] = useState<Band[]>([])
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -135,11 +141,22 @@ function usePeriod(employeeId: string) {
       .select('workflow_status,self_score,final_rating,final_rating_code,is_readonly')
       .eq('employee_id', employeeId).eq('period_id', p.data.id).maybeSingle()
     setOverall(o.error ? null : (o.data as Overall | null))
+
+    // THE SCALE THE ADMIN EDITED. Scoped to the company, because the bands are
+    // per company and per policy; an error or an empty table leaves this empty
+    // and the screens use the built-in fallback.
+    if (companyId) {
+      const sc = await supabase.from('pms_rating_scale')
+        .select('rating_value,rating_code,rating_label,score_from,score_to,min_comment_chars,improvement_feedback_mandatory,sort_order,is_active')
+        .eq('company_id', companyId)
+      if (sc.error) console.error('[pms] could not read the rating scale:', sc.error)
+      setBands(sc.error ? [] : bandsFromScale(sc.data as ScaleRow[]))
+    }
     setLoading(false)
   }, [employeeId])
 
   useEffect(() => { reload() }, [reload])
-  return { period, overall, loading, reload, companyId, managerId }
+  return { period, overall, loading, reload, companyId, managerId, bands }
 }
 
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
@@ -287,7 +304,7 @@ export default function Performance({ employeeId }: { employeeId: string }) {
 // ── the employee's own side ──────────────────────────────────────────────
 
 function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
-  const { period, overall, loading, reload, companyId, managerId } = usePeriod(employeeId)
+  const { period, overall, loading, reload, companyId, managerId, bands } = usePeriod(employeeId)
   const [who, setWho] = useState<Who>({ name: '', code: '' })
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
   const [logs, setLogs] = useState<Log[]>([])
@@ -492,7 +509,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
 
       {tab === 'dashboard' && (
-        <DashboardTab
+        <DashboardTab bands={bands.length ? bands : undefined}
           who={who}
           stages={STAGE_KEYS.map(k => ({ key: k, state: states[k],
                                          detail: k === 'kra' && goals.length
@@ -519,11 +536,12 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           ? <div className="banner b-amber"><span aria-hidden="true">🔒</span><div>
               Self rating opens once your weightages are locked. {lockGate.because}
             </div></div>
-          : <SelfRatingTab rows={selfRows} onChange={setSelfDraft} submitted={selfSubmitted}
+          : <SelfRatingTab bands={bands.length ? bands : undefined}
+                           rows={selfRows} onChange={setSelfDraft} submitted={selfSubmitted}
                            onSubmit={submitSelf} saving={saving} />
       )}
       {tab === 'result' && (
-        <ResultTab
+        <ResultTab bands={bands.length ? bands : undefined}
           published={published} lines={lines}
           finalRating={overall?.final_rating ?? null}
           finalisedBy={null} finalisedOn={null} deptAverage={null}
@@ -649,7 +667,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
 
 function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   // employeeId here is the MANAGER. The person being acted on is `picked`.
-  const { period, loading: pLoading, companyId, reload } = usePeriod(employeeId)
+  const { period, loading: pLoading, companyId, reload, bands } = usePeriod(employeeId)
   const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'rm')
   const [picked, setPicked] = useState<string | null>(null)
   const [rateRows, setRateRows] = useState<RateRow[]>([])
@@ -767,13 +785,15 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       {tab === 'approve' && <ApproveTab members={rows} today={today}
                                         onAcknowledge={acknowledge} onSendBack={sendBack} />}
       {tab === 'rate' && (
-        <RateTab member={member} rows={rateRows} onChange={setRateRows}
+        <RateTab bands={bands.length ? bands : undefined}
+                 member={member} rows={rateRows} onChange={setRateRows}
                  onSubmit={submitRating} saving={saving} overallComment={overall}
                  onOverallComment={setOverall} />
       )}
       {tab === 'pip' && <PipRequestTab members={rows} today={today} />}
       {tab === 'analytics' && (
-        <TeamAnalyticsTab members={rows} today={today} lines={[]}
+        <TeamAnalyticsTab bands={bands.length ? bands : undefined}
+                          members={rows} today={today} lines={[]}
                           deptAverage={null} companyAverage={null} scopeLabel="your team" />
       )}
     </>
@@ -781,7 +801,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
 }
 
 function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
-  const { period, loading: pLoading } = usePeriod(employeeId)
+  const { period, loading: pLoading, bands } = usePeriod(employeeId)
   const { rows, loading } = useRoster(employeeId, period, 'hod')
   const [picked] = useState<string | null>(null)
   const today = localToday()
@@ -793,18 +813,21 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
   return (
     <>
       {tab === 'finalise' && (
-        <FinaliseTab members={rows} today={today} role="HOD"
+        <FinaliseTab bands={bands.length ? bands : undefined}
+                     members={rows} today={today} role="HOD"
                      chain="SELF_RM1_RM2_HOD" whoCanFinalise="RM1_RM2_HOD"
                      deptName="your department" />
       )}
       {tab === 'feedback' && (
-        <FeedbackTab member={member} rating={member?.finalRating ?? null}
+        <FeedbackTab bands={bands.length ? bands : undefined}
+                     member={member} rating={member?.finalRating ?? null}
                      appreciation="" improvement=""
                      benefits={[] as { type: BenefitType; note: string }[]}
                      logs={[]} onChange={() => {}} />
       )}
       {tab === 'deptAnalytics' && (
-        <TeamAnalyticsTab members={rows} today={today} lines={[]}
+        <TeamAnalyticsTab bands={bands.length ? bands : undefined}
+                          members={rows} today={today} lines={[]}
                           deptAverage={null} companyAverage={null}
                           scopeLabel="your department" />
       )}

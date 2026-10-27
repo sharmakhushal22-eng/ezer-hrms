@@ -26,7 +26,7 @@ import { teamQueue, finaliseQueue, teamStats, distribution,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
 import { FLAG_LABEL } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
-         DEFAULT_BANDS, type Line } from '@/lib/pms/scoring'
+         DEFAULT_BANDS, type Band, type Line } from '@/lib/pms/scoring'
 import { canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
@@ -281,7 +281,7 @@ export interface RateRow {
 }
 
 export function RateTab({ member, rows, onChange, onSubmit, saving, overallComment,
-                          onOverallComment }: {
+                          onOverallComment, bands = DEFAULT_BANDS }: {
   member: TeamMember | null
   rows: RateRow[]
   onChange: (next: RateRow[]) => void
@@ -289,6 +289,8 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
   saving?: boolean
   overallComment: string
   onOverallComment: (s: string) => void
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   if (!member) {
     return <Card title="Pick somebody to rate">
@@ -306,9 +308,9 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
   const theirs = score(lines, 'self')
   const g = gap(theirs, mine)
   const unrated = rows.filter(r => r.myRating === null).length
-  const band = bandFor(mine === null ? null : Math.round(mine))
+  const band = bandFor(mine === null ? null : Math.round(mine), bands)
   const fb = checkFeedback(mine === null ? null : Math.round(mine),
-                           { appreciation: overallComment })
+                           { appreciation: overallComment }, bands)
 
   const set = (i: number, patch: Partial<RateRow>) =>
     onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
@@ -365,7 +367,7 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
                         {[1, 2, 3, 4, 5].map(n => (
                           <button key={n} type="button" role="radio" aria-checked={r.myRating === n}
                                   className={r.myRating === n ? 'chip sel' : 'chip'}
-                                  title={bandFor(n)?.label}
+                                  title={bandFor(n, bands)?.label}
                                   onClick={() => set(i, { myRating: n })}>{n}</button>
                         ))}
                       </div>
@@ -508,11 +510,13 @@ export function PipRequestTab({ members, today, onRaise, saving }: {
 
 // ── §4.5 / §5.3 analytics ────────────────────────────────────────────────
 
-export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAverage, scopeLabel }: {
+export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAverage, scopeLabel, bands = DEFAULT_BANDS }: {
   members: TeamMember[]; today: string
   lines: Line[]
   deptAverage: number | null; companyAverage: number | null
   scopeLabel: string
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   const rows = teamQueue(members, today)
   const dist = distribution(rows)
@@ -526,7 +530,7 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
         {rated === 0 ? (
           <div className="k">Nothing has been finalised yet, so there is no distribution to show.</div>
         ) : dist.map(d => {
-          const band = bandFor(d.rating)
+          const band = bandFor(d.rating, bands)
           return (
             <div className="abar" key={d.rating}>
               <div className="nm">{d.rating} · {band?.label ?? ''}</div>
@@ -567,7 +571,7 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
 
 // ── §5.1 Review & Finalise ───────────────────────────────────────────────
 
-export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName,
+export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName, bands = DEFAULT_BANDS,
                               onFinalise, onNudge, saving }: {
   members: TeamMember[]; today: string
   role: Role; chain: Chain; whoCanFinalise: Finaliser
@@ -575,6 +579,8 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
   onFinalise?: (id: string, rating: number) => void
   onNudge?: (id: string) => void
   saving?: boolean
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise })
   const [picked, setPicked] = useState<Record<string, number>>({})
@@ -642,7 +648,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                                 onChange={e => setPicked(p => ({ ...p,
                                   [r.member.employeeId]: Number(e.target.value) }))}>
                           <option value="">Choose</option>
-                          {DEFAULT_BANDS.map(b => (
+                          {bands.map(b => (
                             <option key={b.value} value={b.value}>{b.value} · {b.label}</option>
                           ))}
                         </select>}
@@ -686,7 +692,7 @@ export const BENEFIT_LABEL: Record<BenefitType, string> = {
   STAR_PERFORMER: 'Star performer', OTHER: 'Other',
 }
 
-export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs,
+export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs, bands = DEFAULT_BANDS,
                               onChange, onPublish, saving }: {
   member: TeamMember | null
   rating: number | null
@@ -697,15 +703,17 @@ export function FeedbackTab({ member, rating, appreciation, improvement, benefit
                       benefits?: { type: BenefitType; note: string }[] }) => void
   onPublish?: () => void
   saving?: boolean
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   if (!member) {
     return <Card title="Pick somebody">
       <div className="k">Choose a person from the finalisation queue to write their feedback.</div>
     </Card>
   }
-  const check = checkFeedback(rating, { appreciation, improvement })
+  const check = checkFeedback(rating, { appreciation, improvement }, bands)
   const publish = canPublishResult(logs)
-  const band = bandFor(rating)
+  const band = bandFor(rating, bands)
   const canPublish = check.ok && publish.open
 
   return (

@@ -24,7 +24,7 @@ import { checkKras, canAdd, canDelete, meter, suggestSplit,
 import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
          TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL,
          type Log, type DiscussionType, type Mode } from '@/lib/pms/oneToOne'
-import { score, gap, byCategory, bandForScore, bandFor, DEFAULT_BANDS,
+import { score, gap, byCategory, bandForScore, bandFor, DEFAULT_BANDS, type Band,
          type Line } from '@/lib/pms/scoring'
 import { STAGES, humanDate, type StageKey } from '@/lib/pms/cycle'
 import { DEFAULT_RULES } from '@/lib/pms/cycle'
@@ -82,14 +82,15 @@ const RATING_VALUES = [1, 2, 3, 4, 5]
 
 /** The 1-5 chip row from the mockup. A radiogroup, not five buttons — arrow
  *  keys are how somebody rates seven KRAs without reaching for the mouse. */
-function Chips({ value, onPick, name, disabled }: {
+function Chips({ value, onPick, name, disabled, bands = DEFAULT_BANDS }: {
   value: number | null; onPick: (n: number) => void; name: string; disabled?: boolean
+  bands?: Band[]
 }) {
   return (
     <div className="chips" role="radiogroup" aria-label={name}>
       {RATING_VALUES.map(n => {
         const on = value === n
-        const band = bandFor(n)
+        const band = bandFor(n, bands)
         return (
           <button key={n} type="button" role="radio" aria-checked={on} disabled={disabled}
                   title={band ? `${n}: ${band.label}` : String(n)}
@@ -109,7 +110,8 @@ export interface Who {
 }
 
 export function DashboardTab({ who, stages, current, kraCount, weightage, frequency,
-                               periodLabel, lastRating, lastScore, actionLabel, actionNote }: {
+                               periodLabel, lastRating, lastScore, actionLabel, actionNote,
+                               bands = DEFAULT_BANDS }: {
   who: Who
   stages: { key: StageKey; state: 'done' | 'active' | 'upcoming' | 'blocked'; detail?: string }[]
   current: StageKey
@@ -117,9 +119,11 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
   frequency: string; periodLabel: string
   lastRating: number | null; lastScore: number | null
   actionLabel: string; actionNote: string
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   const setOk = kraCount >= DEFAULT_RULES.minKra && weightage === DEFAULT_RULES.totalWeightage
-  const band = bandFor(lastRating)
+  const band = bandFor(lastRating, bands)
   return (
     <>
       <Card title={`${who.name} · ${who.code}`}
@@ -453,13 +457,16 @@ export interface SelfRow {
   achievement: string; rating: number | null; comment: string
 }
 
-export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, windowNote }: {
+export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, windowNote,
+                                bands = DEFAULT_BANDS }: {
   rows: SelfRow[]
   onChange: (next: SelfRow[]) => void
   submitted: boolean
   onSubmit: () => void
   saving?: boolean
   windowNote?: string
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   const set = (i: number, patch: Partial<SelfRow>) =>
     onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
@@ -496,7 +503,7 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
         <Stat label="Your weighted score" value={mine === null ? '-' : mine.toFixed(2)}
               note="Weighted by the weightage on each KRA" />
         <Stat label="That lands at"
-              value={bandForScore(mine)?.label ?? '-'}
+              value={bandForScore(mine, bands)?.label ?? '-'}
               note={mine === null ? 'Rate every KRA to see this' : 'What your own ratings average to'} />
       </div>
 
@@ -525,7 +532,7 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
                              placeholder="The number you actually hit"
                              onChange={e => set(i, { achievement: e.target.value })} /></td>
                   <td>
-                    <Chips value={r.rating} disabled={submitted} name={`Rating for ${r.title}`}
+                    <Chips bands={bands} value={r.rating} disabled={submitted} name={`Rating for ${r.title}`}
                            onPick={n => set(i, { rating: n })} />
                   </td>
                   <td><input value={r.comment} readOnly={submitted}
@@ -556,7 +563,8 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
 
 export function ResultTab({ published, lines, finalRating, finalisedBy, finalisedOn,
                             deptAverage, appreciation, improvement, benefits,
-                            onAcknowledge, acknowledged, publishGate }: {
+                            onAcknowledge, acknowledged, publishGate,
+                            bands = DEFAULT_BANDS }: {
   published: boolean
   lines: Line[]
   finalRating: number | null
@@ -569,6 +577,8 @@ export function ResultTab({ published, lines, finalRating, finalisedBy, finalise
   onAcknowledge?: () => void
   acknowledged?: boolean
   publishGate: { open: boolean; because: string }
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   // §3.5: NOTHING is visible before publish. Not the rating, not the comments.
   if (!published) {
@@ -589,7 +599,7 @@ export function ResultTab({ published, lines, finalRating, finalisedBy, finalise
   const selfScore = score(lines, 'self')
   const finalScore = score(lines, 'final')
   const g = gap(selfScore, finalScore)
-  const band = bandFor(finalRating)
+  const band = bandFor(finalRating, bands)
 
   return (
     <>
