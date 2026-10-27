@@ -337,11 +337,26 @@ function ScalePanel({ scale, companyId, reload }: {
 }
 
 // ══ 4. CYCLE CONTROL ══════════════════════════════════════════════════════
+/** The five windows a period carries, in the order the work happens. */
+const WINDOWS: { from: string; to: string; label: string; hint: string }[] = [
+  { from: 'kra_window_from',  to: 'kra_window_to',  label: 'KRA setting',
+    hint: 'When people may write and change their KRAs' },
+  { from: 'checkin_from',     to: 'checkin_to',     label: 'Mid-period check-in',
+    hint: 'Optional, and skipped entirely on a monthly cycle' },
+  { from: 'self_rating_from', to: 'self_rating_to', label: 'Self rating',
+    hint: 'Reopening this is how somebody who missed it gets their own view on record' },
+  { from: 'rm_review_from',   to: 'rm_review_to',   label: 'Manager review',
+    hint: 'When RM L1 and RM L2 may rate' },
+  { from: 'finalise_from',    to: 'finalise_to',    label: 'Finalise',
+    hint: 'When the final rating may be set' },
+]
+
 function CyclePanel({ policies, periods, reload }: {
   policies: Row[]; periods: Row[]; reload: () => Promise<void>
 }) {
   const gen = useSaver(reload)
   const open = useSaver(reload)
+  const win = useSaver(reload)
 
   const [policyId, setPolicyId] = useState('')
   const [fy, setFy] = useState('')
@@ -349,6 +364,17 @@ function CyclePanel({ policies, periods, reload }: {
 
   const [periodId, setPeriodId] = useState('')
   const [typed, setTyped] = useState('')
+
+  /** The windows of the period being edited below. Loaded from the row rather
+   *  than typed blind, so an admin nudging one date does not blank the others. */
+  const [winId, setWinId] = useState('')
+  const [winVals, setWinVals] = useState<Record<string, string>>({})
+  const winRow = useMemo(() => periods.find(p => s(p.id) === winId), [periods, winId])
+  useEffect(() => {
+    if (!winRow) { setWinVals({}); return }
+    setWinVals(Object.fromEntries(WINDOWS.flatMap(w =>
+      [[w.from, s(winRow[w.from])], [w.to, s(winRow[w.to])]])))
+  }, [winRow])
 
   useEffect(() => { if (!policyId && policies.length) setPolicyId(s(policies[0].id)) }, [policies, policyId])
 
@@ -409,6 +435,63 @@ function CyclePanel({ policies, periods, reload }: {
                  onSave={() => open.run(
                    () => pmsAdmin<{ message: string }>('period_open', { period_id: periodId, confirm: true }),
                    'Period opened.')} />
+      </Card>
+
+      {/* THE WINDOWS WERE SET ONCE AND NEVER CORRECTABLE. pms_generate_periods
+          lays them out from the frequency, and there was no way to change one
+          afterwards — so a window set wrongly, or one that has simply passed,
+          was permanent. The employee's own screen offers "Ask your manager to
+          reopen it" for a missed self-rating window; this is the thing that
+          actually does it, and by §2's role matrix it belongs to HR Head and
+          Admin rather than to a manager. */}
+      <Card title="Change a period's windows"
+            sub="Who may act, and when. Moving a window does not change anything already recorded against the period — and reopening a closed one is how a missed self rating gets back on record.">
+        <div className="grid g3">
+          <Field label="Period">
+            <select value={winId} onChange={e => setWinId(e.target.value)}>
+              <option value="">Choose a period…</option>
+              {periods.map(p => (
+                <option key={s(p.id)} value={s(p.id)}>
+                  {s(p.period_name)} · {s(p.status).toLowerCase()}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        {!winRow ? (
+          <Note tone="warn">Choose a period to see its windows.</Note>
+        ) : (
+          <>
+            {WINDOWS.map(w => (
+              <div className="grid g3" key={w.from}>
+                <Field label={w.label} hint={w.hint}>
+                  <input type="date" value={winVals[w.from] ?? ''}
+                         onChange={e => setWinVals(v => ({ ...v, [w.from]: e.target.value }))} />
+                </Field>
+                <Field label="until">
+                  <input type="date" value={winVals[w.to] ?? ''}
+                         onChange={e => setWinVals(v => ({ ...v, [w.to]: e.target.value }))} />
+                </Field>
+              </div>
+            ))}
+            <Note tone="warn">
+              Left blank, a window counts as not configured rather than closed, and the
+              screens say so. A window that ends before it starts is refused.
+            </Note>
+            <SaveRow busy={win.busy} error={win.error} saved={win.saved} label="Save these windows"
+                     disabled={!winId}
+                     onSave={() => win.run(
+                       () => pmsAdmin('period_update', {
+                         period_id: winId,
+                         // Blank means "clear it", which the route takes as NULL;
+                         // sending '' would be a date Postgres cannot parse.
+                         ...Object.fromEntries(Object.entries(winVals)
+                           .map(([k, v]) => [k, v === '' ? null : v])),
+                       }),
+                       'Windows saved.')} />
+          </>
+        )}
       </Card>
     </>
   )

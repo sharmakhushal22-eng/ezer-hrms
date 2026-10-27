@@ -51,6 +51,27 @@ const POLICY_COLS = [
   'include_notice_period', 'include_exited', 'is_active',
 ] as const
 
+/** A period's own windows, and its status.
+ *
+ *  WHY THIS EXISTS. pms_generate_periods lays the windows out from the
+ *  frequency and nothing could change them afterwards — there was no
+ *  period_update at all. So a window that was set wrongly, or one that has
+ *  simply passed, could not be corrected from the product: an employee who
+ *  missed the self-rating window saw "Ask your manager to reopen it" and
+ *  nobody, manager or admin, had any way to do it.
+ *
+ *  period_start, period_end, period_code and period_no are NOT here. Those are
+ *  the period's identity; moving them would silently re-date work already
+ *  recorded against it. Windows are scheduling, which is a different thing. */
+const PERIOD_COLS = [
+  'kra_window_from', 'kra_window_to',
+  'checkin_from', 'checkin_to',
+  'self_rating_from', 'self_rating_to',
+  'rm_review_from', 'rm_review_to',
+  'finalise_from', 'finalise_to',
+  'result_publish_date', 'status',
+] as const
+
 const KRA_COLS = [
   'department_id', 'designation', 'grade', 'kra_title', 'kpi_metric',
   'suggested_target', 'category', 'suggested_weightage', 'is_active',
@@ -216,6 +237,33 @@ export async function POST(req: NextRequest) {
         p_policy_id: policy, p_fy: fy, p_fy_start: start,
       })
       return r.error ? bad(r.error.message) : okay({ created: r.data })
+    }
+
+    // Correcting a period's windows — including reopening one that has closed.
+    //
+    // A window that has passed is the common case: the employee's screen says
+    // "You missed the self-rating window" and offers to have it reopened, and
+    // until now that offer led nowhere. Moving a window changes who may act and
+    // when; it does not change what has already been recorded.
+    case 'period_update': {
+      const id = str('period_id') || str('id')
+      if (!id) return bad('Which period?')
+      const fields = pick(body, PERIOD_COLS)
+      if (!Object.keys(fields).length) return bad('Nothing to change.')
+      // A window has to end on or after it starts, or it is open to nobody and
+      // the screens read it as "no window configured" instead of "closed".
+      for (const [from, to, what] of [
+        ['kra_window_from', 'kra_window_to', 'KRA'],
+        ['checkin_from', 'checkin_to', 'check-in'],
+        ['self_rating_from', 'self_rating_to', 'self-rating'],
+        ['rm_review_from', 'rm_review_to', 'manager review'],
+        ['finalise_from', 'finalise_to', 'finalise'],
+      ] as const) {
+        const a = fields[from] as string | undefined, b = fields[to] as string | undefined
+        if (a && b && a > b) return bad(`The ${what} window would end before it starts.`)
+      }
+      const r = await sb.from('pms_periods').update(fields).eq('id', id).select().single()
+      return r.error ? bad(r.error.message) : okay(r.data)
     }
 
     // Opening a period ENROLS EVERY ELIGIBLE EMPLOYEE and writes a row each.
