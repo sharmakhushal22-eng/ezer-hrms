@@ -411,9 +411,30 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     // the window sat open across three companies. Nobody saw a reason to look,
     // because the form validated perfectly right up to the moment it failed.
     if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
-    const { error } = await supabase.from('pms_employee_goals').insert(
+    // UPSERT, NOT INSERT. The editable set is seeded from the rows already
+    // saved (see `kras` above), so a second submit — which is the normal path
+    // after a manager sends a set back — used to write a SECOND full set and
+    // silently double every KRA. The table carries
+    // UNIQUE (period_id, employee_id, seq_no), so keying on it makes a
+    // re-submit a correction of the same rows.
+    //
+    // This was unreachable while nothing saved at all. Making the save work is
+    // what exposed it, so it is fixed in the same breath.
+    const { error } = await supabase.from('pms_employee_goals').upsert(
       kras.map(k => ({ ...k, company_id: companyId, employee_id: employeeId,
-                       period_id: period.id, status: 'PENDING_RM_APPROVAL' })))
+                       period_id: period.id, status: 'PENDING_RM_APPROVAL' })),
+      { onConflict: 'period_id,employee_id,seq_no' })
+    // A SHORTER SET LEAVES A TAIL. Going from six KRAs to four upserts rows
+    // 1-4 and leaves 5 and 6 behind, which would still count towards the
+    // maximum of ten and the total of a hundred — and the manager's screen
+    // counts raw rows. Removed after the upsert rather than before: if the
+    // write fails, the old set is still intact.
+    if (!error && kras.length) {
+      const tail = await supabase.from('pms_employee_goals').delete()
+        .eq('employee_id', employeeId).eq('period_id', period.id)
+        .gt('seq_no', kras.length).neq('status', 'LOCKED')
+      if (tail.error) console.error('[pms] could not remove trailing KRAs:', tail.error)
+    }
     setSaving(false)
     setMsg(error
       ? ((error as { code?: string }).code === MISSING_TABLE

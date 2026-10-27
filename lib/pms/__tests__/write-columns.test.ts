@@ -160,3 +160,30 @@ describe('the roster counts from the rows, not from counters nobody writes', () 
       + ' and rested on a counter nothing writes, so it was false for everybody.')
   })
 })
+
+describe('a re-submitted KRA set corrects the rows rather than doubling them', () => {
+  // The editable set is seeded from the rows already saved, so "send back ->
+  // fix -> send again" is the normal path, not an edge case. A plain insert
+  // wrote a second full set: eight rows totalling 200, which then fails the
+  // max-10 and total-100 rules from the manager's side.
+  it('submitKras upserts on the table\'s own unique key', () => {
+    const body = handlerBody(performanceSource(), 'submitKras')
+    assert.ok(/\.upsert\(/.test(body),
+      'submitKras must upsert, not insert: the set it submits may already exist')
+    assert.ok(/onConflict:\s*'period_id,employee_id,seq_no'/.test(body),
+      "the conflict target must be the table's UNIQUE (period_id, employee_id, seq_no)")
+  })
+
+  it('the unique key it names is the one the table declares', () => {
+    const sql = readFileSync(join(ROOT, 'supabase/migrations/066_pms_module.sql'), 'utf8')
+    const m = /CREATE TABLE IF NOT EXISTS pms_employee_goals \(([\s\S]*?)\n\);/.exec(sql)
+    assert.ok(/UNIQUE \(period_id, employee_id, seq_no\)/.test(stripSql(m![1])),
+      'the upsert above keys on this; if the constraint changes, the upsert must change with it')
+  })
+
+  it('a shortened set does not leave a tail behind', () => {
+    const body = handlerBody(performanceSource(), 'submitKras')
+    assert.ok(/\.delete\(\)[\s\S]*?\.gt\('seq_no'/.test(body),
+      'going from six KRAs to four must remove rows 5 and 6, or they keep counting')
+  })
+})
