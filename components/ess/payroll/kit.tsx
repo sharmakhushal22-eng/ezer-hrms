@@ -1,9 +1,10 @@
 'use client'
-// components/payroll/kit.tsx — the payroll design kit.
+// components/ess/payroll/kit.tsx — the ESS (employee) payroll design kit.
 //
-// Small, composable building blocks every payroll screen reuses, so that the
-// Dashboard, Run Cycle, Lock / Unlock, Data Sync and the config screens read as
-// one product instead of ten hand-styled pages.
+// Small, composable building blocks every screen under ESS → Payroll reuses
+// (Salary Slip, Flexi Benefits, Investment Proofs, Flexi Claims, Voluntary PF,
+// Corporate NPS, Loans, Travel Claims, Statutory), so the nine tabs read as one
+// product instead of nine hand-styled pages.
 //
 // House rules this file keeps:
 //   * every colour comes from the tokens in @/lib/ui (C, tone(), E, R, S, F, W, M) —
@@ -14,7 +15,7 @@
 //     (ez-press, ez-row, ez-tab, ez-lift, ez-scroll) — inline styles cannot express them.
 //   * purely presentational: nothing here loads data or owns business state.
 //
-// Import as:  import { SectionCard, KpiTile, InfoCallout, PButton } from '@/components/payroll/kit'
+// Import as:  import { SectionCard, KpiTile, InfoCallout, PButton } from '@/components/ess/payroll/kit'
 
 import * as React from 'react'
 import {
@@ -222,6 +223,9 @@ export function KpiTile({ label, value, sub, t = 'neutral', icon, progress, prog
       position: 'relative', background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg,
       padding: `${S.md + 2}px ${S.lg}px`, boxShadow: E.flat, minWidth: 0, overflow: 'hidden',
       cursor: onClick ? 'pointer' : undefined,
+      // A size container, so the value below can scale to the tile's own width
+      // instead of being cut off with an ellipsis. A figure is never truncated.
+      containerType: 'inline-size',
     }}>
       {emphasis && <span aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 3, background: C.brand }} />}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.sm }}>
@@ -229,8 +233,8 @@ export function KpiTile({ label, value, sub, t = 'neutral', icon, progress, prog
         {icon && <IconTile icon={icon} t={t === 'neutral' ? 'brand' : t} size={28} />}
       </div>
       <div style={{
-        marginTop: 6, fontSize: F.display, fontWeight: W.bold, lineHeight: 1.08, color: valueColor,
-        letterSpacing: '-.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...numeric,
+        marginTop: 6, fontSize: `clamp(16px, 12.5cqi, ${F.display}px)`, fontWeight: W.bold, lineHeight: 1.12, color: valueColor,
+        letterSpacing: '-.02em', whiteSpace: 'nowrap', ...numeric,
       }}>{value}</div>
       {progress != null && (
         <div style={{ marginTop: S.sm, height: 5, borderRadius: R.pill, background: C.sunken, overflow: 'hidden' }}>
@@ -781,5 +785,227 @@ export function LockedNote({ children }: { children: React.ReactNode }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: F.tiny, color: C.muted }}>
       <IconLock size={13} /> {children}
     </span>
+  )
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// EMPLOYEE-PORTAL ADDITIONS — glyphs and building blocks the ESS payroll tabs
+// need that the admin kit did not: savings/retirement icons, a stacked meter,
+// labelled form fields, radio cards, a consent box and figure rows.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Piggy bank — savings, Voluntary PF. */
+export const IconPiggyBank = (p: KitIconProps) => <KSvg {...p}><path d="M15.6 8.4c.9.4 1.6 1.2 1.9 2.1h.5v3h-1.2a5.6 5.6 0 0 1-1.8 1.7V17h-2.4v-1.2a7 7 0 0 1-2.8 0V17H7.4v-1.8A4.9 4.9 0 0 1 4.5 11c0-3 2.6-5 5.8-5 1.1 0 2.2.2 3 .7l2-1.2Z" /><path d="M2.5 9.5c.4.9 1.1 1.4 2 1.5M12.7 9.4h.1" /><path d="M8.3 7.4c.7-.3 1.5-.4 2.3-.3" /></KSvg>
+/** Umbrella — retirement cover, NPS. */
+export const IconUmbrella = (p: KitIconProps) => <KSvg {...p}><path d="M2.6 10a7.4 7.4 0 0 1 14.8 0Z" /><path d="M10 10v5.4a1.7 1.7 0 0 1-3.4 0M10 2.6v.4" /></KSvg>
+/** Percent sign in a tag — rates, contribution %. */
+export const IconPercent = (p: KitIconProps) => <KSvg {...p}><path d="m5.5 14.5 9-9" /><circle cx="6.3" cy="6.3" r="1.8" /><circle cx="13.7" cy="13.7" r="1.8" /></KSvg>
+/** Calculator — EMI and impact previews. */
+export const IconCalculator = (p: KitIconProps) => <KSvg {...p}><rect x="4" y="2.5" width="12" height="15" rx="2" /><path d="M6.8 5.5h6.4v2.6H6.8Z" /><path d="M7 11h.1M10 11h.1M13 11h.1M7 14h.1M10 14h.1M13 14h.1" /></KSvg>
+/** Wallet — take-home / in-hand pay. */
+export const IconWallet = (p: KitIconProps) => <KSvg {...p}><path d="M15.5 6.5V5a1.5 1.5 0 0 0-1.5-1.5H4.5a2 2 0 0 0 0 4" /><path d="M2.5 5.5v9a2 2 0 0 0 2 2h11a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1h-11a2 2 0 0 1-2-2Z" /><path d="M13.5 12h.1" /></KSvg>
+/** Shield with a tick — statutory, protected, compliant. */
+export const IconShieldCheck = (p: KitIconProps) => <KSvg {...p}><path d="M10 2.6 16 5v4.6c0 3.6-2.5 6.4-6 7.8-3.5-1.4-6-4.2-6-7.8V5Z" /><path d="m7.4 10 1.8 1.8 3.4-3.6" /></KSvg>
+/** Rising line — growth, savings building up. */
+export const IconTrendUp = (p: KitIconProps) => <KSvg {...p}><path d="m2.8 14.2 4.6-4.6 3 3 6.2-6.4" /><path d="M12.6 6.2h4v4" /></KSvg>
+/** Pen — signing an agreement. */
+export const IconPen = (p: KitIconProps) => <KSvg {...p}><path d="m12.6 3.8 3.6 3.6-8.8 8.8H3.8v-3.6Z" /><path d="m10.8 5.6 3.6 3.6" /></KSvg>
+/** Sparkle — something new is coming. */
+export const IconSparkle = (p: KitIconProps) => <KSvg {...p}><path d="M10 2.8c.5 3.4 1.8 4.7 5.2 5.2-3.4.5-4.7 1.8-5.2 5.2-.5-3.4-1.8-4.7-5.2-5.2 3.4-.5 4.7-1.8 5.2-5.2Z" /><path d="M15.4 13.2c.2 1.2.7 1.7 1.9 1.9-1.2.2-1.7.7-1.9 1.9-.2-1.2-.7-1.7-1.9-1.9 1.2-.2 1.7-.7 1.9-1.9Z" /></KSvg>
+/** Tray with an up arrow — upload a proof or a bill. */
+export const IconUpload2 = (p: KitIconProps) => <KSvg {...p}><path d="M10 13V3.5M6.4 7 10 3.5 13.6 7" /><path d="M3.5 12.5v2.5a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-2.5" /></KSvg>
+
+/**
+ * Screen intro inside the Payroll hub: icon tile, title, one plain-language line and a
+ * right-hand slot (usually a StatusPill saying where the person stands). Lighter than
+ * PayrollPageHeader — the hub above already carries the page title.
+ */
+export function ScreenIntro({ icon, title, subtitle, right, t = 'brand' }: {
+  icon?: React.ReactNode; title: React.ReactNode; subtitle?: React.ReactNode; right?: React.ReactNode; t?: Tone
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap', marginBottom: S.lg }}>
+      {icon && <IconTile icon={icon} t={t} size={40} />}
+      <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+        <h2 style={{ margin: 0, fontSize: F.title, fontWeight: W.bold, color: C.ink, letterSpacing: '-.015em', lineHeight: 1.25 }}>{title}</h2>
+        {subtitle && <div style={{ marginTop: 3, fontSize: F.small, color: C.muted, lineHeight: 1.5 }}>{subtitle}</div>}
+      </div>
+      {right && <div style={{ display: 'flex', gap: S.sm, alignItems: 'center', flexWrap: 'wrap' }}>{right}</div>}
+    </div>
+  )
+}
+
+/** One segment of a Meter. `value` is in the same unit as the Meter's `max`. */
+export interface MeterSegment { value: number; t?: Tone; label?: React.ReactNode; striped?: boolean }
+
+/**
+ * Horizontal meter that can stack several segments (EPF + VPF against the 80C cap,
+ * paid vs remaining instalments). Segments are clipped at `max`; an optional legend
+ * names each one with its colour swatch.
+ */
+export function Meter({ segments, max, height = 10, legend, ariaLabel }: {
+  segments: MeterSegment[]; max: number; height?: number; legend?: boolean; ariaLabel?: string
+}) {
+  let used = 0
+  const parts = segments.map(sg => {
+    const room = Math.max(0, max - used)
+    const v = Math.max(0, Math.min(room, sg.value || 0))
+    used += v
+    return { ...sg, pct: max > 0 ? (v / max) * 100 : 0 }
+  })
+  const total = segments.reduce((a, b) => a + Math.max(0, b.value || 0), 0)
+  return (
+    <div>
+      <div role="meter" aria-label={ariaLabel} aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.min(total, max)}
+        style={{ display: 'flex', height, borderRadius: R.pill, background: C.sunken, border: `1px solid ${C.line}`, overflow: 'hidden', boxSizing: 'border-box' }}>
+        {parts.map((p, i) => (
+          <span key={i} style={{
+            width: `${p.pct}%`, height: '100%', background: tone(p.t || 'brand').fg, transition: `width ${M.slow}`,
+            borderRight: i < parts.length - 1 && p.pct > 0 ? `2px solid ${C.surface}` : undefined, boxSizing: 'border-box',
+            backgroundImage: p.striped ? `repeating-linear-gradient(135deg, transparent 0 5px, ${C.surface} 5px 7px)` : undefined,
+          }} />
+        ))}
+      </div>
+      {legend && (
+        <div style={{ display: 'flex', gap: S.md, flexWrap: 'wrap', marginTop: S.sm }}>
+          {parts.filter(p => p.label != null).map((p, i) => (
+            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: F.tiny, color: C.inkSoft, ...numeric }}>
+              <span aria-hidden style={{ width: 9, height: 9, borderRadius: 3, background: tone(p.t || 'brand').fg, flexShrink: 0 }} />
+              {p.label}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** A labelled form control: label, the control, then a hint line (tone-coloured for validation). */
+export function LabeledField({ label, hint, hintTone = 'neutral', children, style }: {
+  label: React.ReactNode; hint?: React.ReactNode; hintTone?: Tone; children: React.ReactNode; style?: React.CSSProperties
+}) {
+  const k = tone(hintTone)
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, ...style }}>
+      <span style={{ fontSize: F.tiny, fontWeight: W.semi, color: C.inkSoft }}>{label}</span>
+      {children}
+      {hint != null && hint !== '' && <span style={{ fontSize: F.tiny, color: hintTone === 'neutral' ? C.muted : k.fg, lineHeight: 1.45, fontWeight: hintTone === 'neutral' ? W.regular : W.semi, ...numeric }}>{hint}</span>}
+    </label>
+  )
+}
+
+/** Comfortable input skin for employee forms (44px, larger type than the 38px filter skin). */
+export function inputSkin(opts?: { invalid?: boolean; big?: boolean; mono?: boolean }): React.CSSProperties {
+  return {
+    width: '100%', height: opts?.big ? 52 : 44, padding: '0 14px', boxSizing: 'border-box',
+    fontSize: opts?.big ? F.title : F.body, fontWeight: opts?.big ? W.semi : W.regular, fontFamily: F.family,
+    color: C.ink, background: C.surface, border: `1px solid ${opts?.invalid ? C.critical : C.lineStrong}`,
+    borderRadius: R.md, outline: 'none', boxShadow: opts?.invalid ? `0 0 0 3px ${C.criticalTint}` : E.flat,
+    transition: `border-color ${M.quick}, box-shadow ${M.quick}`, ...(opts?.mono ? { ...numeric, letterSpacing: '.12em' } : null),
+  }
+}
+
+/**
+ * A radio-style choice drawn as a card — "Yes, I have a PRAN" / "No, I need one", a loan
+ * type. `selected` lifts it with a brand ring; the whole card is the button.
+ */
+export function ChoiceCard({ selected, onClick, title, sub, icon, badge, children }: {
+  selected: boolean; onClick: () => void; title: React.ReactNode; sub?: React.ReactNode
+  icon?: React.ReactNode; badge?: React.ReactNode; children?: React.ReactNode
+}) {
+  return (
+    <button type="button" role="radio" aria-checked={selected} onClick={onClick} className="ez-press"
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: S.md, textAlign: 'left', width: '100%', minWidth: 0,
+        padding: `${S.md + 2}px ${S.lg}px`, borderRadius: R.lg, cursor: 'pointer', fontFamily: 'inherit',
+        background: selected ? C.brandTint : C.surface, color: C.ink,
+        border: `1px solid ${selected ? C.brand : C.line}`,
+        boxShadow: selected ? `0 0 0 3px ${C.brandTint}, ${E.flat}` : E.flat,
+      }}>
+      <span aria-hidden style={{
+        width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1, boxSizing: 'border-box',
+        border: `2px solid ${selected ? C.brand : C.lineStrong}`, background: C.surface,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      }}>{selected && <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.brand }} />}</span>
+      {icon && <span style={{ display: 'inline-flex', color: selected ? C.brandDeep : C.muted, marginTop: 1 }}>{icon}</span>}
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: F.body, fontWeight: W.semi, color: selected ? C.brandDeep : C.ink }}>{title}</span>
+          {badge}
+        </span>
+        {sub && <span style={{ display: 'block', fontSize: F.tiny, color: C.muted, marginTop: 3, lineHeight: 1.45, ...numeric }}>{sub}</span>}
+        {children}
+      </span>
+    </button>
+  )
+}
+
+/** The "I understand…" checkbox, set in a quiet well so it reads as a deliberate step. */
+export function ConsentCheck({ checked, onChange, children }: { checked: boolean; onChange: (checked: boolean) => void; children: React.ReactNode }) {
+  return (
+    <label style={{
+      display: 'flex', gap: S.md, alignItems: 'flex-start', cursor: 'pointer', marginBottom: S.md,
+      padding: `${S.md}px ${S.md + 2}px`, borderRadius: R.md,
+      background: checked ? C.brandTint : C.sunken, border: `1px solid ${checked ? C.brandEdge : C.line}`,
+      transition: `background ${M.quick}, border-color ${M.quick}`,
+    }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
+        style={{ marginTop: 2, width: 17, height: 17, accentColor: C.brand, flexShrink: 0, cursor: 'pointer' }} />
+      <span style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.55 }}>{children}</span>
+    </label>
+  )
+}
+
+/** One label → figure row in a list of figures. `strong` for the total line. */
+export function StatLine({ label, value, sub, t, strong, first }: {
+  label: React.ReactNode; value: React.ReactNode; sub?: React.ReactNode; t?: Tone; strong?: boolean; first?: boolean
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: S.md, padding: `${S.sm + 2}px 0`, borderTop: first ? 'none' : `1px solid ${C.line}` }}>
+      <span style={{ fontSize: F.small, color: t && t !== 'neutral' ? tone(t).fg : C.inkSoft, minWidth: 0 }}>
+        {label}
+        {sub && <span style={{ display: 'block', fontSize: F.tiny, color: C.muted, marginTop: 1 }}>{sub}</span>}
+      </span>
+      <span style={{
+        fontSize: strong ? F.title : F.body, fontWeight: strong ? W.bold : W.semi, whiteSpace: 'nowrap',
+        color: t && t !== 'neutral' ? tone(t).fg : strong ? C.ink : C.ink, letterSpacing: strong ? '-.01em' : undefined, ...numeric,
+      }}>{value}</span>
+    </div>
+  )
+}
+
+/** Bulleted points inside a callout or card, with a small tone-coloured dot. */
+export function PointList({ items, t = 'neutral' }: { items: React.ReactNode[]; t?: Tone }) {
+  const k = tone(t)
+  return (
+    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {items.map((it, i) => (
+        <li key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', lineHeight: 1.55 }}>
+          <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: t === 'neutral' ? C.faint : k.fg, marginTop: '.62em', flexShrink: 0 }} />
+          <span style={{ minWidth: 0 }}>{it}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Responsive two-column layout that becomes one column under ~2 × `min` px. */
+export function TwoCol({ children, min = 340, gap = S.lg, style }: { children: React.ReactNode; min?: number; gap?: number; style?: React.CSSProperties }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}px, 100%), 1fr))`, gap, alignItems: 'start', ...style }}>{children}</div>
+}
+
+/** Loading placeholder for a payroll tab — a few shimmering blocks, not a bare "Loading…". */
+export function LoadingBlock({ label = 'Loading…', rows = 3 }: { label?: string; rows?: number }) {
+  return (
+    <div aria-busy="true" aria-label={label} style={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{
+          height: i === 0 ? 92 : 64, borderRadius: R.lg, border: `1px solid ${C.line}`,
+          background: `linear-gradient(90deg,${C.sunken} 25%,${C.brandTint} 50%,${C.sunken} 75%)`,
+          backgroundSize: '200% 100%', animation: 'ezShimmer 1.2s infinite',
+        }} />
+      ))}
+      <span style={{ fontSize: F.tiny, color: C.muted }}>{label}</span>
+    </div>
   )
 }

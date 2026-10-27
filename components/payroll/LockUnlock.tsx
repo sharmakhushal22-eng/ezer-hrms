@@ -17,15 +17,14 @@ import {
 } from '@/lib/payroll/lock'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK, IconLock } from '@/lib/ui'
-import { ControlSelect, InfoCallout, btnStyle, fieldStyle, IconMonth } from '@/components/payroll/kit'
+import { C as TK } from '@/lib/ui'
 
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: TK.brandTint,
-  card: TK.surface, border: TK.line, muted: TK.muted,
+  card: TK.surface, border: TK.brandEdge, muted: TK.muted,
   green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint,
-  red: TK.critical, redBg: TK.criticalTint, redBd: TK.criticalEdge,
+  red: TK.critical, redBg: TK.criticalTint, redBd: TK.criticalTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -44,12 +43,16 @@ const ago = (iso: string) => {
 }
 
 const card: React.CSSProperties = {
-  background: C.card, borderRadius: 14, padding: '18px 20px', marginBottom: 16,
-  boxShadow: 'var(--ez-shadow-raised)', border: `1px solid ${C.border}`,
+  background: C.card, borderRadius: 14, padding: '20px 22px', marginBottom: 16,
+  boxShadow: 'var(--ez-shadow-flat)', border: `1px solid ${C.border}`,
 }
-const inp: React.CSSProperties = { ...fieldStyle, fontFamily: font }
+const inp: React.CSSProperties = {
+  fontFamily: font, fontSize: 13, color: C.navy, width: '100%',
+  border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 10px', background: TK.surface, outline: 'none',
+}
 const fieldLbl: React.CSSProperties = {
-  fontSize: 12, fontWeight: 600, color: TK.inkSoft, display: 'block', marginBottom: 5,
+  fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase',
+  letterSpacing: '0.03em', display: 'block', marginBottom: 4,
 }
 
 // ── One employee row ───────────────────────────────────────────────────────
@@ -64,7 +67,7 @@ function EmpRow({ r, checked, onToggle, isGroup }: {
   // normal state before the first payroll run. Unlocked rows are tinted rather than
   // faded: a greyed-out row reads as broken, not as "already open".
   return (
-    <tr style={{ background: r.is_locked ? 'transparent' : `color-mix(in srgb, ${TK.positiveTint} 55%, ${TK.surface})` }}>
+    <tr style={{ background: r.is_locked ? 'transparent' : '#F8FDFA' }}>
       <td style={{ ...td, width: 30 }}>
         <input type="checkbox" checked={checked} onChange={onToggle}
           style={{ width: 16, height: 16, cursor: 'pointer', accentColor: C.purple }} />
@@ -263,25 +266,25 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
 
   return (
     <div style={{ fontFamily: font, fontSize: 14, color: C.navy, maxWidth: 920 }}>
-      <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
         <div>
-          <h1 style={{ fontSize: 18, margin: '0 0 4px', letterSpacing: '-0.02em', fontWeight: 700 }}>Lock / Unlock</h1>
+          <h1 style={{ fontSize: 24, margin: '0 0 4px', letterSpacing: '-0.02em', fontWeight: 700 }}>Lock / Unlock</h1>
           <div style={{ fontSize: 13, color: C.muted }}>
             {isGroup ? `Group Companies${monthRuns.length ? ` · ${monthRuns.length} compan${monthRuns.length === 1 ? 'y' : 'ies'}` : ''}` : (monthRuns[0]?.company_name || 'Company')}
             {label ? ` · ${label}` : ''} · Payroll Run
           </div>
         </div>
-        <ControlSelect label="Payroll month" icon={<IconMonth size={15} />} strong minWidth={180}
-          value={monthVal} onChange={e => { setMonthVal(e.target.value); setSel(new Set()); setMsg('') }}>
+        <select value={monthVal} onChange={e => { setMonthVal(e.target.value); setSel(new Set()); setMsg('') }}
+          style={{ ...inp, width: 'auto', borderRadius: 999, padding: '7px 16px', fontWeight: 600, color: C.purpleD, cursor: 'pointer' }}>
           {monthOpts.length === 0 && <option value="">No month created</option>}
-          {monthOpts.map(r => <option key={r.month} value={String(r.month)}>{periodLabel(r)}</option>)}
-        </ControlSelect>
+          {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
+        </select>
       </div>
 
-      <InfoCallout t="info" icon={<IconLock size={16} />} title="How locking works">
+      <div style={{ ...card, background: C.purpleSoft, border: `1px solid #DDD6FE`, fontSize: 12, color: C.purpleD, lineHeight: 1.6 }}>
         <b>Once payroll has run for someone, their data locks</b>: attendance, bank, salary, none of it will change. Anyone it has not run for stays unlocked and can be edited normally.
         Payroll <b>will not run again</b> for a locked employee. Unlock them here first and only then will Run Payroll pick them up. That is why pressing Run twice cannot quietly change a payslip.
-      </InfoCallout>
+      </div>
 
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 700, margin: '0 0 3px' }}>Find employees</div>
@@ -327,11 +330,11 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => { setViewed(true); setApplied({ ...filter }) }} disabled={busy || !monthVal}
-            className="ez-press" style={{ ...btnStyle('primary', 'md', busy || !monthVal), fontFamily: font }}>
-            {viewed ? 'Search' : 'View employees'}
+            style={{ fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: C.purple, border: 'none', borderRadius: 10, padding: '9px 20px', cursor: 'pointer' }}>
+            {viewed ? 'Search' : '👁 View employees'}
           </button>
           <button onClick={() => { setFilter(EMPTY_LOCK_FILTER); setApplied(EMPTY_LOCK_FILTER) }} disabled={busy}
-            className="ez-press" style={{ ...btnStyle('secondary', 'md', busy), fontFamily: font }}>
+            style={{ fontFamily: font, fontSize: 13, fontWeight: 600, color: C.muted, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 16px', cursor: 'pointer' }}>
             Clear
           </button>
         </div>
@@ -355,12 +358,17 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
             // just ticked.
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={toggleAll}
-                className="ez-press" style={{ ...btnStyle('secondary', 'sm'), fontFamily: font }}>
+                style={{ fontFamily: font, fontSize: 12, fontWeight: 600, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '6px 12px', cursor: 'pointer' }}>
                 {rows.every(r => sel.has(r.employee_code)) ? 'Clear selection' : `Select all ${rows.length}`}
               </button>
               <button onClick={unlock} disabled={busy || toUnlock.length === 0}
-                className="ez-press" style={{ ...btnStyle('primary', 'lg', busy || toUnlock.length === 0), fontFamily: font }}>
-                {busy ? 'Working…' : `Unlock Selected (${toUnlock.length})`}
+                style={{
+                  fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
+                  background: toUnlock.length && !busy ? C.purple : TK.brandTint, border: 'none', borderRadius: 10,
+                  padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
+                  boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(37,99,235,0.2)' : 'none',
+                }}>
+                {busy ? 'Working…' : `🔓 Unlock Selected (${toUnlock.length})`}
               </button>
             </div>
           )}
@@ -381,7 +389,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               <thead>
                 <tr>
                   {['', 'Employee', 'Department', ...(isGroup ? ['Company'] : []), 'Status'].map((h, i) => (
-                    <th key={i} style={{ textAlign: 'left', fontSize: 11, fontWeight: 700, letterSpacing: '.09em', color: C.muted, textTransform: 'uppercase', padding: '9px 8px', borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, background: TK.sunken }}>{h}</th>
+                    <th key={i} style={{ textAlign: 'left', fontSize: 11, color: C.muted, textTransform: 'uppercase', padding: 8, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, background: C.card }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -415,15 +423,21 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           {/* No reason needed to lock: closing a record back up takes nothing away from
               anyone. Reopening one does, which is why only that side demands a reason. */}
           <button onClick={lockSelected} disabled={busy || toLock.length === 0}
-            className="ez-press" style={{ ...btnStyle('danger', 'lg', busy || toLock.length === 0), fontFamily: font }}><IconLock size={15} /> Lock Selected ({toLock.length})
+            style={{
+              fontFamily: font, fontSize: 14, fontWeight: 700,
+              color: toLock.length && !busy ? C.red : TK.faint,
+              background: TK.surface, border: `1px solid ${toLock.length && !busy ? C.redBd : C.border}`,
+              borderRadius: 10, padding: '12px 22px',
+              cursor: toLock.length && !busy ? 'pointer' : 'not-allowed',
+            }}>Lock Selected ({toLock.length})
           </button>
           {toLock.length === 0 && (
             <span style={{ fontSize: 12, color: C.muted }}>Tick an unlocked row above to enable Lock. Unlock is at the top of the list.</span>
           )}
         </div>
 
-        {msg && <InfoCallout t="positive" compact style={{ marginTop: 12, marginBottom: 0 }}><b style={{ color: C.green }}>{msg}</b></InfoCallout>}
-        {err && <InfoCallout t="critical" compact style={{ marginTop: 12, marginBottom: 0 }}>{err}</InfoCallout>}
+        {msg && <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, color: C.green, borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 600, marginTop: 12 }}>{msg}</div>}
+        {err && <div style={{ background: C.redBg, border: `1px solid ${C.redBd}`, color: C.red, borderRadius: 10, padding: '12px 16px', fontSize: 13, marginTop: 12 }}>{err}</div>}
       </div>
 
       {unlockedRows.length > 0 && (
@@ -438,7 +452,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               <span style={{ color: C.muted }}>{r.full_name}</span>
               {r.unlock_reason && <span style={{ color: C.muted, fontSize: 11 }}>“{r.unlock_reason}”</span>}
               <button onClick={() => relock(r)} disabled={busy}
-                className="ez-press" style={{ ...btnStyle('danger', 'sm', busy), marginLeft: 'auto', fontFamily: font }}>Lock again
+                style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11, fontWeight: 700, color: C.red, background: TK.surface, border: `1px solid ${C.redBd}`, borderRadius: 10, padding: '5px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>Lock again
               </button>
             </div>
           ))}

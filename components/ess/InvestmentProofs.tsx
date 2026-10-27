@@ -10,16 +10,12 @@
 // an employee who does not know that only finds out in their final settlement.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-// Design tokens, aliased as TK — many of these files already declare
-// their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C, F, W, S, R, E, tone, eyebrow, numeric, inputStyle, type Tone, IconFinance, IconCalendar, IconLock } from '@/lib/ui'
+import {
+  SectionCard, KpiGrid, KpiTile, StatusPill, InfoCallout, PButton, IconTile, IconFile, IconCheckCircle, IconTimer, IconXCircle,
+} from '@/components/ess/payroll/kit'
+import { Meter, fieldLabel } from '@/components/ess/payroll/claimsKit'
 
-const C = {
-  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
-  border: 'rgba(37,99,235,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, red: TK.critical, redBg: TK.criticalTint,
-  soft: TK.sunken, purpleBg: TK.brandTint,
-}
 const FY = '2026-27'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const num = (v: any) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0)
@@ -35,11 +31,11 @@ interface Proof {
   proof_reference: string | null; status: string; rejection_reason: string | null; deadline: string | null
 }
 
-const TONE: Record<string, { bg: string; fg: string; label: string }> = {
-  PENDING:   { bg: TK.sunken, fg: TK.muted, label: 'Proof pending' },
-  SUBMITTED: { bg: TK.warningTint, fg: TK.warning, label: 'Under review' },
-  APPROVED:  { bg: TK.positiveTint, fg: TK.positive, label: 'Approved' },
-  REJECTED:  { bg: TK.criticalTint, fg: TK.critical, label: 'Rejected' },
+const TONE: Record<string, { t: Tone; label: string; icon: React.ReactNode }> = {
+  PENDING:   { t: 'neutral',  label: 'Proof pending', icon: <IconTimer size={13} /> },
+  SUBMITTED: { t: 'warning',  label: 'Under review',  icon: <IconTimer size={13} /> },
+  APPROVED:  { t: 'positive', label: 'Approved',      icon: <IconCheckCircle size={13} /> },
+  REJECTED:  { t: 'critical', label: 'Rejected',      icon: <IconXCircle size={13} /> },
 }
 
 // Outside the parent so typing in an amount box never remounts the row.
@@ -50,52 +46,117 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
   const t = TONE[p.status] || TONE.PENDING
   const locked = p.status === 'APPROVED'
   const shortfall = Math.max(0, num(p.declared_amount) - num(draftAmt || p.submitted_amount))
+  const proofAmt = num(draftAmt || p.submitted_amount)
+  const cover = num(p.declared_amount) > 0 ? proofAmt / num(p.declared_amount) : 0
+  const hasRef = !!(draftRef || '').trim()
+  const field: React.CSSProperties = { ...inputStyle(), background: locked ? C.sunken : C.surface, color: locked ? C.inkSoft : C.ink }
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: TK.surface }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 7, padding: '3px 8px' }}>{p.section}</span>
-        <div style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600 }}>{p.declared_item}</div>
-        <span style={{ fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '3px 10px' }}>{t.label}</span>
+    <div className="ez-rise" style={{
+      background: C.surface, border: `1px solid ${C.line}`, borderLeft: `3px solid ${tone(t.t === 'neutral' ? 'brand' : t.t).fg}`,
+      borderRadius: R.lg, padding: `${S.md + 2}px ${S.lg}px`, marginBottom: S.md, boxShadow: E.flat,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: S.sm + 2, flexWrap: 'wrap', marginBottom: S.md }}>
+        <span style={{ fontSize: F.micro, fontWeight: W.bold, color: C.brandDeep, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius: R.sm, padding: '3px 8px', letterSpacing: '.03em' }}>{p.section}</span>
+        <div style={{ flex: 1, minWidth: 160, fontSize: F.body, fontWeight: W.semi, color: C.ink }}>{p.declared_item}</div>
+        <StatusPill t={t.t} icon={t.icon} title="HR verification status">{t.label}</StatusPill>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, alignItems: 'end' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px,100%),1fr))', gap: S.md, alignItems: 'end' }}>
         <div>
-          <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>Declared</div>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>{inr(p.declared_amount)}</div>
+          <div style={fieldLabel}>Declared</div>
+          <div style={{ height: 38, display: 'flex', alignItems: 'center', fontSize: F.lead, fontWeight: W.bold, color: C.ink, ...numeric }}>{inr(p.declared_amount)}</div>
         </div>
         <div>
-          <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Proof amount</label>
-          <input style={{ width: '100%', padding: '8px 10px', background: locked ? TK.sunken : C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+          <label style={fieldLabel}>Proof amount</label>
+          <input style={{ ...field, ...numeric }}
             value={draftAmt} readOnly={locked} inputMode="numeric"
             onChange={e => onAmt(e.target.value.replace(/[^0-9]/g, ''))} />
         </div>
-        <div style={{ gridColumn: 'span 2' }}>
-          <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Bill / policy reference</label>
-          <input style={{ width: '100%', padding: '8px 10px', background: locked ? TK.sunken : C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+        <div style={{ gridColumn: 'span 2', minWidth: 0 }}>
+          <label style={fieldLabel}>Bill / policy reference</label>
+          <input style={field}
             value={draftRef} readOnly={locked} placeholder="Policy no. / receipt no. / drive link"
             onChange={e => onRef(e.target.value)} />
         </div>
       </div>
 
-      {!locked && shortfall > 0 && (
-        <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>
-          Proof for {inr(shortfall)} is still pending. That much will not stay exempt.
+      {/* Proof vs declared, and whether a reference is on file. */}
+      <div style={{ marginTop: S.md, display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: F.micro, color: C.muted, marginBottom: 4, ...numeric }}>
+            <span>Proof covers {Math.min(100, Math.round(cover * 100))}% of declared</span>
+            <span>{inr(proofAmt)} / {inr(p.declared_amount)}</span>
+          </div>
+          <Meter value={cover} t={locked ? 'positive' : cover >= 1 ? 'brand' : 'warning'} label="Proof amount against declared amount" />
         </div>
+        <StatusPill size="sm" t={hasRef ? 'info' : 'neutral'} icon={<IconFile size={12} />}>
+          {hasRef ? 'Reference on file' : 'No reference yet'}
+        </StatusPill>
+      </div>
+
+      {!locked && shortfall > 0 && (
+        <InfoCallout compact t="warning" style={{ marginTop: S.md, marginBottom: 0 }}>
+          Proof for {inr(shortfall)} is still pending. That much will not stay exempt.
+        </InfoCallout>
       )}
       {p.status === 'REJECTED' && p.rejection_reason && (
-        <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 8 }}>
+        <InfoCallout compact t="critical" style={{ marginTop: S.md, marginBottom: 0 }}>
           Rejected: {p.rejection_reason}
+        </InfoCallout>
+      )}
+      {locked && (
+        <div style={{ marginTop: S.md, display: 'flex', alignItems: 'center', gap: 6, fontSize: F.tiny, color: C.muted }}>
+          <IconLock size={13} /> Verified by HR. This line is locked.
         </div>
       )}
       {!locked && (
-        <div style={{ marginTop: 10 }}>
-          <button onClick={onSave} disabled={busy}
-            style={{ padding: '7px 15px', borderRadius: 7, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, fontFamily: 'inherit' }}>
+        <div style={{ marginTop: S.md }}>
+          <PButton variant="primary" size="sm" onClick={onSave} disabled={busy}>
             {p.status === 'PENDING' ? 'Submit proof' : 'Update proof'}
-          </button>
+          </PButton>
         </div>
       )}
     </div>
+  )
+}
+
+/** Declared vs proof-submitted, rolled up per tax section (80C, 80D, HRA …). Display only. */
+function SectionProgress({ rows }: { rows: Proof[] }) {
+  const map = new Map<string, { declared: number; submitted: number; approved: number; lines: number }>()
+  rows.forEach(p => {
+    const m = map.get(p.section) || { declared: 0, submitted: 0, approved: 0, lines: 0 }
+    m.declared += num(p.declared_amount)
+    if (p.status !== 'PENDING') m.submitted += num(p.submitted_amount)
+    if (p.status === 'APPROVED') m.approved += num(p.submitted_amount)
+    m.lines += 1
+    map.set(p.section, m)
+  })
+  const list = Array.from(map.entries())
+  return (
+    <SectionCard title="Declared vs proof submitted" hint="By tax section. Green is verified by HR, blue is submitted and waiting." icon={<IconFinance size={16} />}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(240px,100%),1fr))', gap: S.md }}>
+        {list.map(([sec, m]) => {
+          const pct = m.declared > 0 ? Math.min(1, m.submitted / m.declared) : 0
+          return (
+            <div key={sec} style={{ padding: `${S.md}px ${S.md + 2}px`, background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.md, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: S.sm, marginBottom: 6 }}>
+                <span style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{sec}</span>
+                <span style={{ fontSize: F.micro, color: C.muted }}>{m.lines} line{m.lines === 1 ? '' : 's'}</span>
+                <span style={{ marginLeft: 'auto', fontSize: F.tiny, fontWeight: W.semi, color: pct >= 1 ? C.positive : C.inkSoft, ...numeric }}>{Math.round(pct * 100)}%</span>
+              </div>
+              <div style={{ display: 'flex', height: 7, borderRadius: R.pill, background: C.surface, border: `1px solid ${C.line}`, overflow: 'hidden' }}>
+                <div style={{ width: `${m.declared ? Math.min(100, (m.approved / m.declared) * 100) : 0}%`, background: C.positive }} />
+                <div style={{ width: `${m.declared ? Math.max(0, Math.min(100, ((m.submitted - m.approved) / m.declared) * 100)) : 0}%`, background: C.brand }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: F.micro, color: C.muted, ...numeric }}>
+                <span>Submitted <b style={{ color: C.ink }}>{inr(m.submitted)}</b></span>
+                <span>Declared <b style={{ color: C.ink }}>{inr(m.declared)}</b></span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </SectionCard>
   )
 }
 
@@ -159,75 +220,102 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
   const overdue = deadline ? new Date(deadline) < new Date() : false
   const declared = rows.reduce((a, p) => a + num(p.declared_amount), 0)
   const proven = rows.filter(p => p.status === 'APPROVED').reduce((a, p) => a + num(p.submitted_amount), 0)
+  // Display-only: days until the deadline, and how many lines sit in each state.
+  const daysLeft = deadline ? Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000) : null
+  const countOf = (s: string) => rows.filter(p => p.status === s).length
 
-  if (loading) return <div style={{ padding: 24, color: C.muted, fontSize: 13 }}>Loading…</div>
+  if (loading) return <div style={{ padding: 24, color: C.muted, fontSize: F.small }}>Loading…</div>
 
   return (
-    <div style={{ fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13, color: C.navy, maxWidth: 780 }}>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 20, fontWeight: 800 }}>Investment Proofs</div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>FY {FY}: bills for what you declared</div>
+    <div style={{ fontFamily: F.family, fontSize: F.small, color: C.ink, maxWidth: 900 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: S.md, marginBottom: S.lg, flexWrap: 'wrap' }}>
+        <IconTile icon={<IconFile size={18} />} t="brand" size={40} />
+        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+          <div style={{ fontSize: F.title, fontWeight: W.bold, letterSpacing: '-.01em' }}>Investment Proofs</div>
+          <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2 }}>FY {FY}: bills for what you declared</div>
+        </div>
+        {hasDecl && regime && <StatusPill t={regime === 'NEW' ? 'positive' : 'brand'} dot>{regime === 'NEW' ? 'New regime' : 'Old regime'}</StatusPill>}
       </div>
 
       {leaving && (
-        <div style={{ background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.amber }}>Your proof window is open now</div>
-          <div style={{ fontSize: 12, color: C.amber, marginTop: 3, lineHeight: 1.55 }}>
-            Your last working day is <b>{fmtDate(leaving)}</b>, so the deadline is not the end of the year, it is <b>that day</b>.
-            Anything not proved by then will not stay exempt and will be taxed in the final settlement.
-          </div>
-        </div>
+        <InfoCallout t="warning" title="Your proof window is open now" icon={<IconCalendar size={17} />}>
+          Your last working day is <b>{fmtDate(leaving)}</b>, so the deadline is not the end of the year, it is <b>that day</b>.
+          Anything not proved by then will not stay exempt and will be taxed in the final settlement.
+        </InfoCallout>
       )}
 
       {!hasDecl ? (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+        <InfoCallout t="info" title="Declaration needed first">
           No <b>Investment Declaration</b> found for this FY. Proofs are submitted against it. Fill in and submit the declaration first.
-        </div>
+        </InfoCallout>
       ) : regime === 'NEW' ? (
-        <div style={{ background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 14, padding: 20, fontSize: 13, color: C.green, lineHeight: 1.6 }}>
+        <InfoCallout t="positive" title="Nothing to prove">
           You are on the <b>New regime</b>: the 80C/80D/HRA exemptions do not apply, so no proof is needed.
-        </div>
+        </InfoCallout>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-            {[['Declared', inr(declared), C.navy], ['Proven', inr(proven), C.green], ['Not yet proven', inr(Math.max(0, declared - proven)), declared - proven > 0 ? C.amber : C.muted]].map(([l, v, col]) => (
-              <div key={l} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 14px', minWidth: 120 }}>
-                <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{l}</div>
-                <div style={{ fontSize: 17, fontWeight: 800, color: col as string }}>{v}</div>
-              </div>
-            ))}
+          {/* Window status — the one thing to know before anything else. */}
+          {rows.length > 0 && deadline && (
+            overdue ? (
+              <InfoCallout t="critical" title="The proof deadline has passed" icon={<IconCalendar size={17} />}>
+                The deadline was <b>{fmtDate(deadline)}</b>. Anything declared but not proven will not stay exempt.
+              </InfoCallout>
+            ) : (
+              <InfoCallout t="info" title={`Proof window open · submit by ${fmtDate(deadline)}`} icon={<IconCalendar size={17} />}
+                action={daysLeft != null ? <StatusPill t={daysLeft <= 15 ? 'warning' : 'info'} solid>{Math.max(0, daysLeft)} day{daysLeft === 1 ? '' : 's'} left</StatusPill> : undefined}>
+                Enter the proof amount and a bill or policy reference for each line, then submit. HR verifies each one.
+              </InfoCallout>
+            )
+          )}
+
+          <KpiGrid min={150}>
+            <KpiTile label="Declared" value={inr(declared)} emphasis sub={`${rows.length} line${rows.length === 1 ? '' : 's'} in your declaration`} />
+            <KpiTile label="Proven" value={inr(proven)} t="positive" icon={<IconCheckCircle size={15} />}
+              progress={declared > 0 ? proven / declared : 0} progressTone="positive"
+              sub={declared > 0 ? `${Math.round((proven / declared) * 100)}% verified by HR` : 'Verified by HR'} />
+            <KpiTile label="Not yet proven" value={inr(Math.max(0, declared - proven))} t={declared - proven > 0 ? 'warning' : 'neutral'}
+              sub={declared - proven > 0 ? 'Taxable if not proved in time' : 'All clear'} />
             {deadline && (
-              <div style={{ background: overdue ? C.redBg : TK.sunken, border: `1px solid ${overdue ? TK.critical : C.border}`, borderRadius: 10, padding: '9px 14px' }}>
-                <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Deadline</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: overdue ? C.red : C.navy }}>{fmtDate(deadline)}</div>
-              </div>
+              <KpiTile label="Deadline" value={fmtDate(deadline)} t={overdue ? 'critical' : 'neutral'} icon={<IconCalendar size={15} />}
+                sub={overdue ? 'Passed' : daysLeft != null ? `${Math.max(0, daysLeft)} day${daysLeft === 1 ? '' : 's'} left` : undefined} />
             )}
-          </div>
+          </KpiGrid>
 
           {rows.length === 0 ? (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>
+            <SectionCard title="Proof window not open yet" icon={<IconCalendar size={16} />}
+              hint="Opening it creates one proof line for every line of your declaration.">
+              <div style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.6, marginBottom: S.md }}>
                 The proof window is not open yet. Use the button below to open a window for each line of your declaration.
               </div>
-              <button onClick={openWindow} disabled={busy === 'open'}
-                style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <PButton variant="primary" onClick={openWindow} disabled={busy === 'open'}>
                 {busy === 'open' ? 'Opening…' : 'Proof window kholein'}
-              </button>
-            </div>
+              </PButton>
+            </SectionCard>
           ) : (
-            rows.map(p => (
-              <ProofRow key={p.id} p={p}
-                draftAmt={draft[p.id]?.amt ?? ''} draftRef={draft[p.id]?.ref ?? ''}
-                onAmt={v => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], amt: v } }))}
-                onRef={v => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], ref: v } }))}
-                onSave={() => saveProof(p)} busy={busy === p.id} />
-            ))
+            <>
+              <SectionProgress rows={rows} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexWrap: 'wrap', margin: `${S.xs}px 0 ${S.md}px` }}>
+                <span style={{ ...eyebrow }}>Your proofs</span>
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(['PENDING', 'SUBMITTED', 'APPROVED', 'REJECTED'] as const).map(s => countOf(s) > 0 && (
+                    <StatusPill key={s} size="sm" t={TONE[s].t}>{countOf(s)} {TONE[s].label.toLowerCase()}</StatusPill>
+                  ))}
+                </span>
+              </div>
+              {rows.map(p => (
+                <ProofRow key={p.id} p={p}
+                  draftAmt={draft[p.id]?.amt ?? ''} draftRef={draft[p.id]?.ref ?? ''}
+                  onAmt={v => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], amt: v } }))}
+                  onRef={v => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], ref: v } }))}
+                  onSave={() => saveProof(p)} busy={busy === p.id} />
+              ))}
+            </>
           )}
         </>
       )}
 
-      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
+      {msg && <InfoCallout t="positive" compact style={{ marginTop: S.md }}>{msg}</InfoCallout>}
+      {err && <InfoCallout t="critical" compact style={{ marginTop: S.md }}>{err}</InfoCallout>}
     </div>
   )
 }

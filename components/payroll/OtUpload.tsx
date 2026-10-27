@@ -6,10 +6,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { loadRuns, uploadOtBatch, getValidEmpCodesForRun, MONTHS, type PayrollRun, type OtUploadRow } from '@/lib/payroll/core'
-import { font, num, fmtDate, DownloadCard, ValidationCard, ScreenIntro, FileDrop, uploadSteps } from './attendanceShared'
+import { C, font, num, fmtDate, DownloadCard, ValidationCard } from './attendanceShared'
 // Design tokens, aliased as TK — this file declares its own C.
-import { C as TK, F, W, S as SP, IconClock, IconUpload } from '@/lib/ui'
-import { SectionCard, InfoCallout, ControlSelect, ProcessStepper, DataTable, StatusPill, IconMonth, dt } from '@/components/payroll/kit'
+import { C as TK } from '@/lib/ui'
 
 function normalizeRow(r: Record<string, any>): OtUploadRow | null {
   const g = (...keys: string[]) => { for (const k of Object.keys(r)) { const kk = k.trim().toLowerCase(); if (keys.some(x => kk === x)) return r[k] } return undefined }
@@ -87,19 +86,19 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
   const runLabel = (r: PayrollRun) => `month master for ${r.company_name || 'company'} for ${r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}`}`
   const updated = results?.filter(r => r.result === 'UPDATED').length || 0
   const notFound = results?.filter(r => r.result !== 'UPDATED') || []
+  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
 
   return (
-    <div style={{ fontFamily: font, fontSize: F.small, color: TK.ink, maxWidth: 860 }}>
-      <ScreenIntro icon={<IconClock size={20} />} title="OT Upload"
-        subtitle="Overtime hours only: a separate sheet that never overwrites leave or paid days"
-        meta={<>
-          <StatusPill t="info" size="sm" dot>Touches OT hours only</StatusPill>
-          {rows.length > 0 && <StatusPill t="brand" size="sm">{rows.length} rows in file</StatusPill>}
-        </>}>
-        <ProcessStepper compact steps={uploadSteps({ hasFile: rows.length > 0, showVal, checking, blocked: false, done: !!results })} />
-      </ScreenIntro>
+    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 760 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.warning},${TK.warning})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(217,119,6,0.28)' }}></div>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>OT Upload</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Overtime hours only: a separate sheet that never overwrites leave or paid days</div>
+        </div>
+      </div>
 
-      {!companyId && <InfoCallout t="warning" compact>Pick a specific company in the header to see its payroll months. (Download works for any company.)</InfoCallout>}
+      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months. (Download works for any company.)</div>}
 
       <DownloadCard companyId={companyId} fy={fy}
         heading="Download OT sheet" note="· filter and download a ready-to-fill OT sheet"
@@ -111,22 +110,24 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
           'Total OT Hours': Number(r.ot_hours) || 0,
         })} />
 
-      <SectionCard icon={<IconUpload size={16} />} title="Upload filled OT"
-        hint="Choose the month, then the file. Codes are matched as soon as the file is read.">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: SP.md, alignItems: 'end' }}>
-          <ControlSelect label="Payroll month" icon={<IconMonth size={15} />} strong minWidth={280}
-            value={runId} onChange={e => { setRunId(e.target.value); resetUpload() }}>
-            {runs.length === 0 && <option value="">No month yet. Create one first</option>}
-            {runs.map(r => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}
-          </ControlSelect>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Upload filled OT</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
           <div>
-            <span style={{ fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.09em', textTransform: 'uppercase', color: TK.muted, display: 'block', marginBottom: 5 }}>OT file (.xlsx)</span>
-            <FileDrop accept=".xlsx,.xls" onChange={handleFile} fileName={fileName} label="Choose the filled OT sheet" />
+            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>
+            <select style={{ ...inp, minWidth: 300 }} value={runId} onChange={e => { setRunId(e.target.value); resetUpload() }}>
+              {runs.length === 0 && <option value="">No month yet. Create one first</option>}
+              {runs.map(r => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>OT file (.xlsx)</label>
+            <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ ...inp, padding: '7px 10px' }} />
           </div>
         </div>
-        <div style={{ fontSize: F.tiny, color: TK.muted, marginTop: SP.md, lineHeight: 1.55 }}>Columns: <b style={{ color: TK.inkSoft }}>Emp Code, Total OT Hours</b>. Only rows whose Emp Code exists in the selected month are updated. Leave / paid days are untouched.</div>
-        {parseErr && <InfoCallout t="critical" compact style={{ marginTop: SP.md, marginBottom: 0 }}>{parseErr}</InfoCallout>}
-      </SectionCard>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Columns: <b>Emp Code, Total OT Hours</b>. Only rows whose Emp Code exists in the selected month are updated. Leave / paid days are untouched.</div>
+        {parseErr && <div style={{ fontSize: 12, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginTop: 10 }}>{parseErr}</div>}
+      </div>
 
       {showVal && (
         <ValidationCard pct={valPct} checking={checking} stage="Matching employee codes…" total={rows.length}
@@ -135,32 +136,37 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
       )}
 
       {rows.length > 0 && !results && (
-        <SectionCard title="Preview" hint={`${fileName} (${rows.length} rows)`} flush
-          actions={rows.length > 8 ? <StatusPill t="neutral" size="sm">First 8 shown</StatusPill> : undefined}>
-          <DataTable minWidth={320}>
-            <thead><tr>{['Emp Code', 'OT Hours'].map(h => <th key={h} style={h === 'Emp Code' ? dt.th : dt.thNum}>{h}</th>)}</tr></thead>
-            <tbody>
-              {rows.slice(0, 8).map((r, i) => (
-                <tr key={i} className={dt.rowClass}>
-                  <td style={dt.tdMono}>{r.emp_code}</td>
-                  <td style={dt.tdNum}>{r.ot_hours ?? '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </DataTable>
-          {rows.length > 8 && <div style={{ fontSize: F.tiny, color: TK.muted, padding: `${SP.sm + 2}px ${SP.lg}px` }}>+ {rows.length - 8} more rows…</div>}
-        </SectionCard>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Preview · {fileName} ({rows.length} rows)</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 320 }}>
+              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'OT Hours'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 10, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {rows.slice(0, 8).map((r, i) => (
+                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
+                    <td style={{ padding: '7px 10px', fontWeight: 700, color: C.navy }}>{r.emp_code}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', color: C.navy }}>{r.ot_hours ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {rows.length > 8 && <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>+ {rows.length - 8} more rows…</div>}
+          </div>
+        </div>
       )}
 
       {results && (
-        <SectionCard title="Result" iconTone="positive">
-          <InfoCallout t="positive" title={`${updated} of ${results.length} OT rows updated`} style={{ marginBottom: notFound.length ? SP.md : 0 }} />
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Result</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginBottom: notFound.length ? 12 : 0 }}>
+            ✓ {updated} of {results.length} OT rows updated
+          </div>
           {notFound.length > 0 && (
-            <InfoCallout t="warning" compact style={{ marginBottom: 0 }}>
+            <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px' }}>
               <b>{notFound.length}</b> emp code{notFound.length > 1 ? 's' : ''} not found in this month (skipped): {notFound.map(r => r.emp_code).join(', ')}
-            </InfoCallout>
+            </div>
           )}
-        </SectionCard>
+        </div>
       )}
     </div>
   )

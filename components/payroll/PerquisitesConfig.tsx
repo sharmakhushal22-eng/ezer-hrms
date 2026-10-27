@@ -15,25 +15,28 @@ import {
 } from '@/lib/perquisites/actions'
 import { VALUATION_METHOD_LABELS } from '@/lib/perquisites/types'
 import type { PerquisiteConfigRow, PerquisiteSlab, ValuationMethod, PerquisiteUnit } from '@/lib/perquisites/types'
-import {
-  C, F, W, S, R, numeric, type IconProps,
-  IconHome, IconTravel, IconFinance, IconHeart, IconEmployees, IconReceipt, IconMobile, IconSliders,
-  IconAward, IconLoans, IconDot, IconPlus, IconClose, IconCalendar,
-} from '@/lib/ui'
-import { SectionCard, StatusPill, CountChip, EmptyState, PButton, InfoCallout, IconTile, IconInfo, type KitTone } from '@/components/payroll/kit'
-import { RefChip, CField, Modal, Toast, cfgInput, cfgTextarea } from '@/components/payroll/configKit'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
-const METHOD_TONE: Record<ValuationMethod, KitTone> = {
-  FLAT_AMOUNT: 'brand', PERCENT_OF_SALARY: 'positive', PERCENT_OF_COST: 'positive',
-  SLAB_BASED: 'warning', FMV_BASED: 'info', MANUAL: 'neutral',
+const C = {
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint,
+  purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
-// One glyph per perquisite category, from the product's own icon set.
-const CATEGORY_ICON: Record<string, (p: IconProps) => React.ReactElement> = {
-  Accommodation: IconHome, Conveyance: IconTravel, Financial: IconFinance, Medical: IconHeart, Staff: IconEmployees,
-  Meals: IconReceipt, Assets: IconMobile, Utilities: IconSliders, Education: IconAward, Retirement: IconLoans, Other: IconDot,
+const METHOD_COLOR: Record<ValuationMethod, string> = {
+  FLAT_AMOUNT: C.purple, PERCENT_OF_SALARY: TK.positive, PERCENT_OF_COST: TK.positive,
+  SLAB_BASED: C.amber, FMV_BASED: TK.info, MANUAL: C.muted,
 }
-const catIcon = (cat: string, size = 15) => { const I = CATEGORY_ICON[cat] || IconDot; return <I size={size} /> }
+
+const CATEGORY_ICON: Record<string, string> = {
+  Accommodation: '', Conveyance: '', Financial: '', Medical: '', Staff: '',
+  Meals: '', Assets: '', Utilities: '', Education: '', Retirement: '', Other: '',
+}
+const catIcon = (cat: string) => CATEGORY_ICON[cat] || ''
 
 const UNITS: PerquisiteUnit[] = ['PER_MONTH', 'PER_YEAR', 'PER_MEAL', 'PER_TRANSACTION', 'LUMP_SUM']
 
@@ -48,30 +51,32 @@ function formatValue(row: PerquisiteConfigRow): string {
 // ── Sub-components — kept OUTSIDE the main component ──────────────
 
 function MethodBadge({ method }: { method: ValuationMethod }) {
-  return <StatusPill t={METHOD_TONE[method]} size="sm">{VALUATION_METHOD_LABELS[method]}</StatusPill>
+  return (
+    <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 999, background: `${METHOD_COLOR[method]}16`, color: METHOD_COLOR[method], fontWeight: 700, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>
+      {VALUATION_METHOD_LABELS[method]}
+    </span>
+  )
 }
 
 function PerquisiteRow({ row, selected, onSelect }: { row: PerquisiteConfigRow; selected: boolean; onSelect: () => void }) {
   return (
-    <div onClick={onSelect} role="button" tabIndex={0} aria-pressed={selected}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect() } }}
-      className={selected ? undefined : 'ez-row'}
+    <div onClick={onSelect}
+      onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = C.gray }}
+      onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = C.card }}
       style={{
-        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 10px', borderRadius: R.md, cursor: 'pointer', marginBottom: 4,
-        background: selected ? C.brandTint : C.surface, border: `1px solid ${selected ? C.brandEdge : 'transparent'}`,
-        boxShadow: selected ? `inset 3px 0 0 ${C.brand}` : 'none',
+        display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', marginBottom: 5,
+        background: selected ? C.purpleBg : C.card, border: `1px solid ${selected ? C.purple : C.border}`,
+        boxShadow: selected ? '0 2px 10px rgba(37,99,235,0.14)' : 'none', transition: 'background .12s',
       }}>
-      <IconTile icon={catIcon(row.category)} t={selected ? 'brand' : 'neutral'} size={30} />
+      <div style={{ width: 30, height: 30, borderRadius: 10, background: selected ? '#fff' : C.gray, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>{catIcon(row.category)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: F.small, fontWeight: W.semi, color: selected ? C.brandDeep : C.ink, lineHeight: 1.35 }}>{row.name}</span>
-          <span title={row.type_active ? 'Active' : 'Inactive'} style={{ width: 7, height: 7, borderRadius: 99, background: row.type_active ? C.positive : C.lineStrong, flexShrink: 0 }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: selected ? C.purpleD : C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</span>
+          <span title={row.type_active ? 'Active' : 'Inactive'} style={{ width: 6, height: 6, borderRadius: 99, background: row.type_active ? C.green: TK.line, flexShrink: 0 }} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-          <MethodBadge method={row.valuation_method} />
-          <span style={{ fontSize: F.tiny, color: C.muted, ...numeric }}>{formatValue(row)}</span>
-        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatValue(row)}</div>
       </div>
+      <MethodBadge method={row.valuation_method} />
     </div>
   )
 }
@@ -80,10 +85,10 @@ function CategorySection({ category, rows, selectedId, onSelect }: {
   category: string; rows: PerquisiteConfigRow[]; selectedId: string | null; onSelect: (id: string) => void
 }) {
   return (
-    <div style={{ marginBottom: S.md }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: F.micro, fontWeight: W.bold, color: C.muted, textTransform: 'uppercase', letterSpacing: '.09em', margin: '0 4px 6px' }}>
-        <span style={{ display: 'inline-flex', color: C.faint }}>{catIcon(category, 13)}</span>{category}
-        <CountChip>{rows.length}</CountChip>
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 7 }}>
+        <span style={{ fontSize: 12 }}>{catIcon(category)}</span>{category}
+        <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, background: C.gray, borderRadius: 99, padding: '1px 7px' }}>{rows.length}</span>
       </div>
       {rows.map(r => <PerquisiteRow key={r.perquisite_type_id} row={r} selected={selectedId === r.perquisite_type_id} onSelect={() => onSelect(r.perquisite_type_id)} />)}
     </div>
@@ -99,41 +104,53 @@ function AddTypeModal({ onClose, onCreate }: { onClose: () => void; onCreate: (a
   const [lawRef, setLawRef] = useState('')
 
   const valid = code.trim() && name.trim() && category.trim()
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 12, boxSizing: 'border-box', marginBottom: 10 }
 
   return (
-    <Modal icon={<IconPlus size={17} />} title="Add new perquisite" subtitle="A new perquisite type: no migration needed" maxWidth={480}
-      footer={<>
-        <PButton variant="primary" disabled={!valid} onClick={() => onCreate({ code, name, category, description, valuationMethod: method, lawReference: lawRef })} style={{ flex: 1 }}>
-          Create
-        </PButton>
-        <PButton variant="secondary" onClick={onClose}>Cancel</PButton>
-      </>}>
-      <CField label="Code" required><input value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/\s+/g, '_'))} placeholder="e.g. CRECHE_FACILITY" style={cfgInput} /></CField>
-      <CField label="Name" required><input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Crèche facility" style={cfgInput} /></CField>
-      <CField label="Category" required><input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Other" style={cfgInput} /></CField>
-      <CField label="Description"><textarea value={description} onChange={e => setDescription(e.target.value)} style={{ ...cfgTextarea, height: 60, resize: 'none' }} /></CField>
-      <CField label="How is this valued?" required>
-        <select value={method} onChange={e => setMethod(e.target.value as ValuationMethod)} style={{ ...cfgInput, cursor: 'pointer' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: TK.surface, borderRadius: 14, padding: 22, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, marginBottom: 14 }}>Add new perquisite</div>
+
+        <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Code *</label>
+        <input value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/\s+/g, '_'))} placeholder="e.g. CRECHE_FACILITY" style={inputStyle} />
+
+        <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Name *</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Crèche facility" style={inputStyle} />
+
+        <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Category *</label>
+        <input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Other" style={inputStyle} />
+
+        <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Description</label>
+        <textarea value={description} onChange={e => setDescription(e.target.value)} style={{ ...inputStyle, height: 50, resize: 'none' }} />
+
+        <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>How is this valued? *</label>
+        <select value={method} onChange={e => setMethod(e.target.value as ValuationMethod)} style={inputStyle}>
           {Object.entries(VALUATION_METHOD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-      </CField>
-      <CField label={<>Law reference <span style={{ fontWeight: W.regular, color: C.muted }}>(optional)</span></>}>
-        <input value={lawRef} onChange={e => setLawRef(e.target.value)} placeholder="e.g. Section 17(1); Rule 15" style={cfgInput} />
-      </CField>
-    </Modal>
+
+        <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Law reference <span style={{ fontWeight: 400 }}>(optional)</span></label>
+        <input value={lawRef} onChange={e => setLawRef(e.target.value)} placeholder="e.g. Section 17(1); Rule 15" style={inputStyle} />
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+          <button disabled={!valid} onClick={() => onCreate({ code, name, category, description, valuationMethod: method, lawReference: lawRef })}
+            style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: valid ? 1 : 0.5 }}>
+            Create
+          </button>
+          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+        </div>
+      </div>
+    </div>
   )
 }
 
 function SlabRow({ slab, onChange, onDelete }: { slab: Partial<PerquisiteSlab> & { _key: string }; onChange: (patch: Partial<PerquisiteSlab>) => void; onDelete: () => void }) {
+  const cellStyle: React.CSSProperties = { padding: '6px 8px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box' }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) 34px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
-      <input value={slab.slab_label ?? ''} onChange={e => onChange({ slab_label: e.target.value })} placeholder="Slab label" style={cfgInput} />
-      <input type="number" value={slab.rate_amount ?? ''} onChange={e => onChange({ rate_amount: e.target.value ? Number(e.target.value) : null })} placeholder="₹ amount" style={cfgInput} />
-      <input type="number" value={slab.rate_percent ?? ''} onChange={e => onChange({ rate_percent: e.target.value ? Number(e.target.value) : null })} placeholder="% rate" style={cfgInput} />
-      <button onClick={onDelete} aria-label="Remove slab" title="Remove slab" className="ez-press" style={{
-        width: 34, height: 34, borderRadius: R.md, border: `1px solid ${C.criticalEdge}`, background: C.surface, color: C.critical,
-        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      }}><IconClose size={13} /></button>
+    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 30px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+      <input value={slab.slab_label ?? ''} onChange={e => onChange({ slab_label: e.target.value })} placeholder="Slab label" style={cellStyle} />
+      <input type="number" value={slab.rate_amount ?? ''} onChange={e => onChange({ rate_amount: e.target.value ? Number(e.target.value) : null })} placeholder="₹ amount" style={cellStyle} />
+      <input type="number" value={slab.rate_percent ?? ''} onChange={e => onChange({ rate_percent: e.target.value ? Number(e.target.value) : null })} placeholder="% rate" style={cellStyle} />
+      <button onClick={onDelete} style={{ background: 'none', border: 'none', color: TK.critical, cursor: 'pointer', fontSize: 16 }}>×</button>
     </div>
   )
 }
@@ -233,102 +250,136 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
   const grouped: Record<string, PerquisiteConfigRow[]> = {}
   for (const r of rows) { (grouped[r.category] ??= []).push(r) }
 
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 12, boxSizing: 'border-box' }
+
   return (
-    <div style={{ display: 'flex', gap: S.lg, fontFamily: F.family, fontSize: F.small, color: C.ink, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 20, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13, flexWrap: 'wrap' }}>
 
       {/* ── List ── */}
-      <SectionCard
-        title="Perquisites" icon={<IconReceipt size={16} />}
-        hint={<span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><RefChip t="brand" icon={<IconCalendar size={11} />}>FY {FY}</RefChip><span style={{ ...numeric }}>{rows.length} types</span></span>}
-        style={{ flex: '1 1 340px', minWidth: 'min(300px, 100%)', marginBottom: 0 }} pad={S.md}>
-        <PButton variant="primary" icon={<IconPlus size={15} />} onClick={() => setShowAddModal(true)} full style={{ marginBottom: S.md }}>
-          Add new perquisite
-        </PButton>
+      <div style={{ width: 300, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Perquisites</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+              <span style={{ fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '1px 7px' }}>FY {FY}</span>
+              <span> · {rows.length} types</span>
+            </div>
+          </div>
+        </div>
+        <button onClick={() => setShowAddModal(true)}
+          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
+          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
+          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+          + Add new perquisite
+        </button>
         {Object.entries(grouped).map(([cat, catRows]) => (
           <CategorySection key={cat} category={cat} rows={catRows} selectedId={selectedId} onSelect={setSelectedId} />
         ))}
-      </SectionCard>
+      </div>
 
       {/* ── Configure panel ── */}
-      <div style={{ flex: '999 1 420px', minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, maxWidth: 560 }}>
         {!selected ? (
-          <SectionCard style={{ marginBottom: 0 }}>
-            <EmptyState icon={<IconReceipt size={20} />} title="Pick a perquisite"
-              hint={`Select a perquisite on the left to configure its FY ${FY} value, or add a new one.`} />
-          </SectionCard>
+          <div style={{ color: C.muted }}>Select a perquisite on the left to configure its FY {FY} value, or add a new one.</div>
         ) : (
-          <SectionCard style={{ marginBottom: 0 }}
-            title={selected.name} icon={catIcon(selected.category, 17)}
-            hint={<span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 3 }}>
-              <StatusPill t="brand" size="sm">{selected.category}</StatusPill>
-              <MethodBadge method={selected.valuation_method} />
-              {selected.law_reference && <span style={{ color: C.muted }}>{selected.law_reference}</span>}
-            </span>}
-            bodyStyle={{ display: 'flex', flexDirection: 'column', gap: S.md + 2 }}>
-            {selected.description && <div style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.55 }}>{selected.description}</div>}
-
-            <div style={{ fontSize: F.micro, fontWeight: W.bold, color: C.brandDeep, textTransform: 'uppercase', letterSpacing: '.09em' }}>Value for FY {FY}</div>
-
-            {(selected.valuation_method === 'FLAT_AMOUNT') && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr)', gap: S.md }}>
-                <CField label="Amount (₹)"><input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={cfgInput} /></CField>
-                <CField label="Unit">
-                  <select value={unit} onChange={e => setUnit(e.target.value as PerquisiteUnit)} style={{ ...cfgInput, cursor: 'pointer' }}>
-                    <option value="">-</option>
-                    {UNITS.map(u => <option key={u} value={u}>{u.replace('PER_', '/').toLowerCase()}</option>)}
-                  </select>
-                </CField>
-              </div>
-            )}
-
-            {(selected.valuation_method === 'PERCENT_OF_SALARY' || selected.valuation_method === 'PERCENT_OF_COST') && (
-              <CField label="Percent (%)"><input type="number" value={percent} onChange={e => setPercent(e.target.value)} style={{ ...cfgInput, maxWidth: 240 }} /></CField>
-            )}
-
-            {selected.valuation_method === 'SLAB_BASED' && (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) 34px', gap: 6, marginBottom: 5 }}>
-                  {['Slabs', '₹ amount', '% rate', ''].map((h, i) => <span key={i} style={{ fontSize: F.tiny, fontWeight: W.semi, color: C.inkSoft }}>{h}</span>)}
+          <>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
+              <div style={{ width: 46, height: 46, borderRadius: 14, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, border: `1px solid ${C.border}` }}>{catIcon(selected.category)}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.15 }}>{selected.name}</div>
+                <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginTop: 5, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 9px', textTransform: 'uppercase', letterSpacing: '.04em' }}>{selected.category}</span>
+                  <MethodBadge method={selected.valuation_method} />
+                  {selected.law_reference && <span style={{ fontSize: 10, color: C.muted }}>{selected.law_reference}</span>}
                 </div>
-                {slabs.map((s, i) => (
-                  <SlabRow key={s._key} slab={s}
-                    onChange={patch => setSlabs(prev => prev.map((x, idx) => idx === i ? { ...x, ...patch } : x))}
-                    onDelete={() => setSlabs(prev => prev.filter((_, idx) => idx !== i))} />
-                ))}
-                <PButton size="sm" variant="secondary" icon={<IconPlus size={13} />} onClick={addSlabRow}>Add slab</PButton>
               </div>
-            )}
-
-            {(selected.valuation_method === 'FMV_BASED' || selected.valuation_method === 'MANUAL') && (
-              <InfoCallout t="neutral" compact icon={<IconInfo size={14} />} style={{ marginBottom: 0 }}>
-                {selected.valuation_method === 'FMV_BASED'
-                  ? 'Calculated per transaction (FMV at exercise minus exercise price), no stored rate. Exemption limit and notes below still apply if relevant.'
-                  : 'Case-by-case: no single rate to store. Use notes below for guidance shown to payroll processors.'}
-              </InfoCallout>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: S.md }}>
-              <CField label="Exemption limit (₹, optional)"><input type="number" value={exemptionLimit} onChange={e => setExemptionLimit(e.target.value)} style={cfgInput} /></CField>
-              <CField label="Taxable?">
-                <select value={isTaxable ? 'yes' : 'no'} onChange={e => setIsTaxable(e.target.value === 'yes')} style={{ ...cfgInput, cursor: 'pointer' }}>
-                  <option value="yes">Taxable</option>
-                </select>
-              </CField>
             </div>
+            {selected.description && <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, lineHeight: 1.45 }}>{selected.description}</div>}
 
-            <CField label="Notes"><textarea value={notes} onChange={e => setNotes(e.target.value)} style={{ ...cfgTextarea, height: 60, resize: 'none' }} /></CField>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px', boxShadow: 'var(--ez-shadow-flat)' }}>
+              <div style={{ height: 3, borderRadius: 99, background: `linear-gradient(90deg,${TK.brand},${TK.brand})`, width: 44, marginBottom: 12 }} />
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', marginBottom: 10 }}>Value for FY {FY}</div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap', paddingTop: S.md, borderTop: `1px solid ${C.line}` }}>
-              <PButton variant="primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save value'}</PButton>
-              <span style={{ fontSize: F.tiny, color: C.muted }}>Saves {selected.name} for FY {FY}.</span>
+              {(selected.valuation_method === 'FLAT_AMOUNT') && (
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Amount (₹)</div>
+                    <input type="number" value={amount} onChange={e => setAmount(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Unit</div>
+                    <select value={unit} onChange={e => setUnit(e.target.value as PerquisiteUnit)} style={inputStyle}>
+                      <option value="">-</option>
+                      {UNITS.map(u => <option key={u} value={u}>{u.replace('PER_', '/').toLowerCase()}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {(selected.valuation_method === 'PERCENT_OF_SALARY' || selected.valuation_method === 'PERCENT_OF_COST') && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Percent (%)</div>
+                  <input type="number" value={percent} onChange={e => setPercent(e.target.value)} style={inputStyle} />
+                </div>
+              )}
+
+              {selected.valuation_method === 'SLAB_BASED' && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, color: C.muted, marginBottom: 6 }}>Slabs</div>
+                  {slabs.map((s, i) => (
+                    <SlabRow key={s._key} slab={s}
+                      onChange={patch => setSlabs(prev => prev.map((x, idx) => idx === i ? { ...x, ...patch } : x))}
+                      onDelete={() => setSlabs(prev => prev.filter((_, idx) => idx !== i))} />
+                  ))}
+                  <button onClick={addSlabRow} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>+ Add slab</button>
+                </div>
+              )}
+
+              {(selected.valuation_method === 'FMV_BASED' || selected.valuation_method === 'MANUAL') && (
+                <div style={{ fontSize: 11, color: C.muted, background: C.gray, padding: '8px 10px', borderRadius: 7, marginBottom: 10 }}>
+                  {selected.valuation_method === 'FMV_BASED'
+                    ? 'Calculated per transaction (FMV at exercise minus exercise price), no stored rate. Exemption limit and notes below still apply if relevant.'
+                    : 'Case-by-case: no single rate to store. Use notes below for guidance shown to payroll processors.'}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Exemption limit (₹, optional)</div>
+                  <input type="number" value={exemptionLimit} onChange={e => setExemptionLimit(e.target.value)} style={inputStyle} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Taxable?</div>
+                  <select value={isTaxable ? 'yes' : 'no'} onChange={e => setIsTaxable(e.target.value === 'yes')} style={inputStyle}>
+                    <option value="yes">Taxable</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Notes</div>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} style={{ ...inputStyle, height: 50, resize: 'none' }} />
+              </div>
+
+              <button onClick={handleSave} disabled={saving}
+                onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
+                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+                {saving ? 'Saving…' : 'Save value'}
+              </button>
             </div>
-          </SectionCard>
+          </>
         )}
       </div>
 
       {showAddModal && <AddTypeModal onClose={() => setShowAddModal(false)} onCreate={handleCreateType} />}
 
-      {toast && <Toast>{toast}</Toast>}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 18px', borderRadius: 10, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }

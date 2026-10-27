@@ -7,84 +7,86 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getSlabs, getSurchargeSlabs, getRegimeConfig, computeIncomeTax } from '@/lib/income-tax/actions'
 import type { TaxSlab, SurchargeSlab, TaxRegimeConfig, TaxCalculationResult, Regime, AgeCategory } from '@/lib/income-tax/types'
-import { C, F, W, S, R, numeric, IconCompliance, IconCalendar, IconReceipt, IconPayroll } from '@/lib/ui'
-import { SectionCard, InfoCallout, PButton, StatusPill, SubHead, DataTable, dt, KeyValueGrid, IconCheckCircle, type KitTone } from '@/components/payroll/kit'
-import { RuleSummary, RefChip, CField, FormGrid, RateChip, cfgInput } from '@/components/payroll/configKit'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
+const C = {
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  greenBd: TK.positiveTint, purpleBg: TK.brandTint, gray: TK.sunken, amber: TK.warning, amberBg: TK.warningTint,
+}
+const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
 
-function rateTone(rate: number): KitTone {
-  return rate === 0 ? 'positive' : rate <= 10 ? 'brand' : rate <= 20 ? 'warning' : 'critical'
-}
 function ratePill(rate: number) {
-  return <RateChip t={rateTone(rate)}>{rate}%</RateChip>
+  const [bg, fg] = rate === 0 ? [TK.positiveTint, TK.positive]
+    : rate <= 10 ? [TK.brandTint, TK.brand]
+    : rate <= 20 ? [TK.warningTint, TK.warning]
+    : [TK.criticalTint, TK.critical]
+  return <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: bg, color: fg, minWidth: 40, display: 'inline-block', textAlign: 'center' }}>{rate}%</span>
 }
 
 function RegimeCard({ regime, slabs, surcharge, config }: {
   regime: Regime; slabs: TaxSlab[]; surcharge: SurchargeSlab[]; config: TaxRegimeConfig | null
 }) {
   const isNew = regime === 'NEW'
+  const accent = isNew ? 'linear-gradient(90deg,#059669,#10B981)' : 'linear-gradient(90deg,#2563EB,#5B21B6)'
   // zero-tax ceiling = top of the 0% slab + standard deduction (gross figure)
   const zeroSlab = slabs.find(s => s.tax_rate === 0 && s.slab_max != null)
   const zeroUpto = zeroSlab && config ? Number(zeroSlab.slab_max) + Number(config.standard_deduction) : null
   return (
-    <SectionCard
-      title={isNew ? 'New Regime' : 'Old Regime'}
-      icon={<IconReceipt size={16} />} iconTone={isNew ? 'positive' : 'brand'}
-      actions={isNew ? <StatusPill t="positive" size="sm" dot>Default</StatusPill> : undefined}
-      style={{ marginBottom: 0, height: '100%' }}
-      bodyStyle={{ display: 'flex', flexDirection: 'column', gap: S.md }}>
-      {config && (
-        <KeyValueGrid min={140} dense items={[
-          { label: 'Std. deduction', value: inr(config.standard_deduction), mono: true },
-          { label: '87A rebate', value: inr(config.rebate_87a_amount), mono: true },
-        ]} />
-      )}
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', flex: 1, minWidth: 250, boxShadow: '0 2px 10px rgba(37,99,235,0.08)' }}>
+      <div style={{ height: 4, background: accent }} />
+      <div style={{ padding: '14px 16px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span style={{ width: 30, height: 30, borderRadius: 10, background: isNew ? C.greenBg : C.purpleBg, color: isNew ? C.green : C.purpleD, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isNew ? '' : ''}</span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>{isNew ? 'New Regime' : 'Old Regime'}</span>
+          {isNew && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 99, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '.03em' }}>Default</span>}
+        </div>
 
-      {zeroUpto != null && (
-        <InfoCallout t="positive" compact icon={<IconCheckCircle size={14} />} style={{ marginBottom: 0 }}>
-          <b style={{ color: C.positive, ...numeric }}>₹0 tax up to {inr(zeroUpto)} gross</b>
-        </InfoCallout>
-      )}
+        {config && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            <span style={{ fontSize: 10, color: C.muted, background: C.gray, borderRadius: 10, padding: '4px 9px' }}>Std. deduction <strong style={{ color: C.navy }}>{inr(config.standard_deduction)}</strong></span>
+            <span style={{ fontSize: 10, color: C.muted, background: C.gray, borderRadius: 10, padding: '4px 9px' }}>87A rebate <strong style={{ color: C.navy }}>{inr(config.rebate_87a_amount)}</strong></span>
+          </div>
+        )}
 
-      <div>
-        <SubHead>Slabs</SubHead>
-        <DataTable framed>
-          <thead><tr><th style={dt.th}>Taxable income</th><th style={{ ...dt.thNum, width: 90 }}>Rate</th></tr></thead>
-          <tbody>
-            {slabs.map(s => (
-              <tr key={s.id} className={dt.rowClass}>
-                <td style={dt.tdMono}>{inr(s.slab_min)}{s.slab_max != null ? ` – ${inr(s.slab_max)}` : '+'}</td>
-                <td style={dt.tdNum}>{ratePill(Number(s.tax_rate))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
+        {zeroUpto != null && (
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '7px 10px', marginBottom: 12 }}>
+            ₹0 tax up to {inr(zeroUpto)} gross
+          </div>
+        )}
+
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Slabs</div>
+        <div style={{ marginBottom: 14 }}>
+          {slabs.map((s, i) => (
+            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderRadius: 7, background: i % 2 === 0 ? C.gray: TK.surface }}>
+              <span style={{ fontSize: 12, color: C.navy }}>{inr(s.slab_min)}{s.slab_max != null ? ` – ${inr(s.slab_max)}` : '+'}</span>
+              {ratePill(Number(s.tax_rate))}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Surcharge</div>
+        <div>
+          {surcharge.filter(s => s.surcharge_rate > 0).map(s => (
+            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
+              <span style={{ fontSize: 11, color: C.muted }}>{inr(s.income_min)}{s.income_max != null ? ` – ${inr(s.income_max)}` : '+'}</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: C.navy }}>{s.surcharge_rate}%</span>
+            </div>
+          ))}
+        </div>
       </div>
-
-      <div>
-        <SubHead>Surcharge</SubHead>
-        <DataTable framed>
-          <thead><tr><th style={dt.th}>Total income</th><th style={{ ...dt.thNum, width: 90 }}>Surcharge</th></tr></thead>
-          <tbody>
-            {surcharge.filter(s => s.surcharge_rate > 0).map(s => (
-              <tr key={s.id} className={dt.rowClass}>
-                <td style={{ ...dt.td, ...numeric }}>{inr(s.income_min)}{s.income_max != null ? ` – ${inr(s.income_max)}` : '+'}</td>
-                <td style={{ ...dt.tdNum, fontWeight: W.bold }}>{s.surcharge_rate}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
-      </div>
-    </SectionCard>
+    </div>
   )
 }
 
 function ResultRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: S.md, padding: '7px 0', borderBottom: bold ? 'none' : `1px solid ${C.line}` }}>
-      <span style={{ fontSize: bold ? F.body : F.small, fontWeight: bold ? W.bold : W.medium, color: bold ? C.ink : C.muted }}>{label}</span>
-      <span style={{ fontSize: bold ? F.title : F.small, fontWeight: bold ? W.bold : W.semi, color: C.ink, ...numeric }}>{inr(value)}</span>
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: bold ? 'none' : `1px solid ${C.border}` }}>
+      <span style={{ fontSize: bold ? 13 : 12, fontWeight: bold ? 700 : 500, color: bold ? C.navy : C.muted }}>{label}</span>
+      <span style={{ fontSize: bold ? 14.5 : 12, fontWeight: bold ? 800 : 600, color: C.navy }}>{inr(value)}</span>
     </div>
   )
 }
@@ -132,68 +134,76 @@ export default function IncomeTaxConfig() {
     } catch (e: any) { setError(e.message) } finally { setCalculating(false) }
   }
 
-  return (
-    <div style={{ fontFamily: F.family, fontSize: F.small, color: C.ink, minWidth: 0 }}>
-      <RuleSummary icon={<IconCompliance size={20} />} eyebrow="Statutory · Income tax" title="Income Tax: Old vs New"
-        rule="Both regimes' slabs and surcharge side by side, and a calculator that compares them for one income."
-        meta={<><RefChip t="brand" icon={<IconCalendar size={12} />}>TY 2026-27</RefChip><RefChip>Income Tax Act 2025</RefChip></>} />
+  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 
-      {error && <InfoCallout t="warning" compact>{error}</InfoCallout>}
+  return (
+    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 800 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Income Tax: Old vs New</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+            <span style={{ fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '1px 7px' }}>TY 2026-27</span>
+            <span> · Income Tax Act 2025</span>
+          </div>
+        </div>
+      </div>
+
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
 
       {/* Regime reference cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: S.lg, marginBottom: S.lg }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <RegimeCard regime="OLD" slabs={slabs.old} surcharge={surcharge.old} config={config.old} />
         <RegimeCard regime="NEW" slabs={slabs.new} surcharge={surcharge.new} config={config.new} />
       </div>
 
       {/* Calculator */}
-      <SectionCard title="Compare: test a gross annual income" icon={<IconPayroll size={16} />} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: S.md + 2 }}>
-        <FormGrid min={180}>
-          <CField label="Gross annual (₹)"><input type="number" value={testIncome} onChange={e => setTestIncome(e.target.value)} placeholder="Gross annual (₹)" style={cfgInput} /></CField>
-          <CField label="Age">
-            <select value={age} onChange={e => setAge(e.target.value as AgeCategory)} style={{ ...cfgInput, cursor: 'pointer' }}>
-              {AGES.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
-            </select>
-          </CField>
-          <div><PButton variant="primary" onClick={runCalculation} disabled={calculating} style={{ height: 38 }}>{calculating ? 'Calculating…' : 'Compare'}</PButton></div>
-        </FormGrid>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Compare: test a gross annual income</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          <input type="number" value={testIncome} onChange={e => setTestIncome(e.target.value)} placeholder="Gross annual (₹)" style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
+          <select value={age} onChange={e => setAge(e.target.value as AgeCategory)} style={{ ...inputStyle, width: 160 }}>
+            {AGES.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
+          </select>
+          <button onClick={runCalculation} disabled={calculating}
+            style={{ padding: '9px 20px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            {calculating ? 'Calculating…' : 'Compare'}
+          </button>
+        </div>
 
         {oldResult && newResult && (() => {
           const newWins = newResult.total_tax <= oldResult.total_tax
           return (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: S.md }}>
-                {([['Old Regime', oldResult, !newWins], ['New Regime', newResult, newWins]] as const).map(([title, r, win]) => (
-                  <div key={title} className="ez-rise" style={{
-                    borderRadius: R.lg, padding: '14px 16px', background: win ? C.positiveTint : C.surface,
-                    border: `1px solid ${win ? C.positiveEdge : C.line}`, boxShadow: win ? `inset 0 0 0 1px ${C.positive}` : 'none',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, marginBottom: 6 }}>
-                      <span style={{ fontSize: F.small, fontWeight: W.bold, color: win ? C.positive : C.ink, textTransform: 'uppercase', letterSpacing: '.05em' }}>{title}</span>
-                      {win && <StatusPill t="positive" solid size="sm">Lower</StatusPill>}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {([['Old Regime', oldResult, !newWins, C.purpleD], ['New Regime', newResult, newWins, C.green]] as const).map(([title, r, win, accent]) => (
+                  <div key={title} style={{ flex: 1, minWidth: 220, borderRadius: 14, padding: '12px 14px', background: win ? (accent === C.green ? C.greenBg : C.purpleBg) : C.gray, border: `2px solid ${win ? accent : C.border}`, boxShadow: win ? '0 3px 12px rgba(37,99,235,0.12)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '.03em' }}>{title}</span>
+                      {win && <span style={{ fontSize: 9, fontWeight: 800, color: TK.onAccent, background: accent, borderRadius: 99, padding: '2px 7px', textTransform: 'uppercase' }}>Lower</span>}
                     </div>
                     <ResultRow label="Taxable income" value={r.taxable_income} />
                     <ResultRow label="Tax before rebate" value={r.tax_before_rebate} />
                     <ResultRow label="Rebate (87A)" value={-r.rebate_applied} />
                     <ResultRow label="Surcharge" value={r.surcharge_amount} />
                     <ResultRow label="Cess (4%)" value={r.cess_amount} />
-                    <div style={{ marginTop: 6, paddingTop: 4, borderTop: `2px solid ${win ? C.positive : C.lineStrong}` }}>
+                    <div style={{ marginTop: 6, paddingTop: 6, borderTop: `2px solid ${win ? accent : C.border}` }}>
                       <ResultRow label="Total tax" value={r.total_tax} bold />
                     </div>
                   </div>
                 ))}
               </div>
-              <InfoCallout t="positive" compact style={{ marginBottom: 0 }}>
-                <b style={{ color: C.positive, fontSize: F.small }}>
-                  {newWins
-                    ? `New regime is better: saves ${inr(oldResult.total_tax - newResult.total_tax)} vs Old`
-                    : `Old regime is better: saves ${inr(newResult.total_tax - oldResult.total_tax)} vs New`}
-                </b>
-              </InfoCallout>
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, fontSize: 13, color: C.green, fontWeight: 800 }}>
+                <span style={{ fontSize: 15 }}></span>
+                {newWins
+                  ? `New regime is better: saves ${inr(oldResult.total_tax - newResult.total_tax)} vs Old`
+                  : `Old regime is better: saves ${inr(newResult.total_tax - oldResult.total_tax)} vs New`}
+              </div>
             </>
           )
         })()}
-      </SectionCard>
+      </div>
     </div>
   )
 }
