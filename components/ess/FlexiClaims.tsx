@@ -7,16 +7,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { loadEntitlements, loadWindow, ComponentLimit, NO_INVOICE, ACCEPTED_TYPES, FY } from '@/lib/flexi/claims'
-// Design tokens, aliased as TK — many of these files already declare
-// their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import {
+  C as TK, F, W, S, R, E, Z, tone, eyebrow, numeric, inputStyle, type Tone,
+  IconUpload, IconPlus, IconClose, IconCalendar, IconReceipt, IconBuilding, IconAlert, IconLock, IconCard,
+} from '@/lib/ui'
+import {
+  SectionCard, KpiGrid, KpiTile, StatusPill, InfoCallout, PButton, IconTile, IconInfo, IconCheckCircle, IconTimer, IconXCircle, IconFile,
+} from '@/components/ess/payroll/kit'
+import { SplitMeter, LegendDot, Figure, fieldLabel, Toast, scrim } from '@/components/ess/payroll/claimsKit'
 
 const V = {
   navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
   card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint,
   amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
 }
-const font = '"DM Sans","Segoe UI",sans-serif'
+const font = F.family
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const uid = () => Math.random().toString(36).slice(2, 9)
 
@@ -27,41 +32,59 @@ const blankFrame = (code = ''): Frame => ({ id: uid(), code, amount: '', billNo:
 // A single submitted claim (for the History drawer).
 interface HistItem { id: string; component_code: string; claim_amount: number; bill_date: string | null; bill_no: string | null; agency_name: string | null; vendor_desc: string | null; remark: string | null; status: string; rejection_reason: string | null; submitted_at: string }
 
-const HIST_STATUS: Record<string, [string, string]> = {
-  PENDING: [V.amberBg, V.amber], APPROVED: [V.greenBg, V.green], REJECTED: [V.redBg, V.red], PAYROLL_PROCESSED: [V.purpleBg, V.purpleDark],
+const HIST_STATUS: Record<string, { t: Tone; icon: React.ReactNode }> = {
+  PENDING: { t: 'warning', icon: <IconTimer size={12} /> },
+  APPROVED: { t: 'positive', icon: <IconCheckCircle size={12} /> },
+  REJECTED: { t: 'critical', icon: <IconXCircle size={12} /> },
+  PAYROLL_PROCESSED: { t: 'brand', icon: <IconCheckCircle size={12} /> },
 }
+const fmtD = (d: string) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
 function HistoryDrawer({ label, items, onClose }: { label: string; items: HistItem[]; onClose: () => void }) {
+  const total = items.reduce((a, c) => a + (Number(c.claim_amount) || 0), 0)
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 4000, display: 'flex' }}>
-      <div onClick={onClose} style={{ flex: 1, background: 'rgba(30,27,75,0.3)' }} />
-      <div style={{ width: 380, maxWidth: '92vw', background: V.card, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', overflowY: 'auto', padding: '20px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: V.navy }}>{label}: Claim history</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: V.muted }}>×</button>
+    <div style={{ position: 'fixed', inset: 0, zIndex: Z.modal, display: 'flex' }}>
+      <div onClick={onClose} style={{ flex: 1, background: scrim }} />
+      <div className="ez-slide-l" style={{ width: 400, maxWidth: '92vw', background: TK.canvas, boxShadow: E.overlay, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: Z.raised, background: TK.surface, borderBottom: `1px solid ${TK.line}`, padding: `${S.lg}px ${S.lg}px ${S.md}px`, display: 'flex', alignItems: 'center', gap: S.md }}>
+          <IconTile icon={<IconReceipt size={16} />} t="brand" size={34} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>{label}: Claim history</div>
+            <div style={{ fontSize: F.micro, color: TK.muted, marginTop: 2, ...numeric }}>{items.length} claim{items.length === 1 ? '' : 's'} · {inr(total)} submitted</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="ez-press"
+            style={{ width: 32, height: 32, borderRadius: R.md, border: `1px solid ${TK.line}`, background: TK.surface, cursor: 'pointer', color: TK.muted, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <IconClose size={16} />
+          </button>
         </div>
-        {items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: V.muted, fontSize: 13 }}>No claims submitted yet</div>
-        ) : items.map(cl => {
-          const [bg, fg] = HIST_STATUS[cl.status] || [TK.brandTint, V.purpleDark]
-          return (
-            <div key={cl.id} style={{ background: V.card, border: `1px solid ${V.border}`, borderLeft: `3px solid ${fg}`, borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{inr(cl.claim_amount)}</div>
-                <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: bg, color: fg, fontWeight: 600 }}>{cl.status.replace(/_/g, ' ')}</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3, fontSize: 11, color: V.muted }}>
-                {cl.bill_date && <span>📅 {new Date(cl.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
-                {cl.bill_no && <span>🧾 {cl.bill_no}</span>}
-                {(cl.agency_name || cl.vendor_desc) && <span>🏪 {cl.agency_name || cl.vendor_desc}</span>}
-              </div>
-              {cl.remark && <div style={{ fontSize: 11, color: V.muted, marginTop: 4, fontStyle: 'italic' }}>&ldquo;{cl.remark}&rdquo;</div>}
-              {cl.status === 'REJECTED' && cl.rejection_reason && (
-                <div style={{ marginTop: 6, padding: '5px 8px', background: V.redBg, borderRadius: 7, fontSize: 11, color: V.red }}>⚠ {cl.rejection_reason}</div>
-              )}
-              <div style={{ fontSize: 10, color: TK.faint, marginTop: 5 }}>Submitted {new Date(cl.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+        <div style={{ padding: S.lg }}>
+          {items.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: TK.muted, fontSize: F.small }}>
+              <div style={{ display: 'inline-flex', marginBottom: S.sm }}><IconTile icon={<IconReceipt size={18} />} t="neutral" size={40} /></div>
+              <div>No claims submitted yet</div>
             </div>
-          )
-        })}
+          ) : items.map(cl => {
+            const st = HIST_STATUS[cl.status] || { t: 'brand' as Tone, icon: null }
+            return (
+              <div key={cl.id} className="ez-rise" style={{ background: TK.surface, border: `1px solid ${TK.line}`, borderLeft: `3px solid ${tone(st.t).fg}`, borderRadius: R.lg, padding: `${S.md}px ${S.md + 2}px`, marginBottom: S.sm + 2, boxShadow: E.flat }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: S.sm, marginBottom: S.sm }}>
+                  <div style={{ fontSize: F.lead, fontWeight: W.bold, color: TK.ink, ...numeric }}>{inr(cl.claim_amount)}</div>
+                  <StatusPill size="sm" t={st.t} icon={st.icon}>{cl.status.replace(/_/g, ' ')}</StatusPill>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: F.tiny, color: TK.muted }}>
+                  {cl.bill_date && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><IconCalendar size={13} /> {fmtD(cl.bill_date)}</span>}
+                  {cl.bill_no && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><IconReceipt size={13} /> {cl.bill_no}</span>}
+                  {(cl.agency_name || cl.vendor_desc) && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><IconBuilding size={13} /> {cl.agency_name || cl.vendor_desc}</span>}
+                </div>
+                {cl.remark && <div style={{ fontSize: F.tiny, color: TK.inkSoft, marginTop: 6, fontStyle: 'italic' }}>&ldquo;{cl.remark}&rdquo;</div>}
+                {cl.status === 'REJECTED' && cl.rejection_reason && (
+                  <InfoCallout compact t="critical" style={{ marginTop: S.sm, marginBottom: 0 }}>{cl.rejection_reason}</InfoCallout>
+                )}
+                <div style={{ fontSize: F.micro, color: TK.faint, marginTop: S.sm }}>Submitted {fmtD(cl.submitted_at)}</div>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -78,18 +101,19 @@ function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
   }, [file])
   const ext = file.name.split('.').pop()?.toUpperCase() || '?'
   return (
-    <div style={{ position: 'relative', width: 64, height: 64, borderRadius: 10, overflow: 'hidden', border: `1px solid ${V.border}`, background: TK.sunken, flexShrink: 0 }}
+    <div style={{ position: 'relative', width: 72, height: 72, borderRadius: R.md, overflow: 'hidden', border: `1px solid ${TK.lineStrong}`, background: TK.surface, flexShrink: 0, boxShadow: E.flat }}
       title={file.name}>
       {url ? (
         <img src={url} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
         <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: EXT_COL[ext] || V.muted }}>{ext}</span>
-          <span style={{ fontSize: 7.5, color: V.muted, padding: '0 4px', textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+          <span style={{ display: 'inline-flex', color: EXT_COL[ext] || V.muted }}><IconFile size={18} /></span>
+          <span style={{ fontSize: 10, fontWeight: W.bold, color: EXT_COL[ext] || V.muted }}>{ext}</span>
+          <span style={{ fontSize: 8, color: V.muted, padding: '0 4px', textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
         </div>
       )}
-      <button onClick={onRemove} title="Remove"
-        style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', border: 'none', background: 'rgba(15,23,42,0.72)', color: TK.onDark, fontSize: 12, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+      <button onClick={onRemove} title="Remove" aria-label={`Remove ${file.name}`}
+        style={{ position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: '50%', border: 'none', background: TK.dark, color: TK.onDark, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><IconClose size={11} strokeWidth={2.4} /></button>
     </div>
   )
 }
@@ -109,25 +133,24 @@ function BillFrame({ frame, index, options, remaining, canRemove, onChange, onFi
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const over = frame.amount !== '' && remaining >= 0 && Number(frame.amount) > remaining
-  const inp: React.CSSProperties = {
-    padding: '9px 11px', border: `1px solid ${V.border}`, borderRadius: 9, fontSize: 13,
-    background: TK.sunken, color: V.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box', width: '100%',
-  }
-  const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: V.muted, textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 }
+  const inp: React.CSSProperties = { ...inputStyle(), fontFamily: font }
+  const lbl = fieldLabel
+  const ready = !!(frame.code && frame.amount && frame.files.length)
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, background: V.card, position: 'relative', boxShadow: '0 1px 3px rgba(30,27,75,0.05)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ width: 22, height: 22, borderRadius: '50%', background: V.purpleBg, color: V.purpleDark, fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{index + 1}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: V.navy }}>Bill {index + 1}</span>
-        {frame.code && remaining >= 0 && <span style={{ marginLeft: 'auto', fontSize: 10, color: V.muted }}>Remaining limit <b style={{ color: V.navy }}>{inr(remaining)}</b></span>}
+    <div className="ez-rise" style={{ border: `1px solid ${ready ? TK.brandEdge : V.border}`, borderRadius: R.lg, padding: S.lg, background: V.card, position: 'relative', boxShadow: E.flat }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, marginBottom: S.md, flexWrap: 'wrap' }}>
+        <span style={{ width: 24, height: 24, borderRadius: '50%', background: ready ? TK.brand : V.purpleBg, color: ready ? TK.onAccent : V.purpleDark, border: `1px solid ${TK.brandEdge}`, fontSize: F.micro, fontWeight: W.bold, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, ...numeric }}>{index + 1}</span>
+        <span style={{ fontSize: F.small, fontWeight: W.bold, color: V.navy }}>Bill {index + 1}</span>
+        {ready && <StatusPill size="sm" t="positive" icon={<IconCheckCircle size={11} />}>Ready</StatusPill>}
+        {frame.code && remaining >= 0 && <span style={{ marginLeft: 'auto', fontSize: F.micro, color: V.muted, ...numeric }}>Remaining limit <b style={{ color: V.navy }}>{inr(remaining)}</b></span>}
         {canRemove && (
-          <button onClick={onRemove} title="Remove this bill"
-            style={{ marginLeft: frame.code ? 8 : 'auto', width: 24, height: 24, borderRadius: 7, border: `1px solid ${V.border}`, background: TK.surface, color: V.red, fontSize: 15, lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}>×</button>
+          <button onClick={onRemove} title="Remove this bill" aria-label="Remove this bill" className="ez-press"
+            style={{ marginLeft: frame.code ? 8 : 'auto', width: 28, height: 28, borderRadius: R.sm, border: `1px solid ${TK.criticalEdge}`, background: TK.surface, color: V.red, cursor: 'pointer', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><IconClose size={14} /></button>
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10, marginBottom: 10 }}>
-        <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(170px,100%),1fr))', gap: S.sm + 2, marginBottom: S.sm + 2 }}>
+        <div style={{ gridColumn: 'span 1' }}>
           <label style={lbl}>Bill type</label>
           <select style={{ ...inp, cursor: 'pointer' }} value={frame.code} onChange={e => onChange({ code: e.target.value })}>
             <option value="">Select a bill type…</option>
@@ -136,10 +159,10 @@ function BillFrame({ frame, index, options, remaining, canRemove, onChange, onFi
         </div>
         <div>
           <label style={lbl}>Amount (₹)</label>
-          <input type="number" min={0} placeholder="0" style={{ ...inp, borderColor: over ? V.red : V.border }} value={frame.amount} onChange={e => onChange({ amount: e.target.value })} />
+          <input type="number" min={0} placeholder="0" style={{ ...inp, ...numeric, borderColor: over ? V.red : TK.lineStrong }} value={frame.amount} onChange={e => onChange({ amount: e.target.value })} />
         </div>
       </div>
-      {over && <div style={{ fontSize: 10.5, color: V.red, marginTop: -4, marginBottom: 8 }}>⚠ Exceeds the remaining limit ({inr(remaining)})</div>}
+      {over && <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: F.micro, color: V.red, marginTop: -2, marginBottom: S.sm }}><IconAlert size={13} /> Exceeds the remaining limit ({inr(remaining)})</div>}
 
       {/* Upload area — multiple files or photos */}
       <div
@@ -147,24 +170,24 @@ function BillFrame({ frame, index, options, remaining, canRemove, onChange, onFi
         onDragOver={e => e.preventDefault()}
         onDrop={e => { e.preventDefault(); if (e.dataTransfer.files?.length) onFiles(Array.from(e.dataTransfer.files)) }}
         style={{
-          border: `1.5px dashed ${frame.files.length ? V.purple : V.border}`, borderRadius: 12,
+          border: `1.5px dashed ${frame.files.length ? TK.brandEdge : TK.lineStrong}`, borderRadius: R.md,
           padding: frame.files.length ? '12px' : '20px 12px', cursor: 'pointer',
           background: frame.files.length ? V.purpleBg : TK.sunken, transition: 'all .15s',
         }}>
         {frame.files.length === 0 ? (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 22, marginBottom: 4 }}>📎</div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: V.purpleDark }}>Upload bills: tap to choose photos or files</div>
-            <div style={{ fontSize: 10.5, color: V.muted, marginTop: 2 }}>Multiple allowed · JPG PNG PDF WORD EXCEL ZIP</div>
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <IconTile icon={<IconUpload size={17} />} t="brand" size={36} />
+            <div style={{ fontSize: F.small, fontWeight: W.semi, color: V.purpleDark, marginTop: 2 }}>Upload bills: tap to choose photos or files</div>
+            <div style={{ fontSize: F.micro, color: V.muted }}>Multiple allowed · JPG PNG PDF WORD EXCEL ZIP</div>
           </div>
         ) : (
           <div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} onClick={e => e.stopPropagation()}>
               {frame.files.map((f, i) => <FileThumb key={i} file={f} onRemove={() => onRemoveFile(i)} />)}
-              <div style={{ width: 64, height: 64, borderRadius: 10, border: `1.5px dashed ${V.purple}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: V.purple, fontSize: 22, cursor: 'pointer', flexShrink: 0 }}
-                onClick={() => fileRef.current?.click()} title="Add more files">+</div>
+              <div className="ez-press" style={{ width: 72, height: 72, borderRadius: R.md, border: `1.5px dashed ${V.purple}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: V.purple, cursor: 'pointer', flexShrink: 0, background: TK.surface }}
+                onClick={() => fileRef.current?.click()} title="Add more files"><IconPlus size={20} /></div>
             </div>
-            <div style={{ fontSize: 10.5, color: V.purpleDark, marginTop: 8, fontWeight: 600 }}>{frame.files.length} file{frame.files.length > 1 ? 's' : ''} attached</div>
+            <div style={{ fontSize: F.micro, color: V.purpleDark, marginTop: 8, fontWeight: W.semi }}>{frame.files.length} file{frame.files.length > 1 ? 's' : ''} attached</div>
           </div>
         )}
         <input ref={fileRef} type="file" accept={ACCEPTED_TYPES} multiple style={{ display: 'none' }}
@@ -172,10 +195,72 @@ function BillFrame({ frame, index, options, remaining, canRemove, onChange, onFi
       </div>
 
       {/* Optional details — kept light so the frame stays about "type + files" */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 8, marginTop: 10 }}>
-        <div><label style={lbl}>Bill no. <span style={{ textTransform: 'none', fontWeight: 400 }}>(optional)</span></label><input type="text" placeholder="INV-2026-001" style={{ ...inp, fontSize: 12, padding: '7px 9px' }} value={frame.billNo} onChange={e => onChange({ billNo: e.target.value })} /></div>
-        <div><label style={lbl}>Bill date</label><input type="date" max={new Date().toISOString().slice(0, 10)} style={{ ...inp, fontSize: 12, padding: '7px 9px' }} value={frame.billDate} onChange={e => onChange({ billDate: e.target.value })} /></div>
-        <div><label style={lbl}>Vendor</label><input type="text" placeholder="HPCL, Airtel…" style={{ ...inp, fontSize: 12, padding: '7px 9px' }} value={frame.vendor} onChange={e => onChange({ vendor: e.target.value })} /></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(140px,100%),1fr))', gap: S.sm, marginTop: S.md }}>
+        <div><label style={lbl}>Bill no. <span style={{ textTransform: 'none', fontWeight: 400, letterSpacing: 0 }}>(optional)</span></label><input type="text" placeholder="INV-2026-001" style={{ ...inp, fontSize: F.tiny, height: 34 }} value={frame.billNo} onChange={e => onChange({ billNo: e.target.value })} /></div>
+        <div><label style={lbl}>Bill date</label><input type="date" max={new Date().toISOString().slice(0, 10)} style={{ ...inp, fontSize: F.tiny, height: 34 }} value={frame.billDate} onChange={e => onChange({ billDate: e.target.value })} /></div>
+        <div><label style={lbl}>Vendor</label><input type="text" placeholder="HPCL, Airtel…" style={{ ...inp, fontSize: F.tiny, height: 34 }} value={frame.vendor} onChange={e => onChange({ vendor: e.target.value })} /></div>
+      </div>
+    </div>
+  )
+}
+
+/** One entitlement (Fuel, Hostel …): figures, approved+pending meter, actions. */
+function EntitlementCard({ lim, histCount, onHistory, onRequest }: {
+  lim: ComponentLimit; histCount: number; onHistory: () => void; onRequest: () => void
+}) {
+  const noInv = NO_INVOICE.includes(lim.code)
+  const remaining = lim.annual_limit - lim.approved - lim.pending
+  const usedPct = lim.annual_limit > 0 ? Math.min(100, Math.round((lim.approved / lim.annual_limit) * 100)) : 0
+  const exhausted = remaining <= 0
+  return (
+    <div className="ez-lift" style={{ background: V.card, border: `1px solid ${V.border}`, borderRadius: R.lg, boxShadow: E.raised, padding: S.lg, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.sm + 2, marginBottom: S.md }}>
+        <IconTile icon={noInv ? <IconCard size={16} /> : <IconReceipt size={16} />} t={exhausted && !noInv ? 'warning' : 'brand'} size={34} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: F.lead, fontWeight: W.bold, color: TK.ink, lineHeight: 1.3 }}>{lim.name}</div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
+            {lim.overridden && <StatusPill size="sm" t="brand">Custom limit</StatusPill>}
+            {noInv && <StatusPill size="sm" t="positive">No invoice needed</StatusPill>}
+            {exhausted && !noInv && <StatusPill size="sm" t="critical">Limit exhausted</StatusPill>}
+          </div>
+        </div>
+        <PButton size="sm" variant="secondary" onClick={onHistory}>History{histCount ? ` (${histCount})` : ''}</PButton>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: F.display - 4, fontWeight: W.bold, color: exhausted ? TK.muted : TK.ink, letterSpacing: '-.02em', ...numeric }}>{inr(remaining)}</span>
+        <span style={{ fontSize: F.tiny, color: TK.muted }}>left of {inr(lim.annual_limit)}</span>
+      </div>
+
+      <div style={{ margin: `${S.sm}px 0 6px` }}>
+        <SplitMeter total={lim.annual_limit} label={`${lim.name} usage`} parts={[
+          { value: lim.approved, t: usedPct >= 100 ? 'critical' : 'positive', label: `Approved ${inr(lim.approved)}` },
+          { value: lim.pending, t: 'warning', label: `Pending ${inr(lim.pending)}` },
+        ]} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: F.micro, color: V.muted, marginBottom: S.md, ...numeric }}><span>Approved: {usedPct}%</span><span>Remaining: {inr(remaining)}</span></div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: S.sm }}>
+        <Figure label="Annual limit" value={inr(lim.annual_limit)} t="brand" />
+        <Figure label="Approved" value={inr(lim.approved)} t="positive" />
+        <Figure label="Pending" value={inr(lim.pending)} t="warning" />
+      </div>
+      {lim.rejected > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: F.micro, color: V.amber, marginTop: S.sm }}><IconAlert size={13} /> {inr(lim.rejected)} rejected (not deducted from limit)</div>}
+
+      {noInv && <InfoCallout compact t="neutral" style={{ marginTop: S.md, marginBottom: 0 }}>Auto-claimed monthly. No bill submission required. Payroll processes this automatically.</InfoCallout>}
+
+      <div style={{ marginTop: 'auto' }}>
+        {exhausted && !noInv && (
+          <InfoCallout compact t="warning" style={{ marginTop: S.md, marginBottom: 0 }}
+            action={<PButton size="sm" variant="primary" onClick={onRequest}>Request increase</PButton>}>
+            Annual limit reached. You can request an increase from Payroll.
+          </InfoCallout>
+        )}
+        {!exhausted && !noInv && (
+          <div style={{ marginTop: S.md, paddingTop: S.md, borderTop: `1px solid ${TK.line}` }}>
+            <PButton size="sm" variant="ghost" icon={<IconPlus size={14} />} onClick={onRequest} style={{ paddingLeft: 4 }}>Request limit increase</PButton>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -273,142 +358,156 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
     setReqComp(null); setReqAmt(''); setReqReason(''); showToast('Limit-increase request sent to Payroll')
   }
 
-  const card: React.CSSProperties = { background: V.card, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 12 }
   const totals = limits.reduce((a, l) => ({ limit: a.limit + l.annual_limit, approved: a.approved + l.approved, pending: a.pending + l.pending, balance: a.balance + (l.annual_limit - l.approved) }), { limit: 0, approved: 0, pending: 0, balance: 0 })
   const activeCount = frames.filter(f => f.code && f.amount && f.files.length).length
+  // Display-only: the running total of the bills drafted in the uploader.
+  const draftTotal = frames.reduce((a, f) => a + (Number(f.amount) || 0), 0)
+  const usedShare = totals.limit > 0 ? (totals.approved + totals.pending) / totals.limit : 0
 
-  if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading flexi claims…</div>
+  if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: F.small }}>Loading flexi claims…</div>
   if (status === 'nopolicy') return (
-    <div style={card}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Flexi Reimbursement</div>
-      <div style={{ fontSize: 13, color: V.muted }}>No claimable flexi components are configured for your company &amp; salary band yet. Once HR sets up the flexi policy slabs, your entitlements &amp; bill submission will appear here.</div>
-    </div>
+    <SectionCard title="Flexi Reimbursement" icon={<IconReceipt size={16} />}>
+      <div style={{ fontSize: F.small, color: V.muted, lineHeight: 1.6 }}>No claimable flexi components are configured for your company &amp; salary band yet. Once HR sets up the flexi policy slabs, your entitlements &amp; bill submission will appear here.</div>
+    </SectionCard>
   )
 
+  const closesAt = win?.closes_at ? new Date(win.closes_at) : null
+  const daysLeft = closesAt ? Math.max(0, Math.ceil((closesAt.getTime() - Date.now()) / 86400000)) : 0
+
   return (
-    <div style={{ fontFamily: font }}>
-      <div style={{ fontSize: 17, fontWeight: 700, color: V.navy, marginBottom: 2 }}>Flexi Reimbursement</div>
-      <div style={{ fontSize: 12, color: V.muted, marginBottom: 12 }}>Submit monthly bills for your declared flexi components · {regime === 'old' ? 'Old' : 'New'} regime{slabLabel ? ` · Slab ${slabLabel}` : ''}</div>
+    <div style={{ fontFamily: font, color: TK.ink }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: S.md, marginBottom: S.lg, flexWrap: 'wrap' }}>
+        <IconTile icon={<IconReceipt size={18} />} t="brand" size={40} />
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+          <div style={{ fontSize: F.title, fontWeight: W.bold, color: V.navy, letterSpacing: '-.01em' }}>Flexi Reimbursement</div>
+          <div style={{ fontSize: F.tiny, color: V.muted, marginTop: 2 }}>Submit monthly bills for your declared flexi components</div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <StatusPill t="brand" dot>{regime === 'old' ? 'Old' : 'New'} regime</StatusPill>
+          {slabLabel && <StatusPill t="neutral">Slab {slabLabel}</StatusPill>}
+        </div>
+      </div>
 
       {/* Window banner */}
       {win ? (
-        <div style={{ background: isOpen ? V.greenBg : V.redBg, border: `1px solid ${isOpen ? TK.positive : TK.critical}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>{isOpen ? '🟢' : '🔴'}</span>
-          <div style={{ flex: 1, fontSize: 12, color: isOpen ? TK.positive : TK.critical }}>
-            {isOpen ? <>Window open · submit bills by <b>{new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</b> · {Math.max(0, Math.ceil((new Date(win.closes_at).getTime() - Date.now()) / 86400000))} days left</> : 'Window closed · bills cannot be submitted right now'}
-          </div>
-        </div>
-      ) : <div style={{ background: V.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: V.amber }}>No submission window is open for this month yet. Contact HR / Payroll.</div>}
+        isOpen ? (
+          <InfoCallout t="positive" title="Window open" icon={<IconCalendar size={17} />}
+            action={<StatusPill t="positive" solid>{daysLeft} days left</StatusPill>}>
+            Submit bills by <b>{new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</b>. Each bill needs a type, an amount and at least one photo or file.
+          </InfoCallout>
+        ) : (
+          <InfoCallout t="warning" title="Window closed" icon={<IconLock size={17} />}>
+            Window closed · bills cannot be submitted right now. Your entitlements and history below stay available.
+          </InfoCallout>
+        )
+      ) : (
+        <InfoCallout t="info" title="No submission window is open for this month yet" icon={<IconCalendar size={17} />}>
+          Contact HR / Payroll. Keep your bills safe in the meantime: the uploader appears here as soon as the window opens, and your limits below stay as they are.
+        </InfoCallout>
+      )}
 
       {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
-        {[['Annual limit', inr(totals.limit), V.purple], ['Approved', inr(totals.approved), V.green], ['Pending', inr(totals.pending), V.amber], ['Balance', inr(totals.balance), V.navy]].map(([l, v, c]) => (
-          <div key={l} style={{ background: TK.sunken, borderRadius: 10, padding: 10, textAlign: 'center' }}><div style={{ fontSize: 18, fontWeight: 700, color: c as string }}>{v}</div><div style={{ fontSize: 10, color: V.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{l}</div></div>
-        ))}
-      </div>
+      <KpiGrid min={150}>
+        <KpiTile label="Annual limit" value={inr(totals.limit)} emphasis icon={<IconCard size={15} />}
+          progress={usedShare} progressTone={usedShare >= 1 ? 'critical' : 'brand'}
+          sub={`${Math.min(100, Math.round(usedShare * 100))}% used or pending`} />
+        <KpiTile label="Approved" value={inr(totals.approved)} t="positive" icon={<IconCheckCircle size={15} />} sub="Paid with salary" />
+        <KpiTile label="Pending" value={inr(totals.pending)} t="warning" icon={<IconTimer size={15} />} sub="Waiting for HR approval" />
+        <KpiTile label="Balance" value={inr(totals.balance)} sub="Limit minus approved" />
+      </KpiGrid>
 
-      {/* ── Bill uploader ─────────────────────────────────────────────── */}
-      {isOpen && billTypeOptions.length > 0 && (
-        <div style={{ borderRadius: 16, marginBottom: 16, overflow: 'hidden', border: `1px solid ${V.border}`, boxShadow: '0 2px 10px rgba(124,58,237,0.08)' }}>
-          <div style={{ background: `linear-gradient(120deg, ${V.purple}, ${V.purpleDark})`, padding: '14px 18px', color: TK.onAccent }}>
-            <div style={{ fontSize: 15, fontWeight: 800 }}>Upload your bills</div>
-            <div style={{ fontSize: 11.5, opacity: 0.9, marginTop: 1 }}>Pick a bill type, enter the amount, attach photos or files. Add as many bills as you like.</div>
+      {/* Used vs limit, across every entitlement. */}
+      {totals.limit > 0 && (
+        <div style={{ background: V.card, border: `1px solid ${V.border}`, borderRadius: R.lg, boxShadow: E.flat, padding: `${S.md}px ${S.lg}px`, marginBottom: S.lg }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap', marginBottom: S.sm }}>
+            <span style={{ ...eyebrow }}>Used vs limit · FY {FY}</span>
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: S.md, flexWrap: 'wrap' }}>
+              <LegendDot t="positive" label="Approved" value={inr(totals.approved)} />
+              <LegendDot t="warning" label="Pending" value={inr(totals.pending)} />
+              <LegendDot t="neutral" label="Unused" value={inr(Math.max(0, totals.limit - totals.approved - totals.pending))} />
+            </span>
           </div>
-          <div style={{ padding: 16, background: TK.canvas, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {frames.map((f, i) => (
-              <BillFrame
-                key={f.id}
-                frame={f}
-                index={i}
-                options={billTypeOptions}
-                remaining={f.code ? remainingOf(f.code) : -1}
-                canRemove={frames.length > 1}
-                onChange={patch => setFrame(f.id, patch)}
-                onFiles={files => addFrameFiles(f.id, files)}
-                onRemoveFile={idx => removeFrameFile(f.id, idx)}
-                onRemove={() => removeFrame(f.id)}
-              />
-            ))}
-
-            {/* Add another frame */}
-            <button onClick={addFrame}
-              style={{ border: `1.5px dashed ${V.purple}`, borderRadius: 12, padding: '12px', background: V.purpleBg, color: V.purpleDark, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span style={{ fontSize: 17 }}>＋</span> Add another bill
-            </button>
-
-            {/* Submit all */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: `1px solid ${V.border}`, paddingTop: 12 }}>
-              <div style={{ flex: 1, fontSize: 11.5, color: V.muted }}>
-                {activeCount > 0 ? <><b style={{ color: V.navy }}>{activeCount}</b> bill{activeCount > 1 ? 's' : ''} ready to submit</> : 'Fill a bill type, amount and file to submit'}
-              </div>
-              <button disabled={submitting || activeCount === 0} onClick={submitAll}
-                style={{ padding: '11px 22px', borderRadius: 11, border: 'none', fontSize: 13, fontWeight: 700, fontFamily: font,
-                  background: submitting || activeCount === 0 ? TK.brandTint : V.purple, color: TK.onAccent,
-                  cursor: submitting || activeCount === 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: submitting || activeCount === 0 ? 'none' : '0 3px 10px rgba(124,58,237,0.3)' }}>
-                {submitting ? 'Submitting…' : `Submit ${activeCount || ''} bill${activeCount === 1 ? '' : 's'}`.replace('  ', ' ')}
-              </button>
-            </div>
-          </div>
+          <SplitMeter total={totals.limit} height={10} label="Flexi limit used" parts={[
+            { value: totals.approved, t: 'positive', label: `Approved ${inr(totals.approved)}` },
+            { value: totals.pending, t: 'warning', label: `Pending ${inr(totals.pending)}` },
+          ]} />
         </div>
       )}
 
-      {/* ── Your entitlements (limits + history) ──────────────────────── */}
-      <div style={{ fontSize: 12, fontWeight: 700, color: V.muted, textTransform: 'uppercase', letterSpacing: '.05em', margin: '4px 0 8px' }}>Your entitlements</div>
-      {limits.map(lim => {
-        const noInv = NO_INVOICE.includes(lim.code)
-        const remaining = lim.annual_limit - lim.approved - lim.pending
-        const usedPct = lim.annual_limit > 0 ? Math.min(100, Math.round((lim.approved / lim.annual_limit) * 100)) : 0
-        const exhausted = remaining <= 0
-        return (
-          <div key={lim.code} style={card}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 700 }}>{lim.name}</span>
-              {lim.overridden && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: V.purpleBg, color: V.purpleDark, fontWeight: 600 }}>Custom limit</span>}
-              {noInv && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: V.greenBg, color: V.green, fontWeight: 600 }}>No invoice needed</span>}
-              {exhausted && !noInv && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: V.redBg, color: V.red, fontWeight: 600 }}>Limit exhausted</span>}
-              {(() => { const cnt = claimHist.filter(c => c.component_code === lim.code).length; return (
-                <button onClick={() => setHistComp(lim.code)} style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 11px', borderRadius: 7, border: `1px solid ${V.border}`, background: TK.surface, color: V.purpleDark, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>History{cnt ? ` (${cnt})` : ''}</button>
-              ) })()}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 8 }}>
-              {[['Annual limit', inr(lim.annual_limit), V.purple], ['Approved', inr(lim.approved), V.green], ['Pending', inr(lim.pending), V.amber]].map(([l, v, c]) => (
-                <div key={l} style={{ background: TK.sunken, borderRadius: 7, padding: 8, textAlign: 'center' }}><div style={{ fontSize: 10, color: V.muted, marginBottom: 2 }}>{l}</div><div style={{ fontSize: 14, fontWeight: 700, color: c as string }}>{v}</div></div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: V.muted, marginBottom: 3 }}><span>Approved: {usedPct}%</span><span>Remaining: {inr(remaining)}</span></div>
-            <div style={{ height: 5, background: V.border, borderRadius: 3, overflow: 'hidden' }}><div style={{ height: '100%', width: `${usedPct}%`, background: usedPct >= 100 ? V.red : usedPct >= 80 ? V.amber : V.purple, borderRadius: 3, transition: 'width .3s' }} /></div>
-            {lim.rejected > 0 && <div style={{ fontSize: 10, color: V.amber, marginTop: 4 }}>⚠ {inr(lim.rejected)} rejected (not deducted from limit)</div>}
+      {/* ── Bill uploader ─────────────────────────────────────────────── */}
+      {isOpen && billTypeOptions.length > 0 && (
+        <SectionCard title="Upload your bills" icon={<IconUpload size={16} />}
+          hint="Pick a bill type, enter the amount, attach photos or files. Add as many bills as you like."
+          bodyStyle={{ background: TK.canvas, display: 'flex', flexDirection: 'column', gap: S.md }}>
+          {frames.map((f, i) => (
+            <BillFrame
+              key={f.id}
+              frame={f}
+              index={i}
+              options={billTypeOptions}
+              remaining={f.code ? remainingOf(f.code) : -1}
+              canRemove={frames.length > 1}
+              onChange={patch => setFrame(f.id, patch)}
+              onFiles={files => addFrameFiles(f.id, files)}
+              onRemoveFile={idx => removeFrameFile(f.id, idx)}
+              onRemove={() => removeFrame(f.id)}
+            />
+          ))}
 
-            {noInv && <div style={{ marginTop: 10, fontSize: 11, color: V.muted, background: TK.sunken, borderRadius: 7, padding: '8px 10px' }}>Auto-claimed monthly. No bill submission required. Payroll processes this automatically.</div>}
+          {/* Add another frame */}
+          <button onClick={addFrame} className="ez-press"
+            style={{ border: `1.5px dashed ${TK.brandEdge}`, borderRadius: R.lg, padding: '12px', background: V.purpleBg, color: V.purpleDark, fontSize: F.small, fontWeight: W.bold, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <IconPlus size={16} /> Add another bill
+          </button>
 
-            {exhausted && !noInv && (
-              <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', background: V.amberBg, border: `1px solid ${TK.warning}`, borderRadius: 10, padding: '8px 12px' }}>
-                <span style={{ fontSize: 12, color: V.amber, flex: 1 }}>Annual limit reached. You can request an increase from Payroll.</span>
-                <button onClick={() => setReqComp(lim.code)} style={{ padding: '5px 12px', background: V.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 11 }}>Request increase</button>
+          {/* Submit all */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap', background: V.card, border: `1px solid ${V.border}`, borderRadius: R.lg, padding: `${S.md}px ${S.lg}px`, boxShadow: E.flat }}>
+            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+              <div style={{ fontSize: F.tiny, color: V.muted }}>
+                {activeCount > 0 ? <><b style={{ color: V.navy }}>{activeCount}</b> bill{activeCount > 1 ? 's' : ''} ready to submit</> : 'Fill a bill type, amount and file to submit'}
               </div>
-            )}
-            {!exhausted && !noInv && (
-              <button onClick={() => setReqComp(lim.code)} style={{ marginTop: 10, padding: '6px 12px', background: TK.surface, color: V.navy, border: `1px solid ${V.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 11.5, fontFamily: font }}>Request limit increase</button>
-            )}
+              {draftTotal > 0 && <div style={{ fontSize: F.lead, fontWeight: W.bold, color: TK.ink, marginTop: 2, ...numeric }}>{inr(draftTotal)} <span style={{ fontSize: F.micro, fontWeight: W.medium, color: TK.muted }}>total entered</span></div>}
+            </div>
+            <PButton variant="primary" size="lg" disabled={submitting || activeCount === 0} onClick={submitAll}>
+              {submitting ? 'Submitting…' : `Submit ${activeCount || ''} bill${activeCount === 1 ? '' : 's'}`.replace('  ', ' ')}
+            </PButton>
           </div>
-        )
-      })}
+        </SectionCard>
+      )}
+
+      {/* ── Your entitlements (limits + history) ──────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, margin: `${S.xs}px 0 ${S.md}px` }}>
+        <span style={{ ...eyebrow }}>Your entitlements</span>
+        <span style={{ fontSize: F.micro, color: TK.faint }}>· {limits.length}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(340px,100%),1fr))', gap: S.md, marginBottom: S.lg }}>
+        {limits.map(lim => (
+          <EntitlementCard key={lim.code} lim={lim}
+            histCount={claimHist.filter(c => c.component_code === lim.code).length}
+            onHistory={() => setHistComp(lim.code)}
+            onRequest={() => setReqComp(lim.code)} />
+        ))}
+      </div>
 
       {reqComp && (
-        <div style={{ background: V.amberBg, border: `1px solid ${TK.warning}`, borderRadius: 14, padding: 16, marginTop: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: V.amber, marginBottom: 10 }}>Request limit increase: {limits.find(l => l.code === reqComp)?.name || reqComp}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Requested annual limit (₹)</label><input type="number" style={{ padding: '7px 8px', border: `1px solid ${TK.warning}`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqAmt} onChange={e => setReqAmt(e.target.value)} /></div>
-            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Reason (mandatory)</label><input type="text" placeholder="Official travel increased…" style={{ padding: '7px 8px', border: `1px solid ${TK.warning}`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqReason} onChange={e => setReqReason(e.target.value)} /></div>
+        <SectionCard title={`Request limit increase: ${limits.find(l => l.code === reqComp)?.name || reqComp}`} icon={<IconInfo size={16} />} iconTone="warning"
+          hint="Payroll reviews the request. Your current limit stays in force until it is approved."
+          style={{ borderColor: TK.warningEdge }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(200px,100%),1fr))', gap: S.md, marginBottom: S.md }}>
+            <div><label style={fieldLabel}>Requested annual limit (₹)</label><input type="number" style={{ ...inputStyle(), ...numeric }} value={reqAmt} onChange={e => setReqAmt(e.target.value)} /></div>
+            <div><label style={fieldLabel}>Reason (mandatory)</label><input type="text" placeholder="Official travel increased…" style={inputStyle()} value={reqReason} onChange={e => setReqReason(e.target.value)} /></div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}><button onClick={sendLimitRequest} style={{ padding: '7px 14px', background: V.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Send request</button><button onClick={() => setReqComp(null)} style={{ padding: '7px 12px', background: TK.surface, color: V.navy, border: `1px solid ${V.border}`, borderRadius: 7, cursor: 'pointer', fontSize: 12 }}>Cancel</button></div>
-        </div>
+          <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
+            <PButton variant="primary" onClick={sendLimitRequest}>Send request</PButton>
+            <PButton variant="secondary" onClick={() => setReqComp(null)}>Cancel</PButton>
+          </div>
+        </SectionCard>
       )}
 
       {histComp && <HistoryDrawer label={limits.find(l => l.code === histComp)?.name || histComp} items={claimHist.filter(c => c.component_code === histComp)} onClose={() => setHistComp(null)} />}
 
-      {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: V.navy, color: TK.onAccent, padding: '11px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,.2)' }}>{toast}</div>}
+      {toast && <Toast>{toast}</Toast>}
     </div>
   )
 }
