@@ -7,6 +7,7 @@
 // Everything is scoped to the raiser's company: the RM2 is the raiser's own
 // l1_manager, and the HR Head is whoever holds HR_HEAD in that company.
 import { NextRequest, NextResponse } from 'next/server'
+import { positionMessage } from '@/lib/recruitment/position-required'
 import { rolesCanRaiseConfidential, selfApprovedChain } from '@/lib/recruitment/confidential'
 import { jobCodePrefix, nextJobCode } from '@/lib/recruitment/job-code'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
@@ -167,6 +168,12 @@ export async function POST(req: NextRequest) {
     // HR Head is the final step — skipped only if they are the raiser or already the RM2 step.
     if (!wantConfidential && hh && hh.id !== me && hh.id !== rm2Brief?.id) chain.push({ order: chain.length + 1, role: 'HR_HEAD', approver_id: hh.id, approver_name: hh.name, approver_code: hh.code, status: chain.length ? 'WAITING' : 'PENDING', acted_at: null, comment: null })
     if (status === 'SUBMITTED' && !chain.length) return NextResponse.json({ error: 'No approver could be found: your company has no HR Head / manager set. Please contact HR.' }, { status: 400 })
+    // The offer letter states designation, department and work location; a requisition going
+    // for approval (or self-approved) must carry all three (lib/recruitment/position-required.ts).
+    if (status !== 'DRAFT') {
+      const posMsg = positionMessage({ designation, department: meRow.department_id, location: body.location_id }, 'on the MRF: the offer letter states them' + (meRow.department_id ? '' : ' (the department comes from your employee record; ask HR to set it)'))
+      if (posMsg) return NextResponse.json({ error: posMsg }, { status: 400 })
+    }
 
     const openings = Math.max(1, Number(body.openings) || 1)
     const nOrNull = (v: any) => (v === '' || v === null || v === undefined) ? null : (Number(v) || null)

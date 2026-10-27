@@ -701,6 +701,8 @@ function validateMrf(form:any, strict:boolean) {
     e.outgoing_employee_id = 'Select the outgoing employee for a replacement'
   if (strict) {
     if (!form.department_id) e.department_id = 'Pick a department before submitting'
+    // The offer letter states the work location too (lib/recruitment/position-required.ts).
+    if (!form.location_id) e.location_id = 'Pick the work location before submitting'
     if (!form.reason) e.reason = 'Reason for hire is required'
     if (!bMax) e.budget_max = 'Budget is needed for approval'
     if (!form.target_joining_date) e.target_joining_date = 'Target joining date is required'
@@ -1513,13 +1515,15 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   // Per-field messages are already rendered by <Field error=…>; the rail only
   // decides whether a step may be left, so it counts keys rather than echoing
   // their text.
-  const stepErrs = validateMrf(form, false)
+  // Department and work location are also checked step by step (not only at submit): the offer
+  // letter states them, so the wizard does not move past a step that leaves either blank.
+  const stepErrs: Record<string, string> = { ...validateMrf(form, false), ...(form.department_id ? {} : { department_id: 'Department is required' }), ...(form.location_id ? {} : { location_id: 'Work location is required' }) }
   const MRF_STEPS: { id: string; title: string; keys: string[] }[] = [
     { id: 'meta',   title: 'Requisition Meta',      keys: [] },
-    { id: 'pos',    title: 'Position Details',      keys: ['company_id', 'designation', 'no_of_openings'] },
-    { id: 'emp',    title: 'Employment Details',    keys: [] },
+    { id: 'pos',    title: 'Position Details',      keys: ['company_id', 'department_id', 'designation', 'no_of_openings'] },
+    { id: 'emp',    title: 'Employment Details',    keys: ['location_id'] },
     { id: 'budget', title: 'Budget & Cost',         keys: ['budget_max', 'duration_months'] },
-    { id: 'just',   title: 'Justification',         keys: ['department_id', 'reason', 'outgoing_employee_id'] },
+    { id: 'just',   title: 'Justification',         keys: ['reason', 'outgoing_employee_id'] },
     { id: 'time',   title: 'Timeline',              keys: ['target_joining_date', 'validity_date'] },
     ...(!isQuick ? [{ id: 'cand', title: 'Candidate Requirements', keys: ['skills_required', 'experience_max'] }] : []),
     { id: 'appr',   title: 'Approval Workflow',     keys: [] },
@@ -2036,7 +2040,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
               </select>
             </Field>
-            <Field label="Department / Function" error={errors.department_id}>
+            <Field label="Department / Function" required error={errors.department_id}>
               <select className="rx-input" style={eb('department_id')} value={form.department_id} onChange={e=>F('department_id',e.target.value)}>
                 <option value="">Select Department</option>
                 {filtDepts.map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
@@ -2095,8 +2099,8 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 {WORK_MODES.map(w=><option key={w} value={w}>{w}</option>)}
               </select>
             </Field>
-            <Field label="Work Location">
-              <select className="rx-input" value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
+            <Field label="Work Location" required error={errors.location_id}>
+              <select className="rx-input" style={eb('location_id')} value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
                 <option value="">Select Location</option>
                 {filtLocs.map((l:Location)=><option key={l.id} value={l.id}>{l.location_name||l.location_code}</option>)}
               </select>
@@ -2359,7 +2363,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               the problems and offer a jump to each — "3 fields need attention"
               on the last step left the reader hunting through ten sections. */}
           {(()=>{
-            const STEP_OF:Record<string,string> = { company_id:'pos', department_id:'pos', designation:'pos', no_of_openings:'pos',
+            const STEP_OF:Record<string,string> = { company_id:'pos', department_id:'pos', designation:'pos', no_of_openings:'pos', location_id:'emp',
               budget_max:'budget', duration_months:'budget', reason:'just', outgoing_employee_id:'just',
               target_joining_date:'time', validity_date:'time', skills_required:'cand', experience_max:'cand' }
             const bad = Object.keys(errors).filter(k=>errors[k])

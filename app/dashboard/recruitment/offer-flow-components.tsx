@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { positionGaps } from '@/lib/recruitment/position-required'
 import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 // send-offer-email runs on the server with no session of its own, so the browser
@@ -156,6 +157,20 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     authHeaders().then(h => fetch(`/api/recruitment/offer-approval?company_ids=${cid}`, { headers: h })).then(r => r.json()).then(j => setHrHeads(j.heads?.[cid] || [])).catch(() => setHrHeads([]))
   }, [candidate?.company_id, mrf?.company_id])
 
+  // Position facts the offer letter states (lib/recruitment/position-required.ts): the MRF's
+  // department and work location, else what was typed on the candidate. Required to submit.
+  const [pos, setPos] = useState<{ department: string | null; location: string | null } | null>(null)
+  useEffect(() => {
+    const req = candidate?.application_details?.requisition || {}
+    Promise.all([
+      mrf?.department_id ? supabase.from('departments').select('dept_name').eq('id', mrf.department_id).maybeSingle() : Promise.resolve({ data: null } as any),
+      mrf?.location_id ? supabase.from('locations').select('location_name').eq('id', mrf.location_id).maybeSingle() : Promise.resolve({ data: null } as any),
+    ]).then(([d, l]: any[]) => setPos({ department: d.data?.dept_name || req.department || null, location: req.job_location || l.data?.location_name || null }))
+      .catch(() => setPos({ department: req.department || null, location: req.job_location || null }))
+  }, [mrf?.department_id, mrf?.location_id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const designation = candidate?.designation || mrf?.designation || mrf?.position || null
+  const posGaps = pos ? positionGaps({ designation, department: pos.department, location: pos.location }) : []
+
   // Everything the recruiter already captured is prefilled: the negotiation's previous-employer
   // fields when it has them, else the Add Candidate form (compensation block, notice, DOJ).
   const comp = candidate?.application_details?.compensation || {}
@@ -196,7 +211,8 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
 
   // The approval template is built from the prefilled data as soon as the form opens, so
   // the recruiter reviews it rather than typing it; edits regenerate it via the button.
-  useEffect(() => { generateTemplate() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Built as soon as the form opens, and again once the department / location are looked up.
+  useEffect(() => { generateTemplate() }, [pos]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function generateTemplate() {
     // Only lines with a value — the same rule as the HR Head's mail. No "—" or "Nil" filler.
@@ -214,7 +230,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
       `Reference ${ref} · ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
       '',
       block('CANDIDATE', [
-        line('Name', candidate?.full_name), line('Position', mrf?.designation || candidate?.designation), line('MRF', mrf?.mrf_number),
+        line('Name', candidate?.full_name), line('Position', designation), line('Department', pos?.department), line('Work location', pos?.location), line('MRF', mrf?.mrf_number),
         line('Experience', candidate?.experience_years != null ? `${candidate.experience_years} years` : null), line('Current company', candidate?.current_company),
       ]),
       block('PREVIOUS EMPLOYER', [
@@ -251,6 +267,10 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   }
 
   async function submitForApproval() {
+    if (!pos || posGaps.length) {
+      alert(`${posGaps.join(', ') || 'Designation, department and work location'} ${posGaps.length === 1 ? 'is' : 'are'} required: the offer letter states them. Add them on the MRF (or the candidate) first.`)
+      return
+    }
     if (!prevForm.prev_company_name || !prevForm.prev_total_ctc) {
       alert('Previous company name and CTC are required')
       return
@@ -356,6 +376,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     { k: 'Previous CTC', ok: Number(prevForm.prev_total_ctc) > 0 },
     { k: 'Proposed DOJ', ok: !!joining.proposed_doj },
     { k: 'Approval preview generated', ok: !!template },
+    { k: posGaps.length ? `Position: add ${posGaps.join(', ').toLowerCase()} (on the MRF or the candidate)` : 'Designation, department and work location', ok: !!pos && posGaps.length === 0 },
   ]
   const ready = readiness.every(x => x.ok) && !!negotiation
   const initials = (candidate?.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
@@ -1725,6 +1746,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
     setSending(true)
 
     // 1. Actually email the offer letter to the candidate via Gmail.
+    let sentPosition: { designation?: string | null; department?: string | null; location?: string | null } | null = null
     try {
       const offer = {
         candidate_name: selected.candidates?.full_name,
@@ -1753,6 +1775,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         alert('Email NOT sent: ' + (d.error || `HTTP ${r.status}`) + '\nNothing was marked as sent.')
         return
       }
+      sentPosition = d.position || null   // what the letter stated: kept on the offer_letters row
     } catch {
       setSending(false)
       alert('Email NOT sent: network error. Nothing was marked as sent.')
@@ -1763,7 +1786,9 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
     const { error } = await supabase.from('offer_letters').insert({
       candidate_id: selected.candidate_id,
       candidate_name: selected.candidates?.full_name || toEmail,
-      designation: selected.candidates?.designation || selected.manpower_requisitions?.designation || 'Not specified',
+      designation: sentPosition?.designation || selected.candidates?.designation || selected.manpower_requisitions?.designation || 'Not specified',
+      department: sentPosition?.department || null,
+      location: sentPosition?.location || null,
       company_id: selected.company_id || null,
       letter_content: body,
       to_email: toEmail,

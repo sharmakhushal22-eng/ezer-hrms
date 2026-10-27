@@ -584,9 +584,14 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   // not something to complete, so it must not count towards progress.
   const STEPS: { id: string; title: string; required?: boolean; gate?: () => string | null }[] = [
     { id: 'meta', title: 'Requisition Meta' },
+    // The offer letter states the designation, department and work location
+    // (lib/recruitment/position-required.ts), so none of them may be left blank.
     { id: 'pos', title: 'Position Details', required: true,
-      gate: () => String(form.designation || '').trim() ? null : 'Designation is required.' },
-    { id: 'emp', title: 'Employment Details' },
+      gate: () => !String(form.designation || '').trim() ? 'Designation is required.'
+        : !auto?.department_id ? 'Your employee record has no department, and the MRF takes it from there. Ask HR to set your department first.'
+        : null },
+    { id: 'emp', title: 'Employment Details', required: true,
+      gate: () => form.location_id ? null : 'Work location is required.' },
     { id: 'budget', title: 'Budget & Cost',
       gate: () => {
         const lo = Number(form.budget_min) || 0, hi = Number(form.budget_max) || 0
@@ -611,7 +616,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   // Stable height + scroll-to-top-of-form on step change (see useWizardBody).
   const wiz = useWizardBody(step)
   const activeId = STEPS[step].id
-  const blocked = STEPS[step].gate?.() ?? null
+  const blocked = readOnly ? null : (STEPS[step].gate?.() ?? null)   // an approver only reads; an old MRF missing a field must not trap them on a step
   // Counts PRESENCE requirements only. Counting every gate read "1 of 5 done"
   // on an untouched form, because the budget check passes vacuously until both
   // figures exist — progress that the user had not made.
@@ -629,6 +634,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
     const bMin = Number(form.budget_min) || 0, bMax = Number(form.budget_max) || 0
     if (bMin && bMax && bMin > bMax) { notify(`${comp.label} range minimum (₹${bMin.toLocaleString('en-IN')}) cannot be more than the maximum (₹${bMax.toLocaleString('en-IN')}).`, 'error'); return }
     if (status === 'SUBMITTED') {
+      if (!auto?.department_id) { notify('Your employee record has no department, and the MRF takes it from there. Ask HR to set your department first.', 'error'); return }
+      if (!form.location_id) { notify('Work location is required to submit.', 'error'); return }
       if (!form.reason) { notify('Reason for hire is required to submit.', 'error'); return }
       if (!form.target_joining_date) { notify('Target joining date is required to submit.', 'error'); return }
       if (!isQuick && !String(form.skills_required || '').trim() && !String(form.job_description || '').trim()) { notify('Add mandatory skills or a job description to submit a Full MRF.', 'error'); return }
@@ -909,7 +916,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       <div style={g2}>
         <Field label="Employment Type"><Sel value={form.employment_type} onChange={v => F('employment_type', v)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
         <Field label="Work Mode"><Sel value={form.work_mode} onChange={v => F('work_mode', v)}>{WORK_MODES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
-        <Field label="Work Location"><Sel value={form.location_id} onChange={v => F('location_id', v)}><option value="">Select Location</option>{locations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</Sel></Field>
+        <Field label="Work Location" required><Sel value={form.location_id} onChange={v => F('location_id', v)}><option value="">Select Location</option>{locations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</Sel></Field>
         {/* BGV and the pre-employment medical sit here rather than in §7, which
             is Full-MRF only — both apply to a Quick Hire just the same. */}
         <Field label="Background Verification">

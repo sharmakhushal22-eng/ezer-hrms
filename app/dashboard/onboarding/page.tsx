@@ -336,8 +336,9 @@ export default function OnboardingDashboard() {
   // New link form
   const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
   const [departments, setDepartments] = useState<{id:string;dept_name:string;company_id:string}[]>([])
+  const [locations, setLocations] = useState<{id:string;location_name:string;company_id:string}[]>([])
   const [newForm, setNewForm] = useState({
-    company_id:'', full_name:'', designation:'', department:'', department_id:'', email:'', mobile:'',
+    company_id:'', full_name:'', designation:'', department:'', department_id:'', location_id:'', email:'', mobile:'',
     date_of_joining:'', offered_ctc:'', employment_type:'Employee',
     hiring_track:'DOMESTIC', work_country:'', payroll_currency:'INR', employing_entity:'', notice_period_days:'',
   })
@@ -354,6 +355,8 @@ export default function OnboardingDashboard() {
       })
     supabase.from('departments').select('id,dept_name,company_id').order('dept_name')
       .then(({data})=>setDepartments(data || []))
+    supabase.from('locations').select('id,location_name,company_id').order('location_name')
+      .then(({data})=>setLocations(data || []))
   },[grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = (msg:string, type:'ok'|'err'='ok') => setToast({msg,type})
@@ -562,6 +565,9 @@ export default function OnboardingDashboard() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email || '').trim())) need.push('a valid email (the link and the login go there)')
     if (!date_of_joining) need.push('date of joining')
     if (!designation?.trim()) need.push('designation')
+    // The offer letter, the statutory forms and the employee record carry these too.
+    if (!newForm.department_id) need.push('department')
+    if (newForm.hiring_track !== 'OVERSEAS' && !newForm.location_id) need.push('work location')
     if (!employment_type) need.push('employment type')
     if (newForm.hiring_track === 'OVERSEAS' && !newForm.work_country?.trim()) need.push('work country (overseas employee)')
     if (need.length) { showToast(`Required: ${need.join(', ')}.`,'err'); return }
@@ -575,7 +581,7 @@ export default function OnboardingDashboard() {
       if (!res.ok) throw new Error(data.error||'Failed')
       showToast(data.emailed ? `Onboarding link emailed for ${full_name}! ✉️` : `Link created (email NOT sent: ${data.email_error || '-'}). Share manually: ${data.magic_link}`, data.emailed ? 'ok' : 'err')
       setLinkModal(false)
-      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee',hiring_track:'DOMESTIC',work_country:'',payroll_currency:'INR',employing_entity:'',notice_period_days:''}))
+      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',location_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee',hiring_track:'DOMESTIC',work_country:'',payroll_currency:'INR',employing_entity:'',notice_period_days:''}))
       load()
     } catch(e:any) { showToast(e.message,'err') }
     setSaving(false)
@@ -1513,11 +1519,19 @@ export default function OnboardingDashboard() {
                 </div>
               ))}
               <div style={{marginBottom:8}}>
-                <div style={labelCss}>Department</div>
+                <div style={labelCss}>Department *</div>
                 <select value={newForm.department_id} onChange={e=>{ const d = departments.find(x=>x.id===e.target.value); setNewForm(f=>({...f, department_id:e.target.value, department: d?.dept_name || ''})) }}
                   style={{...inputCss,width:'100%'}}>
                   <option value="">Select department…</option>
                   {departments.filter(d=>!newForm.company_id||d.company_id===newForm.company_id).map(d=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+                </select>
+              </div>
+              <div style={{marginBottom:8}}>
+                <div style={labelCss}>Work location{newForm.hiring_track === 'OVERSEAS' ? '' : ' *'}</div>
+                <select value={newForm.location_id} onChange={e=>setNewForm(f=>({...f, location_id:e.target.value}))}
+                  style={{...inputCss,width:'100%'}}>
+                  <option value="">Select work location…</option>
+                  {locations.filter(l=>!newForm.company_id||l.company_id===newForm.company_id).map(l=><option key={l.id} value={l.id}>{l.location_name}</option>)}
                 </select>
               </div>
               <div style={{marginBottom:8}}>
