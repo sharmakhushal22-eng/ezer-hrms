@@ -52,7 +52,7 @@ A later step is a PAdES digital signature with an organisation certificate (`@si
 
 ## Setup
 
-1. Run `supabase/migrations/171_esign.sql` in the Supabase SQL editor. It creates 4 tables and the private bucket.
+1. Run `supabase/migrations/172_esign.sql` in the Supabase SQL editor. It creates 4 tables and the private bucket.
 2. Optional: set `ESIGN_SECRET` in Vercel. Without it, the OTP HMAC key falls back to the ESS / service-role secret.
 3. Mail goes through the existing Gmail transport (`lib/mail/send.ts`). In local development with `GMAIL_*` blank, the OTP is shown on screen instead.
 

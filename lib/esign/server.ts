@@ -1,7 +1,7 @@
 // lib/esign/server.ts — EZER Sign's database and storage access. Server only.
 //
 // Everything runs with the service-role key: the esign_* tables have RLS on and no policy
-// (migration 171), so this file and the /api/esign routes are the only way in.
+// (migration 172), so this file and the /api/esign routes are the only way in.
 import { createClient } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
 import { sendMail } from '@/lib/mail/send'
@@ -23,12 +23,12 @@ export function appBase(req: NextRequest): string {
 export const signUrl = (base: string, token: string) => `${base}/sign/${token}`
 export const verifyUrl = (base: string, envelopeNo?: string) => `${base}/sign/verify${envelopeNo ? `?id=${encodeURIComponent(envelopeNo)}` : ''}`
 
-/** A friendly error when migration 171 has not been run yet. */
+/** A friendly error when migration 172 has not been run yet. */
 export function migrationHint(e: any): string | null {
   const m = String(e?.message || e || '')
   if (/esign_(envelopes|signers|fields|events)/.test(m) && /(does not exist|schema cache|relation)/i.test(m))
-    return 'E-Sign is not set up yet: run supabase/migrations/171_esign.sql in the Supabase SQL editor.'
-  if (/Bucket not found/i.test(m)) return 'The private storage bucket "esign" is missing: run supabase/migrations/171_esign.sql.'
+    return 'E-Sign is not set up yet: run supabase/migrations/172_esign.sql in the Supabase SQL editor.'
+  if (/Bucket not found/i.test(m)) return 'The private storage bucket "esign" is missing: run supabase/migrations/172_esign.sql.'
   return null
 }
 
