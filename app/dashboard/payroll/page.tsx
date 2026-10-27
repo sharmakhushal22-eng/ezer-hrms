@@ -40,8 +40,16 @@ import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 // aliased: TK for colour, TF for type, SP for spacing.
 import {
   C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+  IconSliders, IconCalendar, IconEmployees, IconPayroll, IconCompliance, IconHeart, IconAward,
+  IconReports, IconAdmin, IconChevronDown, IconChevron, IconCheck, IconBuilding, IconDownload, IconPlus, IconLock,
+  Z, type IconProps,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
+import {
+  PayrollPageHeader, SectionCard, ControlSelect, StatusPill, RunStatusPill, CountChip, InfoCallout, EmptyState,
+  FilterBar, FilterField, fieldStyle, DataTable, dt, PButton, btnStyle, IconTile,
+  IconGrid, IconLayers, IconInfo, IconXCircle, IconCheckCircle, IconMonth, IconArrowRight,
+} from '@/components/payroll/kit'
 
 // ── Palette (guide-mandated) ──────────────────────────────────────
 // This file already owns the name C, so the design tokens come in as TK and
@@ -92,20 +100,38 @@ const TABS: { id: string; label: string; title: string; subtitle: string }[] = [
   { id: 'admin', label: 'Admin & Controls', title: 'Admin & Controls', subtitle: 'Access control, approvals and the full audit trail' },
 ]
 
+// ── Navigation shape ──────────────────────────────────────────────
+// The ten tabs are laid out in the order a payroll month actually moves through —
+// set up, run the month, file the statutory side, take the outputs — so the bar
+// reads as a process rather than ten equal buttons. Visibility is still decided
+// per tab by canSeeScreen below; this only arranges what is shown.
+const TAB_ICON: Record<string, (p: IconProps) => React.ReactElement> = {
+  dashboard: IconGrid, config: IconSliders, employees: IconEmployees, attendance: IconCalendar,
+  run: IconPayroll, benefits: IconHeart, offcycle: IconAward, statutory: IconCompliance,
+  reports: IconReports, admin: IconAdmin,
+}
+const TAB_GROUPS: { label: string; ids: string[] }[] = [
+  { label: 'Overview', ids: ['dashboard'] },
+  { label: 'Setup', ids: ['config', 'employees'] },
+  { label: 'Monthly run', ids: ['attendance', 'run', 'benefits', 'offcycle'] },
+  { label: 'Statutory', ids: ['statutory'] },
+  { label: 'Outputs & control', ids: ['reports', 'admin'] },
+]
+
 // ── Small shared bits ─────────────────────────────────────────────
 function Badge({ text, bg, color }: { text: string; bg: string; color: string }) {
-  return <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: 99, fontSize: 10, fontWeight: 700, background: bg, color, letterSpacing: '.03em' }}>{text}</span>
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 9px', borderRadius: 99, fontSize: TF.micro, fontWeight: W.semi, background: bg, color, letterSpacing: '.02em', whiteSpace: 'nowrap', lineHeight: 1.5 }}>{text}</span>
 }
 
 const HEAD_COLORS: Record<string, { bg: string; color: string }> = {
-  EARNING: { bg: 'rgba(5,150,105,0.12)', color: C.success },
-  DEDUCTION: { bg: 'rgba(220,38,38,0.12)', color: C.red },
-  EMPLOYER: { bg: 'rgba(37,99,235,0.12)', color: C.purple },
-  NON_SALARY: { bg: 'rgba(180,83,9,0.12)', color: C.amber },
+  EARNING: { bg: TK.positiveTint, color: C.success },
+  DEDUCTION: { bg: TK.criticalTint, color: C.red },
+  EMPLOYER: { bg: TK.brandTint, color: C.purple },
+  NON_SALARY: { bg: TK.warningTint, color: C.amber },
 }
 
 function PlannedBadge() {
-  return <Badge text="Planned" bg="rgba(107,107,123,0.14)" color={C.muted} />
+  return <Badge text="Planned" bg={TK.sunken} color={C.muted} />
 }
 
 // ══ Sub-tab framework (architecture per ezer_payroll_full_architecture_tabs) ══
@@ -122,91 +148,119 @@ interface SubTab {
 
 // Group-mode context passed down so company-specific sub-tabs can show a company switcher.
 
-function SubTabHead({ crumbs, subtitle, built, total }: { crumbs: string[]; subtitle: string; built: number; total: number }) {
+// The section heading under the tab bar: where you are (Tab › Section › View), what the
+// tab is for, and how much of it is built.
+function SubTabHead({ crumbs, subtitle, built, total, icon }: { crumbs: string[]; subtitle: string; built: number; total: number; icon?: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, flexWrap: 'wrap', marginBottom: SP.lg }}>
+      {icon && <IconTile icon={icon} t="brand" size={36} />}
+      <div style={{ minWidth: 0, flex: '1 1 320px' }}>
+        <nav aria-label="Breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {crumbs.map((c, i) => {
             const last = i === crumbs.length - 1
             return (
               <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                {i > 0 && <span style={{ color: TK.line, fontSize: 15 }}>›</span>}
-                <span style={{ fontSize: 17, fontWeight: last ? 700 : 600, color: last ? C.navy : C.muted }}>{c}</span>
+                {i > 0 && <span style={{ color: TK.faint, display: 'inline-flex' }}><IconChevron size={13} /></span>}
+                <span style={{ fontSize: last ? TF.title : TF.lead, fontWeight: last ? W.bold : W.medium, color: last ? C.navy : C.muted, letterSpacing: last ? '-.01em' : undefined }}>{c}</span>
               </span>
             )
           })}
+        </nav>
+        <div style={{ fontSize: TF.small, color: C.muted, marginTop: 3, lineHeight: 1.45 }}>{subtitle}</div>
+      </div>
+      {total > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <StatusPill t="positive" dot size="sm">{built} built</StatusPill>
+          <StatusPill t="neutral" dot size="sm">{total - built} planned</StatusPill>
         </div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{subtitle}</div>
-      </div>
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: C.muted }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: C.success }} />{built} built</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: TK.line }} />{total - built} planned</span>
-      </div>
+      )}
     </div>
   )
 }
 
 // Main-tab button that opens a dropdown of its own sub-sections. Clicking a section
 // enters that tab + section. The menu hangs directly off the tab button.
-function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, onPick }: {
-  label: string; isActive: boolean; sections: SubTab[]; activeSub: string; activeChild?: string; onPick: (id: string, childId?: string) => void
+function MainTabDropdown({ id, label, isActive, sections, activeSub, activeChild, onPick }: {
+  id: string; label: string; isActive: boolean; sections: SubTab[]; activeSub: string; activeChild?: string; onPick: (id: string, childId?: string) => void
 }) {
   const [open, setOpen] = useState(false)
   // One click, not two: a document listener lets the click through to whatever
   // is under it, so moving straight to another trigger opens that one.
   const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
-  const [alignRight, setAlignRight] = useState(false)
+  const [anchor, setAnchor] = useState<{ left?: number; right?: number }>({ left: 0 })
   const [expanded, setExpanded] = useState<Set<string>>(new Set())   // which sections have their children expanded
-  const btnRef = useRef<HTMLButtonElement>(null)
   const built = sections.filter(s => s.built).length
+  const Icon = TAB_ICON[id] || IconLayers
 
-  // The menu is anchored to the button by LAYOUT (position: absolute inside the button's
-  // relative wrapper), not by viewport coordinates written into position: fixed.
+  // The menu is anchored by LAYOUT (position: absolute), never by viewport coordinates
+  // written into position: fixed. That silently breaks whenever anything between the
+  // button and the viewport creates a containing block — a transform, a filter,
+  // contain: paint — because fixed then resolves against that ancestor instead of the
+  // screen, and the panel lands hundreds of pixels away.
   //
-  // It used to measure getBoundingClientRect() and place a fixed-position panel at those
-  // numbers. That silently breaks whenever anything between the button and the viewport
-  // creates a containing block — a transform, a filter, contain: paint — because fixed
-  // then resolves against that ancestor instead of the screen, and the panel lands
-  // hundreds of pixels away. It looked fine on most machines and badly wrong on others,
-  // which is exactly how that class of bug behaves. Layout anchoring cannot drift: the
-  // menu is a child of the button's wrapper, so it goes where the button is, full stop.
-  //
-  // The original reason for fixed — escaping the tab bar's horizontal scroll — no longer
-  // exists; the bar wraps onto multiple rows instead of scrolling.
+  // The tab strip now scrolls sideways instead of wrapping onto two rows, and a scroll
+  // container clips anything positioned inside it. So this wrapper is deliberately NOT
+  // positioned: the menu's containing block is the sticky bar OUTSIDE the scroller,
+  // which does not clip it. Its offset is this wrapper's layout offset (offsetLeft, which
+  // no transform can distort) minus how far the strip has been scrolled.
   const toggle = () => {
     if (sections.length === 0) { onPick(''); return }   // no sub-sections (e.g. Dashboard) → just activate the tab
     if (!open) {
-      // Only decides which EDGE the menu hangs from. If this measurement is off the menu
-      // is still glued to the button — it just opens leftward instead of rightward.
-      const r = btnRef.current?.getBoundingClientRect()
-      setAlignRight(!!r && typeof window !== 'undefined' && r.left > window.innerWidth * 0.55)
+      const el = pop.current
+      const strip = el?.closest('[data-tabstrip]') as HTMLElement | null
+      const bar = el?.offsetParent as HTMLElement | null
+      const left = (el?.offsetLeft || 0) - (strip?.scrollLeft || 0)
+      const barW = bar?.clientWidth || 0
+      // Only decides which EDGE the menu hangs from; either way it stays under the tab.
+      if (barW && left + 290 > barW) setAnchor({ right: Math.max(0, barW - (left + (el?.offsetWidth || 0))) })
+      else setAnchor({ left: Math.max(0, left) })
       setExpanded(new Set())   // each time the menu opens, sub-sections start collapsed
     }
     setOpen(o => !o)
   }
+  // The strip scrolling would leave the open menu hanging under the wrong tab.
+  useEffect(() => {
+    if (!open) return
+    const strip = pop.current?.closest('[data-tabstrip]')
+    const close = () => setOpen(false)
+    strip?.addEventListener('scroll', close, { passive: true })
+    return () => strip?.removeEventListener('scroll', close)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   return (
-    <div ref={pop} style={{ position: 'relative', flexShrink: 0 }}>
-      <button ref={btnRef} onClick={toggle} style={{
-        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10,
-        border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple: TK.surface,
-        color: isActive ? TK.surface : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-        boxShadow: open ? '0 6px 20px rgba(37,99,235,0.18)' : 'none',
-      }}>
+    <div ref={pop} data-ptab={id} style={{ flexShrink: 0 }}>
+      <button onClick={toggle} aria-expanded={sections.length > 0 ? open : undefined} aria-current={isActive ? 'page' : undefined}
+        className="ez-tab ez-press" data-on={isActive ? '1' : '0'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 10px', borderRadius: R.md,
+          border: `1px solid ${isActive ? TK.brandEdge : open ? TK.lineStrong : 'transparent'}`,
+          // Inactive leaves background unset so the .ez-tab hover wash can show.
+          background: isActive ? TK.brandTint : open ? TK.sunken : undefined,
+          color: isActive ? C.purpleDark : TK.inkSoft, fontSize: TF.small, fontWeight: isActive ? W.semi : W.medium,
+          cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+          boxShadow: isActive ? `inset 0 -2px 0 ${TK.brand}` : 'none',
+        }}>
+        <span style={{ display: 'inline-flex', color: isActive ? C.purple : C.muted }}><Icon size={15} /></span>
         {label}
-        {sections.length > 0 && <span style={{ fontSize: 10, opacity: .9, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}></span>}
+        {sections.length > 0 && (
+          <span style={{ display: 'inline-flex', color: isActive ? C.purple : TK.faint, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}>
+            <IconChevronDown size={12} />
+          </span>
+        )}
       </button>
       {open && sections.length > 0 && (
         <>
-          <div style={{
+          <div className="ez-rise" style={{
             position: 'absolute', top: 'calc(100% + 6px)',
-            ...(alignRight ? { right: 0 } : { left: 0 }),
-            zIndex: 1001, minWidth: 262, maxHeight: '70vh', overflowY: 'auto',
-            background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 14,
-            boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6,
+            ...(anchor.right != null ? { right: anchor.right } : { left: anchor.left }),
+            zIndex: 1001, minWidth: 270, maxHeight: '70vh', overflowY: 'auto',
+            background: TK.surface, border: `1px solid ${C.border}`, borderRadius: R.lg,
+            boxShadow: E.overlay, padding: 6,
           }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em', padding: '6px 10px 8px' }}>Sections · {built}/{sections.length} built</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px 8px' }}>
+              <span style={{ ...eyebrow }}>{label}</span>
+              <span style={{ marginLeft: 'auto', fontSize: TF.micro, color: C.muted, ...numeric }}>{built}/{sections.length} built</span>
+            </div>
             {sections.map(s => {
               const on = isActive && s.id === activeSub
               const kids = s.children || []
@@ -217,21 +271,21 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                 <div key={s.id}>
                   <button
                     onClick={() => { if (hasKids) { toggleExpand(s.id) } else { onPick(s.id); setOpen(false) } }}
-                    onMouseEnter={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
-                    onMouseLeave={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                    className={rowActive ? undefined : 'ez-row'}
                     style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 10,
-                      border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 2,
-                      background: rowActive ? 'rgba(37,99,235,0.09)' : 'transparent',
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: R.md,
+                      border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 1,
+                      background: rowActive ? TK.brandTint : undefined,
                     }}>
-                    <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{s.icon}</span>
-                    <span style={{ fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.purpleDark : C.navy, flex: 1 }}>{s.label}</span>
+                    <span title={s.built ? 'Built' : 'Planned'} style={{ width: 7, height: 7, borderRadius: 99, flexShrink: 0, background: s.built ? C.success : TK.lineStrong }} />
+                    {s.icon && <span style={{ fontSize: 15, width: 20, textAlign: 'center', flexShrink: 0 }}>{s.icon}</span>}
+                    <span style={{ fontSize: TF.small, fontWeight: on ? W.semi : W.medium, color: on ? C.purpleDark : C.navy, flex: 1 }}>{s.label}</span>
                     {hasKids ? (
-                      <span style={{ color: C.muted, fontSize: 11, flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}></span>
+                      <span style={{ color: C.muted, display: 'inline-flex', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}><IconChevron size={13} /></span>
                     ) : (
                       <>
-                        <span title={s.built ? 'Built' : 'Planned'} style={{ width: 7, height: 7, borderRadius: 99, flexShrink: 0, background: s.built ? C.success: TK.line }} />
-                        {on && <span style={{ color: C.purple, fontSize: 13, marginLeft: 2 }}></span>}
+                        {!s.built && <span style={{ fontSize: TF.micro, color: TK.faint, fontWeight: W.semi }}>Planned</span>}
+                        {on && <span style={{ color: C.purple, display: 'inline-flex' }}><IconCheck size={14} /></span>}
                       </>
                     )}
                   </button>
@@ -242,15 +296,14 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                         const kon = on && k.id === activeChild
                         return (
                           <button key={k.id} onClick={() => { onPick(s.id, k.id); setOpen(false) }}
-                            onMouseEnter={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
-                            onMouseLeave={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                            className={kon ? undefined : 'ez-row'}
                             style={{
-                              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 10,
+                              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: R.md,
                               border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 1,
-                              background: kon ? 'rgba(37,99,235,0.09)' : 'transparent',
+                              background: kon ? TK.brandTint : undefined,
                             }}>
-                            <span style={{ fontSize: 13, fontWeight: kon ? 700 : 500, color: kon ? C.purpleDark : C.navy, flex: 1 }}>{k.label}</span>
-                            {kon && <span style={{ color: C.purple, fontSize: 12 }}></span>}
+                            <span style={{ fontSize: TF.small, fontWeight: kon ? W.semi : W.medium, color: kon ? C.purpleDark : C.navy, flex: 1 }}>{k.label}</span>
+                            {kon && <span style={{ color: C.purple, display: 'inline-flex' }}><IconCheck size={13} /></span>}
                           </button>
                         )
                       })}
@@ -266,11 +319,12 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
   )
 }
 
-function Chips({ items }: { items: string[] }) {
+function Chips({ items, t = 'brand', center }: { items: string[]; t?: 'brand' | 'positive'; center?: boolean }) {
+  const k = tone(t)
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14, justifyContent: 'center' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14, justifyContent: center ? 'center' : undefined }}>
       {items.map(p => (
-        <span key={p} style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 99, background: 'rgba(37,99,235,0.06)', border: `1px solid ${C.border}`, color: C.purpleDark }}>{p}</span>
+        <span key={p} style={{ fontSize: TF.tiny, fontWeight: W.medium, padding: '3px 10px', borderRadius: 99, background: k.bg, border: `1px solid ${k.edge}`, color: k.fg }}>{p}</span>
       ))}
     </div>
   )
@@ -278,32 +332,44 @@ function Chips({ items }: { items: string[] }) {
 
 function PlannedPanel({ s }: { s: SubTab }) {
   return (
-    <div style={{ ...S.card, textAlign: 'center', padding: '38px 24px' }}>
-      <div style={{ width: 58, height: 58, borderRadius: 14, background: 'rgba(37,99,235,0.07)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px' }}>{s.icon}</div>
+    <div style={{ ...S.card, textAlign: 'center', padding: '40px 24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+        {s.icon
+          ? <span style={{ width: 52, height: 52, borderRadius: R.lg, background: TK.sunken, border: `1px solid ${C.border}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{s.icon}</span>
+          : <IconTile icon={<IconLayers size={22} />} t="neutral" size={52} />}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 6 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: C.navy }}>{s.label}</span>
+        <span style={{ fontSize: TF.title, fontWeight: W.bold, color: C.navy, letterSpacing: '-.01em' }}>{s.label}</span>
         <PlannedBadge />
       </div>
-      {s.desc && <div style={{ fontSize: 13, color: C.muted, maxWidth: 460, margin: '0 auto', lineHeight: 1.6 }}>{s.desc}</div>}
-      {s.points && <Chips items={s.points} />}
-      <div style={{ fontSize: 11, color: C.muted, marginTop: 16, opacity: 0.8 }}>On the payroll roadmap: structure ready, wiring next.</div>
+      {s.desc && <div style={{ fontSize: TF.small, color: C.muted, maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>{s.desc}</div>}
+      {s.points && <Chips items={s.points} center />}
+      <div style={{ fontSize: TF.tiny, color: TK.faint, marginTop: 18 }}>On the payroll roadmap: structure ready, wiring next.</div>
     </div>
   )
 }
 
 function BuiltPanel({ s }: { s: SubTab }) {
   return (
-    <div style={{ ...S.card, padding: '26px 24px' }}>
-      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(5,150,105,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{s.icon}</div>
-        <div style={{ flex: 1 }}>
+    <div style={{ ...S.card, padding: '22px 24px' }}>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        {s.icon
+          ? <span style={{ width: 48, height: 48, borderRadius: R.lg, background: TK.positiveTint, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{s.icon}</span>
+          : <IconTile icon={<IconCheckCircle size={22} />} t="positive" size={48} />}
+        <div style={{ flex: '1 1 280px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: C.navy }}>{s.label}</span>
-            <Badge text="Built" bg="rgba(5,150,105,0.12)" color={C.success} />
+            <span style={{ fontSize: TF.title, fontWeight: W.bold, color: C.navy, letterSpacing: '-.01em' }}>{s.label}</span>
+            <StatusPill t="positive" dot size="sm">Built</StatusPill>
           </div>
-          {s.desc && <div style={{ fontSize: 13, color: C.muted, margin: '7px 0 0', lineHeight: 1.6 }}>{s.desc}</div>}
-          {s.points && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>{s.points.map(p => <span key={p} style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 99, background: 'rgba(5,150,105,0.08)', color: C.success }}>{p}</span>)}</div>}
-          {s.href && <div style={{ marginTop: 14 }}><a href={s.href} style={{ ...S.btnPrimary, display: 'inline-block', textDecoration: 'none' }}>Open →</a></div>}
+          {s.desc && <div style={{ fontSize: TF.small, color: C.muted, margin: '7px 0 0', lineHeight: 1.6, maxWidth: 680 }}>{s.desc}</div>}
+          {s.points && <Chips items={s.points} t="positive" />}
+          {s.href && (
+            <div style={{ marginTop: 16 }}>
+              <a href={s.href} className="ez-press ez-cta" style={{ ...btnStyle('primary', 'md') }}>
+                Open <span className="ez-cta-arrow" style={{ display: 'inline-flex' }}><IconArrowRight size={14} /></span>
+              </a>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -676,36 +742,42 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
     reload()
   }
 
+  const pmTitle = mode === 'create' ? 'Create payroll month' : mode === 'freeze' ? 'Freeze payroll month' : mode === 'unfreeze' ? 'Unfreeze payroll month' : 'Lock payroll month'
+  const pmIcon = mode === 'create' ? <IconPlus size={16} /> : mode === 'lock' ? <IconLock size={16} /> : <IconMonth size={16} />
   return (
     <div>
-      <div style={S.card}>
-        <div style={S.cardTitle}>{mode === 'create' ? 'Create payroll month' : mode === 'freeze' ? 'Freeze payroll month' : mode === 'unfreeze' ? 'Unfreeze payroll month' : 'Lock payroll month'} · FY {fy}</div>
-        <div style={{ fontSize: 12, color: C.muted }}>
-          {mode === 'create' ? 'Open a new payroll month so it can be processed.'
-            : mode === 'freeze' ? 'Freezing locks the attendance snapshot so it can’t change while payroll is calculated.'
-              : mode === 'unfreeze' ? 'Re-open a frozen month so attendance can be edited again (reverts it to OPEN).'
-                : 'Locking finalises the month: the payroll snapshot becomes immutable. Unlock to re-open it.'}
-        </div>
-        {mode === 'create' && (
+      <SectionCard
+        icon={pmIcon}
+        title={<>{pmTitle} <span style={{ color: C.muted, fontWeight: W.medium }}>· FY {fy}</span></>}
+        hint={mode === 'create' ? 'Open a new payroll month so it can be processed.'
+          : mode === 'freeze' ? 'Freezing locks the attendance snapshot so it can’t change while payroll is calculated.'
+            : mode === 'unfreeze' ? 'Re-open a frozen month so attendance can be edited again (reverts it to OPEN).'
+              : 'Locking finalises the month: the payroll snapshot becomes immutable. Unlock to re-open it.'}
+        actions={mode === 'create'
+          ? <PButton variant="primary" icon={<IconPlus size={14} />} onClick={() => setShowCreate(true)}>{allCo ? 'Create for all companies' : 'Create month'}</PButton>
+          : undefined}
+      >
+        {(mode === 'create' && allCo) || err ? (
           <>
-            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: TK.brandTint, borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode: this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
-            <div style={{ marginTop: 12 }}>
-              <button style={{ ...S.btnPrimary }} onClick={() => setShowCreate(true)}>➕ {allCo ? 'Create for all companies' : 'Create month'}</button>
-            </div>
+            {mode === 'create' && allCo && (
+              <InfoCallout t="brand" compact style={{ marginBottom: err ? SP.md : 0 }}>
+                Group Companies mode: this creates the month for <b>every company</b> at once (companies that already have it are skipped).
+              </InfoCallout>
+            )}
+            {err && <InfoCallout t="critical" compact style={{ marginBottom: 0 }}>{err}</InfoCallout>}
           </>
-        )}
-        {err && <div style={{ color: C.red, fontSize: 12, marginTop: 8 }}>{err}</div>}
-      </div>
+        ) : null}
+      </SectionCard>
 
-      {loading ? <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div> : runs.length === 0 ? (
-        <div style={S.card}><div style={{ color: C.muted, fontSize: 12 }}>No payroll months for FY {fy}{allCo ? ' across any company' : ''} yet.</div></div>
+      {loading ? <SectionCard><div style={{ color: C.muted, fontSize: TF.small }}>Loading…</div></SectionCard> : runs.length === 0 ? (
+        <SectionCard><EmptyState compact icon={<IconMonth size={20} />} title={`No payroll months for FY ${fy}${allCo ? ' across any company' : ''} yet.`} /></SectionCard>
       ) : (
-        <div style={S.card}>
+        <SectionCard title="Months" icon={<IconLayers size={16} />} hint={`${allCo ? 'One row per month, rolled up across every company.' : 'Every payroll month created for this company.'}`} flush>
           {allCo ? (
             // Group Companies → one consolidated "Sharma Group · Month" row per month (rolls up all companies' runs).
             Object.values(runs.reduce((acc, r) => { (acc[r.month as number] = acc[r.month as number] || []).push(r); return acc }, {} as Record<number, PayrollRun[]>))
               .sort((a, b) => (a[0].month || 0) - (b[0].month || 0))
-              .map(g => {
+              .map((g, gi) => {
                 const statuses = Array.from(new Set(g.map(r => r.status)))
                 const totalEmp = g.reduce((s, r) => s + (r.emp_count || 0), 0)
                 const active = g.filter(r => r.status !== 'CANCELLED')
@@ -713,68 +785,76 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
                 const unfreezable = active.filter(r => r.status === 'ATTENDANCE_LOCKED')
                 const lockable = active.filter(r => r.status !== 'LOCKED')
                 const single = statuses.length === 1
-                const pill = single ? statusPill(statuses[0]) : { bg: 'rgba(107,107,123,0.14)', color: C.muted }
                 return (
-                  <div key={g[0].month} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, minWidth: 200 }}>🏛️ {groupName} · {g[0].period_label || `${g[0].fy} · M${g[0].month}`}</div>
-                    <Badge text={`${g.length} compan${g.length === 1 ? 'y' : 'ies'}`} bg="rgba(37,99,235,0.12)" color={C.purple} />
-                    <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{single ? statuses[0] : statuses.join(' · ')}</span>
-                    {mode === 'create' && <span style={{ fontSize: 11, color: C.muted }}>{totalEmp} employees across {g.length}</span>}
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                      <button style={{ ...S.btnOutline, opacity: dlKey === `g${g[0].month}` ? 0.6 : 1 }} disabled={!!dlKey}
+                  <div key={g[0].month} className="ez-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: gi === 0 ? 'none' : `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 220, flex: '1 1 220px' }}>
+                      <IconTile icon={<IconBuilding size={15} />} t="brand" size={30} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: TF.body, fontWeight: W.semi, color: C.navy }}>{groupName} · {g[0].period_label || `${g[0].fy} · M${g[0].month}`}</div>
+                        {mode === 'create' && <div style={{ fontSize: TF.tiny, color: C.muted, ...numeric }}>{totalEmp} employees across {g.length}</div>}
+                      </div>
+                    </div>
+                    <CountChip t="brand">{`${g.length} compan${g.length === 1 ? 'y' : 'ies'}`}</CountChip>
+                    {single ? <RunStatusPill status={statuses[0]} raw /> : <StatusPill t="neutral" dot>{statuses.join(' · ')}</StatusPill>}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <PButton size="sm" icon={<IconDownload size={14} />} disabled={!!dlKey}
                         onClick={() => downloadMaster(g, `${groupName} ${g[0].period_label || `${g[0].fy} M${g[0].month}`}`, `g${g[0].month}`)}>
-                        {dlKey === `g${g[0].month}` ? 'Preparing…' : '⬇ Month Master'}
-                      </button>
+                        {dlKey === `g${g[0].month}` ? 'Preparing…' : 'Month Master'}
+                      </PButton>
                       {mode === 'freeze' && (freezable.length
-                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(freezable, 'ATTENDANCE_LOCKED')}>Freeze all</button>
-                        : <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>Frozen</span>)}
+                        ? <PButton size="sm" variant="primary" disabled={busy} onClick={() => applyGroup(freezable, 'ATTENDANCE_LOCKED')}>Freeze all</PButton>
+                        : <StatusPill t="positive" size="sm" icon={<IconCheck size={12} />}>Frozen</StatusPill>)}
                       {mode === 'unfreeze' && (unfreezable.length
-                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(unfreezable, 'OPEN')}>Unfreeze all</button>
-                        : <span style={{ fontSize: 11, color: C.muted }}>nothing to unfreeze</span>)}
+                        ? <PButton size="sm" variant="primary" disabled={busy} onClick={() => applyGroup(unfreezable, 'OPEN')}>Unfreeze all</PButton>
+                        : <span style={{ fontSize: TF.tiny, color: C.muted }}>nothing to unfreeze</span>)}
                       {mode === 'lock' && (lockable.length
-                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(lockable, 'LOCKED')}>Lock all</button>
-                        : <button style={S.btnOutline} disabled={busy} onClick={() => applyGroup(active, 'DISBURSED')}>Unlock all</button>)}
+                        ? <PButton size="sm" variant="primary" icon={<IconLock size={13} />} disabled={busy} onClick={() => applyGroup(lockable, 'LOCKED')}>Lock all</PButton>
+                        : <PButton size="sm" disabled={busy} onClick={() => applyGroup(active, 'DISBURSED')}>Unlock all</PButton>)}
                     </div>
                   </div>
                 )
               })
-          ) : runs.map(run => {
-            const pill = statusPill(run.status)
+          ) : runs.map((run, ri) => {
             const frozen = FROZEN_OR_BEYOND.includes(run.status)
             const locked = run.status === 'LOCKED'
             const cancelled = run.status === 'CANCELLED'
             return (
-              <div key={run.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, minWidth: 120 }}>{run.period_label || `${run.fy} · M${run.month}`}</div>
-                <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{run.status}</span>
-                {mode === 'create' && <span style={{ fontSize: 11, color: C.muted }}>{run.emp_count || 0} employees</span>}
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                  <button style={{ ...S.btnOutline, opacity: dlKey === run.id ? 0.6 : 1 }} disabled={!!dlKey}
+              <div key={run.id} className="ez-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: ri === 0 ? 'none' : `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 160, flex: '1 1 160px' }}>
+                  <IconTile icon={<IconMonth size={15} />} t="brand" size={30} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: TF.body, fontWeight: W.semi, color: C.navy }}>{run.period_label || `${run.fy} · M${run.month}`}</div>
+                    {mode === 'create' && <div style={{ fontSize: TF.tiny, color: C.muted, ...numeric }}>{run.emp_count || 0} employees</div>}
+                  </div>
+                </div>
+                <RunStatusPill status={run.status} raw />
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <PButton size="sm" icon={<IconDownload size={14} />} disabled={!!dlKey}
                     onClick={() => downloadMaster([run], `${run.company_name || ''} ${run.period_label || `${run.fy} M${run.month}`}`, run.id)}>
-                    {dlKey === run.id ? 'Preparing…' : '⬇ Month Master'}
-                  </button>
+                    {dlKey === run.id ? 'Preparing…' : 'Month Master'}
+                  </PButton>
                   {mode === 'freeze' && !cancelled && (
                     frozen
-                      ? <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>Frozen</span>
-                      : <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'ATTENDANCE_LOCKED')}>Freeze</button>
+                      ? <StatusPill t="positive" size="sm" icon={<IconCheck size={12} />}>Frozen</StatusPill>
+                      : <PButton size="sm" variant="primary" disabled={busy} onClick={() => apply(run, 'ATTENDANCE_LOCKED')}>Freeze</PButton>
                   )}
                   {mode === 'unfreeze' && !cancelled && (
                     run.status === 'ATTENDANCE_LOCKED'
-                      ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'OPEN')}>Unfreeze</button>
-                      : <span style={{ fontSize: 11, color: C.muted }}>{frozen ? 'processed, can’t unfreeze' : 'not frozen'}</span>
+                      ? <PButton size="sm" variant="primary" disabled={busy} onClick={() => apply(run, 'OPEN')}>Unfreeze</PButton>
+                      : <span style={{ fontSize: TF.tiny, color: C.muted }}>{frozen ? 'processed, can’t unfreeze' : 'not frozen'}</span>
                   )}
                   {mode === 'lock' && !cancelled && (
                     locked
-                      ? <button style={S.btnOutline} disabled={busy} onClick={() => apply(run, 'DISBURSED')}>Unlock</button>
-                      : <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'LOCKED')}>Lock</button>
+                      ? <PButton size="sm" disabled={busy} onClick={() => apply(run, 'DISBURSED')}>Unlock</PButton>
+                      : <PButton size="sm" variant="primary" icon={<IconLock size={13} />} disabled={busy} onClick={() => apply(run, 'LOCKED')}>Lock</PButton>
                   )}
                 </div>
               </div>
             )
           })}
-        </div>
+        </SectionCard>
       )}
-      <div style={S.note}>The full run lifecycle (sync → calculate → approve → disburse) lives in <b>Payroll Run</b>. These are shortcuts to create, freeze and lock a month.</div>
+      <InfoCallout t="info" compact>The full run lifecycle (sync → calculate → approve → disburse) lives in <b>Payroll Run</b>. These are shortcuts to create, freeze and lock a month.</InfoCallout>
 
       {showCreate && (
         <CreateMonthModal fy={fy} allCo={allCo} onRun={runCreate} disabledMonths={disabledMonths}
@@ -839,8 +919,8 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
     }, 150)
   }
 
-  const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }
-  const box: React.CSSProperties = { background: TK.surface, borderRadius: 14, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
+  const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: `color-mix(in srgb, ${TK.dark} 52%, transparent)`, zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }
+  const box: React.CSSProperties = { background: TK.surface, borderRadius: 14, padding: 24, width: '100%', maxWidth: 440, boxShadow: E.overlay, border: `1px solid ${TK.line}` }
   const GREEN = TK.positive
 
   return (
@@ -857,7 +937,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
               </>
             ) : (
               <>
-                <label style={{ fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 6 }}>Month · FY {fy}</label>
+                <label style={{ ...S.label, marginBottom: 6 }}>Month · FY {fy}</label>
                 <select style={{ ...S.input, width: '100%', marginBottom: 20 }} value={month} onChange={e => setMonth(Number(e.target.value))}>
                   {availableMonths.map(m => <option key={m} value={m}>{MONTHS[m - 1]} {calYearOf(m - 1)}</option>)}
                 </select>
@@ -881,7 +961,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 
         {step === 'blocked' && (
           <>
-            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}></div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}><IconTile icon={<IconXCircle size={24} />} t="critical" size={52} /></div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, textAlign: 'center', marginBottom: 6 }}>
               Can&apos;t create {monthLabel} yet
             </div>
@@ -890,15 +970,16 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             </div>
             <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 18 }}>
               {blockers.map(b => (
-                <div key={b.companyId} style={{ border: `1px solid ${TK.criticalTint}`, background: TK.criticalTint, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                <div key={b.companyId} style={{ border: `1px solid ${TK.criticalEdge}`, background: TK.criticalTint, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
                   <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 6 }}>{b.companyName} · {b.prevLabel}</div>
                   {[
                     ['Attendance processed', b.attendanceDone, b.attendanceDetail],
                     ['Month frozen', b.frozen, b.frozenDetail],
                     ['Payroll locked', b.locked, b.lockedDetail],
                   ].map(([label, ok, detail]: any) => (
-                    <div key={label} style={{ fontSize: 12, color: ok ? C.success : C.red, padding: '2px 0' }}>
-                      {ok ? '' : ''} <b>{label}</b>{ok ? '' : `: ${detail}`}
+                    <div key={label} style={{ fontSize: 12, color: ok ? C.success : C.red, padding: '2px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <span style={{ display: 'inline-flex', marginTop: 1 }}>{ok ? <IconCheckCircle size={14} /> : <IconXCircle size={14} />}</span>
+                      <span><b>{label}</b>{ok ? '' : `: ${detail}`}</span>
                     </div>
                   ))}
                 </div>
@@ -913,7 +994,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 
         {step === 'confirm' && (
           <>
-            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}></div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}><IconTile icon={<IconMonth size={24} />} t="brand" size={52} /></div>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, textAlign: 'center', lineHeight: 1.5, marginBottom: 6 }}>
               Create the month master for<br /><span style={{ color: C.purple, fontSize: 18, fontWeight: 800 }}>{monthLabel}</span>{allCo ? <span style={{ color: C.muted, fontWeight: 600 }}> for all companies</span> : ''}?
             </div>
@@ -939,7 +1020,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 
         {step === 'done' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 60, height: 60, borderRadius: 99, background: TK.positiveTint, border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}></div>
+            <div style={{ width: 60, height: 60, borderRadius: 99, background: TK.positiveTint, border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><IconCheck size={28} strokeWidth={2.2} /></div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 8 }}>Month master ready</div>
             {summary && <div style={{ fontSize: 13, color: C.navy, marginBottom: err ? 10 : 18 }}>{summary}</div>}
             {err && <div style={{ fontSize: 12, color: C.red, background: TK.criticalTint, borderRadius: 10, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
@@ -954,15 +1035,15 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 // ── Run tab helpers ───────────────────────────────────────────────
 function statusPill(status: string) {
   const map: Record<string, { bg: string; color: string }> = {
-    OPEN: { bg: 'rgba(107,107,123,0.14)', color: C.muted },
-    SYNCED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
-    ATTENDANCE_LOCKED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
-    CALCULATED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
-    AI_CHECKED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
-    APPROVED: { bg: 'rgba(5,150,105,0.12)', color: C.success },
-    DISBURSED: { bg: 'rgba(5,150,105,0.12)', color: C.success },
-    LOCKED: { bg: 'rgba(30,27,75,0.12)', color: C.navy },
-    CANCELLED: { bg: 'rgba(220,38,38,0.12)', color: C.red },
+    OPEN: { bg: TK.sunken, color: C.muted },
+    SYNCED: { bg: TK.infoTint, color: TK.info },
+    ATTENDANCE_LOCKED: { bg: TK.infoTint, color: TK.info },
+    CALCULATED: { bg: TK.infoTint, color: TK.info },
+    AI_CHECKED: { bg: TK.infoTint, color: TK.info },
+    APPROVED: { bg: TK.positiveTint, color: C.success },
+    DISBURSED: { bg: TK.positiveTint, color: C.success },
+    LOCKED: { bg: TK.sunken, color: C.navy },
+    CANCELLED: { bg: TK.criticalTint, color: C.red },
   }
   return map[status] || map.OPEN
 }
@@ -972,20 +1053,26 @@ function AuditCard({ companyId, refreshKey }: { companyId: string; refreshKey: n
   const [rows, setRows] = useState<any[]>([])
   useEffect(() => { loadAudit(companyId).then(setRows) }, [companyId, refreshKey])
   return (
-    <div style={S.card}>
-      <div style={S.cardTitle}>Recent activity</div>
-      {rows.length === 0 ? <div style={{ color: C.muted, fontSize: 12 }}>No activity yet.</div> : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {rows.slice(0, 12).map((r, i) => (
-            <div key={i} style={{ display: 'flex', gap: 10, fontSize: 12, alignItems: 'center', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`, paddingTop: i === 0 ? 0 : 6 }}>
-              <span style={{ fontWeight: 600, color: C.purpleDark, minWidth: 150 }}>{r.action}</span>
-              <span style={{ color: C.muted }}>{r.performed_by || '-'}</span>
-              <span style={{ color: C.muted, marginLeft: 'auto' }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</span>
-            </div>
-          ))}
-        </div>
+    <SectionCard title="Recent activity" icon={<IconLayers size={16} />} hint="The latest payroll actions, newest first." flush>
+      {rows.length === 0 ? <EmptyState compact icon={<IconInfo size={20} />} t="neutral" title="No activity yet." /> : (
+        <DataTable>
+          <thead><tr>
+            <th style={dt.th}>Action</th>
+            <th style={dt.th}>By</th>
+            <th style={dt.thNum}>When</th>
+          </tr></thead>
+          <tbody>
+            {rows.slice(0, 12).map((r, i) => (
+              <tr key={i} className={dt.rowClass}>
+                <td style={{ ...dt.tdStrong, color: C.purpleDark }}>{r.action}</td>
+                <td style={dt.td}>{r.performed_by || '-'}</td>
+                <td style={{ ...dt.tdNum, color: C.muted }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
       )}
-    </div>
+    </SectionCard>
   )
 }
 
@@ -1009,7 +1096,7 @@ function BenefitsTab() {
                 ) : (
                   <span style={{ fontSize: 13, fontWeight: 700, color: C.navy }}>{it.title}</span>
                 )}
-                {it.built && <Badge text="Built (employee ESS)" bg="rgba(5,150,105,0.12)" color={C.success} />}
+                {it.built && <Badge text="Built (employee ESS)" bg={TK.positiveTint} color={C.success} />}
               </div>
               <div style={{ fontSize: 12, color: C.muted }}>{it.note}</div>
             </div>
@@ -1054,41 +1141,64 @@ function EmployeesTab({ companyId }: { companyId: string }) {
 
   return (
     <div>
-      <div style={{ ...S.card, position: 'sticky', top: 46, zIndex: 29, boxShadow: 'var(--ez-shadow-flat)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={S.cardTitle}>Employees &amp; CTC ({filtered.length})</div>
-          <input style={{ ...S.input, width: 200 }} placeholder="Search code / name…" value={q} onChange={e => setQ(e.target.value)} />
-          <select style={{ ...S.input, width: 180 }} value={dept} onChange={e => setDept(e.target.value)}>
-            <option value="">All departments</option>{depts.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <button style={{ ...S.btnPrimary, marginLeft: 'auto' }} onClick={exportExcel} title={filtered.length < emps.length ? `Only the ${filtered.length} employees matching the search / department` : undefined}>Export Excel ({filtered.length})</button>
-        </div>
-        {missingCtc > 0 && <div style={{ fontSize: 12, color: C.amber, marginTop: 8 }}>⚠ {missingCtc} employee(s) have no CTC in ctc_master, so CTC/Basic show ₹0. Seed ctc_master to populate.</div>}
+      {/* Sticky under the tab bar (its height plus a hairline gap), so the search and the
+          export count stay in reach while scrolling a 400-row table. */}
+      <div style={{ position: 'sticky', top: 76, zIndex: 29, marginBottom: SP.lg }}>
+        <FilterBar label={<>Employees &amp; CTC <span style={{ ...numeric }}>({filtered.length})</span></>}
+          active={!!(q.trim() || dept)}
+          summary={missingCtc > 0
+            ? <span style={{ color: C.amber }}>{missingCtc} employee(s) have no CTC in ctc_master, so CTC/Basic show ₹0. Seed ctc_master to populate.</span>
+            : <>Showing <b>{filtered.length}</b> of {emps.length} employees{allCo ? ' across all companies' : ''}. Export follows the search and department.</>}
+          summaryTone={missingCtc > 0 ? 'warning' : undefined}>
+          <FilterField label="Search" grow minWidth={220}>
+            <input style={fieldStyle} placeholder="Search code / name…" value={q} onChange={e => setQ(e.target.value)} />
+          </FilterField>
+          <FilterField label="Department" minWidth={200}>
+            <select style={{ ...fieldStyle, cursor: 'pointer' }} value={dept} onChange={e => setDept(e.target.value)}>
+              <option value="">All departments</option>{depts.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </FilterField>
+          <div style={{ marginLeft: 'auto' }}>
+            <PButton variant="primary" icon={<IconDownload size={14} />} onClick={exportExcel} title={filtered.length < emps.length ? `Only the ${filtered.length} employees matching the search / department` : undefined}>Export Excel ({filtered.length})</PButton>
+          </div>
+        </FilterBar>
       </div>
-      {loading ? <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div> : (
-        <div style={{ ...S.card, overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead><tr style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase' }}>
+      {loading ? <SectionCard><div style={{ color: C.muted, fontSize: TF.small }}>Loading…</div></SectionCard> : (
+        <SectionCard flush style={{ overflow: 'visible' }}>
+          <DataTable minWidth={allCo ? 880 : 760}>
+            <thead><tr>
               {['Code', 'Name', ...(allCo ? ['Company'] : []), 'Dept', 'Regime', 'PF/ESIC/PT/LWF', 'Bank'].map(h =>
-                <th key={h} style={{ textAlign: 'left', padding: '6px 8px', whiteSpace: 'nowrap' }}>{h}</th>)}
+                <th key={h} style={dt.th}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {filtered.map(e => (
-                <tr key={e.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>{e.emp_code}</td>
-                  <td style={{ padding: '6px 8px' }}>{e.full_name}<div style={{ fontSize: 10, color: C.muted }}>{e.designation || '-'}</div></td>
-                  {allCo && <td style={{ padding: '6px 8px', fontSize: 11 }}>{e.company || '-'}</td>}
-                  <td style={{ padding: '6px 8px' }}>{e.department || '-'}</td>
-                  <td style={{ padding: '6px 8px' }}>{e.tds_regime || '-'}</td>
-                  <td style={{ padding: '6px 8px', fontSize: 10 }}>{[e.pf_applicable && 'PF', e.esic_applicable && 'ESIC', e.pt_applicable && 'PT', e.lwf_applicable && 'LWF'].filter(Boolean).join(' · ') || '-'}</td>
-                  <td style={{ padding: '6px 8px', fontSize: 11 }}>{e.bank_name || '-'}{e.bank_account_last4 ? ` ••${e.bank_account_last4}` : ''}</td>
-                </tr>
-              ))}
+              {filtered.map(e => {
+                const stat = [e.pf_applicable && 'PF', e.esic_applicable && 'ESIC', e.pt_applicable && 'PT', e.lwf_applicable && 'LWF'].filter(Boolean) as string[]
+                return (
+                  <tr key={e.id} className={dt.rowClass}>
+                    <td style={dt.tdMono}>{e.emp_code}</td>
+                    <td style={dt.td}>
+                      <div style={{ color: C.navy, fontWeight: W.semi }}>{e.full_name}</div>
+                      <div style={{ fontSize: TF.tiny, color: C.muted }}>{e.designation || '-'}</div>
+                    </td>
+                    {allCo && <td style={{ ...dt.td, fontSize: TF.tiny }}>{e.company || '-'}</td>}
+                    <td style={dt.td}>{e.department || '-'}</td>
+                    <td style={dt.td}>{e.tds_regime ? <StatusPill size="sm" t="info">{e.tds_regime}</StatusPill> : '-'}</td>
+                    <td style={dt.td}>
+                      {stat.length ? (
+                        <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+                          {stat.map(x => <span key={x} style={{ fontSize: TF.micro, fontWeight: W.semi, padding: '1px 7px', borderRadius: 99, background: TK.brandTint, color: C.purpleDark, border: `1px solid ${TK.brandEdge}` }}>{x}</span>)}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td style={{ ...dt.td, fontSize: TF.tiny, whiteSpace: 'nowrap' }}>{e.bank_name || '-'}<span style={{ ...numeric, color: C.muted }}>{e.bank_account_last4 ? ` ••${e.bank_account_last4}` : ''}</span></td>
+                  </tr>
+                )
+              })}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
+        </SectionCard>
       )}
-      <div style={S.note}>Source of truth is HRMS (employees + ctc_master). Versioned CTC (from_date/active_month), salary revision &amp; arrears: planned.</div>
+      <InfoCallout t="info" compact>Source of truth is HRMS (employees + ctc_master). Versioned CTC (from_date/active_month), salary revision &amp; arrears: planned.</InfoCallout>
     </div>
   )
 }
@@ -1105,6 +1215,44 @@ function PlannedTab({ title, items }: { title: string; items: string[] }) {
         {items.map((it, i) => <li key={i} style={{ fontSize: 13, color: C.navy }}>{it}</li>)}
       </ul>
     </div>
+  )
+}
+
+// The scrolling strip inside the tab bar. When the ten tabs do not fit, the edge that
+// hides more tabs fades out and carries a small arrow, so "there is more this way" is
+// visible instead of discovered by accident. The arrows are positioned against the
+// sticky bar (this strip is not positioned), same as the menus.
+function TabStrip({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [edge, setEdge] = useState({ l: false, r: false })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const upd = () => setEdge({ l: el.scrollLeft > 4, r: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 })
+    upd()
+    el.addEventListener('scroll', upd, { passive: true })
+    window.addEventListener('resize', upd)
+    return () => { el.removeEventListener('scroll', upd); window.removeEventListener('resize', upd) }
+  }, [])
+  const nudge = (dir: 1 | -1) => ref.current?.scrollBy({ left: dir * 320, behavior: 'smooth' })
+  const arrow = (side: 'l' | 'r'): React.CSSProperties => ({
+    position: 'absolute', top: 0, bottom: 0, [side === 'l' ? 'left' : 'right']: 0, width: 56, zIndex: Z.raised,
+    display: 'flex', alignItems: 'center', justifyContent: side === 'l' ? 'flex-start' : 'flex-end', padding: '0 6px',
+    background: `linear-gradient(${side === 'l' ? '90deg' : '270deg'}, ${TK.surface} 45%, transparent)`,
+    borderRadius: side === 'l' ? `${R.lg}px 0 0 ${R.lg}px` : `0 ${R.lg}px ${R.lg}px 0`, pointerEvents: 'none',
+  })
+  const btn: React.CSSProperties = {
+    pointerEvents: 'auto', width: 28, height: 28, borderRadius: 99, border: `1px solid ${TK.lineStrong}`,
+    background: TK.surface, color: TK.inkSoft, boxShadow: E.flat, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+  }
+  return (
+    <>
+      <div ref={ref} data-tabstrip className="ez-scroll" style={{ display: 'flex', alignItems: 'stretch', overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: '6px 8px 7px', scrollbarWidth: 'none' }}>
+        {children}
+      </div>
+      {edge.l && <div style={arrow('l')}><button aria-label="Scroll tabs left" onClick={() => nudge(-1)} style={btn}><span style={{ display: 'inline-flex', transform: 'rotate(180deg)' }}><IconChevron size={14} /></span></button></div>}
+      {edge.r && <div style={arrow('r')}><button aria-label="Scroll tabs right" onClick={() => nudge(1)} style={btn}><IconChevron size={14} /></button></div>}
+    </>
   )
 }
 
@@ -1135,26 +1283,36 @@ export default function PayrollPage() {
   const activeSub = sections.find(s => s.id === sub) || sections[0]
   const tabMeta = TABS.find(t => t.id === tab)!
 
+  const visibleTabs = TABS.filter(t => canSeeScreen(grant, 'payroll.' + t.id))
+  const groupNames = Array.from(new Set(companies.map(c => c.group_name || 'Companies')))
+  const scopeCompany = companyId ? companies.find(c => c.id === companyId)?.company_name : ''
+  const TabIcon = TAB_ICON[tab] || IconLayers
+
   return (
     <div style={S.page}>
       <div style={S.content}>
         {/* Header */}
-        <div className="ez-page-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <h1 style={S.h1}>Payroll</h1>
-          </div>
-          <div>
-            <label style={S.label}>Financial Year</label>
-            <select style={{ ...S.input, minWidth: 130 }} value={fy} onChange={e => setFy(e.target.value)}>
+        <PayrollPageHeader
+          eyebrow="Money"
+          icon={<IconPayroll size={20} />}
+          title="Payroll"
+          subtitle="Set up, run, file and close each month’s pay — attendance to payslips, with statutory built in."
+          meta={<>
+            <StatusPill t="brand" size="sm" icon={<IconCalendar size={12} />}>FY {fy}</StatusPill>
+            <StatusPill t="neutral" size="sm" icon={<IconBuilding size={12} />}>
+              {companyId ? (scopeCompany || 'Company') : `Group Companies${companies.length ? ` · ${companies.length} compan${companies.length === 1 ? 'y' : 'ies'}` : ''}`}
+            </StatusPill>
+          </>}
+          actions={<>
+            <ControlSelect label="Financial Year" icon={<IconCalendar size={15} />} minWidth={150} strong
+              value={fy} onChange={e => setFy(e.target.value)}>
               {FY_OPTIONS.map(y => <option key={y} value={y}>FY {y}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={S.label}>Company</label>
-            <select style={{ ...S.input, minWidth: 240 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
+            </ControlSelect>
+            <ControlSelect label="Company" icon={<IconBuilding size={15} />} minWidth={260}
+              value={companyId} onChange={e => setCompanyId(e.target.value)}>
               {(() => {
                 // Group the companies under their group name (e.g. "Sharma Group").
-                const groups = Array.from(new Set(companies.map(c => c.group_name || 'Companies')))
+                const groups = groupNames
                 return <>
                   <option value="">Group Companies{groups.length === 1 && groups[0] !== 'Companies' ? ` (${groups[0]})` : ''}</option>
                   {groups.map(g => (
@@ -1166,38 +1324,59 @@ export default function PayrollPage() {
                   ))}
                 </>
               })()}
-            </select>
-          </div>
-        </div>
+            </ControlSelect>
+          </>}
+        />
 
         {/* Tab bar — each main tab is a dropdown of its sub-sections; pick one to enter it.
-            Wraps onto multiple rows so every section is always visible without scrolling. */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, rowGap: 8, marginBottom: 16, paddingBottom: 8, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: 'var(--ez-shadow-flat)' }}>
-          {TABS.filter(t => canSeeScreen(grant, 'payroll.'+t.id)).map(t => (
-            <MainTabDropdown
-              key={t.id}
-              label={t.label}
-              isActive={tab === t.id}
-              sections={subsForTab(t.id, ctx)}
-              activeSub={tab === t.id ? (activeSub?.id || '') : ''}
-              activeChild={tab === t.id ? subView : ''}
-              onPick={(subId, childId) => { setTab(t.id); setSub(subId); if (childId) setSubView(childId) }}
-            />
-          ))}
+            Laid out by stage of the payroll month, and scrolls sideways inside itself
+            rather than wrapping onto a second row. The bar (sticky, so positioned) is the
+            menus' containing block; the strip inside it is the scroller. See
+            MainTabDropdown for why that split matters. */}
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 30, marginBottom: SP.lg,
+          background: TK.surface, border: `1px solid ${C.border}`, borderRadius: R.lg, boxShadow: E.raised,
+        }}>
+          <TabStrip>
+            {TAB_GROUPS.map(g => ({ ...g, tabs: g.ids.map(id => visibleTabs.find(t => t.id === id)).filter(Boolean) as typeof TABS }))
+              .filter(g => g.tabs.length > 0)
+              .map((g, gi) => (
+                <div key={g.label} style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, paddingLeft: gi === 0 ? 0 : 8, marginLeft: gi === 0 ? 0 : 8, borderLeft: gi === 0 ? 'none' : `1px solid ${C.border}` }}>
+                  <span style={{ ...eyebrow, fontSize: 10, color: TK.faint, padding: '2px 11px 0', whiteSpace: 'nowrap' }}>{g.label}</span>
+                  <div style={{ display: 'flex', gap: 2 }}>
+                    {g.tabs.map(t => (
+                      <MainTabDropdown
+                        key={t.id}
+                        id={t.id}
+                        label={t.label}
+                        isActive={tab === t.id}
+                        sections={subsForTab(t.id, ctx)}
+                        activeSub={tab === t.id ? (activeSub?.id || '') : ''}
+                        activeChild={tab === t.id ? subView : ''}
+                        onPick={(subId, childId) => { setTab(t.id); setSub(subId); if (childId) setSubView(childId) }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            {/* Any visible tab not placed in a group above still gets a slot. */}
+            {visibleTabs.filter(t => !TAB_GROUPS.some(g => g.ids.includes(t.id))).map(t => (
+              <MainTabDropdown key={t.id} id={t.id} label={t.label} isActive={tab === t.id} sections={subsForTab(t.id, ctx)}
+                activeSub={tab === t.id ? (activeSub?.id || '') : ''} activeChild={tab === t.id ? subView : ''}
+                onPick={(subId, childId) => { setTab(t.id); setSub(subId); if (childId) setSubView(childId) }} />
+            ))}
+          </TabStrip>
         </div>
 
         {/* Active panel */}
         {tab === 'dashboard' ? (
           <>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.navy }}>Dashboard</div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{tabMeta.subtitle}</div>
-            </div>
+            <SubTabHead crumbs={['Dashboard']} subtitle={tabMeta.subtitle} built={0} total={0} icon={<TabIcon size={18} />} />
             <PayrollDashboard companyId={companyId} fy={fy} companies={companies} />
           </>
         ) : (
           <>
-            <SubTabHead crumbs={(() => {
+            <SubTabHead icon={<TabIcon size={18} />} crumbs={(() => {
               const crumbs = [tabMeta.title]
               if (activeSub) crumbs.push(activeSub.label)
               const child = activeSub?.children?.find(c => c.id === subView)

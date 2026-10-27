@@ -12,7 +12,13 @@ import { useGrant } from '@/lib/rms/client'
 import { companyFilter, scopedCompanies } from '@/lib/rms/resolve'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK , CountUp } from '@/lib/ui'
+import { C as TK , CountUp, F, W, S, R, money, numeric, eyebrow, tone,
+  IconEmployees, IconPayroll, IconCompliance, IconBuilding, IconOnboarding, IconCalendar, IconAward, IconReports } from '@/lib/ui'
+import {
+  SectionCard, KpiTile, KpiGrid, FilterBar, FilterField, fieldStyle, ProcessStepper, runSteps, leastAdvanced,
+  RunStatusPill, StatusPill, CountChip, EmptyState, IconTile, InfoCallout, humanStatus,
+  IconLayers, IconInfo, IconArrowRight, IconMonth,
+} from '@/components/payroll/kit'
 
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
@@ -55,55 +61,77 @@ function timeAgo(iso: string) {
 }
 
 // ── Presentational bits (defined outside parent) ──
-function Kpi({ label, value, accent, warn }: { label: string; value: string; accent?: string; warn?: boolean }) {
-  return (
-    <div style={{ background: warn ? C.amberBg : C.card, border: `1px solid ${warn ? C.amberBd : C.border}`, borderRadius: 14, padding: '13px 15px', boxShadow: 'var(--ez-shadow-flat)', minWidth: 120 }}>
-      <div style={{ fontSize: 10, color: warn ? C.amber : C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700, marginBottom: 5 }}>{label}</div>
-      <div style={{ fontSize: 19, fontWeight: 800, color: accent || (warn ? C.amber : C.navy), lineHeight: 1 }}>{value}</div>
-    </div>
-  )
+
+// One horizontal flex row whose cards wrap on narrow widths instead of squeezing.
+function Row({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: 'flex', flexWrap: 'wrap', gap: S.md, marginBottom: S.md, alignItems: 'stretch' }}>{children}</div>
 }
-function Panel({ title, right, children, style }: { title: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
+function Col({ grow = 1, basis = 300, children }: { grow?: number; basis?: number; children: React.ReactNode }) {
+  return <div style={{ flex: `${grow} 1 ${basis}px`, minWidth: `min(${basis}px, 100%)`, display: 'flex', flexDirection: 'column' }}>{children}</div>
+}
+function Panel({ title, icon, hint, right, children, style }: { title: string; icon?: React.ReactNode; hint?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '15px 17px', boxShadow: 'var(--ez-shadow-flat)', ...style }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: C.purple, textTransform: 'uppercase', letterSpacing: '.06em' }}>{title}</span>
-        {right && <span style={{ marginLeft: 'auto' }}>{right}</span>}
-      </div>
+    <SectionCard title={title} icon={icon} hint={hint} actions={right} style={{ marginBottom: 0, flex: 1, ...style }}>
       {children}
-    </div>
+    </SectionCard>
   )
 }
 function GenderDonut({ male, female, other }: { male: number; female: number; other: number }) {
   const total = male + female + other || 1
-  const R = 34, CIRC = 2 * Math.PI * R
+  const R = 36, CIRC = 2 * Math.PI * R
   const segs = [
     { v: male, c: C.purple, label: 'Male' },
-    { v: female, c: C.pink, label: 'Female' },
+    { v: female, c: C.teal, label: 'Female' },
     { v: other, c: TK.faint, label: 'Other' },
   ].filter(s => s.v > 0)
   let offset = 0
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-      <svg width="88" height="88" viewBox="0 0 88 88">
-        <circle cx="44" cy="44" r={R} fill="none" stroke={C.gray} strokeWidth="15" />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+      <svg width="96" height="96" viewBox="0 0 96 96" style={{ flexShrink: 0 }}>
+        <circle cx="48" cy="48" r={R} fill="none" stroke={C.gray} strokeWidth="12" />
         {segs.map((s, i) => {
           const len = (s.v / total) * CIRC
-          const el = <circle key={i} cx="44" cy="44" r={R} fill="none" stroke={s.c} strokeWidth="15" strokeDasharray={`${len} ${CIRC - len}`} strokeDashoffset={-offset} transform="rotate(-90 44 44)" />
+          const el = <circle key={i} cx="48" cy="48" r={R} fill="none" stroke={s.c} strokeWidth="12" strokeDasharray={`${Math.max(0, len - 1.5)} ${CIRC - len + 1.5}`} strokeDashoffset={-offset} transform="rotate(-90 48 48)" />
           offset += len
           return el
         })}
-        <text x="44" y="48" textAnchor="middle" fontSize="15" fontWeight="800" fill={C.navy}>{total}</text>
+        <text x="48" y="50" textAnchor="middle" fontSize="18" fontWeight="700" fill={C.navy} style={{ fontVariantNumeric: 'tabular-nums' }}>{total}</text>
+        <text x="48" y="64" textAnchor="middle" fontSize="9" fontWeight="600" fill={C.muted} letterSpacing=".08em">PEOPLE</text>
       </svg>
-      <div>
-        {[['Male', male, C.purple], ['Female', female, C.pink], ['Other', other, TK.faint]].filter(r => (r[1] as number) > 0).map(([l, v, c]) => (
-          <div key={l as string} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5, fontSize: 12, color: C.navy }}>
-            <span style={{ width: 9, height: 9, borderRadius: 2, background: c as string }} />{l as string}: <b>{v as number}</b>
+      <div style={{ flex: 1, minWidth: 120 }}>
+        {[['Male', male, C.purple], ['Female', female, C.teal], ['Other', other, TK.faint]].filter(r => (r[1] as number) > 0).map(([l, v, c]) => (
+          <div key={l as string} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: F.small, color: C.navy, borderBottom: `1px solid ${TK.line}` }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: c as string, flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>{l as string}</span>
+            <b style={{ ...numeric }}>{v as number}</b>
+            <span style={{ ...numeric, color: C.muted, fontSize: F.tiny, width: 38, textAlign: 'right' }}>{Math.round(((v as number) / total) * 100)}%</span>
           </div>
         ))}
       </div>
     </div>
   )
+}
+
+// What to do next for the run furthest behind. Text only; it names the screen to open.
+function nextStepFor(status: string | null): { title: string; body: string; t: 'warning' | 'info' | 'positive' } {
+  switch (status) {
+    case null: return { t: 'warning', title: 'Create the first payroll month', body: 'Configuration → Payroll Month → Create Month builds the month master for each company.' }
+    case 'OPEN': case 'SYNCED': return { t: 'info', title: 'Process attendance, then freeze the month', body: 'Attendance → upload / edit, then Configuration → Payroll Month → Freeze.' }
+    case 'ATTENDANCE_LOCKED': return { t: 'info', title: 'Run payroll', body: 'Payroll Run → Run Cycle checks readiness and calculates every eligible employee.' }
+    case 'CALCULATED': case 'AI_CHECKED': return { t: 'info', title: 'Review, download payslips and approve', body: 'Payroll Run → Run Cycle: download the sheet and register, then approve.' }
+    case 'APPROVED': return { t: 'info', title: 'Disburse salaries', body: 'Send the bank file and mark the month disbursed.' }
+    case 'DISBURSED': return { t: 'info', title: 'Lock the month', body: 'Payroll Run → Lock / Unlock makes the month immutable.' }
+    case 'LOCKED': return { t: 'positive', title: 'Every run on record is closed', body: 'Nothing outstanding. Create the next month when attendance is ready.' }
+    default: return { t: 'info', title: humanStatus(status), body: 'Open Payroll Run to continue.' }
+  }
+}
+
+function daysUntil(d: string | null): number | null {
+  if (!d) return null
+  const t = new Date(d + (d.length === 10 ? 'T00:00:00' : '')).getTime()
+  if (Number.isNaN(t)) return null
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  return Math.round((t - today.getTime()) / 86400000)
 }
 
 export default function PayrollDashboard({ companyId, fy, companies }: { companyId: string; fy: string; companies: { id: string; company_name: string; group_name?: string | null }[] }) {
@@ -267,136 +295,181 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
 
   useEffect(() => { load() }, [load])
 
-  const selStyle: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
+  const selStyle: React.CSSProperties = { ...fieldStyle, cursor: 'pointer' }
   const maxDept = Math.max(1, ...deptCost.map(d => d.cost))
+  const deptTotal = deptCost.reduce((n, d) => n + d.cost, 0) || 1
+  const statuses = runStatus ? runStatus.split(', ').filter(Boolean) : []
+  const behind = leastAdvanced(statuses)
+  const next = nextStepFor(behind)
+  const monthLabel = monthOpts.find(m => m.value === month)?.label || ''
+  const firstDue = compliance.find(e => (daysUntil(e.date) ?? -1) >= 0) || null
+  const firstDueIn = firstDue ? daysUntil(firstDue.date) : null
 
   return (
     <div style={{ fontFamily: font }}>
       {/* Filter bar — Company → Department cascade + Month */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-        <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Filters:</span>
-        <select style={selStyle} value={coFilter} onChange={e => { setCoFilter(e.target.value); setDeptId('') }}>
-          {(() => {
-            const groups = Array.from(new Set(scopedCos.map(c => c.group_name || 'Companies')))
-            return <>
-              {grant.crossCompany && <option value="">All companies</option>}
-              {groups.map(g => (
-                <optgroup key={g} label={g}>
-                  {scopedCos.filter(c => (c.group_name || 'Companies') === g).map(c => (
-                    <option key={c.id} value={c.id}>{c.company_name}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </>
-          })()}
-        </select>
-        <select style={selStyle} value={deptId} onChange={e => setDeptId(e.target.value)}>
-          <option value="">All departments</option>
-          {coFilter
-            ? depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)
-            : (() => {
-                // All companies → group departments under their company so duplicate names aren't ambiguous
-                const cm: Record<string, string> = {}; companies.forEach(c => { cm[c.id] = c.company_name })
-                const byCo: Record<string, typeof depts> = {}
-                depts.forEach(d => { (byCo[d.company_id] = byCo[d.company_id] || []).push(d) })
-                return Object.entries(byCo).map(([cid, ds]) => (
-                  <optgroup key={cid} label={cm[cid] || 'Company'}>
-                    {ds.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+      <FilterBar label="Filters" active={!!deptId}
+        summary={<>Compliance dates for <b>{monthLabel}</b>. FY set from the header above.{loading && <span style={{ color: C.purple, marginLeft: 8, fontWeight: 600 }}>Refreshing…</span>}</>}>
+        <FilterField label="Company" minWidth={240}>
+          <select style={selStyle} value={coFilter} onChange={e => { setCoFilter(e.target.value); setDeptId('') }}>
+            {(() => {
+              const groups = Array.from(new Set(scopedCos.map(c => c.group_name || 'Companies')))
+              return <>
+                {grant.crossCompany && <option value="">All companies</option>}
+                {groups.map(g => (
+                  <optgroup key={g} label={g}>
+                    {scopedCos.filter(c => (c.group_name || 'Companies') === g).map(c => (
+                      <option key={c.id} value={c.id}>{c.company_name}</option>
+                    ))}
                   </optgroup>
-                ))
-              })()}
-        </select>
-        <select style={selStyle} value={month} onChange={e => setMonth(e.target.value)}>
-          {monthOpts.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-        </select>
-        <span style={{ fontSize: 11, color: C.muted }}>FY set from the header above.</span>
-        {loading && <span style={{ fontSize: 11, color: C.purple, marginLeft: 'auto' }}>Refreshing…</span>}
-      </div>
+                ))}
+              </>
+            })()}
+          </select>
+        </FilterField>
+        <FilterField label="Department" minWidth={200}>
+          <select style={selStyle} value={deptId} onChange={e => setDeptId(e.target.value)}>
+            <option value="">All departments</option>
+            {coFilter
+              ? depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)
+              : (() => {
+                  // All companies → group departments under their company so duplicate names aren't ambiguous
+                  const cm: Record<string, string> = {}; companies.forEach(c => { cm[c.id] = c.company_name })
+                  const byCo: Record<string, typeof depts> = {}
+                  depts.forEach(d => { (byCo[d.company_id] = byCo[d.company_id] || []).push(d) })
+                  return Object.entries(byCo).map(([cid, ds]) => (
+                    <optgroup key={cid} label={cm[cid] || 'Company'}>
+                      {ds.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+                    </optgroup>
+                  ))
+                })()}
+          </select>
+        </FilterField>
+        <FilterField label="Month" minWidth={150}>
+          <select style={selStyle} value={month} onChange={e => setMonth(e.target.value)}>
+            {monthOpts.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </FilterField>
+      </FilterBar>
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 16 }}>
-        <Kpi label="Headcount" value={String(kpi.headcount)} />
-        <Kpi label="Total gross / mo" value={inrShort(kpi.gross)} accent={C.purpleD} />
-        <Kpi label="Total basic / mo" value={inrShort(kpi.basic)} />
-        <Kpi label="Statutory (employer)" value={inrShort(kpi.statutory)} />
-        <Kpi label="Perquisites" value={inrShort(kpi.perquisites)} />
-        <Kpi label="Bonus accrued" value={inrShort(kpi.bonus)} />
-      </div>
+      <KpiGrid min={140}>
+        <KpiTile label="Headcount" value={<CountUp value={kpi.headcount} />}
+          sub={`${gender.male} M · ${gender.female} F${gender.other ? ` · ${gender.other} other` : ''}`} />
+        <KpiTile label="Total gross / mo" emphasis t="brand" value={inrShort(kpi.gross)}
+          sub={kpi.headcount ? `avg ${inrShort(kpi.gross / kpi.headcount)} per head` : money(kpi.gross)} title={money(kpi.gross)} />
+        <KpiTile label="Total basic / mo" value={inrShort(kpi.basic)} title={money(kpi.basic)}
+          sub={kpi.gross ? `${Math.round((kpi.basic / kpi.gross) * 100)}% of gross` : money(kpi.basic)}
+          progress={kpi.gross ? kpi.basic / kpi.gross : 0} />
+        <KpiTile label="Statutory (employer)" t="info" value={inrShort(kpi.statutory)} title={money(kpi.statutory)}
+          sub="Employer PF + ESIC" />
+        <KpiTile label="Employer cost / mo" value={inrShort(kpi.gross + kpi.statutory)} title={money(kpi.gross + kpi.statutory)} sub="Gross + employer statutory" />
+        <KpiTile label="Perquisites" value={inrShort(kpi.perquisites)} title={money(kpi.perquisites)} sub={`FY ${fy}`} />
+        <KpiTile label="Bonus accrued" value={inrShort(kpi.bonus)} title={money(kpi.bonus)} sub="Accrued to date" />
+      </KpiGrid>
 
-      {/* Row 1: gender + dept cost + month status */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 260px) 1fr minmax(180px, 220px)', gap: 12, alignItems: 'stretch' }}>
-          <Panel title="Gender split">
-            {kpi.headcount === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No employees.</div> : <GenderDonut male={gender.male} female={gender.female} other={gender.other} />}
+      {/* Row 1: month status + next action | compliance */}
+      <Row>
+        <Col grow={2} basis={460}>
+          <Panel title="Payroll month status" icon={<IconMonth size={16} />}
+            hint={statuses.length ? 'Run statuses on record; the rail follows the run furthest behind.' : 'No payroll run on record yet.'}
+            right={statuses.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{statuses.map(st => <RunStatusPill key={st} status={st} raw size="sm" />)}</div> : undefined}>
+            {runStatus
+              ? <div style={{ marginBottom: S.lg }}><ProcessStepper steps={runSteps(behind)} /></div>
+              : <div style={{ fontSize: 12, color: C.muted, marginBottom: S.md }}>No payroll run created yet. Create one in <b>Payroll Run</b>.</div>}
+            <InfoCallout t={next.t} compact title={next.title} icon={<IconArrowRight size={14} />} style={{ marginBottom: 0 }}>{next.body}</InfoCallout>
           </Panel>
-
-          <Panel title="Department-wise cost (gross + statutory)">
-            {deptCost.length === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No salary structures for this FY yet.</div> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {deptCost.map(d => (
-                  <div key={d.name}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                      <span style={{ color: C.navy, fontWeight: 600 }}>{d.name}</span>
-                      <span style={{ color: C.muted }}>{inrShort(d.cost)}</span>
+        </Col>
+        <Col basis={300}>
+          <Panel title={`Compliance calendar · ${monthLabel}`} icon={<IconCalendar size={16} />}
+            hint={firstDue && firstDueIn != null ? <>Next: <b>{firstDue.label}</b> {firstDueIn === 0 ? 'today' : `in ${firstDueIn} day${firstDueIn === 1 ? '' : 's'}`}</> : 'Statutory due dates for the month.'}>
+            {compliance.length === 0 ? <EmptyState compact t="neutral" icon={<IconCalendar size={20} />} title="No statutory modules configured yet." /> : (
+              <div>
+                {compliance.map((e, i) => {
+                  const dd = daysUntil(e.date)
+                  const t = dd == null ? 'neutral' : dd < 0 ? 'neutral' : dd <= 7 ? 'warning' : 'info'
+                  const [day, mon] = fmtDate(e.date).split(' ')
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: i < compliance.length - 1 ? `1px solid ${TK.line}` : 'none' }}>
+                      <div style={{ width: 44, flexShrink: 0, textAlign: 'center', borderRadius: R.md, background: tone(t).bg, border: `1px solid ${tone(t).edge}`, padding: '4px 0' }}>
+                        <div style={{ fontSize: F.lead, fontWeight: W.bold, color: tone(t).fg, lineHeight: 1.1, ...numeric }}>{day}</div>
+                        <div style={{ fontSize: 10, fontWeight: W.semi, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em' }}>{mon || ''}</div>
+                      </div>
+                      <span style={{ flex: 1, fontSize: F.small, color: C.navy, fontWeight: W.medium }}>{e.label}</span>
+                      {dd != null && <span style={{ fontSize: F.tiny, color: dd < 0 ? TK.faint : dd <= 7 ? C.amber : C.muted, whiteSpace: 'nowrap', ...numeric }}>{dd < 0 ? 'passed' : dd === 0 ? 'today' : `in ${dd}d`}</span>}
                     </div>
-                    <div style={{ height: 7, background: C.gray, borderRadius: 7, overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: `linear-gradient(90deg,${TK.brand},${TK.brand})`, borderRadius: 7 }} />
+                  )
+                })}
+              </div>
+            )}
+          </Panel>
+        </Col>
+      </Row>
+
+      {/* Row 2: dept cost | gender */}
+      <Row>
+        <Col grow={2} basis={460}>
+          <Panel title="Department-wise cost (gross + statutory)" icon={<IconReports size={16} />} hint="Top departments by monthly cost.">
+            {deptCost.length === 0 ? <EmptyState compact t="neutral" icon={<IconLayers size={20} />} title="No salary structures for this FY yet." /> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {deptCost.map((d, i) => (
+                  <div key={d.name}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: F.small, marginBottom: 5 }}>
+                      <span style={{ color: C.navy, fontWeight: W.semi, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                      <span style={{ color: C.muted, fontSize: F.tiny, ...numeric }}>{Math.round((d.cost / deptTotal) * 100)}%</span>
+                      <span style={{ color: C.navy, fontWeight: W.semi, minWidth: 72, textAlign: 'right', ...numeric }} title={money(d.cost)}>{inrShort(d.cost)}</span>
+                    </div>
+                    <div style={{ height: 8, background: C.gray, borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: i === 0 ? TK.brand : `color-mix(in srgb, ${TK.brand} 62%, ${TK.surface})`, borderRadius: 99, transition: 'width .4s cubic-bezier(.22,1,.36,1)' }} />
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </Panel>
-
-          <Panel title="Payroll month status">
-            {runStatus
-              ? <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '5px 14px' }}>{runStatus}</span>
-              : <div style={{ fontSize: 12, color: C.muted }}>No payroll run created yet. Create one in <b>Payroll Run</b>.</div>}
+        </Col>
+        <Col basis={300}>
+          <Panel title="Gender split" icon={<IconEmployees size={16} />}>
+            {kpi.headcount === 0 ? <EmptyState compact t="neutral" icon={<IconEmployees size={20} />} title="No employees." /> : <GenderDonut male={gender.male} female={gender.female} other={gender.other} />}
           </Panel>
-        </div>
-      </div>
+        </Col>
+      </Row>
 
-      {/* Row 2: compliance + activity + branches */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-        <Panel title={`Compliance calendar · ${monthOpts.find(m => m.value === month)?.label || ''}`}>
-          {compliance.length === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No statutory modules configured yet.</div> : (
-            <div>
-              {compliance.map((e, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: i < compliance.length - 1 ? `1px solid ${C.gray}` : 'none' }}>
-                  <span style={{ fontSize: 12, color: C.muted, fontWeight: 700, minWidth: 52 }}>{fmtDate(e.date)}</span>
-                  <span style={{ fontSize: 12, color: C.navy, textAlign: 'right' }}>{e.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-
-        <Panel title="Recent activity">
-          {activity.length === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No recent activity.</div> : (
-            <div>
-              {activity.map((a, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: i < activity.length - 1 ? `1px solid ${C.gray}` : 'none' }}>
-                  <span style={{ fontSize: 12, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.text}</span>
-                  <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>{a.when}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-
-        <Panel title="Branches per company">
-          {branches.length === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No branches.</div> : (
-            <div>
-              {branches.map((b, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: i < branches.length - 1 ? `1px solid ${C.gray}` : 'none' }}>
-                  <span style={{ fontSize: 12, color: C.navy }}>{b.company}</span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: C.purpleD }}>{b.count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
+      {/* Row 3: activity + branches */}
+      <Row>
+        <Col grow={2} basis={460}>
+          <Panel title="Recent activity" icon={<IconInfo size={16} />}>
+            {activity.length === 0 ? <EmptyState compact t="neutral" title="No recent activity." /> : (
+              <div>
+                {activity.map((a, i) => {
+                  const joined = a.text.endsWith(' joined')
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < activity.length - 1 ? `1px solid ${TK.line}` : 'none' }}>
+                      <IconTile icon={joined ? <IconOnboarding size={13} /> : <IconPayroll size={13} />} t={joined ? 'positive' : 'brand'} size={26} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: F.small, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.text}</span>
+                      <span style={{ fontSize: F.tiny, color: C.muted, whiteSpace: 'nowrap', ...numeric }}>{a.when}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Panel>
+        </Col>
+        <Col basis={300}>
+          <Panel title="Branches per company" icon={<IconBuilding size={16} />}>
+            {branches.length === 0 ? <EmptyState compact t="neutral" title="No branches." /> : (
+              <div>
+                {branches.map((b, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < branches.length - 1 ? `1px solid ${TK.line}` : 'none' }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: F.small, color: C.navy }}>{b.company}</span>
+                    <CountChip t="brand">{b.count}</CountChip>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </Col>
+      </Row>
     </div>
   )
 }
