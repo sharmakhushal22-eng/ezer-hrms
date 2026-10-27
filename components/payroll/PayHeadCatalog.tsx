@@ -5,15 +5,8 @@
 // Source: EZER-PayHead-Section-Reference.md.
 import { useState } from 'react'
 import SubSectionDropdown from '@/components/payroll/SubSectionDropdown'
-// Design tokens, aliased as TK — many of these files already declare
-// their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
-
-const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
-  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
-}
-const font = '"DM Sans","Segoe UI",sans-serif'
+import { C, F, W, S, numeric, IconFinance, IconReceipt, IconBuilding, IconSliders, IconEmployees, IconPolicies } from '@/lib/ui'
+import { SectionCard, StatusPill, CountChip, DataTable, dt, IconInfo, type KitTone } from '@/components/payroll/kit'
 
 type Row = { label: string; type: string; rule: string; trigger?: string; tone?: 'earn' | 'ded' | 'employer' | 'net' | 'total' }
 
@@ -75,55 +68,47 @@ const RULES: string[] = [
   'TDS: monthly estimate on projected annual income; trued-up in March.',
 ]
 
-function toneColor(t?: Row['tone']) {
-  if (t === 'total') return { bg: TK.canvas, color: C.purple }
-  if (t === 'net') return { bg: C.greenBg, color: C.green }
-  return { bg: 'transparent', color: C.navy }
+function toneColor(t?: Row['tone']): { bg?: string; color: string } {
+  if (t === 'total') return { bg: C.sunken, color: C.brandDeep }
+  if (t === 'net') return { bg: C.positiveTint, color: C.positive }
+  return { bg: undefined, color: C.ink }
+}
+const TYPE_TONE: Record<string, KitTone> = {
+  'Fixed earning': 'positive', 'Balancing': 'warning', 'Variable': 'warning',
+  'Reimbursement': 'brand', 'Statutory': 'critical', 'Voluntary': 'info',
+  'Recovery': 'critical', 'Employer': 'brand', 'Accrual': 'info',
+  'Computed total': 'neutral', 'Computed': 'neutral',
 }
 function TypeBadge({ t }: { t: string }) {
-  const map: Record<string, [string, string]> = {
-    'Fixed earning': [C.greenBg, C.green], 'Balancing': [TK.warningTint, TK.warning], 'Variable': [TK.warningTint, TK.critical],
-    'Reimbursement': [C.purpleBg, C.purpleDark], 'Statutory': [C.redBg, C.red], 'Voluntary': [TK.infoTint, TK.info],
-    'Recovery': [TK.criticalTint, TK.critical], 'Employer': [C.purpleBg, C.purpleDark], 'Accrual': [TK.infoTint, TK.info],
-    'Computed total': [TK.sunken, TK.inkSoft], 'Computed': [TK.sunken, TK.inkSoft],
-  }
-  const [bg, color] = map[t] || [TK.sunken, TK.inkSoft]
-  return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: bg, color, whiteSpace: 'nowrap' }}>{t}</span>
+  return <StatusPill t={TYPE_TONE[t] || 'neutral'} size="sm">{t}</StatusPill>
 }
 
 function Table({ rows }: { rows: Row[] }) {
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead><tr style={{ background: C.bg }}>
-          {['Pay Head', 'Type', 'Calculation / Rule', 'Trigger'].map(h => <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.03em', whiteSpace: 'nowrap' }}>{h}</th>)}
-        </tr></thead>
-        <tbody>
-          {rows.map(r => { const tc = toneColor(r.tone); return (
-            <tr key={r.label} style={{ borderTop: `1px solid ${C.border}`, background: tc.bg }}>
-              <td style={{ padding: '9px 12px', fontWeight: r.tone === 'total' || r.tone === 'net' ? 700 : 600, color: tc.color }}>{r.label}</td>
-              <td style={{ padding: '9px 12px' }}><TypeBadge t={r.type} /></td>
-              <td style={{ padding: '9px 12px', color: TK.inkSoft }}>{r.rule}</td>
-              <td style={{ padding: '9px 12px', color: C.muted, fontSize: 12 }}>{r.trigger || '-'}</td>
-            </tr>
-          )})}
-        </tbody>
-      </table>
-    </div>
+    <DataTable minWidth={640}>
+      <thead><tr>
+        {['Pay Head', 'Type', 'Calculation / Rule', 'Trigger'].map(h => <th key={h} style={dt.th}>{h}</th>)}
+      </tr></thead>
+      <tbody>
+        {rows.map(r => { const tc = toneColor(r.tone); const strong = r.tone === 'total' || r.tone === 'net'; return (
+          <tr key={r.label} className={strong ? undefined : dt.rowClass} style={{ background: tc.bg }}>
+            <td style={{ ...dt.td, fontWeight: strong ? W.bold : W.semi, color: tc.color, whiteSpace: 'nowrap' }}>{r.label}</td>
+            <td style={dt.td}><TypeBadge t={r.type} /></td>
+            <td style={{ ...dt.td, color: strong ? C.ink : C.inkSoft, ...numeric }}>{r.rule}</td>
+            <td style={{ ...dt.td, color: C.muted, fontSize: F.tiny }}>{r.trigger || '-'}</td>
+          </tr>
+        )})}
+      </tbody>
+    </DataTable>
   )
 }
 
-const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 14, overflow: 'hidden', boxShadow: 'var(--ez-shadow-flat)' }
-function GroupCard({ title, icon, subtitle, children }: { title: string; icon: string; subtitle: string; children: React.ReactNode }) {
+function GroupCard({ title, icon, subtitle, count, children, iconTone }: { title: string; icon: React.ReactNode; subtitle: string; count?: number; children: React.ReactNode; iconTone?: KitTone }) {
   return (
-    <div style={card}>
-      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 14 }}>{icon}</span>
-        <span style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{title}</span>
-        <span style={{ fontSize: 12, color: C.muted }}>· {subtitle}</span>
-      </div>
+    <SectionCard flush title={title} icon={icon} iconTone={iconTone} hint={subtitle}
+      actions={count != null ? <CountChip>{count} heads</CountChip> : undefined}>
       {children}
-    </div>
+    </SectionCard>
   )
 }
 
@@ -135,65 +120,64 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
   const TABS: [typeof view, string][] = [['catalog', 'Standard Pay Heads'], ['flexi', 'Flexi / FBP'], ['nonstd', 'Non-standard Types'], ['rules', 'Business Rules']]
 
   return (
-    <div>
+    <div style={{ fontFamily: F.family, color: C.ink, minWidth: 0 }}>
       {!viewProp && <SubSectionDropdown items={TABS.map(([id, label]) => ({ id, label }))} active={view} onChange={id => setViewState(id as typeof view)} kicker="Pay Heads view" />}
 
       {view === 'catalog' && <>
-        <GroupCard title="Earnings" icon="💰" subtitle="salary_structures: fixed & computed earnings"><Table rows={EARNINGS} /></GroupCard>
-        <GroupCard title="Employee Deductions" icon="➖" subtitle="payroll_lines: statutory & voluntary"><Table rows={EE_DED} /></GroupCard>
-        <GroupCard title="Employer Contributions" icon="🏢" subtitle="employer cost, not on payslip by default"><Table rows={EMPLOYER} /></GroupCard>
+        <GroupCard title="Earnings" icon={<IconFinance size={16} />} iconTone="positive" subtitle="salary_structures: fixed & computed earnings" count={EARNINGS.length}><Table rows={EARNINGS} /></GroupCard>
+        <GroupCard title="Employee Deductions" icon={<IconReceipt size={16} />} iconTone="critical" subtitle="payroll_lines: statutory & voluntary" count={EE_DED.length}><Table rows={EE_DED} /></GroupCard>
+        <GroupCard title="Employer Contributions" icon={<IconBuilding size={16} />} subtitle="employer cost, not on payslip by default" count={EMPLOYER.length}><Table rows={EMPLOYER} /></GroupCard>
       </>}
 
       {view === 'flexi' && (
-        <GroupCard title="Flexi / FBP Components" icon="🎛️" subtitle="declared at FY start, claimed monthly via bills (11 components)">
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead><tr style={{ background: C.bg }}>{['Code', 'Component', 'Bill required?', 'Regime', 'Annual limit source'].map(h => <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
-              <tbody>
-                {FLEXI.map(f => (
-                  <tr key={f.code} style={{ borderTop: `1px solid ${C.border}` }}>
-                    <td style={{ padding: '9px 12px' }}><span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: C.purpleBg, color: C.purpleDark }}>{f.code}</span></td>
-                    <td style={{ padding: '9px 12px', fontWeight: 600, color: C.navy }}>{f.name}</td>
-                    <td style={{ padding: '9px 12px' }}><span style={{ fontSize: 11, color: f.bill.startsWith('No') ? C.green : C.amber }}>{f.bill}</span></td>
-                    <td style={{ padding: '9px 12px', color: TK.inkSoft }}>{f.regime}</td>
-                    <td style={{ padding: '9px 12px', color: C.muted, fontSize: 12 }}>{f.source}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <GroupCard title="Flexi / FBP Components" icon={<IconSliders size={16} />} subtitle="declared at FY start, claimed monthly via bills (11 components)">
+          <DataTable minWidth={640}>
+            <thead><tr>{['Code', 'Component', 'Bill required?', 'Regime', 'Annual limit source'].map(h => <th key={h} style={dt.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {FLEXI.map(f => (
+                <tr key={f.code} className={dt.rowClass}>
+                  <td style={dt.td}><StatusPill t="brand" size="sm">{f.code}</StatusPill></td>
+                  <td style={dt.tdStrong}>{f.name}</td>
+                  <td style={dt.td}><StatusPill t={f.bill.startsWith('No') ? 'positive' : 'warning'} size="sm" dot>{f.bill}</StatusPill></td>
+                  <td style={dt.td}>{f.regime}</td>
+                  <td style={{ ...dt.td, color: C.muted, fontSize: F.tiny, ...numeric }}>{f.source}</td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+          <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start', padding: `${S.md}px ${S.lg}px`, fontSize: F.tiny, color: C.inkSoft, background: C.sunken, lineHeight: 1.55 }}>
+            <span style={{ display: 'inline-flex', color: C.muted, marginTop: 2 }}><IconInfo size={13} /></span>
+            <span>Balance = annual limit − SUM(approved claims). Rejected claims never reduce the limit. Configure slabs in <b>Flexi Policy</b>; approve bills in <b>Flexi Claims</b>.</span>
           </div>
-          <div style={{ padding: '10px 16px', fontSize: 12, color: C.muted, borderTop: `1px solid ${C.border}` }}>Balance = annual limit − SUM(approved claims). Rejected claims never reduce the limit. Configure slabs in <b>Flexi Policy</b>; approve bills in <b>Flexi Claims</b>.</div>
         </GroupCard>
       )}
 
       {view === 'nonstd' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: S.lg }}>
           {NONSTD.map(g => (
-            <div key={g.type} style={card}>
-              <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, fontWeight: 700, color: C.navy }}>{g.icon} {g.type}</div>
-              <div style={{ padding: '6px 16px 14px' }}>
-                {g.heads.map(([h, rule]) => (
-                  <div key={h} style={{ padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.navy }}>{h}</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{rule}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SectionCard key={g.type} title={<>{g.icon}{g.type}</>} icon={<IconEmployees size={16} />} style={{ marginBottom: 0 }}
+              actions={<CountChip>{g.heads.length}</CountChip>} bodyStyle={{ padding: `4px ${S.lg}px ${S.sm}px` }}>
+              {g.heads.map(([h, rule], i) => (
+                <div key={h} style={{ padding: '10px 0', borderBottom: i < g.heads.length - 1 ? `1px solid ${C.line}` : 'none' }}>
+                  <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink }}>{h}</div>
+                  <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2, ...numeric }}>{rule}</div>
+                </div>
+              ))}
+            </SectionCard>
           ))}
         </div>
       )}
 
       {view === 'rules' && (
-        <GroupCard title="Statutory Business Rules" icon="⚖️" subtitle="applied by the payroll engine">
-          <div style={{ padding: '8px 16px 14px' }}>
+        <GroupCard title="Statutory Business Rules" icon={<IconPolicies size={16} />} subtitle="applied by the payroll engine">
+          <ol style={{ listStyle: 'none', margin: 0, padding: `${S.xs}px ${S.lg}px ${S.md}px` }}>
             {RULES.map((r, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: i < RULES.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                <span style={{ width: 22, height: 22, borderRadius: 99, background: C.purpleBg, color: C.purpleDark, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
-                <span style={{ fontSize: 13, color: TK.inkSoft, lineHeight: 1.55 }}>{r}</span>
-              </div>
+              <li key={i} style={{ display: 'flex', gap: S.md, alignItems: 'flex-start', padding: '11px 0', borderBottom: i < RULES.length - 1 ? `1px solid ${C.line}` : 'none' }}>
+                <span style={{ width: 24, height: 24, borderRadius: 99, background: C.brandTint, color: C.brandDeep, border: `1px solid ${C.brandEdge}`, fontSize: F.micro, fontWeight: W.bold, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, ...numeric }}>{i + 1}</span>
+                <span style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.6, paddingTop: 2, ...numeric }}>{r}</span>
+              </li>
             ))}
-          </div>
+          </ol>
         </GroupCard>
       )}
     </div>

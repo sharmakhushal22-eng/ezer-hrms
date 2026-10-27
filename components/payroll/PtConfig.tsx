@@ -19,19 +19,9 @@ import { getCurrentPtSlabs, reviseSlab, getPtAmount } from '@/lib/pt/actions'
 import { MONTH_KEYS, MONTH_LABELS } from '@/lib/pt/types'
 import type { PtConfig as PtRow, Gender } from '@/lib/pt/types'
 import { INDIAN_STATES } from '@/lib/geo/india-states-districts'
-// Design tokens, aliased as TK — many of these files already declare
-// their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
-import { useDismiss } from '@/lib/ui/useDismiss'
-
-const C = {
-  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
-  border: TK.line, muted: TK.muted, amber: TK.warning, amberBg: TK.warningTint,
-  purpleBg: TK.brandTint, gray: TK.sunken, red: TK.critical, redBg: TK.criticalTint, green: TK.positive,
-}
-const font = '"DM Sans","Segoe UI",sans-serif'
-const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
-const labelStyle: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }
+import { C, F, W, S, Z, numeric, IconPlus, IconCompliance, IconSearch, IconCalendar, IconReceipt } from '@/lib/ui'
+import { SectionCard, InfoCallout, PButton, StatusPill, EmptyState, DataTable, dt, IconInfo } from '@/components/payroll/kit'
+import { RuleSummary, CField, FormGrid, Modal, StateSelect, QuickButton, ResultWell, cfgInput } from '@/components/payroll/configKit'
 
 function summarizeMonths(r: PtRow): string {
   const amts = [r.jan,r.feb,r.mar,r.apr,r.may,r.jun,r.jul,r.aug,r.sep,r.oct,r.nov,r.dec].map(Number)
@@ -45,46 +35,6 @@ function summarizeMonths(r: PtRow): string {
 function slabLabel(r: PtRow): string {
   const min = Number(r.slab_min).toLocaleString('en-IN')
   return r.slab_max != null ? `₹${min}–${Number(r.slab_max).toLocaleString('en-IN')}` : `₹${min}+`
-}
-
-// ── Searchable dropdown ─────────────────────────────────────────────
-function SearchSelect({ value, options, placeholder, onChange }: {
-  value: string; options: string[]; placeholder: string; onChange: (v: string) => void
-}) {
-  const [open, setOpen] = useState(false)
-  // One click, not two: a document listener lets the click through to whatever
-  // is under it, so moving straight to another trigger opens that one.
-  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
-  const [q, setQ] = useState('')
-  const filtered = (q.trim() ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options).slice(0, 100)
-  return (
-    <div ref={pop} style={{ position: 'relative' }}>
-      <div onClick={() => { setOpen(o => !o); setQ('') }}
-        style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, color: value ? C.navy : TK.faint }}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || placeholder}</span>
-        <span style={{ color: TK.faint, fontSize: 11 }}></span>
-      </div>
-      {open && (
-        <>
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
-            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
-              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
-              {filtered.map(o => (
-                <div key={o} onClick={() => { onChange(o); setOpen(false) }}
-                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
-                  style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
-                  {o}
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
 }
 
 // ── Add / revise slab modal ─────────────────────────────────────────
@@ -115,71 +65,56 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: PtRow | null; onCl
     } catch (e: any) { setErr(e.message) } finally { setSaving(false) }
   }
 
-  const quick = (label: string, fn: () => void) => (
-    <button type="button" onClick={fn} style={{ fontSize: 10, padding: '3px 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', color: C.purpleD, fontWeight: 700 }}>{label}</button>
-  )
   const setSame = () => { const v = amounts.find(a => a) || '200'; setAmounts(Array(12).fill(v)) }
   const setTwice = () => { const v = amounts.find((a, i) => (i === 2 || i === 8) && a) || amounts.find(a => a) || '300'; setAmounts(MONTH_LABELS.map((m) => (m === 'Mar' || m === 'Sep') ? v : '0')) }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: font }}>
-      <div style={{ background: TK.surface, borderRadius: 14, padding: 22, width: '100%', maxWidth: 580, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(30,27,75,0.3)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise PT slab' : 'Add PT slab'}</div>
-            <div style={{ fontSize: 11, color: C.muted }}>Salary band + per-month amount</div>
-          </div>
-        </div>
+    <Modal icon={<IconReceipt size={17} />} title={preset ? 'Revise PT slab' : 'Add PT slab'} subtitle="Salary band + per-month amount" maxWidth={620}
+      footer={<>
+        <PButton variant="primary" onClick={handleSave} disabled={!valid || saving} style={{ flex: 1 }}>{saving ? 'Saving…' : 'Save slab'}</PButton>
+        <PButton variant="secondary" onClick={onClose}>Cancel</PButton>
+      </>}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) repeat(3, minmax(0,1fr))', gap: S.sm + 2 }}>
+        <CField as="div" label="State" required><StateSelect value={state} options={INDIAN_STATES} placeholder="Select state" onChange={setState} /></CField>
+        <CField label="Slab min (₹)" required><input type="number" value={slabMin} onChange={e => setSlabMin(e.target.value)} style={cfgInput} /></CField>
+        <CField label="Slab max (₹)"><input type="number" value={slabMax} onChange={e => setSlabMax(e.target.value)} placeholder="blank = +" style={cfgInput} /></CField>
+        <CField label="Gender">
+          <select value={gender} onChange={e => setGender(e.target.value as Gender)} style={{ ...cfgInput, cursor: 'pointer' }}>
+            <option value="ALL">All</option><option value="MALE">Male only</option><option value="FEMALE">Female only</option>
+          </select>
+        </CField>
+      </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
-          <div><label style={labelStyle}>State *</label><SearchSelect value={state} options={INDIAN_STATES} placeholder="Select state" onChange={setState} /></div>
-          <div><label style={labelStyle}>Slab min (₹) *</label><input type="number" value={slabMin} onChange={e => setSlabMin(e.target.value)} style={inputStyle} /></div>
-          <div><label style={labelStyle}>Slab max (₹)</label><input type="number" value={slabMax} onChange={e => setSlabMax(e.target.value)} placeholder="blank = +" style={inputStyle} /></div>
-          <div><label style={labelStyle}>Gender</label>
-            <select value={gender} onChange={e => setGender(e.target.value as Gender)} style={inputStyle}>
-              <option value="ALL">All</option><option value="MALE">Male only</option><option value="FEMALE">Female only</option>
-            </select>
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: S.sm, flexWrap: 'wrap', marginBottom: 7 }}>
+          <span style={{ fontSize: F.tiny, fontWeight: W.semi, color: C.inkSoft }}>Amount per month (₹)<span style={{ color: C.critical, marginLeft: 3 }}>*</span></span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <QuickButton onClick={setSame}>Same all months</QuickButton>
+            <QuickButton onClick={setTwice}>Only Mar + Sep</QuickButton>
+            <QuickButton onClick={() => setAmounts(Array(12).fill('0'))}>Clear</QuickButton>
           </div>
         </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <label style={labelStyle}>Amount per month (₹) *</label>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {quick('Same all months', setSame)}
-            {quick('Only Mar + Sep', setTwice)}
-            {quick('Clear', () => setAmounts(Array(12).fill('0')))}
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, marginBottom: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 6 }}>
           {MONTH_LABELS.map((m, i) => (
-            <div key={m}>
-              <div style={{ fontSize: 9, color: C.muted, textAlign: 'center', marginBottom: 2 }}>{m}</div>
+            <label key={m} style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+              <span style={{ fontSize: F.micro, fontWeight: W.semi, color: C.muted, textAlign: 'center' }}>{m}</span>
               <input type="number" value={amounts[i]} onChange={e => setAmounts(prev => prev.map((v, j) => j === i ? e.target.value : v))}
-                style={{ ...inputStyle, padding: '6px 4px', textAlign: 'center' }} />
-            </div>
+                style={{ ...cfgInput, padding: '0 4px', textAlign: 'center' }} />
+            </label>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: C.muted, background: C.gray, padding: '8px 10px', borderRadius: 7, marginBottom: 10, lineHeight: 1.5 }}>
-          Use <b>Only Mar + Sep</b> for twice-yearly states (Tamil Nadu, Kerala). For Maharashtra&apos;s annual-cap adjustment, set February higher than the other months directly.
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-          <div><label style={labelStyle}>Effective from *</label><input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} style={inputStyle} /></div>
-          <div><label style={labelStyle}>Notification reference</label><input value={notificationRef} onChange={e => setNotificationRef(e.target.value)} placeholder="PT/2026/…" style={inputStyle} /></div>
-        </div>
-
-        {err && <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginBottom: 10 }}>{err}</div>}
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button disabled={!valid || saving} onClick={handleSave}
-            style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
-            {saving ? 'Saving…' : 'Save slab'}
-          </button>
-          <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
-        </div>
       </div>
-    </div>
+      <InfoCallout t="neutral" compact icon={<IconInfo size={14} />} style={{ marginBottom: 0 }}>
+        Use <b>Only Mar + Sep</b> for twice-yearly states (Tamil Nadu, Kerala). For Maharashtra&apos;s annual-cap adjustment, set February higher than the other months directly.
+      </InfoCallout>
+
+      <FormGrid min={200}>
+        <CField label="Effective from" required><input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} style={cfgInput} /></CField>
+        <CField label="Notification reference"><input value={notificationRef} onChange={e => setNotificationRef(e.target.value)} placeholder="PT/2026/…" style={cfgInput} /></CField>
+      </FormGrid>
+
+      {err && <InfoCallout t="critical" compact style={{ marginBottom: 0 }}>{err}</InfoCallout>}
+    </Modal>
   )
 }
 
@@ -236,158 +171,122 @@ export default function PtConfig() {
     } finally { setQBusy(false) }
   }
 
-  const card: React.CSSProperties = {
-    background: C.card, borderRadius: 14, padding: '18px 20px', marginBottom: 16,
-    border: `1px solid ${C.border}`, boxShadow: 'var(--ez-shadow-flat)',
-  }
-  const th: React.CSSProperties = {
-    background: C.navy, color: TK.brand, padding: '7px 6px', textAlign: 'right',
-    fontSize: 9, textTransform: 'uppercase', position: 'sticky', top: 0, whiteSpace: 'nowrap',
-  }
-  const td: React.CSSProperties = {
-    padding: 6, textAlign: 'right', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap',
-  }
+  const stateCol: React.CSSProperties = { position: 'sticky', left: 0, zIndex: Z.raised }
+  const mLabel = MONTH_LABELS[MONTH_KEYS.indexOf(qMonth as any)]
 
   return (
-    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1200 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Professional Tax Configuration</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
-            {loading ? 'Loading…' : `${states.length} states, ${slabs.length} slabs · exactly what the payroll run reads`}
-          </div>
-        </div>
-        <button onClick={() => setModal({ open: true, preset: null })}
-          style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
-          + Add / revise slab
-        </button>
-      </div>
+    <div style={{ fontFamily: F.family, fontSize: F.small, color: C.ink, minWidth: 0 }}>
+      <RuleSummary icon={<IconCompliance size={20} />} eyebrow="Statutory · Professional Tax" title="Professional Tax Configuration"
+        rule={loading ? 'Loading…' : `${states.length} states, ${slabs.length} slabs · exactly what the payroll run reads`}
+        actions={<PButton variant="primary" icon={<IconPlus size={15} />} onClick={() => setModal({ open: true, preset: null })}>Add / revise slab</PButton>} />
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
+      {error && <InfoCallout t="warning" compact>{error}</InfoCallout>}
 
       {/* ── Quick check ─────────────────────────────────────────── */}
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>Quick check</div>
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
-          Pick a state, month and gross to see exactly which row payroll will use. Same function the run calls.
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr)) auto', gap: 10, alignItems: 'end' }}>
-          <div>
-            <label style={labelStyle}>State</label>
-            <SearchSelect value={qState} options={states} placeholder="Select state"
+      <SectionCard title="Quick check" icon={<IconSearch size={16} />}
+        hint="Pick a state, month and gross to see exactly which row payroll will use. Same function the run calls."
+        style={{ overflow: 'visible' }} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: S.md + 2 }}>
+        <div style={{ display: 'flex', gap: S.md, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <CField as="div" label="State" style={{ flex: '1 1 200px' }}>
+            <StateSelect value={qState} options={states} placeholder="Select state"
               onChange={v => { setQState(v); setQRes(null) }} />
-          </div>
-          <div>
-            <label style={labelStyle}>Month</label>
-            <select style={inputStyle} value={qMonth} onChange={e => { setQMonth(e.target.value); setQRes(null) }}>
+          </CField>
+          <CField label="Month" style={{ flex: '1 1 140px' }}>
+            <select style={{ ...cfgInput, cursor: 'pointer' }} value={qMonth} onChange={e => { setQMonth(e.target.value); setQRes(null) }}>
               {MONTH_KEYS.map((m, i) => <option key={m} value={m}>{MONTH_LABELS[i]}</option>)}
             </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Gross Salary</label>
-            <input style={inputStyle} type="number" value={qGross} placeholder="e.g. 22000"
+          </CField>
+          <CField label="Gross Salary" style={{ flex: '1 1 160px' }}>
+            <input style={cfgInput} type="number" value={qGross} placeholder="e.g. 22000"
               onChange={e => { setQGross(e.target.value); setQRes(null) }} />
-          </div>
-          <button onClick={runCheck} disabled={qBusy || !qState || qGross.trim() === ''}
-            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: (!qState || qGross.trim() === '') ? TK.brandTint : C.purple, cursor: (!qState || qGross.trim() === '') ? 'not-allowed' : 'pointer' }}>
+          </CField>
+          <PButton variant="primary" onClick={runCheck} disabled={qBusy || !qState || qGross.trim() === ''} style={{ height: 38 }}>
             {qBusy ? 'Checking…' : 'Check PT'}
-          </button>
+          </PButton>
         </div>
 
-        {qErr && <div style={{ marginTop: 12, fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px' }}>{qErr}</div>}
+        {qErr && <InfoCallout t="critical" compact style={{ marginBottom: 0 }}>{qErr}</InfoCallout>}
 
         {qRes && (
-          <div style={{
-            marginTop: 14, borderRadius: 10, padding: '14px 16px',
-            background: qRes.found ? TK.positiveTint : C.amberBg,
-            border: `1px solid ${qRes.found ? TK.positiveTint : TK.warningTint}`,
-          }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: qRes.found ? C.green : C.amber }}>
+          <ResultWell t={qRes.found ? 'positive' : 'warning'}>
+            <div style={{ fontSize: F.display, fontWeight: W.bold, letterSpacing: '-.02em', lineHeight: 1.1, color: qRes.found ? C.positive : C.warning, ...numeric }}>
               {qRes.found ? `₹${Number(qRes.amount ?? 0).toLocaleString('en-IN')}` : 'Not configured'}
             </div>
-            <div style={{ fontSize: 12, color: qRes.found ? '#047857' : TK.warning, marginTop: 3 }}>
+            <div style={{ fontSize: F.small, color: C.inkSoft, marginTop: -6, ...numeric }}>
               {!qRes.found
                 ? `${qState} has no slab covering ₹${Number(qGross).toLocaleString('en-IN')}, so payroll deducts nothing and flags it.`
                 : Number(qRes.amount) === 0
                   ? (noPt.has(qState)
                     ? `${qState} does not levy Professional Tax at all.`
-                    : `${qState} levies PT, but nothing is due in ${MONTH_LABELS[MONTH_KEYS.indexOf(qMonth as any)]} for this slab.`)
-                  : `${qRes.row ? slabLabel(qRes.row) : 'slab'} · ${MONTH_LABELS[MONTH_KEYS.indexOf(qMonth as any)]}`}
+                    : `${qState} levies PT, but nothing is due in ${mLabel} for this slab.`)
+                  : `${qRes.row ? slabLabel(qRes.row) : 'slab'} · ${mLabel}`}
             </div>
             {qRes.row?.notification_reference && (
-              <div style={{ fontSize: 10, color: C.muted, marginTop: 5 }}>{qRes.row.notification_reference}</div>
+              <div style={{ fontSize: F.tiny, color: C.muted, marginTop: -6 }}>{qRes.row.notification_reference}</div>
             )}
-          </div>
+          </ResultWell>
         )}
-      </div>
+      </SectionCard>
 
       {/* ── Full grid ───────────────────────────────────────────── */}
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>Full configuration table</div>
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
-          Every state, slab and month-wise amount. A <b>no PT</b> badge means the state levies none at all.
-          That row exists on purpose, so a state with no tax can be told apart from a state nobody configured.
-        </div>
+      <SectionCard flush title="Full configuration table" icon={<IconCalendar size={16} />}
+        hint={<>Every state, slab and month-wise amount. A <b>no PT</b> badge means the state levies none at all.
+          That row exists on purpose, so a state with no tax can be told apart from a state nobody configured.</>}>
         {loading ? (
-          <div style={{ fontSize: 12, color: C.purple, padding: 8 }}>Loading…</div>
+          <EmptyState compact t="neutral" icon={<IconCalendar size={20} />} title="Loading…" />
         ) : (
-          <div style={{ maxHeight: 520, overflow: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+          <>
+            <DataTable minWidth={1040} maxHeight={560}>
               <thead>
                 <tr>
-                  <th style={{ ...th, textAlign: 'left' }}>State</th>
-                  <th style={th}>Min Salary</th>
-                  <th style={th}>Max Salary</th>
-                  <th style={{ ...th, textAlign: 'left' }}>Gender</th>
-                  {MONTH_LABELS.map(m => <th key={m} style={th}>{m}</th>)}
-                  <th style={th}></th>
+                  <th style={{ ...dt.th, ...stateCol, zIndex: Z.sticky }}>State</th>
+                  <th style={dt.thNum}>Min Salary</th>
+                  <th style={dt.thNum}>Max Salary</th>
+                  <th style={dt.th}>Gender</th>
+                  {MONTH_LABELS.map(m => <th key={m} style={{ ...dt.thNum, padding: '9px 8px' }}>{m}</th>)}
+                  <th style={dt.th}></th>
                 </tr>
               </thead>
               <tbody>
-                {slabs.map((r, i) => {
+                {slabs.map(r => {
                   const hit = !!qRes?.row && qRes.row.id === r.id
                   return (
-                    <tr key={r.id} style={{
-                      background: hit ? C.amberBg : i % 2 ? TK.brandTint : 'transparent',
-                      outline: hit ? `2px solid ${C.amber}` : 'none',
-                    }}>
-                      <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: C.navy }}>
+                    <tr key={r.id} className={dt.rowClass} style={{ background: hit ? C.warningTint : undefined, outline: hit ? `2px solid ${C.warning}` : 'none', outlineOffset: -2 }}>
+                      <td style={{ ...dt.tdStrong, ...stateCol, background: hit ? C.warningTint : C.surface, whiteSpace: 'nowrap' }}>
                         {r.state}
-                        {noPt.has(r.state) && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: TK.positiveTint, color: C.green }}>no PT</span>}
+                        {noPt.has(r.state) && <span style={{ marginLeft: 6 }}><StatusPill t="positive" size="sm">no PT</StatusPill></span>}
                       </td>
-                      <td style={td}>{Number(r.slab_min).toLocaleString('en-IN')}</td>
-                      <td style={td}>{r.slab_max == null ? '-' : Number(r.slab_max).toLocaleString('en-IN')}</td>
-                      <td style={{ ...td, textAlign: 'left', color: r.gender === 'ALL' ? C.muted : C.amber, fontWeight: r.gender === 'ALL' ? 400 : 700 }}>{r.gender}</td>
+                      <td style={dt.tdNum}>{Number(r.slab_min).toLocaleString('en-IN')}</td>
+                      <td style={{ ...dt.tdNum, color: r.slab_max == null ? C.faint : C.ink }}>{r.slab_max == null ? '-' : Number(r.slab_max).toLocaleString('en-IN')}</td>
+                      <td style={dt.td}>
+                        {r.gender === 'ALL' ? <span style={{ color: C.muted }}>{r.gender}</span> : <StatusPill t="warning" size="sm">{r.gender}</StatusPill>}
+                      </td>
                       {MONTH_KEYS.map(m => {
                         const v = Number((r as any)[m]) || 0
-                        return <td key={m} style={{ ...td, color: v === 0 ? '#C7C2E8' : C.navy, fontWeight: v > 0 ? 600 : 400 }}>{v}</td>
+                        return <td key={m} style={{ ...dt.tdNum, padding: '9px 8px', color: v === 0 ? C.faint : C.ink, fontWeight: v > 0 ? W.semi : W.regular }}>{v}</td>
                       })}
-                      <td style={{ ...td, textAlign: 'center' }}>
-                        <button onClick={() => setModal({ open: true, preset: r })} title="Revise this slab"
-                          style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>Revise</button>
+                      <td style={{ ...dt.td, textAlign: 'center' }}>
+                        <PButton size="sm" variant="ghost" onClick={() => setModal({ open: true, preset: r })} title="Revise this slab" style={{ height: 26 }}>Revise</PButton>
                       </td>
                     </tr>
                   )
                 })}
-                {!loading && slabs.length === 0 && (
-                  <tr><td colSpan={17} style={{ padding: 26, textAlign: 'center', color: C.muted }}>
-                    No PT slabs configured yet. Click <b>+ Add / revise slab</b> to add the first one.
-                  </td></tr>
-                )}
               </tbody>
-            </table>
-          </div>
+            </DataTable>
+            {!loading && slabs.length === 0 && (
+              <EmptyState compact title="No PT slabs configured yet." hint="Click + Add / revise slab to add the first one." />
+            )}
+          </>
         )}
-      </div>
+      </SectionCard>
 
-      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
-        <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s PT from here, by their
+      <InfoCallout t="info" icon={<IconInfo size={18} />} title="This table is payroll's only source.">
+        Run Payroll reads every employee&apos;s PT from here, by their
         <b> state</b>, that month&apos;s <b>column</b> and their <b>gross</b>. No rate is written anywhere in the app,
         so a rate changed here applies to the next run on its own.
         <br />PT is a <b>fixed monthly</b> amount. Taking leave does not reduce it. Revising does not delete the
         old row, it closes it; so re-running an earlier month still applies the rate that was in force then.
-      </div>
+      </InfoCallout>
 
       {modal.open && <ReviseModal preset={modal.preset} onClose={() => setModal({ open: false })} onSaved={() => { setModal({ open: false }); load() }} />}
     </div>

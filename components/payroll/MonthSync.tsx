@@ -15,14 +15,40 @@ import {
 } from '@/lib/payroll/sync'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import {
+  C as TK, F, W, S as SP, R, E, numeric, type Tone,
+  IconUser, IconCompliance, IconPayroll, IconSliders, IconFinance, IconBuilding, IconHeart, IconPerformance,
+  IconReceipt, IconLoans, IconCheck, IconDownload, IconSearch, IconClose, IconLock, IconAlert,
+} from '@/lib/ui'
+import {
+  SectionCard, InfoCallout, PButton, ControlSelect, KpiTile, KpiGrid, DataTable, EmptyState, StatusPill, RunStatusPill,
+  CountChip, IconTile, IconBank, IconSync, IconLayers, IconFile, IconMonth, dt,
+} from '@/components/payroll/kit'
+import { ScreenIntro, Note } from './attendanceShared'
 
-const C = {
-  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
-  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: TK.positiveTint, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
-}
 const font = '"DM Sans","Segoe UI",sans-serif'
+const scrim = `color-mix(in srgb, ${TK.dark} 52%, transparent)`
+
+// A line icon per sync category, in place of the emoji the category list carries —
+// same 20px stroke family as the rest of the payroll screens. Presentation only.
+function CatIcon({ k, size = 16 }: { k: string; size?: number }) {
+  switch (k) {
+    case 'employee': return <IconUser size={size} />
+    case 'statutory': case 'pt': return <IconCompliance size={size} />
+    case 'bank': return <IconBank size={size} />
+    case 'salary': return <IconPayroll size={size} />
+    case 'flexi': return <IconSliders size={size} />
+    case 'earnings': return <IconFinance size={size} />
+    case 'epf': case 'lwf': case 'nps': return <IconBuilding size={size} />
+    case 'esic': return <IconHeart size={size} />
+    case 'arrear': return <IconPerformance size={size} />
+    case 'flexi_reimb': case 'tds': return <IconReceipt size={size} />
+    case 'loan': return <IconLoans size={size} />
+    case 'inv_decl': return <IconFile size={size} />
+    case 'inv_proof': return <IconCheck size={size} />
+    default: return <IconLayers size={size} />
+  }
+}
 
 // ── Month-over-month change table ──────────────────────────────────────────
 // Sits under the sync card: for the selected payroll month, compares every frozen
@@ -75,87 +101,75 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
     XLSX.writeFile(wb, `Month_Master_Changes_${safe(diff.curLabel)}_vs_${safe(diff.prevLabel)}.xlsx`.replace(/_+/g, '_'))
   }
 
-  const th: React.CSSProperties = { padding: '8px 12px', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', textAlign: 'left', whiteSpace: 'nowrap' }
-  const td: React.CSSProperties = { padding: '9px 12px', color: C.navy, borderTop: `1px solid ${C.border}` }
-  const stat = (label: string, value: any, color: string) => (
-    <div key={label} style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px', minWidth: 96 }}>
-      <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1.25 }}>{value}</div>
-    </div>
-  )
+  const noDownload = !diff || !diff.rows.length
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginTop: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}></div>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>Changes vs previous month</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-            {diff ? <>Comparing <b style={{ color: C.purpleD }}>{diff.curLabel}</b> against <b style={{ color: C.purpleD }}>{diff.prevLabel}</b>: every frozen Month Master column</>
-              : 'Every frozen Month Master column, compared employee by employee'}
-          </div>
-        </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.muted, cursor: 'pointer' }}>
-          <input type="checkbox" checked={withAtt} onChange={e => setWithAtt(e.target.checked)} style={{ accentColor: C.purple, cursor: 'pointer' }} />
+    <SectionCard icon={<IconLayers size={16} />} title="Changes vs previous month"
+      hint={diff ? <>Comparing <b style={{ color: TK.brandDeep }}>{diff.curLabel}</b> against <b style={{ color: TK.brandDeep }}>{diff.prevLabel}</b>: every frozen Month Master column</>
+        : 'Every frozen Month Master column, compared employee by employee'}
+      actions={<>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: F.tiny, color: TK.inkSoft, cursor: 'pointer', fontWeight: W.medium }}>
+          <input type="checkbox" checked={withAtt} onChange={e => setWithAtt(e.target.checked)} style={{ accentColor: TK.brand, cursor: 'pointer', width: 15, height: 15 }} />
           Include attendance &amp; OT
         </label>
-        <button onClick={compare} disabled={busy || !run} style={{ padding: '7px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, fontFamily: font, cursor: busy ? 'not-allowed' : 'pointer' }}>⟳ Refresh</button>
-        <button onClick={download} disabled={!diff || !diff.rows.length}
-          style={{ padding: '8px 15px', borderRadius: 10, border: 'none', background: !diff || !diff.rows.length ? TK.brandTint : 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
-        </button>
-      </div>
+        <PButton size="sm" icon={<IconSync size={14} />} onClick={compare} disabled={busy || !run}>Refresh</PButton>
+        <PButton size="sm" variant="primary" icon={<IconDownload size={14} />} onClick={download} disabled={noDownload}>Download changes</PButton>
+      </>}>
 
-      {busy && <div style={{ fontSize: 12, color: C.muted, padding: '10px 0' }}>Comparing months…</div>}
-      {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 10, padding: '10px 14px' }}>{err}</div>}
+      {busy && <div style={{ fontSize: F.tiny, color: TK.muted, padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }}><IconSync size={13} /> Comparing months…</div>}
+      {err && <InfoCallout t="critical" compact style={{ marginBottom: 0 }}>{err}</InfoCallout>}
       {!busy && !err && prevMissing && (
-        <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 12px' }}>
+        <InfoCallout t="warning" compact style={{ marginBottom: 0 }}>
           Nothing to compare against: <b>{prevMissing}</b> was never created for this selection. The first month of a company has no previous month master.
-        </div>
+        </InfoCallout>
       )}
 
       {!busy && diff && (
         <>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            {stat('Employees', diff.curCount, C.navy)}
-            {stat('New', diff.newRows, C.green)}
-            {stat('Changed', diff.changedRows, C.purple)}
-            {stat('Exited', diff.exitedRows, C.amber)}
-            {stat('No change', diff.unchangedRows, C.muted)}
-          </div>
-          <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead><tr style={{ background: C.purpleD }}>
-                <th style={th}>Category</th>
-                <th style={{ ...th, textAlign: 'right' }}>Employees changed</th>
-                <th style={{ ...th, textAlign: 'right' }}>Columns changed</th>
-              </tr></thead>
-              <tbody>
-                {diff.categories.map(c => (
-                  <tr key={c.key} style={{ background: c.changed ? '#FDFCFF' : '#fff' }}>
-                    <td style={{ ...td, fontWeight: 600 }}>{c.label}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      {!c.comparable ? <span style={{ fontSize: 11, color: C.muted }}>not frozen per month</span>
-                        : <b style={{ fontSize: 14, color: c.changed ? C.purple : C.muted }}>{c.changed}</b>}
-                    </td>
-                    <td style={{ ...td, textAlign: 'right', color: C.muted }}>{c.comparable ? c.fields : '-'}</td>
-                  </tr>
-                ))}
-                <tr style={{ background: C.gray }}>
-                  <td style={{ ...td, fontWeight: 700 }}>New employees this month</td>
-                  <td style={{ ...td, textAlign: 'right' }}><b style={{ fontSize: 14, color: diff.newRows ? C.green : C.muted }}>{diff.newRows}</b></td>
-                  <td style={{ ...td, textAlign: 'right', color: C.muted }}>-</td>
+          <KpiGrid min={130}>
+            <KpiTile label="Employees" value={diff.curCount} />
+            <KpiTile label="New" value={diff.newRows} t="positive" />
+            <KpiTile label="Changed" value={diff.changedRows} t="brand" />
+            <KpiTile label="Exited" value={diff.exitedRows} t="warning" />
+            <KpiTile label="No change" value={<span style={{ color: TK.muted }}>{diff.unchangedRows}</span>} />
+          </KpiGrid>
+          <DataTable framed minWidth={420}>
+            <thead><tr>
+              <th style={dt.th}>Category</th>
+              <th style={dt.thNum}>Employees changed</th>
+              <th style={dt.thNum}>Columns changed</th>
+            </tr></thead>
+            <tbody>
+              {diff.categories.map(c => (
+                <tr key={c.key} className={dt.rowClass} style={{ background: c.changed ? `color-mix(in srgb, ${TK.brandTint} 45%, ${TK.surface})` : undefined }}>
+                  <td style={dt.tdStrong}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ display: 'inline-flex', color: c.changed ? TK.brand : TK.faint }}><CatIcon k={c.key} size={14} /></span>
+                      {c.label}
+                    </span>
+                  </td>
+                  <td style={dt.tdNum}>
+                    {!c.comparable ? <span style={{ fontSize: F.micro, color: TK.muted }}>not frozen per month</span>
+                      : <b style={{ fontSize: F.body, color: c.changed ? TK.brandDeep : TK.muted }}>{c.changed}</b>}
+                  </td>
+                  <td style={{ ...dt.tdNum, color: TK.muted }}>{c.comparable ? c.fields : '-'}</td>
                 </tr>
-              </tbody>
-            </table>
-          </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 8, background: C.gray, borderRadius: 10, padding: '9px 11px', lineHeight: 1.5 }}>
+              ))}
+              <tr style={{ background: TK.sunken }}>
+                <td style={{ ...dt.tdStrong, fontWeight: W.bold }}>New employees this month</td>
+                <td style={dt.tdNum}><b style={{ fontSize: F.body, color: diff.newRows ? TK.positive : TK.muted }}>{diff.newRows}</b></td>
+                <td style={{ ...dt.tdNum, color: TK.muted }}>-</td>
+              </tr>
+            </tbody>
+          </DataTable>
+          <Note style={{ marginTop: SP.md }}>
             An employee is counted once per category, however many columns moved inside it, so “Bank details 1” means one employee’s bank data changed.
             {!withAtt && ' Attendance and OT are excluded by default because they change every month by design. Tick the box to include them.'}
             {' '}<b>Download changes</b> gives one row per new or changed employee, carrying only emp code, name and the columns that actually changed. New joiners carry their full row, since all of it is new.
-          </div>
+          </Note>
         </>
       )}
-    </div>
+    </SectionCard>
   )
 }
 
@@ -169,20 +183,22 @@ function CategoryRow({ cat, count, extra, busy, busyText, disabled, onSync, onDo
 }) {
   const ready = cat.status === 'ready'
   const global_ = cat.status === 'global'
+  const runOwned = ready && cat.syncable === false
+  const t: Tone = ready ? (runOwned ? 'neutral' : 'brand') : global_ ? 'positive' : 'neutral'
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 0', borderTop: `1px solid ${C.border}` }}>
-      <div style={{
-        width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 15, flexShrink: 0, background: ready ? C.purpleBg : global_ ? TK.positiveTint: TK.sunken,
-      }}>{cat.icon}</div>
-      <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: ready || global_ ? C.navy : TK.faint }}>{cat.label}</div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.45 }}>{cat.note}</div>
+    <div className="ez-row" style={{ display: 'flex', alignItems: 'center', gap: SP.md, padding: `${SP.md}px ${SP.lg}px`, borderTop: `1px solid ${TK.line}`, flexWrap: 'wrap' }}>
+      <IconTile icon={<CatIcon k={cat.key} />} t={t} size={34} />
+      <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+        <div style={{ fontSize: F.small, fontWeight: W.semi, color: ready || global_ ? TK.ink : TK.faint, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {cat.label}
+        </div>
+        <div style={{ fontSize: F.tiny, color: TK.muted, marginTop: 2, lineHeight: 1.45 }}>{cat.note}</div>
         {extra}
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: SP.sm, flexWrap: 'wrap', marginLeft: 'auto' }}>
       {ready ? (
         <>
-          <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>
+          <span title="Employees in this category for the month" style={{ minWidth: 34, textAlign: 'center', fontSize: F.small, fontWeight: W.bold, color: TK.brandDeep, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: R.pill, padding: '3px 11px', whiteSpace: 'nowrap', ...numeric }}>
             {count == null ? '-' : count}
           </span>
           {/* Run Payroll owns these five and recomputes them every run, in an order that
@@ -190,27 +206,26 @@ function CategoryRow({ cat, count, extra, busy, busyText, disabled, onSync, onDo
               overwrites — or, pressed out of order, a wrong one. The Download stays:
               this is where the EPF, ESIC, PT and LWF registers come from. */}
           {cat.syncable === false ? (
-            <span title="Run Payroll computes this every time it runs. It is not synced by hand"
-              style={{ fontSize: 11, fontWeight: 700, color: C.muted, background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>
-              Run Payroll
+            <span title="Run Payroll computes this every time it runs. It is not synced by hand">
+              <StatusPill t="neutral" icon={<IconLock size={12} />}>Run Payroll</StatusPill>
             </span>
           ) : (
-            <button onClick={onSync} disabled={busy || disabled}
-              style={{ padding: '7px 15px', borderRadius: 10, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+            <PButton size="sm" variant="primary" icon={<IconSync size={13} />} onClick={onSync} disabled={busy || disabled} style={{ minWidth: 86 }}>
               {busy ? (busyText || 'Syncing…') : 'Sync'}
-            </button>
+            </PButton>
           )}
-          <button onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
-            style={{ padding: '7px 10px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontSize: 12, fontFamily: font, cursor: disabled ? 'not-allowed' : 'pointer' }}></button>
+          <PButton size="sm" onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
+            icon={<IconDownload size={14} />} style={{ padding: '0 9px' }} />
         </>
       ) : global_ ? (
         <>
-          {count != null && <span style={{ fontSize: 12, fontWeight: 700, color: C.green, background: C.greenBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>{count}</span>}
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Whole year</span>
+          {count != null && <span style={{ fontSize: F.small, fontWeight: W.bold, color: TK.positive, background: TK.positiveTint, border: `1px solid ${TK.positiveEdge}`, borderRadius: R.pill, padding: '3px 11px', whiteSpace: 'nowrap', ...numeric }}>{count}</span>}
+          <StatusPill t="positive" dot>Whole year</StatusPill>
         </>
       ) : (
-        <span style={{ fontSize: 11, fontWeight: 700, color: TK.critical, background: TK.criticalTint, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Planned</span>
+        <StatusPill t="neutral" dot>Planned</StatusPill>
       )}
+      </div>
     </div>
   )
 }
@@ -304,82 +319,85 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
   const codesForRpc = chosen.length === pool.length ? null : chosen
 
   const inp: React.CSSProperties = {
-    padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12.5,
-    background: TK.sunken, color: C.navy, fontFamily: font, outline: 'none', boxSizing: 'border-box',
+    height: 36, padding: '0 11px', border: `1px solid ${TK.lineStrong}`, borderRadius: R.md, fontSize: F.small,
+    background: TK.surface, color: TK.ink, fontFamily: font, outline: 'none', boxSizing: 'border-box',
   }
   const initials = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
 
   if (!mounted) return null
   return createPortal(
     <div onClick={onCancel} style={{
-      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.52)', zIndex: 1000,
+      position: 'fixed', inset: 0, background: scrim, zIndex: 1000,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
       backdropFilter: 'blur(2px)', fontFamily: font,
     }}>
-      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{
-        background: TK.surface, borderRadius: 18, width: 'min(680px, 100%)',
-        height: 'min(640px, calc(100vh - 48px))',
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="ez-rise" style={{
+        background: TK.surface, border: `1px solid ${TK.line}`, borderRadius: R.xl, width: 'min(700px, 100%)',
+        height: 'min(660px, calc(100vh - 48px))',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 24px 64px rgba(15,23,42,0.32), 0 4px 16px rgba(15,23,42,0.14)',
+        boxShadow: E.overlay,
       }}>
 
         {/* ── header ── */}
-        <div style={{ padding: '16px 20px 14px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{cat.icon}</div>
+        <div style={{ padding: '16px 20px 14px', borderBottom: `1px solid ${TK.line}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: SP.md }}>
+            <IconTile icon={<CatIcon k={cat.key} size={18} />} t="brand" size={40} solid />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 800, color: C.navy }}>Sync {cat.label}</div>
-              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 1 }}>
+              <div style={{ fontSize: F.lead, fontWeight: W.bold, color: TK.ink }}>Sync {cat.label}</div>
+              <div style={{ fontSize: F.tiny, color: TK.muted, marginTop: 2 }}>
                 {diffMode
                   ? <>Only people whose {cat.label.toLowerCase()} changed in HRMS since this month was frozen.</>
                   : <>Choose whose {cat.label.toLowerCase()} to refresh from HRMS into this month.</>}
               </div>
             </div>
-            <button onClick={onCancel} aria-label="Close" style={{
-              width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface,
-              color: C.muted, fontSize: 15, cursor: 'pointer', lineHeight: 1, flexShrink: 0,
-            }}>✕</button>
+            <button onClick={onCancel} aria-label="Close" className="ez-press" style={{
+              width: 32, height: 32, borderRadius: R.sm, border: `1px solid ${TK.line}`, background: TK.surface,
+              color: TK.muted, cursor: 'pointer', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            }}><IconClose size={15} /></button>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: SP.sm, marginTop: 13, flexWrap: 'wrap' }}>
             {companies.length > 1 && (
-              <select style={{ ...inp, flex: '0 1 170px' }} value={company} onChange={e => setCompany(e.target.value)}>
+              <select style={{ ...inp, flex: '0 1 170px', cursor: 'pointer' }} value={company} onChange={e => setCompany(e.target.value)}>
                 <option value="">All companies</option>
                 {companies.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
             {locations.length > 1 && (
-              <select style={{ ...inp, flex: '0 1 150px' }} value={location} onChange={e => setLocation(e.target.value)}>
+              <select style={{ ...inp, flex: '0 1 150px', cursor: 'pointer' }} value={location} onChange={e => setLocation(e.target.value)}>
                 <option value="">All locations</option>
                 {locations.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             )}
-            <input style={{ ...inp, flex: '1 1 180px', minWidth: 150 }} value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="🔍  Name, emp code, or paste a list" />
+            <span style={{ position: 'relative', flex: '1 1 180px', minWidth: 150, display: 'block' }}>
+              <span aria-hidden style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: TK.muted, display: 'inline-flex', pointerEvents: 'none' }}><IconSearch size={14} /></span>
+              <input style={{ ...inp, width: '100%', paddingLeft: 32 }} value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Name, emp code, or paste a list" />
+            </span>
           </div>
         </div>
 
         {/* ── select-all bar ── */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px',
-          background: TK.sunken, borderBottom: `1px solid ${C.border}`, fontSize: 12, flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: SP.md, padding: '8px 20px', flexWrap: 'wrap',
+          background: TK.sunken, borderBottom: `1px solid ${TK.line}`, fontSize: F.tiny, flexShrink: 0,
         }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontWeight: 700, color: C.purpleD, userSelect: 'none' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontWeight: W.semi, color: TK.brandDeep, userSelect: 'none' }}>
             <input type="checkbox" checked={allVisibleOn} onChange={e => setMany(visibleCodes, e.target.checked)}
-              style={{ width: 15, height: 15, accentColor: C.purple, cursor: 'pointer' }} />
+              style={{ width: 15, height: 15, accentColor: TK.brand, cursor: 'pointer' }} />
             {allVisibleOn ? 'Unselect' : 'Select'} {visible.length === pool.length ? 'all' : `these ${visible.length}`}
           </label>
           <button onClick={() => setSel(new Set())}
-            style={{ border: 'none', background: 'none', color: TK.critical, fontSize: 11.5, fontWeight: 700, fontFamily: font, cursor: 'pointer', padding: 0 }}>
+            style={{ border: 'none', background: 'none', color: TK.critical, fontSize: F.tiny, fontWeight: W.semi, fontFamily: font, cursor: 'pointer', padding: 0 }}>
             Clear all
           </button>
           {diffMode && (
             <button onClick={() => setShowAll(v => !v)}
-              style={{ border: 'none', background: 'none', color: C.purpleD, fontSize: 11.5, fontWeight: 700, fontFamily: font, cursor: 'pointer', padding: 0 }}>
+              style={{ border: 'none', background: 'none', color: TK.brandDeep, fontSize: F.tiny, fontWeight: W.semi, fontFamily: font, cursor: 'pointer', padding: 0 }}>
               {showAll ? `← Only changed (${pending!.size})` : `Show all ${pool.length}`}
             </button>
           )}
-          <span style={{ marginLeft: 'auto', color: C.muted }}>
+          <span style={{ marginLeft: 'auto', color: TK.muted, ...numeric }}>
             {diffMode && !showAll
               ? `${pending!.size} changed of ${pool.length}`
               : visible.length === base.length ? `${base.length} employees` : `${visible.length} of ${base.length} shown`}
@@ -387,48 +405,40 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
         </div>
 
         {/* ── list — the ONLY thing that scrolls ── */}
-        <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '6px 10px' }}>
+        <div className="ez-scroll" style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '6px 10px' }}>
           {visible.length === 0 ? (
-            <div style={{ padding: '48px 20px', textAlign: 'center', fontSize: 12.5, color: C.muted }}>
-              {diffMode && !showAll && !tokens.length && !company && !location ? (
-                <>
-                  <div style={{ fontSize: 26, marginBottom: 8 }}>✅</div>
-                  <div style={{ fontWeight: 700, color: C.green, marginBottom: 4 }}>Nothing to sync: everyone's {cat.label.toLowerCase()} matches HRMS.</div>
-                  <button onClick={() => setShowAll(true)}
-                    style={{ marginTop: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontSize: 11.5, fontWeight: 700, fontFamily: font, cursor: 'pointer', borderRadius: 8, padding: '6px 12px' }}>
-                    Show all {pool.length} anyway
-                  </button>
-                </>
-              ) : (
-                <><div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>Nobody matches this search.</>
-              )}
-            </div>
+            diffMode && !showAll && !tokens.length && !company && !location ? (
+              <EmptyState t="positive" title={<span style={{ color: TK.positive }}>Nothing to sync: everyone's {cat.label.toLowerCase()} matches HRMS.</span>}
+                action={<PButton size="sm" onClick={() => setShowAll(true)}>Show all {pool.length} anyway</PButton>} />
+            ) : (
+              <EmptyState t="neutral" icon={<IconSearch size={20} />} title="Nobody matches this search." />
+            )
           ) : visible.map(e => {
             const on = sel.has(e.code)
             return (
-              <label key={e.code} style={{
-                display: 'flex', alignItems: 'center', gap: 11, padding: '7px 10px', borderRadius: 10,
-                cursor: 'pointer', background: on ? C.purpleBg : 'transparent', marginBottom: 1, userSelect: 'none',
+              <label key={e.code} className={on ? undefined : 'ez-row'} style={{
+                display: 'flex', alignItems: 'center', gap: 11, padding: '7px 10px', borderRadius: R.md,
+                cursor: 'pointer', background: on ? TK.brandTint : 'transparent', marginBottom: 1, userSelect: 'none',
               }}>
                 <input type="checkbox" checked={on} onChange={() => toggle(e.code)}
-                  style={{ width: 15, height: 15, accentColor: C.purple, cursor: 'pointer', flexShrink: 0 }} />
+                  style={{ width: 15, height: 15, accentColor: TK.brand, cursor: 'pointer', flexShrink: 0 }} />
                 <span style={{
-                  width: 28, height: 28, borderRadius: '50%', background: on ? C.purple : TK.sunken,
-                  color: on ? TK.onAccent : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 10, fontWeight: 700, flexShrink: 0,
+                  width: 28, height: 28, borderRadius: '50%', background: on ? TK.brand : TK.sunken,
+                  color: on ? TK.onAccent : TK.brandDeep, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: F.micro, fontWeight: W.bold, flexShrink: 0, border: on ? 'none' : `1px solid ${TK.line}`,
                 }}>{initials(e.name)}</span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || '-'}</span>
-                  <span style={{ display: 'block', fontSize: 10.5, color: C.muted, fontFamily: 'ui-monospace, monospace' }}>{e.code}</span>
+                  <span style={{ display: 'block', fontSize: F.small, fontWeight: W.semi, color: TK.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || '-'}</span>
+                  <span style={{ display: 'block', fontSize: F.micro, color: TK.muted, fontFamily: 'ui-monospace, monospace' }}>{e.code}</span>
                   {pending?.get(e.code) && (
-                    <span style={{ display: 'block', fontSize: 10.5, color: C.amber, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    <span style={{ display: 'block', fontSize: F.micro, color: TK.warning, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                       title={pending.get(e.code)}>
                       ↻ {pending.get(e.code)}
                     </span>
                   )}
                 </span>
-                {e.location && <span style={{ fontSize: 10.5, color: C.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>{e.location}</span>}
-                {e.company && <span style={{ fontSize: 10, fontWeight: 600, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>{e.company}</span>}
+                {e.location && <span style={{ fontSize: F.micro, color: TK.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>{e.location}</span>}
+                {e.company && <StatusPill t="brand" size="sm">{e.company}</StatusPill>}
               </label>
             )
           })}
@@ -436,27 +446,18 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
 
         {/* ── footer ── */}
         <div style={{
-          padding: '13px 20px', borderTop: `1px solid ${C.border}`, background: TK.surface,
-          display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+          padding: '13px 20px', borderTop: `1px solid ${TK.line}`, background: TK.sunken,
+          display: 'flex', alignItems: 'center', gap: SP.md, flexShrink: 0, flexWrap: 'wrap',
         }}>
-          <div style={{ flex: 1, fontSize: 11.5, color: C.muted, lineHeight: 1.5, minWidth: 0 }}>
+          <div style={{ flex: '1 1 220px', fontSize: F.tiny, color: TK.muted, lineHeight: 1.5, minWidth: 0, ...numeric }}>
             {chosen.length === 0
               ? <b style={{ color: TK.critical }}>Nobody selected, nothing to sync.</b>
-              : <>Writing <b style={{ color: C.navy }}>{chosen.length}</b> of {pool.length}. Only <b>{cat.label}</b> changes; the rest stays frozen.</>}
+              : <>Writing <b style={{ color: TK.ink }}>{chosen.length}</b> of {pool.length}. Only <b>{cat.label}</b> changes; the rest stays frozen.</>}
           </div>
-          <button onClick={onCancel} style={{
-            padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface,
-            color: C.navy, fontWeight: 600, fontSize: 12.5, fontFamily: font, cursor: 'pointer', flexShrink: 0,
-          }}>Cancel</button>
-          <button onClick={() => onConfirm(codesForRpc)} disabled={busy || chosen.length === 0}
-            style={{
-              padding: '9px 20px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 12.5, fontFamily: font,
-              background: busy || chosen.length === 0 ? TK.brandTint : C.purple, color: TK.onAccent,
-              cursor: busy || chosen.length === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-              boxShadow: busy || chosen.length === 0 ? 'none' : '0 3px 10px rgba(37,99,235,0.25)',
-            }}>
+          <PButton onClick={onCancel}>Cancel</PButton>
+          <PButton variant="primary" icon={<IconSync size={14} />} onClick={() => onConfirm(codesForRpc)} disabled={busy || chosen.length === 0}>
             {busy ? 'Syncing…' : `Sync ${chosen.length} employee${chosen.length === 1 ? '' : 's'}`}
-          </button>
+          </PButton>
         </div>
       </div>
     </div>,
@@ -575,61 +576,69 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   const runOwnedCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready' && c.syncable === false).length
   const globalCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'global').length
   const plannedCount = DATA_SYNC_CATEGORIES.length - readyCount - runOwnedCount - globalCount
-  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const monthOpts = Array.from(new Map(runs.map(r => [r.month, r])).values()).sort((a, b) => (a.month || 0) - (b.month || 0))
 
   return (
-    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 880 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Snapshot Sync</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
-            Sync each category on its own. Nothing moves into Month Master unless you choose it. Attendance, OT and arrear are never touched by any of these.
-          </div>
-        </div>
-        <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', paddingTop: 4 }}>
-          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: C.green, marginRight: 5 }} />{readyCount} ready
-          {runOwnedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{runOwnedCount} run by payroll</>}
-          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.positiveTint, margin: '0 5px 0 12px' }} />{globalCount} whole-year
-          {plannedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{plannedCount} planned</>}
-        </div>
-      </div>
-
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', boxShadow: 'var(--ez-shadow-flat)' }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginBottom: 6 }}>
-          <div>
-            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>
-            <select style={{ ...inp, minWidth: 220 }} value={monthVal} onChange={e => { setMonthVal(e.target.value); setMsg(''); setErr('') }}>
-              {monthOpts.length === 0 && <option value="">No month yet. Create one first</option>}
-              {monthOpts.map(r => <option key={r.month} value={String(r.month)}>{periodLabel(r)}</option>)}
-            </select>
-          </div>
-          <div style={{ flex: 1 }} />
-          <div style={{ fontSize: 11, color: C.muted, paddingBottom: 8 }}>
-            {sel && <>Status: <b style={{ color: C.purple }}>{isGroup && monthRuns.length > 1 ? `${monthRuns.length} companies` : sel.status}</b></>}
-            {status && <> · in Month Master: <b style={{ color: C.navy }}>{status.in_month}</b></>}
-          </div>
-        </div>
-
-        {status?.is_locked && (
-          <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
-            This month is <b>locked / disbursed</b>, so every category sync is disabled. A locked month should not be changed quietly by a small sync; reopen it formally through <b>Lock / Unlock</b> first. (The database will refuse it anyway.)
+    <div style={{ fontFamily: font, fontSize: F.small, color: TK.ink, maxWidth: 960 }}>
+      <ScreenIntro icon={<IconSync size={20} />} title="Snapshot Sync"
+        subtitle="Sync each category on its own. Nothing moves into Month Master unless you choose it. Attendance, OT and arrear are never touched by any of these."
+        meta={<>
+          <StatusPill t="brand" size="sm" dot>{readyCount} ready</StatusPill>
+          {runOwnedCount > 0 && <StatusPill t="neutral" size="sm" icon={<IconLock size={11} />}>{runOwnedCount} run by payroll</StatusPill>}
+          <StatusPill t="positive" size="sm" dot>{globalCount} whole-year</StatusPill>
+          {plannedCount > 0 && <StatusPill t="neutral" size="sm" dot>{plannedCount} planned</StatusPill>}
+        </>}
+        actions={
+          <ControlSelect label="Payroll month" icon={<IconMonth size={15} />} strong minWidth={200}
+            value={monthVal} onChange={e => { setMonthVal(e.target.value); setMsg(''); setErr('') }}>
+            {monthOpts.length === 0 && <option value="">No month yet. Create one first</option>}
+            {monthOpts.map(r => <option key={r.month} value={String(r.month)}>{periodLabel(r)}</option>)}
+          </ControlSelect>
+        }>
+        {(sel || status) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: SP.sm, flexWrap: 'wrap', fontSize: F.tiny, color: TK.muted }}>
+            {sel && <>
+              <span>Status</span>
+              {isGroup && monthRuns.length > 1
+                ? <StatusPill t="info" size="sm" icon={<IconBuilding size={12} />}>{monthRuns.length} companies</StatusPill>
+                : <RunStatusPill status={sel.status} raw size="sm" />}
+            </>}
+            {status && <>
+              <span style={{ marginLeft: SP.sm }}>in Month Master</span>
+              <CountChip t="brand">{status.in_month}</CountChip>
+            </>}
+            {status?.is_locked && <StatusPill t="warning" size="sm" icon={<IconLock size={11} />}>Locked</StatusPill>}
           </div>
         )}
+      </ScreenIntro>
 
-        {needsMigration && (
-          <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
-            Category-wise sync is off: the database could not resolve one of its functions.
-            {migrationDetail && <div style={{ marginTop: 5, fontFamily: 'ui-monospace, monospace', fontSize: 11, opacity: .85 }}>{migrationDetail}</div>}
-            <div style={{ marginTop: 5 }}>Run the migration that creates that function, then reload.</div>
-            <button onClick={syncEverything} disabled={busyKey === 'all' || !runIds.length}
-              style={{ marginLeft: 10, padding: '5px 12px', borderRadius: 7, border: 'none', background: C.amber, color: TK.onAccent, fontWeight: 700, fontSize: 11, fontFamily: font, cursor: 'pointer' }}>
+      {status?.is_locked && (
+        <InfoCallout t="warning" icon={<IconLock size={16} />} title="Every category sync is disabled">
+          This month is <b>locked / disbursed</b>, so every category sync is disabled. A locked month should not be changed quietly by a small sync; reopen it formally through <b>Lock / Unlock</b> first. (The database will refuse it anyway.)
+        </InfoCallout>
+      )}
+
+      {needsMigration && (
+        <InfoCallout t="warning" icon={<IconAlert size={16} />} title="Category-wise sync is off"
+          action={
+            <PButton size="sm" onClick={syncEverything} disabled={busyKey === 'all' || !runIds.length}
+              style={{ color: TK.warning, borderColor: TK.warningEdge }}>
               {busyKey === 'all' ? 'Syncing…' : 'Re-sync everything (old behaviour)'}
-            </button>
-          </div>
-        )}
+            </PButton>
+          }>
+          The database could not resolve one of its functions.
+          {migrationDetail && <div style={{ marginTop: 5, fontFamily: 'ui-monospace, monospace', fontSize: F.micro, opacity: .85 }}>{migrationDetail}</div>}
+          <div style={{ marginTop: 5 }}>Run the migration that creates that function, then reload.</div>
+        </InfoCallout>
+      )}
 
+      {msg && <InfoCallout t="positive" compact title={msg} />}
+      {err && <InfoCallout t="critical" compact>{err}</InfoCallout>}
+
+      <SectionCard icon={<IconLayers size={16} />} title="Categories" flush
+        hint="Sync refreshes one category from HRMS into this month; Download gives it as frozen."
+        actions={<CountChip>{DATA_SYNC_CATEGORIES.length}</CountChip>}
+        bodyStyle={{ marginTop: -1 }}>
         {DATA_SYNC_CATEGORIES.map(cat => (
           <CategoryRow key={cat.key} cat={cat}
             count={status && cat.countKey ? status[cat.countKey] : null}
@@ -639,21 +648,18 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
             onSync={() => openPicker(cat)}
             onDownload={() => download(cat)}
             extra={cat.key === 'employee' && status && (status.new_joiners > 0 || status.leavers > 0) ? (
-              <div style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {status.new_joiners > 0 && <span style={{ color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>+{status.new_joiners} new joiner{status.new_joiners === 1 ? '' : 's'} waiting</span>}
-                {status.leavers > 0 && <span style={{ color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>{status.leavers} no longer eligible</span>}
+              <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {status.new_joiners > 0 && <StatusPill t="positive" size="sm" dot>+{status.new_joiners} new joiner{status.new_joiners === 1 ? '' : 's'} waiting</StatusPill>}
+                {status.leavers > 0 && <StatusPill t="warning" size="sm" dot>{status.leavers} no longer eligible</StatusPill>}
               </div>
             ) : undefined}
           />
         ))}
+      </SectionCard>
 
-        <div style={{ fontSize: 11, color: C.purpleD, marginTop: 14, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
-          <b>Month Create already runs Employee info, Bank, Salary and Flexi automatically.</b> Use a category’s Sync button after a CTC revision, transfer, bank change or fresh declaration: <b>only that category refreshes</b>, the rest stay exactly as they were frozen. Paid days, leave, OT and arrear stay as uploaded no matter which button you press. New joiners come in through <b>Employee info</b>, and they arrive with their full row. A joiner with a blank salary would be paid zero.
-        </div>
-
-        {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
-        {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
-      </div>
+      <InfoCallout t="info" title="Month Create already runs Employee info, Bank, Salary and Flexi automatically.">
+        Use a category’s Sync button after a CTC revision, transfer, bank change or fresh declaration: <b>only that category refreshes</b>, the rest stay exactly as they were frozen. Paid days, leave, OT and arrear stay as uploaded no matter which button you press. New joiners come in through <b>Employee info</b>, and they arrive with their full row. A joiner with a blank salary would be paid zero.
+      </InfoCallout>
 
       {pickerCat && pool.length > 0 && (
         <EmployeePicker

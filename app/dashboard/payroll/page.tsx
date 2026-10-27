@@ -562,9 +562,8 @@ function ConfigTab({ companyId }: { companyId: string }) {
 
   return (
     <div>
-      <div style={S.card}>
-        <div style={S.cardTitle}>Pay Heads</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr 1fr 0.8fr', gap: 10, marginBottom: 10 }}>
+      <SectionCard title="Pay Heads" icon={<IconSliders size={16} />} hint="Add a head: code, name, type and how it is calculated.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap: 10, marginBottom: 12 }}>
           <div>
             <label style={S.label}>Code</label>
             <input style={S.input} value={code} onChange={e => setCode(e.target.value)} placeholder="BASIC" />
@@ -575,7 +574,7 @@ function ConfigTab({ companyId }: { companyId: string }) {
           </div>
           <div>
             <label style={S.label}>Type</label>
-            <select style={S.input} value={headType} onChange={e => setHeadType(e.target.value)}>
+            <select style={{ ...S.input, cursor: 'pointer' }} value={headType} onChange={e => setHeadType(e.target.value)}>
               <option value="EARNING">EARNING</option>
               <option value="DEDUCTION">DEDUCTION</option>
               <option value="EMPLOYER">EMPLOYER</option>
@@ -584,7 +583,7 @@ function ConfigTab({ companyId }: { companyId: string }) {
           </div>
           <div>
             <label style={S.label}>Calc type</label>
-            <select style={S.input} value={calcType} onChange={e => setCalcType(e.target.value)}>
+            <select style={{ ...S.input, cursor: 'pointer' }} value={calcType} onChange={e => setCalcType(e.target.value)}>
               <option value="FIXED">FIXED</option>
               <option value="PCT_BASIC">PCT_BASIC</option>
               <option value="PCT_CTC">PCT_CTC</option>
@@ -593,55 +592,53 @@ function ConfigTab({ companyId }: { companyId: string }) {
           </div>
           <div>
             <label style={S.label}>Value</label>
-            <input style={S.input} type="number" value={value} onChange={e => setValue(e.target.value)} placeholder="0" />
+            <input style={{ ...S.input, ...numeric }} type="number" value={value} onChange={e => setValue(e.target.value)} placeholder="0" />
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.navy, cursor: 'pointer' }}>
-            <input type="checkbox" checked={taxable} onChange={e => setTaxable(e.target.checked)} /> Taxable
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: TF.small, color: C.navy, cursor: 'pointer' }}>
+            <input type="checkbox" checked={taxable} onChange={e => setTaxable(e.target.checked)} style={{ accentColor: TK.brand, width: 15, height: 15 }} /> Taxable
           </label>
-          <button style={{ ...S.btnPrimary, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={add}>Add</button>
-          {err && <span style={{ color: C.red, fontSize: 12 }}>{err}</span>}
+          <PButton variant="primary" icon={<IconPlus size={14} />} disabled={saving} onClick={add}>Add</PButton>
+          {err && <span style={{ color: C.red, fontSize: TF.tiny }}>{err}</span>}
         </div>
-      </div>
+      </SectionCard>
 
-      <div style={S.card}>
-        {loading ? <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div> : heads.length === 0 ? (
-          <div style={{ color: C.muted, fontSize: 12 }}>No pay heads yet. Add one above.</div>
+      <SectionCard flush>
+        {loading ? <EmptyState compact t="neutral" title="Loading…" /> : heads.length === 0 ? (
+          <EmptyState compact t="neutral" title="No pay heads yet." hint="Add one above." />
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ textAlign: 'left', color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                  <th style={{ padding: '6px 8px' }}>Code</th>
-                  <th style={{ padding: '6px 8px' }}>Name</th>
-                  <th style={{ padding: '6px 8px' }}>Type</th>
-                  <th style={{ padding: '6px 8px' }}>Calc</th>
-                  <th style={{ padding: '6px 8px' }}>Taxable</th>
-                  <th style={{ padding: '6px 8px' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {heads.map(h => {
-                  const hc = HEAD_COLORS[h.head_type] || HEAD_COLORS.EARNING
-                  return (
-                    <tr key={h.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                      <td style={{ padding: '8px', fontWeight: 600, color: C.purpleDark }}>{h.code}</td>
-                      <td style={{ padding: '8px', color: C.navy }}>{h.name}</td>
-                      <td style={{ padding: '8px' }}><Badge text={h.head_type} bg={hc.bg} color={hc.color} /></td>
-                      <td style={{ padding: '8px', color: C.navy }}>{calcLabel(h)}</td>
-                      <td style={{ padding: '8px', color: C.muted }}>{h.taxable ? 'Y' : 'N'}</td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}><button style={S.btnDanger} onClick={() => remove(h.id)}>Delete</button></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable>
+            <thead>
+              <tr>
+                <th style={dt.th}>Code</th>
+                <th style={dt.th}>Name</th>
+                <th style={dt.th}>Type</th>
+                <th style={dt.th}>Calc</th>
+                <th style={dt.th}>Taxable</th>
+                <th style={dt.th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {heads.map(h => {
+                const hc = HEAD_COLORS[h.head_type] || HEAD_COLORS.EARNING
+                return (
+                  <tr key={h.id} className={dt.rowClass}>
+                    <td style={{ ...dt.tdMono, color: C.purpleDark }}>{h.code}</td>
+                    <td style={dt.tdStrong}>{h.name}</td>
+                    <td style={dt.td}><Badge text={h.head_type} bg={hc.bg} color={hc.color} /></td>
+                    <td style={{ ...dt.td, ...numeric }}>{calcLabel(h)}</td>
+                    <td style={{ ...dt.td, color: C.muted }}>{h.taxable ? 'Y' : 'N'}</td>
+                    <td style={{ ...dt.td, textAlign: 'right' }}><PButton size="sm" variant="danger" onClick={() => remove(h.id)}>Delete</PButton></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </DataTable>
         )}
-      </div>
+      </SectionCard>
 
-      <div style={S.note}>Other config (FY/month, PT/LWF/min-wages slabs, tax config, perquisite, bonus): planned.</div>
+      <InfoCallout t="info" compact>Other config (FY/month, PT/LWF/min-wages slabs, tax config, perquisite, bonus): planned.</InfoCallout>
     </div>
   )
 }
@@ -1085,25 +1082,24 @@ function BenefitsTab() {
   ]
   return (
     <div>
-      <div style={{ ...S.card, marginBottom: 14 }}>
-        <div style={S.cardTitle}>Benefits &amp; Loans</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 12 }}>
+      <SectionCard title="Benefits & Loans" icon={<IconHeart size={16} />}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(min(240px, 100%),1fr))', gap: 12 }}>
           {items.map(it => (
-            <div key={it.title} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, background: TK.sunken }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <div key={it.title} style={{ border: `1px solid ${C.border}`, borderRadius: R.md, padding: 14, background: TK.sunken }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                 {it.href ? (
-                  <a href={it.href} style={{ fontSize: 13, fontWeight: 700, color: C.purple, textDecoration: 'none' }}>{it.title} →</a>
+                  <a href={it.href} style={{ fontSize: TF.small, fontWeight: W.bold, color: C.purple, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{it.title} <IconArrowRight size={13} /></a>
                 ) : (
-                  <span style={{ fontSize: 13, fontWeight: 700, color: C.navy }}>{it.title}</span>
+                  <span style={{ fontSize: TF.small, fontWeight: W.bold, color: C.navy }}>{it.title}</span>
                 )}
-                {it.built && <Badge text="Built (employee ESS)" bg={TK.positiveTint} color={C.success} />}
+                {it.built && <StatusPill t="positive" size="sm" dot>Built (employee ESS)</StatusPill>}
               </div>
-              <div style={{ fontSize: 12, color: C.muted }}>{it.note}</div>
+              <div style={{ fontSize: TF.tiny, color: C.muted }}>{it.note}</div>
             </div>
           ))}
         </div>
-      </div>
-      <div style={S.note}>Loans, salary advance &amp; recovery schedules: planned.</div>
+      </SectionCard>
+      <InfoCallout t="info" compact>Loans, salary advance &amp; recovery schedules: planned.</InfoCallout>
     </div>
   )
 }
@@ -1206,15 +1202,15 @@ function EmployeesTab({ companyId }: { companyId: string }) {
 // ── PlannedTab (generic) ──────────────────────────────────────────
 function PlannedTab({ title, items }: { title: string; items: string[] }) {
   return (
-    <div style={S.card}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <div style={S.cardTitle}>{title}</div>
-        <PlannedBadge />
-      </div>
-      <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {items.map((it, i) => <li key={i} style={{ fontSize: 13, color: C.navy }}>{it}</li>)}
+    <SectionCard title={title} icon={<IconLayers size={16} />} iconTone="neutral" actions={<PlannedBadge />}>
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map((it, i) => (
+          <li key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: TF.small, color: C.navy }}>
+            <span aria-hidden style={{ width: 6, height: 6, borderRadius: 99, background: TK.lineStrong, marginTop: 7, flexShrink: 0 }} />{it}
+          </li>
+        ))}
       </ul>
-    </div>
+    </SectionCard>
   )
 }
 

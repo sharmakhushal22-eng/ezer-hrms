@@ -10,19 +10,138 @@ import { scopedCompanies } from '@/lib/rms/resolve'
 import { loadRuns, loadCompanies, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C as TK, F, W, S as SP, R, E, M, numeric, IconChevronDown, IconSearch, IconClose, IconCheck, IconDownload, IconUpload, IconUser } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
+import {
+  SectionCard, InfoCallout, PButton, StatusPill, IconTile, IconInfo, IconFile,
+  type Step, type StepState,
+} from '@/components/payroll/kit'
 
 export const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint, amber: TK.warning, amberBg: TK.warningTint,
+  greenBd: TK.positiveEdge, red: TK.critical, redBg: TK.criticalTint, amber: TK.warning, amberBg: TK.warningTint,
   purpleBg: TK.brandTint, gray: TK.sunken,
 }
 export const font = '"DM Sans","Segoe UI",sans-serif'
 export const num = (v: any) => { const n = Number(v); return isNaN(n) ? null : n }
-export const ddInp: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 10, fontSize: 13, boxSizing: 'border-box', background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
-export const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 5 }
+// The field skin every attendance / voucher form uses: 38px tall like the kit's
+// ControlSelect, hairline-strong border, surface fill. minHeight (not height) so the
+// chip multi-select can grow as codes are added.
+export const ddInp: React.CSSProperties = {
+  width: '100%', minHeight: 38, padding: '8px 12px', border: `1px solid ${TK.lineStrong}`, borderRadius: R.md,
+  fontSize: F.small, boxSizing: 'border-box', background: TK.surface, color: TK.ink, fontFamily: font, outline: 'none',
+  transition: `border-color ${M.quick}, box-shadow ${M.quick}`,
+}
+export const lbl: React.CSSProperties = { fontSize: F.tiny, fontWeight: W.semi, color: TK.inkSoft, display: 'block', marginBottom: 5 }
+
+// ── Presentational building blocks shared by every Attendance / Payroll Run screen ──
+// Module level, never nested — see the house rules in components/payroll/kit.tsx.
+
+/**
+ * The context card at the top of each screen: solid icon tile, title, one-line purpose,
+ * facts (pills) under it, controls on the right, and an optional full-width row below
+ * a hairline (a ProcessStepper for the upload flows).
+ */
+export function ScreenIntro({ icon, title, subtitle, meta, actions, children }: {
+  icon: React.ReactNode; title: React.ReactNode; subtitle?: React.ReactNode
+  meta?: React.ReactNode; actions?: React.ReactNode; children?: React.ReactNode
+}) {
+  return (
+    <section style={{
+      background: TK.surface, border: `1px solid ${TK.line}`, borderRadius: R.lg, boxShadow: E.raised,
+      padding: `${SP.lg}px ${SP.lg + 2}px`, marginBottom: SP.lg, minWidth: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: SP.lg, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: SP.md, minWidth: 0, flex: '1 1 320px' }}>
+          <IconTile icon={icon} size={40} t="brand" solid />
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontSize: F.title, fontWeight: W.bold, color: TK.ink, letterSpacing: '-.01em', lineHeight: 1.2 }}>{title}</h1>
+            {subtitle && <div style={{ marginTop: 3, fontSize: F.small, color: TK.muted, lineHeight: 1.5 }}>{subtitle}</div>}
+            {meta && <div style={{ marginTop: SP.sm, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>{meta}</div>}
+          </div>
+        </div>
+        {actions && <div style={{ display: 'flex', gap: SP.md, alignItems: 'flex-end', flexWrap: 'wrap' }}>{actions}</div>}
+      </div>
+      {children && <div style={{ marginTop: SP.lg, paddingTop: SP.md, borderTop: `1px solid ${TK.line}` }}>{children}</div>}
+    </section>
+  )
+}
+
+/** Quiet explanatory footnote: sunken well, info glyph, small ink-soft text. */
+export function Note({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div style={{
+      display: 'flex', gap: SP.sm + 2, alignItems: 'flex-start', background: TK.sunken, border: `1px solid ${TK.line}`,
+      borderRadius: R.md, padding: `${SP.sm + 2}px ${SP.md}px`, fontSize: F.tiny, color: TK.inkSoft, lineHeight: 1.6, ...numeric, ...style,
+    }}>
+      <span style={{ display: 'inline-flex', color: TK.faint, marginTop: 2 }}><IconInfo size={14} /></span>
+      <div style={{ minWidth: 0 }}>{children}</div>
+    </div>
+  )
+}
+
+/** A labelled field wrapper (div, not label — SearchSelect must not sit inside a <label>). */
+export function Fld({ label, hint, children, span }: { label: React.ReactNode; hint?: React.ReactNode; children: React.ReactNode; span?: boolean }) {
+  return (
+    <div style={{ minWidth: 0, ...(span ? { gridColumn: '1 / -1' } : null) }}>
+      <span style={lbl}>{label}{hint && <span style={{ fontWeight: W.regular, color: TK.muted }}> {hint}</span>}</span>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The file chooser as a drop zone. The real <input type=file> is stretched invisibly
+ * over the whole zone, so a click anywhere opens the picker and a dragged file lands
+ * on the input itself — the caller's onChange is the only handler.
+ */
+export function FileDrop({ accept, onChange, fileName, label = 'Choose a filled sheet', hint }: {
+  accept: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  fileName?: string; label?: React.ReactNode; hint?: React.ReactNode
+}) {
+  const has = !!fileName
+  return (
+    <div className="ez-press" style={{
+      position: 'relative', display: 'flex', alignItems: 'center', gap: SP.md, minHeight: 64, boxSizing: 'border-box',
+      padding: `${SP.md}px ${SP.lg}px`, borderRadius: R.md, cursor: 'pointer',
+      border: `1.5px dashed ${has ? TK.brandEdge : TK.lineStrong}`, background: has ? TK.brandTint : TK.sunken,
+    }}>
+      <IconTile icon={has ? <IconFile size={17} /> : <IconUpload size={17} />} t="brand" size={36} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: F.small, fontWeight: W.semi, color: has ? TK.brandDeep : TK.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {has ? fileName : label}
+        </div>
+        <div style={{ fontSize: F.tiny, color: TK.muted, marginTop: 1 }}>{hint || (has ? 'Click to choose a different file' : `Click to browse, or drop the file here · ${accept.replace(/,/g, ' / ')}`)}</div>
+      </div>
+      <span style={{ fontSize: F.tiny, fontWeight: W.semi, color: TK.brandDeep, background: TK.surface, border: `1px solid ${TK.lineStrong}`, borderRadius: R.sm, padding: '5px 11px', whiteSpace: 'nowrap' }}>
+        {has ? 'Replace' : 'Browse'}
+      </span>
+      <input type="file" accept={accept} onChange={onChange} aria-label={typeof label === 'string' ? label : 'Choose file'}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} />
+    </div>
+  )
+}
+
+/**
+ * Steps for an upload flow — Choose file → Validate → Review → Apply — derived purely
+ * from the screen's existing state, so the rail can never disagree with what is shown.
+ */
+export function uploadSteps({ hasFile, fileBlocked, showVal, checking, blocked, done, validateHint }: {
+  hasFile: boolean; fileBlocked?: boolean; showVal: boolean; checking: boolean; blocked: boolean; done: boolean
+  validateHint?: React.ReactNode
+}): Step[] {
+  const choose: StepState = done || showVal || (hasFile && !fileBlocked) ? 'done' : fileBlocked ? 'blocked' : 'current'
+  const validate: StepState = done ? 'done' : showVal ? (checking ? 'current' : 'done') : hasFile && !fileBlocked ? 'current' : 'todo'
+  const review: StepState = done ? 'done' : showVal && !checking ? (blocked ? 'blocked' : 'current') : 'todo'
+  const apply: StepState = done ? 'done' : 'todo'
+  return [
+    { key: 'choose', label: 'Choose file', hint: 'Filled .xlsx', state: choose },
+    { key: 'validate', label: 'Validate', hint: validateHint || 'Codes & limits', state: validate },
+    { key: 'review', label: 'Review', hint: blocked && review === 'blocked' ? 'Fix the sheet' : 'Matched rows', state: review },
+    { key: 'apply', label: 'Apply', hint: 'Write to month', state: apply },
+  ]
+}
 export type Opt = { value: string; label: string }
 export const GROUP = '__group__'   // Company dropdown sentinel → all companies at once
 
@@ -32,6 +151,18 @@ export const splitCodes = (text: string): string[] =>
   text.split(/[\s,;]+/).map(t => t.trim()).filter(Boolean)
 
 // ── Searchable single-select ────────────────────────────────────────
+// The open panel keeps the kit's floating elevation; the trigger gets a brand ring
+// while open so it is obvious which control the list belongs to.
+const ddPanel: React.CSSProperties = {
+  position: 'absolute', top: 'calc(100% + 4px)', left: 0, width: '100%', background: TK.surface,
+  border: `1px solid ${TK.lineStrong}`, borderRadius: R.md, boxShadow: E.floating, overflow: 'hidden',
+}
+const ddSearch: React.CSSProperties = {
+  width: '100%', padding: '9px 12px', border: 'none', borderBottom: `1px solid ${TK.line}`, fontSize: F.small,
+  outline: 'none', boxSizing: 'border-box', fontFamily: font, background: TK.sunken, color: TK.ink,
+}
+const ddOpen: React.CSSProperties = { borderColor: TK.brand, boxShadow: `0 0 0 3px ${TK.brandTint}` }
+
 export function SearchSelect({ value, options, placeholder, onChange, disabled }: { value: string; options: Opt[]; placeholder: string; onChange: (v: string) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false)
   // One click, not two: a document listener lets the click through to whatever
@@ -43,19 +174,22 @@ export function SearchSelect({ value, options, placeholder, onChange, disabled }
   return (
     <div ref={pop} style={{ position: 'relative' }}>
       <div onClick={() => { if (!disabled) { setOpen(o => !o); setQ('') } }}
-        style={{ ...ddInp, cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center', color: sel ? C.navy : TK.faint, background: disabled ? TK.sunken: TK.surface }}>
+        style={{ ...ddInp, ...(open && !disabled ? ddOpen : null), cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center', color: sel ? TK.ink : TK.faint, fontWeight: sel ? W.medium : W.regular, background: disabled ? TK.sunken : TK.surface }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel ? sel.label : placeholder}</span>
-        <span style={{ color: TK.faint, fontSize: 11 }}></span>
+        <span style={{ color: TK.muted, display: 'inline-flex', transform: open ? 'rotate(180deg)' : 'none', transition: `transform ${M.quick}` }}><IconChevronDown size={14} /></span>
       </div>
       {open && !disabled && (
         <>
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
-            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
-            <div style={{ maxHeight: 210, overflowY: 'auto' }}>
-              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
+          <div style={{ ...ddPanel, minWidth: 200, zIndex: 501 }}>
+            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={ddSearch} />
+            <div className="ez-scroll" style={{ maxHeight: 220, overflowY: 'auto', padding: 4 }}>
+              {filtered.length === 0 && <div style={{ padding: '9px 10px', fontSize: F.tiny, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
-                <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
-                  style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', background: o.value === value ? TK.brandTint : TK.surface, color: C.navy }}>{o.label}</div>
+                <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }} className="ez-row"
+                  style={{ padding: '7px 10px', borderRadius: R.sm, fontSize: F.small, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: o.value === value ? TK.brandTint : TK.surface, color: o.value === value ? TK.brandDeep : TK.ink, fontWeight: o.value === value ? W.semi : W.regular }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.label}</span>
+                  {o.value === value && <IconCheck size={13} />}
+                </div>
               ))}
             </div>
           </div>
@@ -94,36 +228,42 @@ export function MultiSelect({ values, options, placeholder, onChange }: { values
   return (
     <div ref={pop} style={{ position: 'relative' }}>
       <div onClick={() => { setOpen(o => !o); setQ('') }}
-        style={{ ...ddInp, cursor: 'pointer', minHeight: 36, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-        {values.length === 0 && <span style={{ color: TK.faint }}>{placeholder}</span>}
+        style={{ ...ddInp, ...(open ? ddOpen : null), cursor: 'pointer', display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', padding: values.length ? '6px 10px' : ddInp.padding }}>
+        {values.length === 0 && <span style={{ color: TK.faint, display: 'inline-flex', alignItems: 'center', gap: 7 }}><IconUser size={14} />{placeholder}</span>}
         {values.map(v => (
-          <span key={v} onClick={e => { e.stopPropagation(); toggle(v) }} style={{ fontSize: 11, background: C.purpleBg, color: C.purpleD, borderRadius: 99, padding: '2px 8px', fontWeight: 700 }}>{v} ✕</span>
+          <span key={v} onClick={e => { e.stopPropagation(); toggle(v) }} title="Remove"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: F.tiny, background: TK.brandTint, color: TK.brandDeep, border: `1px solid ${TK.brandEdge}`, borderRadius: R.pill, padding: '1px 6px 1px 9px', fontWeight: W.semi, ...numeric }}>
+            {v} <IconClose size={11} />
+          </span>
         ))}
-        <span style={{ marginLeft: 'auto', color: TK.faint, fontSize: 11 }}></span>
+        <span style={{ marginLeft: 'auto', color: TK.muted, display: 'inline-flex', transform: open ? 'rotate(180deg)' : 'none', transition: `transform ${M.quick}` }}><IconChevronDown size={14} /></span>
       </div>
       {open && (
         <>
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 240, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
-            <input autoFocus value={q}
-              onChange={e => onQChange(e.target.value)}
-              onPaste={e => { const t = e.clipboardData.getData('text'); if (/[\s,;]/.test(t)) { e.preventDefault(); addTokens(t) } }}
-              onKeyDown={e => { if (e.key === 'Enter' && q.trim()) { e.preventDefault(); addTokens(q) } }}
-              placeholder="Search or paste codes (comma / newline separated)…"
-              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
-            <div style={{ maxHeight: 210, overflowY: 'auto' }}>
-              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>Press Enter to add “{q.trim()}”</div>}
+          <div style={{ ...ddPanel, minWidth: 240, zIndex: 501 }}>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: TK.muted, display: 'inline-flex', pointerEvents: 'none' }}><IconSearch size={14} /></span>
+              <input autoFocus value={q}
+                onChange={e => onQChange(e.target.value)}
+                onPaste={e => { const t = e.clipboardData.getData('text'); if (/[\s,;]/.test(t)) { e.preventDefault(); addTokens(t) } }}
+                onKeyDown={e => { if (e.key === 'Enter' && q.trim()) { e.preventDefault(); addTokens(q) } }}
+                placeholder="Search or paste codes (comma / newline separated)…"
+                style={{ ...ddSearch, paddingLeft: 32 }} />
+            </div>
+            <div className="ez-scroll" style={{ maxHeight: 220, overflowY: 'auto', padding: 4 }}>
+              {filtered.length === 0 && <div style={{ padding: '9px 10px', fontSize: F.tiny, color: TK.faint }}>Press Enter to add “{q.trim()}”</div>}
               {filtered.map(o => (
-                <div key={o.value} onClick={() => toggle(o.value)}
-                  style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8, background: values.includes(o.value) ? TK.brandTint : TK.surface, color: C.navy }}>
+                <div key={o.value} onClick={() => toggle(o.value)} className="ez-row"
+                  style={{ padding: '7px 10px', borderRadius: R.sm, fontSize: F.small, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, background: values.includes(o.value) ? TK.brandTint : TK.surface, color: TK.ink }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.label}</span>
-                  {values.includes(o.value) && <span style={{ color: C.green }}></span>}
+                  {values.includes(o.value) && <span style={{ color: TK.positive, display: 'inline-flex' }}><IconCheck size={13} /></span>}
                 </div>
               ))}
             </div>
             {values.length > 0 && (
-              <div style={{ borderTop: `1px solid ${TK.brandEdge}`, padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: C.muted }}>{values.length} selected</span>
-                <span onClick={() => onChange([])} style={{ fontSize: 11, color: C.red, cursor: 'pointer', fontWeight: 700 }}>Clear all</span>
+              <div style={{ borderTop: `1px solid ${TK.line}`, padding: '7px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: TK.sunken }}>
+                <span style={{ fontSize: F.tiny, color: TK.muted, ...numeric }}>{values.length} selected</span>
+                <span onClick={() => onChange([])} style={{ fontSize: F.tiny, color: TK.critical, cursor: 'pointer', fontWeight: W.semi }}>Clear all</span>
               </div>
             )}
           </div>
@@ -295,32 +435,36 @@ export function DownloadCard({ companyId, fy, heading, note, filePrefix, sheetNa
     ? (dlRunOptions.find(o => o.value === dlRunId)?.label || '')
     : (allRuns.find(r => r.id === dlRunId)?.period_label || '')
 
+  const filtered = !!(dlLoc || dlDept || dlEmpCodes.length)
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.greenBd}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(5,150,105,0.08)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ width: 26, height: 26, borderRadius: 10, background: C.greenBg, border: `1px solid ${C.greenBd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}></span>
-        <span style={{ fontSize: 13, fontWeight: 800, color: C.navy }}>{heading}</span>
-        <span style={{ fontSize: 11, color: C.muted }}>{note}</span>
+    <SectionCard icon={<IconDownload size={16} />} title={heading} hint={note.replace(/^·\s*/, '')}
+      actions={<StatusPill t="neutral" size="sm" icon={<IconFile size={12} />}>Template</StatusPill>}
+      // Visible overflow: the searchable dropdowns open below their field and must not be clipped.
+      style={{ overflow: 'visible' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(170px, 100%), 1fr))', gap: SP.md, marginBottom: SP.md }}>
+        <Fld label="Company"><SearchSelect value={dlCompany} options={[...(grant.crossCompany ? [{ value: GROUP, label: 'Group Companies (all)' }] : []), ...companies]} placeholder="Select company" onChange={setDlCompany} /></Fld>
+        <Fld label="Month"><SearchSelect value={dlRunId} options={dlRunOptions} placeholder={dlRunOptions.length ? 'Select month' : 'No month created'} onChange={setDlRunId} /></Fld>
+        <Fld label="Location"><SearchSelect value={dlLoc} options={[{ value: '', label: 'All locations' }, ...locOpts]} placeholder="All locations" onChange={setDlLoc} /></Fld>
+        <Fld label="Department"><SearchSelect value={dlDept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDlDept} /></Fld>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
-        <div><label style={lbl}>Company</label><SearchSelect value={dlCompany} options={[...(grant.crossCompany ? [{ value: GROUP, label: 'Group Companies (all)' }] : []), ...companies]} placeholder="Select company" onChange={setDlCompany} /></div>
-        <div><label style={lbl}>Month</label><SearchSelect value={dlRunId} options={dlRunOptions} placeholder={dlRunOptions.length ? 'Select month' : 'No month created'} onChange={setDlRunId} /></div>
-        <div><label style={lbl}>Location</label><SearchSelect value={dlLoc} options={[{ value: '', label: 'All locations' }, ...locOpts]} placeholder="All locations" onChange={setDlLoc} /></div>
-        <div><label style={lbl}>Department</label><SearchSelect value={dlDept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDlDept} /></div>
+      <div style={{ marginBottom: SP.md }}>
+        <Fld label="Employee codes" hint="(optional: leave empty for all; paste a comma / newline list to add many)">
+          <MultiSelect values={dlEmpCodes} options={empOpts} placeholder="All employees" onChange={setDlEmpCodes} />
+        </Fld>
       </div>
-      <div style={{ marginBottom: 12 }}>
-        <label style={lbl}>Employee codes <span style={{ textTransform: 'none', fontWeight: 400, color: C.muted }}>(optional: leave empty for all; paste a comma / newline list to add many)</span></label>
-        <MultiSelect values={dlEmpCodes} options={empOpts} placeholder="All employees" onChange={setDlEmpCodes} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, flexWrap: 'wrap', paddingTop: SP.md, borderTop: `1px solid ${TK.line}` }}>
+        <PButton variant="primary" icon={<IconDownload size={15} />} onClick={download} disabled={dlBusy || !dlRunId}>
+          {dlBusy ? 'Preparing…' : 'Download'}
+        </PButton>
+        {dlRunId && (
+          <span style={{ fontSize: F.tiny, color: TK.inkSoft, display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            month master for <b style={{ color: TK.ink }}>{dlCompanyName}</b> for <b style={{ color: TK.ink }}>{dlPeriod}</b>
+            {filtered && <StatusPill t="brand" size="sm" dot>filtered</StatusPill>}
+          </span>
+        )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <button onClick={download} disabled={dlBusy || !dlRunId}
-          style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: dlBusy || !dlRunId ? 'not-allowed' : 'pointer', opacity: dlBusy || !dlRunId ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
-          {dlBusy ? 'Preparing…' : '⬇ Download'}
-        </button>
-        {dlRunId && <span style={{ fontSize: 12, color: C.purpleD }}>month master for <b>{dlCompanyName}</b> for <b>{dlPeriod}</b>{(dlLoc || dlDept || dlEmpCodes.length) ? ' · filtered' : ''}</span>}
-      </div>
-      {dlErr && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 10 }}>{dlErr}</div>}
-    </div>
+      {dlErr && <InfoCallout t="critical" compact style={{ marginTop: SP.md, marginBottom: 0 }}>{dlErr}</InfoCallout>}
+    </SectionCard>
   )
 }
 
@@ -341,35 +485,39 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
   strictUnmatched?: boolean
 }) {
   const blocked = violations.length > 0 || (!!strictUnmatched && unmatched.length > 0)
+  const failed = blocked && !checking
+  const offProcess = busy || blocked || matched.length === 0
+  const barColor = checking ? TK.brand : failed ? TK.critical : TK.positive
   return (
-    <div style={{ background: C.card, border: `1px solid ${blocked && !checking ? '#FECACA' : C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>
-        {checking ? `Checking ${kind} sheet…` : blocked ? 'Validation failed' : `Ready to process · ${total} rows`}
+    <SectionCard
+      icon={checking ? <IconSearch size={16} /> : failed ? <IconClose size={16} /> : <IconCheck size={16} />}
+      iconTone={checking ? 'brand' : failed ? 'critical' : 'positive'}
+      title={checking ? `Checking ${kind} sheet…` : failed ? 'Validation failed' : `Ready to process · ${total} rows`}
+      hint={checking ? stage : failed ? 'Nothing has been written. Fix the sheet and upload it again.' : 'Every matched row is checked. Process writes them into the month.'}
+      actions={<span style={{ fontSize: F.title, fontWeight: W.bold, color: checking ? TK.brandDeep : failed ? TK.critical : TK.positive, ...numeric }}>{pct}%</span>}
+      style={{ borderColor: failed ? TK.criticalEdge : TK.line }}>
+      <div role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
+        style={{ height: 8, borderRadius: R.pill, background: TK.sunken, border: `1px solid ${TK.line}`, overflow: 'hidden', marginBottom: SP.md }}>
+        <div style={{ width: `${pct}%`, height: '100%', borderRadius: R.pill, background: barColor, transition: 'width .15s linear, background .2s' }} />
       </div>
-      <div style={{ height: 10, borderRadius: 99, background: TK.brandTint, overflow: 'hidden', marginBottom: 8 }}>
-        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: blocked && !checking ? 'linear-gradient(90deg,#F87171,#DC2626)' : `linear-gradient(90deg,#10B981,${C.green})`, transition: 'width .15s linear' }} />
-      </div>
-      <div style={{ display: 'flex', gap: 14, fontSize: 12, color: C.muted, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontWeight: 800, color: C.navy }}>{pct}%</span>
-        {checking && <span>{stage}</span>}
+      <div style={{ display: 'flex', gap: SP.sm, flexWrap: 'wrap', alignItems: 'center', marginBottom: checking ? 0 : SP.md }}>
+        {checking && <span style={{ fontSize: F.tiny, color: TK.muted }}>{stage}</span>}
         {!checking && <>
-          <span style={{ color: C.green, fontWeight: 700 }}>✓ {matched.length} matched</span>
-          {unmatched.length > 0 && <span style={{ color: C.amber, fontWeight: 700 }}>⚠ {unmatched.length} not in this month</span>}
-          {blocked && <span style={{ color: C.red, fontWeight: 700 }}>✕ {violations.length} over Max Days</span>}
+          <StatusPill t="positive" icon={<IconCheck size={12} />}>{matched.length} matched</StatusPill>
+          {unmatched.length > 0 && <StatusPill t="warning" dot>{unmatched.length} not in this month</StatusPill>}
+          {blocked && <StatusPill t="critical" icon={<IconClose size={12} />}>{violations.length} over Max Days</StatusPill>}
         </>}
       </div>
 
       {!checking && strictUnmatched && unmatched.length > 0 && (
-        <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Extra rows: these codes are not in this month&apos;s master. Remove them and upload again.</div>
-          <div style={{ maxHeight: 120, overflowY: 'auto' }}>{unmatched.slice(0, 60).join(', ')}{unmatched.length > 60 ? ` +${unmatched.length - 60} more` : ''}</div>
-        </div>
+        <InfoCallout t="critical" compact title="Extra rows: these codes are not in this month&apos;s master. Remove them and upload again.">
+          <div className="ez-scroll" style={{ maxHeight: 120, overflowY: 'auto' }}>{unmatched.slice(0, 60).join(', ')}{unmatched.length > 60 ? ` +${unmatched.length - 60} more` : ''}</div>
+        </InfoCallout>
       )}
 
       {!checking && violations.length > 0 && (
-        <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
-          <div style={{ fontWeight: 800, marginBottom: 6 }}>Nothing can exceed Max Days. Fix the sheet and upload again.</div>
-          <div style={{ maxHeight: 170, overflowY: 'auto' }}>
+        <InfoCallout t="critical" compact title="Nothing can exceed Max Days. Fix the sheet and upload again.">
+          <div className="ez-scroll" style={{ maxHeight: 170, overflowY: 'auto' }}>
             {violations.slice(0, 60).map((v, i) => (
               <div key={`${v.code}-${v.rule}-${i}`} style={{ padding: '2px 0' }}>
                 <b>{v.code}</b>: {v.rule} <b>{v.actual}</b> &gt; Max Days <b>{v.max}</b>
@@ -377,27 +525,24 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
             ))}
             {violations.length > 60 && <div style={{ marginTop: 4 }}>+ {violations.length - 60} more…</div>}
           </div>
-        </div>
+        </InfoCallout>
       )}
 
       {!checking && !strictUnmatched && unmatched.length > 0 && (
-        <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '8px 10px', marginBottom: 12 }}>
-          Skipped (wrong code / extra person / not in this month's master): <b>{unmatched.slice(0, 40).join(', ')}</b>{unmatched.length > 40 ? ` +${unmatched.length - 40} more` : ''}
-        </div>
+        <InfoCallout t="warning" compact>
+          Skipped (wrong code / extra person / not in this month&apos;s master): <b>{unmatched.slice(0, 40).join(', ')}</b>{unmatched.length > 40 ? ` +${unmatched.length - 40} more` : ''}
+        </InfoCallout>
       )}
 
       {!checking && (
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onProcess} disabled={busy || blocked || matched.length === 0}
-            style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy || blocked || matched.length === 0 ? 'not-allowed' : 'pointer', opacity: busy || blocked || matched.length === 0 ? 0.5 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+        <div style={{ display: 'flex', gap: SP.sm + 2, flexWrap: 'wrap', alignItems: 'center', paddingTop: SP.md, borderTop: `1px solid ${TK.line}` }}>
+          <PButton variant="primary" size="lg" onClick={onProcess} disabled={offProcess}
+            icon={blocked ? <IconClose size={15} /> : <IconCheck size={15} />}>
             {busy ? 'Processing…' : blocked ? 'Blocked' : `Process ${matched.length} rows`}
-          </button>
-          <button onClick={onCancel} disabled={busy}
-            style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer' }}>
-            Cancel
-          </button>
+          </PButton>
+          <PButton size="lg" onClick={onCancel} disabled={busy}>Cancel</PButton>
         </div>
       )}
-    </div>
+    </SectionCard>
   )
 }

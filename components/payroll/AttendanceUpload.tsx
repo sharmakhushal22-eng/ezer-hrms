@@ -13,9 +13,10 @@ import { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { loadRuns, uploadAttendanceBatch, MONTHS, type PayrollRun, type AttendanceUploadRow } from '@/lib/payroll/core'
-import { C, font, num, monthMeta, maxDaysLive, fmtDate, runPeriodISO, DownloadCard, ValidationCard, SearchSelect, lbl, type Opt, type Violation } from './attendanceShared'
+import { font, num, monthMeta, maxDaysLive, fmtDate, runPeriodISO, DownloadCard, ValidationCard, SearchSelect, ScreenIntro, FileDrop, Fld, Note, uploadSteps, type Opt, type Violation } from './attendanceShared'
 // Design tokens, aliased as TK — this file declares its own C.
-import { C as TK } from '@/lib/ui'
+import { C as TK, F, W, S as SP, IconCalendar, IconUpload, IconDownload, IconBuilding } from '@/lib/ui'
+import { SectionCard, InfoCallout, PButton, ProcessStepper, DataTable, StatusPill, dt } from '@/components/payroll/kit'
 
 // A parsed sheet row. Paid Days is read so it can be validated against Max Days;
 // the stored value is still recomputed server-side as (EL+CL+SL+Other) − Absent.
@@ -301,19 +302,26 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
 
   const updated = results?.filter(r => r.result === 'UPDATED').length || 0
   const notFound = results?.filter(r => r.result !== 'UPDATED') || []
-  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const nn = (v: any) => Number(v) || 0
   const companyCount = allRuns.filter(r => String(r.month) === upMonth).length
 
+  const uploadOff = !rows.length || !upMonth || checking || busy || sheetErrs.length > 0
+  const valBlocked = violations.length > 0 || unmatched.length > 0
+
   return (
-    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 820 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
-        <div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Upload</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Leave · absent days into the frozen month snapshot. Paid Days is computed as (EL+CL+SL+Other) − Absent</div>
-        </div>
-      </div>
+    <div style={{ fontFamily: font, fontSize: F.small, color: TK.ink, maxWidth: 900 }}>
+      <ScreenIntro icon={<IconCalendar size={20} />} title="Attendance Upload"
+        subtitle="Leave · absent days into the frozen month snapshot. Paid Days is computed as (EL+CL+SL+Other) − Absent"
+        meta={<>
+          <StatusPill t="brand" size="sm" icon={<IconBuilding size={12} />}>Group-wide{companyCount ? ` · ${companyCount} compan${companyCount === 1 ? 'y' : 'ies'} this month` : ''}</StatusPill>
+          <StatusPill t="neutral" size="sm" dot>Paid Days ≤ Max Days</StatusPill>
+          <StatusPill t="neutral" size="sm" dot>Total Days ≤ Max Days</StatusPill>
+        </>}>
+        <ProcessStepper compact steps={uploadSteps({
+          hasFile: rows.length > 0, fileBlocked: sheetErrs.length > 0, showVal, checking,
+          blocked: valBlocked, done: !!results, validateHint: 'Press Upload',
+        })} />
+      </ScreenIntro>
 
       <DownloadCard companyId={companyId} fy={fy}
         heading="Download attendance sheet" note="· filter and download a ready-to-fill sheet"
@@ -331,57 +339,50 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
         })} />
 
       {/* ── Upload attendance — always group-wide ── */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Upload filled attendance</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-          <div>
-            <label style={lbl}>Company</label>
+      <SectionCard icon={<IconUpload size={16} />} title="Upload filled attendance"
+        hint="Choose the month and the file, then press Upload to start the checking pass."
+        style={{ overflow: 'visible' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: SP.md }}>
+          <Fld label="Company">
             <SearchSelect value="__group__" options={[{ value: '__group__', label: 'Group Companies (all)' }]}
               placeholder="Group Companies" onChange={() => {}} />
-          </div>
-          <div>
-            <label style={lbl}>Payroll month</label>
+          </Fld>
+          <Fld label="Payroll month">
             <SearchSelect value={upMonth} options={monthOptions}
               placeholder={monthOptions.length ? 'Select month' : 'No month created'}
               onChange={v => { setUpMonth(v); resetUpload() }} />
-          </div>
-          <div>
-            <label style={lbl}>Attendance file (.xlsx)</label>
-            <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ ...inp, padding: '7px 10px', width: '100%', boxSizing: 'border-box' }} />
-          </div>
+          </Fld>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>
+        <div style={{ marginTop: SP.md }}>
+          <Fld label="Attendance file (.xlsx)">
+            <FileDrop accept=".xlsx,.xls" onChange={handleFile} fileName={fileName} label="Choose the filled attendance sheet" />
+          </Fld>
+        </div>
+        <Note style={{ marginTop: SP.md }}>
           One sheet covers <b>every company</b> in the group{companyCount ? ` (${companyCount} this month)` : ''}, and codes are matched across all of them.
           Columns: <b>Emp Code, Weekly Off, EL, CL, SL, Other Leave, Paid Days, Absent Days</b>. Before anything is saved every row is checked for
           <b> Paid Days ≤ Max Days</b> and <b>Total Days ≤ Max Days</b>, where Total Days = Weekly Off + EL + CL + SL + Other Leave + Paid Days − Absent Days.
-        </div>
+        </Note>
 
         {/* Upload — starts the checking pass. Nothing is read until this is clicked. */}
         {sheetErrs.length > 0 && (
-          <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginTop: 12 }}>
-            <div style={{ fontWeight: 800, marginBottom: 6 }}>This sheet has been modified. Upload blocked.</div>
+          <InfoCallout t="critical" compact title="This sheet has been modified. Upload blocked." style={{ marginTop: SP.md, marginBottom: 0 }}>
             {sheetErrs.map((e, i) => <div key={i} style={{ padding: '2px 0' }}>• {e}</div>)}
-          </div>
+          </InfoCallout>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-          {(() => {
-            const off = !rows.length || !upMonth || checking || busy || sheetErrs.length > 0
-            return (
-              <button onClick={() => runValidation(rows)} disabled={off}
-                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
-                {checking ? 'Checking…' : '⬆ Upload attendance'}
-              </button>
-            )
-          })()}
+        <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginTop: SP.md, paddingTop: SP.md, borderTop: `1px solid ${TK.line}`, flexWrap: 'wrap' }}>
+          <PButton variant="primary" size="lg" icon={<IconUpload size={15} />} onClick={() => runValidation(rows)} disabled={uploadOff}>
+            {checking ? 'Checking…' : 'Upload attendance'}
+          </PButton>
           {rows.length > 0 && !checking && sheetErrs.length === 0 && (
-            <span style={{ fontSize: 12, color: C.purpleD }}><b>{fileName}</b> · {rows.length} rows ready</span>
+            <span style={{ fontSize: F.tiny, color: TK.inkSoft }}><b style={{ color: TK.ink }}>{fileName}</b> · {rows.length} rows ready</span>
           )}
-          {!rows.length && <span style={{ fontSize: 12, color: C.muted }}>Choose a file to enable upload</span>}
+          {!rows.length && <span style={{ fontSize: F.tiny, color: TK.muted }}>Choose a file to enable upload</span>}
         </div>
 
-        {parseErr && <div style={{ fontSize: 12, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginTop: 10 }}>{parseErr}</div>}
-      </div>
+        {parseErr && <InfoCallout t="critical" compact style={{ marginTop: SP.md, marginBottom: 0 }}>{parseErr}</InfoCallout>}
+      </SectionCard>
 
       {showVal && (
         <ValidationCard pct={valPct} checking={checking} stage={stage} total={rows.length}
@@ -390,50 +391,44 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
       )}
 
       {rows.length > 0 && !results && !showVal && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Preview · {fileName} ({rows.length} rows)</div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
-              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'WO', 'EL', 'CL', 'SL', 'Other', 'Absent', 'Paid Days', 'Total Days'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 10, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
-              <tbody>
-                {rows.slice(0, 8).map((r, i) => {
-                  const pd = r.paid_days ?? ((r.earned_leave || 0) + (r.casual_leave || 0) + (r.sick_leave || 0) + (r.other_leave || 0) - (r.absent_days || 0))
-                  return (
-                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
-                      <td style={{ padding: '7px 10px', fontWeight: 700, color: C.navy }}>{r.emp_code}</td>
-                      {[r.weekly_off, r.earned_leave, r.casual_leave, r.sick_leave, r.other_leave, r.absent_days].map((v, j) => <td key={j} style={{ padding: '7px 10px', textAlign: 'right', color: C.navy }}>{v ?? '-'}</td>)}
-                      <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: pd < 0 ? C.red : C.green }}>{pd}</td>
-                      <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: C.purpleD }}>{totalDaysOf(r, pd)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            {rows.length > 8 && <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>+ {rows.length - 8} more rows…</div>}
-          </div>
-        </div>
+        <SectionCard title="Preview" hint={`${fileName} (${rows.length} rows)`} flush
+          actions={rows.length > 8 ? <StatusPill t="neutral" size="sm">First 8 shown</StatusPill> : undefined}>
+          <DataTable minWidth={560}>
+            <thead><tr>{['Emp Code', 'WO', 'EL', 'CL', 'SL', 'Other', 'Absent', 'Paid Days', 'Total Days'].map(h => <th key={h} style={h === 'Emp Code' ? dt.th : dt.thNum}>{h}</th>)}</tr></thead>
+            <tbody>
+              {rows.slice(0, 8).map((r, i) => {
+                const pd = r.paid_days ?? ((r.earned_leave || 0) + (r.casual_leave || 0) + (r.sick_leave || 0) + (r.other_leave || 0) - (r.absent_days || 0))
+                return (
+                  <tr key={i} className={dt.rowClass}>
+                    <td style={dt.tdMono}>{r.emp_code}</td>
+                    {[r.weekly_off, r.earned_leave, r.casual_leave, r.sick_leave, r.other_leave, r.absent_days].map((v, j) => <td key={j} style={{ ...dt.tdNum, color: TK.inkSoft }}>{v ?? '-'}</td>)}
+                    <td style={{ ...dt.tdNum, fontWeight: W.bold, color: pd < 0 ? TK.critical : TK.positive }}>{pd}</td>
+                    <td style={{ ...dt.tdNum, fontWeight: W.bold, color: TK.brandDeep }}>{totalDaysOf(r, pd)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </DataTable>
+          {rows.length > 8 && <div style={{ fontSize: F.tiny, color: TK.muted, padding: `${SP.sm + 2}px ${SP.lg}px` }}>+ {rows.length - 8} more rows…</div>}
+        </SectionCard>
       )}
 
       {results && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Result</div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-            ✓ {updated} of {results.length} rows updated
-          </div>
+        <SectionCard title="Result">
+          <InfoCallout t="positive" title={`${updated} of ${results.length} rows updated`} style={{ marginBottom: SP.md }} />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: notFound.length ? 12 : 0 }}>
-            <button onClick={downloadProcessed}
-              style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
-              ⬇ Download processed file
-            </button>
-            <span style={{ fontSize: 12, color: C.muted }}>Your uploaded sheet plus <b>Total Days</b> and <b>Status</b>, each employee marked <b>Processed</b>.</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, flexWrap: 'wrap', marginBottom: notFound.length ? SP.md : 0 }}>
+            <PButton variant="primary" icon={<IconDownload size={15} />} onClick={downloadProcessed}>
+              Download processed file
+            </PButton>
+            <span style={{ fontSize: F.tiny, color: TK.muted }}>Your uploaded sheet plus <b>Total Days</b> and <b>Status</b>, each employee marked <b>Processed</b>.</span>
           </div>
           {notFound.length > 0 && (
-            <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px' }}>
+            <InfoCallout t="warning" compact style={{ marginBottom: 0 }}>
               <b>{notFound.length}</b> emp code{notFound.length > 1 ? 's' : ''} not found in this month (skipped): {notFound.map(r => r.emp_code).join(', ')}
-            </div>
+            </InfoCallout>
           )}
-        </div>
+        </SectionCard>
       )}
 
     </div>

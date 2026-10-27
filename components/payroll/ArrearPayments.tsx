@@ -19,14 +19,13 @@ import { supabase } from '@/lib/supabase'
 import { loadRuns, buildNeftRows, loadUnbankable, setRunStatus, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C as TK, F, W, S as SP, numeric, IconReceipt, IconDownload, IconCheck, IconBuilding } from '@/lib/ui'
+import {
+  SectionCard, InfoCallout, PButton, ControlSelect, SegmentedTabs, KpiTile, KpiGrid, DataTable, EmptyState,
+  StatusPill, RunStatusPill, CountChip, IconMonth, IconBank, IconSync, dt,
+} from '@/components/payroll/kit'
+import { ScreenIntro, Note } from './attendanceShared'
 
-const C = {
-  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
-  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, red: TK.critical, redBg: TK.criticalTint,
-  purpleBg: TK.brandTint, gray: TK.sunken,
-}
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const num = (v: any) => (v === null || v === undefined || v === '' ? 0 : Number(v) || 0)
@@ -41,22 +40,11 @@ interface ArrearRow {
 }
 interface PayRow { employee_code: string; full_name: string; net_pay: number }
 
-const S = {
-  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' } as React.CSSProperties,
-  th: { padding: '8px 11px', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.05em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const },
-  td: { padding: '8px 11px', color: C.navy, borderTop: `1px solid ${C.border}`, whiteSpace: 'nowrap' as const },
-  inp: { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' } as React.CSSProperties,
-  btnP: { padding: '9px 17px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
-  btnO: { padding: '8px 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
-}
-
-function Stat({ label, value, color }: { label: string; value: any; color: string }) {
-  return (
-    <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 14px', minWidth: 110 }}>
-      <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 17, fontWeight: 800, color }}>{value}</div>
-    </div>
-  )
+// Table cell styles from the kit, with this screen's one tweak: names may wrap.
+const ST = {
+  th: dt.th, thNum: dt.thNum,
+  td: { ...dt.td, whiteSpace: 'nowrap' } as React.CSSProperties,
+  tdNum: dt.tdNum,
 }
 
 export default function ArrearPayments({ companyId, fy }: { companyId: string; fy: string }) {
@@ -192,154 +180,145 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
   const monthOpts = Array.from(new Map(runs.map(r => [r.month, r])).values()).sort((a, b) => (a.month || 0) - (b.month || 0))
 
   return (
-    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 940 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Arrear &amp; Payments</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
-            What is owed from earlier periods and being paid this month, and what leaves the bank this month.
-          </div>
-        </div>
-      </div>
-
-      <div style={{ ...S.card, display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
-        <div>
-          <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>
-          <select style={{ ...S.inp, minWidth: 220 }} value={monthVal} onChange={e => { setMonthVal(e.target.value); setMsg(''); setErr('') }}>
+    <div style={{ fontFamily: font, fontSize: F.small, color: TK.ink, maxWidth: 1000 }}>
+      <ScreenIntro icon={<IconReceipt size={20} />} title={<>Arrear &amp; Payments</>}
+        subtitle="What is owed from earlier periods and being paid this month, and what leaves the bank this month."
+        meta={sel ? <>
+          {isGroup && monthRuns.length > 1
+            ? <StatusPill t="info" size="sm" icon={<IconBuilding size={12} />}>Status: {monthRuns.length} companies</StatusPill>
+            : <RunStatusPill status={sel.status} raw size="sm" />}
+          {calculated ? <StatusPill t="positive" size="sm" dot>Net pay calculated</StatusPill> : <StatusPill t="warning" size="sm" dot>Not calculated yet</StatusPill>}
+        </> : undefined}
+        actions={
+          <ControlSelect label="Payroll month" icon={<IconMonth size={15} />} strong minWidth={200}
+            value={monthVal} onChange={e => { setMonthVal(e.target.value); setMsg(''); setErr('') }}>
             {monthOpts.length === 0 && <option value="">No month created</option>}
             {monthOpts.map(r => <option key={r.month} value={String(r.month)}>{periodLabel(r)}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['arrear', 'payments'] as const).map(k => (
-            <button key={k} onClick={() => setTab(k)}
-              style={{ padding: '9px 16px', borderRadius: 10, border: `1px solid ${tab === k ? C.purple : C.border}`, background: tab === k ? C.purple: TK.surface, color: tab === k ? TK.surface : C.navy, fontWeight: tab === k ? 700 : 500, fontSize: 13, cursor: 'pointer', fontFamily: font }}>
-              {k === 'arrear' ? 'Arrear' : 'Payments'}
-            </button>
-          ))}
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ fontSize: 11, color: C.muted, paddingBottom: 8 }}>
-          {sel && <>Status: <b style={{ color: C.purple }}>{isGroup && monthRuns.length > 1 ? `${monthRuns.length} companies` : sel.status}</b></>}
-        </div>
-      </div>
+          </ControlSelect>
+        } />
 
-      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
-      {loading && <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Loading…</div>}
+      <SegmentedTabs<'arrear' | 'payments'> value={tab} onChange={setTab} items={[
+        { key: 'arrear', label: 'Arrear', icon: <IconReceipt size={14} />, count: loading ? undefined : arrears.length },
+        { key: 'payments', label: 'Payments', icon: <IconBank size={14} />, count: loading || !calculated ? undefined : pays.length },
+      ]} />
+
+      {msg && <InfoCallout t="positive" compact title={msg} />}
+      {err && <InfoCallout t="critical" compact>{err}</InfoCallout>}
+      {loading && <div style={{ fontSize: F.tiny, color: TK.muted, marginBottom: SP.md, display: 'flex', alignItems: 'center', gap: 6 }}><IconSync size={13} /> Loading…</div>}
 
       {/* ── ARREAR ── */}
       {tab === 'arrear' && !loading && (
-        <div style={S.card}>
-          <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
-            <Stat label="Employees" value={arrears.length} color={C.navy} />
-            <Stat label="Arrear paid" value={inr(totalArrearAdd)} color={C.green} />
-            <Stat label="Arrear recovered" value={inr(totalArrearDed)} color={C.amber} />
-            <Stat label="Net arrear" value={inr(totalArrearAdd - totalArrearDed)} color={C.purple} />
-            <div style={{ flex: 1 }} />
-            <button onClick={downloadArrear} disabled={!arrears.length} style={{ ...S.btnP, alignSelf: 'center', opacity: arrears.length ? 1 : 0.5, cursor: arrears.length ? 'pointer' : 'not-allowed' }}>Download</button>
-          </div>
+        <>
+          <KpiGrid min={170}>
+            <KpiTile label="Employees" value={arrears.length} />
+            <KpiTile label="Arrear paid" value={inr(totalArrearAdd)} t="positive" />
+            <KpiTile label="Arrear recovered" value={inr(totalArrearDed)} t="warning" />
+            <KpiTile label="Net arrear" value={inr(totalArrearAdd - totalArrearDed)} emphasis />
+          </KpiGrid>
 
-          {arrears.length === 0 ? (
-            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, background: C.gray, borderRadius: 10, padding: '12px 14px' }}>
-              There is no arrear in this month. Arrear arrives from two places: <b>Attendance → Arrear Days</b> (days from an earlier month), and the <b>Arrear Addition / Arrear Deduction</b> heads in the <b>Bulk Uploader</b> (money). Both are shown together here.
-            </div>
-          ) : (
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead><tr style={{ background: C.purpleD }}>
-                  {isGroup && <th style={S.th}>Company</th>}
-                  <th style={S.th}>Emp Code</th><th style={S.th}>Name</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Arrear Days</th>
-                  <th style={S.th}>Source Period</th><th style={S.th}>Reason</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Addition</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Deduction</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Net</th>
+          <SectionCard icon={<IconReceipt size={15} />} title={`Arrear in ${label || 'this month'}`} flush={arrears.length > 0}
+            hint="Arrear days from the Month Master and arrear vouchers, side by side."
+            actions={<PButton variant="primary" size="sm" icon={<IconDownload size={14} />} onClick={downloadArrear} disabled={!arrears.length}>Download</PButton>}>
+            {arrears.length === 0 ? (
+              <EmptyState compact t="neutral" icon={<IconReceipt size={20} />} title="There is no arrear in this month."
+                hint={<>Arrear arrives from two places: <b>Attendance → Arrear Days</b> (days from an earlier month), and the <b>Arrear Addition / Arrear Deduction</b> heads in the <b>Bulk Uploader</b> (money). Both are shown together here.</>} />
+            ) : (
+              <DataTable minWidth={isGroup ? 860 : 760}>
+                <thead><tr>
+                  {isGroup && <th style={ST.th}>Company</th>}
+                  <th style={ST.th}>Emp Code</th><th style={ST.th}>Name</th>
+                  <th style={ST.thNum}>Arrear Days</th>
+                  <th style={ST.th}>Source Period</th><th style={ST.th}>Reason</th>
+                  <th style={ST.thNum}>Addition</th>
+                  <th style={ST.thNum}>Deduction</th>
+                  <th style={ST.thNum}>Net</th>
                 </tr></thead>
                 <tbody>
                   {arrears.map((r, i) => (
-                    <tr key={r.employee_code + i} style={{ background: i % 2 ? '#fff' : C.gray }}>
-                      {isGroup && <td style={{ ...S.td, color: C.muted }}>{r.company}</td>}
-                      <td style={{ ...S.td, fontWeight: 700 }}>{r.employee_code}</td>
-                      <td style={S.td}>{r.full_name || '-'}</td>
-                      <td style={{ ...S.td, textAlign: 'right' }}>{r.arrear_days || '-'}</td>
-                      <td style={{ ...S.td, color: C.muted }}>{r.source_period || '-'}</td>
-                      <td style={{ ...S.td, color: C.muted, whiteSpace: 'normal', maxWidth: 220 }}>{r.reason || '-'}</td>
-                      <td style={{ ...S.td, textAlign: 'right', color: C.green }}>{r.voucherAdd ? inr(r.voucherAdd) : '-'}</td>
-                      <td style={{ ...S.td, textAlign: 'right', color: C.red }}>{r.voucherDed ? inr(r.voucherDed) : '-'}</td>
-                      <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{inr(r.voucherAdd - r.voucherDed)}</td>
+                    <tr key={r.employee_code + i} className={dt.rowClass}>
+                      {isGroup && <td style={{ ...ST.td, color: TK.muted }}>{r.company}</td>}
+                      <td style={dt.tdMono}>{r.employee_code}</td>
+                      <td style={{ ...ST.td, color: TK.ink, fontWeight: W.medium }}>{r.full_name || '-'}</td>
+                      <td style={ST.tdNum}>{r.arrear_days || '-'}</td>
+                      <td style={{ ...ST.td, color: TK.muted, ...numeric }}>{r.source_period || '-'}</td>
+                      <td style={{ ...ST.td, color: TK.muted, whiteSpace: 'normal', maxWidth: 220 }}>{r.reason || '-'}</td>
+                      <td style={{ ...ST.tdNum, color: TK.positive }}>{r.voucherAdd ? inr(r.voucherAdd) : '-'}</td>
+                      <td style={{ ...ST.tdNum, color: TK.critical }}>{r.voucherDed ? inr(r.voucherDed) : '-'}</td>
+                      <td style={{ ...ST.tdNum, fontWeight: W.bold }}>{inr(r.voucherAdd - r.voucherDed)}</td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
-          )}
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 10, padding: '9px 11px', lineHeight: 1.55 }}>
+              </DataTable>
+            )}
+          </SectionCard>
+          <Note style={{ marginBottom: SP.lg }}>
             Arrear <b>days</b> and arrear <b>amounts</b> arrive by different routes. They are shown together because looking at only one is how the same arrear gets paid <b>twice</b>: once through days, once through a voucher.
-          </div>
-        </div>
+          </Note>
+        </>
       )}
 
       {/* ── PAYMENTS ── */}
       {tab === 'payments' && !loading && (
-        <div style={S.card}>
+        <>
           {!calculated ? (
-            <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '12px 14px', lineHeight: 1.6 }}>
-              <b>{label} has not been calculated yet.</b> A payment only exists once net pay has been worked out. Run <b>Run Cycle → ⚙️ Calculate</b> first.
-            </div>
+            <InfoCallout t="warning" title={`${label} has not been calculated yet.`}>
+              A payment only exists once net pay has been worked out. Run <b>Run Cycle → Calculate</b> first.
+            </InfoCallout>
           ) : (
             <>
-              <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
-                <Stat label="Payable" value={pays.filter(p => p.net_pay > 0).length} color={C.navy} />
-                <Stat label="Total net" value={inr(totalNet)} color={C.green} />
-                {unbankable.length > 0 && <Stat label="No bank detail" value={unbankable.length} color={C.red} />}
-                <div style={{ flex: 1 }} />
-                <button onClick={downloadNeft} disabled={busy === 'neft' || !pays.length} style={{ ...S.btnP, alignSelf: 'center', opacity: pays.length ? 1 : 0.5 }}>
-                  {busy === 'neft' ? 'Building…' : 'NEFT file'}
-                </button>
-                <button onClick={markDisbursed} disabled={busy === 'disburse' || !pays.length}
-                  style={{ ...S.btnO, alignSelf: 'center', borderColor: C.green, color: C.green, fontWeight: 700 }}>
-                  {busy === 'disburse' ? 'Marking…' : 'Mark disbursed'}
-                </button>
-              </div>
+              <KpiGrid min={170}>
+                <KpiTile label="Payable" value={pays.filter(p => p.net_pay > 0).length} />
+                <KpiTile label="Total net" value={inr(totalNet)} t="positive" emphasis />
+                {unbankable.length > 0 && <KpiTile label="No bank detail" value={unbankable.length} t="critical" />}
+              </KpiGrid>
 
               {unbankable.length > 0 && (
-                <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '11px 13px', marginBottom: 12, lineHeight: 1.6 }}>
-                  <b>{unbankable.length} employees cannot be paid</b>: their salary is ready but their bank details are incomplete. They will not appear in the NEFT file:
+                <InfoCallout t="critical" title={`${unbankable.length} employees cannot be paid`}>
+                  Their salary is ready but their bank details are incomplete. They will not appear in the NEFT file:
                   <div style={{ marginTop: 6 }}>
                     {unbankable.slice(0, 8).map(u => (
-                      <div key={u.employee_code} style={{ fontSize: 12 }}>· <b>{u.employee_code}</b> {u.full_name} · {u.missing} missing ({inr(u.net_pay)})</div>
+                      <div key={u.employee_code}>· <b>{u.employee_code}</b> {u.full_name} · {u.missing} missing ({inr(u.net_pay)})</div>
                     ))}
-                    {unbankable.length > 8 && <div style={{ fontSize: 12, marginTop: 3 }}>…and {unbankable.length - 8} more</div>}
+                    {unbankable.length > 8 && <div style={{ marginTop: 3 }}>…and {unbankable.length - 8} more</div>}
                   </div>
                   <div style={{ marginTop: 6 }}>Fix them under Employees &amp; CTC → <b>Bank Details</b>, then run <b>Data Sync → Bank</b>.</div>
-                </div>
+                </InfoCallout>
               )}
 
-              <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'auto', maxHeight: 420 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead><tr style={{ background: C.purpleD }}>
-                    <th style={S.th}>Emp Code</th><th style={S.th}>Name</th>
-                    <th style={{ ...S.th, textAlign: 'right' }}>Net Pay</th>
+              <SectionCard icon={<IconBank size={15} />} title={`Net pay · ${label}`} flush
+                hint="What leaves the bank for each employee this month."
+                actions={<>
+                  <CountChip t="brand">{pays.length}</CountChip>
+                  <PButton variant="primary" size="sm" icon={<IconBank size={14} />} onClick={downloadNeft} disabled={busy === 'neft' || !pays.length}>
+                    {busy === 'neft' ? 'Building…' : 'NEFT file'}
+                  </PButton>
+                  <PButton size="sm" icon={<IconCheck size={14} />} onClick={markDisbursed} disabled={busy === 'disburse' || !pays.length}
+                    style={busy === 'disburse' || !pays.length ? undefined : { color: TK.positive, borderColor: TK.positiveEdge }}>
+                    {busy === 'disburse' ? 'Marking…' : 'Mark disbursed'}
+                  </PButton>
+                </>}>
+                <DataTable maxHeight={420} minWidth={420}>
+                  <thead><tr>
+                    <th style={ST.th}>Emp Code</th><th style={ST.th}>Name</th>
+                    <th style={ST.thNum}>Net Pay</th>
                   </tr></thead>
                   <tbody>
                     {pays.map((p, i) => (
-                      <tr key={p.employee_code + i} style={{ background: i % 2 ? '#fff' : C.gray }}>
-                        <td style={{ ...S.td, fontWeight: 700 }}>{p.employee_code}</td>
-                        <td style={S.td}>{p.full_name}</td>
-                        <td style={{ ...S.td, textAlign: 'right', fontWeight: 700, color: p.net_pay > 0 ? C.navy : C.red }}>{inr(p.net_pay)}</td>
+                      <tr key={p.employee_code + i} className={dt.rowClass}>
+                        <td style={dt.tdMono}>{p.employee_code}</td>
+                        <td style={{ ...ST.td, color: TK.ink }}>{p.full_name}</td>
+                        <td style={{ ...ST.tdNum, fontWeight: W.bold, color: p.net_pay > 0 ? TK.ink : TK.critical }}>{inr(p.net_pay)}</td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 10, padding: '9px 11px', lineHeight: 1.55 }}>
+                </DataTable>
+              </SectionCard>
+              <Note style={{ marginBottom: SP.lg }}>
                 The NEFT file carries the <b>full account number</b> (not masked, as a masked file is rejected by the bank), and Excel keeps it as text so leading zeros survive. After <b>Mark disbursed</b>, changing the month needs a formal reopen.
-              </div>
+              </Note>
             </>
           )}
-        </div>
+        </>
       )}
     </div>
   )

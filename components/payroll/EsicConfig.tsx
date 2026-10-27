@@ -8,41 +8,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCurrentEsicConfig } from '@/lib/esic/actions'
 import type { EsicConfig as EsicCfg } from '@/lib/esic/types'
-// Design tokens, aliased as TK — many of these files already declare
-// their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import {
+  C, F, S, numeric,
+  IconUser, IconBuilding, IconHeart, IconReceipt, IconCalendar, IconClock, IconCompliance, IconSliders,
+} from '@/lib/ui'
+import { SectionCard, KpiTile, KpiGrid, InfoCallout, StatusPill, SubHead, IconInfo } from '@/components/payroll/kit'
+import { RuleSummary, CField, FormGrid, CheckRow, FigureStrip, ResultWell, cfgInput } from '@/components/payroll/configKit'
 
-const C = {
-  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
-  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: TK.positiveTint, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
-}
-const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
-
-function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: string; value: string; hint?: string; accent?: string }) {
-  const a = accent || C.purpleD
-  return (
-    <div style={{ background: TK.surface, borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: 'var(--ez-shadow-flat)', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: a }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-        <span style={{ fontSize: 13 }}>{icon}</span>
-        <span style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700 }}>{label}</span>
-      </div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: C.navy, lineHeight: 1 }}>{value}</div>
-      {hint && <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>{hint}</div>}
-    </div>
-  )
-}
-
-function GroupCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{title}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>{children}</div>
-    </div>
-  )
-}
 
 export default function EsicConfig() {
   const [cfg, setCfg] = useState<EsicCfg | null>(null)
@@ -80,87 +53,69 @@ export default function EsicConfig() {
     }
   })()
 
-  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
-
   return (
-    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 680 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
-        <div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>ESIC</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Employees&apos; State Insurance: wage ceiling, contributions &amp; mid-period coverage continuity</div>
-        </div>
-      </div>
+    <div style={{ fontFamily: F.family, fontSize: F.small, color: C.ink, minWidth: 0 }}>
+      <RuleSummary icon={<IconCompliance size={20} />} eyebrow="Statutory · State Insurance" title="ESIC"
+        rule={<>Employees&apos; State Insurance: wage ceiling, contributions &amp; mid-period coverage continuity</>}>
+        {cfg && (
+          <>
+          <SubHead>Contribution rates</SubHead>
+            <KpiGrid min={170}>
+              <KpiTile label="Employee share" value={`${cfg.employee_contribution_percent}%`} icon={<IconUser size={15} />} />
+              <KpiTile label="Employer share" value={`${cfg.employer_contribution_percent}%`} icon={<IconBuilding size={15} />} />
+              <KpiTile label="Employer (PWD)" value={`${cfg.employer_contribution_percent_pwd}%`} sub="reduced rate" t="positive" icon={<IconHeart size={15} />} />
+              <KpiTile label="Low-wage exemption" value={`≤ ₹${cfg.daily_wage_exemption_threshold}/day`} sub="employee share waived" t="warning" icon={<IconReceipt size={15} />} />
+            </KpiGrid>
+            <SubHead>Coverage &amp; deadlines</SubHead>
+            <KpiGrid min={170} style={{ marginBottom: 0 }}>
+              <KpiTile label="Wage ceiling" value={inr(cfg.wage_ceiling)} sub="standard" icon={<IconSliders size={15} />} />
+              <KpiTile label="PWD ceiling" value={inr(cfg.wage_ceiling_pwd)} sub="persons with disability" t="positive" icon={<IconHeart size={15} />} />
+              <KpiTile label="New-employee registration" value={`${cfg.new_employee_registration_days} days`} sub="from joining" t="info" icon={<IconClock size={15} />} />
+              <KpiTile label="Monthly deposit due" value={`${cfg.monthly_deposit_due_day}th`} sub="of next month" t="info" icon={<IconCalendar size={15} />} />
+            </KpiGrid>
+          </>
+        )}
+      </RuleSummary>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
+      {error && <InfoCallout t="warning" compact>{error}</InfoCallout>}
 
       {cfg && (
         <>
-          <GroupCard title="Contribution rates">
-            <InfoTile icon="🧑‍💼" label="Employee share" value={`${cfg.employee_contribution_percent}%`} accent={TK.brand} />
-            <InfoTile icon="🏢" label="Employer share" value={`${cfg.employer_contribution_percent}%`} accent={TK.brand} />
-            <InfoTile icon="♿" label="Employer (PWD)" value={`${cfg.employer_contribution_percent_pwd}%`} hint="reduced rate" accent={TK.positive} />
-            <InfoTile icon="🪙" label="Low-wage exemption" value={`≤ ₹${cfg.daily_wage_exemption_threshold}/day`} hint="employee share waived" accent={TK.warning} />
-          </GroupCard>
-
-          <GroupCard title="Coverage & deadlines">
-            <InfoTile icon="📊" label="Wage ceiling" value={inr(cfg.wage_ceiling)} hint="standard" accent={TK.brand} />
-            <InfoTile icon="♿" label="PWD ceiling" value={inr(cfg.wage_ceiling_pwd)} hint="persons with disability" accent={TK.positive} />
-            <InfoTile icon="📝" label="New-employee registration" value={`${cfg.new_employee_registration_days} days`} hint="from joining" accent="#0891B2" />
-            <InfoTile icon="🗓️" label="Monthly deposit due" value={`${cfg.monthly_deposit_due_day}th`} hint="of next month" accent="#0891B2" />
-          </GroupCard>
 
           {/* Coverage-continuity note */}
-          <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '9px 12px', marginBottom: 16, lineHeight: 1.5 }}>
-            <b>Coverage continuity:</b> once an employee is within the ceiling in any month of a 6-month contribution period (Apr–Sep / Oct–Mar), they stay covered for the rest of that period even if a raise pushes them above ₹{Number(cfg.wage_ceiling).toLocaleString('en-IN')}. This is applied automatically during the payroll run.
-          </div>
+          <InfoCallout t="info" title="Coverage continuity">
+            Once an employee is within the ceiling in any month of a 6-month contribution period (Apr–Sep / Oct–Mar), they stay covered for the rest of that period even if a raise pushes them above ₹{Number(cfg.wage_ceiling).toLocaleString('en-IN')}. This is applied automatically during the payroll run.
+          </InfoCallout>
 
           {/* Estimator */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Contribution estimate (single month)</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ flex: 1, minWidth: 130 }}>
-                <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Gross wage (₹/mo)</label>
-                <input type="number" value={wage} onChange={e => setWage(e.target.value)} style={{ ...inputStyle, width: '100%' }} />
-              </div>
-              <div style={{ minWidth: 150 }}>
-                <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Avg daily wage (optional)</label>
-                <input type="number" value={dailyAvg} onChange={e => setDailyAvg(e.target.value)} placeholder="for low-wage check" style={{ ...inputStyle, width: '100%' }} />
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.navy, cursor: 'pointer', marginTop: 16 }}>
-                <input type="checkbox" checked={isPwd} onChange={e => setIsPwd(e.target.checked)} style={{ accentColor: C.purple }} />
-                PWD
-              </label>
-            </div>
+          <SectionCard title="Contribution estimate (single month)" icon={<IconUser size={16} />} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: S.md + 2 }}>
+            <FormGrid min={180}>
+              <CField label="Gross wage (₹/mo)"><input type="number" value={wage} onChange={e => setWage(e.target.value)} style={cfgInput} /></CField>
+              <CField label="Avg daily wage (optional)"><input type="number" value={dailyAvg} onChange={e => setDailyAvg(e.target.value)} placeholder="for low-wage check" style={cfgInput} /></CField>
+              <div style={{ paddingBottom: 9 }}><CheckRow checked={isPwd} onChange={e => setIsPwd(e.target.checked)}>PWD</CheckRow></div>
+            </FormGrid>
 
             {est && (
-              <div style={{ background: est.covered ? C.greenBg : C.gray, border: `1px solid ${est.covered ? C.greenBd : C.border}`, borderRadius: 11, padding: '13px 15px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: est.covered ? 12 : 0 }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: TK.onAccent, background: est.covered ? C.green : TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase', letterSpacing: '.03em' }}>
-                    {est.covered ? 'Covered' : 'Not covered'}
-                  </span>
-                  {!est.covered && <span style={{ fontSize: 12, color: C.muted }}>wage above {inr(est.ceiling)} ceiling</span>}
-                  {est.lowWaged && est.covered && <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 8px' }}>low-wage: employee share waived</span>}
+              <ResultWell>
+                <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
+                  <StatusPill t={est.covered ? 'positive' : 'neutral'} solid dot>{est.covered ? 'Covered' : 'Not covered'}</StatusPill>
+                  {!est.covered && <span style={{ fontSize: F.small, color: C.muted, ...numeric }}>wage above {inr(est.ceiling)} ceiling</span>}
+                  {est.lowWaged && est.covered && <StatusPill t="warning" size="sm">low-wage: employee share waived</StatusPill>}
                 </div>
                 {est.covered && (
-                  <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: TK.surface, borderRadius: 10, border: `1px solid ${C.greenBd}`, overflow: 'hidden' }}>
-                    {[
-                      ['Employee', est.employee, C.navy],
-                      ['Employer', est.employer, C.navy],
-                      ['Total / month', est.employee + est.employer, C.purpleD],
-                    ].map(([lbl, val, col], i) => (
-                      <div key={lbl as string} style={{ flex: 1, padding: '10px 14px', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none', background: i === 2 ? C.purpleBg: TK.surface }}>
-                        <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700, marginBottom: 3 }}>{lbl as string}</div>
-                        <div style={{ fontSize: 17, fontWeight: 800, color: col as string }}>{inr(val as number)}</div>
-                      </div>
-                    ))}
-                  </div>
+                  <FigureStrip items={[
+                    { label: 'Employee', value: inr(est.employee) },
+                    { label: 'Employer', value: inr(est.employer) },
+                    { label: 'Total / month', value: inr(est.employee + est.employer), strong: true },
+                  ]} />
                 )}
-              </div>
+              </ResultWell>
             )}
-            <div style={{ fontSize: 10, color: C.muted, marginTop: 8 }}>Estimate only: a first-month, no-history view. The payroll run uses the stateful check that also applies mid-period continuity.</div>
-          </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: F.tiny, color: C.muted, lineHeight: 1.5 }}>
+              <span style={{ display: 'inline-flex', color: C.faint, marginTop: 1 }}><IconInfo size={13} /></span>
+              Estimate only: a first-month, no-history view. The payroll run uses the stateful check that also applies mid-period continuity.
+            </div>
+          </SectionCard>
         </>
       )}
     </div>

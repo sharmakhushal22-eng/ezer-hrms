@@ -19,17 +19,43 @@ import {
   loadVoucherHeads, loadVoucherEntries, loadVoucherAudit, saveVoucher, deleteVoucher,
   type VoucherHead, type VoucherEntry, type VoucherAudit,
 } from '@/lib/payroll/manual-voucher'
-import { C, font, lbl, ddInp, SearchSelect, type Opt } from './attendanceShared'
+import { font, ddInp, SearchSelect, ScreenIntro, Fld, Note, FileDrop, type Opt } from './attendanceShared'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C as TK, F, W, S as SP, R, E, numeric, type Tone, IconReceipt, IconDownload, IconUpload, IconCheck, IconClose, IconAlert, IconPlus, IconEye, IconClock, IconUser } from '@/lib/ui'
+import {
+  SectionCard, InfoCallout, PButton, SegmentedTabs, ProcessStepper, DataTable, EmptyState, StatusPill, CountChip,
+  IconTile, IconFile, IconMonth, dt,
+} from '@/components/payroll/kit'
 
 type Tab = 'individual' | 'bulk' | 'tracking'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
-const ACTION_TONE: Record<string, { bg: string; fg: string }> = {
-  CREATED: { bg: TK.positiveTint, fg: TK.positive },
-  REPLACED: { bg: TK.warningTint, fg: TK.warning },
-  DELETED: { bg: TK.criticalTint, fg: TK.critical },
+const ACTION_TONE: Record<string, Tone> = {
+  CREATED: 'positive',
+  REPLACED: 'warning',
+  DELETED: 'critical',
+}
+const scrim = `color-mix(in srgb, ${TK.dark} 52%, transparent)`
+
+// One toggle chip in the head picker. Module level so the list does not remount.
+function HeadChip({ name, type, on, title, onClick }: { name: string; type: string; on: boolean; title?: string; onClick: () => void }) {
+  const add = type === 'Addition'
+  return (
+    <button onClick={onClick} title={title} aria-pressed={on} className="ez-press"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 11px 0 9px', borderRadius: R.pill,
+        fontFamily: 'inherit', fontSize: F.tiny, fontWeight: on ? W.semi : W.medium, cursor: 'pointer', whiteSpace: 'nowrap',
+        background: on ? TK.brandTint : TK.surface, color: on ? TK.brandDeep : TK.ink,
+        border: `1px solid ${on ? TK.brand : TK.lineStrong}`, boxShadow: on ? 'none' : E.flat,
+      }}>
+      <span style={{
+        width: 16, height: 16, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: on ? TK.brand : TK.sunken, color: on ? TK.onAccent : TK.faint, border: on ? 'none' : `1px solid ${TK.line}`,
+      }}>{on ? <IconCheck size={10} strokeWidth={2.6} /> : null}</span>
+      {name}
+      <span style={{ fontSize: F.micro, fontWeight: W.bold, color: add ? TK.positive : TK.critical }}>{add ? '+' : '−'}</span>
+    </button>
+  )
 }
 
 // ── Delete confirmation ────────────────────────────────────────────────────
@@ -52,33 +78,33 @@ function ConfirmDelete({ entry, company, busy, onCancel, onConfirm }: {
   if (!mounted) return null
   return createPortal(
     <div onClick={onCancel} style={{
-      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.52)', zIndex: 1000,
+      position: 'fixed', inset: 0, background: scrim, zIndex: 1000,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
       fontFamily: '"DM Sans","Segoe UI",sans-serif',
     }}>
-      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{
-        background: TK.surface, borderRadius: 16, width: 'min(420px, 100%)', padding: '20px 22px',
-        boxShadow: '0 24px 64px rgba(15,23,42,0.32)',
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="ez-rise" style={{
+        background: TK.surface, border: `1px solid ${TK.line}`, borderRadius: R.xl, width: 'min(440px, 100%)', padding: '20px 22px',
+        boxShadow: E.overlay,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: C.redBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>🗑</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Delete this entry?</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginBottom: SP.md }}>
+          <IconTile icon={<IconAlert size={18} />} t="critical" size={38} />
+          <div>
+            <div style={{ fontSize: F.lead, fontWeight: W.bold, color: TK.ink }}>Delete this entry?</div>
+            <div style={{ fontSize: F.tiny, color: TK.muted, marginTop: 1 }}>Manual voucher</div>
+          </div>
         </div>
-        <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 13px', fontSize: 12.5, lineHeight: 1.7, marginBottom: 8 }}>
-          <div><b>{entry.employee_code}</b>{company ? <span style={{ color: C.muted }}> · {company}</span> : null}</div>
-          <div>{entry.head_name} <span style={{ color: entry.head_type === 'Addition' ? C.green : C.red, fontWeight: 700 }}>({entry.head_type})</span> · <b>{inr(entry.amount)}</b></div>
-          {entry.remark && <div style={{ color: C.muted }}>“{entry.remark}”</div>}
+        <div style={{ background: TK.sunken, border: `1px solid ${TK.line}`, borderRadius: R.md, padding: '11px 14px', fontSize: F.small, lineHeight: 1.7, marginBottom: SP.sm + 2, ...numeric }}>
+          <div><b>{entry.employee_code}</b>{company ? <span style={{ color: TK.muted }}> · {company}</span> : null}</div>
+          <div>{entry.head_name} <span style={{ color: entry.head_type === 'Addition' ? TK.positive : TK.critical, fontWeight: W.bold }}>({entry.head_type})</span> · <b>{inr(entry.amount)}</b></div>
+          {entry.remark && <div style={{ color: TK.muted }}>“{entry.remark}”</div>}
         </div>
-        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, marginBottom: 16 }}>
+        <div style={{ fontSize: F.tiny, color: TK.muted, lineHeight: 1.55, marginBottom: SP.lg }}>
           The amount leaves this month's payroll for this employee. The removal is recorded in Tracking, but the entry itself cannot be brought back. It would have to be typed in again.
         </div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={{ padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.navy, fontWeight: 600, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={onConfirm} disabled={busy} style={{
-            padding: '9px 18px', borderRadius: 10, border: 'none', background: busy ? TK.criticalTint : C.red,
-            color: TK.onAccent, fontWeight: 700, fontSize: 12.5, fontFamily: 'inherit',
-            cursor: busy ? 'not-allowed' : 'pointer',
-          }}>{busy ? 'Deleting…' : 'Delete entry'}</button>
+        <div style={{ display: 'flex', gap: SP.sm + 2, justifyContent: 'flex-end' }}>
+          <PButton onClick={onCancel}>Cancel</PButton>
+          <PButton onClick={onConfirm} disabled={busy} icon={<IconClose size={14} />}
+            style={busy ? undefined : { background: TK.critical, color: TK.onAccent, border: `1px solid ${TK.critical}` }}>{busy ? 'Deleting…' : 'Delete entry'}</PButton>
         </div>
       </div>
     </div>,
@@ -250,13 +276,6 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     setBulkBusy(false); setBulkResults(out); refresh()
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }
-  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
-  const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
-  const pill = (on: boolean): React.CSSProperties => ({
-    padding: '6px 14px', borderRadius: 99, border: `1px solid ${on ? C.purple : TK.brandTint}`, cursor: 'pointer',
-    fontSize: 12, fontWeight: on ? 600 : 500, fontFamily: 'inherit', background: on ? C.purple : TK.sunken, color: on ? TK.surface : C.navy,
-  })
   const okCount = bulkResults?.filter(r => r.ok).length || 0
   const badCount = bulkResults?.filter(r => !r.ok).length || 0
 
@@ -266,98 +285,105 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
   const fileNames = (rows: { source_file?: string | null }[]) =>
     Array.from(new Set(rows.map(r => r.source_file).filter(Boolean))) as string[]
   const fileHead = (names: string[]) => names.length === 0 ? null : (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
-      <span style={{ fontSize: 13 }}></span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', padding: `${SP.md}px ${SP.lg}px`, borderBottom: `1px solid ${TK.line}`, background: TK.sunken }}>
+      <span style={{ display: 'inline-flex', color: TK.muted }}><IconFile size={14} /></span>
       {names.map(n => (
-        <span key={n} style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: TK.brandTint, border: `1px solid ${C.border}`, borderRadius: 99, padding: '3px 11px' }}>{n}</span>
+        <span key={n} style={{ fontSize: F.tiny, fontWeight: W.semi, color: TK.brandDeep, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: R.pill, padding: '2px 11px' }}>{n}</span>
       ))}
     </div>
   )
+  const th = dt.th
+  const td: React.CSSProperties = { ...dt.td, whiteSpace: 'nowrap' }
+  const bulkSteps = [
+    { key: 'heads', label: 'Pick heads', hint: `${picked.length} selected`, state: (picked.length ? 'done' : 'current') as 'done' | 'current' },
+    { key: 'file', label: 'Upload filled file', hint: bulkFile || 'Template .xlsx', state: (bulkRows ? 'done' : picked.length ? 'current' : 'todo') as 'done' | 'current' | 'todo' },
+    { key: 'save', label: 'Save rows', hint: bulkRows ? `${bulkRows.length} rows` : 'Each row on its own', state: (bulkResults ? 'done' : bulkRows ? 'current' : 'todo') as 'done' | 'current' | 'todo' },
+    { key: 'result', label: 'Result', hint: bulkResults ? `${okCount} saved · ${badCount} failed` : 'Saved / failed', state: (bulkResults ? (badCount ? 'blocked' : 'done') : 'todo') as 'done' | 'blocked' | 'todo' },
+  ]
 
   return (
-    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1000 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
-        <div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Manual Voucher</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>One-off additions and deductions for a specific employee in a specific month</div>
-        </div>
-      </div>
+    <div style={{ fontFamily: font, fontSize: F.small, color: TK.ink, maxWidth: 1040 }}>
+      <ScreenIntro icon={<IconReceipt size={20} />} title="Manual Voucher"
+        subtitle="One-off additions and deductions for a specific employee in a specific month"
+        meta={<>
+          <StatusPill t="positive" size="sm" dot>Addition</StatusPill>
+          <StatusPill t="critical" size="sm" dot>Deduction</StatusPill>
+        </>}
+        actions={
+          <div style={{ minWidth: 'min(280px, 100%)' }}>
+            <span style={{ fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.09em', textTransform: 'uppercase', color: TK.muted, display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}><IconMonth size={13} /> Payroll month</span>
+            <SearchSelect value={monthVal} options={runOpts} placeholder={runOpts.length ? 'Select month' : 'No month created'} onChange={v => { setMonthVal(v); setMsg(''); setErr('') }} />
+          </div>
+        } />
 
-      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
+      {!companyId && <InfoCallout t="warning" compact>Pick a specific company in the header to see its payroll months.</InfoCallout>}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        {([['individual', 'Individual'], ['bulk', 'Bulk upload'], ['tracking', 'Tracking']] as [Tab, string][]).map(([k, l]) => (
-          <button key={k} onClick={() => { setTab(k); setMsg(''); setErr('') }} style={pill(tab === k)}>{l}</button>
-        ))}
-      </div>
+      <SegmentedTabs<Tab> value={tab} onChange={k => { setTab(k); setMsg(''); setErr('') }} items={[
+        { key: 'individual', label: 'Individual', icon: <IconUser size={14} /> },
+        { key: 'bulk', label: 'Bulk upload', icon: <IconUpload size={14} /> },
+        { key: 'tracking', label: 'Tracking', icon: <IconClock size={14} /> },
+      ]} />
 
-      <div style={card}>
-        <label style={lbl}>Payroll month</label>
-        <div style={{ maxWidth: 340 }}>
-          <SearchSelect value={monthVal} options={runOpts} placeholder={runOpts.length ? 'Select month' : 'No month created'} onChange={v => { setMonthVal(v); setMsg(''); setErr('') }} />
-        </div>
-      </div>
-
-      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>{err}</div>}
+      {msg && <InfoCallout t="positive" compact title={msg} />}
+      {err && <InfoCallout t="critical" compact>{err}</InfoCallout>}
 
       {/* ── Individual ── */}
       {tab === 'individual' && (
         <>
-          <div style={card}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Add an entry</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-              <div><label style={lbl}>Employee</label><SearchSelect value={empCode} options={empOpts} placeholder={empOpts.length ? 'Search emp code / name' : 'No employees in this month'} onChange={setEmpCode} /></div>
-              <div><label style={lbl}>Voucher head</label><SearchSelect value={headName} options={headOpts} placeholder="Select head" onChange={setHeadName} /></div>
-              <div><label style={lbl}>Amount</label><input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} style={ddInp} /></div>
-              <div><label style={lbl}>Remark</label><input value={remark} onChange={e => setRemark(e.target.value)} placeholder="e.g. Diwali bonus" style={ddInp} /></div>
+          <SectionCard icon={<IconPlus size={15} />} title="Add an entry"
+            style={{ overflow: 'visible' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(190px, 100%), 1fr))', gap: SP.md }}>
+              <Fld label="Employee"><SearchSelect value={empCode} options={empOpts} placeholder={empOpts.length ? 'Search emp code / name' : 'No employees in this month'} onChange={setEmpCode} /></Fld>
+              <Fld label="Voucher head"><SearchSelect value={headName} options={headOpts} placeholder="Select head" onChange={setHeadName} /></Fld>
+              <Fld label="Amount">
+                <span style={{ position: 'relative', display: 'block' }}>
+                  <span aria-hidden style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: TK.muted, fontSize: F.small, fontWeight: W.semi, pointerEvents: 'none' }}>₹</span>
+                  <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} style={{ ...ddInp, paddingLeft: 26, ...numeric }} />
+                </span>
+              </Fld>
+              <Fld label="Remark"><input value={remark} onChange={e => setRemark(e.target.value)} placeholder="e.g. Diwali bonus" style={ddInp} /></Fld>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
-              <button onClick={saveOne} disabled={busy}
-                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginTop: SP.md, paddingTop: SP.md, borderTop: `1px solid ${TK.line}`, flexWrap: 'wrap' }}>
+              <PButton variant="primary" icon={<IconCheck size={15} />} onClick={saveOne} disabled={busy}>
                 {busy ? 'Saving…' : 'Save entry'}
-              </button>
-              {headType && <span style={{ fontSize: 12, fontWeight: 700, color: headType === 'Addition' ? C.green : C.red }}>{headType}</span>}
-              <span style={{ fontSize: 11, color: C.muted }}>Saving the same head again for this employee replaces the existing amount.</span>
+              </PButton>
+              {headType && <StatusPill t={headType === 'Addition' ? 'positive' : 'critical'} dot>{headType}</StatusPill>}
+              <span style={{ fontSize: F.tiny, color: TK.muted }}>Saving the same head again for this employee replaces the existing amount.</span>
             </div>
-          </div>
+          </SectionCard>
 
-          <div style={card}>
+          <SectionCard icon={<IconReceipt size={15} />} title="Entries this month" flush>
             {fileHead(fileNames([...entries].sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))))}
             {entries.length === 0
-              ? <div style={{ fontSize: 12, color: C.muted, padding: '14px 0', textAlign: 'center' }}>Nothing added for this month yet.</div>
+              ? <EmptyState compact t="neutral" icon={<IconReceipt size={20} />} title="Nothing added for this month yet." />
               : !viewList ? (
-                <div style={{ padding: '10px 0' }}>
-                  <button onClick={() => setViewList(true)}
-                    style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: TK.brand, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <div style={{ padding: `${SP.lg}px`, display: 'flex', alignItems: 'center', gap: SP.md, flexWrap: 'wrap' }}>
+                  <PButton variant="secondary" icon={<IconEye size={15} />} onClick={() => setViewList(true)}>
                     View list ({entries.length})
-                  </button>
+                  </PButton>
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
-                    <thead><tr style={{ background: C.navy }}>{[...(isGroup ? ['Company'] : []), 'Emp Code', 'Head', 'Type', 'Amount', 'Remark', 'Via', ''].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-                    <tbody>
-                      {entries.map((e, i) => (
-                        <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
-                          {isGroup && <td style={{ ...td, color: C.muted }}>{coByRun[e.run_id] || '-'}</td>}
-                          <td style={{ ...td, fontWeight: 700 }}>{e.employee_code}</td>
-                          <td style={td}>{e.head_name}</td>
-                          <td style={{ ...td, color: e.head_type === 'Addition' ? C.green : C.red, fontWeight: 700 }}>{e.head_type}</td>
-                          <td style={{ ...td, fontWeight: 700 }}>{inr(e.amount)}</td>
-                          <td style={{ ...td, color: C.muted }}>{e.remark || '-'}</td>
-                          <td style={{ ...td, color: C.muted, fontSize: 11 }}>{e.uploaded_via}</td>
-                          <td style={td}>
-                            <button onClick={() => setConfirmDel(e)} style={{ padding: '4px 10px', borderRadius: 99, border: `1px solid ${C.red}`, background: C.redBg, color: C.red, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable minWidth={720}>
+                  <thead><tr>{[...(isGroup ? ['Company'] : []), 'Emp Code', 'Head', 'Type', 'Amount', 'Remark', 'Via', ''].map(h => <th key={h} style={h === 'Amount' ? dt.thNum : th}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {entries.map(e => (
+                      <tr key={e.id} className={dt.rowClass}>
+                        {isGroup && <td style={{ ...td, color: TK.muted }}>{coByRun[e.run_id] || '-'}</td>}
+                        <td style={dt.tdMono}>{e.employee_code}</td>
+                        <td style={{ ...td, color: TK.ink }}>{e.head_name}</td>
+                        <td style={td}><StatusPill size="sm" t={e.head_type === 'Addition' ? 'positive' : 'critical'}>{e.head_type}</StatusPill></td>
+                        <td style={{ ...dt.tdNum, fontWeight: W.bold }}>{inr(e.amount)}</td>
+                        <td style={{ ...td, color: TK.muted }}>{e.remark || '-'}</td>
+                        <td style={{ ...td, color: TK.muted, fontSize: F.micro }}>{e.uploaded_via}</td>
+                        <td style={{ ...td, textAlign: 'right' }}>
+                          <PButton size="sm" variant="danger" onClick={() => setConfirmDel(e)}>Delete</PButton>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </DataTable>
               )}
-          </div>
+          </SectionCard>
         </>
       )}
 
@@ -369,96 +395,91 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
       {/* ── Bulk ── */}
       {tab === 'bulk' && (
         <>
-          <div style={card}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 4 }}>1 · Pick the heads to process</div>
-            <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>The template will have one column per head, pre-filled with anything already saved.</div>
-            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 12 }}>
+          <SectionCard>
+            <ProcessStepper compact steps={bulkSteps} />
+          </SectionCard>
+
+          <SectionCard icon={<span style={{ fontSize: F.small, fontWeight: W.bold, ...numeric }}>1</span>} title="Pick the heads to process"
+            hint="The template will have one column per head, pre-filled with anything already saved."
+            actions={<CountChip t={picked.length ? 'brand' : 'neutral'}>{picked.length} selected</CountChip>}>
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: SP.md }}>
               {heads.map(h => {
                 const on = picked.includes(h.head_name)
                 return (
-                  <button key={h.id} onClick={() => setPicked(p => on ? p.filter(x => x !== h.head_name) : [...p, h.head_name])}
-                    title={h.note || h.head_type}
-                    style={{ ...pill(on), fontSize: 11, padding: '5px 11px' }}>
-                    {h.head_name}
-                    <span style={{ marginLeft: 6, opacity: 0.75, fontSize: 10 }}>{h.head_type === 'Addition' ? '+' : '−'}</span>
-                  </button>
+                  <HeadChip key={h.id} name={h.head_name} type={h.head_type} on={on} title={h.note || h.head_type}
+                    onClick={() => setPicked(p => on ? p.filter(x => x !== h.head_name) : [...p, h.head_name])} />
                 )
               })}
             </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button onClick={downloadTemplate} disabled={!picked.length || !runIds.length}
-                style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: picked.length && runIds.length ? 'pointer' : 'not-allowed', opacity: picked.length && runIds.length ? 1 : 0.5 }}>
-                ⬇ Download template
-              </button>
-              <span style={{ fontSize: 11, color: C.muted }}>{picked.length} head{picked.length === 1 ? '' : 's'} selected</span>
-              {picked.length > 0 && <span onClick={() => setPicked([])} style={{ fontSize: 11, color: C.red, cursor: 'pointer', fontWeight: 700 }}>Clear</span>}
+            <div style={{ display: 'flex', gap: SP.sm + 2, alignItems: 'center', flexWrap: 'wrap', paddingTop: SP.md, borderTop: `1px solid ${TK.line}` }}>
+              <PButton variant="primary" icon={<IconDownload size={15} />} onClick={downloadTemplate} disabled={!picked.length || !runIds.length}>
+                Download template
+              </PButton>
+              <span style={{ fontSize: F.tiny, color: TK.muted, ...numeric }}>{picked.length} head{picked.length === 1 ? '' : 's'} selected</span>
+              {picked.length > 0 && <button onClick={() => setPicked([])} className="ez-press" style={{ border: 'none', background: 'none', padding: 0, fontFamily: 'inherit', fontSize: F.tiny, color: TK.critical, cursor: 'pointer', fontWeight: W.semi }}>Clear</button>}
             </div>
-          </div>
+          </SectionCard>
 
-          <div style={card}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>2 · Upload the filled file</div>
-            <input type="file" accept=".xlsx,.xls" onChange={handleBulkFile} style={{ ...ddInp, padding: '7px 10px' }} />
+          <SectionCard icon={<span style={{ fontSize: F.small, fontWeight: W.bold, ...numeric }}>2</span>} title="Upload the filled file"
+            hint="A blank cell is left alone. Each row saves on its own, so one bad value doesn't stop the rest.">
+            <FileDrop accept=".xlsx,.xls" onChange={handleBulkFile} fileName={bulkFile} label="Choose the filled voucher template" />
             {bulkRows && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-                <button onClick={processBulk} disabled={bulkBusy}
-                  style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: bulkBusy ? 'not-allowed' : 'pointer', opacity: bulkBusy ? 0.6 : 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginTop: SP.md, paddingTop: SP.md, borderTop: `1px solid ${TK.line}`, flexWrap: 'wrap' }}>
+                <PButton variant="primary" size="lg" icon={<IconCheck size={15} />} onClick={processBulk} disabled={bulkBusy}>
                   {bulkBusy ? 'Saving…' : `Save ${bulkRows.length} rows`}
-                </button>
-                <span style={{ fontSize: 12, color: C.purpleD }}><b>{bulkFile}</b> · {bulkRows.length} employees</span>
+                </PButton>
+                <span style={{ fontSize: F.tiny, color: TK.inkSoft }}><b style={{ color: TK.ink }}>{bulkFile}</b> · {bulkRows.length} employees</span>
               </div>
             )}
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>A blank cell is left alone. Each row saves on its own, so one bad value doesn&apos;t stop the rest.</div>
-          </div>
+          </SectionCard>
 
           {bulkResults && (
-            <div style={card}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Result</div>
-              <div style={{ display: 'flex', gap: 14, marginBottom: 10, fontSize: 13, fontWeight: 700 }}>
-                <span style={{ color: C.green }}>✓ {okCount} saved</span>
-                {badCount > 0 && <span style={{ color: C.red }}>✕ {badCount} failed</span>}
-              </div>
-              <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+            <SectionCard title="Result" flush
+              actions={<>
+                <StatusPill t="positive" icon={<IconCheck size={12} />}>{okCount} saved</StatusPill>
+                {badCount > 0 && <StatusPill t="critical" icon={<IconClose size={12} />}>{badCount} failed</StatusPill>}
+              </>}>
+              <div className="ez-scroll" style={{ maxHeight: 260, overflowY: 'auto' }}>
                 {bulkResults.map((r, i) => (
-                  <div key={i} style={{ fontSize: 12, padding: '4px 0', color: r.ok ? C.navy : C.red, borderBottom: `1px solid ${TK.brandEdge}` }}>
-                    {r.ok ? '' : ''} <b>{r.code}</b> · {r.head}: {r.detail}
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: SP.sm, fontSize: F.tiny, padding: `7px ${SP.lg}px`, color: r.ok ? TK.ink : TK.critical, borderBottom: `1px solid ${TK.line}`, ...numeric }}>
+                    <span style={{ display: 'inline-flex', color: r.ok ? TK.positive : TK.critical }}>{r.ok ? <IconCheck size={13} /> : <IconClose size={13} />}</span>
+                    <span><b>{r.code}</b> · {r.head}: {r.detail}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </SectionCard>
           )}
         </>
       )}
 
       {/* ── Tracking ── */}
       {tab === 'tracking' && (
-        <div style={card}>
+        <SectionCard icon={<IconClock size={15} />} title="Voucher activity" hint="Every create, replace and delete, most recent first." flush>
           {fileHead(fileNames(audit))}
           {audit.length === 0
-            ? <div style={{ fontSize: 12, color: C.muted, padding: '14px 0', textAlign: 'center' }}>No voucher activity for this month yet.</div>
+            ? <EmptyState compact t="neutral" icon={<IconClock size={20} />} title="No voucher activity for this month yet." />
             : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 780 }}>
-                  <thead><tr style={{ background: C.navy }}>{['When', 'Emp Code', 'Head', 'Action', 'Old', 'New', 'Via'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-                  <tbody>
-                    {audit.map((a, i) => {
-                      const t = ACTION_TONE[a.action] || { bg: C.gray, fg: C.muted }
-                      return (
-                        <tr key={a.id} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
-                          <td style={{ ...td, color: C.muted, fontSize: 11 }}>{new Date(a.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
-                          <td style={{ ...td, fontWeight: 700 }}>{a.employee_code}</td>
-                          <td style={td}>{a.head_name}</td>
-                          <td style={td}><span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: t.bg, color: t.fg }}>{a.action}</span></td>
-                          <td style={{ ...td, color: C.muted }}>{a.old_amount == null ? '-' : inr(a.old_amount)}</td>
-                          <td style={{ ...td, fontWeight: 700 }}>{a.new_amount == null ? '-' : inr(a.new_amount)}</td>
-                          <td style={{ ...td, color: C.muted, fontSize: 11 }}>{a.uploaded_via || '-'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable minWidth={780}>
+                <thead><tr>{['When', 'Emp Code', 'Head', 'Action', 'Old', 'New', 'Via'].map(h => <th key={h} style={h === 'Old' || h === 'New' ? dt.thNum : th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {audit.map(a => {
+                    const t = ACTION_TONE[a.action] || 'neutral'
+                    return (
+                      <tr key={a.id} className={dt.rowClass}>
+                        <td style={{ ...td, color: TK.muted, fontSize: F.tiny, ...numeric }}>{new Date(a.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                        <td style={dt.tdMono}>{a.employee_code}</td>
+                        <td style={{ ...td, color: TK.ink }}>{a.head_name}</td>
+                        <td style={td}><StatusPill size="sm" t={t}>{a.action}</StatusPill></td>
+                        <td style={{ ...dt.tdNum, color: TK.muted }}>{a.old_amount == null ? '-' : inr(a.old_amount)}</td>
+                        <td style={{ ...dt.tdNum, fontWeight: W.bold }}>{a.new_amount == null ? '-' : inr(a.new_amount)}</td>
+                        <td style={{ ...td, color: TK.muted, fontSize: F.micro }}>{a.uploaded_via || '-'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </DataTable>
             )}
-        </div>
+        </SectionCard>
       )}
     </div>
   )
