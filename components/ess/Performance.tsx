@@ -545,7 +545,10 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
     if (!period) { setRows([]); setLoading(false); return }
     setLoading(true)
     const q = supabase.from('pms_overall_rating')
-      .select('employee_id,workflow_status,kra_count,total_weightage,self_score,rm_l1_score,rm_l2_score,final_rating,rm_l1_id,rm_l2_id,employment_flag')
+      // kra_count and total_weightage are deliberately NOT selected: nothing in
+      // the schema writes them. See the comment below, and the test that keeps
+      // them out.
+      .select('employee_id,workflow_status,self_score,rm_l1_score,rm_l2_score,final_rating,rm_l1_id,rm_l2_id,employment_flag')
       .eq('period_id', period.id)
     const { data } = as === 'hod'
       ? await q.eq('hod_id', employeeId)
@@ -557,18 +560,57 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
       .select('id,emp_code,full_name,date_of_leaving').in('id', ids)
     const byId = new Map((emps ?? []).map(e => [e.id, e as Record<string, unknown>]))
 
+    // HOW MANY KRAs, COUNTED FROM THE KRAs.
+    //
+    // pms_overall_rating carries kra_count and total_weightage, and NOTHING IN
+    // THE SCHEMA EVER WRITES EITHER — no trigger, no function, no migration.
+    // They were denormalised counters that stayed null because the module had
+    // never held a goal. Reading them showed every manager "No KRAs written
+    // yet. They cannot be rated at all until there are." for an employee whose
+    // own screen said four KRAs totalling 100, which is the worst way for two
+    // screens to disagree: both confident, one wrong, and the wrong one is the
+    // one that decides whether anybody can act.
+    const { data: goals } = await supabase.from('pms_employee_goals')
+      .select('employee_id,weightage,status')
+      .eq('period_id', period.id).in('employee_id', ids)
+    const goalsBy = new Map<string, { n: number; wt: number }>()
+    for (const g of goals ?? []) {
+      const k = String((g as { employee_id: string }).employee_id)
+      const cur = goalsBy.get(k) ?? { n: 0, wt: 0 }
+      cur.n += 1
+      cur.wt += Number((g as { weightage?: number }).weightage) || 0
+      goalsBy.set(k, cur)
+    }
+
+    // WHETHER THE ONE-TO-ONE HAPPENED, read from the one-to-one.
+    //
+    // This used to be inferred as "workflow_status is not NOT_STARTED and the
+    // weightage totals 100", which is not what a one-to-one is — and rested on
+    // the same counter that is never written, so it was false for everybody
+    // always. pms_lock_kras asks the real question: a KRA_SETTING discussion
+    // acknowledged by BOTH sides. Asking it the same way here means the screen
+    // and the database agree about who is waiting on whom.
+    const { data: talks } = await supabase.from('pms_one_to_one')
+      .select('employee_id,employee_ack,manager_ack')
+      .eq('period_id', period.id).eq('discussion_type', 'KRA_SETTING')
+      .in('employee_id', ids)
+    const bothAcked = new Set((talks ?? [])
+      .filter(t => (t as { employee_ack?: boolean }).employee_ack
+                && (t as { manager_ack?: boolean }).manager_ack)
+      .map(t => String((t as { employee_id: string }).employee_id)))
+
     setRows(data.map(d => {
       const e = byId.get(d.employee_id)
+      const g = goalsBy.get(String(d.employee_id)) ?? { n: 0, wt: 0 }
       return {
         employeeId: String(d.employee_id),
         code: String(e?.emp_code ?? ''),
         name: String(e?.full_name ?? 'Unknown'),
         dateOfLeaving: (e?.date_of_leaving as string | null) ?? null,
         flagOverride: (d.employment_flag as Flag | null) ?? null,
-        kraCount: Number(d.kra_count) || 0,
-        totalWeightage: Number(d.total_weightage) || 0,
-        oneToOneDone: String(d.workflow_status ?? '') !== 'NOT_STARTED'
-                   && Number(d.total_weightage) === DEFAULT_RULES.totalWeightage,
+        kraCount: g.n,
+        totalWeightage: g.wt,
+        oneToOneDone: bothAcked.has(String(d.employee_id)),
         selfSubmitted: d.self_score != null,
         selfScore: d.self_score == null ? null : Number(d.self_score),
         rmL1Score: d.rm_l1_score == null ? null : Number(d.rm_l1_score),
@@ -585,26 +627,127 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
 }
 
 function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
-  const { period, loading: pLoading } = usePeriod(employeeId)
-  const { rows, loading } = useRoster(employeeId, period, 'rm')
+  // employeeId here is the MANAGER. The person being acted on is `picked`.
+  const { period, loading: pLoading, companyId, reload } = usePeriod(employeeId)
+  const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'rm')
   const [picked, setPicked] = useState<string | null>(null)
   const [rateRows, setRateRows] = useState<RateRow[]>([])
   const [overall, setOverall] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
   const today = localToday()
 
   const member = useMemo(
     () => rows.find(r => r.employeeId === picked) ?? null, [rows, picked])
+
+  /**
+   * The manager's half of the one-to-one, and the lock that follows it.
+   *
+   * BOTH SIDES HAVE TO ACKNOWLEDGE, and the database is the one that insists:
+   * pms_lock_kras refuses unless a KRA_SETTING discussion exists with
+   * employee_ack AND manager_ack both true, when the policy makes the
+   * one-to-one mandatory. So this ticks the manager's side first and then asks
+   * to lock — one press, because to a manager "I confirm we spoke" and "so
+   * these are now the KRAs" are one decision.
+   *
+   * pms_lock_kras RETURNS A STRING, NOT AN ERROR. 'LOCKED', or
+   * 'BLOCKED: <why>' — a validation failure comes back as a perfectly
+   * successful call carrying a refusal in its payload. Checking only `error`
+   * would report success while nothing had been locked, which is the exact
+   * shape of bug this module has already had twice.
+   */
+  const acknowledge = async (id: string) => {
+    setSaving(true); setMsg(null)
+    const ack = await supabase.from('pms_one_to_one')
+      .update({ manager_ack: true, manager_ack_at: new Date().toISOString() })
+      .eq('employee_id', id).eq('period_id', period!.id)
+      .eq('discussion_type', 'KRA_SETTING')
+      .select('id')
+    if (ack.error) {
+      console.error('[pms] manager acknowledge refused:', ack.error)
+      setSaving(false); setMsg(SAVE_FAILED('acknowledgement')); return
+    }
+    if (!ack.data?.length) {
+      setSaving(false)
+      setMsg('There is no KRA-setting discussion logged for them yet, so there is nothing to acknowledge. They log it from their own Performance screen.')
+      return
+    }
+    const lock = await supabase.rpc('pms_lock_kras',
+      { p_employee_id: id, p_period_id: period!.id, p_manager_id: employeeId })
+    setSaving(false)
+    if (lock.error) {
+      console.error('[pms] pms_lock_kras failed:', lock.error)
+      setMsg('Acknowledged, but the weightages could not be locked. Try again, and tell HR if it keeps happening.')
+    } else if (typeof lock.data === 'string' && lock.data.startsWith('BLOCKED')) {
+      // The reason is written for a manager, so it is worth showing verbatim.
+      setMsg(`Acknowledged, but not locked yet — ${lock.data.replace(/^BLOCKED:\s*/, '')}.`)
+    } else {
+      setMsg('Acknowledged, and their weightages are locked.')
+    }
+    reload(); reloadRoster()
+  }
+
+  /** Hand the set back for the employee to rebuild. Their own screen reads
+   *  sent_back_reason, so the reason is the whole point of the action. */
+  const sendBack = async (id: string, reason: string) => {
+    setSaving(true); setMsg(null)
+    const { error } = await supabase.from('pms_employee_goals')
+      .update({ status: 'SENT_BACK', sent_back_reason: reason })
+      .eq('employee_id', id).eq('period_id', period!.id)
+    setSaving(false)
+    if (error) { console.error('[pms] send back refused:', error); setMsg(SAVE_FAILED('note')); return }
+    setMsg('Sent back, with your reason.')
+    reloadRoster()
+  }
+
+  /** The manager's rating of one reportee, one row per KRA. rater_role is
+   *  RM_L1: pms_score reads it by that name, and the chain snapshot on
+   *  pms_overall_rating is what decides whose rating this counts as. */
+  const submitRating = async () => {
+    if (!picked) return
+    setSaving(true); setMsg(null)
+    if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
+    // An empty set would upsert nothing and report success, which is how a
+    // screen comes to lie about having saved. Nothing loads rateRows yet —
+    // there is no way to pick a reportee — so this is the honest state.
+    if (!rateRows.length) {
+      setSaving(false)
+      setMsg('Their KRAs have not loaded, so there is nothing to rate yet.')
+      return
+    }
+    const unrated = rateRows.filter(r => r.myRating == null)
+    if (unrated.length) {
+      setSaving(false)
+      setMsg(`${unrated.length} of ${rateRows.length} KRAs still have no rating from you. Rate every one before you send it.`)
+      return
+    }
+    const { error } = await supabase.from('pms_reviews').upsert(
+      rateRows.map(r => ({
+        company_id: companyId, period_id: period!.id, employee_id: picked,
+        goal_id: r.goalId, rater_id: employeeId, rater_role: 'RM_L1',
+        achievement_value: r.achievement || null, rating: r.myRating,
+        comments: r.myComment || null, submitted: true,
+        submitted_at: new Date().toISOString(),
+      })),
+      { onConflict: 'period_id,employee_id,goal_id,rater_role' })
+    setSaving(false)
+    if (error) { console.error('[pms] manager rating refused:', error); setMsg(SAVE_FAILED('rating')); return }
+    setMsg('Your rating has been sent.')
+    reloadRoster()
+  }
 
   if (pLoading || loading) return <div className="k">Loading…</div>
   if (!period) return <NoPeriod />
 
   return (
     <>
+      {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
       {tab === 'team' && <TeamTab members={rows} today={today} managerName="your team" />}
-      {tab === 'approve' && <ApproveTab members={rows} today={today} />}
+      {tab === 'approve' && <ApproveTab members={rows} today={today}
+                                        onAcknowledge={acknowledge} onSendBack={sendBack} />}
       {tab === 'rate' && (
         <RateTab member={member} rows={rateRows} onChange={setRateRows}
-                 onSubmit={() => {}} overallComment={overall}
+                 onSubmit={submitRating} saving={saving} overallComment={overall}
                  onOverallComment={setOverall} />
       )}
       {tab === 'pip' && <PipRequestTab members={rows} today={today} />}

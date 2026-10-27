@@ -1,5 +1,5 @@
-// lib/pms/__tests__/kra-insert-columns.test.ts — the KRA insert names every
-// column the table insists on.
+// lib/pms/__tests__/write-columns.test.ts — every PMS write names the columns
+// its table insists on, and the roster counts from rows rather than counters.
 //
 // WHY THIS EXISTS. pms_employee_goals held zero rows for the entire life of the
 // module. The window was open across three companies, the form validated
@@ -28,7 +28,7 @@
 // catch, and a mistake made more than once in this repo already.
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROOT = join(import.meta.dirname, '..', '..', '..')
@@ -106,7 +106,7 @@ describe('every PMS write satisfies its table', () => {
         + `    ${missing.join(', ')}\n`)
     })
 
-    it(`${handler} does not hand a database constraint message to the employee`, () => {
+    it(`${handler} does not hand a database constraint message to the person`, () => {
       const body = handlerBody(performanceSource(), handler)
       // error.message is the raw Postgres text. It names a relation and a
       // constraint, which tells the person who just filled in four KRAs
@@ -115,4 +115,48 @@ describe('every PMS write satisfies its table', () => {
         `${handler} must not put error.message in front of the employee; say what happened and what to do`)
     })
   }
+})
+
+describe('the roster counts from the rows, not from counters nobody writes', () => {
+  /** Columns that exist on pms_overall_rating but that no migration ever
+   *  assigns. Derived, so the day somebody adds a trigger this test stops
+   *  objecting on its own. */
+  function neverWritten(cols: string[]): string[] {
+    const dir = join(ROOT, 'supabase/migrations')
+    const sql = readdirSync(dir).filter(f => f.endsWith('.sql'))
+      .map(f => stripSql(readFileSync(join(dir, f), 'utf8'))).join('\n')
+    // An assignment looks like `col =` or names the column in an INSERT list
+    // that also carries VALUES. Reading it (SELECT ... col) does not count.
+    return cols.filter(c => !new RegExp(`\\b${c}\\s*=`, 'i').test(sql))
+  }
+
+  it('kra_count and total_weightage are still written by nothing', () => {
+    // If this fails, something now maintains them and the roster could read
+    // them again — which would be fine, and this test should then be deleted
+    // rather than worked around.
+    assert.deepEqual(neverWritten(['kra_count', 'total_weightage']).sort(),
+      ['kra_count', 'total_weightage'],
+      'a migration now assigns one of these; re-check whether useRoster should trust it')
+  })
+
+  it('useRoster does not select them', () => {
+    const src = performanceSource()
+    const m = /function useRoster[\s\S]*?\n\}/.exec(src)
+    assert.ok(m, 'useRoster must still be findable; update this test if it moved')
+    for (const c of ['kra_count', 'total_weightage']) {
+      assert.ok(!new RegExp(`['"\`][^'"\`]*\\b${c}\\b`).test(m![0]),
+        `useRoster selects ${c}, which no migration ever writes. It read 0 for every`
+        + ' employee, so a manager was told "No KRAs written yet" about somebody'
+        + ' whose own screen showed four. Count from pms_employee_goals instead.')
+    }
+  })
+
+  it('whether the one-to-one happened is read from pms_one_to_one', () => {
+    const src = performanceSource()
+    const m = /function useRoster[\s\S]*?\n\}/.exec(src)
+    assert.ok(/pms_one_to_one/.test(m![0]),
+      'oneToOneDone must come from pms_one_to_one and both acknowledgements —'
+      + ' it was inferred from a weightage total, which is not what a one-to-one is'
+      + ' and rested on a counter nothing writes, so it was false for everybody.')
+  })
 })
