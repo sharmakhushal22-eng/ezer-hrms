@@ -160,15 +160,16 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandb
         if (savedForm.regime) { setChosenRegime(norm(savedForm.regime)); setUserPicked(true) }
         setStatus(savedForm.status === 'SUBMITTED' ? 'SUBMITTED' : 'DRAFT')
         if (savedForm.status === 'SUBMITTED') setSaved(true)
-        // Still backfill CTC/DOJ if the saved form left them blank.
-        if (cm?.[0]) setF(p => ({ ...p, ctc: p.ctc || String(Math.round(cm[0].annual_ctc || 0)) || '', variable: p.variable || String(Math.round(cm[0].annual_variable || 0)) }))
-        if (doj) setF(p => ({ ...p, doj: p.doj || String(doj).slice(0, 10) }))
+        // CTC, variable and DOJ always come from the record, never from the saved form: they
+        // are not the employee's to change, and a form saved before a revision holds stale pay.
+        if (cm?.[0]) setF(p => ({ ...p, ctc: String(Math.round(cm[0].annual_ctc || 0)), variable: String(Math.round(cm[0].annual_variable || 0)) }))
+        if (doj) setF(p => ({ ...p, doj: String(doj).slice(0, 10) }))
         return
       }
 
       // ── No saved form — fresh prefill ──
-      if (cm?.[0]) setF(p => ({ ...p, ctc: p.ctc || String(Math.round(cm[0].annual_ctc || 0)) || '', variable: p.variable || String(Math.round(cm[0].annual_variable || 0)) }))
-      if (doj) setF(p => ({ ...p, doj: p.doj || String(doj).slice(0, 10) }))
+      if (cm?.[0]) setF(p => ({ ...p, ctc: String(Math.round(cm[0].annual_ctc || 0)), variable: String(Math.round(cm[0].annual_variable || 0)) }))
+      if (doj) setF(p => ({ ...p, doj: String(doj).slice(0, 10) }))
 
       // Default regime: submitted declaration → saved tds_regime → (mid-year joiner, no declaration ⇒ NEW).
       const decl: any = (declRes as any)?.data
@@ -355,13 +356,22 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandb
     <div>
       <div style={s.card}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Employee Information</div>
-        <div style={{ fontSize: 12, color: P.muted, marginBottom: 12 }}>Prefilled from your record. Adjust CTC / variable if needed.</div>
+        {/* An employee's CTC, variable and DOJ are HR's record, not inputs — the declaration and
+            the TDS projection must be worked on the pay payroll will actually run. Only the
+            Help → TDS Calculator sandbox (a what-if for hiring managers / HR) edits them. */}
+        <div style={{ fontSize: 12, color: P.muted, marginBottom: 12 }}>{sandbox ? 'Prefilled from the record when an employee is picked. Adjust CTC / variable to try a different package.' : 'From your salary record. If any of this is wrong, raise it with HR — it cannot be changed here.'}</div>
         <div style={s.g2}>
           <Fg label="Employee Name"><input style={{ ...s.input, background: TK.sunken }} value={empName || ''} readOnly /></Fg>
           <Fg label="Employee Code"><input style={{ ...s.input, background: TK.sunken }} value={empCode || ''} readOnly /></Fg>
-          <Fg label="Annual CTC (₹)"><input style={s.input} type="number" value={f.ctc} onChange={e => set('ctc', e.target.value)} placeholder="e.g. 1500000" /></Fg>
-          <Fg label="Date of Joining"><input style={s.input} type="date" value={f.doj} onChange={e => set('doj', e.target.value)} /></Fg>
-          <Fg label="Annual Variable Pay (₹)"><input style={s.input} type="number" value={f.variable} onChange={e => set('variable', e.target.value)} placeholder="0 if none" /></Fg>
+          {sandbox ? <>
+            <Fg label="Annual CTC (₹)"><input style={s.input} type="number" value={f.ctc} onChange={e => set('ctc', e.target.value)} placeholder="e.g. 1500000" /></Fg>
+            <Fg label="Date of Joining"><input style={s.input} type="date" value={f.doj} onChange={e => set('doj', e.target.value)} /></Fg>
+            <Fg label="Annual Variable Pay (₹)"><input style={s.input} type="number" value={f.variable} onChange={e => set('variable', e.target.value)} placeholder="0 if none" /></Fg>
+          </> : <>
+            <Fg label="Annual CTC (₹)"><input style={{ ...s.input, background: TK.sunken, cursor: 'default' }} value={f.ctc ? R(N(f.ctc)) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+            <Fg label="Date of Joining"><input style={{ ...s.input, background: TK.sunken, cursor: 'default' }} value={f.doj ? new Date(f.doj + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+            <Fg label="Annual Variable Pay (₹)"><input style={{ ...s.input, background: TK.sunken, cursor: 'default' }} value={f.ctc ? R(N(f.variable)) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+          </>}
         </div>
       </div>
       {/* Actual salary structure — identical rows, order and figures to

@@ -1730,6 +1730,9 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
   async function sendOffer() {
     if (!selected || !toEmail || !body) { alert('Recipient email and body are required'); return }
+    // A placeholder the template's values did not fill would reach the candidate as "{{…}}".
+    const unfilled = [...new Set([...`${subject}\n${body}`.matchAll(/\{\{\s*([#/]?[\w ]+?)\s*\}\}/g)].map(m => m[1]))]
+    if (unfilled.length) { alert(`The email still has placeholders that have no value:\n• ${unfilled.map(u => `{{${u}}}`).join('\n• ')}\n\nType the real values into the email, or fix the template in Configuration → Offer email.`); return }
     // Never trust the button state alone — re-read the row so an offer the HR Head has not
     // approved (or has rejected since the screen loaded) cannot go out.
     const { data: live } = await supabase.from('offer_approval_requests').select('status').eq('id', selected.id).maybeSingle()

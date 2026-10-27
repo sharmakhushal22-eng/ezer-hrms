@@ -10,7 +10,7 @@
 // Advance walked a run to APPROVED with zero payroll lines. Month creation lives in
 // Configuration → Payroll Month (where the previous-month readiness check runs) and
 // per-category sync lives in Data Sync, so neither is repeated here.
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { loadRuns, loadRunsForPeriod, loadRunRegister, loadMonthMaster, RUN_SHEET_COLS, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { calculateRun } from '@/lib/payroll/engine'
@@ -344,6 +344,9 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
   const rd: Readiness | null = rows ? computeReadiness(shown) : null
   const rdAll: Readiness | null = rows ? computeReadiness(rows) : null
   const filtering = isFiltered(filter)
+  // Downloads follow the filter too: with one on, the sheet, register and payslips hold
+  // only the employees it matches — not the whole month.
+  const shownCodes = useMemo(() => filtering ? shown.map(r => String(r.employee_code)) : null, [filtering, shown])
 
   const sel = monthRuns[0] || null
   const label = sel ? periodLabel(sel) : monthVal ? `${MONTHS[Number(monthVal) - 1]} ${fy.split('-')[0]}` : ''
@@ -480,20 +483,21 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
     XLSX.writeFile(wb, `Payroll_Run_${safe(label)}_${out.length}emp.xlsx`)
   }
 
-  async function downloadRegister() {
+  async function downloadRegister(codes: string[] | null) {
     setBusy(true); setErr('')
     try {
+      const want = codes ? new Set(codes) : null
       const rows: Record<string, any>[] = []
       for (const r of monthRuns) {
         const part = await loadRunRegister(r.id)
-        part.forEach(x => rows.push(isGroup ? { Company: r.company_name || '', ...x } : x))
+        part.forEach(x => { if (!want || want.has(String(x.employee_code))) rows.push(isGroup ? { Company: r.company_name || '', ...x } : x) })
       }
-      if (!rows.length) { setErr('No payroll lines for this month yet. Run payroll first.'); return }
+      if (!rows.length) { setErr(want ? 'Nobody in this filter has a payroll line for this month yet.' : 'No payroll lines for this month yet. Run payroll first.'); return }
       const header: string[] = []
       rows.forEach(r => Object.keys(r).forEach(k => { if (!header.includes(k)) header.push(k) }))
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, { header }), 'Register')
-      XLSX.writeFile(wb, `EZER_Payroll_Register_${label.replace(/\s+/g, '_')}.xlsx`)
+      XLSX.writeFile(wb, `EZER_Payroll_Register_${label.replace(/\s+/g, '_')}${want ? `_${rows.length}emp` : ''}.xlsx`)
     } catch (e: any) { setErr('Export failed: ' + (e?.message || e)) } finally { setBusy(false) }
   }
 
@@ -638,20 +642,22 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
             was previously produced only as the last step of a successful run, so any
             failure earlier in the chain left HR with no numbers at all to look at. */}
         {(rows?.length ?? 0) > 0 && (
-          <button onClick={() => downloadSheet(null).catch(e => setErr('Sheet download failed: ' + (e?.message || e)))}
-            disabled={busy}
+          <button onClick={() => downloadSheet(shownCodes).catch(e => setErr('Sheet download failed: ' + (e?.message === 'nothing to export' && shownCodes ? 'nobody in this filter is in the month yet' : (e?.message || e))))}
+            disabled={busy || (!!shownCodes && shownCodes.length === 0)}
+            title={shownCodes ? `Only the ${shownCodes.length} employee${shownCodes.length === 1 ? '' : 's'} matching the filter` : 'Every employee in the month'}
             style={{
               fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px',
               cursor: busy ? 'not-allowed' : 'pointer',
-            }}>Download sheet</button>
+            }}>Download sheet{shownCodes ? ` (${shownCodes.length})` : ''}</button>
         )}
         {calculated && (
-          <button onClick={downloadRegister} disabled={busy}
+          <button onClick={() => downloadRegister(shownCodes)} disabled={busy || (!!shownCodes && shownCodes.length === 0)}
+            title={shownCodes ? `Only the ${shownCodes.length} employee${shownCodes.length === 1 ? '' : 's'} matching the filter` : 'Every employee in the month'}
             style={{
               fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px', cursor: busy ? 'not-allowed' : 'pointer',
-            }}>Register</button>
+            }}>Register{shownCodes ? ` (${shownCodes.length})` : ''}</button>
         )}
         {/* Payslips exist only for a calculated month; the server confirms payroll_lines
             are there and that the run is not older than its own inputs before anything
@@ -660,7 +666,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         {monthRuns.length > 0 && (
           <PayslipDownload key={`${monthRuns.map(r => r.id).join(',')}|${result ? `${result.processed}:${result.net}` : ''}`}
             runs={monthRuns.map(r => ({ id: r.id, company_name: r.company_name }))}
-            enabled={calculated} busyOutside={busy} />
+            enabled={calculated} busyOutside={busy} only={shownCodes} />
         )}
         <span style={{ fontSize: 12, color: C.muted }}>{hint}</span>
       </div>
