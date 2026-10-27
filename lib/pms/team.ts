@@ -47,6 +47,19 @@ export interface TeamMember extends Employment {
    *  the L1's rating. Comparing against these is how the role is decided. */
   rmL1Id?: string | null
   rmL2Id?: string | null
+  /**
+   * Has the FINAL_REVIEW one-to-one been held AND acknowledged by both sides?
+   *
+   * Only meaningful where the policy sets final_review_one_to_one, which is
+   * the default. pms_finalise refuses without it, so a screen that does not
+   * ask leaves the HOD pressing a button that cannot work and reading the
+   * refusal afterwards. Undefined means the caller did not load it.
+   */
+  finalReviewDone?: boolean
+  /** Has a FINAL_REVIEW one-to-one been logged at all? Distinct from
+   *  finalReviewDone, because "nobody has logged it" and "it is logged and
+   *  waiting on the manager's tick" need different people to act. */
+  finalReviewLogged?: boolean
   finalRating: number | null
   finalised: boolean
 }
@@ -79,13 +92,13 @@ function toneFor(f: Flag): RowTone {
  * reshuffle between renders for no reason.
  */
 export function teamQueue<T extends TeamMember>(
-  members: T[], today: string, rules?: FlagRules,
+  members: T[], today: string, rules?: FlagRules, chain?: Chain,
 ): QueueRow<T>[] {
   return members
     .map(m => {
       const flag = m.flagOverride ?? flagFor(m, today, rules)
       const dl = daysToLwd(m, today)
-      const next = nextForRm(m, flag)
+      const next = nextForRm(m, flag, chain)
       return {
         member: m, flag, tone: toneFor(flag), daysLeft: dl,
         actionable: next !== null,
@@ -105,8 +118,33 @@ export function teamQueue<T extends TeamMember>(
       a.member.name.localeCompare(b.member.name))
 }
 
+/**
+ * DOES THIS PERSON'S CHAIN HAVE A SECOND MANAGER RUNG?
+ *
+ * Asked per employee, because that is where the answer is decided.
+ * pms_resolve_chain (067) drops L2 when it resolves to the same person as L1:
+ *
+ *   -- Same person at L1 and L2: drop L2, keep them as L1 reviewer
+ *   IF v_l2 IS NOT NULL AND v_l2 = v_l1 THEN v_l2 := NULL; END IF;
+ *
+ * So a company whose POLICY chain is SELF_RM1_RM2_HOD still has employees with
+ * no L2 at all — which is the ordinary case wherever one manager holds both
+ * rungs. Judging by the policy alone leaves those rows waiting on a rating
+ * nobody can give: the queue says "with RM L2", the finalise control stays
+ * shut, and the cycle cannot complete.
+ *
+ * The frozen snapshot wins when it is loaded. `undefined` means this caller
+ * never selected the column, and then the policy chain is the best answer
+ * available — with no chain either, there is nothing to claim is pending.
+ * The only production loader (useRoster) always selects it.
+ */
+export function hasRmL2(m: TeamMember, chain?: Chain): boolean {
+  if (m.rmL2Id !== undefined) return m.rmL2Id !== null
+  return chain ? blockedByRmL2(chain, false) : false
+}
+
 /** The one thing an RM owes on this person, or null when nothing is. */
-function nextForRm(m: TeamMember, flag: Flag): string | null {
+function nextForRm(m: TeamMember, flag: Flag, chain?: Chain): string | null {
   if (m.finalised) return null
   if (flag === 'NEW_JOINER') return null
   if (m.kraCount === 0) return 'No KRAs written yet. They cannot be rated at all until there are.'
@@ -114,19 +152,11 @@ function nextForRm(m: TeamMember, flag: Flag): string | null {
   if (!m.oneToOneDone) return 'Hold the KRA one-to-one and acknowledge it, so the weightage can lock.'
   if (!m.selfSubmitted) return 'Waiting on their self rating. You cannot rate first.'
   if (m.rmL1Score === null) return 'Your rating is owed.'
-  // ONLY WHEN THERE IS AN RM L2 TO WAIT FOR. This used to say "With RM L2 now"
-  // on the strength of rmL2Score being null, which is also true when the chain
-  // has no second rung at all — and pms_resolve_chain collapses it on purpose:
-  //
-  //   -- Same person at L1 and L2: drop L2, keep them as L1 reviewer
-  //   IF v_l2 IS NOT NULL AND v_l2 = v_l1 THEN v_l2 := NULL; END IF;
-  //
-  // So for anybody whose manager is their own L1 and L2 — which is every
-  // reportee of a small company's top of chain — rm_l2_score could never be
-  // filled, and the queue said "With RM L2 now" for ever, pointing at nobody.
-  // The snapshot's own rm_l2_id is the honest test, and it is per employee,
-  // which the policy's chain shape is not.
-  if (m.rmL2Id && m.rmL2Score === null) return 'With RM L2 now.'
+  // ONLY WHEN THERE IS AN RM L2 TO WAIT FOR — see hasRmL2. This used to say
+  // "With RM L2 now" on the strength of rmL2Score being null, which is also
+  // true when the chain has no second rung at all, so the row parked there for
+  // ever pointing at nobody.
+  if (hasRmL2(m, chain) && m.rmL2Score === null) return 'With RM L2 now.'
   return 'Ready to be finalised.'
 }
 
@@ -153,13 +183,26 @@ export interface FinaliseRow<T extends TeamMember = TeamMember> extends QueueRow
  */
 export function finaliseQueue<T extends TeamMember>(
   members: T[], today: string,
-  { role, chain, whoCanFinalise, rules }: {
+  { role, chain, whoCanFinalise, rules, finalReviewRequired = false }: {
     role: Role; chain: Chain; whoCanFinalise: Finaliser; rules?: FlagRules
+    /** pms_policies.final_review_one_to_one. Defaults false so existing
+     *  callers keep their behaviour; the live screen passes the real value. */
+    finalReviewRequired?: boolean
   },
 ): FinaliseRow<T>[] {
   const allowed = canFinalise(role, whoCanFinalise)
-  return teamQueue(members, today, rules).map(r => {
-    const waiting = blockedByRmL2(chain, r.member.rmL2Score !== null)
+  return teamQueue(members, today, rules, chain).map(r => {
+    // THE SAME QUESTION THE QUEUE ASKS, AND IT HAS TO GET THE SAME ANSWER.
+    //
+    // This asked blockedByRmL2(chain, …) — the POLICY chain — so every
+    // employee whose own chain had collapsed to one rung was permanently
+    // "waiting on RM L2": finalise disabled, and a HOD told to go nudge
+    // somebody the resolver had deliberately removed. Observed live: Arjun
+    // Malhotra could not sign off Shreya Singh, whose L1 and L2 are the same
+    // person, and the screen's only advice was to chase the rung that is not
+    // there. That is the last gate in the cycle, so nothing could complete.
+    const waiting = hasRmL2(r.member, chain) && r.member.rmL2Score === null
+    const needsFinalReview = finalReviewRequired && r.member.finalReviewDone === false
     let insteadDo: string | null = null
     // ORDER MATTERS, and getting it wrong is not cosmetic. "Nudge RM L2" on a
     // row whose employee has never submitted a self rating sends a HOD to
@@ -170,9 +213,17 @@ export function finaliseQueue<T extends TeamMember>(
     else if (!allowed) insteadDo = `Your role cannot finalise under this policy. ${whoCanFinalise === 'HOD_ONLY' ? 'The HOD' : 'RM L2 or the HOD'} does.`
     else if (!r.member.selfSubmitted) insteadDo = 'No self rating on record. The chain has not started, so there is nobody downstream to chase yet.'
     else if (waiting) insteadDo = 'RM L2 has not submitted. Nudge them. Finalising now would skip a step of the chain.'
+    // LAST, because pms_finalise checks it last — the screen and the function
+    // have to block in the same order or they will name different causes for
+    // the same stuck row. Reported up front rather than after a failed press:
+    // 188 refuses with "final review one-to-one not logged", which is a fine
+    // sentence to read, but a worse one to discover by pressing a button that
+    // looked available.
+    else if (needsFinalReview) insteadDo = 'The final review one-to-one is not logged and acknowledged by both sides yet. This policy requires it before the rating can be settled.'
     return {
       ...r,
-      canFinalise: allowed && !waiting && !r.member.finalised && r.member.selfSubmitted,
+      canFinalise: allowed && !waiting && !needsFinalReview
+                   && !r.member.finalised && r.member.selfSubmitted,
       insteadDo,
     }
   })

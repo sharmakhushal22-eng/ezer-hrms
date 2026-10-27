@@ -210,14 +210,24 @@ export function TeamTab({ members, today, managerName }: {
 
 // ── §4.2 KRA Approval & One-to-One ───────────────────────────────────────
 
-export function ApproveTab({ members, today, onSendBack, onAcknowledge }: {
+export function ApproveTab({ members, today, onSendBack, onAcknowledge,
+                             onAcknowledgeFinalReview }: {
   members: TeamMember[]; today: string
   onSendBack?: (id: string, reason: string) => void
   onAcknowledge?: (id: string) => void
+  /** The second tick on a FINAL_REVIEW discussion. Without it pms_finalise
+   *  refuses and the cycle cannot be closed. */
+  onAcknowledgeFinalReview?: (id: string) => void
 }) {
   const [reason, setReason] = useState<Record<string, string>>({})
   const rows = teamQueue(members, today)
     .filter(r => !r.member.selfSubmitted || !r.member.oneToOneDone)
+  // Logged by the employee, still waiting on this manager's half. Not merged
+  // into the card above: that one is about getting a KRA set locked before
+  // the period runs, this one is the last thing standing between a rated
+  // employee and a settled rating. Same table, opposite ends of the cycle.
+  const finalRows = teamQueue(members, today)
+    .filter(r => r.member.finalReviewLogged && !r.member.finalReviewDone)
 
   return (
     <>
@@ -268,6 +278,27 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge }: {
           employee guesses at what to change, and the set comes back wrong a second time.
         </div>
       </Card>
+      {finalRows.length > 0 && (
+        <Card title="Final review one-to-ones waiting on you"
+              sub="They have logged the conversation. The rating cannot be settled until you confirm it happened.">
+          <QueueTable
+            rows={finalRows}
+            empty="None waiting."
+            extraHead={<th>Action</th>}
+            extraCell={r => (
+              <td>
+                <button className="btn sm" type="button" disabled={!onAcknowledgeFinalReview}
+                        onClick={() => onAcknowledgeFinalReview?.(r.member.employeeId)}>
+                  Acknowledge
+                </button>
+              </td>
+            )} />
+          <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+            Where the policy asks for a final review, the HOD cannot finalise without
+            both ticks. This is the last thing owed before the result exists.
+          </div>
+        </Card>
+      )}
     </>
   )
 }
@@ -600,17 +631,20 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
 // ── §5.1 Review & Finalise ───────────────────────────────────────────────
 
 export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName, bands = DEFAULT_BANDS,
-                              onFinalise, onNudge, saving }: {
+                              onFinalise, onNudge, saving, finalReviewRequired = false }: {
   members: TeamMember[]; today: string
   role: Role; chain: Chain; whoCanFinalise: Finaliser
   deptName: string
+  /** pms_policies.final_review_one_to_one, so the queue blocks on the same
+   *  condition pms_finalise does rather than discovering it on refusal. */
+  finalReviewRequired?: boolean
   onFinalise?: (id: string, rating: number) => void
   onNudge?: (id: string) => void
   saving?: boolean
   /** The configured rating scale; falls back to the built-in list. */
   bands?: Band[]
 }) {
-  const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise })
+  const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise, finalReviewRequired })
   const [picked, setPicked] = useState<Record<string, number>>({})
   const awaiting = rows.filter(r => !r.member.finalised).length
   const done = rows.filter(r => r.member.finalised).length

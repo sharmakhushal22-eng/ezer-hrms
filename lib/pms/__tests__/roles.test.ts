@@ -311,6 +311,27 @@ test('RULE 7: finalise is shut while RM L2 is pending, and says to nudge them', 
   assert.match(rows[0].insteadDo ?? '', /nudge/i)
 })
 
+test('RULE 7 does not shut finalise on a rung this employee does not have', () => {
+  // The policy chain includes RM L2; this employee's FROZEN chain does not,
+  // because 067 collapsed it when L1 and L2 resolved to the same person. The
+  // gate used to read the policy only, so the HOD was told to nudge an RM L2
+  // the resolver had removed, and the last step of the cycle could never run.
+  // Observed live: Arjun Malhotra could not sign off Shreya Singh.
+  const collapsed = finaliseQueue([member({
+    employeeId: 'e', name: 'E', rmL1Id: 'm1', rmL2Id: null, rmL1Score: 4,
+  })], TODAY, { role: 'HOD', chain: 'SELF_RM1_RM2_HOD', whoCanFinalise: 'HOD_ONLY' })
+  assert.equal(collapsed[0].canFinalise, true)
+  assert.equal(collapsed[0].insteadDo, null)
+
+  // The genuine two-rung case still waits — otherwise the fix would just be
+  // deleting rule 7 rather than asking it the right question.
+  const twoRung = finaliseQueue([member({
+    employeeId: 'e', name: 'E', rmL1Id: 'm1', rmL2Id: 'm2', rmL1Score: 4,
+  })], TODAY, { role: 'HOD', chain: 'SELF_RM1_RM2_HOD', whoCanFinalise: 'HOD_ONLY' })
+  assert.equal(twoRung[0].canFinalise, false)
+  assert.match(twoRung[0].insteadDo ?? '', /nudge/i)
+})
+
 test('...but a chain with no RM L2 finalises without waiting for one', () => {
   const rows = finaliseQueue([member({ employeeId: 'e', name: 'E', rmL1Score: 4 })], TODAY,
     { role: 'HOD', chain: 'SELF_RM1_HOD', whoCanFinalise: 'RM1_RM2_HOD' })

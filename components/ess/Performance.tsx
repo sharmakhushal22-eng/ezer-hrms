@@ -46,6 +46,7 @@ import {
   type MgrTab, type HodTab, type RateRow, type BenefitType,
 } from '@/components/pms/ManagerTabs'
 import { type TeamMember } from '@/lib/pms/team'
+import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
 import { type Kra, type Category } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { bandsFromScale, type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
@@ -71,7 +72,14 @@ const NO_COMPANY =
 const SAVE_FAILED = (what: string) =>
   `Your ${what} could not be saved. Nothing was lost — try again, and tell HR if it keeps happening.`
 
-interface Period { id: string; period_code: string; status: string }
+interface Period { id: string; period_code: string; status: string; policy_id?: string | null }
+/** The three policy columns the review screens have to agree with pms_finalise
+ *  about. Widened from the CHECK constraints in 066 rather than from memory. */
+interface Policy {
+  approval_chain: Chain
+  who_can_finalise: Finaliser
+  final_review_one_to_one: boolean
+}
 interface Overall {
   workflow_status?: string | null
   self_score?: number | null
@@ -112,6 +120,10 @@ function usePeriod(employeeId: string) {
    *  constant: the hardcoded list and pms_rating_scale disagreed, and the
    *  hardcoded one was winning. */
   const [bands, setBands] = useState<Band[]>([])
+  /** This period's policy workflow rules. Null until loaded, and null when the
+   *  period has no policy — in which case pms_finalise refuses outright (188),
+   *  so the screens fall back to the schema defaults purely to render. */
+  const [policy, setPolicy] = useState<Policy | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -130,12 +142,31 @@ function usePeriod(employeeId: string) {
     setManagerId(row?.l1_manager_id ?? null)
 
     let q = supabase.from('pms_periods')
-      .select('id,period_code,status')
+      .select('id,period_code,status,policy_id')
       .not('status', 'in', '("CLOSED","SCHEDULED")')
     if (companyId) q = q.eq('company_id', companyId)
     const p = await q.order('period_start', { ascending: false }).limit(1).maybeSingle()
     if (p.error || !p.data) { setPeriod(null); setOverall(null); setLoading(false); return }
     setPeriod(p.data as Period)
+
+    // THE WORKFLOW RULES OF THIS PERIOD'S POLICY, not a constant.
+    //
+    // approval_chain and who_can_finalise are both columns an admin can set,
+    // with four and three legal values. The finalise screen was passing the
+    // schema defaults as literals, so a company on HOD_ONLY was still shown
+    // RM L2 as a finaliser, and a company on SELF_RM1 was told to wait for an
+    // RM L2 the chain does not contain. pms_finalise reads the real policy and
+    // would have refused — the screen would simply have disagreed with it.
+    const pid = (p.data as { policy_id?: string }).policy_id
+    if (pid) {
+      const po = await supabase.from('pms_policies')
+        .select('approval_chain,who_can_finalise,final_review_one_to_one')
+        .eq('id', pid).maybeSingle()
+      if (po.error) console.error('[pms] could not read the policy:', po.error)
+      setPolicy(po.error ? null : (po.data as Policy | null))
+    } else {
+      setPolicy(null)
+    }
 
     const o = await supabase.from('pms_overall_rating')
       .select('workflow_status,self_score,final_rating,final_rating_code,is_readonly')
@@ -156,7 +187,7 @@ function usePeriod(employeeId: string) {
   }, [employeeId])
 
   useEffect(() => { reload() }, [reload])
-  return { period, overall, loading, reload, companyId, managerId, bands }
+  return { period, overall, loading, reload, companyId, managerId, bands, policy }
 }
 
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
@@ -629,13 +660,24 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
     // always. pms_lock_kras asks the real question: a KRA_SETTING discussion
     // acknowledged by BOTH sides. Asking it the same way here means the screen
     // and the database agree about who is waiting on whom.
+    // Both discussion types in one read, because the finalise gate needs the
+    // FINAL_REVIEW one the same way the weightage lock needs the KRA_SETTING
+    // one: pms_finalise refuses outright without it when the policy asks for
+    // it, so a screen that does not look leaves the HOD guessing.
     const { data: talks } = await supabase.from('pms_one_to_one')
-      .select('employee_id,employee_ack,manager_ack')
-      .eq('period_id', period.id).eq('discussion_type', 'KRA_SETTING')
+      .select('employee_id,discussion_type,employee_ack,manager_ack')
+      .eq('period_id', period.id)
+      .in('discussion_type', ['KRA_SETTING', 'FINAL_REVIEW'])
       .in('employee_id', ids)
-    const bothAcked = new Set((talks ?? [])
-      .filter(t => (t as { employee_ack?: boolean }).employee_ack
+    const ackedOf = (kind: string) => new Set((talks ?? [])
+      .filter(t => (t as { discussion_type?: string }).discussion_type === kind
+                && (t as { employee_ack?: boolean }).employee_ack
                 && (t as { manager_ack?: boolean }).manager_ack)
+      .map(t => String((t as { employee_id: string }).employee_id)))
+    const bothAcked = ackedOf('KRA_SETTING')
+    const finalAcked = ackedOf('FINAL_REVIEW')
+    const finalLogged = new Set((talks ?? [])
+      .filter(t => (t as { discussion_type?: string }).discussion_type === 'FINAL_REVIEW')
       .map(t => String((t as { employee_id: string }).employee_id)))
 
     setRows(data.map(d => {
@@ -650,6 +692,8 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
         kraCount: g.n,
         totalWeightage: g.wt,
         oneToOneDone: bothAcked.has(String(d.employee_id)),
+        finalReviewDone: finalAcked.has(String(d.employee_id)),
+        finalReviewLogged: finalLogged.has(String(d.employee_id)),
         selfSubmitted: d.self_score != null,
         selfScore: d.self_score == null ? null : Number(d.self_score),
         rmL1Score: d.rm_l1_score == null ? null : Number(d.rm_l1_score),
@@ -787,6 +831,40 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       setMsg('Acknowledged, and their weightages are locked.')
     }
     reload(); reloadRoster()
+  }
+
+  /**
+   * THE OTHER ONE-TO-ONE THE CYCLE CANNOT FINISH WITHOUT.
+   *
+   * Where the policy sets final_review_one_to_one — the schema default, and
+   * true for every company in the database — pms_finalise refuses until a
+   * FINAL_REVIEW discussion exists with BOTH acknowledgements. The employee
+   * logs it and self-acks in one step; nothing anywhere could supply the
+   * manager's half, so the final gate was unopenable and the cycle had no
+   * ending. Observed live: Arjun Malhotra's finalise returned "BLOCKED: final
+   * review one-to-one not logged" with no screen able to clear it.
+   *
+   * No lock call here — that belongs to the KRA discussion, which is what
+   * freezes weightages. This one only records that the conversation happened.
+   */
+  const acknowledgeFinalReview = async (id: string) => {
+    setSaving(true); setMsg(null)
+    const ack = await supabase.from('pms_one_to_one')
+      .update({ manager_ack: true, manager_ack_at: new Date().toISOString() })
+      .eq('employee_id', id).eq('period_id', period!.id)
+      .eq('discussion_type', 'FINAL_REVIEW')
+      .select('id')
+    setSaving(false)
+    if (ack.error) {
+      console.error('[pms] final review acknowledge refused:', ack.error)
+      setMsg(SAVE_FAILED('acknowledgement')); return
+    }
+    if (!ack.data?.length) {
+      setMsg('There is no final review discussion logged for them yet, so there is nothing to acknowledge. They log it from their own One-to-One Log.')
+      return
+    }
+    setMsg('Final review acknowledged. The HOD can settle their rating now.')
+    reloadRoster()
   }
 
   /** Hand the set back for the employee to rebuild. Their own screen reads
@@ -927,7 +1005,8 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
       {tab === 'team' && <TeamTab members={rows} today={today} managerName="your team" />}
       {tab === 'approve' && <ApproveTab members={rows} today={today}
-                                        onAcknowledge={acknowledge} onSendBack={sendBack} />}
+                                        onAcknowledge={acknowledge} onSendBack={sendBack}
+                                        onAcknowledgeFinalReview={acknowledgeFinalReview} />}
       {tab === 'rate' && (
         <RateTab bands={bands.length ? bands : undefined}
                  members={rows} onPick={setPicked} today={today}
@@ -946,22 +1025,63 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
 }
 
 function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
-  const { period, loading: pLoading, bands } = usePeriod(employeeId)
-  const { rows, loading } = useRoster(employeeId, period, 'hod')
+  const { period, loading: pLoading, bands, policy } = usePeriod(employeeId)
+  const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'hod')
   const [picked] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
   const today = localToday()
   const member = rows.find(r => r.employeeId === picked) ?? null
+
+  /**
+   * §5.1 — the HOD signs off. This is the last gate in the cycle and the one
+   * that makes a rating real: pms_overall_rating goes to FINALISED, final_score
+   * is written, and an exited employee's record becomes permanently read-only.
+   *
+   * 'HOD' is not a self-assertion here. useRoster's hod scope selects on
+   * hod_id = employeeId, so every row on this screen already names the viewer
+   * as its HOD in the FROZEN chain — which is the same column pms_finalise
+   * checks before it will do anything. A mismatch is therefore impossible by
+   * construction, and if it somehow happened the function refuses and says so.
+   */
+  const finalise = async (id: string, rating: number) => {
+    if (!period) return
+    setSaving(true); setMsg(null)
+    const r = await supabase.rpc('pms_finalise', {
+      p_employee_id: id, p_period_id: period.id,
+      p_actor_id: employeeId, p_actor_role: 'HOD',
+      p_rating: rating, p_reason: null,
+    })
+    setSaving(false)
+    if (r.error) {
+      console.error('[pms] pms_finalise failed:', r.error)
+      setMsg(SAVE_FAILED('final rating')); return
+    }
+    // 188 returns a sentence written for the person reading this screen —
+    // which rung is missing, whose chain it is. Paraphrasing it here would
+    // only lose the detail that tells them what to do next.
+    if (typeof r.data === 'string' && r.data.startsWith('BLOCKED')) {
+      setMsg(`Not finalised — ${r.data.replace(/^BLOCKED:\s*/, '')}`)
+    } else {
+      setMsg('Finalised. Their rating is settled for this period.')
+    }
+    reloadRoster()
+  }
 
   if (pLoading || loading) return <div className="k">Loading…</div>
   if (!period) return <NoPeriod />
 
   return (
     <>
+      {msg && <div className="card" style={{ marginBottom: 10 }}>{msg}</div>}
       {tab === 'finalise' && (
         <FinaliseTab bands={bands.length ? bands : undefined}
                      members={rows} today={today} role="HOD"
-                     chain="SELF_RM1_RM2_HOD" whoCanFinalise="RM1_RM2_HOD"
-                     deptName="your department" />
+                     chain={policy?.approval_chain ?? 'SELF_RM1_RM2_HOD'}
+                     whoCanFinalise={policy?.who_can_finalise ?? 'RM1_RM2_HOD'}
+                     finalReviewRequired={policy?.final_review_one_to_one ?? false}
+                     deptName="your department"
+                     onFinalise={finalise} saving={saving} />
       )}
       {tab === 'feedback' && (
         <FeedbackTab bands={bands.length ? bands : undefined}
