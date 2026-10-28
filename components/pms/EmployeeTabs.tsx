@@ -507,9 +507,13 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
 
 // ── §3.3 One-to-One Log ──────────────────────────────────────────────────
 
-export function OneToOneTab({ logs, managerName, onLog, saving, kras = [] }: {
+export function OneToOneTab({ logs, managerName, onLog, onAcknowledge, saving, kras = [] }: {
   logs: Log[]; managerName: string
   onLog?: (l: Log) => void; saving?: boolean
+  /** Acknowledge a discussion somebody else logged. Without this the
+   *  employee's half of a manager-logged final review could never be given,
+   *  and pms_finalise requires both halves. */
+  onAcknowledge?: (logId: string) => void
   /** The current KRA set, so an agreed weightage change can name the KRA it
    *  applies to rather than asking the employee to remember a seq_no. */
   kras?: { seq_no: number; kra_title: string; weightage: number }[]
@@ -593,9 +597,22 @@ export function OneToOneTab({ logs, managerName, onLog, saving, kras = [] }: {
                         </ul>
                       )}
                     </td>
+                    {/* A BUTTON, NOT A LABEL, when it is the employee's turn.
+                        This column showed a dead "not yet" pill, and nothing
+                        anywhere let an employee acknowledge a discussion that
+                        somebody ELSE had logged — the employee's own form sets
+                        employee_ack as it inserts, so the only acknowledged
+                        rows were ones they created. A manager-logged final
+                        review could therefore never collect the employee's
+                        half, and pms_finalise needs both. */}
                     <td>{l.employee_ack
                       ? <span className="pill p-green">✓ acknowledged</span>
-                      : <span className="pill p-grey">not yet</span>}</td>
+                      : onAcknowledge && l.id
+                        ? <button className="btn sm" type="button" disabled={saving}
+                                  onClick={() => onAcknowledge(l.id!)}>
+                            Acknowledge
+                          </button>
+                        : <span className="pill p-grey">not yet</span>}</td>
                     <td>{l.manager_ack
                       ? <span className="pill p-green">✓ acknowledged</span>
                       : <span className="pill p-grey">not yet</span>}</td>

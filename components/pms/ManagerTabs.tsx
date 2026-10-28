@@ -872,7 +872,9 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
 // ── §5.1 Review & Finalise ───────────────────────────────────────────────
 
 export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName, bands = DEFAULT_BANDS,
-                              onFinalise, onNudge, saving, finalReviewRequired = false, flagRules}: {
+                              onFinalise, onNudge, onLogFinalReview,
+                              onAcknowledgeFinalReview, saving,
+                              finalReviewRequired = false, flagRules}: {
   /**
    * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
    *
@@ -891,6 +893,11 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
   finalReviewRequired?: boolean
   onFinalise?: (id: string, rating: number) => void
   onNudge?: (id: string) => void
+  /** Create the final-review one-to-one and tick the manager's half. The gate
+   *  pms_finalise enforces had no door on this side at all — see the action
+   *  cell below. */
+  onLogFinalReview?: (id: string) => void
+  onAcknowledgeFinalReview?: (id: string) => void
   saving?: boolean
   /** The configured rating scale; falls back to the built-in list. */
   bands?: Band[]
@@ -979,6 +986,40 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                                 onClick={() => onNudge?.(r.member.employeeId)}>
                           Nudge RM L2
                         </button>
+                      ) : finalReviewRequired && !r.member.finalReviewDone ? (
+                        /* THE DEAD END THIS REPLACES. When the final-review
+                           one-to-one was the only thing blocking a rating,
+                           this cell printed insteadDo as plain text and
+                           offered nothing — and the ONLY code in the product
+                           that could create that row was the employee's own
+                           one-to-one form. A HOD with every other gate
+                           satisfied was stuck for good, and the message told
+                           them to go and ask the employee to log a meeting the
+                           HOD runs. Observed on Anil Verma (STC9030).
+
+                           §2's matrix has always granted log_one_to_one to
+                           RM L1, RM L2 and HOD. Only the button was missing.
+
+                           Three states, because one button cannot serve them:
+                           nothing logged, logged and awaiting MY tick, and
+                           logged with my tick and awaiting theirs. */
+                        !r.member.finalReviewLogged ? (
+                          <button className="btn sm" type="button"
+                                  disabled={!onLogFinalReview || saving}
+                                  onClick={() => onLogFinalReview?.(r.member.employeeId)}>
+                            Log final review
+                          </button>
+                        ) : !r.member.finalReviewMgrAcked ? (
+                          <button className="btn sm" type="button"
+                                  disabled={!onAcknowledgeFinalReview || saving}
+                                  onClick={() => onAcknowledgeFinalReview?.(r.member.employeeId)}>
+                            Acknowledge it
+                          </button>
+                        ) : (
+                          <span className="k">
+                            Waiting on {r.member.name.split(' ')[0]} to acknowledge the final review
+                          </span>
+                        )
                       ) : <span className="k">{r.insteadDo}</span>}
                   </td>
                 </tr>

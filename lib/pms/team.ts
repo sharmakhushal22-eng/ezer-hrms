@@ -62,6 +62,15 @@ export interface TeamMember extends Employment {
   sentBackTo?: string | null
   sentBackReason?: string | null
   /**
+   * Whether the MANAGER's half of the final-review one-to-one is on record.
+   *
+   * finalReviewDone means BOTH sides acknowledged — which is what pms_finalise
+   * requires — and finalReviewLogged means a row exists at all. Neither
+   * distinguishes "I have acknowledged and am waiting on them" from "it is my
+   * turn", and a queue that cannot tell those apart offers the wrong button.
+   */
+  finalReviewMgrAcked?: boolean
+  /**
    * Has the FINAL_REVIEW one-to-one been held AND acknowledged by both sides?
    *
    * Only meaningful where the policy sets final_review_one_to_one, which is
@@ -229,11 +238,21 @@ export function finaliseQueue<T extends TeamMember>(
     else if (waiting) insteadDo = 'RM L2 has not submitted. Nudge them. Finalising now would skip a step of the chain.'
     // LAST, because pms_finalise checks it last — the screen and the function
     // have to block in the same order or they will name different causes for
-    // the same stuck row. Reported up front rather than after a failed press:
-    // 188 refuses with "final review one-to-one not logged", which is a fine
-    // sentence to read, but a worse one to discover by pressing a button that
-    // looked available.
-    else if (needsFinalReview) insteadDo = 'The final review one-to-one is not logged and acknowledged by both sides yet. This policy requires it before the rating can be settled.'
+    // the same stuck row. Reported up front rather than after a failed press.
+    //
+    // THIS ONE IS NOW ACTIONABLE, and it was not. 188 refused with "final
+    // review one-to-one not logged", and for a long time the only code in the
+    // product that could create that row was the employee's own one-to-one
+    // form — so a HOD read a true sentence about a gate they had no way to
+    // open. Observed on Anil Verma (STC9030): every other condition satisfied,
+    // permanently stuck. The Finalise tab now offers "Log final review" on
+    // exactly these rows (§2's matrix always permitted it), 198 rewrote the
+    // refusal to say who can do what, and this text says whose turn it is.
+    else if (needsFinalReview) insteadDo = r.member.finalReviewLogged
+      ? (r.member.finalReviewMgrAcked
+          ? 'Waiting on them to acknowledge the final review one-to-one.'
+          : 'The final review is logged. Acknowledge it to settle the rating.')
+      : 'No final review one-to-one yet. Log it here, or ask them to log it — this policy needs both of you to acknowledge it before the rating can be settled.'
     return {
       ...r,
       canFinalise: allowed && !waiting && !needsFinalReview

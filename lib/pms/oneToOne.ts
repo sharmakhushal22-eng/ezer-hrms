@@ -55,6 +55,13 @@ export interface WeightageChange {
 }
 
 export interface Log {
+  /**
+   * The row's own id. Already selected by every caller and simply never
+   * carried on the type, which meant a screen could display a discussion but
+   * not act on a specific one — so an acknowledgement had to be addressed by
+   * (employee, period, type) and would hit every row of that type at once.
+   */
+  id?: string
   discussion_type: DiscussionType
   discussion_date?: string | null
   mode?: Mode | null

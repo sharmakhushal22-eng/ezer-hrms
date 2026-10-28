@@ -243,6 +243,69 @@ function usePeriod(employeeId: string) {
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
  *  yesterday for anybody east of Greenwich after 05:30 IST, and these dates
  *  decide whether a window is open. */
+/**
+ * Create the FINAL_REVIEW one-to-one, from the manager's or HOD's side.
+ *
+ * AT MODULE SCOPE because both sides need it and it must behave identically
+ * on each. The RM surface and the HOD surface are separate components, and
+ * the first version of this fix lived inside the RM one — where the HOD, the
+ * person actually blocked, could not reach it.
+ *
+ * THE DEAD END THIS REMOVES. pms_finalise refuses until a FINAL_REVIEW
+ * discussion exists with BOTH acknowledgements, and the only code anywhere
+ * that could create such a row was the employee's own one-to-one form. The
+ * manager's acknowledge path can add a tick to an existing row; it cannot
+ * bring one into being. So if the employee never logged a final review, the
+ * HOD was blocked permanently, and the screen told them to go and ask the
+ * employee to log it — for a meeting the HOD runs.
+ *
+ * Observed live, and what prompted it: Anil Verma (STC9030) had four locked
+ * KRAs totalling 100, SELF, RM L1 and RM L2 ratings all in, and chain_stage
+ * HOD. Kiran Patel is his frozen HOD and the policy is HOD_ONLY, so every
+ * gate was satisfied except this one — and nothing in the product could
+ * satisfy it.
+ *
+ * ALREADY PERMITTED: §2's matrix gives log_one_to_one to RM L1, RM L2 and HOD
+ * as well as the employee — [Y, Y, Y, Y, N, N, N]. The right was always
+ * there; only the button was missing.
+ *
+ * The manager's own tick goes on as it is created, because logging it IS the
+ * manager asserting the conversation happened. The employee still has to
+ * acknowledge — so this does not let a HOD finalise unilaterally, it gives a
+ * two-party gate its second door.
+ */
+async function insertFinalReview(o: {
+  companyId: string; periodId: string; employeeId: string
+  managerId: string; today: string; points: string
+}): Promise<'CREATED' | 'ALREADY' | 'ERROR'> {
+  // Don't create a second row. The finalise gate counts rows with both acks so
+  // a duplicate would not break it, but two records of one meeting is a mess
+  // in the log and the employee would not know which to acknowledge.
+  const existing = await supabase.from('pms_one_to_one')
+    .select('id').eq('employee_id', o.employeeId).eq('period_id', o.periodId)
+    .eq('discussion_type', 'FINAL_REVIEW').limit(1)
+  if (existing.data?.length) return 'ALREADY'
+
+  // manager_id is NOT NULL: the row names both people. Here the other party is
+  // the viewer, who is the manager or HOD holding the conversation.
+  // mode is constrained to IN_PERSON / VIDEO / PHONE by 066.
+  const { error } = await supabase.from('pms_one_to_one').insert({
+    company_id: o.companyId, manager_id: o.managerId,
+    period_id: o.periodId, employee_id: o.employeeId,
+    discussion_type: 'FINAL_REVIEW',
+    discussion_date: o.today,
+    mode: 'IN_PERSON',
+    discussion_points: o.points.trim() || 'Final review discussion held.',
+    manager_ack: true, manager_ack_at: new Date().toISOString(),
+  })
+  if (error) { console.error('[pms] final review log refused:', error); return 'ERROR' }
+  return 'CREATED'
+}
+
+const FINAL_REVIEW_LOGGED =
+  'Final review logged and acknowledged by you. They acknowledge it from their '
+  + 'own One-to-One Log, and then the rating can be settled.'
+
 function localToday(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -922,6 +985,33 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     loadPeriodData()
   }
 
+  /**
+   * THE EMPLOYEE'S HALF OF SOMEBODY ELSE'S LOG.
+   *
+   * logDiscussion above sets employee_ack as it inserts, so the only
+   * acknowledged rows were ones the employee created themselves. A discussion
+   * logged by a manager or HOD could never collect the employee's tick — and
+   * pms_finalise requires BOTH, so a manager-logged final review would have
+   * been a new dead end replacing the old one.
+   *
+   * Addressed by row id, not by discussion type: acking by type would tick
+   * every discussion of that type at once, which is wrong the moment there is
+   * more than one KRA_SETTING conversation in a period.
+   */
+  const acknowledgeDiscussion = async (logId: string) => {
+    setSaving(true); setMsg(null)
+    const { error } = await supabase.from('pms_one_to_one')
+      .update({ employee_ack: true, employee_ack_at: new Date().toISOString() })
+      .eq('id', logId).eq('employee_id', employeeId)
+    setSaving(false)
+    if (error) {
+      console.error('[pms] discussion acknowledge refused:', error)
+      setMsg(SAVE_FAILED('acknowledgement')); return
+    }
+    setMsg('Acknowledged.')
+    loadPeriodData(); reload()
+  }
+
   return (
     <>
       {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
@@ -969,7 +1059,8 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       {tab === 'oneToOne' && (
         <OneToOneTab kras={kras.map(k => ({ seq_no: k.seq_no, kra_title: k.kra_title, weightage: k.weightage }))}
                      logs={logs} managerName="your manager"
-                     onLog={logDiscussion} saving={saving} />
+                     onLog={logDiscussion} onAcknowledge={acknowledgeDiscussion}
+                     saving={saving} />
       )}
       {tab === 'self' && (
         !locked
@@ -1096,6 +1187,12 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
     const finalLogged = new Set((talks ?? [])
       .filter(t => (t as { discussion_type?: string }).discussion_type === 'FINAL_REVIEW')
       .map(t => String((t as { employee_id: string }).employee_id)))
+    // The manager's half on its own, so the queue can tell "my turn" from
+    // "waiting on them" and offer the right button rather than a dead label.
+    const finalMgrAcked = new Set((talks ?? [])
+      .filter(t => (t as { discussion_type?: string }).discussion_type === 'FINAL_REVIEW'
+                && (t as { manager_ack?: boolean }).manager_ack)
+      .map(t => String((t as { employee_id: string }).employee_id)))
 
     setRows(data.map(d => {
       const e = byId.get(d.employee_id)
@@ -1130,6 +1227,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
         oneToOneDone: bothAcked.has(String(d.employee_id)),
         finalReviewDone: finalAcked.has(String(d.employee_id)),
         finalReviewLogged: finalLogged.has(String(d.employee_id)),
+        finalReviewMgrAcked: finalMgrAcked.has(String(d.employee_id)),
         selfSubmitted: d.self_score != null,
         selfScore: d.self_score == null ? null : Number(d.self_score),
         rmL1Score: d.rm_l1_score == null ? null : Number(d.rm_l1_score),
@@ -1290,6 +1388,47 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    * No lock call here — that belongs to the KRA discussion, which is what
    * freezes weightages. This one only records that the conversation happened.
    */
+  /**
+   * LOG the final review, from the manager's or HOD's side.
+   *
+   * THE DEAD END THIS REMOVES. pms_finalise refuses until a FINAL_REVIEW
+   * discussion exists with BOTH acknowledgements, and until now the ONLY code
+   * anywhere that could create such a row was the employee's own one-to-one
+   * form. acknowledgeFinalReview below can add the manager's tick to an
+   * existing row; it cannot bring one into being. So if the employee never
+   * logged a final review, the HOD was blocked permanently and the screen told
+   * them to go and ask the employee to log it — for a meeting the HOD runs.
+   *
+   * Observed live, and this is what prompted it: Anil Verma (STC9030) had four
+   * locked KRAs totalling 100, SELF, RM L1 and RM L2 ratings all in, and
+   * chain_stage HOD. Kiran Patel is his frozen HOD and the policy is HOD_ONLY,
+   * so every gate was satisfied except this one — and there was no screen in
+   * the product that could satisfy it.
+   *
+   * ALREADY PERMITTED: §2's matrix gives log_one_to_one to RM L1, RM L2 and
+   * HOD as well as the employee — [Y, Y, Y, Y, N, N, N]. The right to do this
+   * was always there; only the button was missing.
+   *
+   * The manager's own tick goes on at the same time, because logging it IS the
+   * manager asserting the conversation happened. The employee still has to
+   * acknowledge, which is the point of a two-party record — so this does not
+   * let a HOD finalise unilaterally, it gives the gate a second door.
+   */
+  /** See insertFinalReview at module scope for why this exists. */
+  const logFinalReview = async (id: string, points: string) => {
+    if (!companyId) { setMsg(NO_COMPANY); return }
+    setSaving(true); setMsg(null)
+    const r = await insertFinalReview({
+      companyId, periodId: period!.id, employeeId: id,
+      managerId: employeeId, today, points,
+    })
+    setSaving(false)
+    setMsg(r === 'CREATED' ? FINAL_REVIEW_LOGGED
+         : r === 'ALREADY' ? 'A final review is already logged for them. Acknowledge that one instead.'
+         : SAVE_FAILED('final review'))
+    reload(); reloadRoster()
+  }
+
   const acknowledgeFinalReview = async (id: string) => {
     setSaving(true); setMsg(null)
     const ack = await supabase.from('pms_one_to_one')
@@ -1303,10 +1442,14 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       setMsg(SAVE_FAILED('acknowledgement')); return
     }
     if (!ack.data?.length) {
-      setMsg('There is no final review discussion logged for them yet, so there is nothing to acknowledge. They log it from their own One-to-One Log.')
+      // No longer a dead end: logFinalReview above can create the row, and the
+      // Finalise tab offers it on exactly these rows.
+      setMsg('There is no final review discussion logged for them yet. Log it '
+           + 'yourself from the Review & Finalise tab, or ask them to log it '
+           + 'from their One-to-One Log.')
       return
     }
-    setMsg('Final review acknowledged. The HOD can settle their rating now.')
+    setMsg('Final review acknowledged. Once they have acknowledged it too, the rating can be settled.')
     reloadRoster()
   }
 
@@ -1604,6 +1747,51 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
   const today = localToday()
   const member = rows.find(r => r.employeeId === picked) ?? null
 
+  /**
+   * THE DOOR THE HOD DID NOT HAVE. pms_finalise refuses until the
+   * final-review one-to-one carries both acknowledgements, and nothing on the
+   * HOD's side could create that row or even tick their own half — the
+   * Finalise queue printed the blocker as plain text. So a HOD with every
+   * other gate satisfied was permanently stuck. Both handlers live here now,
+   * next to the queue that needs them.
+   *
+   * See insertFinalReview at module scope for why this is allowed: §2's matrix
+   * grants log_one_to_one to the HOD.
+   */
+  const logFinalReview = async (id: string) => {
+    if (!companyId) { setMsg(NO_COMPANY); return }
+    setSaving(true); setMsg(null)
+    const r = await insertFinalReview({
+      companyId, periodId: period!.id, employeeId: id,
+      managerId: employeeId, today, points: '',
+    })
+    setSaving(false)
+    setMsg(r === 'CREATED' ? FINAL_REVIEW_LOGGED
+         : r === 'ALREADY' ? 'A final review is already logged for them. Acknowledge that one instead.'
+         : SAVE_FAILED('final review'))
+    reloadRoster()
+  }
+
+  const acknowledgeFinalReview = async (id: string) => {
+    setSaving(true); setMsg(null)
+    const ack = await supabase.from('pms_one_to_one')
+      .update({ manager_ack: true, manager_ack_at: new Date().toISOString() })
+      .eq('employee_id', id).eq('period_id', period!.id)
+      .eq('discussion_type', 'FINAL_REVIEW')
+      .select('id')
+    setSaving(false)
+    if (ack.error) {
+      console.error('[pms] final review acknowledge refused:', ack.error)
+      setMsg(SAVE_FAILED('acknowledgement')); return
+    }
+    if (!ack.data?.length) {
+      setMsg('There is no final review logged for them yet. Use “Log final review” on that row.')
+      return
+    }
+    setMsg('Acknowledged. Once they acknowledge it too, you can settle the rating.')
+    reloadRoster()
+  }
+
   /** What the HOD is writing, and the one-to-ones that decide whether it can
    *  be published. Reloaded whenever the picked person changes — keeping one
    *  draft across two employees is how feedback ends up on the wrong record. */
@@ -1770,7 +1958,10 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
                      whoCanFinalise={policy?.who_can_finalise ?? 'RM1_RM2_HOD'}
                      finalReviewRequired={policy?.final_review_one_to_one ?? false}
                      deptName="your department"
-                     onFinalise={finalise} saving={saving} />
+                     onFinalise={finalise}
+                     onLogFinalReview={logFinalReview}
+                     onAcknowledgeFinalReview={acknowledgeFinalReview}
+                     saving={saving} />
       )}
       {tab === 'feedback' && (
         <>

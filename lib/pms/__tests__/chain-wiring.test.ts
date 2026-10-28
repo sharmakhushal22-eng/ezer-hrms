@@ -166,12 +166,25 @@ test('HR has a publish screen, reachable through a seeded permission', () => {
     + 'is bypassed and the publish tab will be invisible')
 })
 
-test('the publish queue reads chain_stage, not workflow_status', () => {
-  // FINALISED says a rating exists; stage HR says nobody below still holds
-  // it. Reading the status would list appraisals settled but still sitting
-  // with a HOD who has not passed them on.
-  assert.match(PAGE, /\.in\('chain_stage',\s*\['HR',\s*'DONE'\]\)/,
-    'the publish queue does not filter on chain_stage')
+test('the publish queue cannot miss a settled rating', () => {
+  // THIS ASSERTION WAS BACKWARDS AT FIRST. It demanded a chain_stage IN
+  // ('HR','DONE') filter, which reads naturally and silently drops every row
+  // finalised before 197 existed: their chain_stage is NULL, and an IN filter
+  // does not match NULL. Nikhil Reddy (SRS9088) is finalised with a null
+  // stage, and his rating was invisible to the only screen that can release
+  // it — a test enforcing the bug.
+  //
+  // workflow_status is the honest question: FINALISED is exactly when HR may
+  // publish, whatever route the rating took and whenever it was settled.
+  assert.match(PAGE,
+    /\.in\('workflow_status',\s*\['FINALISED',\s*'PUBLISHED',\s*'ACKNOWLEDGED'\]\)/,
+    'the publish queue does not select on workflow_status, so it can miss '
+    + 'settled ratings whose chain_stage is NULL or was never advanced')
+  // And it must NOT narrow by chain_stage, which would reintroduce the hole.
+  const q = PAGE.slice(PAGE.indexOf('const pub = await supabase'),
+                       PAGE.indexOf('const pub = await supabase') + 600)
+  assert.ok(!/\.in\('chain_stage'/.test(q),
+    'the publish queue filters on chain_stage again, excluding NULL-stage rows')
 })
 
 test('HR cannot change a rating or a KRA from the publish screen', () => {
@@ -228,4 +241,87 @@ test('the HOD publish path also closes the stage out', () => {
   const st = PERF.slice(PERF.indexOf("workflow_status: 'PUBLISHED'"))
   assert.match(st.slice(0, 200), /chain_stage: 'DONE'/,
     'the manager-side publish leaves the chain stage behind')
+})
+
+// ── the final-review gate must be openable from BOTH sides ───────────────
+
+test('a manager or HOD can LOG the final review, not only acknowledge one', () => {
+  // THE BUG: pms_finalise refuses until a FINAL_REVIEW one-to-one carries both
+  // acknowledgements, and the ONLY code that could create that row was the
+  // employee's own one-to-one form. The manager's acknowledge path updates an
+  // existing row; it cannot bring one into being. So a HOD with every other
+  // gate satisfied was blocked permanently and told to go ask the employee to
+  // log a meeting the HOD runs. Observed on Anil Verma (STC9030).
+  assert.match(PERF, /async function insertFinalReview/,
+    'nothing can create a FINAL_REVIEW row from the manager side')
+  // At MODULE scope, because the RM surface and the HOD surface are separate
+  // components and the first version of this fix lived inside the RM one —
+  // where the HOD, the person actually blocked, could not reach it.
+  const fnAt = PERF.indexOf('async function insertFinalReview')
+  const firstComponent = PERF.indexOf('function usePeriod')
+  assert.ok(fnAt < firstComponent || /^async function insertFinalReview/m.test(PERF),
+    'insertFinalReview is nested inside a component, so only one surface has it')
+  // Both surfaces must call it.
+  const calls = [...PERF.matchAll(/insertFinalReview\(\{/g)]
+  assert.ok(calls.length >= 2,
+    `only ${calls.length} surface(s) can log a final review; the RM and HOD sides both need it`)
+  // And it must set the manager's own tick as it creates the row — logging it
+  // IS the manager asserting the conversation happened.
+  const body = PERF.slice(fnAt, fnAt + 2500)
+  assert.match(body, /manager_ack: true/)
+  // It must NOT set the employee's tick: a two-party gate the manager can
+  // satisfy alone is not a gate.
+  assert.ok(!/employee_ack: true/.test(body),
+    'logging from the manager side also ticks the employee — that lets a HOD '
+    + 'satisfy a two-party gate unilaterally')
+})
+
+test('the employee can acknowledge a one-to-one somebody else logged', () => {
+  // The other half. The employee's own form sets employee_ack as it inserts,
+  // so the only acknowledged rows were ones they created — a manager-logged
+  // final review could never collect the employee's tick, and pms_finalise
+  // needs both. Without this the fix above just moves the dead end.
+  assert.match(PERF, /const acknowledgeDiscussion = async/,
+    'the employee cannot acknowledge a discussion they did not log')
+  assert.match(PERF, /onAcknowledge=\{acknowledgeDiscussion\}/,
+    'the handler is never wired to the one-to-one tab')
+  assert.match(EMP, /onClick=\{\(\) => onAcknowledge\(l\.id!\)\}/,
+    'the one-to-one log has no acknowledge control')
+  // By ROW ID. Acking by discussion_type would tick every discussion of that
+  // type at once, which is wrong the moment a period has two of them.
+  const h = PERF.slice(PERF.indexOf('const acknowledgeDiscussion'),
+                       PERF.indexOf('const acknowledgeDiscussion') + 800)
+  assert.match(h, /\.eq\('id', logId\)/,
+    'the acknowledgement is not addressed to a single row')
+})
+
+test('the finalise queue offers an action instead of a dead label', () => {
+  // The cell used to render insteadDo as plain text when the final review was
+  // the blocker — a true sentence about a gate with no door.
+  assert.match(MGR, /onLogFinalReview\?\.\(r\.member\.employeeId\)/,
+    'the finalise queue has no Log final review action')
+  assert.match(MGR, /onAcknowledgeFinalReview\?\.\(r\.member\.employeeId\)/,
+    'the finalise queue has no acknowledge action')
+  // Three distinct states; one button cannot serve them.
+  assert.match(MGR, /!r\.member\.finalReviewLogged \? \(/)
+  assert.match(MGR, /!r\.member\.finalReviewMgrAcked \? \(/)
+  // And the HOD surface must pass both handlers, since that is who gets stuck.
+  assert.match(PERF, /onLogFinalReview=\{logFinalReview\}/)
+  assert.match(PERF, /onAcknowledgeFinalReview=\{acknowledgeFinalReview\}/)
+})
+
+test('finalising hands the appraisal to HR, whichever path was used', () => {
+  // Found while proving the fix: Anil Verma came out FINALISED with
+  // chain_stage still 'HOD', and HR's publish queue reads chain_stage IN
+  // ('HR','DONE') — so a settled rating was invisible to the only screen that
+  // could release it. Fixed in pms_finalise itself, because the HOD tab, the
+  // bulk upload and HR's override all call it.
+  const sql = readFileSync(
+    join(process.cwd(), 'supabase/migrations/198_pms_finalise_hands_over_to_hr.sql'),
+    'utf8')
+  assert.match(sql, /chain_stage\s*=\s*CASE WHEN chain_stage = 'DONE'/,
+    '198 does not advance the stage on finalise')
+  // 'HR', never straight to 'DONE' — publishing is HR's separate act, and a
+  // finalise that jumped to DONE would publish by accident.
+  assert.match(sql, /ELSE 'HR' END/)
 })

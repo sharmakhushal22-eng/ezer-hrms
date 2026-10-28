@@ -314,10 +314,32 @@ export default function PmsPage() {
        * vanishes the instant it is released and HR cannot tell a successful
        * publish from a failed one.
        */
+      /**
+       * SELECTED ON workflow_status, NOT chain_stage.
+       *
+       * The first version filtered chain_stage IN ('HR','DONE'), which reads
+       * naturally and misses two whole classes of row:
+       *
+       *   * anything finalised BEFORE 197 existed has chain_stage NULL. Nikhil
+       *     Reddy (SRS9088) is finalised with a null stage, and an IN filter
+       *     does not match NULL — so his settled rating was invisible to the
+       *     only screen that can release it.
+       *   * anything finalised through a path that did not move the stage.
+       *     198 fixes that going forward, but a migration cannot reach rows
+       *     that were already wrong.
+       *
+       * workflow_status is the honest question: FINALISED means a rating
+       * exists and is settled, which is exactly when HR may publish it, and
+       * PUBLISHED/ACKNOWLEDGED are the already-released rows the tab lists
+       * underneath. chain_stage then only decides which of the two lists a row
+       * falls into, which it does correctly whether it is NULL or not.
+       */
       const pub = await supabase.from('pms_overall_rating')
         .select('employee_id, final_rating, final_rating_code, finalised_by_role,'
               + 'finalised_at, chain_stage, workflow_status')
-        .eq('period_id', row.id).in('chain_stage', ['HR', 'DONE']).limit(2000)
+        .eq('period_id', row.id)
+        .in('workflow_status', ['FINALISED', 'PUBLISHED', 'ACKNOWLEDGED'])
+        .limit(2000)
       if (pub.error) {
         // Before 197 is applied there is no chain_stage column at all, and
         // that is a waiting state rather than a fault: every other tab works.
