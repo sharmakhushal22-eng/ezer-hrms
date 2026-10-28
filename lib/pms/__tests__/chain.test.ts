@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { CHAINS, type Chain } from '../hierarchy.ts'
 import {
   rungs, firstRung, nextRung, prevRung, isActorsTurn, approvalFinalises,
-  mayReject, rejectDestination, remarkOk, rungFor, MIN_REMARK, STAGES,
+  mayReject, rejectDestination, remarkOk, rungFor, heldBy, MIN_REMARK, STAGES,
   STAGE_LABEL,
 } from '../chain.ts'
 
@@ -109,6 +109,60 @@ test('every stage has a label a human can read', () => {
   for (const s of STAGES) {
     assert.ok(STAGE_LABEL[s] && STAGE_LABEL[s].length > 3, `${s} needs a label`)
   }
+})
+
+// ── the collapsed chain, which is half the database ──────────────────────
+
+test('an unfilled rung is SKIPPED, not stepped onto', () => {
+  // THE BUG THIS EXISTS FOR. 190 of the 395 enrolments in the database have a
+  // policy chain of SELF_RM1_RM2_HOD and a snapshot with rm_l2_id NULL,
+  // because pms_resolve_chain drops L2 when it equals L1. Stepping to the next
+  // LISTED rung parks 48% of the company on an RM_L2 that does not exist —
+  // and approve and reject both check identity against the frozen chain, so
+  // nobody can move it in either direction. A permanent deadlock.
+  const collapsed = heldBy({ rmL1Id: 'u-a', rmL2Id: null, hodId: 'u-c' })
+  assert.equal(nextRung('SELF_RM1_RM2_HOD', 'RM_L1', collapsed), 'HOD')
+  assert.equal(prevRung('SELF_RM1_RM2_HOD', 'HOD', collapsed), 'RM_L1')
+})
+
+test('a collapsed line means the RM L1 approval finalises', () => {
+  // Consequence of the skip, and the reason the UI must know: the button has
+  // to read "Approve & finalise" and ask for the rating pms_chain_approve
+  // will demand. Said as "Approve" with no field, the manager clicks and gets
+  // "a final rating is needed to finalise" with nowhere to type one.
+  const noL2noHod = heldBy({ rmL1Id: 'u-a', rmL2Id: null, hodId: null })
+  assert.ok(approvalFinalises('SELF_RM1_RM2_HOD', 'RM_L1', noL2noHod))
+  // With a HOD present it does not — the HOD's does.
+  const withHod = heldBy({ rmL1Id: 'u-a', rmL2Id: null, hodId: 'u-c' })
+  assert.ok(!approvalFinalises('SELF_RM1_RM2_HOD', 'RM_L1', withHod))
+  assert.ok(approvalFinalises('SELF_RM1_RM2_HOD', 'HOD', withHod))
+})
+
+test('a rejection never strands the set on an empty rung', () => {
+  // Worse than going forward onto nobody: the employee is left waiting on a
+  // correction that can never be made.
+  const onlyL1 = heldBy({ rmL1Id: 'u-a', rmL2Id: null, hodId: null })
+  assert.equal(prevRung('SELF_RM1_RM2_HOD', 'HOD', onlyL1), 'RM_L1')
+  // Nothing held below at all falls through to the employee.
+  const none = heldBy({ rmL1Id: null, rmL2Id: null, hodId: 'u-c' })
+  assert.equal(prevRung('SELF_RM1_RM2_HOD', 'HOD', none), 'EMPLOYEE')
+  assert.match(rejectDestination('SELF_RM1_RM2_HOD', 'HOD', none),
+    /back to the employee/)
+})
+
+test('HR counts as held even though no column names a person', () => {
+  // HR is a role, not an id in the snapshot. Treated as unfilled, the last
+  // reviewer's approval would find no next rung and never finalise.
+  const h = heldBy({ rmL1Id: null, rmL2Id: null, hodId: null })
+  assert.ok(h('HR'))
+  assert.ok(!h('RM_L1'))
+})
+
+test('with no holders given, every rung counts — the old behaviour', () => {
+  // The default has to stay the policy's own chain, for screens that describe
+  // a policy rather than a person.
+  assert.equal(nextRung('SELF_RM1_RM2_HOD', 'RM_L1'), 'RM_L2')
+  assert.equal(prevRung('SELF_RM1_RM2_HOD', 'HOD'), 'RM_L2')
 })
 
 // ── whose rung is it, per employee ───────────────────────────────────────

@@ -95,14 +95,25 @@ test('the rating field appears only where approval finalises', () => {
   // Asking every rung for a final rating invites a manager to set a number
   // they have no authority to set; asking none means the last rung's approval
   // is refused for want of one.
-  assert.match(MGR, /const finalises = approvalFinalises\(chain, myStage\)/)
   assert.match(MGR, /finalises\s*&&\s*\(\s*<input type="number"/)
   assert.match(MGR, /finalises \? 'Approve & finalise' : 'Approve'/)
+  // AND IT MUST ASK ABOUT THE HOLDERS, not just the policy's chain. On a
+  // collapsed line — 190 of 395 enrolments — RM L2 is unfilled, so the RM L1's
+  // approval finalises. Computed from the chain alone the button would say
+  // "Approve", offer no rating field, and the database would answer "a final
+  // rating is needed to finalise" with nowhere to type one.
+  assert.match(MGR, /const held = heldBy\(r\.member\)/,
+    'the approval card does not resolve who actually fills each rung')
+  assert.match(MGR, /approvalFinalises\(chain, myStage, held\)/,
+    'whether approval finalises is computed without the rung holders')
 })
 
 test('the reject button names where the set is going', () => {
-  assert.match(MGR, /rejectDestination\(chain, myStage\)/,
-    'the rejection dialog does not say where the set will go')
+  // With the holders, for the same reason: a HOD rejecting on a collapsed line
+  // sends the set to RM L1, and saying "back to RM L2" names somebody who does
+  // not exist for this employee.
+  assert.match(MGR, /rejectDestination\(chain, myStage, held\)/,
+    'the rejection dialog does not say where the set will really go')
 })
 
 test('the remark minimum is checked in the form, not just the database', () => {

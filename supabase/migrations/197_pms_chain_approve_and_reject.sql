@@ -223,7 +223,41 @@ BEGIN
     PERFORM pms_refresh_workflow(p_employee_id, p_period_id);
   END IF;
 
-  v_next := v_rungs[v_idx + 1];
+  /**
+   * THE NEXT RUNG THAT SOMEBODY ACTUALLY OCCUPIES.
+   *
+   * NOT v_rungs[v_idx + 1]. The policy's chain says which rungs a cycle has;
+   * the FROZEN SNAPSHOT says who fills them for this employee, and the two
+   * disagree by design. pms_resolve_chain (067) drops RM L2 when it resolves
+   * to the same person as RM L1 — "Same person at L1 and L2: drop L2, keep
+   * them as L1 reviewer" — so a collapsed line has a policy chain of
+   * SELF_RM1_RM2_HOD and a snapshot shape of L1_HOD with rm_l2_id NULL.
+   *
+   * MEASURED, NOT IMAGINED: 190 of the 395 enrolments in the database are in
+   * exactly that state. Stepping blindly to the next listed rung would have
+   * parked 48% of the company on RM_L2 with no RM_L2 in existence — and both
+   * approve and reject check identity against the frozen chain, so NOBODY
+   * could have moved it in either direction. Not a stall: a permanent
+   * deadlock, for half the company, on the first approval.
+   *
+   * This is the same bug lib/pms/team.ts's hasRmL2 was written to fix on the
+   * queue side earlier, reintroduced here in SQL. Skipping an unfilled rung is
+   * what the rest of the module already does.
+   *
+   * HR is special-cased because it is a rung with no holder column by nature:
+   * HR is a role, not a person named in the snapshot.
+   */
+  v_next := NULL;
+  FOR i IN v_idx + 1 .. COALESCE(array_length(v_rungs, 1), 0) LOOP
+    IF v_rungs[i] = 'HR' THEN
+      v_next := 'HR';
+      EXIT;
+    END IF;
+    IF pms_chain_holder(p_employee_id, p_period_id, v_rungs[i]) IS NOT NULL THEN
+      v_next := v_rungs[i];
+      EXIT;
+    END IF;
+  END LOOP;
 
   -- The LAST REVIEWER finalises. Everything after them is publication, and a
   -- result cannot be published before it exists. pms_finalise carries all of
@@ -296,11 +330,26 @@ BEGIN
         || 'employee in this period.';
   END IF;
 
-  -- ONE RUNG BACK. The rung before the first reviewer is the employee, and
-  -- their KRA set has to become editable again or they cannot answer the
-  -- remark — which is why the goals go back to SENT_BACK rather than the
-  -- stage alone moving.
-  v_back := CASE WHEN v_idx = 1 THEN 'EMPLOYEE' ELSE v_rungs[v_idx - 1] END;
+  /**
+   * ONE RUNG BACK — to the nearest rung somebody OCCUPIES.
+   *
+   * Same reason as the forward walk above, in the other direction: on a
+   * collapsed line a HOD's rejection must reach RM L1, because the RM_L2 the
+   * policy lists does not exist for this employee. Sending it to an empty
+   * rung would strand it where nobody can act, and a rejection that strands
+   * the appraisal is worse than no rejection at all — the employee is waiting
+   * on a correction that can never be made.
+   *
+   * Falls through to the employee when no held rung remains below, which is
+   * also the right answer for the first rung.
+   */
+  v_back := 'EMPLOYEE';
+  FOR i IN REVERSE v_idx - 1 .. 1 LOOP
+    IF pms_chain_holder(p_employee_id, p_period_id, v_rungs[i]) IS NOT NULL THEN
+      v_back := v_rungs[i];
+      EXIT;
+    END IF;
+  END LOOP;
 
   IF v_back = 'EMPLOYEE' THEN
     UPDATE pms_employee_goals

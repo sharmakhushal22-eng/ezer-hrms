@@ -65,34 +65,77 @@ export function firstRung(chain: Chain): Stage {
 }
 
 /**
+ * WHETHER A RUNG IS ACTUALLY OCCUPIED for one employee.
+ *
+ * THE POLICY'S CHAIN AND THE FROZEN SNAPSHOT DISAGREE BY DESIGN, and this is
+ * the function that reconciles them. pms_resolve_chain (067) drops RM L2 when
+ * it resolves to the same person as RM L1 — "Same person at L1 and L2: drop
+ * L2, keep them as L1 reviewer" — so a collapsed reporting line has a policy
+ * chain of SELF_RM1_RM2_HOD and a snapshot with rm_l2_id NULL.
+ *
+ * 190 of the 395 enrolments in the database are in that state. Walking the
+ * policy's rungs without asking who fills them would say an RM L1's approval
+ * passes the set to RM L2 — for 48% of the company, a rung with nobody on it.
+ *
+ * HR is always held: it is a role, not a person named in the snapshot.
+ */
+export function heldBy(m: {
+  rmL1Id?: string | null; rmL2Id?: string | null; hodId?: string | null
+}): (s: Stage) => boolean {
+  return s => s === 'HR' ? true
+            : s === 'RM_L1' ? !!m.rmL1Id
+            : s === 'RM_L2' ? !!m.rmL2Id
+            : s === 'HOD' ? !!m.hodId
+            : false
+}
+
+/** Every rung counts as filled. The honest default when holders are unknown,
+ *  and what a screen showing a policy rather than a person wants. */
+const ALL_HELD = () => true
+
+/**
  * The rung after this one, or null at the end of the chain.
+ *
+ * SKIPS RUNGS NOBODY OCCUPIES when given `held`, matching 197's forward walk.
+ * Without that, a collapsed line's RM L1 would be told their approval passes
+ * the set up when it actually finalises it — the button would say the wrong
+ * thing and withhold the rating field the database then demands.
  *
  * A stage not in this chain returns null rather than guessing. That happens
  * for real: a policy switched from Self→RM1→RM2→HOD to Self→RM1 leaves
  * in-flight appraisals parked on RM_L2, a rung the chain no longer has.
  * Guessing "the next one along" would hand it to a HOD nobody appointed.
  */
-export function nextRung(chain: Chain, stage: Stage): Stage | null {
+export function nextRung(
+  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+): Stage | null {
   const r = rungs(chain)
   const i = r.indexOf(stage)
   if (i < 0) return null
-  return r[i + 1] ?? null
+  for (let j = i + 1; j < r.length; j++) if (held(r[j])) return r[j]
+  return null
 }
 
 /**
- * Where a rejection sends it: one rung back, and back to the employee from
- * the first rung.
+ * Where a rejection sends it: back to the nearest rung somebody occupies, and
+ * to the employee when none remains below.
  *
  * Set-level, not per-KRA. The brief says the KRAs go back to the preceding
  * person — the set — and a half-approved set could sit with a weightage total
  * that is no longer 100, which the lock exists to prevent.
+ *
+ * Skipping empty rungs matters more here than going forward: a rejection that
+ * strands the appraisal on nobody is worse than no rejection, because the
+ * employee is left waiting on a correction that can never be made.
  */
-export function prevRung(chain: Chain, stage: Stage): Stage | null {
+export function prevRung(
+  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+): Stage | null {
   const r = rungs(chain)
   const i = r.indexOf(stage)
   if (i < 0) return null
-  if (i === 0) return 'EMPLOYEE'
-  return r[i - 1]
+  for (let j = i - 1; j >= 0; j--) if (held(r[j])) return r[j]
+  return 'EMPLOYEE'
 }
 
 /**
@@ -115,8 +158,10 @@ export function isActorsTurn(stage: Stage | null, role: Role): boolean {
  * result cannot be published before it exists. This is what makes the
  * Approve button read "Approve & finalise" and ask for a rating.
  */
-export function approvalFinalises(chain: Chain, stage: Stage): boolean {
-  return nextRung(chain, stage) === 'HR'
+export function approvalFinalises(
+  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+): boolean {
+  return nextRung(chain, stage, held) === 'HR'
 }
 
 /** Whether this rung may reject at all. HR publishes; it does not judge. */
@@ -130,8 +175,10 @@ export function mayReject(stage: Stage | null): boolean {
  * back to the employee" are different decisions and the rejecter should see
  * which one they are making before they type the remark.
  */
-export function rejectDestination(chain: Chain, stage: Stage): string {
-  const back = prevRung(chain, stage)
+export function rejectDestination(
+  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+): string {
+  const back = prevRung(chain, stage, held)
   if (back === null) return 'nowhere — this stage is not part of the chain'
   return back === 'EMPLOYEE' ? 'back to the employee' : `back to ${back.replace('_', ' ')}`
 }

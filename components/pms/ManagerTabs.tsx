@@ -31,7 +31,7 @@ import { canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
 import { approvalFinalises, mayReject, rejectDestination, remarkOk, MIN_REMARK,
-         rungFor } from '@/lib/pms/chain'
+         rungFor, heldBy } from '@/lib/pms/chain'
 import { humanDate } from '@/lib/pms/cycle'
 import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
@@ -288,7 +288,12 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
         extraCell={r => {
           const id = r.member.employeeId
           const myStage = rungFor(r.member, viewerId)!
-          const finalises = approvalFinalises(chain, myStage)
+          // The HOLDERS, not just the policy's chain. On a collapsed line
+          // (190 of 395 enrolments) RM L2 is unfilled, so an RM L1's approval
+          // finalises rather than passing the set up — and the button has to
+          // say so and ask for the rating the database will demand.
+          const held = heldBy(r.member)
+          const finalises = approvalFinalises(chain, myStage, held)
           const canReject = mayReject(myStage)
           const rk = remark[id] ?? ''
           const rt = rating[id] ?? ''
@@ -304,7 +309,7 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
               <td>
                 <div style={{ display: 'grid', gap: 4, minWidth: 220 }}>
                   <div className="k">
-                    This goes <b>{rejectDestination(chain, myStage)}</b>.
+                    This goes <b>{rejectDestination(chain, myStage, held)}</b>.
                   </div>
                   <input placeholder="What has to change, in a sentence"
                          aria-label={`Reason for rejecting ${r.member.name}'s appraisal`}
