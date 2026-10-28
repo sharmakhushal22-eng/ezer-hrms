@@ -19,12 +19,39 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadPmsAdmin, pmsAdmin, type PmsAdminSnapshot } from '@/lib/pms/adminClient'
+import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL } from '@/lib/pms/hierarchy'
 
 type Row = Record<string, unknown>
 const s = (v: unknown) => (v === null || v === undefined) ? '' : String(v)
 const n = (v: unknown) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
 
 const FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'ANNUAL'] as const
+
+/**
+ * EVERY ONE OF THESE IS A CHECK CONSTRAINT, SO A TEXT BOX OVER IT IS A TRAP.
+ *
+ * kra_created_by, approval_chain and who_can_finalise were free-text inputs.
+ * The column accepts exactly three or four values and rejects everything else,
+ * so saving a policy failed with
+ *
+ *   new row for relation "pms_policies" violates check constraint
+ *   "pms_policies_kra_created_by_check"
+ *
+ * — reported by an admin who had done nothing wrong except type into a box
+ * the screen offered them. A correct value was reachable only by knowing the
+ * enum and spelling it in capitals. frequency was already a select; these
+ * three were not.
+ *
+ * The chain and finaliser lists come from lib/pms/hierarchy, which is the
+ * same source the review screens reason with, so the dropdown cannot offer a
+ * value the rest of the module does not understand.
+ */
+const KRA_AUTHORS = ['EMPLOYEE', 'MANAGER', 'BOTH'] as const
+const KRA_AUTHOR_LABEL: Record<typeof KRA_AUTHORS[number], string> = {
+  EMPLOYEE: 'The employee writes their own',
+  MANAGER:  'Their manager writes them',
+  BOTH:     'Either may write them',
+}
 const CATEGORIES = ['BUSINESS', 'PROCESS', 'PEOPLE', 'CUSTOMER', 'COMPLIANCE', 'LEARNING'] as const
 
 // ── small shared pieces, matching the classes pms.css already defines ──────
@@ -129,9 +156,35 @@ function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Prom
 
       <div className="grid g4">
         <Field label="Minimum weightage per KRA"><input type="number" value={n(draft.min_weightage_per_kra)} onChange={e => set('min_weightage_per_kra', Number(e.target.value))} /></Field>
-        <Field label="KRAs created by"><input value={s(draft.kra_created_by)} onChange={e => set('kra_created_by', e.target.value)} /></Field>
-        <Field label="Approval chain"><input value={s(draft.approval_chain)} onChange={e => set('approval_chain', e.target.value)} /></Field>
-        <Field label="Who may finalise"><input value={s(draft.who_can_finalise)} onChange={e => set('who_can_finalise', e.target.value)} /></Field>
+        <Field label="KRAs created by" hint="§0 made this the employee by default">
+          <select value={s(draft.kra_created_by) || 'EMPLOYEE'}
+                  onChange={e => set('kra_created_by', e.target.value)}>
+            {KRA_AUTHORS.map(k => <option key={k} value={k}>{KRA_AUTHOR_LABEL[k]}</option>)}
+          </select>
+        </Field>
+        <Field label="Approval chain" hint="Who rates, in order">
+          <select value={s(draft.approval_chain) || 'SELF_RM1_RM2_HOD'}
+                  onChange={e => set('approval_chain', e.target.value)}>
+            {CHAINS.map(c => <option key={c} value={c}>{CHAIN_LABEL[c]}</option>)}
+            {/* The schema also permits SELF_RM1_RM2_HOD_MD and §6.2's example
+                table uses it, but lib/pms/hierarchy has no MD step — no
+                CHAIN_STEPS entry, no finaliser, nothing in the queues. Offering
+                it would let an admin configure a chain the module cannot run,
+                which is worse than not offering it. Kept visible if it is
+                already set, so an existing value is never silently rewritten. */}
+            {s(draft.approval_chain) === 'SELF_RM1_RM2_HOD_MD' && (
+              <option value="SELF_RM1_RM2_HOD_MD">
+                Self → RM L1 → RM L2 → HOD → MD (set in the database; not supported yet)
+              </option>
+            )}
+          </select>
+        </Field>
+        <Field label="Who may finalise" hint="Checked again by pms_finalise">
+          <select value={s(draft.who_can_finalise) || 'RM1_RM2_HOD'}
+                  onChange={e => set('who_can_finalise', e.target.value)}>
+            {FINALISERS.map(f => <option key={f} value={f}>{FINALISER_LABEL[f]}</option>)}
+          </select>
+        </Field>
       </div>
 
       <div className="grid g4">
