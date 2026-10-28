@@ -109,12 +109,36 @@ function useSaver(reload: () => Promise<void>) {
 }
 
 // ══ 1. POLICIES ═══════════════════════════════════════════════════════════
-function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Promise<void> }) {
+function PolicyPanel({ policies, companies, reload }: {
+  policies: Row[]; companies: Row[]; reload: () => Promise<void>
+}) {
   const [id, setId] = useState<string>('')
   const [draft, setDraft] = useState<Row>({})
   const { busy, error, saved, run } = useSaver(reload)
 
   const current = useMemo(() => policies.find(p => s(p.id) === id), [policies, id])
+
+  /**
+   * NAME THE COMPANY, because the name alone does not identify the policy.
+   *
+   * Every company is seeded with a policy called "Standard Quarterly", so the
+   * dropdown read "Standard Quarterly / Standard Quarterly / Standard
+   * Quarterly" and an admin had no way to tell which company they were
+   * editing. I proved how easily that goes wrong by doing it myself: three
+   * attempts to change one policy's minimum KRA count landed on three
+   * different companies' policies, leaving them at 1, 5 and 2.
+   *
+   * CyclePanel already labels its period dropdowns this way. PolicyPanel
+   * never got the same treatment, and this is the screen where it matters
+   * more — a period is obviously per company, a policy name looks global.
+   */
+  const companyName = useMemo(
+    () => new Map(companies.map(c => [s(c.id), s(c.company_name)])), [companies])
+  const policyLabel = useCallback((p: Row) => {
+    const co = companyName.get(s(p.company_id))
+    const inactive = p.is_active === false ? ' · inactive' : ''
+    return `${co ? co + ' · ' : ''}${s(p.policy_name)}${inactive}`
+  }, [companyName])
 
   useEffect(() => {
     if (!id && policies.length) setId(s(policies[0].id))
@@ -135,7 +159,7 @@ function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Prom
       <div className="grid g3">
         <Field label="Policy">
           <select value={id} onChange={e => setId(e.target.value)}>
-            {policies.map(p => <option key={s(p.id)} value={s(p.id)}>{s(p.policy_name)}</option>)}
+            {policies.map(p => <option key={s(p.id)} value={s(p.id)}>{policyLabel(p)}</option>)}
           </select>
         </Field>
         <Field label="Name"><input value={s(draft.policy_name)} onChange={e => set('policy_name', e.target.value)} /></Field>
@@ -645,7 +669,7 @@ export default function AdminEditor() {
         ))}
       </div>
 
-      {section === 'policy'   && <PolicyPanel policies={snap.policies} reload={reload} />}
+      {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies} reload={reload} />}
       {section === 'kra'      && <KraPanel kras={snap.kras} companyId={companyId} reload={reload} />}
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}

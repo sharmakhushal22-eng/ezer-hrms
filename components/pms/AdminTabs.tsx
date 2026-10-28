@@ -63,6 +63,33 @@ import { csvText, parseCsv } from '@/lib/pms/csv'
 import { pmsAdmin } from '@/lib/pms/adminClient'
 import { humanDate } from '@/lib/pms/cycle'
 
+/** §6.1's configuration, as the policy row holds it. Named in the screen's
+ *  own terms rather than the column names, so the page does the mapping once
+ *  and this file never has to know about snake_case. */
+export interface PolicyConfig {
+  /** Which policy these values came from, so the screen can say so. With one
+   *  policy per company the config screen shows one of several and must not
+   *  imply it is describing all of them. */
+  policyName?: string | null
+  companyName?: string | null
+  policyCount?: number
+  minKra: number
+  maxKra: number
+  totalWeightage: number
+  minWeightagePerKra: number
+  kraCreatedBy?: string | null
+  oneToOneMandatory?: boolean | null
+  midPeriodCheckin?: boolean | null
+  finalReviewOneToOne?: boolean | null
+  approvalChain?: string | null
+  whoCanFinalise?: string | null
+  ratingScaleType?: string | null
+  selfRatingMandatory?: boolean | null
+  newJoinerCutoffDays?: number | null
+  includeNoticePeriod?: boolean | null
+  includeExited?: boolean | null
+}
+
 export type AdminTab =
   | 'config' | 'setup' | 'policies' | 'fill' | 'upload' | 'pip' | 'reports'
 
@@ -184,17 +211,45 @@ const FREQ_LABEL: Record<Frequency, string> = {
   HALF_YEARLY: 'Half-Yearly', ANNUAL: 'Annual',
 }
 
-export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
+/**
+ * §6.1's configuration, READ FROM THE POLICY.
+ *
+ * Every value on this screen used to be a literal. DEFAULT_RULES for the KRA
+ * counts, the string "Employee (RM approves)" for who writes them,
+ * CHAIN_LABEL[CHAINS[0]] and FINALISER_LABEL[FINALISERS[0]] for the workflow
+ * — the FIRST entry of each array rather than the policy's own value. So it
+ * showed "RM L1, RM L2 or HOD" while every company in the database is
+ * actually HOD_ONLY, and an admin who changed anything in Setup & Controls
+ * saw this screen report the old values back. Reported as "changing
+ * configuration is not getting in effect, and not reflected on PMS
+ * Configuration".
+ *
+ * `policy` is optional so the screen still renders before the first load, and
+ * says so rather than printing confident defaults.
+ */
+export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy }: {
   freq: Frequency; onFreq: (f: Frequency) => void
   fyStart: string; fyLabel: string; today: string
+  policy?: PolicyConfig | null
 }) {
+  const yn = (v: boolean | null | undefined, yes: string, no: string) =>
+    v === null || v === undefined ? '—' : v ? yes : no
   const periods = previewPeriods(freq, fyStart)
   return (
     <>
       <Card title="Cycle & frequency preview"
             sub="Try a frequency and every period below regenerates, windows and all. This is a preview. Nothing here is saved.">
         <div className="grid g4">
-          <Fixed label="Company" value="All companies" />
+          {/* NOT "All companies". Three policies exist, one per company, and
+              this screen reads one of them — saying "all" was a claim it could
+              not support and hid the fact that the others may differ. */}
+          <Fixed label="Policy shown here"
+                 value={policy?.policyName
+                   ? `${policy.policyName}${policy.companyName ? ' · ' + policy.companyName : ''}`
+                   : '—'}
+                 hint={policy?.policyCount && policy.policyCount > 1
+                   ? `One of ${policy.policyCount} policies. The others may differ — see Policy Builder.`
+                   : undefined} />
           <Fixed label="Financial year" value={fyLabel} hint={`Starts ${shortDate(fyStart)}`} />
           {/* A preview control, and now labelled as one. It sat beside real
               settings reading just "Frequency", so changing it looked like a
@@ -258,27 +313,48 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
         <div className="divider" />
         <Section>KRA rules</Section>
         <div className="grid g4">
-          <Fixed label="Minimum KRA count" value={String(DEFAULT_RULES.minKra)}
+          <Fixed label="Minimum KRA count" value={String(policy?.minKra ?? DEFAULT_RULES.minKra)}
                  hint="Fewer than four and a rating rests on too little" />
-          <Fixed label="Maximum KRA count" value={String(DEFAULT_RULES.maxKra)}
+          <Fixed label="Maximum KRA count" value={String(policy?.maxKra ?? DEFAULT_RULES.maxKra)}
                  hint="Past ten, weightages get too thin to mean anything" />
-          <Fixed label="Total weightage must be" value={String(DEFAULT_RULES.totalWeightage)}
+          <Fixed label="Total weightage must be" value={String(policy?.totalWeightage ?? DEFAULT_RULES.totalWeightage)}
                  hint="Exactly, not at least" />
-          <Fixed label="Minimum weightage per KRA" value={String(DEFAULT_RULES.minWeightagePerKra)}
+          <Fixed label="Minimum weightage per KRA" value={String(policy?.minWeightagePerKra ?? DEFAULT_RULES.minWeightagePerKra)}
                  hint="Stops a token KRA carrying 1%" />
-          <Fixed label="Who creates KRAs" value="Employee (RM approves)" />
-          <Fixed label="One-to-one mandatory" value="Yes, before weightage lock" />
-          <Fixed label="Mid-period check-in" value="Optional" />
-          <Fixed label="Final review one-to-one" value="Mandatory before publish" />
+          <Fixed label="Who creates KRAs" value={
+            policy?.kraCreatedBy === 'MANAGER' ? 'Their manager'
+            : policy?.kraCreatedBy === 'BOTH' ? 'Either may write them'
+            : policy?.kraCreatedBy === 'EMPLOYEE' ? 'The employee (RM approves)' : '—'} />
+          <Fixed label="One-to-one mandatory"
+                 value={yn(policy?.oneToOneMandatory, 'Yes, before weightage lock', 'No')} />
+          <Fixed label="Mid-period check-in"
+                 value={yn(policy?.midPeriodCheckin, 'Yes', 'Optional')} />
+          <Fixed label="Final review one-to-one"
+                 value={yn(policy?.finalReviewOneToOne, 'Mandatory before publish', 'Not required')} />
         </div>
 
         <div className="divider" />
         <Section>Workflow &amp; rating</Section>
         <div className="grid g4">
-          <Fixed label="Approval chain" value={CHAIN_LABEL[CHAINS[0]]} />
-          <Fixed label="Who can finalise" value={FINALISER_LABEL[FINALISERS[0]]} />
-          <Fixed label="Rating scale" value="5 point (1–5)" />
-          <Fixed label="Self rating mandatory" value="Yes, a manager cannot rate first" />
+          <Fixed label="Approval chain" value={
+            policy?.approvalChain
+              ? ((CHAIN_LABEL as Record<string, string>)[policy.approvalChain]
+                 // A chain the schema allows but lib/pms/hierarchy does not
+                 // model — SELF_RM1_RM2_HOD_MD — has no label. Show the raw
+                 // value and say so, rather than rendering "undefined".
+                 ?? `${policy.approvalChain} (not supported yet)`)
+              : '—'} />
+          <Fixed label="Who can finalise" value={
+            policy?.whoCanFinalise
+              ? ((FINALISER_LABEL as Record<string, string>)[policy.whoCanFinalise]
+                 ?? policy.whoCanFinalise)
+              : '—'} />
+          <Fixed label="Rating scale" value={
+            policy?.ratingScaleType === 'FOUR_POINT_NR' ? '4 point + NR'
+            : policy?.ratingScaleType === 'TEN_POINT' ? '10 point (1–10)'
+            : policy?.ratingScaleType === 'FIVE_POINT' ? '5 point (1–5)' : '—'} />
+          <Fixed label="Self rating mandatory"
+                 value={yn(policy?.selfRatingMandatory, 'Yes, a manager cannot rate first', 'No')} />
         </div>
 
         <div className="divider" />
@@ -286,9 +362,13 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
         <div className="grid g4">
           <Fixed label="Payout / CTC linkage" value="OFF (developmental only)" locked
                  hint="Locked off. No increment, variable or CTC impact." />
-          <Fixed label="New joiner cut-off" value="30 days before the period ends" />
-          <Fixed label="Notice period employees" value="Include, and highlight" />
-          <Fixed label="Exited employees" value="Include, read-only after last working day" />
+          <Fixed label="New joiner cut-off" value={
+            policy?.newJoinerCutoffDays == null ? '—'
+            : `${policy.newJoinerCutoffDays} days before the period ends`} />
+          <Fixed label="Notice period employees"
+                 value={yn(policy?.includeNoticePeriod, 'Include, and highlight', 'Exclude')} />
+          <Fixed label="Exited employees"
+                 value={yn(policy?.includeExited, 'Include, read-only after last working day', 'Exclude')} />
         </div>
         <div className="banner b-red" style={{ marginTop: 14, marginBottom: 0 }}>
           <span aria-hidden="true">🔒</span>
@@ -397,7 +477,10 @@ const FILL_TONE: Record<FillStatus, 'red' | 'amber' | 'brand' | 'blue' | 'green'
   IN_REVIEW: 'blue', FINALISED: 'green',
 }
 
-export function FillTab({ rows, deptNames, loading }: {
+export function FillTab({ rows, deptNames, loading, totalWeightage = DEFAULT_RULES.totalWeightage}: {
+  /** The policy's total, so a correct set is not coloured red on a policy
+   *  whose total is not 100. */
+  totalWeightage?: number
   rows: FillRow[] | null; deptNames: Record<string, string>; loading: boolean
 }) {
   const [status, setStatus] = useState<'ALL' | FillStatus>('ALL')
@@ -498,7 +581,7 @@ export function FillTab({ rows, deptNames, loading }: {
                     <td>{deptNames[r.department_id ?? ''] ?? 'Unknown'}</td>
                     <td className="num">{r.kra_count ?? 0}</td>
                     <td className="num">
-                      <span className={wt === DEFAULT_RULES.totalWeightage ? 'ok' : 'bad'}>{wt}</span>
+                      <span className={wt === totalWeightage ? 'ok' : 'bad'}>{wt}</span>
                     </td>
                     <td>{known
                       ? <Pill tone={FILL_TONE[s]}>{FILL_LABEL[s]}</Pill>

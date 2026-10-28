@@ -25,7 +25,7 @@ import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from
 import { PERIOD_OPEN } from '@/lib/pms/status'
 import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
 import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
-         FlowTab, type AdminTab, type PipRow } from '@/components/pms/AdminTabs'
+         FlowTab, type AdminTab, type PipRow, type PolicyConfig } from '@/components/pms/AdminTabs'
 import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
 import { type Frequency, type Policy } from '@/lib/pms/policy'
@@ -73,6 +73,8 @@ export default function PmsPage() {
    *  the tab block, and a banner inside it would vanish the moment it was
    *  set — which is what happened to the first successful commit. */
   const [commitNote, setCommitNote] = useState<string | null>(null)
+  /** §6.1's values, read from the policy rather than hardcoded. */
+  const [config, setConfig] = useState<PolicyConfig | null>(null)
   const [deptNames, setDeptNames] = useState<Record<string, string>>({})
   const [freq, setFreq] = useState<Frequency>('QUARTERLY')
   const [policies, setPolicies] = useState<Policy[]>([])
@@ -128,9 +130,16 @@ export default function PmsPage() {
       // vw_pms_fill_status already collapses ten workflow values into the five
       // states an admin chases. One CASE in SQL beats the same mapping
       // rewritten in every screen that needs it.
+      // §6.1 shows all four config groups, so all four groups have to be
+      // fetched. It was showing DEFAULT_RULES and the first entry of the
+      // CHAINS/FINALISERS arrays instead of these columns.
       let polQ = supabase.from('pms_policies')
         .select('id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
-              + ' total_weightage, min_weightage_per_kra, who_can_finalise')
+              + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
+              + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
+              + ' final_review_one_to_one, approval_chain, rating_scale_type,'
+              + ' self_rating_mandatory, new_joiner_cutoff_days,'
+              + ' include_notice_period, include_exited')
       if (co) polQ = polQ.eq('company_id', co)
       const pol = await polQ.limit(50)
       if (!pol.error) {
@@ -143,8 +152,33 @@ export default function PmsPage() {
           minWeightagePerKra: Number(r.min_weightage_per_kra) || 5,
           whoCanFinalise: (r.who_can_finalise as Policy['whoCanFinalise']) ?? 'RM1_RM2_HOD',
         })))
-        const first = (pol.data ?? [])[0] as { frequency?: Frequency } | undefined
-        if (first?.frequency) setFreq(first.frequency)
+        const first = (pol.data ?? [])[0] as unknown as Record<string, unknown> | undefined
+        if (first?.frequency) setFreq(first.frequency as Frequency)
+        // The config screen reads ONE policy. With more than one per company
+        // that is a real limitation, and §6.2's Policy Builder is the screen
+        // that lists them all — so this takes the first and the config screen
+        // says which policy it is describing rather than implying "the" config.
+        setConfig(first ? {
+          policyName: (first.policy_name as string) ?? null,
+          companyName: null,   // filled below once department/company names load
+          policyCount: (pol.data ?? []).length,
+          minKra: Number(first.min_kra_count) || 4,
+          maxKra: Number(first.max_kra_count) || 10,
+          totalWeightage: Number(first.total_weightage) || 100,
+          minWeightagePerKra: Number(first.min_weightage_per_kra) || 5,
+          kraCreatedBy: (first.kra_created_by as string) ?? null,
+          oneToOneMandatory: first.one_to_one_mandatory as boolean ?? null,
+          midPeriodCheckin: first.mid_period_checkin as boolean ?? null,
+          finalReviewOneToOne: first.final_review_one_to_one as boolean ?? null,
+          approvalChain: (first.approval_chain as string) ?? null,
+          whoCanFinalise: (first.who_can_finalise as string) ?? null,
+          ratingScaleType: (first.rating_scale_type as string) ?? null,
+          selfRatingMandatory: first.self_rating_mandatory as boolean ?? null,
+          newJoinerCutoffDays: first.new_joiner_cutoff_days == null
+            ? null : Number(first.new_joiner_cutoff_days),
+          includeNoticePeriod: first.include_notice_period as boolean ?? null,
+          includeExited: first.include_exited as boolean ?? null,
+        } : null)
       }
 
       // §6.3's export is specified as "all columns", so the columns have to be
@@ -358,8 +392,9 @@ export default function PmsPage() {
             ) : <Overview cov={cov} />
           )}
 
-          {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading} />}
-          {tab === 'config'   && <ConfigTab freq={freq} onFreq={setFreq} fyStart={fyStart}
+          {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading}
+                               totalWeightage={config?.totalWeightage} />}
+          {tab === 'config'   && <ConfigTab policy={config} freq={freq} onFreq={setFreq} fyStart={fyStart}
                                             fyLabel={fyLabel} today={localToday()} />}
           {tab === 'setup'    && <AdminEditor />}
           {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}

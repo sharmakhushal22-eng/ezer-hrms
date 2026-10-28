@@ -53,7 +53,7 @@ import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne
 import { reached, WORKFLOW } from '@/lib/pms/status'
 import { bandsFromScale, type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
 import { stageStates, currentStage, settled, STAGES, DEFAULT_RULES,
-         type Progress, type StageKey } from '@/lib/pms/cycle'
+         type Progress, type StageKey, type Rules } from '@/lib/pms/cycle'
 import { type Flag } from '@/lib/pms/employment'
 
 const MISSING_TABLE = 'PGRST205'
@@ -81,6 +81,14 @@ interface Policy {
   approval_chain: Chain
   who_can_finalise: Finaliser
   final_review_one_to_one: boolean
+  /** The KRA rules. DEFAULT_RULES (4/10/100/5) was being used as though it
+   *  were the live rule in the employee screen, the manager's approve check
+   *  and the cycle header — so an admin could change min_kra_count and
+   *  nothing anywhere would change. Reported from the admin screen. */
+  min_kra_count: number
+  max_kra_count: number
+  total_weightage: number
+  min_weightage_per_kra: number
 }
 interface Overall {
   workflow_status?: string | null
@@ -162,7 +170,8 @@ function usePeriod(employeeId: string) {
     const pid = (p.data as { policy_id?: string }).policy_id
     if (pid) {
       const po = await supabase.from('pms_policies')
-        .select('approval_chain,who_can_finalise,final_review_one_to_one')
+        .select('approval_chain,who_can_finalise,final_review_one_to_one,'
+              + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra')
         .eq('id', pid).maybeSingle()
       if (po.error) console.error('[pms] could not read the policy:', po.error)
       setPolicy(po.error ? null : (po.data as Policy | null))
@@ -189,7 +198,22 @@ function usePeriod(employeeId: string) {
   }, [employeeId])
 
   useEffect(() => { reload() }, [reload])
-  return { period, overall, loading, reload, companyId, managerId, bands, policy }
+  /**
+   * The KRA rules this period is actually run under.
+   *
+   * Falls back to DEFAULT_RULES only when no policy has loaded — the constant
+   * is a fallback, not the rule. Everything that validates or describes a KRA
+   * set reads this, so changing min_kra_count in the admin screen now changes
+   * what the employee is held to, which it previously did not.
+   */
+  const rules: Rules = useMemo(() => policy ? {
+    minKra: Number(policy.min_kra_count) || DEFAULT_RULES.minKra,
+    maxKra: Number(policy.max_kra_count) || DEFAULT_RULES.maxKra,
+    totalWeightage: Number(policy.total_weightage) || DEFAULT_RULES.totalWeightage,
+    minWeightagePerKra: Number(policy.min_weightage_per_kra) || DEFAULT_RULES.minWeightagePerKra,
+  } : DEFAULT_RULES, [policy])
+
+  return { period, overall, loading, reload, companyId, managerId, bands, policy, rules }
 }
 
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
@@ -337,7 +361,7 @@ export default function Performance({ employeeId }: { employeeId: string }) {
 // ── the employee's own side ──────────────────────────────────────────────
 
 function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
-  const { period, overall, loading, reload, companyId, managerId, bands } = usePeriod(employeeId)
+  const { period, overall, loading, reload, companyId, managerId, bands, rules } = usePeriod(employeeId)
   const [who, setWho] = useState<Who>({ name: '', code: '' })
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
   const [logs, setLogs] = useState<Log[]>([])
@@ -413,7 +437,9 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
         category: (String(g.category ?? 'BUSINESS')) as Category,
         weightage: Number(g.weightage) || 0,
       }))
-    : Array.from({ length: DEFAULT_RULES.minKra }, (_, i) => blankKra(i + 1)))
+    // The policy's minimum, not the constant: on a policy of 5 an employee
+    // was handed 4 blank rows and had to notice the shortfall themselves.
+    : Array.from({ length: rules.minKra }, (_, i) => blankKra(i + 1)))
 
   const lockGate = canLockWeightage(logs)
   const publishGate = canPublishResult(logs)
@@ -610,7 +636,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
 
       {tab === 'dashboard' && (
-        <DashboardTab bands={bands.length ? bands : undefined}
+        <DashboardTab rules={rules} bands={bands.length ? bands : undefined}
           who={who}
           stages={STAGE_KEYS.map(k => ({ key: k, state: states[k],
                                          detail: k === 'kra' && goals.length
@@ -622,10 +648,10 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           lastRating={overall?.final_rating ?? null}
           lastScore={overall?.self_score ?? null}
           actionLabel={ACTION_LABEL[stage] ?? 'Nothing right now'}
-          actionNote={ACTION_NOTE[stage] ?? ''} />
+          actionNote={actionNotes(rules)[stage] ?? ''} />
       )}
       {tab === 'kras' && (
-        <KraTab kras={kras} onChange={setDraftKras} locked={locked}
+        <KraTab rules={rules} kras={kras} onChange={setDraftKras} locked={locked}
                 lockGate={lockGate} onSubmit={submitKras} saving={saving} />
       )}
       {tab === 'oneToOne' && (
@@ -666,15 +692,21 @@ const ACTION_LABEL: Record<StageKey, string> = {
   lock: 'Waiting on your manager', self: 'Your self rating',
   review: 'With your manager', finalise: 'With the HOD', result: 'Read your result',
 }
-const ACTION_NOTE: Record<StageKey, string> = {
-  kra: `${DEFAULT_RULES.minKra} to ${DEFAULT_RULES.maxKra}, totalling ${DEFAULT_RULES.totalWeightage}`,
+/** The stage chips' sub-labels.
+ *
+ *  A FUNCTION, because the KRA note quotes the policy's numbers and a module
+ *  constant can only quote the fallback. It read "4 to 10, totalling 100" on
+ *  a policy of 5, which is the same defect as the rest of this change, just
+ *  in a place that looked too small to be wrong. */
+const actionNotes = (rules: Rules): Record<StageKey, string> => ({
+  kra: `${rules.minKra} to ${rules.maxKra}, totalling ${rules.totalWeightage}`,
   oneToOne: 'Both of you have to acknowledge it',
   lock: 'They lock the weightages once acknowledged',
   self: 'Rate every KRA, then submit (it locks)',
   review: 'Nothing owed from you right now',
   finalise: 'Nothing owed from you right now',
   result: 'Acknowledge once you have read it',
-}
+})
 
 // ── the manager's side ───────────────────────────────────────────────────
 
@@ -785,7 +817,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
 
 function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   // employeeId here is the MANAGER. The person being acted on is `picked`.
-  const { period, loading: pLoading, companyId, reload, bands } = usePeriod(employeeId)
+  const { period, loading: pLoading, companyId, reload, bands, rules } = usePeriod(employeeId)
   const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'rm')
   const [picked, setPicked] = useState<string | null>(null)
   const [rateRows, setRateRows] = useState<RateRow[]>([])
@@ -1100,12 +1132,12 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   return (
     <>
       {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
-      {tab === 'team' && <TeamTab members={rows} today={today} managerName="your team" />}
-      {tab === 'approve' && <ApproveTab members={rows} today={today}
+      {tab === 'team' && <TeamTab rules={rules} members={rows} today={today} managerName="your team" />}
+      {tab === 'approve' && <ApproveTab rules={rules} members={rows} today={today}
                                         onAcknowledge={acknowledge} onSendBack={sendBack}
                                         onAcknowledgeFinalReview={acknowledgeFinalReview} />}
       {tab === 'rate' && (
-        <RateTab bands={bands.length ? bands : undefined}
+        <RateTab rules={rules} bands={bands.length ? bands : undefined}
                  members={rows} onPick={setPicked} today={today}
                  member={member} rows={rateRows} onChange={setRateRows}
                  onSubmit={submitRating} saving={saving} overallComment={overall}

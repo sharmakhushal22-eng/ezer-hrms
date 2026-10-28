@@ -27,7 +27,7 @@ import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
 import { score, gap, byCategory, bandForScore, bandFor, DEFAULT_BANDS, type Band,
          type Line } from '@/lib/pms/scoring'
 import { STAGES, humanDate, type StageKey } from '@/lib/pms/cycle'
-import { DEFAULT_RULES } from '@/lib/pms/cycle'
+import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
 export type EmpTab = 'dashboard' | 'kras' | 'oneToOne' | 'self' | 'result' | 'analytics'
 
@@ -111,7 +111,11 @@ export interface Who {
 
 export function DashboardTab({ who, stages, current, kraCount, weightage, frequency,
                                periodLabel, lastRating, lastScore, actionLabel, actionNote,
-                               bands = DEFAULT_BANDS }: {
+                               bands = DEFAULT_BANDS, rules = DEFAULT_RULES}: {
+  /** The policy's KRA rules. DEFAULT_RULES is a FALLBACK, not the rule:
+   *  reading the constant directly meant an admin could change min_kra_count
+   *  and this screen would go on holding the employee to 4. */
+  rules?: Rules
   who: Who
   stages: { key: StageKey; state: 'done' | 'active' | 'upcoming' | 'blocked'; detail?: string }[]
   current: StageKey
@@ -122,7 +126,7 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
   /** The configured rating scale; falls back to the built-in list. */
   bands?: Band[]
 }) {
-  const setOk = kraCount >= DEFAULT_RULES.minKra && weightage === DEFAULT_RULES.totalWeightage
+  const setOk = kraCount >= rules.minKra && weightage === rules.totalWeightage
   const band = bandFor(lastRating, bands)
   return (
     <>
@@ -151,7 +155,7 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
         <Stat label="My KRAs" value={kraCount}
               note={setOk
                 ? `Totalling ${weightage}. The set is valid`
-                : `Totalling ${weightage}. Needs ${DEFAULT_RULES.minKra}–${DEFAULT_RULES.maxKra} KRAs at exactly ${DEFAULT_RULES.totalWeightage}`}
+                : `Totalling ${weightage}. Needs ${rules.minKra}–${rules.maxKra} KRAs at exactly ${rules.totalWeightage}`}
               tone={setOk ? undefined : 'warn'} />
         <Stat label="How often" value={frequency} note={periodLabel} />
         <Stat label="Last time"
@@ -174,7 +178,11 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
 
 // ── §3.2 My KRAs ─────────────────────────────────────────────────────────
 
-export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
+export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES}: {
+  /** The policy's KRA rules. DEFAULT_RULES is a FALLBACK, not the rule:
+   *  reading the constant directly meant an admin could change min_kra_count
+   *  and this screen would go on holding the employee to 4. */
+  rules?: Rules
   kras: Kra[]
   onChange: (next: Kra[]) => void
   locked: boolean
@@ -216,12 +224,12 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
           <div className={`bar ${m.tone === 'good' ? 'green' : m.tone === 'bad' ? 'red' : 'amber'}`}
                style={{ marginBottom: 6 }}
                role="progressbar" aria-valuenow={check.total} aria-valuemin={0}
-               aria-valuemax={DEFAULT_RULES.totalWeightage} aria-label="Total weightage">
+               aria-valuemax={rules.totalWeightage} aria-label="Total weightage">
             <span style={{ width: `${m.pct}%` }} />
           </div>
           <div className="k">
             {m.says} · {check.count} {check.count === 1 ? 'KRA' : 'KRAs'}{' '}
-            (minimum {DEFAULT_RULES.minKra}, maximum {DEFAULT_RULES.maxKra})
+            (minimum {rules.minKra}, maximum {rules.maxKra})
           </div>
         </div>
         {!locked && (
@@ -237,7 +245,7 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
       </div>
 
       <Card title="My KRAs"
-            sub={`At least ${DEFAULT_RULES.minKra}, at most ${DEFAULT_RULES.maxKra}, and the weightages must total exactly ${DEFAULT_RULES.totalWeightage}.`}>
+            sub={`At least ${rules.minKra}, at most ${rules.maxKra}, and the weightages must total exactly ${rules.totalWeightage}.`}>
         <div className="tblwrap">
           <table>
             <thead>
@@ -253,7 +261,7 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
                 <tr><td colSpan={locked ? 6 : 7} style={{ textAlign: 'center', padding: '22px 14px' }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Nothing written yet</div>
                   <div className="k">
-                    Add {DEFAULT_RULES.minKra} to {DEFAULT_RULES.maxKra} KRAs. They are what
+                    Add {rules.minKra} to {rules.maxKra} KRAs. They are what
                     your rating will be measured against, so they are worth the time.
                   </div>
                 </td></tr>
@@ -322,11 +330,11 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
                 : check.canSubmit ? 'Send to my manager'
                 : `Cannot send yet: ${check.faults.length} to fix`}
             </button>
-            {check.total !== DEFAULT_RULES.totalWeightage && kras.length > 0 && (
+            {check.total !== rules.totalWeightage && kras.length > 0 && (
               <button className="btn ghost" type="button"
                       onClick={() => onChange(kras.map((k, i) =>
                         ({ ...k, weightage: suggestSplit(kras.length)[i] })))}>
-                Split {DEFAULT_RULES.totalWeightage} evenly
+                Split {rules.totalWeightage} evenly
               </button>
             )}
           </div>

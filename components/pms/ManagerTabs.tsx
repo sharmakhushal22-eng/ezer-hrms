@@ -31,7 +31,7 @@ import { canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
 import { humanDate } from '@/lib/pms/cycle'
-import { DEFAULT_RULES } from '@/lib/pms/cycle'
+import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
 export type MgrTab = 'team' | 'approve' | 'rate' | 'pip' | 'analytics'
 export type HodTab = 'finalise' | 'feedback' | 'deptAnalytics'
@@ -119,11 +119,15 @@ function ExitBanner({ rows }: { rows: QueueRow[] }) {
   )
 }
 
-function QueueTable({ rows, extraHead, extraCell, empty }: {
+function QueueTable({ rows, extraHead, extraCell, empty, rules = DEFAULT_RULES }: {
   rows: QueueRow[]
   extraHead?: React.ReactNode
   extraCell?: (r: QueueRow) => React.ReactNode
   empty: string
+  /** Only used to colour the weightage cell, but it still has to be the
+   *  POLICY's total: on a policy with total_weightage 80, a correct set would
+   *  otherwise render red against the hardcoded 100. */
+  rules?: Rules
 }) {
   return (
     <div className="tblwrap">
@@ -152,7 +156,7 @@ function QueueTable({ rows, extraHead, extraCell, empty }: {
               <td><FlagPill r={r} /></td>
               <td className="num">{r.member.kraCount}</td>
               <td className="num">
-                <span className={r.member.totalWeightage === DEFAULT_RULES.totalWeightage ? 'ok' : 'bad'}>
+                <span className={r.member.totalWeightage === rules.totalWeightage ? 'ok' : 'bad'}>
                   {r.member.totalWeightage}
                 </span>
               </td>
@@ -181,7 +185,10 @@ const EMPTY_TEAM =
 
 // ── §4.1 Team Dashboard ──────────────────────────────────────────────────
 
-export function TeamTab({ members, today, managerName }: {
+export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES}: {
+  /** The policy's KRA rules, not the constant — a manager must be shown the
+   *  same thresholds the employee was held to. */
+  rules?: Rules
   members: TeamMember[]; today: string; managerName: string
 }) {
   const rows = teamQueue(members, today)
@@ -202,7 +209,7 @@ export function TeamTab({ members, today, managerName }: {
       </div>
       <Card title={`My team: ${managerName}`}
             sub="Ordered by whose deadline cannot move, then by what is actually owed.">
-        <QueueTable rows={rows} empty={EMPTY_TEAM} />
+        <QueueTable rules={rules} rows={rows} empty={EMPTY_TEAM} />
       </Card>
     </>
   )
@@ -211,7 +218,10 @@ export function TeamTab({ members, today, managerName }: {
 // ── §4.2 KRA Approval & One-to-One ───────────────────────────────────────
 
 export function ApproveTab({ members, today, onSendBack, onAcknowledge,
-                             onAcknowledgeFinalReview }: {
+                             onAcknowledgeFinalReview, rules = DEFAULT_RULES}: {
+  /** The policy's KRA rules, not the constant — a manager must be shown the
+   *  same thresholds the employee was held to. */
+  rules?: Rules
   members: TeamMember[]; today: string
   onSendBack?: (id: string, reason: string) => void
   onAcknowledge?: (id: string) => void
@@ -234,8 +244,8 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
       <div className="banner b-blue">
         <span aria-hidden="true">ℹ️</span>
         <div>
-          A set is valid at <b>{DEFAULT_RULES.minKra} to {DEFAULT_RULES.maxKra} KRAs
-          totalling exactly {DEFAULT_RULES.totalWeightage}</b>. Weightage locks only once
+          A set is valid at <b>{rules.minKra} to {rules.maxKra} KRAs
+          totalling exactly {rules.totalWeightage}</b>. Weightage locks only once
           you and they have both acknowledged the KRA one-to-one. One tick is a manager
           asserting a conversation happened, two is a record.
         </div>
@@ -243,13 +253,14 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
       <Card title="Waiting on the discussion"
             sub="Sets to check, and the one-to-ones that lock them.">
         <QueueTable
+          rules={rules}
           rows={rows}
           empty="Every set is settled and locked."
           extraHead={<th>Action</th>}
           extraCell={r => {
-            const valid = r.member.kraCount >= DEFAULT_RULES.minKra
-                       && r.member.kraCount <= DEFAULT_RULES.maxKra
-                       && r.member.totalWeightage === DEFAULT_RULES.totalWeightage
+            const valid = r.member.kraCount >= rules.minKra
+                       && r.member.kraCount <= rules.maxKra
+                       && r.member.totalWeightage === rules.totalWeightage
             return (
               <td>
                 {!valid ? (
@@ -282,6 +293,7 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
         <Card title="Final review one-to-ones waiting on you"
               sub="They have logged the conversation. The rating cannot be settled until you confirm it happened.">
           <QueueTable
+            rules={rules}
             rows={finalRows}
             empty="None waiting."
             extraHead={<th>Action</th>}
@@ -312,7 +324,10 @@ export interface RateRow {
 }
 
 export function RateTab({ member, rows, onChange, onSubmit, saving, overallComment,
-                          onOverallComment, bands = DEFAULT_BANDS, members, onPick, today }: {
+                          onOverallComment, bands = DEFAULT_BANDS, members, onPick, today, rules = DEFAULT_RULES}: {
+  /** Passed to QueueTable so the weightage column is coloured against the
+   *  policy's total rather than a hardcoded 100. */
+  rules?: Rules
   member: TeamMember | null
   rows: RateRow[]
   onChange: (next: RateRow[]) => void
@@ -340,6 +355,7 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
         {!onPick
           ? <div className="k">Picking is not available on this screen.</div>
           : <QueueTable
+              rules={rules}
               rows={pickable}
               empty="Nobody is with you yet. A rating opens once their weightages are locked and they have submitted their own rating."
               extraHead={<th />}
