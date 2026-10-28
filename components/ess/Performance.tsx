@@ -38,7 +38,7 @@ import CycleHeader from '@/components/pms/CycleHeader'
 import type { ActionTab } from '@/lib/pms/cycle'
 import {
   EMP_TABS, DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
-  AnalyticsTab, type EmpTab, type Who, type SelfRow, type KraSelf,
+  AnalyticsTab, ChainBanner, type EmpTab, type Who, type SelfRow, type KraSelf,
 } from '@/components/pms/EmployeeTabs'
 import {
   MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab,
@@ -48,6 +48,7 @@ import {
 } from '@/components/pms/ManagerTabs'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
+import { rungFor } from '@/lib/pms/chain'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { reached, WORKFLOW } from '@/lib/pms/status'
@@ -103,6 +104,13 @@ interface Overall {
   final_rating?: number | null
   final_rating_code?: string | null
   is_readonly?: boolean | null
+  // 197. workflow_status says how far the ratings have got; chain_stage says
+  // whose move it is. The employee needs the second one to know whether they
+  // are waiting or being waited for.
+  chain_stage?: string | null
+  sent_back_to?: string | null
+  sent_back_reason?: string | null
+  sent_back_at?: string | null
 }
 interface Roles { isRM: boolean; isHOD: boolean; reportees: number; deptCount: number }
 
@@ -188,7 +196,7 @@ function usePeriod(employeeId: string) {
     }
 
     const o = await supabase.from('pms_overall_rating')
-      .select('workflow_status,self_score,final_rating,final_rating_code,is_readonly')
+      .select('workflow_status,self_score,final_rating,final_rating_code,is_readonly,chain_stage,sent_back_to,sent_back_reason,sent_back_at')
       .eq('employee_id', employeeId).eq('period_id', p.data.id).maybeSingle()
     setOverall(o.error ? null : (o.data as Overall | null))
 
@@ -798,6 +806,39 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
         logWarning = ' The change log could not be written, though — tell HR.'
       }
     }
+
+    /**
+     * INTO THE CHAIN. This is what makes the merged step a submission rather
+     * than a save: pms_chain_submit parks the appraisal on the first reviewer
+     * and clears any previous rejection, so a set sent back and resubmitted
+     * stops looking rejected.
+     *
+     * AFTER the ratings, not before, and that order is load-bearing. The RPC
+     * refuses without a self rating on record, and self_score only exists once
+     * trg_pms_sync_role_score has seen the SELF reviews written above. Called
+     * first, it would refuse every first-time submission.
+     *
+     * Only when a rating actually went in. An employee saving a draft set with
+     * no ratings yet should not be handed to their manager — the RPC would
+     * refuse anyway, but asking it would put a false "not submitted" warning
+     * on a save that did exactly what the employee asked.
+     *
+     * A refusal here is reported, never swallowed: the KRAs are saved either
+     * way, but "saved" and "with your manager" are different states and the
+     * employee is the one who has to know which they are in.
+     */
+    let chainWarning = ''
+    if (!error && ratedCount && !ratingWarning) {
+      const ch = await supabase.rpc('pms_chain_submit',
+        { p_employee_id: employeeId, p_period_id: period.id })
+      if (ch.error) {
+        console.error('[pms] pms_chain_submit failed:', ch.error)
+        chainWarning = ' It is saved, but could not be sent on for approval — try again.'
+      } else if (typeof ch.data === 'string' && ch.data.startsWith('BLOCKED')) {
+        chainWarning = ' It is saved, but not sent on yet — '
+          + ch.data.replace(/^BLOCKED:\s*/, '')
+      }
+    }
     setSaving(false)
     setMsg(error
       ? ((error as { code?: string }).code === MISSING_TABLE
@@ -809,7 +850,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           ratedCount && !kraLocked
             ? `${ratedCount} ${ratedCount === 1 ? 'rating' : 'ratings'} went with it.` : '',
           changes.length ? `${changes.length} ${changes.length === 1 ? 'change' : 'changes'} recorded against the one-to-one.` : '',
-          ratingWarning, logWarning,
+          ratingWarning, logWarning, chainWarning,
         ].filter(Boolean).join(' '))
     if (!error) { setDraftKras(null); setSelfBySeq(null); loadPeriodData(); reload() }
   }
@@ -829,6 +870,23 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       .upsert(rows, { onConflict: 'period_id,employee_id,goal_id,rater_role' })
     setSaving(false)
     if (error) { console.error('[pms] self rating refused:', error); setMsg(SAVE_FAILED('self rating')); return }
+
+    // The separate Self Rating tab submits too — it is the same event as the
+    // merged step's submission, so it enters the chain the same way. Without
+    // this, an employee who rated from this tab instead would be saved and
+    // never handed to anybody, which is the failure mode the merged step was
+    // meant to remove rather than relocate.
+    const ch = await supabase.rpc('pms_chain_submit',
+      { p_employee_id: employeeId, p_period_id: period.id })
+    if (ch.error) {
+      console.error('[pms] pms_chain_submit failed:', ch.error)
+      setMsg('Your ratings are saved, but could not be sent on for approval — try again.')
+    } else if (typeof ch.data === 'string' && ch.data.startsWith('BLOCKED')) {
+      setMsg('Your ratings are saved, but not sent on yet — '
+        + ch.data.replace(/^BLOCKED:\s*/, ''))
+    } else {
+      setMsg('Your ratings are in with your manager.')
+    }
     setSelfDraft(null); reload(); loadPeriodData()
   }
 
@@ -867,6 +925,12 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   return (
     <>
       {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
+
+      {/* Above the tabs, not inside one: a set that has come back needs saying
+          wherever the employee happens to be looking. */}
+      <ChainBanner stage={overall?.chain_stage}
+                   sentBackReason={overall?.sent_back_reason}
+                   sentBackAt={overall?.sent_back_at} />
 
       {tab === 'dashboard' && (
         <DashboardTab rules={rules} bands={bands.length ? bands : undefined}
@@ -971,7 +1035,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
       // kra_count and total_weightage are deliberately NOT selected: nothing in
       // the schema writes them. See the comment below, and the test that keeps
       // them out.
-      .select('employee_id,workflow_status,self_score,rm_l1_score,rm_l2_score,final_rating,rm_l1_id,rm_l2_id,employment_flag')
+      .select('employee_id,workflow_status,self_score,rm_l1_score,rm_l2_score,final_rating,rm_l1_id,rm_l2_id,hod_id,employment_flag,chain_stage,sent_back_to,sent_back_reason')
       .eq('period_id', period.id)
     const { data } = as === 'hod'
       ? await q.eq('hod_id', employeeId)
@@ -1072,6 +1136,10 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
         rmL2Score: d.rm_l2_score == null ? null : Number(d.rm_l2_score),
         rmL1Id: (d.rm_l1_id as string | null) ?? null,
         rmL2Id: (d.rm_l2_id as string | null) ?? null,
+        hodId: (d.hod_id as string | null) ?? null,
+        chainStage: (d.chain_stage as string | null) ?? null,
+        sentBackTo: (d.sent_back_to as string | null) ?? null,
+        sentBackReason: (d.sent_back_reason as string | null) ?? null,
         finalRating: d.final_rating == null ? null : Number(d.final_rating),
         finalised: d.final_rating != null,
       }
@@ -1085,7 +1153,10 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
 
 function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   // employeeId here is the MANAGER. The person being acted on is `picked`.
-  const { period, loading: pLoading, companyId, reload, bands, rules, flagRules } = usePeriod(employeeId)
+  // policy for its approval_chain: which rung finalises depends on the chain,
+  // and a hardcoded guess would put "Approve & finalise" on the wrong manager.
+  const { period, loading: pLoading, companyId, reload, bands, rules, flagRules,
+          policy } = usePeriod(employeeId)
   const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'rm')
   const [picked, setPicked] = useState<string | null>(null)
   const [rateRows, setRateRows] = useState<RateRow[]>([])
@@ -1239,10 +1310,70 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     reloadRoster()
   }
 
-  /** Hand the set back for the employee to rebuild. Their own screen reads
-   *  sent_back_reason, so the reason is the whole point of the action. */
+  /**
+   * WHICH RUNG OF THE CHAIN THE VIEWER IS ON FOR ONE EMPLOYEE.
+   *
+   * Resolved per employee, not once for the viewer. One manager is RM L1 to
+   * their own reportees and HOD to a department at the same time — SRS9009 is
+   * L1, L2 and HOD across his team — so a single rung computed once would be
+   * wrong for part of the queue in both directions: hiding approvals that are
+   * genuinely theirs and offering ones that are not.
+   *
+   * myRaterRole below answers a narrower question — which rater_role a rating
+   * is written under — and returns null for a HOD, who rates through
+   * hod_score rather than pms_reviews. The chain needs the wider answer: a HOD
+   * approves and rejects like anybody else in the line.
+   *
+   * Read from the frozen chain on the row, same as everything else here.
+   */
+  const chainRoleFor = useCallback((id: string) => {
+    const m = rows.find(r => r.employeeId === id)
+    return m ? rungFor(m, employeeId) : null
+  }, [rows, employeeId])
+
+  /**
+   * Hand the set back, with a reason. Their own screen reads sent_back_reason,
+   * so the reason is the whole point of the action.
+   *
+   * CHAIN-AWARE, and that changes where it goes. Before 197 this was always a
+   * send-back to the EMPLOYEE, because nothing recorded where in the line the
+   * appraisal had got to. Now an RM L2's rejection reaches RM L1 and only the
+   * first rung's rejection reaches the employee — so the RPC decides the
+   * destination, not this screen, and the screen reports what it chose.
+   *
+   * The direct-update path is kept for a row with no stage: appraisals already
+   * in flight when 197 was applied have chain_stage NULL, and refusing to send
+   * those back would strand them. It writes exactly what it always wrote.
+   */
   const sendBack = async (id: string, reason: string) => {
     setSaving(true); setMsg(null)
+    const row = rows.find(r => r.employeeId === id)
+    const myRung = chainRoleFor(id)
+
+    if (row?.chainStage && myRung) {
+      const r = await supabase.rpc('pms_chain_reject', {
+        p_employee_id: id, p_period_id: period!.id,
+        p_actor_id: employeeId, p_actor_role: myRung, p_remark: reason,
+      })
+      setSaving(false)
+      if (r.error) {
+        console.error('[pms] pms_chain_reject failed:', r.error)
+        setMsg(SAVE_FAILED('rejection')); return
+      }
+      const out = String(r.data ?? '')
+      if (out.startsWith('BLOCKED')) {
+        // Written for a manager, so it is worth showing verbatim.
+        setMsg(out.replace(/^BLOCKED:\s*/, 'Not sent back — '))
+      } else {
+        const to = out.split(':')[1]
+        setMsg(to === 'EMPLOYEE'
+          ? 'Sent back to the employee, with your reason.'
+          : `Sent back to ${String(to).replace('_', ' ')}, with your reason.`)
+      }
+      reload(); reloadRoster()
+      return
+    }
+
     const { error } = await supabase.from('pms_employee_goals')
       .update({ status: 'SENT_BACK', sent_back_reason: reason })
       .eq('employee_id', id).eq('period_id', period!.id)
@@ -1250,6 +1381,45 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     if (error) { console.error('[pms] send back refused:', error); setMsg(SAVE_FAILED('note')); return }
     setMsg('Sent back, with your reason.')
     reloadRoster()
+  }
+
+  /**
+   * Approve and pass it up the line — or, at the last rung, finalise.
+   *
+   * ONE CALL, because the two cannot be separated safely. pms_chain_approve
+   * locks the weightages at the first rung and calls pms_finalise at the last,
+   * both inside the one statement, so a half-done approval cannot be left
+   * behind by a failed second request. The rating is only wanted at the rung
+   * that finalises; everywhere else it is ignored, and passing it would be a
+   * lie about who set the number.
+   */
+  const approveInChain = async (id: string, rating?: number) => {
+    const myRung = chainRoleFor(id)
+    if (!myRung) {
+      setMsg('You are not recorded in this employee’s chain for this period, so you cannot approve it.')
+      return
+    }
+    setSaving(true); setMsg(null)
+    const r = await supabase.rpc('pms_chain_approve', {
+      p_employee_id: id, p_period_id: period!.id,
+      p_actor_id: employeeId, p_actor_role: myRung,
+      p_rating: rating ?? null,
+    })
+    setSaving(false)
+    if (r.error) {
+      console.error('[pms] pms_chain_approve failed:', r.error)
+      setMsg(SAVE_FAILED('approval')); return
+    }
+    const out = String(r.data ?? '')
+    if (out.startsWith('BLOCKED')) {
+      setMsg(out.replace(/^BLOCKED:\s*/, 'Not approved — '))
+    } else {
+      const next = out.split(':')[1]
+      setMsg(next === 'HR'
+        ? 'Approved and settled. It is with HR to publish now.'
+        : `Approved. It is with ${String(next).replace('_', ' ')} now.`)
+    }
+    reload(); reloadRoster()
   }
 
   /**
@@ -1403,7 +1573,11 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       {tab === 'team' && <TeamTab flagRules={flagRules} rules={rules} members={rows} today={today} managerName="your team" />}
       {tab === 'approve' && <ApproveTab flagRules={flagRules} rules={rules} members={rows} today={today}
                                         onAcknowledge={acknowledge} onSendBack={sendBack}
-                                        onAcknowledgeFinalReview={acknowledgeFinalReview} />}
+                                        onAcknowledgeFinalReview={acknowledgeFinalReview}
+                                        viewerId={employeeId}
+                                        chain={policy?.approval_chain as Chain | undefined ?? 'SELF_RM1_RM2_HOD'}
+                                        onApprove={approveInChain}
+                                        bands={bands.length ? bands : undefined} />}
       {tab === 'rate' && (
         <RateTab flagRules={flagRules} rules={rules} bands={bands.length ? bands : undefined}
                  members={rows} onPick={setPicked} today={today}

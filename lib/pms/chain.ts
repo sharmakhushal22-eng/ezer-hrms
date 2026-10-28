@@ -136,6 +136,37 @@ export function rejectDestination(chain: Chain, stage: Stage): string {
   return back === 'EMPLOYEE' ? 'back to the employee' : `back to ${back.replace('_', ' ')}`
 }
 
+/**
+ * Which rung a viewer holds FOR ONE EMPLOYEE, from that employee's frozen
+ * chain.
+ *
+ * PER EMPLOYEE, NOT PER VIEWER, and that is not a refinement — it is the only
+ * correct reading. One manager is RM L1 to their own reportees and HOD to a
+ * whole department at the same time; in a small company the chain collapses
+ * further and one person holds every rung. A single "my rung" computed once
+ * would be wrong for part of the queue in both directions: hiding approvals
+ * genuinely waiting on them, and offering approvals that are not theirs.
+ *
+ * The order matters where one person holds two rungs. L1 first, matching
+ * pms_resolve_chain (067), which refuses to store the same person at L1 and
+ * L2 — "Same person at L1 and L2: drop L2, keep them as L1 reviewer" — so a
+ * manager who is both is recorded as L1 alone. An appraisal parked at RM_L2
+ * for somebody who is also the L1 would otherwise be unreachable.
+ *
+ * Shaped to read off whatever carries the frozen ids, so a queue row and a
+ * raw pms_overall_rating row can both be asked.
+ */
+export function rungFor(
+  m: { rmL1Id?: string | null; rmL2Id?: string | null; hodId?: string | null },
+  viewerId: string,
+): Stage | null {
+  if (!viewerId) return null
+  if (m.rmL1Id && m.rmL1Id === viewerId) return 'RM_L1'
+  if (m.rmL2Id && m.rmL2Id === viewerId) return 'RM_L2'
+  if (m.hodId && m.hodId === viewerId) return 'HOD'
+  return null
+}
+
 /** 197 refuses a remark under this length. Mirrored so the form can too. */
 export const MIN_REMARK = 10
 

@@ -30,6 +30,8 @@ import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
 import { canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
+import { approvalFinalises, mayReject, rejectDestination, remarkOk, MIN_REMARK,
+         rungFor } from '@/lib/pms/chain'
 import { humanDate } from '@/lib/pms/cycle'
 import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
@@ -227,8 +229,159 @@ export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES, fl
 
 // ── §4.2 KRA Approval & One-to-One ───────────────────────────────────────
 
+/**
+ * §(none) — the approval chain, asked for directly.
+ *
+ * ONE CARD, NOT A TAB. The sets waiting on this manager's approval belong
+ * beside the sets waiting on their one-to-one: both answer "what is sitting
+ * with me", and splitting them across tabs means a manager who clears one
+ * screen believes they are done.
+ *
+ * WHY THE RATING INPUT APPEARS ON ONLY ONE RUNG. Approving at the last rung
+ * before HR does not pass the appraisal on, it FINALISES it — pms_chain_approve
+ * calls pms_finalise in the same statement and refuses without a number. Every
+ * other rung is passing it up, where asking for a rating would invite a manager
+ * to set a final figure they have no authority to set. So the button changes
+ * its name and grows a field exactly where the consequence changes.
+ *
+ * WHY THE REJECT BUTTON NAMES ITS DESTINATION. "Reject" reads the same to an
+ * RM L2 whose rejection reaches RM L1 and to an RM L1 whose rejection reaches
+ * the employee, and those are different decisions. The rejecter sees which one
+ * they are making before they type the remark, not after.
+ */
+function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
+                          onApprove, onReject, bands }: {
+  members: TeamMember[]; today: string
+  flagRules?: FlagRules
+  rules: Rules
+  /** The VIEWER's employee id. Their rung is worked out per row — see
+   *  rungFor. Empty means nothing renders. */
+  viewerId: string
+  /** The policy's chain, which decides which rung finalises. */
+  chain: Chain
+  onApprove?: (id: string, rating?: number) => void
+  onReject?: (id: string, remark: string) => void
+  bands?: Band[]
+}) {
+  const [remark, setRemark] = useState<Record<string, string>>({})
+  const [rating, setRating] = useState<Record<string, string>>({})
+  const [rejecting, setRejecting] = useState<Record<string, boolean>>({})
+
+  // Only what is actually with this person, on the rung they hold for THAT
+  // employee. A manager holding RM_L1 must not be offered an approval on a set
+  // that has moved up to RM_L2 — the RPC would refuse it, but offering it at
+  // all suggests the queue is theirs to clear.
+  const rows = teamQueue(members, today, flagRules)
+    .filter(r => r.member.chainStage
+              && r.member.chainStage === rungFor(r.member, viewerId))
+
+  if (!viewerId || !rows.length) return null
+
+  return (
+    <Card title="Waiting on your approval"
+          sub="Sets that have reached your rung. Approving passes them up the chain; the last rung settles the rating.">
+      <QueueTable
+        rules={rules}
+        rows={rows}
+        empty="Nothing is with you for approval."
+        extraHead={<th>Approval</th>}
+        extraCell={r => {
+          const id = r.member.employeeId
+          const myStage = rungFor(r.member, viewerId)!
+          const finalises = approvalFinalises(chain, myStage)
+          const canReject = mayReject(myStage)
+          const rk = remark[id] ?? ''
+          const rt = rating[id] ?? ''
+          const num = Number(rt)
+          // The band list is the policy's scale, so its edges are the valid
+          // range rather than a hardcoded 1-5 that a 1-4 scale would break.
+          const lo = bands?.length ? Math.min(...bands.map(b => b.value)) : 1
+          const hi = bands?.length ? Math.max(...bands.map(b => b.value)) : 5
+          const ratingOk = !finalises || (rt !== '' && num >= lo && num <= hi)
+
+          if (rejecting[id]) {
+            return (
+              <td>
+                <div style={{ display: 'grid', gap: 4, minWidth: 220 }}>
+                  <div className="k">
+                    This goes <b>{rejectDestination(chain, myStage)}</b>.
+                  </div>
+                  <input placeholder="What has to change, in a sentence"
+                         aria-label={`Reason for rejecting ${r.member.name}'s appraisal`}
+                         value={rk}
+                         onChange={e => setRemark(p => ({ ...p, [id]: e.target.value }))} />
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn ghost sm" type="button"
+                            disabled={!onReject || !remarkOk(rk)}
+                            onClick={() => { onReject?.(id, rk)
+                                             setRejecting(p => ({ ...p, [id]: false })) }}>
+                      Confirm rejection
+                    </button>
+                    <button className="btn ghost sm" type="button"
+                            onClick={() => setRejecting(p => ({ ...p, [id]: false }))}>
+                      Cancel
+                    </button>
+                  </div>
+                  {!remarkOk(rk) && (
+                    <div className="k">
+                      At least {MIN_REMARK} characters. The database refuses a
+                      rejection without a reason.
+                    </div>
+                  )}
+                </div>
+              </td>
+            )
+          }
+
+          return (
+            <td>
+              <div style={{ display: 'grid', gap: 4, minWidth: 180 }}>
+                {finalises && (
+                  <input type="number" step="0.01" min={lo} max={hi}
+                         placeholder={`Final rating (${lo}–${hi})`}
+                         aria-label={`Final rating for ${r.member.name}`}
+                         value={rt}
+                         onChange={e => setRating(p => ({ ...p, [id]: e.target.value }))} />
+                )}
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn sm" type="button"
+                          disabled={!onApprove || !ratingOk}
+                          onClick={() => onApprove?.(id, finalises ? num : undefined)}>
+                    {finalises ? 'Approve & finalise' : 'Approve'}
+                  </button>
+                  {canReject && (
+                    <button className="btn ghost sm" type="button"
+                            disabled={!onReject}
+                            onClick={() => setRejecting(p => ({ ...p, [id]: true }))}>
+                      Reject
+                    </button>
+                  )}
+                </div>
+              </div>
+            </td>
+          )
+        }} />
+      <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+        A rejection goes back one rung, never straight to the employee from
+        halfway up — and it needs a reason, which they see. You can change their
+        KRAs or ratings before approving; every change is logged against your
+        name.
+      </div>
+    </Card>
+  )
+}
+
 export function ApproveTab({ members, today, onSendBack, onAcknowledge,
-                             onAcknowledgeFinalReview, rules = DEFAULT_RULES, flagRules}: {
+                             onAcknowledgeFinalReview, rules = DEFAULT_RULES, flagRules,
+                             viewerId = '', chain = 'SELF_RM1_RM2_HOD',
+                             onApprove, bands}: {
+  /** The viewer's id and the policy's chain — see ChainApprovals. Defaulted so
+   *  a call site that has not been updated renders the tab without the
+   *  approval card rather than crashing. */
+  viewerId?: string
+  chain?: Chain
+  onApprove?: (id: string, rating?: number) => void
+  bands?: Band[]
   /**
    * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
    *
@@ -270,6 +423,11 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
           asserting a conversation happened, two is a record.
         </div>
       </div>
+      {/* First, because it is the only card here with a consequence that
+          cannot be undone: approving at the last rung settles the rating. */}
+      <ChainApprovals members={members} today={today} flagRules={flagRules}
+                      rules={rules} viewerId={viewerId} chain={chain}
+                      onApprove={onApprove} onReject={onSendBack} bands={bands} />
       <Card title="Waiting on the discussion"
             sub="Sets to check, and the one-to-ones that lock them.">
         <QueueTable

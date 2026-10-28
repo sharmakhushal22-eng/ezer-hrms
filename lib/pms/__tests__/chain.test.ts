@@ -15,7 +15,8 @@ import { join } from 'node:path'
 import { CHAINS, type Chain } from '../hierarchy.ts'
 import {
   rungs, firstRung, nextRung, prevRung, isActorsTurn, approvalFinalises,
-  mayReject, rejectDestination, remarkOk, MIN_REMARK, STAGES, STAGE_LABEL,
+  mayReject, rejectDestination, remarkOk, rungFor, MIN_REMARK, STAGES,
+  STAGE_LABEL,
 } from '../chain.ts'
 
 test('HR is the last rung on every chain, and the employee is not a rung', () => {
@@ -108,6 +109,33 @@ test('every stage has a label a human can read', () => {
   for (const s of STAGES) {
     assert.ok(STAGE_LABEL[s] && STAGE_LABEL[s].length > 3, `${s} needs a label`)
   }
+})
+
+// ── whose rung is it, per employee ───────────────────────────────────────
+
+test('the viewer\'s rung is resolved per employee, not once', () => {
+  const me = 'u-me'
+  // The real shape this was written for: one manager who is RM L1 to their own
+  // reportee and HOD to somebody else's. A single rung computed once is wrong
+  // for one of these two whichever way it is computed.
+  assert.equal(rungFor({ rmL1Id: me, rmL2Id: 'u-x', hodId: 'u-y' }, me), 'RM_L1')
+  assert.equal(rungFor({ rmL1Id: 'u-a', rmL2Id: 'u-b', hodId: me }, me), 'HOD')
+  assert.equal(rungFor({ rmL1Id: 'u-a', rmL2Id: me, hodId: 'u-y' }, me), 'RM_L2')
+})
+
+test('somebody outside the chain holds no rung', () => {
+  assert.equal(rungFor({ rmL1Id: 'u-a', rmL2Id: 'u-b', hodId: 'u-c' }, 'u-me'), null)
+  // An empty viewer id must not match an empty/missing chain id. Without the
+  // guard, `null === null` style comparisons hand every unassigned row to
+  // whoever happens to be looking.
+  assert.equal(rungFor({ rmL1Id: null, rmL2Id: null, hodId: null }, ''), null)
+  assert.equal(rungFor({ rmL1Id: null, rmL2Id: null, hodId: null }, 'u-me'), null)
+})
+
+test('one person holding every rung is placed at L1, as 067 stores them', () => {
+  // SRS9009 is RM L1, RM L2 and HOD for his whole team. pms_resolve_chain
+  // drops L2 when it equals L1, so L1 is the rung that actually exists.
+  assert.equal(rungFor({ rmL1Id: 'u-s', rmL2Id: 'u-s', hodId: 'u-s' }, 'u-s'), 'RM_L1')
 })
 
 // ── the one that catches drift ───────────────────────────────────────────

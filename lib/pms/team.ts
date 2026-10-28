@@ -47,6 +47,20 @@ export interface TeamMember extends Employment {
    *  the L1's rating. Comparing against these is how the role is decided. */
   rmL1Id?: string | null
   rmL2Id?: string | null
+  hodId?: string | null
+  /**
+   * 197's chain_stage: whose move it is, as opposed to how far the ratings
+   * have got. A queue needs both — a set sitting at RM_L2 with an L1 rating
+   * already in has the same workflow_status whether it arrived there forward
+   * or came back from the HOD, and only one of those needs chasing.
+   *
+   * Optional because a row written before 197 has no stage at all, and the
+   * queue has to keep working for those rather than treating them as
+   * unsubmitted.
+   */
+  chainStage?: string | null
+  sentBackTo?: string | null
+  sentBackReason?: string | null
   /**
    * Has the FINAL_REVIEW one-to-one been held AND acknowledged by both sides?
    *

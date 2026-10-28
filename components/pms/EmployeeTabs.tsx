@@ -102,6 +102,76 @@ function Chips({ value, onPick, name, disabled, bands = DEFAULT_BANDS }: {
   )
 }
 
+// ── where it is in the chain, and why it came back ───────────────────────
+
+/**
+ * The one thing a rejection is for.
+ *
+ * 197 refuses a rejection without a remark, on the argument that sending
+ * somebody back to guess what to change gets the same set returned wrong a
+ * second time. That argument only holds if the employee SEES the remark —
+ * and nothing did. sent_back_reason has existed since 066 and was written by
+ * the manager's send-back for just as long, with no screen anywhere reading
+ * it. The employee got a set back with no idea why.
+ *
+ * So the remark is a banner, not a field in a tab they might not open, and it
+ * is critical-coloured because it is the only thing on the screen that is
+ * asking them to do something.
+ *
+ * Stage without a remark is the ordinary case — it says who is holding the
+ * appraisal, which otherwise an employee can only infer from which buttons
+ * have gone quiet.
+ */
+export function ChainBanner({ stage, sentBackReason, sentBackAt }: {
+  stage?: string | null
+  sentBackReason?: string | null
+  sentBackAt?: string | null
+}) {
+  // Not submitted yet, or finished. Neither needs narrating: the KRA tab's own
+  // state says the first, and the Result tab says the second.
+  if (!stage || stage === 'DONE') return null
+
+  const backWithYou = stage === 'EMPLOYEE'
+
+  if (backWithYou && sentBackReason) {
+    return (
+      <div className="banner b-red">
+        <span aria-hidden="true">↩️</span>
+        <div>
+          <strong>Sent back to you{sentBackAt ? ` on ${sentBackAt.slice(0, 10)}` : ''}.</strong>{' '}
+          Change what is asked for below and send it again.
+          <div style={{ marginTop: 6, fontStyle: 'italic' }}>“{sentBackReason}”</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Back with the employee but no reason recorded: a pre-197 send-back, or a
+  // row whose remark did not save. Say so plainly rather than inventing one.
+  if (backWithYou) {
+    return (
+      <div className="banner b-amber">
+        <span aria-hidden="true">↩️</span>
+        <div>This is back with you. No reason was recorded — ask your manager
+          what they want changed.</div>
+      </div>
+    )
+  }
+
+  const WITH: Record<string, string> = {
+    RM_L1: 'your reporting manager',
+    RM_L2: 'your second-level manager',
+    HOD:   'your head of department',
+    HR:    'HR, to publish',
+  }
+  return (
+    <div className="banner b-blue">
+      <span aria-hidden="true">⏳</span>
+      <div>Your KRAs and ratings are with {WITH[stage] ?? stage} for approval.</div>
+    </div>
+  )
+}
+
 // ── §3.1 My Dashboard ────────────────────────────────────────────────────
 
 export interface Who {
