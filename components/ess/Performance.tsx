@@ -54,7 +54,7 @@ import { reached, WORKFLOW } from '@/lib/pms/status'
 import { bandsFromScale, type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
 import { stageStates, currentStage, settled, STAGES, DEFAULT_RULES,
          type Progress, type StageKey, type Rules } from '@/lib/pms/cycle'
-import { type Flag } from '@/lib/pms/employment'
+import { DEFAULT_FLAG_RULES, type Flag, type FlagRules } from '@/lib/pms/employment'
 
 const MISSING_TABLE = 'PGRST205'
 
@@ -75,13 +75,16 @@ const SAVE_FAILED = (what: string) =>
   `Your ${what} could not be saved. Nothing was lost — try again, and tell HR if it keeps happening.`
 
 interface Period { id: string; period_code: string; status: string; policy_id?: string | null
-                   period_start?: string | null }
+                   period_start?: string | null; period_end?: string | null }
 /** The three policy columns the review screens have to agree with pms_finalise
  *  about. Widened from the CHECK constraints in 066 rather than from memory. */
 interface Policy {
   approval_chain: Chain
   who_can_finalise: Finaliser
   final_review_one_to_one: boolean
+  /** §8's NEW_JOINER cutoff. Configurable per policy and, until now,
+   *  enforced nowhere — DEFAULT_FLAG_RULES's 30 days always won. */
+  new_joiner_cutoff_days?: number | null
   /** The KRA rules. DEFAULT_RULES (4/10/100/5) was being used as though it
    *  were the live rule in the employee screen, the manager's approve check
    *  and the cycle header — so an admin could change min_kra_count and
@@ -153,7 +156,7 @@ function usePeriod(employeeId: string) {
     setManagerId(row?.l1_manager_id ?? null)
 
     let q = supabase.from('pms_periods')
-      .select('id,period_code,status,policy_id,period_start')
+      .select('id,period_code,status,policy_id,period_start,period_end')
       .not('status', 'in', '("CLOSED","SCHEDULED")')
     if (companyId) q = q.eq('company_id', companyId)
     const p = await q.order('period_start', { ascending: false }).limit(1).maybeSingle()
@@ -172,7 +175,8 @@ function usePeriod(employeeId: string) {
     if (pid) {
       const po = await supabase.from('pms_policies')
         .select('approval_chain,who_can_finalise,final_review_one_to_one,'
-              + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra')
+              + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra,'
+              + 'new_joiner_cutoff_days')
         .eq('id', pid).maybeSingle()
       if (po.error) console.error('[pms] could not read the policy:', po.error)
       setPolicy(po.error ? null : (po.data as Policy | null))
@@ -214,7 +218,15 @@ function usePeriod(employeeId: string) {
     minWeightagePerKra: Number(policy.min_weightage_per_kra) || DEFAULT_RULES.minWeightagePerKra,
   } : DEFAULT_RULES, [policy])
 
-  return { period, overall, loading, reload, companyId, managerId, bands, policy, rules }
+  /** §8's eligibility rules, from the policy rather than the constant. */
+  const flagRules: FlagRules = useMemo(() => ({
+    newJoinerCutoffDays: Number(policy?.new_joiner_cutoff_days)
+      || DEFAULT_FLAG_RULES.newJoinerCutoffDays,
+    // §8 measures the cut-off against the period END, not today.
+    periodEnd: period?.period_end ?? null,
+  }), [policy, period])
+
+  return { period, overall, loading, reload, companyId, managerId, bands, policy, rules, flagRules }
 }
 
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
@@ -959,7 +971,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
 
     const ids = data.map(d => d.employee_id)
     const { data: emps } = await supabase.from('employees')
-      .select('id,emp_code,full_name,date_of_leaving').in('id', ids)
+      .select('id,emp_code,full_name,date_of_leaving,date_of_resignation,company_doj').in('id', ids)
     const byId = new Map((emps ?? []).map(e => [e.id, e as Record<string, unknown>]))
 
     // HOW MANY KRAs, COUNTED FROM THE KRAs.
@@ -1020,7 +1032,26 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
         code: String(e?.emp_code ?? ''),
         name: String(e?.full_name ?? 'Unknown'),
         dateOfLeaving: (e?.date_of_leaving as string | null) ?? null,
-        flagOverride: (d.employment_flag as Flag | null) ?? null,
+        resignationDate: (e?.date_of_resignation as string | null) ?? null,
+        dateOfJoining: (e?.company_doj as string | null) ?? null,
+        /**
+         * NOT pms_overall_rating.employment_flag.
+         *
+         * That column is NOT NULL DEFAULT 'ACTIVE' and is written only by
+         * pms_finalise. Every one of the 395 rows in the database holds
+         * 'ACTIVE' while the view computes EXITED for one and NOTICE_PERIOD
+         * for another — and because the queue read it through `??`, which
+         * cannot fall through on a non-null value, flagFor NEVER RAN. Every
+         * employee appeared Active in every RM and HOD queue, so §4.1's
+         * yellow and orange rows, the blue NEW_JOINER badge, the LWD
+         * countdown and §8's notice-period priority sort had never once
+         * shown. The feature was there; nothing could reach it.
+         *
+         * Left null deliberately so flagFor derives the flag from the dates
+         * above, with the policy's cut-off and the period end — neither of
+         * which the stored column or vw_pms_employment_flag knows about.
+         */
+        flagOverride: null,
         kraCount: g.n,
         totalWeightage: g.wt,
         oneToOneDone: bothAcked.has(String(d.employee_id)),
@@ -1045,7 +1076,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
 
 function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   // employeeId here is the MANAGER. The person being acted on is `picked`.
-  const { period, loading: pLoading, companyId, reload, bands, rules } = usePeriod(employeeId)
+  const { period, loading: pLoading, companyId, reload, bands, rules, flagRules } = usePeriod(employeeId)
   const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'rm')
   const [picked, setPicked] = useState<string | null>(null)
   const [rateRows, setRateRows] = useState<RateRow[]>([])
@@ -1360,20 +1391,20 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   return (
     <>
       {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
-      {tab === 'team' && <TeamTab rules={rules} members={rows} today={today} managerName="your team" />}
-      {tab === 'approve' && <ApproveTab rules={rules} members={rows} today={today}
+      {tab === 'team' && <TeamTab flagRules={flagRules} rules={rules} members={rows} today={today} managerName="your team" />}
+      {tab === 'approve' && <ApproveTab flagRules={flagRules} rules={rules} members={rows} today={today}
                                         onAcknowledge={acknowledge} onSendBack={sendBack}
                                         onAcknowledgeFinalReview={acknowledgeFinalReview} />}
       {tab === 'rate' && (
-        <RateTab rules={rules} bands={bands.length ? bands : undefined}
+        <RateTab flagRules={flagRules} rules={rules} bands={bands.length ? bands : undefined}
                  members={rows} onPick={setPicked} today={today}
                  member={member} rows={rateRows} onChange={setRateRows}
                  onSubmit={submitRating} saving={saving} overallComment={overall}
                  onOverallComment={setOverall} />
       )}
-      {tab === 'pip' && <PipRequestTab members={rows} today={today} />}
+      {tab === 'pip' && <PipRequestTab flagRules={flagRules} members={rows} today={today} />}
       {tab === 'analytics' && (
-        <TeamAnalyticsTab bands={bands.length ? bands : undefined}
+        <TeamAnalyticsTab flagRules={flagRules} bands={bands.length ? bands : undefined}
                           members={rows} today={today} lines={[]}
                           deptAverage={null} companyAverage={null} scopeLabel="your team" />
       )}
@@ -1382,7 +1413,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
 }
 
 function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
-  const { period, loading: pLoading, bands, policy, companyId } = usePeriod(employeeId)
+  const { period, loading: pLoading, bands, policy, companyId, flagRules } = usePeriod(employeeId)
   const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'hod')
   const [picked, setPicked] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -1533,7 +1564,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
     <>
       {msg && <div className="card" style={{ marginBottom: 10 }}>{msg}</div>}
       {tab === 'finalise' && (
-        <FinaliseTab bands={bands.length ? bands : undefined}
+        <FinaliseTab flagRules={flagRules} bands={bands.length ? bands : undefined}
                      members={rows} today={today} role="HOD"
                      chain={policy?.approval_chain ?? 'SELF_RM1_RM2_HOD'}
                      whoCanFinalise={policy?.who_can_finalise ?? 'RM1_RM2_HOD'}
@@ -1580,7 +1611,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
         </>
       )}
       {tab === 'deptAnalytics' && (
-        <TeamAnalyticsTab bands={bands.length ? bands : undefined}
+        <TeamAnalyticsTab flagRules={flagRules} bands={bands.length ? bands : undefined}
                           members={rows} today={today} lines={[]}
                           deptAverage={null} companyAverage={null}
                           scopeLabel="your department" />

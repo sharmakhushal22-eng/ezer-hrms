@@ -46,6 +46,22 @@ const FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'ANNUAL'] as const
  * same source the review screens reason with, so the dropdown cannot offer a
  * value the rest of the module does not understand.
  */
+/**
+ * §13.2(1): "Rating Scale: Configurable per policy; recommended standard is a
+ * 5-point developmental maturity scale."
+ *
+ * The column has allowed these three since 066 and the admin route already
+ * accepted writes to it — there was simply no control, so the one thing the
+ * spec calls out as configurable could only be changed by calling the API by
+ * hand. Same for new_joiner_cutoff_days.
+ */
+const RATING_SCALES = ['FIVE_POINT', 'FOUR_POINT_NR', 'TEN_POINT'] as const
+const RATING_SCALE_LABEL: Record<typeof RATING_SCALES[number], string> = {
+  FIVE_POINT:    '5 point (1–5) — the recommended standard',
+  FOUR_POINT_NR: '4 point plus Not Rated',
+  TEN_POINT:     '10 point (1–10)',
+}
+
 const KRA_AUTHORS = ['EMPLOYEE', 'MANAGER', 'BOTH'] as const
 const KRA_AUTHOR_LABEL: Record<typeof KRA_AUTHORS[number], string> = {
   EMPLOYEE: 'The employee writes their own',
@@ -180,6 +196,11 @@ function PolicyPanel({ policies, companies, reload }: {
 
       <div className="grid g4">
         <Field label="Minimum weightage per KRA"><input type="number" value={n(draft.min_weightage_per_kra)} onChange={e => set('min_weightage_per_kra', Number(e.target.value))} /></Field>
+        <Field label="New joiner cut-off (days)"
+               hint="§8: joined within this many days of the period end is Not Rated">
+          <input type="number" min={0} max={365} value={n(draft.new_joiner_cutoff_days)}
+                 onChange={e => set('new_joiner_cutoff_days', Number(e.target.value))} />
+        </Field>
         <Field label="KRAs created by" hint="§0 made this the employee by default">
           <select value={s(draft.kra_created_by) || 'EMPLOYEE'}
                   onChange={e => set('kra_created_by', e.target.value)}>
@@ -201,6 +222,12 @@ function PolicyPanel({ policies, companies, reload }: {
                 Self → RM L1 → RM L2 → HOD → MD (set in the database; not supported yet)
               </option>
             )}
+          </select>
+        </Field>
+        <Field label="Rating scale" hint="§13.2 recommends the 5-point scale">
+          <select value={s(draft.rating_scale_type) || 'FIVE_POINT'}
+                  onChange={e => set('rating_scale_type', e.target.value)}>
+            {RATING_SCALES.map(r => <option key={r} value={r}>{RATING_SCALE_LABEL[r]}</option>)}
           </select>
         </Field>
         <Field label="Who may finalise" hint="Checked again by pms_finalise">

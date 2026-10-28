@@ -24,7 +24,7 @@ import { useState } from 'react'
 import './pms.css'
 import { teamQueue, finaliseQueue, teamStats, distribution,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
-import { FLAG_LABEL } from '@/lib/pms/employment'
+import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
          DEFAULT_BANDS, type Band, type Line } from '@/lib/pms/scoring'
 import { canPublishResult, type Log } from '@/lib/pms/oneToOne'
@@ -185,13 +185,23 @@ const EMPTY_TEAM =
 
 // ── §4.1 Team Dashboard ──────────────────────────────────────────────────
 
-export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES}: {
+export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   /** The policy's KRA rules, not the constant — a manager must be shown the
    *  same thresholds the employee was held to. */
   rules?: Rules
   members: TeamMember[]; today: string; managerName: string
 }) {
-  const rows = teamQueue(members, today)
+  const rows = teamQueue(members, today, flagRules)
   const s = teamStats(rows)
   return (
     <>
@@ -218,7 +228,17 @@ export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES}: {
 // ── §4.2 KRA Approval & One-to-One ───────────────────────────────────────
 
 export function ApproveTab({ members, today, onSendBack, onAcknowledge,
-                             onAcknowledgeFinalReview, rules = DEFAULT_RULES}: {
+                             onAcknowledgeFinalReview, rules = DEFAULT_RULES, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   /** The policy's KRA rules, not the constant — a manager must be shown the
    *  same thresholds the employee was held to. */
   rules?: Rules
@@ -230,13 +250,13 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
   onAcknowledgeFinalReview?: (id: string) => void
 }) {
   const [reason, setReason] = useState<Record<string, string>>({})
-  const rows = teamQueue(members, today)
+  const rows = teamQueue(members, today, flagRules)
     .filter(r => !r.member.selfSubmitted || !r.member.oneToOneDone)
   // Logged by the employee, still waiting on this manager's half. Not merged
   // into the card above: that one is about getting a KRA set locked before
   // the period runs, this one is the last thing standing between a rated
   // employee and a settled rating. Same table, opposite ends of the cycle.
-  const finalRows = teamQueue(members, today)
+  const finalRows = teamQueue(members, today, flagRules)
     .filter(r => r.member.finalReviewLogged && !r.member.finalReviewDone)
 
   return (
@@ -324,7 +344,17 @@ export interface RateRow {
 }
 
 export function RateTab({ member, rows, onChange, onSubmit, saving, overallComment,
-                          onOverallComment, bands = DEFAULT_BANDS, members, onPick, today, rules = DEFAULT_RULES}: {
+                          onOverallComment, bands = DEFAULT_BANDS, members, onPick, today, rules = DEFAULT_RULES, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   /** Passed to QueueTable so the weightage column is coloured against the
    *  policy's total rather than a hardcoded 100. */
   rules?: Rules
@@ -348,7 +378,7 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
     // The same queue the Team Dashboard shows, with one column added, rather
     // than a second table that could drift from it — exit and notice rows stay
     // highlighted and pinned here too.
-    const pickable = members && today ? teamQueue(members, today) : []
+    const pickable = members && today ? teamQueue(members, today, flagRules) : []
     return (
       <Card title="Who are you rating?"
             sub="Their KRAs and their own ratings appear beside yours once you choose.">
@@ -498,12 +528,22 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
 
 export interface PipArea { area: string; current: string; target: string; measure: string; reviewOn: string }
 
-export function PipRequestTab({ members, today, onRaise, saving }: {
+export function PipRequestTab({ members, today, onRaise, saving, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   members: TeamMember[]; today: string
   onRaise?: (employeeId: string, areas: PipArea[], support: string) => void
   saving?: boolean
 }) {
-  const rows = teamQueue(members, today)
+  const rows = teamQueue(members, today, flagRules)
   const [who, setWho] = useState('')
   const [support, setSupport] = useState('')
   const [areas, setAreas] = useState<PipArea[]>([
@@ -597,7 +637,17 @@ export function PipRequestTab({ members, today, onRaise, saving }: {
 
 // ── §4.5 / §5.3 analytics ────────────────────────────────────────────────
 
-export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAverage, scopeLabel, bands = DEFAULT_BANDS }: {
+export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAverage, scopeLabel, bands = DEFAULT_BANDS, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   members: TeamMember[]; today: string
   lines: Line[]
   deptAverage: number | null; companyAverage: number | null
@@ -605,7 +655,7 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
   /** The configured rating scale; falls back to the built-in list. */
   bands?: Band[]
 }) {
-  const rows = teamQueue(members, today)
+  const rows = teamQueue(members, today, flagRules)
   const dist = distribution(rows)
   const rated = dist.reduce((s, d) => s + d.n, 0)
   const cats = byCategory(lines, 'final')
@@ -659,7 +709,17 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
 // ── §5.1 Review & Finalise ───────────────────────────────────────────────
 
 export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName, bands = DEFAULT_BANDS,
-                              onFinalise, onNudge, saving, finalReviewRequired = false }: {
+                              onFinalise, onNudge, saving, finalReviewRequired = false, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   members: TeamMember[]; today: string
   role: Role; chain: Chain; whoCanFinalise: Finaliser
   deptName: string
@@ -672,7 +732,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
   /** The configured rating scale; falls back to the built-in list. */
   bands?: Band[]
 }) {
-  const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise, finalReviewRequired })
+  const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise, finalReviewRequired, rules: flagRules })
   const [picked, setPicked] = useState<Record<string, number>>({})
   const awaiting = rows.filter(r => !r.member.finalised).length
   const done = rows.filter(r => r.member.finalised).length

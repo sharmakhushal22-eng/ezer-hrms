@@ -19,6 +19,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { DEFAULT_RULES } from '../cycle.ts'
+import { DEFAULT_FLAG_RULES } from '../employment.ts'
 
 /** Every .ts/.tsx under a directory, recursively. */
 function walk(dir: string): string[] {
@@ -105,4 +106,43 @@ test('the policy columns behind these rules all exist in the schema', () => {
     assert.ok(new RegExp(`\\b${col}\\b`).test(sql),
       `pms_policies has no ${col} — the rules mapping is broken`)
   }
+})
+
+// ── §8's eligibility cut-off, the same mistake in a second place ─────────
+//
+// new_joiner_cutoff_days is policy configuration per §13.2, the admin screen
+// now edits it, and §8 computes NEW_JOINER from it. It was enforced NOWHERE:
+// no caller passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and
+// a policy set to 45 changed nothing anybody could see.
+
+test('nothing reads the new-joiner cut-off off the constant', () => {
+  const offenders: string[] = []
+  for (const { f, src } of FILES) {
+    if (f.endsWith('lib/pms/employment.ts')) continue   // defines it
+    for (const m of src.matchAll(/DEFAULT_FLAG_RULES\.newJoinerCutoffDays/g)) {
+      const lead = src.slice(Math.max(0, m.index - 40), m.index)
+      if (/(\|\||\?\?)\s*$/.test(lead)) continue
+      if (/[^=!<>]=\s*$/.test(lead)) continue
+      offenders.push(`${f}:${src.slice(0, m.index).split('\n').length}`)
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'these read the cut-off from the constant, so a policy change will not '
+    + 'reach them — take a FlagRules and pass it to flagFor/teamQueue')
+})
+
+test('every queue call site supplies the policy rules', () => {
+  // The bug was not a wrong value, it was an ABSENT argument: teamQueue's
+  // third parameter is optional, so omitting it compiles, runs, and silently
+  // falls back to 30 days. A type cannot catch that; this can.
+  const mgr = FILES.find(x => x.f.endsWith('components/pms/ManagerTabs.tsx'))
+  assert.ok(mgr, 'ManagerTabs not found')
+  const bare = [...mgr!.src.matchAll(/teamQueue\(\s*members\s*,\s*today\s*\)/g)]
+  assert.equal(bare.length, 0,
+    'teamQueue called without FlagRules — the policy cut-off will be ignored '
+    + 'and DEFAULT_FLAG_RULES used instead')
+})
+
+test('DEFAULT_FLAG_RULES is still the documented 30-day fallback', () => {
+  assert.deepEqual(DEFAULT_FLAG_RULES, { newJoinerCutoffDays: 30 })
 })
