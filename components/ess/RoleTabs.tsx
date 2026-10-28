@@ -807,37 +807,39 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
 // a PANELIST. Everyone sees the details and acknowledges; only the main
 // interviewer's row turns into a blue "Give feedback" (8 parameters + a
 // Hold / Reject / Shortlist decision). A panelist's row is done once acknowledged.
+// It lives in the ESS notification panel (the bell), not Tasks & Approvals: the
+// interviewer acknowledges and gives feedback from the notification itself.
 const isMain = (i: any) => (i.role || 'MAIN') === 'MAIN'
 
-export function InterviewInvites({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+export function InterviewInvites({ employeeId, notify, onDone }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void; onDone?: () => void }) {
   const [invites, setInvites] = useState<any[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [fbFor, setFbFor] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const load = useCallback(() => api('/api/ess/interview', employeeId).then(d => setInvites(d.invites || [])).catch(() => setInvites([])), [employeeId])
   useEffect(() => { load() }, [load])
-  if (!invites || invites.length === 0) return null
-
   // Main interviewers are done once feedback is in; panelists once they've acknowledged.
-  const pending = invites.filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  // Only what still needs doing is listed; a finished interview leaves the panel.
+  const pending = (invites || []).filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  if (pending.length === 0) return null
   const ack = async (id: string) => {
     setBusy(id)
-    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify('Acknowledged. Record your feedback after the interview.'); await load() }
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify(isMain(pending.find((i: any) => i.id === id)) ? 'Acknowledged. Give your feedback here after the interview.' : 'Acknowledged.'); await load(); onDone?.() }
     catch (e: any) { notify(e.message, 'error') }
     setBusy(null)
   }
   const submit = async (fb: InterviewFeedback) => {
     if (!fbFor) return
     setSaving(true)
-    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load() }
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load(); onDone?.() }
     catch (e: any) { notify(e.message, 'error') }
     setSaving(false)
   }
 
   return (
     <div style={S.card}>
-      <div style={S.section}>Interviews to conduct ({pending.length || invites.length})</div>
-      {invites.map((i: any) => {
+      <div style={S.section}>Interviews to conduct ({pending.length})</div>
+      {pending.map((i: any) => {
         const when = i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'time to be confirmed'
         return (
           <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
@@ -864,7 +866,7 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
       })}
 
       {fbFor && createPortal(
-        <div onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
+        <div data-ez-keep-open onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 4000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '24px 16px' }}>
           <div style={{ background: C.card, borderRadius: 16, width: 'min(1000px, 100%)', boxShadow: '0 24px 70px rgba(30,27,75,0.3)', padding: '18px 20px', margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -877,6 +879,72 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
               onSubmit={submit} onClose={() => !saving && setFbFor(null)} />
           </div>
         </div>, document.body)}
+    </div>
+  )
+}
+
+// ── Exits to approve — the company-started exits (People → Employees → Exit) waiting on you
+// as HR Manager / Legal / HR Head / MD. Approve moves it to the next step; Reject needs a reason
+// and stops it. The chain itself is app/api/ess/exit-employee (lib/exit/hr-exit.ts).
+export function HrExitApprovals({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+  const [items, setItems] = useState<any[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [rejecting, setRejecting] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+  const load = useCallback(() => api('/api/ess/exit-employee?inbox=1', employeeId).then(d => setItems(d.items || [])).catch(() => setItems([])), [employeeId])
+  useEffect(() => { load() }, [load])
+  if (!items || items.length === 0) return null
+  const act = async (id: string, approve: boolean) => {
+    setBusy(id)
+    try {
+      const d = await api('/api/ess/exit-employee', employeeId, { method: 'POST', body: JSON.stringify({ action: approve ? 'approve' : 'reject', id, note: approve ? '' : note }) })
+      notify(!approve ? 'Exit rejected.' : d.request?.status === 'APPROVED' ? 'Exit approved. It is now in effect.' : 'Approved. It has moved to the next approver.')
+      setRejecting(null); setNote(''); await load()
+    } catch (e: any) { notify(e.message, 'error') }
+    setBusy(null)
+  }
+  return (
+    <div style={S.card}>
+      <div style={S.section}>Exits to approve ({items.length})</div>
+      {items.map((x: any) => {
+        const step = (x.chain || []).find((s: any) => s.status === 'PENDING')
+        return (
+          <div key={x.id} style={{ padding: '10px 0', borderTop: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{x.employee?.full_name} <span style={{ color: C.muted, fontWeight: 500 }}>{x.employee?.emp_code}{x.employee?.designation ? ` · ${x.employee.designation}` : ''}</span>
+                  <span style={{ ...pill('dang'), marginLeft: 6 }}>{x.reason_label}{x.sub_reason ? ` · ${x.sub_reason}` : ''}</span></div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
+                  Last working day {new Date(`${x.last_working_day}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · started by {x.initiated_by_name || 'HR'} · waiting on you as {step?.label || 'approver'}
+                </div>
+                {x.remarks && <div style={{ fontSize: 12, color: C.ink, marginTop: 4 }}>{x.remarks}</div>}
+                {(x.documents || []).length > 0 && (
+                  <div style={{ fontSize: 11.5, marginTop: 4 }}>Documents: {x.documents.map((d: any) => (
+                    <button key={d.path} type="button" onClick={() => api(`/api/exit/documents?request_id=${x.id}&path=${encodeURIComponent(d.path)}`, employeeId).then(j => window.open(j.url, '_blank', 'noopener')).catch((e: any) => notify(e.message, 'error'))}
+                      style={{ border: 'none', background: 'none', padding: 0, marginRight: 8, color: C.blue, cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>{d.name}</button>
+                  ))}</div>
+                )}
+                <div style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>
+                  {(x.chain || []).map((s: any) => `${s.label}: ${s.status === 'APPROVED' ? 'approved' : s.status === 'PENDING' ? 'waiting' : s.status === 'SKIPPED' ? 'skipped' : s.status === 'REJECTED' ? 'rejected' : 'next'}`).join(' → ')}
+                </div>
+              </div>
+              {rejecting !== x.id && <>
+                <button onClick={() => { setRejecting(x.id); setNote('') }} disabled={busy === x.id} style={S.btnD}>Reject</button>
+                <button onClick={() => act(x.id, true)} disabled={busy === x.id} style={{ ...S.btn, background: C.green, opacity: busy === x.id ? .6 : 1 }}>{busy === x.id ? '…' : 'Approve'}</button>
+              </>}
+            </div>
+            {rejecting === x.id && (
+              <div style={{ marginTop: 8 }}>
+                <textarea style={{ ...S.input, minHeight: 56, resize: 'vertical' }} value={note} onChange={e => setNote(e.target.value)} placeholder="Reason for rejecting (required)" />
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
+                  <button onClick={() => { setRejecting(null); setNote('') }} disabled={busy === x.id} style={S.btnO}>Back</button>
+                  <button onClick={() => act(x.id, false)} disabled={busy === x.id || !note.trim()} style={{ ...S.btn, background: C.red, opacity: busy === x.id || !note.trim() ? .6 : 1 }}>{busy === x.id ? 'Rejecting…' : 'Confirm reject'}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -895,7 +963,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
     <div>
       <MrfApprovals employeeId={employeeId} notify={notify} />
       <OfferApprovals employeeId={employeeId} notify={notify} />
-      <InterviewInvites employeeId={employeeId} notify={notify} />
+      <HrExitApprovals employeeId={employeeId} notify={notify} />
       <OnboardingApprovals employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },

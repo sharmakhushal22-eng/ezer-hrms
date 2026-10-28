@@ -938,7 +938,7 @@ export const WORKFLOW_NOTIFICATIONS: TemplateDef[] = [
     variables: [CANDIDATE, ROUND, WHEN, MEET, PASS],
     defaults: {
       subject: 'Interview to conduct — {{candidate_name}} ({{round}})',
-      body: `You are the main interviewer for the {{round}} round on {{interview_time}}.${JOIN_BITS} Acknowledge it in Tasks & Approvals, then give your feedback after the interview.`,
+      body: `You are the main interviewer for the {{round}} round on {{interview_time}}.${JOIN_BITS} Acknowledge it from your ESS notifications, then give your feedback there after the interview.`,
     },
   }),
   notification({
@@ -950,14 +950,14 @@ export const WORKFLOW_NOTIFICATIONS: TemplateDef[] = [
     variables: [CANDIDATE, ROUND, WHEN, MEET, PASS, v('main_interviewer', 'Main interviewer', 'Rahul Nair')],
     defaults: {
       subject: 'Interview to conduct — {{candidate_name}} ({{round}})',
-      body: `You've been added as a panelist for the {{round}} round on {{interview_time}}.${JOIN_BITS} Main interviewer: {{main_interviewer}}. Acknowledge it in Tasks & Approvals.`,
+      body: `You've been added as a panelist for the {{round}} round on {{interview_time}}.${JOIN_BITS} Main interviewer: {{main_interviewer}}. Acknowledge it from your ESS notifications.`,
     },
   }),
   notification({
     key: 'notify.interview.feedback', module: RS,
     label: 'Interview feedback in',
     description: 'Tells whoever scheduled the round that the main interviewer has submitted feedback.',
-    usedIn: 'ESS → Tasks & Approvals → interview feedback',
+    usedIn: 'ESS → Notifications → interview feedback',
     recipient: 'Who scheduled the round',
     variables: [
       CANDIDATE, ROUND, v('decision', 'Decision', 'Proceed to next round'), v('interviewer_name', 'Interviewer', 'Rahul Nair'),

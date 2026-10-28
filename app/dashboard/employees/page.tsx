@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase'
 import { useGrant, authToken } from '@/lib/rms/client'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import HRActionPanel from '@/components/employees/HRActionPanel'
+import HrExitButton from '@/components/employees/HrExitButton'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
@@ -900,7 +901,11 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: {
               </Button>
             </>
           ) : (
-            <Button variant="primary" onClick={onEdit}>Edit profile</Button>
+            <>
+              {/* Red Exit: for the hiring / HR roles only (it renders nothing for anyone else). */}
+              <HrExitButton employeeId={emp.id} />
+              <Button variant="primary" onClick={onEdit}>Edit profile</Button>
+            </>
           )}
         </div>
       </div>

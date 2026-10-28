@@ -92,9 +92,9 @@ HR Team`)
     const base = { candidate_name: 'Priya', round: 'L1', interview_time: 'T', meet_link: '', meet_passcode: '', scheduler_name: 'Anita', company_name: '' }
     const main = fill('interview.interviewer_main', { ...base, interviewer_name: 'Rahul', panel_names: 'Meera' })
     assert.equal(main.subject, 'Interview to conduct — Priya (L1)')
-    assert.equal(main.body, 'Hi Rahul,\n\nPriya — L1 round, scheduled for T.\n\nYou are the MAIN interviewer (panel: Meera). Please acknowledge in ESS → Tasks & Approvals and record your feedback after the interview.\n\nAnita')
+    assert.equal(main.body, 'Hi Rahul,\n\nPriya — L1 round, scheduled for T.\n\nYou are the MAIN interviewer (panel: Meera). Please acknowledge it from your ESS notifications (the bell) and record your feedback there after the interview.\n\nAnita')
     const panel = fill('interview.interviewer_panel', { ...base, interviewer_name: 'Meera', main_interviewer_name: 'Rahul' })
-    assert.equal(panel.body, "Hi Meera,\n\nPriya — L1 round, scheduled for T.\n\nYou've been added as a PANELIST. Main interviewer: Rahul. Please acknowledge in ESS → Tasks & Approvals.\n\nAnita")
+    assert.equal(panel.body, "Hi Meera,\n\nPriya — L1 round, scheduled for T.\n\nYou've been added as a PANELIST. Main interviewer: Rahul. Please acknowledge it from your ESS notifications (the bell).\n\nAnita")
   })
 
   test('document re-upload lists exactly the missing documents', () => {
