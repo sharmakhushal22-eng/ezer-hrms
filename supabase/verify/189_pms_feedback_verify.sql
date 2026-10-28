@@ -27,7 +27,7 @@ SELECT CASE WHEN count(*) = 1 THEN 'PASS' ELSE 'FAIL — unique key changed' END
   FROM pg_constraint c
  WHERE c.conrelid = 'pms_feedback'::regclass
    AND c.contype = 'u'
-   AND pg_get_constraintdef(c) ILIKE '%period_id%employee_id%';
+   AND pg_get_constraintdef(c.oid) ILIKE '%period_id%employee_id%';
 
 -- 3. No data was touched: every pre-existing row still has its remark, and the
 --    new columns start empty because nothing has written them yet.

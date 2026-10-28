@@ -956,6 +956,29 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       return
     }
     if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
+    /**
+     * A SETTLED RATING IS NOT REWRITABLE FROM HERE.
+     *
+     * pms_reviews has no guard against this, and trg_pms_sync_role_score
+     * fires on every upsert, so re-submitting on a finalised record silently
+     * recomputes rm_l1_score — on a PUBLISHED one, that is the number the
+     * employee has already read, changing underneath them with no audit trail
+     * and nobody told. Rule 12's read-only lock only covers employees who
+     * have EXITED, so an active employee's published appraisal was wide open.
+     *
+     * Observed live: Shreya Singh's appraisal was finalised at 4 and
+     * published, and her RM's rating screen still accepted a submission and
+     * reported "Your rating has been sent."
+     *
+     * Refused here rather than hidden: the queue no longer offers the button,
+     * but a stale tab still holds one, and the honest place to say no is the
+     * write. The real fix is a DB-level guard — this is the client half.
+     */
+    if (member?.finalised) {
+      setSaving(false)
+      setMsg('Their rating has already been finalised, so it cannot be changed here. If it is wrong, ask HR to reopen the period — that keeps a record of why it changed.')
+      return
+    }
     // An empty set would upsert nothing and report success, which is how a
     // screen comes to lie about having saved. Nothing loads rateRows yet —
     // there is no way to pick a reportee — so this is the honest state.

@@ -345,13 +345,25 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
               extraHead={<th />}
               extraCell={r => (
                 <td>
-                  <button type="button" className="btn sm"
-                          onClick={() => onPick(r.member.employeeId)}
-                          title={r.member.selfSubmitted
-                            ? `Rate ${r.member.name}`
-                            : `Open ${r.member.name} — they have not submitted their own rating yet`}>
-                    {r.member.selfSubmitted ? 'Rate' : 'Open'}
-                  </button>
+                  {/* A SETTLED RATING IS NOT A RATING TASK. This offered "Rate"
+                      on finalised rows beside the words "Nothing owed on this
+                      one right now", and the screen behind it accepted the
+                      submission — which recomputes the RM score the employee
+                      may already have been shown. Observed live on a published
+                      appraisal. The row says what it is instead. */}
+                  {r.member.finalised ? (
+                    <span className="pill p-green" title="Finalised. Ask HR to reopen the period if it has to change.">
+                      settled
+                    </span>
+                  ) : (
+                    <button type="button" className="btn sm"
+                            onClick={() => onPick(r.member.employeeId)}
+                            title={r.member.selfSubmitted
+                              ? `Rate ${r.member.name}`
+                              : `Open ${r.member.name} — they have not submitted their own rating yet`}>
+                      {r.member.selfSubmitted ? 'Rate' : 'Open'}
+                    </button>
+                  )}
                 </td>
               )} />}
       </Card>
