@@ -11,7 +11,7 @@
 //   • Shortlist (or Hold) on the latest round enables "+ Add round": name the
 //     round, then schedule it with ONE main interviewer and any number of
 //     panelists (date/time, meeting link, passcode). Everyone gets the details
-//     in ESS → Tasks & Approvals; only the main interviewer gets "Give feedback".
+//     from the ESS notification panel; only the main interviewer gets "Give feedback".
 //   • The main interviewer's decision moves the candidate: Reject → Rejected
 //     (with remark), Hold → the Hold stage (with remark; a round can still be
 //     added), Shortlist → clears the round.

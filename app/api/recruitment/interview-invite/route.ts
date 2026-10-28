@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
   const ins = await insertInvites(rows)
   if (ins.error) return bad(ins.error.message, 500)
 
-  // In-app ESS task for everyone (surfaces in Tasks & Approvals + bell). The wording tells
+  // In-app ESS task for everyone (acknowledged and answered from the ESS notification bell). The wording tells
   // the main interviewer feedback is theirs; panelists are asked only to acknowledge.
   // Words: Configuration → Recruitment → Notifications ("Interview to conduct — main
   // interviewer / panelist"), for the candidate's company and the MRF's branch.
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
   const scope = await mrfScope(mrf_id || (cand as any)?.mrf_id, companyId)
   const when = scheduled_at ? new Date(scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'a time to be confirmed'
   const nVars = { candidate_name: cand?.full_name || 'a candidate', round, interview_time: when, meet_link: meet_link || '', meet_passcode: meet_passcode || '', main_interviewer: mainEmp?.full_name || '—' }
-  await Promise.all(ids.map(id => notifyFromTemplate(id, id === mainId ? 'notify.interview.main' : 'notify.interview.panel', nVars, { scope, link: '/ess?tab=approvals', category: 'INTERVIEW' })))
+  await Promise.all(ids.map(id => notifyFromTemplate(id, id === mainId ? 'notify.interview.main' : 'notify.interview.panel', nVars, { scope, link: '/ess?notifications=1', category: 'INTERVIEW' })))
 
   // Email — best effort (mailRound below).
   const { emailed, emailSkipped } = await mailRound({ cand, candidateId: candidate_id, companyId, scope, round, when, meetLink: meet_link || '', meetPasscode: meet_passcode || '', schedName, mainId, panelIds, empById })
@@ -252,11 +252,11 @@ async function reschedule(body: any) {
   const when = next.scheduledAt ? new Date(next.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }) : 'a time to be confirmed'
   const mainEmp: any = empById.get(next.mainId!)
   const nVars = { candidate_name: cand?.full_name || 'a candidate', round: mainRow.round, interview_time: when, meet_link: next.link, meet_passcode: next.passcode, main_interviewer: mainEmp?.full_name || '—' }
-  await Promise.all(ids.map(id => notifyFromTemplate(id, id === next.mainId ? 'notify.interview.main' : 'notify.interview.panel', nVars, { scope, link: '/ess?tab=approvals', category: 'INTERVIEW' }).catch(() => null)))
+  await Promise.all(ids.map(id => notifyFromTemplate(id, id === next.mainId ? 'notify.interview.main' : 'notify.interview.panel', nVars, { scope, link: '/ess?notifications=1', category: 'INTERVIEW' }).catch(() => null)))
   // Removed interviewers: a bell and a mail, so nobody turns up to an interview they left.
   for (const id of who.removed) {
     const e: any = empById.get(id)
-    await notify(id, `Interview update: ${mainRow.round}`, `You are no longer on the ${mainRow.round} interview of ${cand?.full_name || 'the candidate'}. ${schedName} updated the panel.`, '/ess?tab=approvals', 'INTERVIEW').catch(() => null)
+    await notify(id, `Interview update: ${mainRow.round}`, `You are no longer on the ${mainRow.round} interview of ${cand?.full_name || 'the candidate'}. ${schedName} updated the panel.`, '/ess?notifications=1', 'INTERVIEW').catch(() => null)
     const to = empEmail(e)
     if (to && mailConfigured()) await sendMail({ to, fromName: 'EZER HR Team', subject: `Interview update: you are off the ${mainRow.round} panel for ${cand?.full_name || 'a candidate'}`, text: `Hi ${e?.full_name || ''},\n\nYou are no longer on the ${mainRow.round} interview of ${cand?.full_name || 'the candidate'}. Please ignore the earlier invite; nothing is needed from you.\n\n${schedName}`, html: `<p>Hi ${escapeHtml(e?.full_name || '')},</p><p>You are no longer on the <b>${escapeHtml(mainRow.round)}</b> interview of <b>${escapeHtml(cand?.full_name || 'the candidate')}</b>. Please ignore the earlier invite; nothing is needed from you.</p><p>${escapeHtml(schedName)}</p>` }).catch(() => null)
   }

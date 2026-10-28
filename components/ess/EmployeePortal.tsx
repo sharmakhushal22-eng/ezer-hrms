@@ -36,7 +36,7 @@ import Today from '@/components/ess/today/Today'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
-import { useEssMenu, PendingOnYou, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
+import { useEssMenu, PendingOnYou, ApprovalsSection, InterviewInvites, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, MODULE_TABS, roleEntryOpen, type NavEntry } from '@/lib/rms/nav'
 // The address bar as the portal's "where am I": /ess/leave, /ess/recruitment/mrf … (lib/ess/routes.ts)
 import { parseEssPath, essHref, essPath, pushUrl, atEss, type EssLocation, type EssKeys } from '@/lib/ess/routes'
@@ -1276,7 +1276,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
 // NOTIFICATIONS (B11)
 // ════════════════════════════════════════════════════════════════
 
-function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () => void }) {
+function Notifications({ emp, onChange, notify }: { emp: EmployeeDetail; onChange?: () => void; notify: (m: string, t?: 'success'|'error') => void }) {
   const [personal, setPersonal] = useState<any[]>([])
   const [role, setRole] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -1341,6 +1341,10 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
         <div style={T.section}>Notifications</div>
         <button onClick={() => act({ action: 'read_all' })} style={T.btnO}>Mark all read</button>
       </div>
+
+      {/* Interviews this person is on: acknowledged, and the main interviewer's
+          feedback given, right here (nothing when there is none). */}
+      <InterviewInvites employeeId={emp.id} notify={notify} onDone={load} />
 
       {loading && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>Loading…</div>}
       {!loading && total === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You&apos;re all caught up. 🎉</div>}
@@ -3918,6 +3922,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     }
     applyLocation(loc)
     if (atEss()) pushUrl(essHref(loc), 'replace')
+    // ?notifications=1 (an interview invite's link) opens the bell, where it is acknowledged.
+    if (q.get('notifications')) setBellOpen(true)
     const onPop = () => applyLocation(parseEssPath(window.location.pathname, window.location.search, ESS_KEYS))
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
@@ -4241,7 +4247,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
         // No full-screen catcher: it used to swallow the next click, so
         // dismissing this panel and pressing anything else took two clicks.
         <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 60 : 70, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:Z.navMenu, background:C.surface, border: `1px solid ${C.line}`, borderRadius:14, boxShadow:E.floating, padding:'12px 14px' }}>
-          <Notifications emp={emp} onChange={refreshUnread} />
+          <Notifications emp={emp} onChange={refreshUnread} notify={notify} />
         </div>
       )}
 

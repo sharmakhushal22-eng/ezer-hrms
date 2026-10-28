@@ -807,37 +807,39 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
 // a PANELIST. Everyone sees the details and acknowledges; only the main
 // interviewer's row turns into a blue "Give feedback" (8 parameters + a
 // Hold / Reject / Shortlist decision). A panelist's row is done once acknowledged.
+// It lives in the ESS notification panel (the bell), not Tasks & Approvals: the
+// interviewer acknowledges and gives feedback from the notification itself.
 const isMain = (i: any) => (i.role || 'MAIN') === 'MAIN'
 
-export function InterviewInvites({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+export function InterviewInvites({ employeeId, notify, onDone }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void; onDone?: () => void }) {
   const [invites, setInvites] = useState<any[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [fbFor, setFbFor] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const load = useCallback(() => api('/api/ess/interview', employeeId).then(d => setInvites(d.invites || [])).catch(() => setInvites([])), [employeeId])
   useEffect(() => { load() }, [load])
-  if (!invites || invites.length === 0) return null
-
   // Main interviewers are done once feedback is in; panelists once they've acknowledged.
-  const pending = invites.filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  // Only what still needs doing is listed; a finished interview leaves the panel.
+  const pending = (invites || []).filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  if (pending.length === 0) return null
   const ack = async (id: string) => {
     setBusy(id)
-    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify('Acknowledged. Record your feedback after the interview.'); await load() }
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify(isMain(pending.find((i: any) => i.id === id)) ? 'Acknowledged. Give your feedback here after the interview.' : 'Acknowledged.'); await load(); onDone?.() }
     catch (e: any) { notify(e.message, 'error') }
     setBusy(null)
   }
   const submit = async (fb: InterviewFeedback) => {
     if (!fbFor) return
     setSaving(true)
-    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load() }
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load(); onDone?.() }
     catch (e: any) { notify(e.message, 'error') }
     setSaving(false)
   }
 
   return (
     <div style={S.card}>
-      <div style={S.section}>Interviews to conduct ({pending.length || invites.length})</div>
-      {invites.map((i: any) => {
+      <div style={S.section}>Interviews to conduct ({pending.length})</div>
+      {pending.map((i: any) => {
         const when = i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'time to be confirmed'
         return (
           <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
@@ -864,7 +866,7 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
       })}
 
       {fbFor && createPortal(
-        <div onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
+        <div data-ez-keep-open onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 4000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '24px 16px' }}>
           <div style={{ background: C.card, borderRadius: 16, width: 'min(1000px, 100%)', boxShadow: '0 24px 70px rgba(30,27,75,0.3)', padding: '18px 20px', margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -895,7 +897,6 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
     <div>
       <MrfApprovals employeeId={employeeId} notify={notify} />
       <OfferApprovals employeeId={employeeId} notify={notify} />
-      <InterviewInvites employeeId={employeeId} notify={notify} />
       <OnboardingApprovals employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },
