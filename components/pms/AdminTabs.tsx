@@ -60,6 +60,7 @@ import { DEFAULT_RULES } from '@/lib/pms/cycle'
 import { FILL_ORDER, FILL_LABEL, type FillStatus } from '@/lib/pms/status'
 import { rollUp, type FillRow } from '@/lib/pms/rollup'
 import { csvText, parseCsv } from '@/lib/pms/csv'
+import { pmsAdmin } from '@/lib/pms/adminClient'
 import { humanDate } from '@/lib/pms/cycle'
 
 export type AdminTab =
@@ -589,14 +590,21 @@ const FILL_MEANING_SHORT: Record<FillStatus, string> = {
 
 // ── §6.4 Final Rating Upload ─────────────────────────────────────────────
 
-export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow }: {
+export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
+                            periodId, periodLabel, onCommitted }: {
   /** vw_pms_fill_status for the open period. Null while loading. */
   rows?: FillRow[] | null
   scale?: number[]
   improvementAtOrBelow?: number | null
+  /** The open period. Without it the commit has nowhere to write. */
+  periodId?: string | null
+  periodLabel?: string
+  onCommitted?: () => void
 } = {}) {
   const [rows, setRows] = useState<UploadRow[] | null>(null)
   const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
 
   /**
    * THE REAL LOOKUP. This was KNOWN_NOTHING, which answered "no such
@@ -661,8 +669,16 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow }: {
 
       <Card title="Final rating upload"
             sub="For when a calibration happened offline, or legacy data has to be brought in.">
+        {result && (
+          <div className={result.ok ? 'banner b-green' : 'banner b-amber'}>
+            <span aria-hidden="true">{result.ok ? '✓' : '⚠️'}</span>
+            <div>{result.text}</div>
+          </div>
+        )}
         <div className="grid g3">
-          <Field label="Period"><select disabled><option>The open period</option></select></Field>
+          <Field label="Period" hint="Uploads apply to the period that is open">
+            <select disabled><option>{periodLabel || 'The open period'}</option></select>
+          </Field>
           <Field label="Upload file" hint={name || 'CSV, using the template below'}>
             <input type="file" accept=".csv,text/csv"
                    onChange={e => {
@@ -739,12 +755,35 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow }: {
                       onClick={() => exportErrorRows(preview)}>
                 ⬇ Download error rows ({preview.errorCount})
               </button>
-              <button className="btn dark sm" type="button" disabled={!preview.canCommit}>
-                {preview.canCommit
-                  ? `Commit upload (${preview.rows.length} rows)`
+              <button className="btn dark sm" type="button"
+                      disabled={!preview.canCommit || !periodId || busy}
+                      onClick={async () => {
+                        setBusy(true); setResult(null)
+                        const r = await pmsAdmin<{ message?: string; applied?: number }>(
+                          'upload_commit',
+                          { period_id: periodId, actor_role: 'HR_MANAGER',
+                            rows: preview.rows.map(x => x.row) })
+                        setBusy(false)
+                        if (r.error) { setResult({ ok: false, text: r.error.message }); return }
+                        setResult({ ok: true, text: r.data?.message ?? 'Committed.' })
+                        // The file is spent: its preview was computed against
+                        // ratings this commit has just changed, so leaving it
+                        // on screen would invite a second application of the
+                        // same batch against different numbers.
+                        setRows(null); setName('')
+                        onCommitted?.()
+                      }}>
+                {busy ? 'Committing…'
+                  : preview.canCommit
+                  ? `Commit upload (${preview.rows.length} ${preview.rows.length === 1 ? 'row' : 'rows'})`
                   : `Commit blocked: ${preview.errorCount} ${preview.errorCount === 1 ? 'row needs' : 'rows need'} fixing`}
               </button>
             </div>
+            {!periodId && (
+              <div className="k bad" style={{ marginTop: 8 }}>
+                No open period is loaded, so there is nowhere to commit this to.
+              </div>
+            )}
             <div className="k" style={{ marginTop: 8, lineHeight: 1.6 }}>{summarise(preview)}</div>
           </>
         )}

@@ -67,6 +67,8 @@ export default function PmsPage() {
   const [err, setErr] = useState<string | null>(null)
   const [fill, setFill] = useState<FillRow[] | null>(null)
   const [naming, setNaming] = useState<PeriodNaming | null>(null)
+  /** The open period's id — §6.4 commits against it. */
+  const [periodId, setPeriodId] = useState<string | null>(null)
   const [deptNames, setDeptNames] = useState<Record<string, string>>({})
   const [freq, setFreq] = useState<Frequency>('QUARTERLY')
   const [policies, setPolicies] = useState<Policy[]>([])
@@ -106,6 +108,7 @@ export default function PmsPage() {
       .order('period_start', { ascending: false }).limit(1).maybeSingle()
 
     const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null
+    setPeriodId(row?.id ?? null)
     if (row) {
       const freq = ((row as unknown as { pms_policies?: { frequency?: string } })
         .pms_policies?.frequency) ?? null
@@ -341,7 +344,9 @@ export default function PmsPage() {
           {tab === 'setup'    && <AdminEditor />}
           {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}
           {tab === 'upload'   && <UploadTab rows={fill} scale={scale}
-                               improvementAtOrBelow={improvementAtOrBelow} />}
+                               improvementAtOrBelow={improvementAtOrBelow}
+                               periodId={periodId} periodLabel={naming?.title}
+                               onCommitted={load} />}
           {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}
           {tab === 'reports'  && <ReportsTab />}
           {tab === 'chain'    && <FlowTab chainCoverage={cov ? <ChainCoverage cov={cov} /> : null} />}

@@ -305,6 +305,44 @@ export async function POST(req: NextRequest) {
       return r.error ? bad(r.error.message) : okay({ message: r.data })
     }
 
+    /**
+     * §6.4 — commit a bulk rating upload.
+     *
+     * The rows go to the database UNCHECKED by this route, deliberately.
+     * pms_commit_rating_upload re-validates every one of them against the
+     * live tables, and that is where the decision belongs: a check here would
+     * be a third copy of the same rules, able to disagree with both the
+     * browser preview and the function.
+     *
+     * One RPC, so one transaction. A loop here would be the part-applied
+     * batch the whole feature is built to prevent.
+     */
+    case 'upload_commit': {
+      const period = str('period_id')
+      if (!period) return bad('Which period is this upload for?')
+      if (!Array.isArray(body.rows)) return bad('No rows were sent.')
+      if (!body.rows.length) return bad('That file had no data rows.')
+      // Attributable or not at all — the function refuses a null actor too,
+      // but saying it here costs nothing and names the fix.
+      if (!actor.employeeId) {
+        return bad('This session is the shared dashboard login, which is not '
+                 + 'attached to an employee record. A bulk override is recorded '
+                 + 'against a named person, so sign in with your own account.')
+      }
+      const r = await sb.rpc('pms_commit_rating_upload', {
+        p_period_id: period, p_actor_id: actor.employeeId,
+        p_actor_role: str('actor_role') || 'HR_MANAGER',
+        p_rows: body.rows,
+      })
+      if (r.error) return bad(r.error.message)
+      const res = (r.data ?? {}) as { ok?: boolean; message?: string }
+      // A refused batch is not a transport failure: it returns ok:false with
+      // a sentence for the admin, and the attempt is logged either way.
+      return res.ok === false
+        ? bad(String(res.message ?? 'The upload was refused.'))
+        : okay(r.data as Record<string, unknown>)
+    }
+
     default:
       return bad(`Unknown action '${action}'.`)
   }
