@@ -162,6 +162,82 @@ export interface TeCall {
   /** 403 unless the caller holds the module at the level. */
   permit(module: Module, level?: AccessLevel): Promise<void>
   /**
+   * true when the caller sits on a desk (migration 161's finance_team /
+   * travel_desk), resolved once per request. Never throws: a project without
+   * 161 applied has no te_on_desk, and that must read as "not on the desk"
+   * rather than breaking the route.
+   */
+  onDesk(kind: 'finance' | 'travel'): Promise<boolean>
+  /**
+   * true when the caller is on that desk with GROUP scope — one person who
+   * answers for every company in the group, which is what travel_desk's own
+   * comment says the flag is for: "one row instead of one per company".
+   *
+   * It was honoured at the door and nowhere else. te_on_desk let them in and
+   * then every query filtered to their own company and ?company_id= was
+   * refused, so the only group-scoped desk member in the data could serve
+   * exactly one of the three companies he was supposed to cover.
+   */
+  deskIsGroupWide(kind: 'finance' | 'travel'): Promise<boolean>
+  /**
+   * Whether the caller may commit company money on the travel desk —
+   * travel_desk.can_book, the admin screen's "May book" checkbox.
+   *
+   * TRUE FOR ANYBODY WHO IS NOT ON THAT DESK AT ALL, because then the box does
+   * not apply to them and their dashboard role decides, as it always has. This
+   * only ever refuses a person who IS on the travel desk and has not been
+   * given the right. Mirrors te_may_book (migration 175), which is the floor;
+   * this is the early, legible refusal.
+   *
+   * It used to be the other way round and wrong in both directions: can_book
+   * gated te_on_desk — so unticking "May book" removed the person from the
+   * desk entirely — while no route consulted it, so ticking it bought nothing.
+   */
+  deskMayBook(): Promise<boolean>
+  /**
+   * 403 unless the caller is on the desk OR holds the module by role.
+   *
+   * WHY BOTH. Desk membership is the real rule and the SQL enforces it — a
+   * payout refuses anyone without a finance_team row that may disburse. The
+   * route permission is the older, coarser one, and on this data the two had
+   * drifted apart in both directions: an HR Head with the Finance role and no
+   * finance_team row could read the whole company's money, while the Finance
+   * Controller herself, can_disburse and all, was refused at the door because
+   * nobody had granted her the dashboard role. Accepting either keeps the
+   * route from being stricter than the database it is guarding.
+   */
+  permitDesk(kind: 'finance' | 'travel', module: Module, level?: AccessLevel): Promise<void>
+  /**
+   * 403 unless the caller may open the Finance desk: a place on it, or full
+   * admin access to the module.
+   *
+   * ONE RULE, BECAUSE THERE WERE TWO AND THEY POINTED OPPOSITE WAYS.
+   * /finance/overview had this test inline, with a comment explaining that the
+   * Finance VIEW role must NOT be enough — on this data it lets an HR Head
+   * with no finance_team row read the whole company's claims. Every other
+   * Finance route asked permitDesk(..., 'Finance', 'VIEW') instead. So the
+   * strict gate sat on the read-only summary and the loose one on the routes
+   * that move money, which is backwards:
+   *
+   *   Finance VIEW, no desk row (6 roles, 7 holders, three of them real
+   *   people) → refused /finance/overview, but GET /payouts answered 200 with
+   *   every batch and its items: claim, employee, amount, bank reference. That
+   *   route is a direct table read, so unlike the writes it has no SQL floor
+   *   underneath to catch it.
+   *
+   *   Travel Claims FULL, no desk row → the opposite: allowed to read the
+   *   whole Finance desk through the overview, refused by every room inside
+   *   it. The Payouts room swallowed the 403 and rendered "no batches", so a
+   *   module administrator was quietly shown an empty list rather than told.
+   *
+   * The writes were never exposed: te_assert_finance guards te_payout_create,
+   * te_adjustment_add, te_adjustment_close, te_advance_act and te_period_act.
+   * This closes the read and makes the UI honest, and it is deliberately the
+   * overview's wording that wins, because that is the one with the reasoning
+   * written next to it.
+   */
+  permitFinanceDesk(): Promise<void>
+  /**
    * The company this request is about. An employee's own company; another one
    * (?company_id=) only for a caller whose roles reach across companies. The
    * legacy shared login has no company of its own and must name one.
@@ -178,6 +254,7 @@ function makeCall(req: NextRequest): TeCall {
   let grantP: Promise<Grant> | null = null
   let companyP: Promise<string> | null = null
   let bodyP: Promise<unknown> | null = null
+  const deskP = new Map<string, Promise<boolean>>()
 
   const t: TeCall = {
     req,
@@ -205,6 +282,73 @@ function makeCall(req: NextRequest): TeCall {
       if (!(await t.holds(module, level))) {
         throw new TeHttpError(403, 'TE_FORBIDDEN', `${module} (${level.toLowerCase()} access) is not part of your role.`)
       }
+    },
+    async onDesk(kind) {
+      const cached = deskP.get(kind)
+      if (cached) return cached
+      const p = (async () => {
+        const id = (await t.actor()).employeeId
+        if (!id) return false
+        try {
+          return await teDb().rpc<boolean>('te_on_desk', { p_kind: kind, p_actor: id }) === true
+        } catch {
+          return false                                  // migration 161 not applied
+        }
+      })()
+      deskP.set(kind, p)
+      return p
+    },
+    async deskIsGroupWide(kind) {
+      const key = `group:${kind}`
+      const cached = deskP.get(key)
+      if (cached) return cached
+      const p = (async () => {
+        const id = (await t.actor()).employeeId
+        if (!id) return false
+        const table = kind === 'finance' ? 'finance_team' : 'travel_desk'
+        const { data, error } = await t.sb().from(table)
+          .select('id').eq('employee_id', id).eq('is_active', true).eq('is_group_scope', true).limit(1)
+        // No column, no table: migration 161 is not applied, and then nobody
+        // is group-scoped. Never a reason to fail the request.
+        if (error) return false
+        return (data?.length ?? 0) > 0
+      })()
+      deskP.set(key, p)
+      return p
+    },
+    async deskMayBook() {
+      const key = 'maybook:travel'
+      const cached = deskP.get(key)
+      if (cached) return cached
+      const p = (async () => {
+        const id = (await t.actor()).employeeId
+        if (!id) return false
+        const { data, error } = await t.sb().from('travel_desk')
+          .select('can_book').eq('employee_id', id).eq('is_active', true)
+        // No table, no column: migration 161 is not applied, so this right does
+        // not exist yet and refusing on it would invent a rule the database has
+        // never heard of. Same for somebody with no desk row at all.
+        if (error || !data?.length) return true
+        return data.some(r => r.can_book === true)
+      })()
+      deskP.set(key, p)
+      return p
+    },
+    async permitDesk(kind, module, level = 'VIEW') {
+      if (await t.onDesk(kind)) return
+      if (await t.holds(module, level)) return
+      throw new TeHttpError(403, 'TE_FORBIDDEN',
+        `This needs a place on the ${kind} desk, or ${module} (${level.toLowerCase()}) access.`)
+    },
+    async permitFinanceDesk() {
+      if (await t.onDesk('finance')) return
+      // Full admin of the module, which is what the admin console grants, and
+      // what /finance/overview has always accepted. NOT the Finance VIEW role
+      // on its own — see the note on the interface for why.
+      if (await t.holds('Travel Claims', 'FULL')) return
+      if (await t.holds('Finance', 'FULL')) return
+      throw new TeHttpError(403, 'TE_FORBIDDEN',
+        'This needs a place on the finance desk, or full access to Travel and Expenses.')
     },
     company: () => (companyP ??= resolveCompany(t)),
     async body<T extends object>() {
@@ -240,6 +384,19 @@ async function resolveCompany(t: TeCall): Promise<string> {
   // companyFilter() is the repo's single choke-point for this (lib/rms/resolve.ts).
   const allowed = companyFilter(await t.grant(), asked)
   if (allowed && (!asked || allowed === asked)) return allowed
+
+  // A GROUP-SCOPED DESK MEMBER may work in any company of their own group.
+  // That is what the flag means and it reached nothing before: the one
+  // group-scoped person in the data could be refused the other two companies
+  // he exists to serve. Still their own group only — this widens the reach of
+  // a deliberate flag, never of an ordinary desk row.
+  if (asked && own && (await t.deskIsGroupWide('travel') || await t.deskIsGroupWide('finance'))) {
+    const { data, error } = await t.sb().from('companies').select('id, group_id').in('id', [asked, own])
+    if (error) throw rpcError(error, 'companies')
+    const mine = data?.find(c => c.id === own)?.group_id ?? null
+    const theirs = data?.find(c => c.id === asked)?.group_id ?? null
+    if (mine && theirs && mine === theirs) return asked
+  }
   if (asked) throw new TeHttpError(403, 'TE_FORBIDDEN', 'You can only work with your own company.')
   throw new TeHttpError(400, 'TE_BAD_REQUEST', 'company_id is required for this sign-in.')
 }
@@ -346,7 +503,28 @@ export async function teStaffFor(
   const { data, error } = await t.sb().from(table).select('company_id').eq('id', id).maybeSingle()
   if (error) throw rpcError(error, table)
   if (!data) return false
-  return companyFilter(await t.grant(), data.company_id as string) === data.company_id
+  const recordCo = data.company_id as string
+  if (companyFilter(await t.grant(), recordCo) === recordCo) return true
+
+  // A GROUP-SCOPED DESK MEMBER reaches the rest of their own group. The same
+  // flag resolveCompany honours for reading: without this the Travel Desk
+  // could open another company's work list and then be refused every booking
+  // in it, which is worse than not seeing it at all. The company must still
+  // be in their group, and they must still hold the module.
+  if (await t.deskIsGroupWide('travel') || await t.deskIsGroupWide('finance')) {
+    const me = (await t.actor()).employeeId
+    if (!me) return false
+    const { data: mine, error: e1 } = await t.sb().from('employees').select('company_id').eq('id', me).maybeSingle()
+    if (e1) throw rpcError(e1, 'employees')
+    const ownCo = mine?.company_id as string | undefined
+    if (!ownCo) return false
+    const { data: cos, error: e2 } = await t.sb().from('companies').select('id, group_id').in('id', [ownCo, recordCo])
+    if (e2) throw rpcError(e2, 'companies')
+    const a = cos?.find(c => c.id === ownCo)?.group_id ?? null
+    const b = cos?.find(c => c.id === recordCo)?.group_id ?? null
+    if (a && b && a === b) return true
+  }
+  return false
 }
 
 /** 403 unless teStaffFor() says yes. */
@@ -369,13 +547,71 @@ export async function tePermitFor(
  * belongs to a company they may see; the SQL is then told p_admin = true.
  */
 export async function teOpen<T>(t: TeCall, kind: 'trip' | 'claim', id: string, read: (admin: boolean) => Promise<T>): Promise<T> {
+  const table = kind === 'trip' ? 'te_trips' : 'te_claims'
   try {
     return await read(false)
   } catch (e) {
     if (refusalCode(e) !== 'TE_FORBIDDEN') throw e
-    if (!(await teStaffFor(t, kind === 'trip' ? 'te_trips' : 'te_claims', id, ['Travel Claims', 'Finance']))) throw e
-    return read(true)
+    if (await teStaffFor(t, table, id, ['Travel Claims', 'Finance'])) return read(true)
+    // A DESK MEMBER MAY OPEN WHAT THEIR DESK IS WORKING ON. The test above is
+    // the dashboard role, which desk membership does not imply — so the five
+    // DESK-role people on this company's travel desk could be told to book a
+    // flight and then refused the trip it belongs to. That is the same drift
+    // between desk membership and dashboard roles that this module has had to
+    // correct three times already.
+    //
+    // READ ONLY, and no wider than the desk's own list: teOpen never grants an
+    // action, and the desk is already shown every trip of its company — the
+    // ones it books in v_te_to_book, the rest in v_te_desk_watch. Being able to
+    // open the detail of a row it can already see is not new knowledge; being
+    // unable to is just a dead end.
+    if (await deskCanOpen(t, table, id)) return read(true)
+    throw e
   }
+}
+
+/** The caller's own company, from their employee record. */
+async function ownCompany(t: TeCall): Promise<string | null> {
+  const me = (await t.actor()).employeeId
+  if (!me) return null
+  const { data, error } = await t.sb().from('employees').select('company_id').eq('id', me).maybeSingle()
+  if (error) throw rpcError(error, 'employees')
+  return (data?.company_id as string | undefined) ?? null
+}
+
+/** Whether two companies belong to one group. */
+async function sameGroup(t: TeCall, a: string, b: string): Promise<boolean> {
+  if (a === b) return true
+  const { data, error } = await t.sb().from('companies').select('id, group_id').in('id', [a, b])
+  if (error) throw rpcError(error, 'companies')
+  const ga = data?.find(c => c.id === a)?.group_id ?? null
+  const gb = data?.find(c => c.id === b)?.group_id ?? null
+  return !!ga && !!gb && ga === gb
+}
+
+/**
+ * Whether somebody on a desk may READ this record. True when they sit on the
+ * finance or travel desk and the record belongs to their own company — or to
+ * another company of their group, when their desk row is group-scoped.
+ *
+ * WHY NOT companyFilter, which teStaffFor uses. That answers "which companies
+ * do this person's ROLES reach", and a desk member need hold no role at all.
+ * For them the question is their own employee record's company, which is the
+ * company whose desk they sit on.
+ */
+async function deskCanOpen(t: TeCall, table: 'te_trips' | 'te_claims', id: string): Promise<boolean> {
+  if (!(await t.onDesk('travel')) && !(await t.onDesk('finance'))) return false
+  const { data, error } = await t.sb().from(table).select('company_id').eq('id', id).maybeSingle()
+  if (error) throw rpcError(error, table)
+  const recordCo = data?.company_id as string | undefined
+  if (!recordCo) return false
+  const ownCo = await ownCompany(t)
+  if (!ownCo) return false
+  if (ownCo === recordCo) return true
+  if (await t.deskIsGroupWide('travel') || await t.deskIsGroupWide('finance')) {
+    return sameGroup(t, ownCo, recordCo)
+  }
+  return false
 }
 
 /** A file download response. */

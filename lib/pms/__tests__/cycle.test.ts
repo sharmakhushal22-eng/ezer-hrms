@@ -325,3 +325,15 @@ test('a missed window still offers a way forward, not just a scolding', () => {
   assert.match(after.cta, /reopen/i)
   assert.match(after.why, /manager/)
 })
+
+test('a missed window points at the team that can actually reopen it', () => {
+  // It used to say "Ask your manager to reopen it". A manager cannot: the
+  // window lives on pms_periods, and §2's role matrix gives "Configure policy
+  // / periods" to HR Head and Admin alone. Sending somebody to a person with
+  // nothing to click is worse than saying nothing, and the reopen itself did
+  // not exist anywhere until period_update was added.
+  const after = nextAction(PERIOD, { kraApproved: true }, { isEmployee: true }, {}, '2027-01-14')!
+  assert.match(after.cta, /HR/, 'the CTA must name HR, who can change a period')
+  assert.doesNotMatch(after.cta, /manager/i, 'a manager cannot reopen a period')
+  assert.match(after.why, /HR team/, 'the explanation must say who to ask')
+})

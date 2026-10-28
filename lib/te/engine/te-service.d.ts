@@ -12,6 +12,7 @@ import type {
   TripDraft, TripPreview, TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput,
   LegPreview, TeLegStats, TeFlag, ExpenseInput, ExpensePreview, ClaimInput, ClaimPreview, ClaimStatus, ClaimStage,
   RiskBand, DecideInput, PayoutRoute, TeConfig, TeWorkflowLevel, TeChainRow, TeStep,
+  TeDashboard, TeDraft, TeDraftInput,
 } from '../types'
 
 /** What te-service needs to reach the database: one call, named arguments in,
@@ -91,6 +92,7 @@ export interface StayRequestInput {
 /** Asks the Travel Desk for a stay. Writes no expense — nothing is bought yet. */
 export function bookingRequest(ctx: TeCtx, input: StayRequestInput): Promise<{ booking_id: Uuid; booking_no: string; status: 'REQUESTED' }>
 export function stayDecide(ctx: TeCtx, input: { trip_id: Uuid; action: 'choose' | 'reject'; choice?: number; remark?: string }): Promise<{ trip_id: Uuid; status: 'CHOSEN' | 'REJECTED'; chosen: number | null; name: string }>
+export function dashboard(ctx: TeCtx, from: string | null, to: string | null): Promise<TeDashboard>
 export function bookingCancel(ctx: TeCtx, bookingId: Uuid, reason: string): Promise<{ booking_id: Uuid; status: 'CANCELLED' }>
 
 // ── legs ────────────────────────────────────────────────────────────────────
@@ -105,10 +107,38 @@ export function legSkip(ctx: TeCtx, legId: Uuid, reason: string): Promise<{ leg_
 export function legNoGps(ctx: TeCtx, legId: Uuid, reason: string, note?: string | null): Promise<{ leg_id: Uuid; status: 'ENDED' }>
 export function legAdd(ctx: TeCtx, tripId: Uuid, d: ExtraLegInput): Promise<{ leg_id: Uuid; leg_no: number }>
 
+// ── the two desks' review of a journey (180) ────────────────────────────────
+/** A desk agrees the journey happened as recorded. `desk` is which desk is
+ *  speaking; the caller must be a member of it, which SQL checks. */
+export function legConfirm(ctx: TeCtx, legId: Uuid, desk: 'travel' | 'finance'):
+  Promise<{ leg_id: Uuid; desk: string; policy: string }>
+/** A desk asks the traveller for something. Holds the trip's claim until
+ *  answered; the reason is required. */
+export function legSendBack(ctx: TeCtx, legId: Uuid, desk: 'travel' | 'finance', reason: string):
+  Promise<{ leg_id: Uuid; desk: string }>
+/** The traveller answers. Lifts the hold; does not restore the confirmation. */
+export function legAnswer(ctx: TeCtx, legId: Uuid, text: string): Promise<{ leg_id: Uuid }>
+
 // ── expenses ────────────────────────────────────────────────────────────────
 export function expensePreview(ctx: TeCtx, input: ExpenseInput): Promise<ExpensePreview>
 export function expenseSave(ctx: TeCtx, input: ExpenseInput): Promise<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>
 export function expenseDiscard(ctx: TeCtx, expenseId: Uuid): Promise<{ expense_id: Uuid; status: 'DISCARDED' }>
+/** Move an unclaimed line into a trip, or out of every trip with tripId null.
+ *  `moved` is false when it was already in that bucket — asking for the bucket
+ *  a line is already in is a no-op, not an error. */
+export function expenseMoveTrip(ctx: TeCtx, expenseId: Uuid, tripId: Uuid | null): Promise<{ moved: boolean; expense_no: string; from_no?: string | null; trip_no: string | null }>
+
+// ── drafts ──────────────────────────────────────────────────────────────────
+// Unfinished work, stored verbatim and private to the person who wrote it.
+// These take no employee id: te_draft_* filter on the actor.
+export function bookingEmailed(ctx: TeCtx, bookingId: Uuid, to: string): Promise<{ booking_id: Uuid; emailed_to: string }>
+export function draftSave(ctx: TeCtx, input: TeDraftInput): Promise<{ draft_id: Uuid; updated_at: string }>
+export function draftList(ctx: TeCtx, kind?: TeDraft['kind'] | null): Promise<TeDraft[]>
+export function draftDelete(ctx: TeCtx, draftId: Uuid): Promise<{ deleted: boolean }>
+/** Discard several of the actor's own drafts in one statement. `deleted` is how
+ *  many actually went, which can be fewer than `asked` when one had already
+ *  gone or was never theirs. */
+export function draftDeleteMany(ctx: TeCtx, ids: Uuid[]): Promise<{ deleted: number; asked: number }>
 
 // ── claims ──────────────────────────────────────────────────────────────────
 export interface ClaimResult { claim_id: Uuid; status: ClaimStatus; stage: ClaimStage; net_amount?: number | null; advance_adjusted?: number }
