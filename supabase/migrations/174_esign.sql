@@ -1,5 +1,5 @@
 -- =====================================================================
--- 172_esign.sql — EZER Sign: send PDFs for signature, sign with e-mail OTP
+-- 174_esign.sql — EZER Sign: send PDFs for signature, sign with e-mail OTP
 -- (and optional Aadhaar OTP), stamp the PDF, keep a tamper-evident audit trail.
 --
 -- NEW TABLES ONLY. Nothing existing is altered. Safe to run twice.
