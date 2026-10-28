@@ -84,6 +84,19 @@ export interface TeamMember extends Employment {
    */
   kraLocked?: boolean
   /**
+   * Has the result been RELEASED to the employee?
+   *
+   * Distinct from `finalised`, which only means a rating exists. Between the
+   * two sits the whole point of §8: a settled rating nobody has seen yet is
+   * still the HOD's to write feedback against, and a published one is not —
+   * the employee has read it, so editing the feedback underneath them would
+   * change a document they have already been shown.
+   */
+  published?: boolean
+  publishedAt?: string | null
+  /** Whether the employee has confirmed they read it. */
+  resultAcknowledged?: boolean
+  /**
    * Has the FINAL_REVIEW one-to-one been held AND acknowledged by both sides?
    *
    * Only meaningful where the policy sets final_review_one_to_one, which is

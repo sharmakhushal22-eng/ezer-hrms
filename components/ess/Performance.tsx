@@ -42,9 +42,10 @@ import {
 } from '@/components/pms/EmployeeTabs'
 import {
   MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab,
-  TeamAnalyticsTab, FinaliseTab, FeedbackTab,
+  TeamAnalyticsTab, FinaliseTab, FeedbackTab, PublishedResultsTab,
   BENEFIT_LABEL,
   type MgrTab, type HodTab, type RateRow, type BenefitType,
+  type PublishedResult,
 } from '@/components/pms/ManagerTabs'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
@@ -1126,7 +1127,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
       // kra_count and total_weightage are deliberately NOT selected: nothing in
       // the schema writes them. See the comment below, and the test that keeps
       // them out.
-      .select('employee_id,workflow_status,self_score,rm_l1_score,rm_l2_score,final_rating,rm_l1_id,rm_l2_id,hod_id,employment_flag,chain_stage,sent_back_to,sent_back_reason')
+      .select('employee_id,workflow_status,self_score,rm_l1_score,rm_l2_score,final_rating,rm_l1_id,rm_l2_id,hod_id,employment_flag,chain_stage,sent_back_to,sent_back_reason,published_at,employee_ack')
       .eq('period_id', period.id)
     const { data } = as === 'hod'
       ? await q.eq('hod_id', employeeId)
@@ -1248,6 +1249,21 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
         sentBackReason: (d.sent_back_reason as string | null) ?? null,
         finalRating: d.final_rating == null ? null : Number(d.final_rating),
         finalised: d.final_rating != null,
+        /**
+         * PUBLISHED, read from the two facts that mean it rather than one.
+         *
+         * A publish writes workflow_status PUBLISHED and chain_stage DONE, and
+         * an acknowledgement moves the status on to ACKNOWLEDGED. Reading only
+         * the status would miss a row published before 197 existed; reading
+         * only the stage would miss one whose stage was never advanced. Either
+         * marker is enough, which is the same rule HR's publish queue uses to
+         * split its two lists.
+         */
+        published: d.workflow_status === 'PUBLISHED'
+                || d.workflow_status === 'ACKNOWLEDGED'
+                || d.chain_stage === 'DONE',
+        publishedAt: (d.published_at as string | null) ?? null,
+        resultAcknowledged: d.employee_ack === true,
       }
     }))
     setLoading(false)
@@ -1800,6 +1816,56 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
     reloadRoster()
   }
 
+  /**
+   * WHAT WENT OUT WITH EACH PUBLISHED RESULT, for the read-only record.
+   *
+   * Loaded for the whole department at once rather than per person: the tab
+   * is a list, and a query per row would make it N+1 against a table that is
+   * already keyed on (period, employee). Only published rows are fetched —
+   * unpublished feedback is a draft the employee has not seen, and it has no
+   * business on a screen titled Published Results.
+   */
+  const [published, setPublished] = useState<PublishedResult[]>([])
+  useEffect(() => {
+    if (!period) { setPublished([]); return }
+    const ids = rows.filter(r => r.published).map(r => r.employeeId)
+    if (!ids.length) { setPublished([]); return }
+    let live = true
+    ;(async () => {
+      const [fb, ben] = await Promise.all([
+        supabase.from('pms_feedback')
+          .select('employee_id,appreciation_remark,improvement_feedback')
+          .eq('period_id', period.id).in('employee_id', ids),
+        supabase.from('pms_additional_benefits')
+          .select('employee_id,benefit_type,benefit_note')
+          .eq('period_id', period.id).in('employee_id', ids),
+      ])
+      if (!live) return
+      const benBy = new Map<string, { type: string; note: string }[]>()
+      for (const b of ben.data ?? []) {
+        const r = b as { employee_id: string; benefit_type: string; benefit_note?: string }
+        const k = String(r.employee_id)
+        benBy.set(k, [...(benBy.get(k) ?? []),
+                      { type: String(r.benefit_type), note: String(r.benefit_note ?? '') }])
+      }
+      // Driven off the PUBLISHED ids, not off the feedback rows: somebody can
+      // be published with no written feedback at all, and they still belong in
+      // the list. Keying on the feedback would quietly drop them.
+      setPublished(ids.map(id => {
+        const f = (fb.data ?? []).find(x => String((x as { employee_id: string }).employee_id) === id) as
+          { appreciation_remark?: string; improvement_feedback?: string } | undefined
+        return {
+          employeeId: id,
+          appreciation: f?.appreciation_remark ?? null,
+          improvement: f?.improvement_feedback ?? null,
+          benefits: benBy.get(id) ?? [],
+        }
+      }))
+    })()
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period?.id, rows])
+
   /** What the HOD is writing, and the one-to-ones that decide whether it can
    *  be published. Reloaded whenever the picked person changes — keeping one
    *  draft across two employees is how feedback ends up on the wrong record. */
@@ -1986,18 +2052,37 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
               <select id="fb-who" value={picked ?? ''}
                       onChange={e => setPicked(e.target.value || null)}>
                 <option value="">Choose somebody…</option>
-                {rows.filter(r => r.finalised).map(r => (
+                {/* FINALISED AND NOT YET PUBLISHED.
+                    Once a result is out, the employee has read their rating
+                    and their feedback — editing it here would change a
+                    document they have already been shown, and possibly
+                    formally acknowledged. They move to Published Results,
+                    which has no inputs at all. Leaving them in this list was
+                    the gap: publishing left somebody sitting in a feedback
+                    form that could still be typed into. */}
+                {rows.filter(r => r.finalised && !r.published).map(r => (
                   <option key={r.employeeId} value={r.employeeId}>
                     {r.code} · {r.name} — rated {r.finalRating}
                   </option>
                 ))}
               </select>
             </div>
-            {!rows.some(r => r.finalised) && (
+            {/* Two different empty states, because they need different
+                advice. Nobody finalised means go and finalise; everybody
+                finalised ALREADY PUBLISHED means there is nothing owed and
+                the record is one tab away. One message for both would send a
+                HOD back to a queue they have already cleared. */}
+            {!rows.some(r => r.finalised) ? (
               <div className="k" style={{ marginTop: 6, lineHeight: 1.6 }}>
                 Nobody in your department has been finalised yet. Settle a rating on
                 Review &amp; Finalise first — feedback is published with the result,
                 not before it.
+              </div>
+            ) : !rows.some(r => r.finalised && !r.published) && (
+              <div className="k" style={{ marginTop: 6, lineHeight: 1.6 }}>
+                Every settled result in your department has been published. They
+                are on <b>Published Results</b>, where they cannot be edited —
+                the employees have already read them.
               </div>
             )}
           </div>
@@ -2008,6 +2093,10 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
                        onChange={patch => setDraft(d => ({ ...d, ...patch }))}
                        onPublish={publishResult} saving={saving} />
         </>
+      )}
+      {tab === 'published' && (
+        <PublishedResultsTab members={rows} bands={bands.length ? bands : undefined}
+                             results={published} deptName="Your department" />
       )}
       {tab === 'deptAnalytics' && (
         <TeamAnalyticsTab flagRules={flagRules} bands={bands.length ? bands : undefined}

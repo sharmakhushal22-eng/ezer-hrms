@@ -36,7 +36,7 @@ import { humanDate } from '@/lib/pms/cycle'
 import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
 export type MgrTab = 'team' | 'approve' | 'rate' | 'pip' | 'analytics'
-export type HodTab = 'finalise' | 'feedback' | 'deptAnalytics'
+export type HodTab = 'finalise' | 'feedback' | 'published' | 'deptAnalytics'
 
 export const MGR_TABS: { k: MgrTab; label: string; blurb: string }[] = [
   { k: 'team',      label: 'Team Dashboard',           blurb: 'who is where, worst deadline first' },
@@ -49,6 +49,7 @@ export const MGR_TABS: { k: MgrTab; label: string; blurb: string }[] = [
 export const HOD_TABS: { k: HodTab; label: string; blurb: string }[] = [
   { k: 'finalise',      label: 'Review & Finalise',     blurb: 'sign off, exit and notice cases first' },
   { k: 'feedback',      label: 'Feedback & Recognition',blurb: 'what they read, and what they receive' },
+  { k: 'published',     label: 'Published Results',     blurb: 'released and settled — your department\'s record, read-only' },
   { k: 'deptAnalytics', label: 'Department Analytics',  blurb: 'the department against the company' },
 ]
 
@@ -1053,6 +1054,145 @@ export const BENEFIT_LABEL: Record<BenefitType, string> = {
   CERTIFICATE: 'Certificate', SPOT_AWARD: 'Spot award',
   TRAINING_NOMINATION: 'Training nomination', SPECIAL_MENTION: 'Special mention',
   STAR_PERFORMER: 'Star performer', OTHER: 'Other',
+}
+
+// ── §5.3 Published Results — the department's record ─────────────────────
+
+export interface PublishedResult {
+  employeeId: string
+  appreciation?: string | null
+  improvement?: string | null
+  benefits?: { type: string; note: string }[]
+}
+
+/**
+ * Every result released in this HOD's department, and nothing editable.
+ *
+ * ONLY A HOD CAN REACH THIS. It renders inside the department surface, which
+ * the ESS screen offers only when roles.isHOD — so the audience is settled by
+ * where it lives rather than by a check here, the same way Review & Finalise
+ * is.
+ *
+ * WHY READ-ONLY IS THE FEATURE. Publishing is the moment the employee sees
+ * their rating and their feedback (§3.5, §8). Editing either afterwards would
+ * change a document somebody has already read, and in the worst case one they
+ * have formally acknowledged — so this screen has no inputs at all, not
+ * disabled ones. A disabled field still says "this is a thing you might edit".
+ *
+ * It is also where a published person GOES. Feedback & Recognition offers only
+ * people who are finalised and NOT yet published, so once a result is out, the
+ * employee leaves that queue and appears here instead. Without the second
+ * half, publishing would leave them sitting in a feedback form that could
+ * still be typed into.
+ */
+export function PublishedResultsTab({ members, bands = DEFAULT_BANDS, results = [],
+                                      deptName }: {
+  members: TeamMember[]
+  bands?: Band[]
+  /** The feedback and recognition that went out with each result. */
+  results?: PublishedResult[]
+  deptName?: string
+}) {
+  const rows = members
+    .filter(m => m.published)
+    // Most recently released first: the one a HOD is asked about is almost
+    // always the one that just went out.
+    .sort((a, b) => String(b.publishedAt ?? '').localeCompare(String(a.publishedAt ?? '')))
+  const byId = new Map(results.map(r => [r.employeeId, r]))
+  const acked = rows.filter(r => r.resultAcknowledged).length
+
+  return (
+    <>
+      <div className="banner b-blue">
+        <span aria-hidden="true">🔒</span>
+        <div>
+          These results are out. {deptName ? `${deptName}'s ` : 'Your department’s '}
+          record of what each person was told, and nothing here can be changed —
+          the employee has already read it. A rating that genuinely needs
+          correcting goes through HR.
+        </div>
+      </div>
+
+      <div className="grid g3" style={{ marginBottom: 16 }}>
+        <Stat tone="accent" label="Published" value={rows.length} />
+        <Stat label="Acknowledged by the employee" value={acked}
+              note={rows.length ? `${rows.length - acked} still to read theirs` : undefined} />
+        <Stat label="Average rating"
+              value={rows.length
+                ? (rows.reduce((s, r) => s + (r.finalRating ?? 0), 0) / rows.length).toFixed(2)
+                : '—'} />
+      </div>
+
+      <Card title="Released results" sub="Oldest at the bottom. Read-only.">
+        {!rows.length ? (
+          <div style={{ padding: '22px 14px', textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Nothing published yet</div>
+            <div className="k">
+              A result appears here once it has been released to the employee.
+              Until then it sits in Review &amp; Finalise, then Feedback &amp;
+              Recognition.
+            </div>
+          </div>
+        ) : (
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th><th>Employee</th><th className="num">Rating</th>
+                  <th>Published</th><th>Read by them</th><th>What they were told</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(m => {
+                  const band = bandFor(m.finalRating, bands)
+                  const fb = byId.get(m.employeeId)
+                  return (
+                    <tr key={m.employeeId}>
+                      <td>{m.code}</td>
+                      <td style={{ fontWeight: 600 }}>{m.name}</td>
+                      <td className="num">
+                        <b>{m.finalRating ?? '—'}</b>{band ? ` · ${band.label}` : ''}
+                      </td>
+                      <td className="k">
+                        {m.publishedAt ? humanDate(String(m.publishedAt).slice(0, 10)) : '—'}
+                      </td>
+                      <td>{m.resultAcknowledged
+                        ? <span className="pill p-green">✓ acknowledged</span>
+                        : <span className="pill p-amber">not yet</span>}</td>
+                      <td style={{ maxWidth: 360 }}>
+                        {!fb?.appreciation && !fb?.improvement
+                          ? <span className="k">No written feedback went out.</span>
+                          : (
+                            <div style={{ display: 'grid', gap: 4 }}>
+                              {fb?.appreciation && (
+                                <div><b>Appreciation.</b> {fb.appreciation}</div>
+                              )}
+                              {fb?.improvement && (
+                                <div><b>Improvement.</b> {fb.improvement}</div>
+                              )}
+                              {!!fb?.benefits?.length && (
+                                <div className="chips">
+                                  {fb.benefits.map((b, i) => (
+                                    <span key={i} className="pill p-brand">
+                                      {b.type.replace(/_/g, ' ').toLowerCase()}
+                                      {b.note ? ` · ${b.note}` : ''}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </>
+  )
 }
 
 export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs, bands = DEFAULT_BANDS,
