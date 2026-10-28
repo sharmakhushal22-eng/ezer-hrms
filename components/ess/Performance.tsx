@@ -1151,12 +1151,19 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
     const { data: goals } = await supabase.from('pms_employee_goals')
       .select('employee_id,weightage,status')
       .eq('period_id', period.id).in('employee_id', ids)
-    const goalsBy = new Map<string, { n: number; wt: number }>()
+    const goalsBy = new Map<string, { n: number; wt: number; locked: boolean }>()
     for (const g of goals ?? []) {
       const k = String((g as { employee_id: string }).employee_id)
-      const cur = goalsBy.get(k) ?? { n: 0, wt: 0 }
+      const cur = goalsBy.get(k) ?? { n: 0, wt: 0, locked: false }
       cur.n += 1
       cur.wt += Number((g as { weightage?: number }).weightage) || 0
+      // THE LOCK ITSELF, not the one-to-one it usually follows. 199 refuses a
+      // finalise on unlocked weightages, and the two facts come apart: a
+      // doubly acknowledged one-to-one whose pms_lock_kras call was refused
+      // (bad KRA count, weightage not totalling the policy's figure) leaves
+      // the goals editable. Inferring the lock from the acknowledgement would
+      // offer a finalise the database then refuses.
+      if ((g as { status?: string }).status === 'LOCKED') cur.locked = true
       goalsBy.set(k, cur)
     }
 
@@ -1196,7 +1203,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
 
     setRows(data.map(d => {
       const e = byId.get(d.employee_id)
-      const g = goalsBy.get(String(d.employee_id)) ?? { n: 0, wt: 0 }
+      const g = goalsBy.get(String(d.employee_id)) ?? { n: 0, wt: 0, locked: false }
       return {
         employeeId: String(d.employee_id),
         code: String(e?.emp_code ?? ''),
@@ -1224,6 +1231,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
         flagOverride: null,
         kraCount: g.n,
         totalWeightage: g.wt,
+        kraLocked: g.locked,
         oneToOneDone: bothAcked.has(String(d.employee_id)),
         finalReviewDone: finalAcked.has(String(d.employee_id)),
         finalReviewLogged: finalLogged.has(String(d.employee_id)),

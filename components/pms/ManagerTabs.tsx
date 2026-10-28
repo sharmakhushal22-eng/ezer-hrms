@@ -986,7 +986,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                                 onClick={() => onNudge?.(r.member.employeeId)}>
                           Nudge RM L2
                         </button>
-                      ) : finalReviewRequired && !r.member.finalReviewDone ? (
+                      ) : finalReviewRequired && !r.member.finalReviewDone && r.precedingDone ? (
                         /* THE DEAD END THIS REPLACES. When the final-review
                            one-to-one was the only thing blocking a rating,
                            this cell printed insteadDo as plain text and
@@ -1004,6 +1004,15 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                            nothing logged, logged and awaiting MY tick, and
                            logged with my tick and awaiting theirs. */
                         !r.member.finalReviewLogged ? (
+                          /* Reached only once r.precedingDone — see the branch
+                             condition above. 199 put a trigger on
+                             pms_one_to_one that refuses an early FINAL_REVIEW
+                             with a database exception, so this button must not
+                             exist before the chain has caught up; and gating
+                             it with `disabled` instead would REPLACE the
+                             insteadDo sentence naming who is outstanding with
+                             a dead control, which is less useful than the
+                             sentence. */
                           <button className="btn sm" type="button"
                                   disabled={!onLogFinalReview || saving}
                                   onClick={() => onLogFinalReview?.(r.member.employeeId)}>
