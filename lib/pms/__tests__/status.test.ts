@@ -7,13 +7,33 @@
 // and none of them would have thrown.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import {
   PERIOD_STATUS, PERIOD_OPEN, GOAL_STATUS, GOAL_SENT, GOAL_AWAITING_RM,
-  WORKFLOW, WORKFLOW_ORDER, reached,
+  WORKFLOW, WORKFLOW_ORDER, reached, FILL, FILL_MEANING,
 } from '../status.ts'
 
 const SQL = readFileSync('supabase/migrations/066_pms_module.sql', 'utf8')
+
+/**
+ * The migration that most recently defines `object`, found by number rather
+ * than by name.
+ *
+ * Naming a file is how the equivalent T&E test broke: it matched the literal
+ * '156_te_journey_wording' and a renumber to 162_ turned a real assertion
+ * into a silent pass. A view can also be redefined by a later migration, and
+ * the one that matters is the last one.
+ */
+function latestDefining(object: string): { file: string; sql: string } {
+  const dir = 'supabase/migrations'
+  const hits = readdirSync(dir)
+    .filter(f => /^\d+_.*\.sql$/.test(f))
+    .filter(f => readFileSync(`${dir}/${f}`, 'utf8').includes(object))
+    .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
+  assert.ok(hits.length, `nothing defines ${object}`)
+  const file = hits[hits.length - 1]
+  return { file, sql: readFileSync(`${dir}/${file}`, 'utf8') }
+}
 
 /** The values a column's CHECK (col IN (...)) actually permits.
  *
@@ -87,6 +107,39 @@ test('reached() walks the ladder and refuses to guess', () => {
   assert.equal(reached('WHATEVER', WORKFLOW.NOT_STARTED), false)
   assert.equal(reached(null, WORKFLOW.NOT_STARTED), false)
   assert.equal(reached(undefined, WORKFLOW.KRA_DRAFT), false)
+})
+
+test('every workflow value the roll-up can see maps to a fill status', () => {
+  // KRA_LOCKED matched no branch in vw_pms_fill_status and fell through to
+  // ELSE 'NOT_STARTED'. Observed live: four LOCKED KRAs at 100%, the KRA
+  // one-to-one acknowledged both ways, self rating genuinely owed — reported
+  // as NOT_STARTED, the same answer the view gives for somebody who never
+  // opened the screen, and the state an admin escalates.
+  //
+  // Asserted against the SQL because the mapping lives there, not here. The
+  // first branch keys on kra_count rather than the status, so it is excluded:
+  // NOT_STARTED needs no mention by name.
+  const { sql, file } = latestDefining('CREATE OR REPLACE VIEW vw_pms_fill_status')
+  const view = sql.slice(sql.indexOf('CREATE OR REPLACE VIEW vw_pms_fill_status'))
+  const cases = view.slice(0, view.indexOf('AS fill_status'))
+  for (const v of Object.values(WORKFLOW)) {
+    if (v === WORKFLOW.NOT_STARTED) continue
+    assert.ok(cases.includes(`'${v}'`),
+      `${v} appears in no branch of vw_pms_fill_status (${file}), so a row in `
+      + `that state falls through to ELSE and reports NOT_STARTED`)
+  }
+})
+
+test('DRAFT_SAVED describes both states it now covers', () => {
+  // 191 folded KRA_LOCKED in here. The sentence used to say "started writing,
+  // nothing sent", which is plainly false about a set that is agreed and
+  // frozen — and this string is what an HR admin reads to decide who to
+  // chase, so a wrong one sends them after the wrong person.
+  const m = FILL_MEANING[FILL.DRAFT_SAVED]
+  assert.doesNotMatch(m, /started writing, nothing sent/i,
+    'reworded in 191: it has to cover the locked case too')
+  assert.match(m, /locked/i, 'must mention the locked case')
+  assert.match(m, /nudge/i, 'the operational advice is the point of the sentence')
 })
 
 test('§3.5: being rated is not being published', () => {
