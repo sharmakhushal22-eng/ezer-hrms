@@ -71,6 +71,19 @@ export interface TeamMember extends Employment {
    */
   finalReviewMgrAcked?: boolean
   /**
+   * Are the weightages actually locked — from pms_employee_goals.status, not
+   * inferred from the one-to-one.
+   *
+   * The acknowledgement and the lock are two facts and they come apart: a
+   * one-to-one can be doubly acknowledged while pms_lock_kras refused for some
+   * other reason (an invalid KRA count, a weightage total that is not 100), in
+   * which case the goals are still editable. 199 checks the lock itself, so
+   * the screen has to as well or it will promise a finalise the database
+   * refuses. Optional: a caller that does not load goal statuses leaves it
+   * undefined, and undefined is not treated as "not locked".
+   */
+  kraLocked?: boolean
+  /**
    * Has the FINAL_REVIEW one-to-one been held AND acknowledged by both sides?
    *
    * Only meaningful where the policy sets final_review_one_to_one, which is
@@ -188,6 +201,16 @@ function nextForRm(m: TeamMember, flag: Flag, chain?: Chain): string | null {
 export interface FinaliseRow<T extends TeamMember = TeamMember> extends QueueRow<T> {
   /** Can the finalise control be used at all? */
   canFinalise: boolean
+  /**
+   * Has everyone BEFORE this actor in the chain finished — self rating, KRA
+   * one-to-one, weightage lock, and every occupied rung's score?
+   *
+   * Separate from canFinalise because it gates a DIFFERENT control: 199
+   * refuses an early final-review log with a database exception, so the "Log
+   * final review" button has to be withheld on this, while canFinalise also
+   * accounts for the final review itself being done.
+   */
+  precedingDone: boolean
   /** What to do instead when it cannot. Null when it can. */
   insteadDo: string | null
 }
@@ -226,6 +249,26 @@ export function finaliseQueue<T extends TeamMember>(
     // there. That is the last gate in the cycle, so nothing could complete.
     const waiting = hasRmL2(r.member, chain) && r.member.rmL2Score === null
     const needsFinalReview = finalReviewRequired && r.member.finalReviewDone === false
+
+    /**
+     * 199's PRECEDING-RUNG RULE, mirrored so the screen and the database
+     * agree about whose move it is.
+     *
+     * pms_finalise used to check who was acting and nothing about whether the
+     * work before them existed — a HOD could settle a rating with no self
+     * rating, unlocked weightages and neither RM having scored, and all 390
+     * unfinalised appraisals in the database were exposed to it. 199 closes
+     * that in SQL. These lines exist so the control is never OFFERED for
+     * something the function will refuse: a button that fails is worse than a
+     * button that explains itself.
+     *
+     * Only rungs somebody OCCUPIES. hasRmL2 already reads the frozen snapshot
+     * rather than the policy chain, for the collapsed-line reason above; RM L1
+     * gets the same treatment, because a row with no rmL1Id has nobody to wait
+     * for and blocking on it would deadlock the record.
+     */
+    const l1Pending = !!r.member.rmL1Id && r.member.rmL1Score === null
+    const kraNotLocked = r.member.kraLocked === false
     let insteadDo: string | null = null
     // ORDER MATTERS, and getting it wrong is not cosmetic. "Nudge RM L2" on a
     // row whose employee has never submitted a self rating sends a HOD to
@@ -235,6 +278,12 @@ export function finaliseQueue<T extends TeamMember>(
     if (r.member.finalised) insteadDo = null
     else if (!allowed) insteadDo = `Your role cannot finalise under this policy. ${whoCanFinalise === 'HOD_ONLY' ? 'The HOD' : 'RM L2 or the HOD'} does.`
     else if (!r.member.selfSubmitted) insteadDo = 'No self rating on record. The chain has not started, so there is nobody downstream to chase yet.'
+    // 199's order, exactly: self rating, KRA one-to-one, weightage lock, then
+    // each occupied rung in turn. Any other order names a different cause than
+    // the database will, and sends somebody to the wrong screen.
+    else if (!r.member.oneToOneDone) insteadDo = 'The KRA one-to-one is not acknowledged by both of them yet. Nothing can be settled against weightages that can still move.'
+    else if (kraNotLocked) insteadDo = 'Their weightages are not locked yet. Acknowledge the KRA one-to-one to lock them.'
+    else if (l1Pending) insteadDo = 'RM L1 has not submitted their rating. Nudge them — finalising now would skip the first rung of the chain.'
     else if (waiting) insteadDo = 'RM L2 has not submitted. Nudge them. Finalising now would skip a step of the chain.'
     // LAST, because pms_finalise checks it last — the screen and the function
     // have to block in the same order or they will name different causes for
@@ -253,10 +302,23 @@ export function finaliseQueue<T extends TeamMember>(
           ? 'Waiting on them to acknowledge the final review one-to-one.'
           : 'The final review is logged. Acknowledge it to settle the rating.')
       : 'No final review one-to-one yet. Log it here, or ask them to log it — this policy needs both of you to acknowledge it before the rating can be settled.'
+    /**
+     * Is everyone BEFORE this actor finished? 199's question, and the one that
+     * decides whether the final review may even be logged — the trigger it
+     * added refuses an early FINAL_REVIEW with an exception, so offering the
+     * button before this is true produces a raw database error on screen
+     * instead of a sentence.
+     */
+    const precedingDone = r.member.selfSubmitted && r.member.oneToOneDone
+                       && !kraNotLocked && !l1Pending && !waiting
+
     return {
       ...r,
-      canFinalise: allowed && !waiting && !needsFinalReview
-                   && !r.member.finalised && r.member.selfSubmitted,
+      // 199's gates added. Without them this said yes to a row with no RM
+      // rating at all, and the function would have accepted it.
+      canFinalise: allowed && precedingDone && !needsFinalReview
+                   && !r.member.finalised,
+      precedingDone,
       insteadDo,
     }
   })
