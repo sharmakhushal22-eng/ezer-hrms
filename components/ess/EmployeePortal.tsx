@@ -260,6 +260,9 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return
     if (!f.type.startsWith('image/')) { notify('Please choose an image file', 'error'); return }
+    // Same rule as the profile photo cropper (components/profile/PhotoUploader.tsx).
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) { notify('Use a JPG, PNG or WebP photo', 'error'); return }
+    if (f.size > 10 * 1024 * 1024) { notify(`That image is ${(f.size / 1048576).toFixed(1)} MB — the limit is 10 MB`, 'error'); return }
     try { setPreview(await resizeToDataUrl(f)) } catch { notify('Could not read that image', 'error') }
   }
   const save = async () => {
@@ -277,7 +280,8 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
           <div style={{ width:120, height:120, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:700 }}>
             {preview ? <img src={preview} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}
           </div>
-          <label style={{ ...T.btnO, cursor:'pointer' }}>Choose photo<input type="file" accept="image/*" style={{ display:'none' }} onChange={onFile} /></label>
+          <label style={{ ...T.btnO, cursor:'pointer' }}>Choose photo<input type="file" accept="image/jpeg,image/png,image/webp" style={{ display:'none' }} onChange={onFile} /></label>
+          <div style={{ fontSize:11, color:C.muted, textAlign:'center' }}>JPG, PNG or WebP · up to 10 MB</div>
           {preview && <button onClick={() => setPreview(null)} style={{ ...T.btnO, color:C.critical, borderColor: C.criticalTint }}>Remove photo</button>}
         </div>
         <div style={{ display:'flex', gap:10, marginTop:16 }}>
