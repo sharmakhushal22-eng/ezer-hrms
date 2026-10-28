@@ -565,24 +565,24 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandb
       </div>
       <div className="ezp-cols"><WalletBar title="Old Regime Wallet" used={oTot} io={true} /><WalletBar title="New Regime Wallet" used={nTot} io={false} /></div>
       <div className="ezp-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}><div style={{ minWidth: 440 }}>
-        <div style={{ ...s.th, display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', padding: '10px 14px' }}>
+        <div style={{ overflowX: 'auto' }}><div style={{ minWidth: 330 }}>
+        <div style={{ ...s.th, display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', columnGap: 6, padding: '10px 12px' }}>
           <span>Component</span><span style={{ textAlign: 'center' }}>Old Regime</span><span style={{ textAlign: 'center' }}>New Regime</span>
         </div>
         {COMPS.map(({ k, l, perq }) => {
           const oL = getOldLimit(k), nL = getNewLimit(k)
           const drop = (lim: number, val: number, rg: 'old' | 'new') => lim
-            ? <select className="ezp-input" style={{ height: 32, padding: '0 8px', width: 'auto', minWidth: 96 }} value={val} onChange={e => setFlexi(rg, k, +e.target.value)}><option value={0}>₹0</option><option value={lim}>{R(lim)}</option></select>
+            ? <select className="ezp-input" style={{ height: 32, padding: '0 6px', width: '100%', maxWidth: 124, minWidth: 0 }} value={val} onChange={e => setFlexi(rg, k, +e.target.value)}><option value={0}>₹0</option><option value={lim}>{R(lim)}</option></select>
             : <span style={{ fontSize: 11.5, color: TK.faint }}>Not eligible</span>
           return (
-            <div key={k} style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', alignItems: 'center', padding: '9px 14px', borderTop: `1px solid ${P.border}`, background: perq ? TK.warningTint : TK.surface }}>
+            <div key={k} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', columnGap: 6, alignItems: 'center', padding: '9px 12px', borderTop: `1px solid ${P.border}`, background: perq ? TK.warningTint : TK.surface }}>
               <div><div style={{ fontSize: 13, color: P.navy }}>{l}</div>{perq && <span className="ezp-chip is-warn" style={{ height: 18, fontSize: 10, padding: '0 7px', marginTop: 3 }}>Perquisite Tax</span>}</div>
               <div style={{ textAlign: 'center' }}>{drop(oL, oFlexi[k] || 0, 'old')}</div>
               <div style={{ textAlign: 'center' }}>{drop(nL, nFlexi[k] || 0, 'new')}</div>
             </div>
           )
         })}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', padding: '10px 14px', borderTop: `1px solid ${TK.lineStrong}`, background: TK.sunken, fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', columnGap: 6, padding: '10px 12px', borderTop: `1px solid ${TK.lineStrong}`, background: TK.sunken, fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
           <span>Total Selected</span><span style={{ textAlign: 'center', color: oTot > sal.other ? P.red : TK.warning }}>{R(oTot)}</span><span style={{ textAlign: 'center', color: nTot > sal.other ? P.red : P.green }}>{R(nTot)}</span>
         </div>
         </div></div>

@@ -34,6 +34,7 @@ import Celebrations from '@/components/ess/Celebrations'
 // trade bundle size for a spinner on the one screen everybody sees first.
 import Today from '@/components/ess/today/Today'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
+import { EyeComfortDock } from '@/lib/ui/EyeComfort'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
 import PayStyles from '@/components/ess/payroll/PayStyles'
@@ -3734,6 +3735,28 @@ function GoneToItsOwnPage({ href, label }: { href: string; label: string }) {
   )
 }
 
+/** An admin module reached on a phone — by a notification link, or an address typed in.
+ *  Those modules are the /dashboard screens and are built for a desk, so a phone is told
+ *  where they work properly. "Open anyway" is kept for the one urgent click that cannot
+ *  wait for a laptop; it shows the module exactly as the desktop would. */
+function AdminOnPhone({ label, onHome, onOpen }: { label: string; onHome: () => void; onOpen: () => void }) {
+  return (
+    <div style={{ padding:'28px 16px' }}>
+      <div style={{ background:C.surface, border:`1px solid ${C.line}`, borderRadius:R.lg, padding:'22px 18px', boxShadow:E.raised, textAlign:'center' }}>
+        <div style={{ width:48, height:48, borderRadius:14, margin:'0 auto 12px', display:'grid', placeItems:'center', background:C.brandTint, color:C.brand }}>
+          <EssIcon k="company" size={22} strokeWidth={1.8} />
+        </div>
+        <div style={{ fontSize:16, fontWeight:700, color:C.ink, marginBottom:6 }}>{label} opens on a computer</div>
+        <div style={{ fontSize:13, color:C.muted, lineHeight:1.55, marginBottom:18 }}>
+          Admin modules are built for a larger screen. Sign in on a laptop or desktop to use {label}. Your own screens, approvals included, all work here.
+        </div>
+        <button onClick={onHome} style={{ ...T.btnP, width:'100%', height:44, fontSize:14 }}>Go to my portal</button>
+        <button onClick={onOpen} style={{ marginTop:10, background:'none', border:'none', color:C.muted, fontSize:12.5, fontFamily:'inherit', cursor:'pointer', textDecoration:'underline' }}>Open anyway</button>
+      </div>
+    </div>
+  )
+}
+
 /** What a tab will hold once it's built. Shown instead of the module, never alongside. */
 function FeatureGrid({ features }: { features: Feature[] }) {
   return (
@@ -3805,6 +3828,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // re-open on the click, and the panel could never be shut from its own button.
   const bellPop = useDismiss<HTMLDivElement>(bellOpen, () => setBellOpen(false), '[data-ez-bell]')
   const [moreOpen, setMoreOpen] = useState(false)
+  // A phone that reached an admin module by link chose "Open anyway" (AdminOnPhone).
+  const [adminOnPhone, setAdminOnPhone] = useState(false)
   const [unread, setUnread] = useState(0)
   const [toast, setToast] = useState<{ msg: string; type: 'success'|'error' } | null>(null)
   const notify = (msg: string, type: 'success'|'error' = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
@@ -3813,6 +3838,31 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     const check = () => setIsMobile(window.innerWidth < 1024)
     check(); window.addEventListener('resize', check); return () => window.removeEventListener('resize', check)
   }, [])
+  // On a phone every row of tabs — the portal's sub-tabs and the ones screens draw for
+  // themselves (Profile, Performance, Inbox…) — scrolls sideways, and the open tab
+  // could sit past the edge where nobody sees which one is open. Centre it: on arrival
+  // at a screen, and whenever a tab is tapped.
+  useEffect(() => {
+    if (!isMobile) return
+    const centre = (el: Element | null) => {
+      let box = el?.parentElement || null
+      while (box && box !== document.body) {
+        const ox = getComputedStyle(box).overflowX
+        if ((ox === 'auto' || ox === 'scroll') && box.scrollWidth > box.clientWidth + 1) break
+        box = box.parentElement
+      }
+      if (!el || !box || box === document.body) return
+      const b = box.getBoundingClientRect(), r = el.getBoundingClientRect()
+      box.scrollTo({ left: box.scrollLeft + (r.left - b.left) - (b.width - r.width) / 2, behavior: 'smooth' })
+    }
+    const SEL = '[role="tab"], .ess-seg button'
+    const onClick = (e: MouseEvent) => { const t = (e.target as Element | null)?.closest?.(SEL); if (t) centre(t) }
+    document.addEventListener('click', onClick, true)
+    const t = setTimeout(() => {
+      document.querySelectorAll('.ess-main [role="tab"][aria-selected="true"], .ess-main .ess-seg button[data-on="1"]').forEach(centre)
+    }, 350)
+    return () => { document.removeEventListener('click', onClick, true); clearTimeout(t) }
+  }, [isMobile, view])
   useEffect(() => { setLoading(true); loadEmployeeDetail(employeeId).then(e => { setEmp(e); setLoading(false) }) }, [employeeId])
   const reload = useCallback(() => loadEmployeeDetail(employeeId).then(setEmp), [employeeId])
   // My Details (Profile360) fires this after any save — a new photo, phone or
@@ -4033,7 +4083,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     return !!sc.allow[screen]
   }
   const isHrHeadMenu = essMenu.super_admin || essMenu.roles.some(r => r.code === 'HR_HEAD')
-  for (const g of adminGroups) for (const it of g.items) {
+  // Phones get the employee's own screens only — see AdminOnPhone.
+  for (const g of isMobile ? [] : adminGroups) for (const it of g.items) {
     searchEntries.push({ id: `mod:${it.key}`, label: it.label, crumb: `${g.group} · module`, icon: '', keywords: `${g.group.toLowerCase()} ${it.key.replace(/-/g, ' ')}`, run: () => { if (typeof window !== 'undefined' && window.location.search) window.history.replaceState(null, '', window.location.pathname); setAdminNonce(n => n + 1); goAdmin(it.key) } })
     for (const t of MODULE_TABS[it.key] || []) {
       if (!screenOk(t.screen)) continue
@@ -4249,7 +4300,9 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
           // The dashboard page renders exactly as it does at /dashboard/<module> —
           // same component, no wrapper of ours around it, because those pages bring
           // their own <Page> padding and expect the full width.
-          <AdminModuleHost key={`${adminKey}-${adminNonce}`} moduleKey={adminKey} />
+          isMobile && !adminOnPhone
+            ? <AdminOnPhone label={NAV_ENTRY_BY_KEY[adminKey]?.label || adminKey} onHome={() => go('home')} onOpen={() => setAdminOnPhone(true)} />
+            : <AdminModuleHost key={`${adminKey}-${adminNonce}`} moduleKey={adminKey} />
         ) : (
           view === 'inbox' || section.k === 'hris' || section.k === 'funzone' ? (
             section.k === 'hris' || section.k === 'funzone' ? (
@@ -4348,29 +4401,30 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
                 </div>
               </div>
             ))}
+            {/* The admin modules ("Manage": People, Compliance, Docs…) are not offered on a
+                phone. They are the /dashboard screens — wide tables and multi-column forms
+                built for a desk — and squeezed into 390px they broke rather than worked. HR
+                and managers still have everything that is theirs as an employee here,
+                Tasks & Approvals included; the modules are on the desktop portal. */}
             {adminGroups.length > 0 && (
-              <>
-                <div style={{ fontSize:13, fontWeight:700, margin:'20px 0 4px' }}>Manage</div>
-                {adminGroups.map(g => (
-                  <div key={g.group} style={{ marginTop:10 }}>
-                    <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'.09em', textTransform:'uppercase', color:C.faint, marginBottom:7 }}>{g.group}</div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                      {g.items.map(i => (
-                        <button key={i.key} className="ess-sheet-tile" data-on={adminKey === i.key ? '1' : '0'} onClick={() => goAdmin(i.key)}
-                          style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>
-                          {i.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </>
+              <div style={{ marginTop:18, padding:'10px 12px', borderRadius:12, background:C.sunken, color:C.muted, fontSize:12, lineHeight:1.5 }}>
+                Admin modules you manage (People, Compliance, Docs and others) open on a laptop or desktop.
+              </div>
             )}
+            {/* Display: the eye-comfort control that floats bottom-right on a desktop.
+                On a phone it covered content on every screen, so it lives here. */}
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:18, paddingTop:14, borderTop:`1px solid ${C.line}` }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:700 }}>Eye comfort</div>
+                <div style={{ fontSize:12, color:C.muted }}>Warmer screen for low light</div>
+              </div>
+              <EyeComfortDock />
+            </div>
           </div>
         </div>
       )}
 
-      {toast && <div role="status" style={{ position:'fixed', bottom: isMobile ? 88 : 24, right:24, zIndex:Z.toast, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:12, padding:'12px 18px', fontSize:13, fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:8 }}>{toast.type==='success' ? <IconCheck size={16} strokeWidth={2.2} /> : <IconAlert size={16} strokeWidth={2} />}{toast.msg}</div>}
+      {toast && <div role="status" style={{ position:'fixed', bottom: isMobile ? 'calc(80px + env(safe-area-inset-bottom))' : 24, right: isMobile ? 12 : 24, left: isMobile ? 12 : 'auto', zIndex:Z.toast, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:12, padding:'12px 18px', fontSize:13, fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:8 }}>{toast.type==='success' ? <IconCheck size={16} strokeWidth={2.2} /> : <IconAlert size={16} strokeWidth={2} />}{toast.msg}</div>}
     </div>
   )
 }
