@@ -38,7 +38,7 @@ import CycleHeader from '@/components/pms/CycleHeader'
 import type { ActionTab } from '@/lib/pms/cycle'
 import {
   EMP_TABS, DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
-  AnalyticsTab, type EmpTab, type Who, type SelfRow,
+  AnalyticsTab, type EmpTab, type Who, type SelfRow, type KraSelf,
 } from '@/components/pms/EmployeeTabs'
 import {
   MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab,
@@ -367,6 +367,10 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
   /** Last period's locked KRAs, offered as this period's starting point.
    *  Null when there is nothing to carry or this period already has its own. */
+  /** The employee's rating of each KRA while they write it, keyed by seq_no.
+   *  Seeded from any SELF review already saved, so re-opening the tab shows
+   *  what they rated last time rather than an empty form. */
+  const [selfBySeq, setSelfBySeq] = useState<Record<number, KraSelf> | null>(null)
   const [carried, setCarried] = useState<{
     fromPeriodId: string; fromPeriodCode: string; kras: Kra[]
   } | null>(null)
@@ -562,6 +566,29 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     final: ratingOf(String(g.id), 'HOD') ?? ratingOf(String(g.id), 'RM_L2') ?? ratingOf(String(g.id), 'RM_L1'),
   }))
 
+  /**
+   * seq_no -> the employee's rating, seeded from pms_reviews.
+   *
+   * The join is goal.id -> review.goal_id, then re-keyed by seq_no, because
+   * the KRA form works in seq_no (a row being typed has no id yet) while
+   * pms_reviews is keyed by goal_id. One of the two has to translate, and it
+   * is cheaper to do it here than to carry ids through the editing form.
+   */
+  const selfSeeded: Record<number, KraSelf> = useMemo(() => {
+    const out: Record<number, KraSelf> = {}
+    for (const g of goals) {
+      const seq = Number(g.seq_no)
+      const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
+      out[seq] = {
+        achievement: String(row?.achievement_value ?? ''),
+        rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
+        comment: String(row?.comments ?? ''),
+      }
+    }
+    return out
+  }, [goals, reviews])
+  const selfForKras = selfBySeq ?? selfSeeded
+
   const selfRows: SelfRow[] = selfDraft ?? goals.map(g => {
     const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
     return {
@@ -678,6 +705,47 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
         .gt('seq_no', kras.length).neq('status', 'LOCKED')
       if (tail.error) console.error('[pms] could not remove trailing KRAs:', tail.error)
     }
+    /**
+     * §3's merge: the self rating goes with the KRAs, in the same submission.
+     *
+     * It has to come AFTER the goals upsert, because pms_reviews.goal_id is a
+     * real reference and a KRA being typed has no id until the upsert returns
+     * one. So the ids are read back and matched on seq_no — the column
+     * UNIQUE (period_id, employee_id, seq_no) makes that the identity of a KRA
+     * within the period, and it is the same key the upsert itself used.
+     *
+     * Only rows the employee actually rated are written. A null rating is not
+     * a rating of zero, and pms_reviews.rating has no NOT NULL to stop one
+     * being stored as though it were.
+     */
+    let ratingWarning = ''
+    let ratedCount = 0
+    if (!error) {
+      const saved = await supabase.from('pms_employee_goals')
+        .select('id,seq_no').eq('employee_id', employeeId).eq('period_id', period.id)
+      const idBySeq = new Map((saved.data ?? [])
+        .map(g => [Number((g as { seq_no: number }).seq_no), String((g as { id: string }).id)]))
+      const rated = kras
+        .map(k => ({ k, sr: selfForKras[k.seq_no], goalId: idBySeq.get(k.seq_no) }))
+        .filter(x => x.goalId && x.sr && x.sr.rating !== null)
+      ratedCount = rated.length
+      if (rated.length) {
+        const rv = await supabase.from('pms_reviews').upsert(
+          rated.map(({ sr, goalId }) => ({
+            company_id: companyId, period_id: period.id, employee_id: employeeId,
+            goal_id: goalId, rater_id: employeeId, rater_role: 'SELF',
+            achievement_value: sr!.achievement || null, rating: sr!.rating,
+            comments: sr!.comment || null, submitted: true,
+            submitted_at: new Date().toISOString(),
+          })),
+          { onConflict: 'period_id,employee_id,goal_id,rater_role' })
+        if (rv.error) {
+          console.error('[pms] self rating refused:', rv.error)
+          ratingWarning = ' Your ratings did not save, though — send it again.'
+        }
+      }
+    }
+
     // The log is written AFTER the change lands, so a refused save never
     // leaves a record of a modification that did not happen.
     let logWarning = ''
@@ -701,10 +769,13 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       ? ((error as { code?: string }).code === MISSING_TABLE
           ? 'The performance module is not live yet: migration 066 has not been applied.'
           : (console.error('[pms] KRA insert refused:', error), SAVE_FAILED('KRAs')))
-      : changes.length
-        ? `Sent to your reporting manager. ${changes.length} ${changes.length === 1 ? 'change' : 'changes'} recorded against the one-to-one.${logWarning}`
-        : 'Sent to your reporting manager.')
-    if (!error) { setDraftKras(null); loadPeriodData() }
+      : [
+          'Sent to your reporting manager.',
+          ratedCount ? `${ratedCount} ${ratedCount === 1 ? 'rating' : 'ratings'} went with it.` : '',
+          changes.length ? `${changes.length} ${changes.length === 1 ? 'change' : 'changes'} recorded against the one-to-one.` : '',
+          ratingWarning, logWarning,
+        ].filter(Boolean).join(' '))
+    if (!error) { setDraftKras(null); setSelfBySeq(null); loadPeriodData(); reload() }
   }
 
   const submitSelf = async () => {
@@ -779,6 +850,18 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       {tab === 'kras' && (
         <KraTab rules={rules}
                 carriedFrom={!goals.length && carried ? carried.fromPeriodCode : null}
+                bands={bands.length ? bands : undefined}
+                self={selfForKras}
+                onSelfChange={(seq, patch) => setSelfBySeq(prev => ({
+                  ...(prev ?? selfSeeded),
+                  [seq]: { ...(prev ?? selfSeeded)[seq]
+                             ?? { achievement: '', rating: null, comment: '' }, ...patch },
+                }))}
+                // Required only once the one-to-one is acknowledged: at that
+                // point this submission is the final one the brief describes,
+                // carrying the updated KRAs and the final self rating together.
+                rateRequired={logs.some(l => l.discussion_type === 'KRA_SETTING'
+                                          && (l.employee_ack || l.manager_ack))}
                 kras={kras} onChange={setDraftKras} locked={locked}
                 lockGate={lockGate} onSubmit={submitKras} saving={saving} />
       )}

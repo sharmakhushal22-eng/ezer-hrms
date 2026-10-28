@@ -178,7 +178,17 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
 
 // ── §3.2 My KRAs ─────────────────────────────────────────────────────────
 
-export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom}: {
+export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom, self, onSelfChange, bands = DEFAULT_BANDS, rateRequired = false}: {
+  /** §3's merge: the employee rates each KRA as they write it, and the KRAs
+   *  and the ratings go to the manager together. Optional, so a caller that
+   *  has not wired rating still renders. */
+  self?: Record<number, KraSelf>
+  onSelfChange?: (seq: number, patch: Partial<KraSelf>) => void
+  bands?: Band[]
+  /** Once the one-to-one is acknowledged this submission IS the final one, so
+   *  every KRA must carry a rating. Before that the employee is drafting and a
+   *  half-rated set is a reasonable thing to save. */
+  rateRequired?: boolean
   /** The period code these KRAs were carried from, when they were. Shown so a
    *  carried set is visibly not a blank form the employee forgot to fill in. */
   carriedFrom?: string | null
@@ -194,6 +204,12 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   saving?: boolean
 }) {
   const check = checkKras(kras)
+  // How many KRAs still have no rating. Only a blocker once rateRequired —
+  // see the prop's note.
+  const unrated = rateRequired
+    ? kras.filter(k => (self?.[k.seq_no]?.rating ?? null) === null).length
+    : 0
+  const canGo = check.canSubmit && unrated === 0
   const m = meter(check)
   const add = canAdd(kras)
   const del = canDelete(kras)
@@ -268,12 +284,17 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                 <th style={{ width: 34 }}>#</th>
                 <th>KRA / objective</th><th>KPI metric</th><th>Target</th>
                 <th>Category</th><th style={{ width: 104 }} className="num">Weightage</th>
+                {onSelfChange && <><th>What you delivered</th><th>Your rating</th></>}
                 {!locked && <th style={{ width: 40 }}><span className="sr-only">Remove</span></th>}
               </tr>
             </thead>
             <tbody>
+              {/* colSpan is counted, not guessed: 6 base columns, +1 for the
+                  remove button when unlocked, +2 when rating is shown. A wrong
+                  one leaves the empty state squeezed into a single cell. */}
               {kras.length === 0 ? (
-                <tr><td colSpan={locked ? 6 : 7} style={{ textAlign: 'center', padding: '22px 14px' }}>
+                <tr><td colSpan={6 + (locked ? 0 : 1) + (onSelfChange ? 2 : 0)}
+                        style={{ textAlign: 'center', padding: '22px 14px' }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Nothing written yet</div>
                   <div className="k">
                     Add {rules.minKra} to {rules.maxKra} KRAs. They are what
@@ -307,6 +328,36 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                              style={thin ? { borderColor: 'var(--ez-critical)' } : undefined}
                              onChange={e => set(i, { weightage: Number(e.target.value) || 0 })} />
                     </td>
+                    {/* §3's merge: rated beside the KRA it belongs to, rather
+                        than on a separate screen found afterwards. */}
+                    {onSelfChange && (
+                      <>
+                        <td>
+                          <input value={self?.[k.seq_no]?.achievement ?? ''} readOnly={locked}
+                                 aria-label={`Achievement for KRA ${i + 1}`}
+                                 placeholder="The number you actually hit"
+                                 onChange={e => onSelfChange(k.seq_no, { achievement: e.target.value })} />
+                          <input value={self?.[k.seq_no]?.comment ?? ''} readOnly={locked}
+                                 aria-label={`Comment for KRA ${i + 1}`}
+                                 placeholder="Evidence a manager could check"
+                                 style={{ marginTop: 4 }}
+                                 onChange={e => onSelfChange(k.seq_no, { comment: e.target.value })} />
+                        </td>
+                        <td>
+                          <div className="btnrow" role="group"
+                               aria-label={`Your rating for KRA ${i + 1}`}>
+                            {bands.map(b => (
+                              <button key={b.value} type="button" disabled={locked}
+                                      className={self?.[k.seq_no]?.rating === b.value ? 'btn sm' : 'btn ghost sm'}
+                                      title={`${b.value}: ${b.label}`}
+                                      onClick={() => onSelfChange(k.seq_no, { rating: b.value })}>
+                                {b.value}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      </>
+                    )}
                     {!locked && (
                       <td>
                         <button className="btn ghost sm" type="button" disabled={!del.allowed}
@@ -339,11 +390,14 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
 
         {!locked && (
           <div className="btnrow">
-            <button className="btn" type="button" disabled={!check.canSubmit || saving}
+            <button className="btn" type="button" disabled={!canGo || saving}
                     onClick={onSubmit}>
               {saving ? 'Saving…'
-                : check.canSubmit ? 'Send to my manager'
-                : `Cannot send yet: ${check.faults.length} to fix`}
+                : !check.canSubmit ? `Cannot send yet: ${check.faults.length} to fix`
+                : unrated > 0
+                  ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+                  : rateRequired ? 'Send KRAs and my ratings to my manager'
+                  : 'Send to my manager'}
             </button>
             {check.total !== rules.totalWeightage && kras.length > 0 && (
               <button className="btn ghost" type="button"
@@ -592,6 +646,15 @@ export function OneToOneTab({ logs, managerName, onLog, saving, kras = [] }: {
 }
 
 // ── §3.4 Self Rating ─────────────────────────────────────────────────────
+
+/**
+ * The employee's own rating of one KRA, while they are still writing it.
+ *
+ * Keyed by seq_no rather than goal_id, because during authoring the goal row
+ * may not exist yet — pms_reviews.goal_id can only be filled once the upsert
+ * returns. Performance.tsx resolves seq_no to goal_id at submit time.
+ */
+export interface KraSelf { achievement: string; rating: number | null; comment: string }
 
 export interface SelfRow {
   goalId: string; title: string; weightage: number; category: Category
