@@ -82,6 +82,7 @@ const SectionLoading = () => (
 // analyses them statically, and hoisting them into a shared const fails the
 // build with "next/dynamic options must be an object literal" once per call.
 
+const MyDocumentsToSign    = dynamic(() => import('@/components/esign/MyDocumentsToSign'), { ssr: false, loading: SectionLoading })
 const FlexiTdsCalculator   = dynamic(() => import('@/components/ess/FlexiTdsCalculator'), { ssr: false, loading: SectionLoading })
 const FunZone              = dynamic(() => import('@/components/ess/FunZone'), { ssr: false, loading: SectionLoading })
 const FlexiClaims          = dynamic(() => import('@/components/ess/FlexiClaims'), { ssr: false, loading: SectionLoading })
@@ -3172,6 +3173,7 @@ const SECTIONS: NavSection[] = [
       { k:'profile',     label:'My Details' },
       { k:'documents',   label:'Letter Requests' },
       { k:'letters',     label:'My Letters' },
+      { k:'to-sign',     label:'Documents to sign' },
     ]},
 
   { k:'team', label:'Team', short:'Team', icon:'', status:'ready',
@@ -3549,7 +3551,7 @@ type SearchEntry = { id: string; label: string; crumb: string; icon: string; key
 // Extra words people search ESS's own tabs by.
 const ESS_KEYWORDS: Record<string, string> = {
   home: 'dashboard today landing', profile: 'my details personal info bank address',
-  documents: 'letter request certificate', letters: 'my letters offer letter appointment',
+  documents: 'letter request certificate', letters: 'my letters offer letter appointment', 'to-sign': 'esign e-sign sign signature documents pending',
   team: 'reportees manager my team', orgchart: 'org chart hierarchy reporting tree',
   flexi: 'flexi benefits tax', declaration: 'investment declaration 80c tax', proofs: 'investment proofs tax',
   flexiclaims: 'flexi claims bills reimbursement', vpf: 'voluntary pf provident fund', nps: 'corporate nps pension',
@@ -4053,6 +4055,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
+      case 'to-sign':       return <MyDocumentsToSign />
 
       case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
       case 'orgchart':      return <AdminModuleHost moduleKey="org-chart" />

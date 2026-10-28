@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
       abscond_stage: abscond ? 'REMINDING' : null, step_started_at: current != null ? now : null,
     }).select('*').single()
     if (error) return bad(/hr_exit_requests/.test(error.message) && /does not exist|schema cache/.test(error.message)
-      ? 'The exit approvals table is missing. Run migration 172_hr_exit_requests.sql in the Supabase SQL Editor.' : error.message, 500)
+      ? 'The exit approvals table is missing. Run migration 174_hr_exit_requests.sql in the Supabase SQL Editor.' : error.message, 500)
     let applied = null
     if (abscond) {
       // Attendance stops counting from today; the first reminder goes now.
