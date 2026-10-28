@@ -43,6 +43,7 @@ import {
 import {
   MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab,
   TeamAnalyticsTab, FinaliseTab, FeedbackTab,
+  BENEFIT_LABEL,
   type MgrTab, type HodTab, type RateRow, type BenefitType,
 } from '@/components/pms/ManagerTabs'
 import { type TeamMember } from '@/lib/pms/team'
@@ -342,6 +343,8 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const [logs, setLogs] = useState<Log[]>([])
   const [reviews, setReviews] = useState<Record<string, unknown>[]>([])
   const [feedback, setFeedback] = useState<Record<string, unknown> | null>(null)
+  /** §3.5's recognition list, already labelled for display. */
+  const [benefits, setBenefits] = useState<{ type: string; note: string }[]>([])
   const [draftKras, setDraftKras] = useState<Kra[] | null>(null)
   const [selfDraft, setSelfDraft] = useState<SelfRow[] | null>(null)
   const [saving, setSaving] = useState(false)
@@ -382,6 +385,24 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       .select('appreciation_remark,improvement_feedback,development_plan,visible_to_employee')
       .eq('employee_id', employeeId).eq('period_id', period.id).maybeSingle()
     setFeedback(f.error ? null : (f.data as Record<string, unknown> | null))
+
+    // §3.5 lists additional benefits on the result alongside the remarks. The
+    // result screen was passed a hardcoded empty array, so a HOD could award a
+    // nomination, see it save, and the employee would read "Nothing recorded
+    // for this period" — observed live on Ishaan Shah's published result after
+    // a TRAINING_NOMINATION had been written. Same shape of fault as the
+    // Acknowledge button: a built control with nothing feeding it.
+    const bn = await supabase.from('pms_additional_benefits')
+      .select('benefit_type,benefit_note')
+      .eq('employee_id', employeeId).eq('period_id', period.id)
+    if (bn.error) console.error('[pms] could not read recognition:', bn.error)
+    setBenefits((bn.data ?? []).map(b => ({
+      // The label, not the enum: the result screen prints this verbatim and
+      // 'TRAINING_NOMINATION' is a column value, not something to show anybody.
+      type: BENEFIT_LABEL[(b as { benefit_type: BenefitType }).benefit_type]
+            ?? String((b as { benefit_type: string }).benefit_type),
+      note: String((b as { benefit_note?: string }).benefit_note ?? ''),
+    })))
   }, [employeeId, period])
   useEffect(() => { loadPeriodData() }, [loadPeriodData])
 
@@ -629,7 +650,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           acknowledged={overall?.workflow_status === WORKFLOW.ACKNOWLEDGED}
           appreciation={feedbackVisible ? feedback?.appreciation_remark as string | undefined : undefined}
           improvement={feedbackVisible ? feedback?.improvement_feedback as string | undefined : undefined}
-          benefits={[]} publishGate={publishGate} />
+          benefits={feedbackVisible ? benefits : []} publishGate={publishGate} />
       )}
       {tab === 'analytics' && (
         <AnalyticsTab lines={lines} trend={[]} published={published} />
