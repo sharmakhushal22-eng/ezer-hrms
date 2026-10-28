@@ -247,6 +247,19 @@ function PolicyPanel({ policies, companies, reload }: {
           choose, which is the whole reason the column exists rather than the
           split being hardcoded. */}
       <div className="grid g2">
+        {/* 203: whether this company's employees may be published from a
+            cross-company list. Default COMPANY — the restriction, not the
+            permission, because a default that widens reach is the wrong way
+            round for an irreversible action and the employee codes repeat
+            across companies. */}
+        <Field label="Publishing across companies"
+               hint="Company only: these employees are published from their own company's list. Allow combined: they also appear when HR works on several companies at once.">
+          <select value={String(draft.publish_scope ?? 'COMPANY')}
+                  onChange={e => set('publish_scope', e.target.value)}>
+            <option value="COMPANY">Company only</option>
+            <option value="ALL">Allow a combined list</option>
+          </select>
+        </Field>
         <Field label="After the rating is settled"
                hint="HR: HR writes the feedback, awards recognition and publishes. Finaliser: whoever finalised does all of it, as docx Stage 6 describes.">
           <select value={String(draft.post_final_owner ?? 'HR')}

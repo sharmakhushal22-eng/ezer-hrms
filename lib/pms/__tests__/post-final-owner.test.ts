@@ -201,3 +201,87 @@ test('the summary distinguishes the companies it is now mixing', () => {
   // The column appears only when it carries information.
   assert.match(tab, /\{spansCompanies && <th>Company<\/th>\}/)
 })
+
+// ── publishing stays inside one company ──────────────────────────────────
+
+test('203 defaults to the RESTRICTION, not the permission', () => {
+  const sql = read('supabase/migrations/203_pms_publish_scope.sql')
+  assert.match(sql, /publish_scope text NOT NULL DEFAULT 'COMPANY'/,
+    'the default allows a combined list — wrong way round for an '
+    + 'irreversible action')
+  assert.match(sql, /CHECK \(publish_scope IN \('COMPANY', 'ALL'\)\)/)
+  // Configurable, which is the half of the request that made it a column.
+  const route = read('app/api/pms/admin/route.ts')
+  const cols = route.slice(route.indexOf('const POLICY_COLS'),
+                           route.indexOf('] as const', route.indexOf('const POLICY_COLS')))
+  assert.match(cols, /'publish_scope'/,
+    'publish_scope is not allowlisted, so the admin control saves into nothing')
+  assert.match(read('components/pms/AdminEditor.tsx'),
+    /set\('publish_scope', e\.target\.value\)/,
+    'there is no admin control for it')
+})
+
+test('the publish list is narrowed before any count or control is computed', () => {
+  // Filtering further down would leave the stats describing a wider set than
+  // the list, and the editor reachable for a row the list does not show.
+  const admin = read('components/pms/AdminTabs.tsx')
+  const tab = admin.slice(admin.indexOf('export function PublishTab'),
+                          admin.indexOf('// ── the whole company, on one screen'))
+  const scoped = tab.indexOf('const scoped = company ===')
+  for (const after of ['const waiting = scoped.filter', 'const done = scoped.filter',
+                       'const member = scoped.find']) {
+    const at = tab.indexOf(after)
+    assert.ok(at > scoped && at > 0, `${after} is not derived from the scoped set`)
+  }
+})
+
+test('"all companies" lists only the companies that opted in', () => {
+  const admin = read('components/pms/AdminTabs.tsx')
+  const tab = admin.slice(admin.indexOf('export function PublishTab'),
+                          admin.indexOf('// ── the whole company, on one screen'))
+  assert.match(tab, /const optedIn = new Set\(companies\.filter\(c => c\.allowsAll\)/,
+    'a company left at the default would be dragged into the combined list')
+  assert.match(tab, /company === 'ALL'\s*\n?\s*\? rows\.filter\(r => optedIn\.has/)
+  // And the option only exists when somebody opted in.
+  assert.match(tab, /\{allowAll && <option value="ALL">/)
+})
+
+test('within a company, opting in has to be unanimous', () => {
+  // A company with two policies where one is relaxed would otherwise expose
+  // the employees governed by the other.
+  assert.match(read('app/dashboard/pms/page.tsx'),
+    /seen\.set\(name, \(seen\.get\(name\) \?\? true\) && c\.publishScope === 'ALL'\)/,
+    'one relaxed policy can open a whole company')
+})
+
+test('the handlers refuse an out-of-scope row, not just the list', () => {
+  // They resolve rows from the full cross-company dataset because the summary
+  // needs it whole. Trusting the list to have narrowed it is one refactor away
+  // from being wrong, and the act is irreversible.
+  const page = read('app/dashboard/pms/page.tsx')
+  assert.match(page, /const inPublishScope = useCallback/,
+    'there is no scope check in the handlers')
+  const guards = page.match(/if \(!inPublishScope\(employeeId\)\) \{/g) ?? []
+  assert.equal(guards.length, 2,
+    `expected publishOne and saveFeedback to both guard, found ${guards.length}`)
+  // And it must be a real check, not a pass-through.
+  assert.match(page, /return \(row\.companyName \?\? ''\) === \(pubCompany \?\? ''\)/)
+})
+
+test('a single-company HR user sees no chooser', () => {
+  const admin = read('components/pms/AdminTabs.tsx')
+  assert.match(admin, /\{companies\.length > 1 && onCompany && \(/,
+    'the company chooser renders even with one company in scope')
+})
+
+test('the SUMMARY still spans — only publishing was narrowed', () => {
+  // The asymmetry is the point: reading across companies is a report,
+  // releasing across companies is an irreversible act on somebody's record.
+  const admin = read('components/pms/AdminTabs.tsx')
+  const sum = admin.slice(admin.indexOf('export function SummaryTab'),
+                          admin.indexOf('// ── §6.4 Final Rating Upload'))
+  assert.match(sum, /<option value="all">All companies<\/option>/,
+    'the summary lost its all-companies view')
+  assert.ok(!/publish_scope|allowsAll/.test(sum),
+    'the publish restriction leaked into the summary')
+})

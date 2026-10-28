@@ -95,6 +95,8 @@ export interface PolicyConfig {
   includeExited?: boolean | null
   /** 202: who runs the appraisal after the rating is settled. */
   postFinalOwner?: string | null
+  /** 203: may this company's employees be published from a combined list. */
+  publishScope?: string | null
 }
 
 export type AdminTab =
@@ -814,7 +816,8 @@ export interface PublishRow {
  * so the row says whether it is signed and the button waits.
  */
 export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishing,
-                             periodLabel, bands = [], canAct = true, note }: {
+                             periodLabel, bands = [], canAct = true, note,
+                             company, onCompany, companies = [], allowAll = false }: {
   rows: PublishRow[] | null
   loading?: boolean
   onPublish?: (employeeId: string) => void
@@ -834,6 +837,20 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
    *  where a cycle has got to even when a company runs docx Stage 6. */
   canAct?: boolean
   note?: string | null
+  /**
+   * WHICH COMPANY'S RESULTS THIS LIST SHOWS. 203.
+   *
+   * Publishing is irreversible and the names repeat across companies — two of
+   * the three here have an employee coded *9030. A combined list is the right
+   * shape for a report and the wrong shape for a release, so this one is
+   * always narrowed to a company unless every company in it has opted in.
+   */
+  company?: string | null
+  onCompany?: (company: string) => void
+  companies?: { name: string; allowsAll: boolean }[]
+  /** Whether an "all companies" option is offered at all — true only when at
+   *  least one company's policy sets publish_scope = 'ALL'. */
+  allowAll?: boolean
 }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [draft, setDraft] = useState<{ appreciation: string; improvement: string
@@ -841,9 +858,22 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
 
   if (loading || rows === null) return <div className="k">Loading…</div>
 
-  const waiting = rows.filter(r => !r.published)
-  const done = rows.filter(r => r.published)
-  const member = rows.find(r => r.employeeId === picked) ?? null
+  /**
+   * NARROWED BEFORE ANYTHING ELSE IS COMPUTED, so no count, no editor and no
+   * button can reach a row outside the chosen company. Filtering further down
+   * would leave the stats describing a wider set than the list.
+   *
+   * 'ALL' lists only the companies that opted in — a company left at the
+   * default is reachable only by selecting it by name.
+   */
+  const optedIn = new Set(companies.filter(c => c.allowsAll).map(c => c.name))
+  const scoped = company === 'ALL'
+    ? rows.filter(r => optedIn.has(r.companyName ?? ''))
+    : rows.filter(r => (r.companyName ?? '') === (company ?? ''))
+
+  const waiting = scoped.filter(r => !r.published)
+  const done = scoped.filter(r => r.published)
+  const member = scoped.find(r => r.employeeId === picked) ?? null
 
   // Seeded from the row, so re-picking somebody shows what is actually on
   // record rather than the last person's text — the bug a single shared draft
@@ -882,6 +912,25 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
           </>}
         </div>
       </div>
+
+      {companies.length > 1 && onCompany && (
+        <Card title="Whose results"
+              sub="Publishing acts on one company at a time. A result released to the wrong person cannot be unreleased.">
+          <div className="grid g2">
+            <Field label="Company"
+                   hint={allowAll
+                     ? 'Companies that have opted in can also be worked on together.'
+                     : 'No company has enabled a combined list. Set publish scope in Setup & Controls to change that.'}>
+              <select value={company ?? ''} onChange={e => { onCompany(e.target.value); setPicked(null) }}>
+                {companies.map(c => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
+                {allowAll && <option value="ALL">All companies that allow it</option>}
+              </select>
+            </Field>
+          </div>
+        </Card>
+      )}
 
       <div className="grid g3" style={{ marginBottom: 16 }}>
         <Stat label="Waiting on you" value={waiting.length} tone={waiting.length ? 'accent' : undefined} />

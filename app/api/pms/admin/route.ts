@@ -59,6 +59,8 @@ const POLICY_COLS = [
   // into nothing — the precise shape of the "my configuration changes do not
   // take effect" bug reported against this module once already.
   'post_final_owner',
+  // 203. Inert until named here, same as every column above it.
+  'publish_scope',
 ] as const
 
 /** A period's own windows, and its status.

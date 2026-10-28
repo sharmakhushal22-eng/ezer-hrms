@@ -99,6 +99,15 @@ export default function PmsPage() {
   /** What has reached HR's rung — see the loader. */
   const [pubRows, setPubRows] = useState<PublishRow[] | null>(null)
   const [publishing, setPublishing] = useState<string | null>(null)
+  /**
+   * WHICH COMPANY THE PUBLISH WORKSPACE IS ACTING IN. 203.
+   *
+   * Seeded from the newest open period's company — the one the rest of this
+   * screen already describes — so a single-company HR user never sees a
+   * chooser and a cross-company one starts somewhere sensible rather than
+   * alphabetically first.
+   */
+  const [pubCompany, setPubCompany] = useState<string | null>(null)
   const [naming, setNaming] = useState<PeriodNaming | null>(null)
   /** The open period's id — §6.4 commits against it. */
   const [periodId, setPeriodId] = useState<string | null>(null)
@@ -136,6 +145,28 @@ export default function PmsPage() {
   /** Every policy, labelled, for the selector. */
   const configChoices = useMemo(
     () => configs.map(withCompany), [configs, withCompany])
+
+  /**
+   * The companies in scope, and which of them opted into a combined publish
+   * list. Read from each company's OWN policy: a group where two are relaxed
+   * and one is strict keeps the combined view for the two without dragging
+   * the third into it.
+   */
+  const pubCompanies = useMemo(() => {
+    const seen = new Map<string, boolean>()
+    for (const c of configChoices) {
+      const name = c.companyName
+      if (!name) continue
+      // If a company somehow has two policies, the STRICTER wins: opting in
+      // has to be unanimous within a company, or one relaxed policy would
+      // expose employees governed by the other.
+      seen.set(name, (seen.get(name) ?? true) && c.publishScope === 'ALL')
+    }
+    return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, allowsAll]) => ({ name, allowsAll }))
+  }, [configChoices])
+
+  const pubAllowAll = pubCompanies.some(c => c.allowsAll)
   const [deptNames, setDeptNames] = useState<Record<string, string>>({})
   const [freq, setFreq] = useState<Frequency>('QUARTERLY')
   const [policies, setPolicies] = useState<Policy[]>([])
@@ -232,6 +263,7 @@ export default function PmsPage() {
               + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
               + ' final_review_one_to_one, approval_chain, rating_scale_type,'
               + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
+              + ' publish_scope,'
               + ' include_notice_period, include_exited')
       if (co) polQ = polQ.eq('company_id', co)
       // ORDER BY, because "the first policy" was meaningless without one.
@@ -297,6 +329,7 @@ export default function PmsPage() {
           includeNoticePeriod: p.include_notice_period as boolean ?? null,
           includeExited: p.include_exited as boolean ?? null,
           postFinalOwner: (p.post_final_owner as string) ?? 'HR',
+          publishScope: (p.publish_scope as string) ?? 'COMPANY',
         })
         setConfigs(polRows.map(toConfig))
 
@@ -611,6 +644,24 @@ export default function PmsPage() {
     })()
   }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Keep the publish workspace pointed at a company that actually exists.
+   *
+   * Seeded from the newest open period's company, which is what the rest of
+   * this screen already describes. Re-checked rather than set once: a reload
+   * can change which companies are in scope, and a stale selection would
+   * leave the workspace showing an empty list with no clue why.
+   */
+  useEffect(() => {
+    if (!pubCompanies.length) return
+    const valid = pubCompany === 'ALL'
+      ? pubAllowAll
+      : pubCompanies.some(c => c.name === pubCompany)
+    if (valid) return
+    const current = pubRows?.find(r => r.periodId === periodId)?.companyName
+    setPubCompany(current ?? pubCompanies[0].name)
+  }, [pubCompanies, pubCompany, pubAllowAll, pubRows, periodId])
+
   useEffect(() => { load(); loadCoverage() }, [load, loadCoverage])
 
   /**
@@ -659,10 +710,32 @@ export default function PmsPage() {
    * and one written by the manager who held the conversation are different
    * documents, and the column is the only place that difference survives.
    */
+  /**
+   * IS THIS ROW INSIDE THE CHOSEN SCOPE? 203.
+   *
+   * The handlers resolve rows from the full cross-company dataset, because
+   * the summary needs it whole. Trusting the list to have narrowed it is one
+   * refactor away from being wrong, and the act is irreversible — so the rule
+   * is checked where the write happens, not only where the button is drawn.
+   */
+  const inPublishScope = useCallback((employeeId: string) => {
+    const row = pubRows?.find(r => r.employeeId === employeeId)
+    if (!row) return false
+    if (pubCompany === 'ALL') {
+      return pubCompanies.some(c => c.name === row.companyName && c.allowsAll)
+    }
+    return (row.companyName ?? '') === (pubCompany ?? '')
+  }, [pubRows, pubCompany, pubCompanies])
+
   const saveFeedback = useCallback(async (employeeId: string, patch: {
     appreciation: string; improvement: string
     benefits: { type: string; note: string }[]
   }) => {
+    if (!inPublishScope(employeeId)) {
+      setCommitNote('That employee is not in the company you are working on. '
+                  + 'Switch company above before writing their feedback.')
+      return
+    }
     // THE ROW'S PERIOD, not the page's. HR Head spans companies and each runs
     // its own cycle, so the page's "current period" is one of several — using
     // it would write another company's feedback against the wrong period, or
@@ -704,9 +777,15 @@ export default function PmsPage() {
     }
     setCommitNote('Saved. Not released to them until you publish.')
     load()
-  }, [pubRows, grant, load])
+  }, [pubRows, grant, load, inPublishScope])
 
   const publishOne = useCallback(async (employeeId: string) => {
+    // 203: a result released to the wrong person cannot be unreleased.
+    if (!inPublishScope(employeeId)) {
+      setCommitNote('That employee is not in the company you are working on. '
+                  + 'Nothing was published.')
+      return
+    }
     const periodId = pubRows?.find(r => r.employeeId === employeeId)?.periodId
     if (!periodId) return
     setPublishing(employeeId)
@@ -734,7 +813,7 @@ export default function PmsPage() {
       ? 'Published — the employee can see their rating. The feedback could not be opened to them, though; check it before telling them it is all there.'
       : 'Published. The employee can see their rating and feedback now.')
     load()
-  }, [pubRows, load])
+  }, [pubRows, load, inPublishScope])
 
   const roll: Rollup | null = fill ? rollUp(fill) : null
   const depts: DeptRollup[] = fill ? byDepartment(fill) : []
@@ -840,7 +919,9 @@ export default function PmsPage() {
                                onPublish={publishOne} onSaveFeedback={saveFeedback}
                                publishing={publishing} periodLabel={naming?.title}
                                bands={bandList} canAct={canRunPostFinal}
-                               note={postFinalNote(postFinalOwner, myHrRole)} />}
+                               note={postFinalNote(postFinalOwner, myHrRole)}
+                               company={pubCompany} onCompany={setPubCompany}
+                               companies={pubCompanies} allowAll={pubAllowAll} />}
           {tab === 'summary'  && <SummaryTab rows={pubRows} loading={loading}
                                deptNames={deptNames} bands={bandList}
                                periodLabel={naming?.title} />}
