@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChainRow, PendingItem } from './types'
 import { Ic, type IconKey } from './icons'
 import { CountUp, fmtDateTime, riseStyle, useToast } from './ui'
-import { MrfApprovals, OfferApprovals } from '@/components/ess/RoleTabs'
+import { MrfApprovals, OfferApprovals, HrExitApprovals } from '@/components/ess/RoleTabs'
 import OnboardingApprovals from '@/components/ess/OnboardingApprovals'
 
 type Filter = 'MINE' | 'ALL' | 'LEAVE' | 'ATTENDANCE' | 'TRAVEL' | 'RESIGNATION'
@@ -79,6 +79,8 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
           Interviews to conduct are in the notification panel (the bell). */}
       <MrfApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       <OfferApprovals employeeId={employeeId} notify={(m) => toast(m)} />
+      {/* Company-started exits (People → Employees → Exit) waiting on this approver. */}
+      <HrExitApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       {/* The four-team onboarding sign-off (IT / Admin / Payroll / HR Manager). */}
       <OnboardingApprovals employeeId={employeeId} notify={(m) => toast(m)} />
 

@@ -883,6 +883,66 @@ export function InterviewInvites({ employeeId, notify, onDone }: { employeeId: s
   )
 }
 
+// ── Exits to approve — the company-started exits (People → Employees → Exit) waiting on you
+// as HR Manager / Legal / HR Head / MD. Approve moves it to the next step; Reject needs a reason
+// and stops it. The chain itself is app/api/ess/exit-employee (lib/exit/hr-exit.ts).
+export function HrExitApprovals({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+  const [items, setItems] = useState<any[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [rejecting, setRejecting] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+  const load = useCallback(() => api('/api/ess/exit-employee?inbox=1', employeeId).then(d => setItems(d.items || [])).catch(() => setItems([])), [employeeId])
+  useEffect(() => { load() }, [load])
+  if (!items || items.length === 0) return null
+  const act = async (id: string, approve: boolean) => {
+    setBusy(id)
+    try {
+      const d = await api('/api/ess/exit-employee', employeeId, { method: 'POST', body: JSON.stringify({ action: approve ? 'approve' : 'reject', id, note: approve ? '' : note }) })
+      notify(!approve ? 'Exit rejected.' : d.request?.status === 'APPROVED' ? 'Exit approved. It is now in effect.' : 'Approved. It has moved to the next approver.')
+      setRejecting(null); setNote(''); await load()
+    } catch (e: any) { notify(e.message, 'error') }
+    setBusy(null)
+  }
+  return (
+    <div style={S.card}>
+      <div style={S.section}>Exits to approve ({items.length})</div>
+      {items.map((x: any) => {
+        const step = (x.chain || []).find((s: any) => s.status === 'PENDING')
+        return (
+          <div key={x.id} style={{ padding: '10px 0', borderTop: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{x.employee?.full_name} <span style={{ color: C.muted, fontWeight: 500 }}>{x.employee?.emp_code}{x.employee?.designation ? ` · ${x.employee.designation}` : ''}</span>
+                  <span style={{ ...pill('dang'), marginLeft: 6 }}>{x.reason_label}{x.sub_reason ? ` · ${x.sub_reason}` : ''}</span></div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
+                  Last working day {new Date(`${x.last_working_day}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · started by {x.initiated_by_name || 'HR'} · waiting on you as {step?.label || 'approver'}
+                </div>
+                {x.remarks && <div style={{ fontSize: 12, color: C.ink, marginTop: 4 }}>{x.remarks}</div>}
+                <div style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>
+                  {(x.chain || []).map((s: any) => `${s.label}: ${s.status === 'APPROVED' ? 'approved' : s.status === 'PENDING' ? 'waiting' : s.status === 'SKIPPED' ? 'skipped' : s.status === 'REJECTED' ? 'rejected' : 'next'}`).join(' → ')}
+                </div>
+              </div>
+              {rejecting !== x.id && <>
+                <button onClick={() => { setRejecting(x.id); setNote('') }} disabled={busy === x.id} style={S.btnD}>Reject</button>
+                <button onClick={() => act(x.id, true)} disabled={busy === x.id} style={{ ...S.btn, background: C.green, opacity: busy === x.id ? .6 : 1 }}>{busy === x.id ? '…' : 'Approve'}</button>
+              </>}
+            </div>
+            {rejecting === x.id && (
+              <div style={{ marginTop: 8 }}>
+                <textarea style={{ ...S.input, minHeight: 56, resize: 'vertical' }} value={note} onChange={e => setNote(e.target.value)} placeholder="Reason for rejecting (required)" />
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
+                  <button onClick={() => { setRejecting(null); setNote('') }} disabled={busy === x.id} style={S.btnO}>Back</button>
+                  <button onClick={() => act(x.id, false)} disabled={busy === x.id || !note.trim()} style={{ ...S.btn, background: C.red, opacity: busy === x.id || !note.trim() ? .6 : 1 }}>{busy === x.id ? 'Rejecting…' : 'Confirm reject'}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ApprovalsSection({ employeeId, go, notify }: { employeeId: string; go: (k: string) => void; notify: (m: string, t?: 'success' | 'error') => void }) {
   const [items, setItems] = useState<PendingItem[] | null>(null)
   const [err, setErr] = useState('')
@@ -897,6 +957,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
     <div>
       <MrfApprovals employeeId={employeeId} notify={notify} />
       <OfferApprovals employeeId={employeeId} notify={notify} />
+      <HrExitApprovals employeeId={employeeId} notify={notify} />
       <OnboardingApprovals employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },
