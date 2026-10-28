@@ -91,7 +91,7 @@ export interface PolicyConfig {
 }
 
 export type AdminTab =
-  | 'config' | 'setup' | 'policies' | 'fill' | 'upload' | 'pip' | 'reports'
+  | 'config' | 'setup' | 'policies' | 'fill' | 'publish' | 'upload' | 'pip' | 'reports'
 
 export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'config',   label: 'PMS Configuration',  blurb: 'Frequency, windows and the KRA rules everyone is held to' },
@@ -99,6 +99,7 @@ export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'setup',    label: 'Setup & Controls',   blurb: 'Edit the policy, KRA library and rating scale; generate and open periods' },
   { k: 'policies', label: 'Policy Builder',     blurb: 'Different cycles for different groups, and who falls under which' },
   { k: 'fill',     label: 'Fill Status Tracker',blurb: 'Live status for everyone, and who to chase' },
+  { k: 'publish',  label: 'Publish Results',    blurb: 'Settled ratings waiting to be released to employees' },
   { k: 'upload',   label: 'Final Rating Upload',blurb: 'Bulk override from an offline calibration' },
   { k: 'pip',      label: 'PIP Management',     blurb: 'Requests from managers, and the plans you have started' },
   { k: 'reports',  label: 'Reports & Export',   blurb: 'The fourteen reports, and Excel export' },
@@ -669,6 +670,137 @@ const FILL_MEANING_SHORT: Record<FillStatus, string> = {
   SUBMITTED:   'Waiting on their manager',
   IN_REVIEW:   'Waiting on the next approver or the HOD',
   FINALISED:   'Settled, nothing further owed',
+}
+
+// ── the last rung: HR publishes ───────────────────────────────────────────
+
+export interface PublishRow {
+  employeeId: string
+  name: string
+  code: string
+  finalRating: number | null
+  finalRatingCode: string | null
+  finalisedByRole: string | null
+  finalisedAt: string | null
+  published: boolean
+}
+
+/**
+ * §(none) — asked for directly: "hr manager have authorities to publish the
+ * result… they just see it and publish it".
+ *
+ * WHAT IS DELIBERATELY ABSENT FROM THIS SCREEN. There is no rating field, no
+ * KRA list, no comment box and no reject button. That is the requirement, not
+ * an unfinished tab: HR cannot change what the chain decided, only release it.
+ * 197 enforces the same thing from the other side — HR's rung has no reject
+ * path, and pms_chain_reject refuses outright at stage HR with a sentence
+ * saying a rating that needs changing goes back through the HOD.
+ *
+ * The rating IS shown, because publishing a number without seeing it is not a
+ * decision anybody can take responsibly. Shown, not editable.
+ *
+ * ROWS COME FROM chain_stage, NOT workflow_status. FINALISED says a rating
+ * exists; stage HR says it has reached HR and nobody below has it any more.
+ * Reading the status instead would list appraisals that are settled but still
+ * sitting with a HOD who has not passed them on.
+ */
+export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }: {
+  rows: PublishRow[] | null
+  loading?: boolean
+  onPublish?: (employeeId: string) => void
+  /** The id currently being published, so one button can show progress
+   *  without freezing the whole table. */
+  publishing?: string | null
+  periodLabel?: string | null
+}) {
+  if (loading || rows === null) return <div className="k">Loading…</div>
+
+  const waiting = rows.filter(r => !r.published)
+  const done = rows.filter(r => r.published)
+
+  return (
+    <>
+      <div className="banner b-blue">
+        <span aria-hidden="true">ℹ️</span>
+        <div>
+          These ratings are settled. Publishing releases the rating and the
+          feedback to the employee{periodLabel ? ` for ${periodLabel}` : ''} —
+          it does not change either. A rating that needs changing goes back
+          through the HOD, not from here.
+        </div>
+      </div>
+
+      <Card title={`Waiting to publish (${waiting.length})`}
+            sub="Finalised by the chain and now with you.">
+        {!waiting.length
+          ? <Empty what="Nothing is waiting"
+                   why="A rating reaches this list once the last approver in the chain has settled it." />
+          : (
+            <div className="tblwrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Employee</th><th>Code</th><th>Final rating</th>
+                    <th>Settled by</th><th>Settled on</th><th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {waiting.map(r => (
+                    <tr key={r.employeeId}>
+                      <td>{r.name}</td>
+                      <td className="k">{r.code}</td>
+                      <td>
+                        {r.finalRating == null
+                          ? <span className="k">—</span>
+                          : <b>{r.finalRating}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</b>}
+                      </td>
+                      <td className="k">{r.finalisedByRole ?? '—'}</td>
+                      <td className="k">{r.finalisedAt ? r.finalisedAt.slice(0, 10) : '—'}</td>
+                      <td>
+                        <button className="btn sm" type="button"
+                                disabled={!onPublish || publishing === r.employeeId
+                                          || r.finalRating == null}
+                                onClick={() => onPublish?.(r.employeeId)}>
+                          {publishing === r.employeeId ? 'Publishing…' : 'Publish'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+          A row with no final rating cannot be published: there would be nothing
+          to show. That means the chain has not finished with it, however far
+          along it looks.
+        </div>
+      </Card>
+
+      {done.length > 0 && (
+        <Card title={`Already published (${done.length})`}
+              sub="The employee can see these.">
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Employee</th><th>Code</th><th>Final rating</th><th /></tr>
+              </thead>
+              <tbody>
+                {done.map(r => (
+                  <tr key={r.employeeId}>
+                    <td>{r.name}</td>
+                    <td className="k">{r.code}</td>
+                    <td>{r.finalRating ?? '—'}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</td>
+                    <td><Pill tone="green">published</Pill></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </>
+  )
 }
 
 // ── §6.4 Final Rating Upload ─────────────────────────────────────────────

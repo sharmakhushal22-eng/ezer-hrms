@@ -1728,8 +1728,25 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
       }
     }
 
+    /**
+     * PUBLISHING IS THE LAST MOVE IN THE CHAIN, so it closes the stage out.
+     *
+     * Without chain_stage going to DONE, a published appraisal sits at 'HR'
+     * for ever: the employee's banner keeps saying it is with HR to publish
+     * while their Result tab shows the rating, and HR's own queue never
+     * empties. Two screens confidently disagreeing, which is the failure the
+     * stage column was added to end rather than create.
+     *
+     * Set here rather than in a function because publishing is the one chain
+     * move with no approval to check — 197 deliberately gives HR no reject
+     * path and no rating to set. trg_pms_readonly allows both of these columns
+     * on a locked record (193 for the status, 197 for the stage), so this
+     * works for an exited employee too, which is the whole point of §8's
+     * "result copy before the login closes".
+     */
     const st = await supabase.from('pms_overall_rating')
-      .update({ workflow_status: 'PUBLISHED', published_at: new Date().toISOString() })
+      .update({ workflow_status: 'PUBLISHED', published_at: new Date().toISOString(),
+                chain_stage: 'DONE' })
       .eq('employee_id', picked).eq('period_id', period.id)
     setSaving(false)
     if (st.error) {

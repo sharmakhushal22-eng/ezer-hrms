@@ -24,8 +24,9 @@ import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
 import { PERIOD_OPEN } from '@/lib/pms/status'
 import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
-import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
-         FlowTab, type AdminTab, type PipRow, type PolicyConfig } from '@/components/pms/AdminTabs'
+import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, PublishTab, UploadTab, PipTab,
+         ReportsTab, FlowTab, type AdminTab, type PipRow, type PolicyConfig,
+         type PublishRow } from '@/components/pms/AdminTabs'
 import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
 import { type Frequency, type Policy } from '@/lib/pms/policy'
@@ -54,11 +55,33 @@ interface Coverage {
   deptSourceReady: boolean // false until migration 067 adds the column
 }
 
+/**
+ * WHICH SEEDED SCREEN PERMISSION GOVERNS A TAB.
+ *
+ * canSeeScreen denies any key absent from the seeded screen config — line 203
+ * returns true only while a module has NO config at all, and PMS has one. So a
+ * tab introduced with a brand-new key is invisible to everybody, including
+ * admins, until somebody seeds the key. 'publish' is such a tab.
+ *
+ * Seeding a key means writing to the roles and permissions module, which is
+ * load-bearing for every other module in the product and is deliberately left
+ * alone here. So Publish Results borrows 'pms.upload' instead: that key
+ * already means "may set final ratings in bulk", which §2 grants to HR alone
+ * (bulk_upload_ratings is ✅ for HR Manager, HR Head and Admin and — for
+ * everyone else). Publishing is a strictly weaker action in the same family —
+ * it releases a rating HR cannot change — so no permission is widened by
+ * this, and nobody gains a screen they could not already reach.
+ *
+ * Everything not listed governs itself, which is every pre-existing tab.
+ */
+const SCREEN_KEY: Partial<Record<Tab, string>> = { publish: 'pms.upload' }
+const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
+
 export default function PmsPage() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<Tab>('overview')
   useEffect(() => {
-    const vis = (['overview','config','setup','policies','fill','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, 'pms.'+k))
+    const vis = (['overview','config','setup','policies','fill','publish','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, screenKeyOf(k)))
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [ready, setReady] = useState<boolean | null>(null)   // null = still checking
@@ -66,6 +89,9 @@ export default function PmsPage() {
   const [cov, setCov] = useState<Coverage | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [fill, setFill] = useState<FillRow[] | null>(null)
+  /** What has reached HR's rung — see the loader. */
+  const [pubRows, setPubRows] = useState<PublishRow[] | null>(null)
+  const [publishing, setPublishing] = useState<string | null>(null)
   const [naming, setNaming] = useState<PeriodNaming | null>(null)
   /** The open period's id — §6.4 commits against it. */
   const [periodId, setPeriodId] = useState<string | null>(null)
@@ -193,6 +219,82 @@ export default function PmsPage() {
         .eq('period_id', row.id).limit(2000)
       if (!f.error) setFill((f.data ?? []) as unknown as FillRow[])
 
+      /**
+       * WHAT HAS REACHED HR, for the Publish Results tab.
+       *
+       * NOT from vw_pms_fill_status, which the tab above uses. That view
+       * carries no employee_id and no chain_stage, so it cannot say who a row
+       * is or whether the chain has handed it over — and publishing needs
+       * both: an id to write against, and the stage to know it is HR's to
+       * release rather than a HOD's to finish. Widening the view would mean a
+       * migration for something two columns of a table already answer.
+       *
+       * Read on chain_stage, not workflow_status. FINALISED says a rating
+       * exists; stage HR says nobody below still holds it. DONE is included so
+       * the tab can show what it has already published — otherwise a row
+       * vanishes the instant it is released and HR cannot tell a successful
+       * publish from a failed one.
+       */
+      const pub = await supabase.from('pms_overall_rating')
+        .select('employee_id, final_rating, final_rating_code, finalised_by_role,'
+              + 'finalised_at, chain_stage, workflow_status')
+        .eq('period_id', row.id).in('chain_stage', ['HR', 'DONE']).limit(2000)
+      if (pub.error) {
+        // Before 197 is applied there is no chain_stage column at all, and
+        // that is a waiting state rather than a fault: every other tab works.
+        console.error('[pms] publish queue unavailable:', pub.error)
+        setPubRows([])
+      } else {
+        /**
+         * Cast because chain_stage is NOT in the generated database types: 197
+         * adds it, and the types are generated from the applied schema. Without
+         * this the whole row type collapses to GenericStringError and every
+         * field read below is a type error — eleven of them, which is how this
+         * was found rather than guessed. The same `as unknown as` the fill
+         * query above uses, for the same reason.
+         */
+        const pubData = (pub.data ?? []) as unknown as {
+          employee_id: string
+          final_rating?: number | string | null
+          final_rating_code?: string | null
+          finalised_by_role?: string | null
+          finalised_at?: string | null
+          chain_stage?: string | null
+          workflow_status?: string | null
+        }[]
+        const ids = pubData.map(r => String(r.employee_id))
+        const { data: emps } = ids.length
+          ? await supabase.from('employees').select('id, emp_code, full_name').in('id', ids)
+          : { data: [] as unknown[] }
+        const byId = new Map((emps ?? []).map(e => {
+          const r = e as { id: string; emp_code?: string; full_name?: string }
+          return [r.id, r]
+        }))
+        setPubRows(pubData.map(r => {
+          const e = byId.get(String(r.employee_id))
+          return {
+            employeeId: String(r.employee_id),
+            name: e?.full_name ?? 'Unknown',
+            code: e?.emp_code ?? '',
+            // PostgREST returns numeric as a STRING, so Number() is not
+            // decoration — a template literal on the raw value would read
+            // "4.50" where the rest of the screen says 4.5.
+            finalRating: r.final_rating == null ? null : Number(r.final_rating),
+            finalRatingCode: r.final_rating_code ?? null,
+            finalisedByRole: r.finalised_by_role ?? null,
+            finalisedAt: r.finalised_at ?? null,
+            // Either marker counts. The stage is what this screen moves, the
+            // status is what the employee's screen reads, and a row that has
+            // one without the other is half-published — worth showing as
+            // published so somebody looks, rather than offering the button
+            // again.
+            published: r.chain_stage === 'DONE'
+                    || r.workflow_status === 'PUBLISHED'
+                    || r.workflow_status === 'ACKNOWLEDGED',
+          }
+        }))
+      }
+
       // THE SCALE THE COMPANY CONFIGURED, for §6.4's validator. It was
       // hardcoded [1,2,3,4,5] with improvement mandatory at or below 2, which
       // happens to match the seeded scale and would silently stop matching
@@ -294,6 +396,56 @@ export default function PmsPage() {
 
   useEffect(() => { load(); loadCoverage() }, [load, loadCoverage])
 
+  /**
+   * HR RELEASES THE RESULT. The last move in the chain, and the only one on
+   * this screen that writes.
+   *
+   * IT CHANGES NO RATING, by requirement: "hr manager and hr authorities can
+   * not change the ratings and kras set for team through out the chain, they
+   * just see it and publish it". So this touches three columns that are all
+   * about delivery, and nothing about the number.
+   *
+   * Existing feedback is made visible in the same action. pms_feedback is
+   * written by the finaliser with visible_to_employee, and the employee's
+   * screen shows feedback only when the result is published AND that flag is
+   * set — so publishing without flipping it would release a rating with the
+   * feedback still hidden, which is §8's "result + feedback" half-delivered.
+   * No row is created here: HR does not author feedback, and an upsert would
+   * let them.
+   *
+   * chain_stage goes to DONE so the stage and the status agree. Leaving the
+   * stage at HR would keep the employee's banner saying it is with HR to
+   * publish while their Result tab showed the rating.
+   */
+  const publishOne = useCallback(async (employeeId: string) => {
+    if (!periodId) return
+    setPublishing(employeeId)
+    setCommitNote(null)
+
+    // Not fatal on its own: a period with no feedback row still has a rating
+    // worth releasing, and `update` on no rows is a no-op rather than an error.
+    const fb = await supabase.from('pms_feedback')
+      .update({ visible_to_employee: true })
+      .eq('period_id', periodId).eq('employee_id', employeeId)
+    if (fb.error) console.error('[pms] making feedback visible failed:', fb.error)
+
+    const st = await supabase.from('pms_overall_rating')
+      .update({ workflow_status: 'PUBLISHED',
+                published_at: new Date().toISOString(),
+                chain_stage: 'DONE' })
+      .eq('period_id', periodId).eq('employee_id', employeeId)
+    setPublishing(null)
+    if (st.error) {
+      console.error('[pms] publish refused:', st.error)
+      setCommitNote('That result could not be published. Try again, and tell the developer if it keeps failing.')
+      return
+    }
+    setCommitNote(fb.error
+      ? 'Published — the employee can see their rating. The feedback could not be opened to them, though; check it before telling them it is all there.'
+      : 'Published. The employee can see their rating and feedback now.')
+    load()
+  }, [periodId, load])
+
   const roll: Rollup | null = fill ? rollUp(fill) : null
   const depts: DeptRollup[] = fill ? byDepartment(fill) : []
   const nameOf = (id: string | null) => id ? (deptNames[id] ?? 'Unknown department') : 'No department set'
@@ -338,7 +490,7 @@ export default function PmsPage() {
           eight tabs, eight filled chips read as eight competing buttons; an
           underline puts the weight on the one you are in. */}
       <div className="tabs">
-        {TABS.filter(t => canSeeScreen(grant, 'pms.'+t.k)).map(t => (
+        {TABS.filter(t => canSeeScreen(grant, screenKeyOf(t.k))).map(t => (
           <button key={t.k} type="button" onClick={() => setTab(t.k)}
                   className={tab === t.k ? 'on' : undefined}
                   aria-current={tab === t.k ? 'page' : undefined}>
@@ -394,6 +546,9 @@ export default function PmsPage() {
 
           {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading}
                                totalWeightage={config?.totalWeightage} />}
+          {tab === 'publish'  && <PublishTab rows={pubRows} loading={loading}
+                               onPublish={publishOne} publishing={publishing}
+                               periodLabel={naming?.title} />}
           {tab === 'config'   && <ConfigTab policy={config} freq={freq} onFreq={setFreq} fyStart={fyStart}
                                             fyLabel={fyLabel} today={localToday()} />}
           {tab === 'setup'    && <AdminEditor />}

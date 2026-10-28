@@ -24,6 +24,8 @@ const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 const PERF = read('components/ess/Performance.tsx')
 const MGR = read('components/pms/ManagerTabs.tsx')
 const EMP = read('components/pms/EmployeeTabs.tsx')
+const ADMIN = read('components/pms/AdminTabs.tsx')
+const PAGE = read('app/dashboard/pms/page.tsx')
 
 test('all three chain RPCs are actually called from a screen', () => {
   // The module had working SQL nobody invoked before — pms_finalise's final
@@ -134,4 +136,85 @@ test('the stage and the remark are actually selected from the database', () => {
   for (const col of ['chain_stage', 'hod_id']) {
     assert.match(roster![0], new RegExp(col), `${col} is not selected for the roster`)
   }
+})
+
+// ── the HR end of the chain ──────────────────────────────────────────────
+
+test('HR has a publish screen, reachable through a seeded permission', () => {
+  assert.match(ADMIN, /export function PublishTab/, 'no publish tab')
+  assert.match(ADMIN, /k: 'publish'/, 'the tab is not listed in ADMIN_TABS')
+  assert.match(PAGE, /<PublishTab/, 'the tab is never rendered')
+  // canSeeScreen denies any key absent from the seeded screen config, so a
+  // brand-new 'pms.publish' key would hide the tab from everybody including
+  // admins. It borrows the existing HR-only key instead of the roles module
+  // being touched.
+  assert.match(PAGE, /SCREEN_KEY[\s\S]{0,80}publish:\s*'pms\.upload'/,
+    'the publish tab does not borrow a seeded screen key')
+  assert.ok(!/'pms\.' ?\+ ?t\.k\)/.test(PAGE),
+    'the tab bar still builds the screen key by concatenation, so the mapping '
+    + 'is bypassed and the publish tab will be invisible')
+})
+
+test('the publish queue reads chain_stage, not workflow_status', () => {
+  // FINALISED says a rating exists; stage HR says nobody below still holds
+  // it. Reading the status would list appraisals settled but still sitting
+  // with a HOD who has not passed them on.
+  assert.match(PAGE, /\.in\('chain_stage',\s*\['HR',\s*'DONE'\]\)/,
+    'the publish queue does not filter on chain_stage')
+})
+
+test('HR cannot change a rating or a KRA from the publish screen', () => {
+  // THE REQUIREMENT, not an unfinished tab: HR sees and publishes, and the
+  // absence of these controls is the enforcement on this side. 197 enforces
+  // the same thing from the database side by giving HR's rung no reject path.
+  const tab = ADMIN.slice(ADMIN.indexOf('export function PublishTab'),
+                          ADMIN.indexOf('// ── §6.4 Final Rating Upload'))
+  assert.ok(tab.length > 500, 'could not isolate the publish tab body')
+  assert.ok(!/<input/.test(tab), 'the publish tab has an input — HR must not edit here')
+  assert.ok(!/<textarea/.test(tab), 'the publish tab has a textarea')
+  assert.ok(!/<select/.test(tab), 'the publish tab has a select')
+  assert.ok(!/onChange/.test(tab), 'the publish tab has an editable control')
+  // And no reject path, which would make HR an approver.
+  assert.ok(!/[Rr]eject/.test(tab), 'the publish tab offers a rejection')
+})
+
+test('publishing writes only delivery columns', () => {
+  const act = PAGE.slice(PAGE.indexOf('const publishOne'),
+                         PAGE.indexOf('const publishOne') + 2200)
+  assert.ok(act.length > 500, 'could not isolate publishOne')
+  // Exactly the three columns 193 and 197 allow on a locked record, so this
+  // works for an exited employee too — §8's result-before-the-login-closes.
+  assert.match(act, /workflow_status: 'PUBLISHED'/)
+  assert.match(act, /published_at:/)
+  assert.match(act, /chain_stage: 'DONE'/)
+  // Nothing about the number.
+  for (const col of ['final_rating', 'final_score', 'hod_score', 'rm_l1_score',
+                     'rm_l2_score', 'finalised_by']) {
+    assert.ok(!new RegExp(`${col}\\s*:`).test(act),
+      `publishing writes ${col}, which HR must not change`)
+  }
+})
+
+test('publishing opens existing feedback without authoring any', () => {
+  const act = PAGE.slice(PAGE.indexOf('const publishOne'),
+                         PAGE.indexOf('const publishOne') + 2200)
+  // The employee's screen shows feedback only when published AND
+  // visible_to_employee — so publishing without this releases a rating with
+  // the feedback still hidden.
+  assert.match(act, /from\('pms_feedback'\)[\s\S]{0,120}visible_to_employee: true/,
+    'publishing does not make the feedback visible')
+  // `update`, never `upsert` or `insert`: HR does not write feedback, and an
+  // upsert would quietly let them.
+  const fb = act.slice(act.indexOf("from('pms_feedback')"))
+  assert.ok(!/upsert|insert/.test(fb.slice(0, 200)),
+    'HR authors feedback on publish — it must only reveal what exists')
+})
+
+test('the HOD publish path also closes the stage out', () => {
+  // Two screens can publish — the finaliser's own Finalise tab and HR's queue.
+  // A publish that leaves chain_stage at 'HR' makes the employee's banner say
+  // it is still with HR while their Result tab shows the rating.
+  const st = PERF.slice(PERF.indexOf("workflow_status: 'PUBLISHED'"))
+  assert.match(st.slice(0, 200), /chain_stage: 'DONE'/,
+    'the manager-side publish leaves the chain stage behind')
 })
