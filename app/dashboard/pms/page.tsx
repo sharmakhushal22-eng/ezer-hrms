@@ -136,8 +136,15 @@ export default function PmsPage() {
         if (first?.frequency) setFreq(first.frequency)
       }
 
+      // §6.3's export is specified as "all columns", so the columns have to be
+      // fetched. Six were being selected and the export is expected to carry
+      // thirteen. The view does not hold rm_l1_score / rm_l2_score /
+      // hod_score at all — only self_score — so the per-rung manager ratings
+      // the spec lists cannot be exported without widening the view itself.
       const f = await supabase.from('vw_pms_fill_status')
-        .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage')
+        .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage,'
+              + 'employment_flag, one_to_one_status, self_score, final_rating, final_rating_code,'
+              + 'finalised_by_role, workflow_status, last_action_at')
         .eq('period_id', row.id).limit(2000)
       if (!f.error) setFill((f.data ?? []) as unknown as FillRow[])
     } else {

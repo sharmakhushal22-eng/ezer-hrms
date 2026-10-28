@@ -58,7 +58,7 @@ import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL, FLOW, FLOW_ENDS,
          REPORTING_LINE, type Role } from '@/lib/pms/hierarchy'
 import { DEFAULT_RULES } from '@/lib/pms/cycle'
 import { FILL_ORDER, FILL_LABEL, type FillStatus } from '@/lib/pms/status'
-import { rollUp, type FillRow } from '@/lib/pms/rollup'
+import { rollUp, csvText, type FillRow } from '@/lib/pms/rollup'
 import { humanDate } from '@/lib/pms/cycle'
 
 export type AdminTab =
@@ -405,6 +405,11 @@ export function FillTab({ rows, deptNames, loading }: {
   const shown = all.filter(r =>
     (status === 'ALL' || r.fill_status === status) &&
     (dept === 'ALL' || (r.department_id ?? '') === dept))
+  // The not-started export is deliberately NOT the filtered set: §6.3 lists it
+  // as its own action, for chasing everybody who has not begun, and a
+  // department filter left on from a previous look would quietly shrink the
+  // chase list without saying so.
+  const notStarted = all.filter(r => r.fill_status === 'NOT_STARTED')
 
   return (
     <>
@@ -504,16 +509,63 @@ export function FillTab({ rows, deptNames, loading }: {
           </table>
         </div>
         <div className="btnrow">
-          <button className="btn ghost sm" type="button" disabled>⬇ Export to Excel</button>
-          <button className="btn ghost sm" type="button" disabled>⬇ Export not-started only</button>
-          <button className="btn ghost sm" type="button" disabled>Send bulk reminder</button>
+          {/* Exports the FILTERED set, not everything. What is on screen is
+              what the admin has narrowed to, and a file that silently
+              disagrees with the table above it is worse than no file. */}
+          <button className="btn ghost sm" type="button" disabled={!shown.length}
+                  onClick={() => exportFill(shown, deptNames, 'pms-fill-status')}>
+            ⬇ Export {status === 'ALL' && dept === 'ALL' ? 'all' : 'this view'} ({shown.length})
+          </button>
+          <button className="btn ghost sm" type="button" disabled={!notStarted.length}
+                  onClick={() => exportFill(notStarted, deptNames, 'pms-not-started')}>
+            ⬇ Export not-started only ({notStarted.length})
+          </button>
+          {/* NOT WIRED, and labelled so. §12's notification layer does not
+              exist yet, so there is nothing to send with. A disabled button
+              under the words "switches on once there are rows" was a promise
+              the code could not keep: `disabled` was a literal, so it could
+              never switch on at any number of rows. */}
+          <button className="btn ghost sm" type="button" disabled
+                  title="Needs the notification layer (§12), which is not built yet">
+            Send bulk reminder — not available yet
+          </button>
         </div>
         <div className="k" style={{ marginTop: 8 }}>
-          Export and reminders switch on once there are rows to send about.
+          Exports are CSV with a UTF-8 byte-order mark, which is what stops Excel
+          mangling names. Per-rung manager ratings are not in the file: the
+          fill-status view carries the self score only.
         </div>
       </Card>
     </>
   )
+}
+
+/** §6.3's export. Columns in the order the spec lists them, as far as the
+ *  view actually carries them. The CSV text is built by csvText in
+ *  lib/pms/rollup.ts, where the quoting rules can be tested; this half is
+ *  only the browser download, which cannot be. */
+function exportFill(rows: FillRow[], deptNames: Record<string, string>, name: string): void {
+  const head = ['Code', 'Name', 'Department', 'Employment flag', 'KRA count',
+                'Total weightage', 'One-to-one', 'Self score', 'Fill status',
+                'Workflow status', 'Final rating', 'Rating code', 'Finalised by',
+                'Last action']
+  const body = rows.map(r => [
+    r.employee_code, r.employee_name,
+    deptNames[r.department_id ?? ''] ?? r.department_id,
+    r.employment_flag, r.kra_count, r.total_weightage,
+    r.one_to_one_status, r.self_score,
+    FILL_LABEL[r.fill_status as FillStatus] ?? r.fill_status,
+    r.workflow_status, r.final_rating, r.final_rating_code,
+    r.finalised_by_role, r.last_action_at,
+  ])
+  // UTF-8 BOM — the EZER export standard, same as downloadTemplate below.
+  const blob = new Blob(['﻿' + csvText(head, body)],
+                        { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `${name}-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
 }
 
 /** The chase-list phrasing, trimmed to fit a table cell.
