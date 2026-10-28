@@ -130,7 +130,7 @@ test('every workflow value the roll-up can see maps to a fill status', () => {
   }
 })
 
-test('DRAFT_SAVED describes both states it now covers', () => {
+test('DRAFT_SAVED describes both states it now covers — in BOTH copies', () => {
   // 191 folded KRA_LOCKED in here. The sentence used to say "started writing,
   // nothing sent", which is plainly false about a set that is agreed and
   // frozen — and this string is what an HR admin reads to decide who to
@@ -140,6 +140,23 @@ test('DRAFT_SAVED describes both states it now covers', () => {
     'reworded in 191: it has to cover the locked case too')
   assert.match(m, /locked/i, 'must mention the locked case')
   assert.match(m, /nudge/i, 'the operational advice is the point of the sentence')
+
+  // THE SECOND COPY. AdminTabs keeps FILL_MEANING_SHORT, trimmed to fit a
+  // table cell — a deliberate variant, not a duplicate to delete. But the
+  // first version of this test pinned only the long copy, so when 191
+  // reworded that one, the tracker went on telling admins "Started, nothing
+  // sent" about four LOCKED KRAs. A test that covers one of two copies of a
+  // rule is how the rule drifts.
+  //
+  // Read from source because the file is .tsx and Node cannot load it.
+  const tsx = readFileSync('components/pms/AdminTabs.tsx', 'utf8')
+  const block = /const FILL_MEANING_SHORT[^{]*\{([^}]*)\}/.exec(tsx)
+  assert.ok(block, 'FILL_MEANING_SHORT not found — renamed? point this test at it')
+  const short = /DRAFT_SAVED:\s*'([^']*)'/.exec(block![1])
+  assert.ok(short, 'no DRAFT_SAVED entry in FILL_MEANING_SHORT')
+  assert.doesNotMatch(short![1], /nothing sent/i,
+    'the short copy still claims nothing was sent, which is false once locked')
+  assert.match(short![1], /nudge/i, 'the short copy keeps the operational advice')
 })
 
 test('§3.5: being rated is not being published', () => {

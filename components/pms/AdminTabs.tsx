@@ -516,10 +516,19 @@ export function FillTab({ rows, deptNames, loading }: {
   )
 }
 
-/** The chase-list phrasing, trimmed to fit a table cell. */
+/** The chase-list phrasing, trimmed to fit a table cell.
+ *
+ *  Kept in step with FILL_MEANING in lib/pms/status.ts — same five states,
+ *  shorter sentences, and a test reads BOTH so they cannot drift apart.
+ *  They did drift: 191 folded KRA_LOCKED into DRAFT_SAVED and only the long
+ *  copy was reworded, so this cell still told an admin "nothing sent" about
+ *  Nikhil Reddy's four LOCKED KRAs. Observed on the live tracker. */
 const FILL_MEANING_SHORT: Record<FillStatus, string> = {
   NOT_STARTED: 'Cannot be rated at all. Chase first',
-  DRAFT_SAVED: 'Started, nothing sent. A nudge, not an escalation',
+  // Covers KRA_DRAFT and KRA_LOCKED. Phrased by WHOSE MOVE IT IS, which is
+  // the one thing both states agree on and the only thing this column is
+  // asked — and it reads in parallel with the two rows below it.
+  DRAFT_SAVED: 'Waiting on the employee. A nudge, not an escalation',
   SUBMITTED:   'Waiting on their manager',
   IN_REVIEW:   'Waiting on the next approver or the HOD',
   FINALISED:   'Settled, nothing further owed',
