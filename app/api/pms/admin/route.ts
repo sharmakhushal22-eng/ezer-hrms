@@ -54,6 +54,11 @@ const POLICY_COLS = [
   // — which is the right default for a table that decides how everybody is
   // rated, but it does mean the list has to be kept up.
   'carry_forward_kras',
+  // 202. Same reason as the line above: a policy column is INERT until it is
+  // named here, so the admin screen's new control would have saved silently
+  // into nothing — the precise shape of the "my configuration changes do not
+  // take effect" bug reported against this module once already.
+  'post_final_owner',
 ] as const
 
 /** A period's own windows, and its status.

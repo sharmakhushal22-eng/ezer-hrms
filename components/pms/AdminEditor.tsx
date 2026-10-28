@@ -238,6 +238,25 @@ function PolicyPanel({ policies, companies, reload }: {
         </Field>
       </div>
 
+      {/* 202: WHO RUNS THE APPRAISAL AFTER THE RATING IS SETTLED.
+          A select and not a boolean, because neither value is the negation of
+          the other — both name a person. 'HR' is the default and diverges from
+          docx Stage 6, which gives the finaliser the appreciation remark, the
+          improvement feedback and the recognition awards along with the
+          rating; 'FINALISER' is that behaviour. Offered here so a company can
+          choose, which is the whole reason the column exists rather than the
+          split being hardcoded. */}
+      <div className="grid g2">
+        <Field label="After the rating is settled"
+               hint="HR: HR writes the feedback, awards recognition and publishes. Finaliser: whoever finalised does all of it, as docx Stage 6 describes.">
+          <select value={String(draft.post_final_owner ?? 'HR')}
+                  onChange={e => set('post_final_owner', e.target.value)}>
+            <option value="HR">HR writes the feedback and publishes</option>
+            <option value="FINALISER">The finaliser does all of it</option>
+          </select>
+        </Field>
+      </div>
+
       <div className="grid g4">
         {([
           ['self_rating_mandatory',   'Self rating is mandatory'],

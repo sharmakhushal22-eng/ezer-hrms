@@ -24,9 +24,10 @@ import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
 import { PERIOD_OPEN } from '@/lib/pms/status'
 import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
-import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, PublishTab, UploadTab, PipTab,
-         ReportsTab, FlowTab, type AdminTab, type PipRow, type PolicyConfig,
-         type PublishRow } from '@/components/pms/AdminTabs'
+import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, PublishTab, SummaryTab,
+         UploadTab, PipTab, ReportsTab, FlowTab, type AdminTab, type PipRow,
+         type PolicyConfig, type PublishRow } from '@/components/pms/AdminTabs'
+import { mayWritePostFinal, postFinalNote, type PostFinalOwner } from '@/lib/pms/postFinal'
 import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
 import { type Frequency, type Policy } from '@/lib/pms/policy'
@@ -74,14 +75,20 @@ interface Coverage {
  *
  * Everything not listed governs itself, which is every pre-existing tab.
  */
-const SCREEN_KEY: Partial<Record<Tab, string>> = { publish: 'pms.upload' }
+const SCREEN_KEY: Partial<Record<Tab, string>> = {
+  publish: 'pms.upload',
+  // Ratings Summary reads what Fill Status reads, so it rides the same seeded
+  // key. Same reasoning as publish: a new 'pms.summary' key would be absent
+  // from the seeded config and the tab invisible to everybody.
+  summary: 'pms.fill',
+}
 const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
 
 export default function PmsPage() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<Tab>('overview')
   useEffect(() => {
-    const vis = (['overview','config','setup','policies','fill','publish','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, screenKeyOf(k)))
+    const vis = (['overview','config','setup','policies','fill','publish','summary','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, screenKeyOf(k)))
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [ready, setReady] = useState<boolean | null>(null)   // null = still checking
@@ -136,6 +143,17 @@ export default function PmsPage() {
    *  until the first load answers; an empty scale would reject every rating. */
   const [scale, setScale] = useState<number[]>([1, 2, 3, 4, 5])
   const [improvementAtOrBelow, setImprovementAtOrBelow] = useState<number | null>(2)
+  /**
+   * The configured scale WITH its labels, for the publish workspace and the
+   * summary distribution.
+   *
+   * `scale` above is numbers only, which §6.4's validator wants; a screen that
+   * prints "4 · Exceeds Expectations" and one that decides whether improvement
+   * feedback is mandatory both need more than the number. Same query, kept
+   * whole rather than reduced twice.
+   */
+  const [bandList, setBandList] = useState<{ value: number; label: string
+                                             improvementMandatory?: boolean }[]>([])
   // The Indian financial year. Periods are generated from it, so the preview
   // has to start where the real thing starts.
   const fyStart = `${new Date().getMonth() >= 3 ? new Date().getFullYear()
@@ -192,7 +210,7 @@ export default function PmsPage() {
               + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
               + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
               + ' final_review_one_to_one, approval_chain, rating_scale_type,'
-              + ' self_rating_mandatory, new_joiner_cutoff_days,'
+              + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
               + ' include_notice_period, include_exited')
       if (co) polQ = polQ.eq('company_id', co)
       // ORDER BY, because "the first policy" was meaningless without one.
@@ -257,6 +275,7 @@ export default function PmsPage() {
             ? null : Number(p.new_joiner_cutoff_days),
           includeNoticePeriod: p.include_notice_period as boolean ?? null,
           includeExited: p.include_exited as boolean ?? null,
+          postFinalOwner: (p.post_final_owner as string) ?? 'HR',
         })
         setConfigs(polRows.map(toConfig))
 
@@ -334,11 +353,15 @@ export default function PmsPage() {
        * underneath. chain_stage then only decides which of the two lists a row
        * falls into, which it does correctly whether it is NULL or not.
        */
+      // EVERY enrolment, not only the settled ones. This set now feeds two
+      // tabs: Publish Results, which filters to what is finalised, and
+      // Ratings Summary, whose whole job is "all the employees" — including
+      // the ones still in the chain, shown as such. Fetching twice would be
+      // two queries disagreeing about the same period.
       const pub = await supabase.from('pms_overall_rating')
         .select('employee_id, final_rating, final_rating_code, finalised_by_role,'
-              + 'finalised_at, chain_stage, workflow_status')
+              + 'finalised_at, chain_stage, workflow_status, employee_ack')
         .eq('period_id', row.id)
-        .in('workflow_status', ['FINALISED', 'PUBLISHED', 'ACKNOWLEDGED'])
         .limit(2000)
       if (pub.error) {
         // Before 197 is applied there is no chain_stage column at all, and
@@ -362,13 +385,47 @@ export default function PmsPage() {
           finalised_at?: string | null
           chain_stage?: string | null
           workflow_status?: string | null
+          employee_ack?: boolean | null
         }[]
         const ids = pubData.map(r => String(r.employee_id))
-        const { data: emps } = ids.length
-          ? await supabase.from('employees').select('id, emp_code, full_name').in('id', ids)
-          : { data: [] as unknown[] }
-        const byId = new Map((emps ?? []).map(e => {
-          const r = e as { id: string; emp_code?: string; full_name?: string }
+        // Names, departments, the feedback HR writes, the recognition it
+        // awards, and whether the final review is signed. Five reads for the
+        // whole period rather than five per row — the publish workspace and
+        // the summary both need all of it, and a per-row query would be
+        // 390 x 5 against tables already keyed on (period, employee).
+        const [emps, fbs, bens, frs] = ids.length ? await Promise.all([
+          supabase.from('employees').select('id, emp_code, full_name, department_id').in('id', ids),
+          supabase.from('pms_feedback')
+            .select('employee_id, appreciation_remark, improvement_feedback')
+            .eq('period_id', row.id).in('employee_id', ids),
+          supabase.from('pms_additional_benefits')
+            .select('employee_id, benefit_type, benefit_note')
+            .eq('period_id', row.id).in('employee_id', ids),
+          supabase.from('pms_one_to_one')
+            .select('employee_id, employee_ack, manager_ack')
+            .eq('period_id', row.id).eq('discussion_type', 'FINAL_REVIEW')
+            .in('employee_id', ids),
+        ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }] as const
+        const fbBy = new Map((fbs.data ?? []).map(x => {
+          const r = x as { employee_id: string; appreciation_remark?: string; improvement_feedback?: string }
+          return [String(r.employee_id), r]
+        }))
+        const benBy = new Map<string, { type: string; note: string }[]>()
+        for (const b of bens.data ?? []) {
+          const r = b as { employee_id: string; benefit_type: string; benefit_note?: string }
+          const k = String(r.employee_id)
+          benBy.set(k, [...(benBy.get(k) ?? []),
+                        { type: String(r.benefit_type), note: String(r.benefit_note ?? '') }])
+        }
+        // 200's gate: BOTH acknowledgements. A row with no final review at all
+        // is NOT signed, which is the honest answer — the trigger will refuse
+        // it for exactly that reason.
+        const signed = new Set((frs.data ?? [])
+          .filter(x => (x as { employee_ack?: boolean }).employee_ack
+                    && (x as { manager_ack?: boolean }).manager_ack)
+          .map(x => String((x as { employee_id: string }).employee_id)))
+        const byId = new Map((emps.data ?? []).map(e => {
+          const r = e as { id: string; emp_code?: string; full_name?: string; department_id?: string }
           return [r.id, r]
         }))
         setPubRows(pubData.map(r => {
@@ -384,6 +441,12 @@ export default function PmsPage() {
             finalRatingCode: r.final_rating_code ?? null,
             finalisedByRole: r.finalised_by_role ?? null,
             finalisedAt: r.finalised_at ?? null,
+            departmentId: e?.department_id ?? null,
+            appreciation: fbBy.get(String(r.employee_id))?.appreciation_remark ?? null,
+            improvement: fbBy.get(String(r.employee_id))?.improvement_feedback ?? null,
+            benefits: benBy.get(String(r.employee_id)) ?? [],
+            signedOff: signed.has(String(r.employee_id)),
+            acknowledged: r.employee_ack === true,
             // Either marker counts. The stage is what this screen moves, the
             // status is what the employee's screen reads, and a row that has
             // one without the other is half-published — worth showing as
@@ -403,15 +466,23 @@ export default function PmsPage() {
       // from the rating screens. improvement_feedback_mandatory is a per-band
       // flag, so the threshold is the HIGHEST band that still demands it.
       let scQ = supabase.from('pms_rating_scale')
-        .select('rating_value, improvement_feedback_mandatory, is_active')
+        .select('rating_value, rating_label, improvement_feedback_mandatory, is_active, sort_order')
       if (co) scQ = scQ.eq('company_id', co)
       const sc = await scQ
       if (!sc.error) {
         const bands = ((sc.data ?? []) as unknown as {
-          rating_value: number; improvement_feedback_mandatory: boolean; is_active?: boolean
+          rating_value: number; rating_label?: string
+          improvement_feedback_mandatory: boolean; is_active?: boolean
         }[]).filter(b => b.is_active !== false)
         if (bands.length) {
           setScale(bands.map(b => Number(b.rating_value)).sort((a, b) => a - b))
+          setBandList([...bands]
+            .sort((a, b) => Number(b.rating_value) - Number(a.rating_value))
+            .map(b => ({
+              value: Number(b.rating_value),
+              label: String((b as { rating_label?: string }).rating_label ?? b.rating_value),
+              improvementMandatory: !!b.improvement_feedback_mandatory,
+            })))
           const mandatory = bands.filter(b => b.improvement_feedback_mandatory)
             .map(b => Number(b.rating_value))
           setImprovementAtOrBelow(mandatory.length ? Math.max(...mandatory) : null)
@@ -518,6 +589,73 @@ export default function PmsPage() {
    * stage at HR would keep the employee's banner saying it is with HR to
    * publish while their Result tab showed the rating.
    */
+  /**
+   * The policy's post-finalisation owner, and whether this viewer is it.
+   *
+   * 202 defaults to 'HR', which is what was asked for: after the HOD settles
+   * the rating, HR writes the feedback, awards recognition and publishes. A
+   * company running docx Stage 6 sets FINALISER and these controls go back to
+   * the HOD — the tab stays visible either way, read-only, because HR Admin
+   * still needs to see where a cycle has got to.
+   */
+  const postFinalOwner = (config?.postFinalOwner ?? 'HR') as PostFinalOwner
+  const myHrRole = grant.isSuperAdmin ? 'ADMIN' : 'HR_MGR'
+  const canRunPostFinal = mayWritePostFinal(postFinalOwner, myHrRole)
+
+  /**
+   * HR writes what the employee reads.
+   *
+   * UPSERT on pms_feedback and a replace on the benefits, which is the same
+   * shape the HOD's own publish path has always used — one row of feedback per
+   * (period, employee), and recognition rows that are a set rather than a log,
+   * so editing means replacing.
+   *
+   * given_by_role records HR, not HOD. An appreciation remark written by HR
+   * and one written by the manager who held the conversation are different
+   * documents, and the column is the only place that difference survives.
+   */
+  const saveFeedback = useCallback(async (employeeId: string, patch: {
+    appreciation: string; improvement: string
+    benefits: { type: string; note: string }[]
+  }) => {
+    if (!periodId) return
+    setCommitNote(null)
+    const co = companyFilter(grant, grant.companyId)
+
+    const fb = await supabase.from('pms_feedback').upsert({
+      company_id: co, period_id: periodId, employee_id: employeeId,
+      appreciation_remark: patch.appreciation.trim() || null,
+      improvement_feedback: patch.improvement.trim() || null,
+      given_by_role: 'HR_MGR',
+      // NOT visible yet. Publishing is what opens it, and that is a separate
+      // deliberate act — writing the words must not release them.
+      visible_to_employee: false,
+    }, { onConflict: 'period_id,employee_id' })
+    if (fb.error) {
+      console.error('[pms] HR feedback save refused:', fb.error)
+      setCommitNote('That feedback did not save. Try again before publishing.')
+      return
+    }
+
+    const kept = patch.benefits.filter(b => b.note.trim() || b.type)
+    await supabase.from('pms_additional_benefits')
+      .delete().eq('period_id', periodId).eq('employee_id', employeeId)
+    if (kept.length) {
+      const ben = await supabase.from('pms_additional_benefits').insert(
+        kept.map(b => ({
+          company_id: co, period_id: periodId, employee_id: employeeId,
+          benefit_type: b.type, benefit_note: b.note.trim() || null,
+        })))
+      if (ben.error) {
+        console.error('[pms] HR recognition save refused:', ben.error)
+        setCommitNote('The feedback saved but the recognition did not. Add it again before telling them it is published.')
+        return
+      }
+    }
+    setCommitNote('Saved. Not released to them until you publish.')
+    load()
+  }, [periodId, grant, load])
+
   const publishOne = useCallback(async (employeeId: string) => {
     if (!periodId) return
     setPublishing(employeeId)
@@ -648,7 +786,12 @@ export default function PmsPage() {
           {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading}
                                totalWeightage={config?.totalWeightage} />}
           {tab === 'publish'  && <PublishTab rows={pubRows} loading={loading}
-                               onPublish={publishOne} publishing={publishing}
+                               onPublish={publishOne} onSaveFeedback={saveFeedback}
+                               publishing={publishing} periodLabel={naming?.title}
+                               bands={bandList} canAct={canRunPostFinal}
+                               note={postFinalNote(postFinalOwner, myHrRole)} />}
+          {tab === 'summary'  && <SummaryTab rows={pubRows} loading={loading}
+                               deptNames={deptNames} bands={bandList}
                                periodLabel={naming?.title} />}
           {tab === 'config'   && <ConfigTab policy={config} freq={freq} onFreq={setFreq} fyStart={fyStart}
                                             fyLabel={fyLabel} today={localToday()}

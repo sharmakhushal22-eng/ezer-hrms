@@ -93,10 +93,13 @@ export interface PolicyConfig {
   newJoinerCutoffDays?: number | null
   includeNoticePeriod?: boolean | null
   includeExited?: boolean | null
+  /** 202: who runs the appraisal after the rating is settled. */
+  postFinalOwner?: string | null
 }
 
 export type AdminTab =
-  | 'config' | 'setup' | 'policies' | 'fill' | 'publish' | 'upload' | 'pip' | 'reports'
+  | 'config' | 'setup' | 'policies' | 'fill' | 'publish' | 'summary' | 'upload'
+  | 'pip' | 'reports'
 
 export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'config',   label: 'PMS Configuration',  blurb: 'Frequency, windows and the KRA rules everyone is held to' },
@@ -104,7 +107,8 @@ export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'setup',    label: 'Setup & Controls',   blurb: 'Edit the policy, KRA library and rating scale; generate and open periods' },
   { k: 'policies', label: 'Policy Builder',     blurb: 'Different cycles for different groups, and who falls under which' },
   { k: 'fill',     label: 'Fill Status Tracker',blurb: 'Live status for everyone, and who to chase' },
-  { k: 'publish',  label: 'Publish Results',    blurb: 'Settled ratings waiting to be released to employees' },
+  { k: 'publish',  label: 'Publish Results',    blurb: 'Settled ratings: write the feedback, award recognition, release' },
+  { k: 'summary',  label: 'Ratings Summary',    blurb: 'Every employee\'s rating and where their appraisal stands' },
   { k: 'upload',   label: 'Final Rating Upload',blurb: 'Bulk override from an offline calibration' },
   { k: 'pip',      label: 'PIP Management',     blurb: 'Requests from managers, and the plans you have started' },
   { k: 'reports',  label: 'Reports & Export',   blurb: 'The fourteen reports, and Excel export' },
@@ -165,6 +169,31 @@ function Pill({ tone, children }: {
   children: React.ReactNode
 }) {
   return <span className={`pill p-${tone}`}>{children}</span>
+}
+
+/** The same three-up figure the manager surfaces use, so a count means the
+ *  same thing and looks the same on both sides of the product. */
+function Stat({ label, value, note, tone }: {
+  label: string; value: React.ReactNode; note?: string; tone?: 'accent' | 'warn'
+}) {
+  return (
+    <div className={tone === 'accent' ? 'stat accent' : tone === 'warn' ? 'stat warn' : 'stat'}>
+      <div className="lbl">{label}</div>
+      <div className="val">{value}</div>
+      {note && <div className="note">{note}</div>}
+    </div>
+  )
+}
+
+function Note({ tone = 'info', children }: {
+  tone?: 'info' | 'warn'; children: React.ReactNode
+}) {
+  return (
+    <div className={tone === 'warn' ? 'banner b-amber' : 'banner b-blue'}>
+      <span aria-hidden="true">{tone === 'warn' ? '!' : 'ℹ️'}</span>
+      <div>{children}</div>
+    </div>
+  )
 }
 
 function Empty({ what, why }: { what: string; why: string }) {
@@ -706,11 +735,29 @@ export interface PublishRow {
   employeeId: string
   name: string
   code: string
+  departmentId?: string | null
   finalRating: number | null
   finalRatingCode: string | null
   finalisedByRole: string | null
   finalisedAt: string | null
   published: boolean
+  /**
+   * The words that go out beside the number. HR writes these when the policy
+   * says post_final_owner = 'HR', which is the default — see migration 202.
+   */
+  appreciation?: string | null
+  improvement?: string | null
+  benefits?: { type: string; note: string }[]
+  /**
+   * Whether the final-review one-to-one carries BOTH acknowledgements.
+   *
+   * 200's trg_pms_publish_needs_signoff refuses a publish without it, so this
+   * has to be on the row: offering the button to HR and letting the database
+   * answer with a raw P0001 is the behaviour that gate exists to replace.
+   */
+  signedOff?: boolean
+  /** Whether the employee has confirmed reading the result. */
+  acknowledged?: boolean
 }
 
 /**
@@ -731,31 +778,105 @@ export interface PublishRow {
  * exists; stage HR says it has reached HR and nobody below has it any more.
  * Reading the status instead would list appraisals that are settled but still
  * sitting with a HOD who has not passed them on.
+ *//**
+ * §(none) — HR runs the appraisal after the rating is settled.
+ *
+ * Requested: once the HOD finalises, the result moves here and every step
+ * after the rating — the appreciation remark, the improvement feedback, the
+ * recognition awards, and the publish itself — is HR's. The HOD's part ends
+ * at the number.
+ *
+ * WHICH MEANS THIS TAB WRITES, and the previous version did not. It listed
+ * settled ratings and offered one button. The controls it now carries were on
+ * the HOD's Feedback & Recognition tab, which migration 202's default takes
+ * away from them.
+ *
+ * WHAT IT STILL CANNOT DO IS CHANGE THE RATING. That was settled earlier and
+ * has not moved: there is no rating input anywhere on this screen, and 188's
+ * guards would refuse one. HR writes the words beside the number and releases
+ * it; the number belongs to the chain.
+ *
+ * THE SIGN-OFF IS SHOWN, NOT DISCOVERED. 200's trg_pms_publish_needs_signoff
+ * refuses any publish before the final-review one-to-one carries both
+ * acknowledgements. Offering the button anyway and letting the database answer
+ * with a raw P0001 is exactly the behaviour that gate was written to replace,
+ * so the row says whether it is signed and the button waits.
  */
-export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }: {
+export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishing,
+                             periodLabel, bands = [], canAct = true, note }: {
   rows: PublishRow[] | null
   loading?: boolean
   onPublish?: (employeeId: string) => void
+  /** Write the words that go out beside the rating. */
+  onSaveFeedback?: (employeeId: string, patch: {
+    appreciation: string; improvement: string
+    benefits: { type: string; note: string }[]
+  }) => void
   /** The id currently being published, so one button can show progress
    *  without freezing the whole table. */
   publishing?: string | null
   periodLabel?: string | null
+  /** The configured scale, for the improvement-feedback threshold. */
+  bands?: { value: number; label: string; improvementMandatory?: boolean }[]
+  /** Whether the viewer's role owns this step under the policy. False renders
+   *  the record read-only rather than hiding it — HR Admin still needs to see
+   *  where a cycle has got to even when a company runs docx Stage 6. */
+  canAct?: boolean
+  note?: string | null
 }) {
+  const [picked, setPicked] = useState<string | null>(null)
+  const [draft, setDraft] = useState<{ appreciation: string; improvement: string
+                                       benefits: { type: string; note: string }[] } | null>(null)
+
   if (loading || rows === null) return <div className="k">Loading…</div>
 
   const waiting = rows.filter(r => !r.published)
   const done = rows.filter(r => r.published)
+  const member = rows.find(r => r.employeeId === picked) ?? null
+
+  // Seeded from the row, so re-picking somebody shows what is actually on
+  // record rather than the last person's text — the bug a single shared draft
+  // always produces.
+  const d = draft ?? {
+    appreciation: member?.appreciation ?? '',
+    improvement: member?.improvement ?? '',
+    benefits: member?.benefits ?? [],
+  }
+  const band = bands.find(b => b.value === member?.finalRating)
+  const improvementRequired = !!band?.improvementMandatory
+  const faults: string[] = []
+  if (member) {
+    if (!d.appreciation.trim()) faults.push('An appreciation remark is needed.')
+    if (improvementRequired && !d.improvement.trim()) {
+      faults.push(`Improvement feedback is mandatory at a rating of ${member.finalRating}.`)
+    }
+    if (member.signedOff === false) {
+      faults.push('The final review one-to-one is not acknowledged by both of '
+                + 'them yet. The rating is settled; it is the employee seeing '
+                + 'it that waits on their acknowledgement.')
+    }
+  }
+  const publishable = !!member && faults.length === 0
 
   return (
     <>
       <div className="banner b-blue">
         <span aria-hidden="true">ℹ️</span>
         <div>
-          These ratings are settled. Publishing releases the rating and the
-          feedback to the employee{periodLabel ? ` for ${periodLabel}` : ''} —
-          it does not change either. A rating that needs changing goes back
-          through the HOD, not from here.
+          {note ?? <>
+            These ratings are settled{periodLabel ? ` for ${periodLabel}` : ''}. You
+            write the feedback and any recognition, then release the result. The
+            rating itself is the chain’s — a number that needs changing goes back
+            through the HOD.
+          </>}
         </div>
+      </div>
+
+      <div className="grid g3" style={{ marginBottom: 16 }}>
+        <Stat label="Waiting on you" value={waiting.length} tone={waiting.length ? 'accent' : undefined} />
+        <Stat label="Published" value={done.length} />
+        <Stat label="Acknowledged by the employee"
+              value={done.filter(r => r.acknowledged).length} />
       </div>
 
       <Card title={`Waiting to publish (${waiting.length})`}
@@ -768,28 +889,28 @@ export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }
               <table>
                 <thead>
                   <tr>
-                    <th>Employee</th><th>Code</th><th>Final rating</th>
-                    <th>Settled by</th><th>Settled on</th><th>Action</th>
+                    <th>Code</th><th>Employee</th><th className="num">Rating</th>
+                    <th>Settled by</th><th>Settled on</th><th>Sign-off</th><th />
                   </tr>
                 </thead>
                 <tbody>
                   {waiting.map(r => (
                     <tr key={r.employeeId}>
-                      <td>{r.name}</td>
-                      <td className="k">{r.code}</td>
-                      <td>
-                        {r.finalRating == null
-                          ? <span className="k">—</span>
+                      <td>{r.code}</td>
+                      <td style={{ fontWeight: 600 }}>{r.name}</td>
+                      <td className="num">
+                        {r.finalRating == null ? <span className="k">—</span>
                           : <b>{r.finalRating}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</b>}
                       </td>
                       <td className="k">{r.finalisedByRole ?? '—'}</td>
                       <td className="k">{r.finalisedAt ? r.finalisedAt.slice(0, 10) : '—'}</td>
+                      <td>{r.signedOff === false
+                        ? <Pill tone="amber">not signed</Pill>
+                        : <Pill tone="green">signed</Pill>}</td>
                       <td>
-                        <button className="btn sm" type="button"
-                                disabled={!onPublish || publishing === r.employeeId
-                                          || r.finalRating == null}
-                                onClick={() => onPublish?.(r.employeeId)}>
-                          {publishing === r.employeeId ? 'Publishing…' : 'Publish'}
+                        <button className="btn ghost sm" type="button"
+                                onClick={() => { setPicked(r.employeeId); setDraft(null) }}>
+                          {picked === r.employeeId ? 'Open' : 'Work on this'}
                         </button>
                       </td>
                     </tr>
@@ -799,27 +920,139 @@ export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }
             </div>
           )}
         <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
-          A row with no final rating cannot be published: there would be nothing
-          to show. That means the chain has not finished with it, however far
+          A row with no rating cannot be published: there would be nothing to
+          show. That means the chain has not finished with it, however far
           along it looks.
         </div>
       </Card>
 
+      {member && (
+        <Card title={`${member.name} — ${member.code}`}
+              sub={`Rated ${member.finalRating ?? '—'}${band ? ` · ${band.label}` : ''} by ${member.finalisedByRole ?? 'the chain'}. You are writing what they read.`}>
+          {!canAct ? (
+            <Note tone="warn">
+              Under this policy the finaliser writes the feedback and publishes.
+              This is here so you can see where the cycle has got to.
+            </Note>
+          ) : (
+            <>
+              <div className="fld">
+                <label htmlFor="pf-appr">Appreciation remark</label>
+                <textarea id="pf-appr" rows={3} value={d.appreciation}
+                          placeholder="What they did well, in their own terms."
+                          onChange={e => setDraft({ ...d, appreciation: e.target.value })} />
+              </div>
+              <div className="fld">
+                <label htmlFor="pf-impr">
+                  Improvement feedback{improvementRequired ? ' (mandatory at this rating)' : ''}
+                </label>
+                <textarea id="pf-impr" rows={3} value={d.improvement}
+                          placeholder={improvementRequired
+                            ? 'Required: what has to change, and the support for it.'
+                            : 'Optional.'}
+                          onChange={e => setDraft({ ...d, improvement: e.target.value })} />
+              </div>
+
+              <Section>Recognition</Section>
+              {d.benefits.map((b, i) => (
+                <div className="grid g2" key={i} style={{ marginBottom: 8 }}>
+                  <Field label="Award">
+                    <select value={b.type}
+                            onChange={e => setDraft({ ...d, benefits: d.benefits.map(
+                              (x, j) => j === i ? { ...x, type: e.target.value } : x) })}>
+                      {['CERTIFICATE','SPOT_AWARD','TRAINING_NOMINATION',
+                        'SPECIAL_MENTION','STAR_PERFORMER','OTHER'].map(k => (
+                        <option key={k} value={k}>{k.replace(/_/g, ' ').toLowerCase()}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Note">
+                    <input value={b.note}
+                           onChange={e => setDraft({ ...d, benefits: d.benefits.map(
+                             (x, j) => j === i ? { ...x, note: e.target.value } : x) })} />
+                  </Field>
+                </div>
+              ))}
+              <div className="btnrow">
+                <button className="btn ghost sm" type="button"
+                        onClick={() => setDraft({ ...d, benefits: [...d.benefits,
+                          { type: 'CERTIFICATE', note: '' }] })}>
+                  + Add recognition
+                </button>
+                {d.benefits.length > 0 && (
+                  <button className="btn ghost sm" type="button"
+                          onClick={() => setDraft({ ...d, benefits: d.benefits.slice(0, -1) })}>
+                    Remove the last
+                  </button>
+                )}
+              </div>
+
+              {faults.length > 0 && (
+                <div className="banner b-amber" style={{ marginTop: 12 }}>
+                  <span aria-hidden="true">!</span>
+                  <div>
+                    <b>Before this can be published:</b>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                      {faults.map((f, i) => <li key={i}>{f}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              <div className="btnrow">
+                <button className="btn ghost" type="button"
+                        disabled={!onSaveFeedback}
+                        onClick={() => onSaveFeedback?.(member.employeeId, d)}>
+                  Save without publishing
+                </button>
+                <button className="btn" type="button"
+                        disabled={!publishable || !onPublish || publishing === member.employeeId}
+                        onClick={() => { onSaveFeedback?.(member.employeeId, d)
+                                         onPublish?.(member.employeeId) }}>
+                  {publishing === member.employeeId ? 'Publishing…'
+                    : publishable ? 'Save and publish' : 'Cannot publish yet'}
+                </button>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
       {done.length > 0 && (
         <Card title={`Already published (${done.length})`}
-              sub="The employee can see these.">
+              sub="The employee can see these. Read-only.">
           <div className="tblwrap">
             <table>
               <thead>
-                <tr><th>Employee</th><th>Code</th><th>Final rating</th><th /></tr>
+                <tr><th>Code</th><th>Employee</th><th className="num">Rating</th>
+                    <th>Read by them</th><th>What they were told</th></tr>
               </thead>
               <tbody>
                 {done.map(r => (
                   <tr key={r.employeeId}>
-                    <td>{r.name}</td>
-                    <td className="k">{r.code}</td>
-                    <td>{r.finalRating ?? '—'}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</td>
-                    <td><Pill tone="green">published</Pill></td>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="num">{r.finalRating ?? '—'}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</td>
+                    <td>{r.acknowledged
+                      ? <Pill tone="green">✓ acknowledged</Pill>
+                      : <Pill tone="amber">not yet</Pill>}</td>
+                    <td style={{ maxWidth: 340 }}>
+                      {!r.appreciation && !r.improvement
+                        ? <span className="k">No written feedback went out.</span>
+                        : <div style={{ display: 'grid', gap: 4 }}>
+                            {r.appreciation && <div><b>Appreciation.</b> {r.appreciation}</div>}
+                            {r.improvement && <div><b>Improvement.</b> {r.improvement}</div>}
+                            {!!r.benefits?.length && (
+                              <div className="chips">
+                                {r.benefits.map((b, i) => (
+                                  <Pill key={i} tone="brand">
+                                    {b.type.replace(/_/g, ' ').toLowerCase()}{b.note ? ` · ${b.note}` : ''}
+                                  </Pill>
+                                ))}
+                              </div>
+                            )}
+                          </div>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -827,6 +1060,147 @@ export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }
           </div>
         </Card>
       )}
+    </>
+  )
+}
+
+// ── the whole company, on one screen ─────────────────────────────────────
+
+/**
+ * §(none) — "hr head also show a summary of all the employees ratings and pms
+ * details".
+ *
+ * WHY NOT THE FILL STATUS TRACKER, which already lists everybody. That answers
+ * "who has not done their part yet" — it is a chase list, ordered by what is
+ * missing. This answers "what did the company score", which is a different
+ * question with a different shape: the distribution first, then the detail.
+ * Collapsing them would make one screen that serves neither.
+ *
+ * READ-ONLY. Releasing a result is Publish Results; this is the view HR reads
+ * before and after. No control here writes anything.
+ */
+export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLabel }: {
+  rows: PublishRow[] | null
+  deptNames?: Record<string, string>
+  bands?: { value: number; label: string }[]
+  loading?: boolean
+  periodLabel?: string | null
+}) {
+  const [dept, setDept] = useState('all')
+  if (loading || rows === null) return <div className="k">Loading…</div>
+
+  const inScope = dept === 'all' ? rows : rows.filter(r => (r.departmentId ?? '') === dept)
+  const rated = inScope.filter(r => r.finalRating != null)
+  const avg = rated.length
+    ? rated.reduce((s, r) => s + (r.finalRating ?? 0), 0) / rated.length : null
+
+  // The configured scale, not a hardcoded 1-5: a company on a 1-4 scale would
+  // otherwise get a phantom band with nobody in it and a missing one at the top.
+  const buckets = bands.map(b => ({
+    ...b, n: rated.filter(r => r.finalRating === b.value).length,
+  }))
+  const widest = Math.max(1, ...buckets.map(b => b.n))
+
+  const depts = [...new Set(rows.map(r => r.departmentId ?? '').filter(Boolean))]
+
+  return (
+    <>
+      <div className="grid g4" style={{ marginBottom: 16 }}>
+        <Stat tone="accent" label="Rated" value={rated.length}
+              note={`of ${inScope.length} enrolled`} />
+        <Stat label="Average rating" value={avg === null ? '—' : avg.toFixed(2)} />
+        <Stat label="Published" value={inScope.filter(r => r.published).length} />
+        <Stat label="Acknowledged" value={inScope.filter(r => r.acknowledged).length} />
+      </div>
+
+      <Card title={`Distribution${periodLabel ? ` — ${periodLabel}` : ''}`}
+            sub="Against the configured rating scale.">
+        <div className="fld" style={{ maxWidth: 320, marginBottom: 12 }}>
+          <label htmlFor="sum-dept">Department</label>
+          <select id="sum-dept" value={dept} onChange={e => setDept(e.target.value)}>
+            <option value="all">All departments</option>
+            {depts.map(d => (
+              <option key={d} value={d}>{deptNames[d] ?? d.slice(0, 8)}</option>
+            ))}
+          </select>
+        </div>
+        {!buckets.length ? (
+          <Empty what="No rating scale configured"
+                 why="Set the scale in Setup & Controls and the distribution appears here." />
+        ) : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {buckets.map(b => (
+              <div key={b.value} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 150, fontSize: 12 }}>
+                  <b>{b.value}</b> · {b.label}
+                </div>
+                {/* A bar, because 11 of 390 and 190 of 390 read identically as
+                    numerals in a column and not at all alike as lengths. */}
+                <div style={{ flex: 1, minWidth: 60 }}>
+                  <div style={{ height: 14, borderRadius: 7, width: `${(b.n / widest) * 100}%`,
+                                minWidth: b.n ? 6 : 0,
+                                background: 'var(--ez-brand)' }} />
+                </div>
+                <div className="num" style={{ width: 70, fontSize: 12 }}>
+                  {b.n}{rated.length ? ` · ${Math.round((b.n / rated.length) * 100)}%` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title={`Every employee (${inScope.length})`}
+            sub="Highest rating first; unrated at the bottom.">
+        {!inScope.length ? (
+          <Empty what="Nobody enrolled"
+                 why="Open a period in Setup & Controls and enrolments appear here." />
+        ) : (
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th><th>Employee</th><th>Department</th>
+                  <th className="num">Rating</th><th>Settled by</th>
+                  <th>Stage</th><th>Recognition</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...inScope].sort((a, b) =>
+                  (b.finalRating ?? -1) - (a.finalRating ?? -1)
+                  || a.code.localeCompare(b.code)).map(r => (
+                  <tr key={r.employeeId}>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="k">{deptNames[r.departmentId ?? ''] ?? '—'}</td>
+                    <td className="num">
+                      {r.finalRating == null ? <span className="k">not rated</span>
+                        : <b>{r.finalRating}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</b>}
+                    </td>
+                    <td className="k">{r.finalisedByRole ?? '—'}</td>
+                    <td>
+                      {r.acknowledged ? <Pill tone="green">acknowledged</Pill>
+                        : r.published ? <Pill tone="blue">published</Pill>
+                        : r.finalRating != null ? <Pill tone="amber">with you</Pill>
+                        : <Pill tone="grey">in the chain</Pill>}
+                    </td>
+                    <td>
+                      {!r.benefits?.length ? <span className="k">—</span>
+                        : <div className="chips">
+                            {r.benefits.map((b, i) => (
+                              <Pill key={i} tone="brand">
+                                {b.type.replace(/_/g, ' ').toLowerCase()}
+                              </Pill>
+                            ))}
+                          </div>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
   )
 }

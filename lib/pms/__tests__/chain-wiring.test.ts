@@ -167,39 +167,53 @@ test('HR has a publish screen, reachable through a seeded permission', () => {
 })
 
 test('the publish queue cannot miss a settled rating', () => {
-  // THIS ASSERTION WAS BACKWARDS AT FIRST. It demanded a chain_stage IN
-  // ('HR','DONE') filter, which reads naturally and silently drops every row
-  // finalised before 197 existed: their chain_stage is NULL, and an IN filter
-  // does not match NULL. Nikhil Reddy (SRS9088) is finalised with a null
-  // stage, and his rating was invisible to the only screen that can release
-  // it — a test enforcing the bug.
+  // THIS ASSERTION HAS BEEN WRONG TWICE, in opposite directions, and both
+  // times it was encoding the implementation rather than the rule.
   //
-  // workflow_status is the honest question: FINALISED is exactly when HR may
-  // publish, whatever route the rating took and whenever it was settled.
-  assert.match(PAGE,
-    /\.in\('workflow_status',\s*\['FINALISED',\s*'PUBLISHED',\s*'ACKNOWLEDGED'\]\)/,
-    'the publish queue does not select on workflow_status, so it can miss '
-    + 'settled ratings whose chain_stage is NULL or was never advanced')
-  // And it must NOT narrow by chain_stage, which would reintroduce the hole.
+  // First it demanded a chain_stage IN ('HR','DONE') filter, which silently
+  // dropped every row finalised before 197 existed — their chain_stage is
+  // NULL and an IN filter does not match NULL. Then it demanded a
+  // workflow_status filter, which 202 removed: one query now feeds both
+  // Publish Results and Ratings Summary, and the summary's whole job is "all
+  // the employees", including the ones still in the chain.
+  //
+  // The RULE is that the loader must not narrow in a way that can drop a
+  // settled rating. Narrowing by nothing satisfies it; the tab filters what
+  // it shows.
   const q = PAGE.slice(PAGE.indexOf('const pub = await supabase'),
-                       PAGE.indexOf('const pub = await supabase') + 600)
+                       PAGE.indexOf('const pub = await supabase') + 700)
+  assert.ok(q.length > 200, 'could not find the publish/summary loader')
   assert.ok(!/\.in\('chain_stage'/.test(q),
-    'the publish queue filters on chain_stage again, excluding NULL-stage rows')
+    'the loader filters on chain_stage, which excludes NULL-stage rows — the '
+    + 'bug that hid finalised appraisals from HR entirely')
+  assert.ok(!/\.eq\('workflow_status'/.test(q),
+    'the loader pins a single workflow_status and will miss the rest')
+  // It must still be scoped to the period, or it reads the whole table.
+  assert.match(q, /\.eq\('period_id', row\.id\)/)
 })
 
 test('HR cannot change a rating or a KRA from the publish screen', () => {
-  // THE REQUIREMENT, not an unfinished tab: HR sees and publishes, and the
-  // absence of these controls is the enforcement on this side. 197 enforces
-  // the same thing from the database side by giving HR's rung no reject path.
+  // NARROWED, deliberately. This used to assert the tab had no input,
+  // textarea, select or onChange at all — true when HR could only publish.
+  // 202 moved the appreciation remark, the improvement feedback and the
+  // recognition awards to HR, so the tab writes now and that assertion was
+  // enforcing a rule that no longer exists.
+  //
+  // What has NOT moved is the number. HR writes the words beside the rating
+  // and releases it; the rating belongs to the chain, and 188's guards would
+  // refuse one from here anyway.
   const tab = ADMIN.slice(ADMIN.indexOf('export function PublishTab'),
-                          ADMIN.indexOf('// ── §6.4 Final Rating Upload'))
-  assert.ok(tab.length > 500, 'could not isolate the publish tab body')
-  assert.ok(!/<input/.test(tab), 'the publish tab has an input — HR must not edit here')
-  assert.ok(!/<textarea/.test(tab), 'the publish tab has a textarea')
-  assert.ok(!/<select/.test(tab), 'the publish tab has a select')
-  assert.ok(!/onChange/.test(tab), 'the publish tab has an editable control')
-  // And no reject path, which would make HR an approver.
-  assert.ok(!/[Rr]eject/.test(tab), 'the publish tab offers a rejection')
+                          ADMIN.indexOf('// ── the whole company, on one screen'))
+  assert.ok(tab.length > 1000, 'could not isolate the publish workspace')
+  assert.ok(!/type="number"/.test(tab),
+    'the publish workspace offers a numeric input — HR must not set a rating')
+  assert.ok(!/final_rating|finalRating:\s/.test(tab.replace(/finalRating[\s)}\]]/g, '')),
+    'the workspace writes a final rating')
+  // No KRA editing either: that is the employee's set, locked long before.
+  assert.ok(!/weightage|kra_title/i.test(tab), 'the workspace touches KRAs')
+  // And no reject path — a rating that needs changing goes back through the
+  // HOD, which is what the banner tells them.
+  assert.ok(!/[Rr]eject/.test(tab), 'the workspace offers a rejection')
 })
 
 test('publishing writes only delivery columns', () => {

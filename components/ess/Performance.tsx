@@ -50,6 +50,7 @@ import {
 import { type TeamMember } from '@/lib/pms/team'
 import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
 import { rungFor } from '@/lib/pms/chain'
+import { showFinaliserFeedbackTab, type PostFinalOwner } from '@/lib/pms/postFinal'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { reached, WORKFLOW } from '@/lib/pms/status'
@@ -90,6 +91,8 @@ interface Policy {
   /** §13.2(3): carry the previous period's locked KRAs forward. Default true
    *  in the schema, so an absent value means ON rather than OFF. */
   carry_forward_kras?: boolean | null
+  /** 202: who runs the appraisal after the rating is settled. */
+  post_final_owner?: string | null
   /** The KRA rules. DEFAULT_RULES (4/10/100/5) was being used as though it
    *  were the live rule in the employee screen, the manager's approve check
    *  and the cycle header — so an admin could change min_kra_count and
@@ -188,7 +191,7 @@ function usePeriod(employeeId: string) {
       const po = await supabase.from('pms_policies')
         .select('approval_chain,who_can_finalise,final_review_one_to_one,'
               + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra,'
-              + 'new_joiner_cutoff_days,carry_forward_kras')
+              + 'new_joiner_cutoff_days,carry_forward_kras,post_final_owner')
         .eq('id', pid).maybeSingle()
       if (po.error) console.error('[pms] could not read the policy:', po.error)
       setPolicy(po.error ? null : (po.data as Policy | null))
@@ -2037,7 +2040,38 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
                      onAcknowledgeFinalReview={acknowledgeFinalReview}
                      saving={saving} />
       )}
-      {tab === 'feedback' && (
+      {tab === 'feedback' && !showFinaliserFeedbackTab(
+        (policy?.post_final_owner ?? 'HR') as PostFinalOwner) && (
+        /* 202: HR OWNS THIS STEP BY DEFAULT.
+           The tab stays in the strip rather than vanishing — HOD_TABS is a
+           module constant shared with the preview screen, and more to the
+           point a HOD who remembers writing feedback here needs to be told
+           where it went rather than finding one fewer tab and wondering. The
+           controls are genuinely gone, not disabled: there is nothing to type
+           into below. */
+        <>
+          <div className="banner b-blue">
+            <span aria-hidden="true">📋</span>
+            <div>
+              <b>HR writes this now.</b> Once you settle a rating, HR writes the
+              appreciation and improvement feedback, awards any recognition and
+              publishes the result. What went out is on <b>Published Results</b>,
+              read-only. Your part ends at the rating.
+            </div>
+          </div>
+          <div className="card">
+            <div className="k" style={{ lineHeight: 1.7 }}>
+              If your company would rather the finaliser did all of it — the
+              appreciation remark, the improvement feedback and the recognition
+              awards, as the spec&rsquo;s Stage 6 describes — HR can switch this
+              policy&rsquo;s <b>post-finalisation owner</b> back to the finaliser
+              in Setup &amp; Controls, and these controls return here.
+            </div>
+          </div>
+        </>
+      )}
+      {tab === 'feedback' && showFinaliserFeedbackTab(
+        (policy?.post_final_owner ?? 'HR') as PostFinalOwner) && (
         <>
           {/* FeedbackTab writes about ONE person and has no way to choose
               them; the finalisation queue is a different tab. Without this
