@@ -423,6 +423,32 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   // open, or the remark leaks the moment the result does.
   const feedbackVisible = published && !!feedback?.visible_to_employee
 
+  /**
+   * §3.5's Acknowledge button — the last rung of the ladder, and the only one
+   * the employee owns. ResultTab has rendered this control all along behind
+   * `{onAcknowledge && …}`, and nothing ever passed the handler, so the button
+   * was never shown and pms_overall_rating.employee_ack / employee_ack_at and
+   * the ACKNOWLEDGED status were dead columns. Same shape as FeedbackTab
+   * earlier: a finished control with no caller.
+   *
+   * Guarded on `published` because acknowledging something you cannot see is
+   * not a confirmation of anything.
+   */
+  const acknowledgeResult = async () => {
+    if (!period || !published) return
+    setSaving(true); setMsg(null)
+    const { error } = await supabase.from('pms_overall_rating')
+      .update({ employee_ack: true, employee_ack_at: new Date().toISOString(),
+                workflow_status: WORKFLOW.ACKNOWLEDGED })
+      .eq('employee_id', employeeId).eq('period_id', period.id)
+    setSaving(false)
+    if (error) {
+      console.error('[pms] acknowledgement refused:', error)
+      setMsg(SAVE_FAILED('acknowledgement')); return
+    }
+    loadPeriodData(); reload()
+  }
+
   const ratingOf = (goalId: string, role: string) => {
     const row = reviews.find(r => String(r.goal_id) === goalId && r.rater_role === role)
     return row?.rating === null || row?.rating === undefined ? null : Number(row.rating)
@@ -599,6 +625,8 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           published={published} lines={lines}
           finalRating={overall?.final_rating ?? null}
           finalisedBy={null} finalisedOn={null} deptAverage={null}
+          onAcknowledge={acknowledgeResult}
+          acknowledged={overall?.workflow_status === WORKFLOW.ACKNOWLEDGED}
           appreciation={feedbackVisible ? feedback?.appreciation_remark as string | undefined : undefined}
           improvement={feedbackVisible ? feedback?.improvement_feedback as string | undefined : undefined}
           benefits={[]} publishGate={publishGate} />
