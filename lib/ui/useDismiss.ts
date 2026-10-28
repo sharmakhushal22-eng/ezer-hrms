@@ -41,6 +41,11 @@ import * as React from 'react';
  *               pointerdown and re-open on the click, so the popover could
  *               never be closed from its own button.
  */
+/** A dialog a popover opens portals itself to <body>, outside the popover's wrapper.
+ *  Marked with this attribute, a click or Escape inside it leaves the popover open —
+ *  otherwise the popover would close and unmount the dialog it just opened. */
+const KEEP_OPEN = '[data-ez-keep-open]';
+
 export function useDismiss<T extends HTMLElement = HTMLDivElement>(
   open: boolean,
   close: () => void,
@@ -61,9 +66,10 @@ export function useDismiss<T extends HTMLElement = HTMLDivElement>(
       const t = e.target as Element | null;
       if (el.contains(t as Node)) return;
       if (ignore && t?.closest?.(ignore)) return;
+      if (t?.closest?.(KEEP_OPEN)) return;
       cb.current();
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cb.current(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target as Element | null)?.closest?.(KEEP_OPEN)) cb.current(); };
     document.addEventListener('pointerdown', onDown, true);
     document.addEventListener('keydown', onKey);
     return () => {

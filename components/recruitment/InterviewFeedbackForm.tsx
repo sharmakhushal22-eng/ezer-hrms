@@ -2,7 +2,7 @@
 // components/recruitment/InterviewFeedbackForm.tsx
 //
 // The interview feedback form, used in two places from one definition:
-//   • mode="fill"  — an interviewer fills it from ESS → Tasks & Approvals.
+//   • mode="fill"  — an interviewer fills it from the ESS notification panel (the bell).
 //   • mode="view"  — the hiring manager reads back what an interviewer recorded,
 //                    inside the candidate popup.
 //

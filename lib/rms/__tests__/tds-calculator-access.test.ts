@@ -24,5 +24,14 @@ test('sandbox mode cannot save, submit or restore a declaration', () => {
   assert.ok(/async function persistForm[^]*?\n\s*if \(sandbox\) return/.test(src), 'persistForm refuses in sandbox')
   assert.ok(/async function submitRegime\(\) \{\n\s*if \(sandbox\) return/.test(src), 'submitRegime refuses in sandbox')
   assert.ok(/if \(sandbox\) \{[^]*?return\n\s*\}/.test(src), 'no saved form is restored in sandbox')
-  assert.ok(/<FlexiTdsCalculator key=\{picked\?\.id \|\| 'blank'\} sandbox /.test(readFileSync('app/dashboard/tds-calculator/page.tsx', 'utf8')), 'the Help page uses sandbox')
+
+})
+
+test('the Help page is the Negotiation CTC calculator: no employee lookup, nothing written', () => {
+  const page = readFileSync('app/dashboard/tds-calculator/page.tsx', 'utf8')
+  assert.ok(/<CtcBreakupCalculator \/>/.test(page), 'the Help page renders CtcBreakupCalculator')
+  assert.ok(!/employees|emp_code|EmployeePick/.test(page.replace(/^\s*\/\/.*$/gm, '')), 'no employee code input')
+  const calc = readFileSync('components/recruitment/CtcBreakupCalculator.tsx', 'utf8')
+  assert.ok(/computeCtc\(/.test(calc) && /ctcStatementRows\(/.test(calc) && /<CtcStatementTable /.test(calc), 'same model, rows and table as Negotiation')
+  assert.ok(!/\.(insert|update|upsert|delete|rpc)\(|fetch\(/.test(calc), 'the calculator writes nothing')
 })

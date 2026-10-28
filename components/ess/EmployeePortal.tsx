@@ -37,7 +37,7 @@ import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
 import PayStyles from '@/components/ess/payroll/PayStyles'
-import { useEssMenu, PendingOnYou, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
+import { useEssMenu, PendingOnYou, ApprovalsSection, InterviewInvites, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, MODULE_TABS, roleEntryOpen, type NavEntry } from '@/lib/rms/nav'
 // The address bar as the portal's "where am I": /ess/leave, /ess/recruitment/mrf … (lib/ess/routes.ts)
 import { parseEssPath, essHref, essPath, pushUrl, atEss, type EssLocation, type EssKeys } from '@/lib/ess/routes'
@@ -261,6 +261,9 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return
     if (!f.type.startsWith('image/')) { notify('Please choose an image file', 'error'); return }
+    // Same rule as the profile photo cropper (components/profile/PhotoUploader.tsx).
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) { notify('Use a JPG, PNG or WebP photo', 'error'); return }
+    if (f.size > 10 * 1024 * 1024) { notify(`That image is ${(f.size / 1048576).toFixed(1)} MB — the limit is 10 MB`, 'error'); return }
     try { setPreview(await resizeToDataUrl(f)) } catch { notify('Could not read that image', 'error') }
   }
   const save = async () => {
@@ -278,7 +281,8 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
           <div style={{ width:120, height:120, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:700 }}>
             {preview ? <img src={preview} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}
           </div>
-          <label style={{ ...T.btnO, cursor:'pointer' }}>Choose photo<input type="file" accept="image/*" style={{ display:'none' }} onChange={onFile} /></label>
+          <label style={{ ...T.btnO, cursor:'pointer' }}>Choose photo<input type="file" accept="image/jpeg,image/png,image/webp" style={{ display:'none' }} onChange={onFile} /></label>
+          <div style={{ fontSize:11, color:C.muted, textAlign:'center' }}>JPG, PNG or WebP · up to 10 MB</div>
           {preview && <button onClick={() => setPreview(null)} style={{ ...T.btnO, color:C.critical, borderColor: C.criticalTint }}>Remove photo</button>}
         </div>
         <div style={{ display:'flex', gap:10, marginTop:16 }}>
@@ -1278,7 +1282,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
 // NOTIFICATIONS (B11)
 // ════════════════════════════════════════════════════════════════
 
-function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () => void }) {
+function Notifications({ emp, onChange, notify }: { emp: EmployeeDetail; onChange?: () => void; notify: (m: string, t?: 'success'|'error') => void }) {
   const [personal, setPersonal] = useState<any[]>([])
   const [role, setRole] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -1343,6 +1347,10 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
         <div style={T.section}>Notifications</div>
         <button onClick={() => act({ action: 'read_all' })} style={T.btnO}>Mark all read</button>
       </div>
+
+      {/* Interviews this person is on: acknowledged, and the main interviewer's
+          feedback given, right here (nothing when there is none). */}
+      <InterviewInvites employeeId={emp.id} notify={notify} onDone={load} />
 
       {loading && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>Loading…</div>}
       {!loading && total === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You&apos;re all caught up. 🎉</div>}
@@ -3235,6 +3243,8 @@ const SECTIONS: NavSection[] = [
       // Raise MRF removed from HRIS — an MRF is now raised from Recruitment → MRF tab
       // (the same auto-filling form), so it no longer appears here.
       { k:'exit',        label:'Exit Process' },
+      // Clearance forms, exits in progress and F&F — only for canExitFnf (see sectionItems).
+      { k:'exit-fnf',    label:'Exit Clearance & F&F' },
     ]},
 
   // ── Role-wise tabs (071) — shown only when /api/ess/menu says so ──
@@ -3549,7 +3559,7 @@ const ESS_KEYWORDS: Record<string, string> = {
   attendance: 'attendance punch regularise regularize', leave: 'leave apply holiday time off',
   inbox: 'messages notifications mail', directory: 'team directory people colleagues employees',
   requests: 'raise request helpdesk ticket', approvals: 'tasks approvals pending approve leave travel resignation offers interviews',
-  exit: 'resign resignation exit separation', company: 'company headcount attrition', reports: 'reports export',
+  exit: 'resign resignation exit separation', 'exit-fnf': 'exit clearance full and final fnf f&f settlement relieving experience letter no dues', company: 'company headcount attrition', reports: 'reports export',
   performance: 'pms performance goals kra appraisal review', social: 'social wall fame appreciate', funzone: 'games fun zone',
 }
 
@@ -3745,6 +3755,8 @@ function NotificationBell({ unread, open, onToggle }: { unread: number; open: bo
 
 /** Every employee screen the portal can show — the SECTIONS items plus the views reached only
  *  by a link or a button (declaration, directory…). Used to read /ess/<view> from the address. */
+/** Who gets HR Services → Exit Clearance & F&F (beside managers, who clear as HOD). */
+const EXIT_FNF_ROLES = ['IT', 'ADMIN_COMPANY', 'ADMIN_SUPER', 'FINANCE_EXECUTIVE', 'PAYROLL', 'PAYROLL_ADMIN', 'CFO', 'HR_MANAGER', 'HR_HEAD', 'CHRO', 'HR_EXECUTIVE', 'BRANCH_HR', 'RECRUITER']
 const VIEW_KEYS: Set<string> = new Set([
   ...SECTIONS.flatMap(s => s.items.map(i => i.k)),
   'home', 'profile', 'leave', 'inbox', 'vpf', 'nps', 'loans', 'flexi', 'declaration', 'proofs', 'flexiclaims', 'claims', 'attendance',
@@ -3923,6 +3935,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     }
     applyLocation(loc)
     if (atEss()) pushUrl(essHref(loc), 'replace')
+    // ?notifications=1 (an interview invite's link) opens the bell, where it is acknowledged.
+    if (q.get('notifications')) setBellOpen(true)
     const onPop = () => applyLocation(parseEssPath(window.location.pathname, window.location.search, ESS_KEYS))
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
@@ -3966,7 +3980,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // widening the server instead would hand out the right to raise, which is not
   // a UI decision.
   const canRaiseMrf = essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals
-  const sectionItems = section.items.filter(i => i.k !== 'raise-mrf' || canRaiseMrf)
+  // Exit Clearance & F&F: the clearing departments, managers (HOD clearance) and HR / Payroll /
+  // Finance. The server decides what each sees (app/api/exit/*).
+  const canExitFnf = essMenu.super_admin || essMenu.is_rm || essMenu.is_hod || essMenu.roles.some(r => EXIT_FNF_ROLES.includes(r.code))
+  const sectionItems = section.items.filter(i => (i.k !== 'raise-mrf' || canRaiseMrf) && (i.k !== 'exit-fnf' || canExitFnf))
 
   // Everything the feature search may offer — only what this person can open.
   const searchEntries: SearchEntry[] = []
@@ -3975,6 +3992,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     for (const it of sec.items) {
       if ((it as any).needs) continue                              // not built yet — a placeholder
       if (it.k === 'raise-mrf' && !canRaiseMrf) continue
+      if (it.k === 'exit-fnf' && !canExitFnf) continue
       searchEntries.push({ id: `ess:${it.k}`, label: it.label, crumb: sec.items.length > 1 ? `${sec.label} › ${it.label}` : 'My portal', icon: sec.k,
         keywords: `${sec.label.toLowerCase()} ${ESS_KEYWORDS[it.k] || ''}`, run: () => go(it.k) })
     }
@@ -4055,9 +4073,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       case 'requests':
       case 'approvals':
       case 'raise-mrf':
-      case 'exit':          return <HrisShell employeeId={emp.id} tab={view} go={go}
+      case 'exit':
+      case 'exit-fnf':      return <HrisShell employeeId={emp.id} tab={view} go={go}
                                               canApprove={essMenu.can.approvals}
                                               canRaiseMrf={canRaiseMrf}
+                                              canExitFnf={canExitFnf}
                                               adminMode={adminMode}
                                               notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />
@@ -4247,7 +4267,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
         // No full-screen catcher: it used to swallow the next click, so
         // dismissing this panel and pressing anything else took two clicks.
         <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 60 : 70, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:Z.navMenu, background:C.surface, border: `1px solid ${C.line}`, borderRadius:14, boxShadow:E.floating, padding:'12px 14px' }}>
-          <Notifications emp={emp} onChange={refreshUnread} />
+          <Notifications emp={emp} onChange={refreshUnread} notify={notify} />
         </div>
       )}
 

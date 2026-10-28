@@ -72,6 +72,8 @@ interface Row {
   companyId: string
   openings: number
   raised: string
+  /** yyyy-mm-dd of created_at, local time — compared with the From / To date filters. */
+  day: string
   confidential: boolean
   hay: string
 }
@@ -84,6 +86,27 @@ function Chip({ text, strong }: { text: string; strong?: boolean }) {
       background: strong ? C.brandTint : C.sunken, color: strong ? C.brandDeep : C.muted,
       border: `1px solid ${strong ? C.brandEdge : C.line}`,
     }}>{text}</span>
+  )
+}
+
+/** Local calendar day of a timestamp as yyyy-mm-dd ('' when absent), so "raised on 25 Oct" matches a 25 Oct filter in IST. */
+function dayKey(v: any): string {
+  if (!v) return ''
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function DateFilter({ label, value, min, max, onChange }: { label: string; value: string; min?: string; max?: string; onChange: (v: string) => void }) {
+  return (
+    <label style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 4px 0 9px', borderRadius: R.sm, flex: '1 1 150px', minWidth: 0, maxWidth: 190,
+      border: `1px solid ${value ? C.brand : C.lineStrong}`, background: value ? C.brandTint : C.surface,
+    }}>
+      <span style={{ fontSize: F.micro, fontWeight: W.semi, color: value ? C.brandDeep : C.muted, whiteSpace: 'nowrap' }}>{label}</span>
+      <input type="date" aria-label={`Raised ${label.toLowerCase()} date`} value={value} min={min || undefined} max={max || undefined} onChange={e => onChange(e.target.value)}
+        style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: F.tiny, fontFamily: 'inherit', color: value ? C.brandDeep : C.inkSoft, minWidth: 0, flex: 1, cursor: 'pointer' }} />
+    </label>
   )
 }
 
@@ -110,6 +133,9 @@ export default function MrfPicker({
   const [fDept, setFDept] = useState('')
   const [fLoc, setFLoc] = useState('')
   const [fCo, setFCo] = useState('')
+  // Raised between these days, inclusive (yyyy-mm-dd). Either end may be open.
+  const [fFrom, setFFrom] = useState('')
+  const [fTo, setFTo] = useState('')
   const [active, setActive] = useState(0)
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number; maxH: number } | null>(null)
   const trigRef = useRef<HTMLButtonElement>(null)
@@ -138,6 +164,7 @@ export default function MrfPicker({
         companyId: m.company_id || '',
         openings: Number(m.no_of_openings || m.openings || 0),
         raised: fmtDate(m.created_at),
+        day: dayKey(m.created_at),
         confidential: isConfidentialMrf(m),
         hay: '',
       }
@@ -157,8 +184,9 @@ export default function MrfPicker({
   const ql = q.trim().toLowerCase()
   const hits = rows.filter(r =>
     (!fDept || r.dept === fDept) && (!fLoc || r.loc === fLoc) && (!fCo || r.company === fCo) &&
+    (!fFrom || (!!r.day && r.day >= fFrom)) && (!fTo || (!!r.day && r.day <= fTo)) &&
     (!ql || ql.split(/\s+/).every(t => r.hay.includes(t))))
-  const filtersOn = !!(fDept || fLoc || fCo || ql)
+  const filtersOn = !!(fDept || fLoc || fCo || fFrom || fTo || ql)
   const selected = rows.find(r => r.id === value) || null
 
   const place = () => {
@@ -231,7 +259,7 @@ export default function MrfPicker({
     else if (e.key === 'End' && (e.target as HTMLElement) !== searchRef.current) { e.preventDefault(); setActive(hits.length - 1) }
     else if (e.key === 'Enter') { e.preventDefault(); const r = hits[active]; if (r) pick(r) }
   }
-  const clearFilters = () => { setQ(''); setFDept(''); setFLoc(''); setFCo(''); setActive(0); searchRef.current?.focus() }
+  const clearFilters = () => { setQ(''); setFDept(''); setFLoc(''); setFCo(''); setFFrom(''); setFTo(''); setActive(0); searchRef.current?.focus() }
 
   const trigBase: React.CSSProperties = className ? {} : inputStyle(invalid)
   const listId = `${uid}-list`
@@ -282,11 +310,14 @@ export default function MrfPicker({
               aria-label="Search openings"
               placeholder="Search designation, MRF number, department, location, hiring manager…"
               style={{ ...inputStyle(false), height: 34 }} />
-            {(deptOpts.length > 1 || locOpts.length > 1 || (multiCompany && coOpts.length > 1)) && (
+            {/* Always shown: the date range narrows by when the MRF was raised, even with one department. */}
+            {(
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {deptOpts.length > 1 && <FilterSelect label="Department" value={fDept} options={deptOpts} onChange={v => { setFDept(v); setActive(0) }} />}
                 {locOpts.length > 1 && <FilterSelect label="Location" value={fLoc} options={locOpts} onChange={v => { setFLoc(v); setActive(0) }} />}
                 {multiCompany && coOpts.length > 1 && <FilterSelect label="Company" value={fCo} options={coOpts} onChange={v => { setFCo(v); setActive(0) }} />}
+                <DateFilter label="From" value={fFrom} max={fTo} onChange={v => { setFFrom(v); setActive(0) }} />
+                <DateFilter label="To" value={fTo} min={fFrom} onChange={v => { setFTo(v); setActive(0) }} />
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: F.micro, color: C.muted }}>
