@@ -3,7 +3,8 @@
 //   GET  ?target=<employee id> -> { allowed, reasons, employee, request, blocked }
 //                                 the live request (PENDING / APPROVED / REJECTED) with its chain
 //   GET  ?inbox=1              -> { items } requests whose current step waits on the caller
-//   POST { action: 'start', employee_id, reason_code, sub_reason, lwd, remarks }
+//   POST { action: 'start', target_id, reason_code, sub_reason, lwd, remarks, destination_company_id }
+//        (target_id, not employee_id: lib/ess/asked reads a body employee_id as whose portal it is)
 //   POST { action: 'approve' | 'reject', id, note }   the current step's approver
 //   POST { action: 'cancel', id, note }                running or approved (not yet left)
 //   POST { action: 'reset', id }                       a rejected one, so another can start
@@ -18,13 +19,11 @@ import {
   buildChain, advance, decide, waitingOn, type ChainStep, type Person,
 } from '@/lib/exit/hr-exit'
 import { effectiveNoticeDays } from '@/lib/exit/notice'
-import { revokeAccess } from '@/lib/offboarding/run'
-import { sendMail, mailConfigured } from '@/lib/mail/send'
+import { applyCompanyExit, sendAbscondReminder } from '@/lib/exit/case'
 
 export const dynamic = 'force-dynamic'
 
 const bad = (m: string, s = 400) => NextResponse.json({ error: m }, { status: s })
-const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string))
 const day = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const today = () => new Date().toISOString().slice(0, 10)
 const APPROVALS_LINK = '/ess?tab=approvals'
@@ -39,7 +38,13 @@ async function personOf(id: string): Promise<Person> {
   return { id, emp_code: data?.emp_code ?? null, full_name: data?.full_name || 'HR' }
 }
 
-/** Active holders of every stage role, in one company. */
+/** Active holders of every stage role, in one company; a Transfer's destination HR Managers
+ *  are added under `DEST:HR_MANAGER`. */
+async function holdersFor(companyId: string | null, destinationId: string | null): Promise<Record<string, Person[]>> {
+  const out = await holdersIn(companyId)
+  if (destinationId) out['DEST:HR_MANAGER'] = (await holdersIn(destinationId)).HR_MANAGER || []
+  return out
+}
 async function holdersIn(companyId: string | null): Promise<Record<string, Person[]>> {
   const codes = Array.from(new Set(Object.values(STAGES).flatMap(s => s.roles)))
   const { data } = await sb.from('ess_user_roles')
@@ -64,6 +69,8 @@ const shape = (r: any) => r && ({
   id: r.id, employee_id: r.employee_id, reason_code: r.reason_code, reason_label: r.reason_label, sub_reason: r.sub_reason,
   last_working_day: r.last_working_day, remarks: r.remarks, status: r.status, chain: r.chain || [], current_step: r.current_step,
   rehire_flag: r.rehire_flag, initiated_by_name: r.initiated_by_name, created_at: r.created_at, decided_at: r.decided_at,
+  documents: r.documents || [], abscond_stage: r.abscond_stage || null, reminders_sent: r.reminders_sent || 0, last_reminder_at: r.last_reminder_at || null,
+  destination_company_id: r.destination_company_id || null, resignation_id: r.resignation_id || null,
 })
 
 export async function GET(req: NextRequest) {
@@ -108,51 +115,17 @@ export async function GET(req: NextRequest) {
     : (emp.access_revoked_at || emp.employment_status === 'Resigned') ? `${emp.full_name} has already left.`
     : open?.length ? `${emp.full_name} already has a resignation in progress (${String(open[0].status).replace(/_/g, ' ').toLowerCase()}). It is handled in Tasks & Approvals.`
     : null
+  // Companies of the group, for a Transfer's destination.
+  const { data: co0 } = await sb.from('companies').select('id, group_id').eq('id', emp.company_id).maybeSingle()
+  let cq = sb.from('companies').select('id, company_name, company_code').neq('id', emp.company_id).order('company_name')
+  if ((co0 as any)?.group_id) cq = cq.eq('group_id', (co0 as any).group_id)
+  const { data: companies } = await cq
+  const destName = request?.destination_company_id ? ((await sb.from('companies').select('company_name').eq('id', request.destination_company_id).maybeSingle()).data as any)?.company_name : null
   return NextResponse.json({
-    allowed, reasons, blocked, request: shape(request), notice_days: noticeDays, last_attendance: lastAttendance,
+    allowed, reasons, blocked, request: request ? { ...shape(request), destination_company: destName || null } : null, notice_days: noticeDays, last_attendance: lastAttendance,
+    companies: (companies || []).map((c: any) => ({ id: c.id, name: c.company_name || c.company_code })),
     employee: { id: emp.id, full_name: emp.full_name, emp_code: emp.emp_code, employment_status: emp.employment_status, left: !!emp.access_revoked_at },
   })
-}
-
-/** The last approval: the exit takes effect. */
-async function applyExit(row: any, by: Person): Promise<{ resignationId: string | null; revokedNow: boolean; mailed: boolean }> {
-  const { data: emp } = await sb.from('employees')
-    .select('id, full_name, emp_code, office_email, personal_email, notice_period_days, confirmation_status, confirmation_date, company_doj, group_doj, probation_months')
-    .eq('id', row.employee_id).maybeSingle()
-  if (!emp) return { resignationId: null, revokedNow: false, mailed: false }
-  const now = new Date().toISOString(), t = today(), lwd = row.last_working_day as string
-  const why = `${row.reason_label}${row.sub_reason ? ` · ${row.sub_reason}` : ''}`
-  const { data: res } = await sb.from('employee_resignation').insert({
-    employee_id: emp.id, reason_code: null, date_of_resignation: t,
-    notice_period_days: effectiveNoticeDays(emp as any), lwd_as_per_policy: lwd, final_lwd: lwd,
-    status: 'INITIATED', current_stage: null, current_approver_id: null,
-    submitted_by_employee: false, submitted_at: now, remarks: `${why}. ${row.remarks || ''}`.trim(),
-    initiated_by: row.initiated_by, initiated_by_name: row.initiated_by_name,
-  }).select('id').single()
-  if (res?.id) {
-    await sb.from('resignation_stage_log').insert({
-      resignation_id: res.id, stage: 'HR_MANAGER', approver_id: by.id, actor_id: by.id, action: 'FINAL_LWD_SET', proposed_lwd: lwd,
-      note: `Company exit (${why}) started by ${row.initiated_by_name}, approved by the chain; last approval ${who(by)}`, actioned_at: now,
-    }).then(() => null, () => null)
-  }
-  await sb.from('employees').update({ date_of_resignation: t, last_working_date: lwd }).eq('id', emp.id)
-  let revokedNow = false
-  if (lwd <= t) {
-    try { await revokeAccess(sb as any, emp.id, { reason: `Company exit: ${why}`, by: by.id, byName: who(by), lastWorkingDay: lwd }); revokedNow = true } catch { /* the daily run retries */ }
-  }
-  await notify(emp.id, 'Your exit has been processed', `HR has processed your exit (${row.reason_label}). Your last working day is ${day(lwd)}. Download your payslips and documents before then; ESS access ends on that day.`, '/ess', 'COMPLIANCE').catch(() => null)
-  let mailed = false
-  const to = emp.office_email || emp.personal_email
-  if (to && mailConfigured()) {
-    const sent = await sendMail({
-      to, fromName: 'EZER HR Team',
-      subject: `Your exit has been processed: last working day ${day(lwd)}`,
-      text: `Hi ${emp.full_name},\n\nHR has processed your exit from the company.\nReason: ${row.reason_label}\nLast working day: ${day(lwd)}\n\nPlease download your payslips, letters and other documents from ESS before your last working day; your ESS access ends on that day.\n\nEZER HR Team`,
-      html: `<p>Hi ${esc(emp.full_name)},</p><p>HR has processed your exit from the company.</p><p><b>Reason:</b> ${esc(row.reason_label)}<br><b>Last working day:</b> ${esc(day(lwd))}</p><p>Please download your payslips, letters and other documents from ESS before your last working day; your ESS access ends on that day.</p><p>EZER HR Team</p>`,
-    }).catch(() => ({ sent: false }))
-    mailed = !!(sent as any).sent
-  }
-  return { resignationId: res?.id || null, revokedNow, mailed }
 }
 
 export async function POST(req: NextRequest) {
@@ -171,10 +144,10 @@ export async function POST(req: NextRequest) {
 
   if (action === 'start') {
     if (!allowedFor(ctx)) return forbidden('Only the HR team and Hiring Managers can exit an employee.')
-    const x = { employeeId: String(body.employee_id || '') || null, reasonCode: String(body.reason_code || '') || null, subReason: String(body.sub_reason || '') || null, lwd: String(body.lwd || '') || null, remarks: String(body.remarks || '').trim() || null }
-    const problems = startProblems(x, { self: me })
+    const x = { employeeId: String(body.target_id || '') || null, reasonCode: String(body.reason_code || '') || null, subReason: String(body.sub_reason || '') || null, lwd: String(body.lwd || '') || null, remarks: String(body.remarks || '').trim() || null, destinationCompanyId: String(body.destination_company_id || '') || null }
+    const { data: emp } = await sb.from('employees').select('id, full_name, emp_code, company_id, employment_status, access_revoked_at').eq('id', x.employeeId || '00000000-0000-0000-0000-000000000000').maybeSingle()
+    const problems = startProblems({ ...x, sourceCompanyId: emp?.company_id || null }, { self: me })
     if (problems.length) return bad(problems.join(' '))
-    const { data: emp } = await sb.from('employees').select('id, full_name, emp_code, company_id, employment_status, access_revoked_at').eq('id', x.employeeId!).maybeSingle()
     if (!emp) return bad('Employee not found.', 404)
     const co = scopeOf(ctx)
     if (co && emp.company_id !== co) return forbidden('This employee belongs to another company.')
@@ -188,24 +161,31 @@ export async function POST(req: NextRequest) {
 
     const reason = reasonOf(x.reasonCode)!
     const target: Person = { id: emp.id, emp_code: emp.emp_code, full_name: emp.full_name }
-    const built = buildChain(reason.code, { holders: await holdersIn(emp.company_id), initiator: actor, initiatorRoles: ctx.menu.roles || [], employeeId: emp.id, now })
-    const { chain, current, done } = advance(built, now)
+    const built = buildChain(reason.code, { holders: await holdersFor(emp.company_id, reason.code === 'TRANSFER' ? x.destinationCompanyId : null), initiator: actor, initiatorRoles: ctx.menu.roles || [], employeeId: emp.id, now })
+    // Abscond (§4 Step 3): three weekly reminders first; the chain starts after 21 days.
+    const abscond = reason.code === 'ABSCOND'
+    const { chain, current, done } = abscond ? { chain: built, current: null, done: false } : advance(built, now)
     const { data: row, error } = await sb.from('hr_exit_requests').insert({
       employee_id: emp.id, company_id: emp.company_id, reason_code: reason.code, reason_label: reason.label, sub_reason: x.subReason,
       last_working_day: x.lwd, remarks: x.remarks, status: done ? 'APPROVED' : 'PENDING', chain, current_step: current,
       rehire_flag: reason.rehire, initiated_by: me, initiated_by_name: who(actor), decided_at: done ? now : null,
+      destination_company_id: reason.code === 'TRANSFER' ? x.destinationCompanyId : null,
+      abscond_stage: abscond ? 'REMINDING' : null, step_started_at: current != null ? now : null,
     }).select('*').single()
     if (error) return bad(/hr_exit_requests/.test(error.message) && /does not exist|schema cache/.test(error.message)
       ? 'The exit approvals table is missing. Run migration 172_hr_exit_requests.sql in the Supabase SQL Editor.' : error.message, 500)
     let applied = null
-    if (done) {
-      applied = await applyExit(row, actor)
-      if (applied.resignationId) await sb.from('hr_exit_requests').update({ resignation_id: applied.resignationId }).eq('id', row.id)
+    if (abscond) {
+      // Attendance stops counting from today; the first reminder goes now.
+      await sb.from('employees').update({ abscond_marked_at: now }).eq('id', emp.id)
+      await sendAbscondReminder(sb as any, row, new Date(now))
+    } else if (done) {
+      applied = await applyCompanyExit(sb as any, row, actor)
     } else if (current != null) {
       await tellApprovers(chain[current], target, `${reason.label} · ${x.subReason}`)
     }
     await audit(ctx.caller, 'EXIT_STARTED_BY_HR', emp.id, { request_id: row.id, reason: reason.code, sub_reason: x.subReason, lwd: x.lwd, approved_at_once: done })
-    return NextResponse.json({ ok: true, request: shape({ ...row, resignation_id: applied?.resignationId }), applied })
+    return NextResponse.json({ ok: true, request: shape({ ...row, resignation_id: applied?.resignationId || null }), applied })
   }
 
   const id = String(body.id || '')
@@ -225,14 +205,13 @@ export async function POST(req: NextRequest) {
     const status = action === 'reject' ? 'REJECTED' : done ? 'APPROVED' : 'PENDING'
     // Conditional on the step it was read at, so two approvers cannot both act on it.
     const { data: upd, error } = await sb.from('hr_exit_requests')
-      .update({ chain: next, current_step: current, status, updated_at: now, decided_at: status === 'PENDING' ? null : now })
+      .update({ chain: next, current_step: current, status, updated_at: now, decided_at: status === 'PENDING' ? null : now, step_started_at: now, step_escalated_at: null })
       .eq('id', row.id).eq('status', 'PENDING').eq('current_step', row.current_step).select('*')
     if (error) return bad(error.message, 500)
     if (!upd?.length) return bad('Somebody acted on this exit a moment ago. Reload to see where it is.', 409)
     let applied = null
     if (status === 'APPROVED') {
-      applied = await applyExit(upd[0], actor)
-      if (applied.resignationId) await sb.from('hr_exit_requests').update({ resignation_id: applied.resignationId }).eq('id', row.id)
+      applied = await applyCompanyExit(sb as any, upd[0], actor)
     } else if (status === 'PENDING' && current != null) {
       await tellApprovers(next[current], target, `${row.reason_label}${row.sub_reason ? ` · ${row.sub_reason}` : ''}`)
     }
@@ -252,6 +231,10 @@ export async function POST(req: NextRequest) {
     if (action === 'reset' && row.status !== 'REJECTED') return bad('Only a rejected exit is reset. A running one is cancelled.', 409)
     if (action === 'cancel' && !['PENDING', 'APPROVED'].includes(row.status)) return bad(`This exit is ${String(row.status).toLowerCase()}; there is nothing to cancel.`, 409)
     if (action === 'cancel' && row.status === 'APPROVED' && emp?.access_revoked_at) return bad(`${who(target)} has already left on ${day(row.last_working_day)}, so the exit cannot be cancelled here.`, 409)
+    if (action === 'cancel' && row.resignation_id) {
+      const { data: f } = await sb.from('fnf_settlements').select('status').eq('resignation_id', row.resignation_id).maybeSingle()
+      if (f && f.status !== 'CALCULATED') return bad(`The F&F for ${who(target)} is already ${String(f.status).toLowerCase()}, so the exit cannot be cancelled.`, 409)
+    }
     const note = String(body.note || '').trim() || null
     const { data: upd, error } = await sb.from('hr_exit_requests')
       .update({ status: action === 'cancel' ? 'CANCELLED' : 'RESET', current_step: null, closed_by: me, closed_by_name: who(actor), close_note: note, closed_at: now, updated_at: now })
@@ -264,9 +247,16 @@ export async function POST(req: NextRequest) {
         await sb.from('employee_resignation').update({ status: 'WITHDRAWN' }).eq('id', row.resignation_id)
         await sb.from('resignation_stage_log').insert({ resignation_id: row.resignation_id, stage: 'HR_MANAGER', approver_id: me, actor_id: me, action: 'WITHDRAWN', note: `Company exit cancelled by ${who(actor)}${note ? `: ${note}` : ''}`, actioned_at: now }).then(() => null, () => null)
       }
-      await sb.from('employees').update({ date_of_resignation: null, last_working_date: null }).eq('id', row.employee_id)
+      await sb.from('employees').update({ date_of_resignation: null, last_working_date: null, rehire_flag: null, rehire_reason: null }).eq('id', row.employee_id)
+      // Clearance and an unapproved F&F go with it; a Transfer's onboarding is withdrawn.
+      if (row.resignation_id) {
+        await sb.from('exit_clearance').delete().eq('resignation_id', row.resignation_id).then(() => null, () => null)
+        await sb.from('fnf_settlements').delete().eq('resignation_id', row.resignation_id).eq('status', 'CALCULATED').then(() => null, () => null)
+      }
+      if (row.onboarding_candidate_id) await sb.from('onboarding_candidates').update({ status: 'REJECTED', hr_notes: 'Transfer cancelled' }).eq('id', row.onboarding_candidate_id).then(() => null, () => null)
       await notify(row.employee_id, 'Your exit has been cancelled', `HR has cancelled your exit (${row.reason_label}). You continue in your role.`, '/ess', 'COMPLIANCE').catch(() => null)
     }
+    if (row.reason_code === 'ABSCOND') await sb.from('employees').update({ abscond_marked_at: null }).eq('id', row.employee_id)
     if (action === 'cancel' && row.status === 'PENDING') {
       const pending = (row.chain || []).find((s: ChainStep) => s.status === 'PENDING')
       await Promise.all((pending?.approvers || []).map((p: Person) => notify(p.id, `Exit cancelled: ${who(target)}`, `The ${row.reason_label} exit waiting on you was cancelled by ${who(actor)}.`, APPROVALS_LINK, 'APPROVAL').catch(() => null)))

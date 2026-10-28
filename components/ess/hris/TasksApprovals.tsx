@@ -16,6 +16,7 @@ import { Ic, type IconKey } from './icons'
 import { CountUp, fmtDateTime, riseStyle, useToast } from './ui'
 import { MrfApprovals, OfferApprovals, HrExitApprovals } from '@/components/ess/RoleTabs'
 import OnboardingApprovals from '@/components/ess/OnboardingApprovals'
+import { ClearanceInbox } from './ExitFnf'
 
 type Filter = 'MINE' | 'ALL' | 'LEAVE' | 'ATTENDANCE' | 'TRAVEL' | 'RESIGNATION'
 
@@ -81,6 +82,8 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
       <OfferApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       {/* Company-started exits (People → Employees → Exit) waiting on this approver. */}
       <HrExitApprovals employeeId={employeeId} notify={(m) => toast(m)} />
+      {/* Exit clearance forms waiting on this department / manager (also in Exit Clearance & F&F). */}
+      <ClearanceInbox api={api} />
       {/* The four-team onboarding sign-off (IT / Admin / Payroll / HR Manager). */}
       <OnboardingApprovals employeeId={employeeId} notify={(m) => toast(m)} />
 

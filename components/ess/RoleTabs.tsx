@@ -918,6 +918,12 @@ export function HrExitApprovals({ employeeId, notify }: { employeeId: string; no
                   Last working day {new Date(`${x.last_working_day}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · started by {x.initiated_by_name || 'HR'} · waiting on you as {step?.label || 'approver'}
                 </div>
                 {x.remarks && <div style={{ fontSize: 12, color: C.ink, marginTop: 4 }}>{x.remarks}</div>}
+                {(x.documents || []).length > 0 && (
+                  <div style={{ fontSize: 11.5, marginTop: 4 }}>Documents: {x.documents.map((d: any) => (
+                    <button key={d.path} type="button" onClick={() => api(`/api/exit/documents?request_id=${x.id}&path=${encodeURIComponent(d.path)}`, employeeId).then(j => window.open(j.url, '_blank', 'noopener')).catch((e: any) => notify(e.message, 'error'))}
+                      style={{ border: 'none', background: 'none', padding: 0, marginRight: 8, color: C.blue, cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>{d.name}</button>
+                  ))}</div>
+                )}
                 <div style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>
                   {(x.chain || []).map((s: any) => `${s.label}: ${s.status === 'APPROVED' ? 'approved' : s.status === 'PENDING' ? 'waiting' : s.status === 'SKIPPED' ? 'skipped' : s.status === 'REJECTED' ? 'rejected' : 'next'}`).join(' → ')}
                 </div>

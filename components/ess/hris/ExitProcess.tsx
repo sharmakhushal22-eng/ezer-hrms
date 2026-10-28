@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ChainRow, ResignationRecord, ResignationState, StageApprover } from './types'
 import { Ic } from './icons'
 import { fmtDate, fmtDateTime, riseStyle, useToast } from './ui'
+import { MyExitDocuments } from './ExitFnf'
 
 const STAGE_LABEL: Record<string, string> = {
   INITIATED: 'Initiated by HR',
@@ -114,12 +115,16 @@ function OwnExit({ api }: { api: (path: string, init?: RequestInit) => Promise<a
             Retention pauses the chain; only you can withdraw it. Your last working day becomes final at the HR stage.
           </div>
         </div>
+        <MyExitDocuments api={api} resignationId={cur.id} />
       </>
     )
   }
 
   /* ----------------------------------------------------------------- form */
   return (
+    <>
+    {/* A settled exit keeps its F&F statement and letters downloadable (12 months, spec §11.2). */}
+    {cur?.status === 'SETTLED' && <MyExitDocuments api={api} resignationId={cur.id} />}
     <div className="hx-card pad">
       <div className="hx-sec"><h2>Resign</h2></div>
       {cur && (
@@ -160,6 +165,7 @@ function OwnExit({ api }: { api: (path: string, init?: RequestInit) => Promise<a
         )}
       </div>
     </div>
+    </>
   )
 }
 

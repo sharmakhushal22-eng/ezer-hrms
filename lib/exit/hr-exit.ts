@@ -15,17 +15,20 @@ export function canExitOthers(roleCodes: string[], superAdmin: boolean): boolean
 export const OPEN_EXIT = ['INITIATED', 'PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER', 'RETENTION_HOLD', 'RECOVERY_PENDING']
 
 // ── Stages ────────────────────────────────────────────────────────────────────
-export type StageKey = 'HR_MANAGER' | 'LEGAL' | 'HR_HEAD' | 'MD'
+export type StageKey = 'HR_MANAGER' | 'DEST_HR_MANAGER' | 'LEGAL' | 'HR_HEAD' | 'MD'
 export const STAGES: Record<StageKey, { label: string; roles: string[] }> = {
   HR_MANAGER: { label: 'HR Manager', roles: ['HR_MANAGER'] },
+  /** A Transfer's receiving side: the HR Managers of the destination company (the route keys
+   *  them as `DEST:HR_MANAGER`). Holding HR Manager in the source company does not approve it. */
+  DEST_HR_MANAGER: { label: 'HR Manager (destination company)', roles: ['DEST:HR_MANAGER'] },
   LEGAL:      { label: 'Legal / Compliance', roles: ['LEGAL', 'COMPLIANCE'] },
   HR_HEAD:    { label: 'HR Head', roles: ['HR_HEAD'] },
   MD:         { label: 'MD / Management', roles: ['MD'] },
 }
 
 // ── Reasons (spec §2; Self Resignation is the employee's own, from ESS → Exit) ──────────
-export type LwdRule = 'LAST_ATTENDANCE' | 'TODAY' | 'PLUS_30' | 'NOTICE'
-export interface HrExitReason { code: string; label: string; subReasons: string[]; chain: StageKey[]; lwd: LwdRule; lwdHint: string; rehire: 'GREEN' | 'BLOCKED' | 'REVIEW' }
+export type LwdRule = 'LAST_ATTENDANCE' | 'TODAY' | 'PLUS_30' | 'NOTICE' | 'MONTH_END'
+export interface HrExitReason { code: string; label: string; subReasons: string[]; chain: StageKey[]; lwd: LwdRule; lwdHint: string; rehire: 'GREEN' | 'BLOCKED' | 'REVIEW' | null }
 export const HR_EXIT_REASONS: HrExitReason[] = [
   { code: 'ABSCOND', label: 'Abscond', subReasons: ['No Show', 'Unreachable', 'Left without notice'],
     chain: ['HR_MANAGER', 'HR_HEAD'], lwd: 'LAST_ATTENDANCE', lwdHint: 'Last attendance date', rehire: 'BLOCKED' },
@@ -37,6 +40,8 @@ export const HR_EXIT_REASONS: HrExitReason[] = [
     chain: ['HR_MANAGER', 'HR_HEAD', 'MD'], lwd: 'TODAY', lwdHint: 'Immediate, or a later date as per notice', rehire: 'REVIEW' },
   { code: 'DISCONTINUE', label: 'Notice of Discontinue', subReasons: ['Business Closure', 'Department Shutdown', 'Contract End', 'No Requirement'],
     chain: ['HR_MANAGER', 'HR_HEAD', 'MD'], lwd: 'NOTICE', lwdHint: "Today + the employee's notice period", rehire: 'GREEN' },
+  { code: 'TRANSFER', label: 'Transfer (Inter-Company)', subReasons: ['Same Branch Transfer', 'Different Branch', 'Different Company Same Group', 'Relocation with Transfer'],
+    chain: ['HR_MANAGER', 'DEST_HR_MANAGER', 'HR_HEAD'], lwd: 'MONTH_END', lwdHint: 'Transfer date − 1 day: the last day in this company (new DOJ is the day after)', rehire: null },
 ]
 export const reasonOf = (code: string | null | undefined) => HR_EXIT_REASONS.find(r => r.code === code) || null
 
@@ -49,10 +54,11 @@ export function suggestedLwd(code: string, o: { today: string; noticeDays: numbe
   if (r.lwd === 'LAST_ATTENDANCE') return o.lastAttendance && o.lastAttendance <= o.today ? o.lastAttendance : o.today
   if (r.lwd === 'PLUS_30') return addDays(o.today, 30)
   if (r.lwd === 'NOTICE') return addDays(o.today, Math.max(0, o.noticeDays || 0))
+  if (r.lwd === 'MONTH_END') { const d = new Date(`${o.today}T00:00:00Z`); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10) }
   return o.today
 }
 
-export interface StartInput { employeeId?: string | null; reasonCode?: string | null; subReason?: string | null; lwd?: string | null; remarks?: string | null }
+export interface StartInput { employeeId?: string | null; reasonCode?: string | null; subReason?: string | null; lwd?: string | null; remarks?: string | null; destinationCompanyId?: string | null; sourceCompanyId?: string | null }
 
 /** Why this exit cannot be started (empty = it can). `self` = the caller's own employee id. */
 export function startProblems(x: StartInput, o: { self: string }): string[] {
@@ -64,6 +70,10 @@ export function startProblems(x: StartInput, o: { self: string }): string[] {
   else if (!r) out.push('That reason is not one HR can start.')
   else if (!x.subReason || !r.subReasons.includes(x.subReason)) out.push('Pick the sub-reason.')
   if (!x.lwd || !/^\d{4}-\d{2}-\d{2}$/.test(x.lwd) || Number.isNaN(new Date(x.lwd).getTime())) out.push('Enter the last working day.')
+  if (r?.code === 'TRANSFER') {
+    if (!x.destinationCompanyId) out.push('Pick the company the employee is transferring to.')
+    else if (x.destinationCompanyId === x.sourceCompanyId) out.push('A transfer goes to another company in the group. A move inside the company is a transfer in People → Transfers.')
+  }
   const rem = String(x.remarks || '').trim()
   if (!rem) out.push('Additional information is required: why the exit is happening.')
   else if (rem.length > 2000) out.push('Additional information is limited to 2000 characters.')
@@ -81,6 +91,8 @@ export interface ChainStep {
 export type ExitStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'RESET'
 /** The request the Exit button shows: still running, approved but not yet undone, or rejected
  *  and waiting to be reset. CANCELLED and RESET are closed — the button starts a new one. */
+/** The Abscond reminder run (§4 Step 3): three weekly reminders before the chain starts. */
+export const ABSCOND_REMINDERS = 3
 export const SHOWN_STATUSES: ExitStatus[] = ['PENDING', 'APPROVED', 'REJECTED']
 
 /**

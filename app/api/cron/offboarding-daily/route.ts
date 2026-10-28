@@ -1,9 +1,12 @@
 // app/api/cron/offboarding-daily/route.ts — daily (vercel.json, 00:30 IST): everybody whose
 // last working day has passed loses ESS access, roles and reporting lines
-// (lib/offboarding/run.ts). Protected by CRON_SECRET when it is set.
+// (lib/offboarding/run.ts). Then the Exit Module's daily run (lib/exit/case.ts runExitDaily):
+// clearance opens 7 days before the LWD, overdue clearances and 48-hour approvals escalate, and
+// the Abscond reminders go out. Protected by CRON_SECRET when it is set.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { runOffboardingDaily } from '@/lib/offboarding/run'
+import { runExitDaily } from '@/lib/exit/case'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -21,7 +24,8 @@ async function run(req: NextRequest) {
   }
   try {
     const out = await runOffboardingDaily(supabase as any)
-    return NextResponse.json({ ok: true, checked: out.checked, revoked: out.revoked.map(r => ({ emp_code: r.emp_code, roles_off: r.roles_off, lines_closed: r.lines_closed, reports: r.reports, warnings: r.warnings })), errors: out.errors, notice_updated: out.notice_updated, ran_at: new Date().toISOString() })
+    const exit = await runExitDaily(supabase as any).catch((e: any) => ({ errors: [String(e?.message || e)] }))
+    return NextResponse.json({ ok: true, exit, checked: out.checked, revoked: out.revoked.map(r => ({ emp_code: r.emp_code, roles_off: r.roles_off, lines_closed: r.lines_closed, reports: r.reports, warnings: r.warnings })), errors: out.errors, notice_updated: out.notice_updated, ran_at: new Date().toISOString() })
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
   }

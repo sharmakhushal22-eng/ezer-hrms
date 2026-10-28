@@ -16,11 +16,23 @@ test('the hiring and HR roles may exit others; everyone else may not', () => {
 })
 
 test('the company reasons and their chains follow the spec', () => {
+  assert.deepEqual(HR_EXIT_REASONS.map(r => r.code), ['ABSCOND', 'FRAUD', 'LAYOFF', 'TERMINATION', 'DISCONTINUE', 'TRANSFER'])
   const by = Object.fromEntries(HR_EXIT_REASONS.map(r => [r.code, r]))
   assert.deepEqual(by.ABSCOND.chain, ['HR_MANAGER', 'HR_HEAD'])
   assert.deepEqual(by.FRAUD.chain, ['HR_MANAGER', 'LEGAL', 'HR_HEAD', 'MD'])
   for (const c of ['LAYOFF', 'TERMINATION', 'DISCONTINUE']) assert.deepEqual(by[c].chain, ['HR_MANAGER', 'HR_HEAD', 'MD'], c)
   assert.ok(HR_EXIT_REASONS.every(r => r.subReasons.length > 0))
+  assert.deepEqual(by.TRANSFER.chain, ['HR_MANAGER', 'DEST_HR_MANAGER', 'HR_HEAD'])
+})
+
+test('a transfer needs another company; its receiving HR Manager is the destination’s', () => {
+  const ok = { employeeId: 'e1', reasonCode: 'TRANSFER', subReason: 'Different Company Same Group', lwd: '2026-11-30', remarks: 'Moving to the group company.', sourceCompanyId: 'A' }
+  assert.ok(startProblems(ok, { self: 'me' })[0].startsWith('Pick the company'))
+  assert.ok(startProblems({ ...ok, destinationCompanyId: 'A' }, { self: 'me' })[0].startsWith('A transfer goes to another company'))
+  assert.deepEqual(startProblems({ ...ok, destinationCompanyId: 'B' }, { self: 'me' }), [])
+  const chain = buildChain('TRANSFER', { holders: { HR_MANAGER: [P('srcHm')], 'DEST:HR_MANAGER': [P('dstHm')], HR_HEAD: [P('hh')] }, initiator: P('srcHm'), initiatorRoles: ['HR_MANAGER'], employeeId: 'e1', now: NOW })
+  assert.deepEqual(chain.map(s => s.status), ['APPROVED', 'WAITING', 'WAITING'])
+  assert.deepEqual(chain[1].approvers.map(p => p.id), ['dstHm'])
 })
 
 test('the last working day is suggested per reason', () => {
@@ -78,11 +90,13 @@ test('one person on two steps approves once', () => {
 test('the route guards before writing and takes effect only on the last approval', () => {
   const src = readFileSync('app/api/ess/exit-employee/route.ts', 'utf8')
   const insert = src.indexOf(".from('hr_exit_requests').insert(")
-  for (const g of ["forbidden('Only the HR team and Hiring Managers can exit an employee.')", 'startProblems(x', "forbidden('This employee belongs to another company.')", 'already has an exit', 'already has a resignation in progress']) {
+  for (const g of ["forbidden('Only the HR team and Hiring Managers can exit an employee.')", 'startProblems({ ...x', "forbidden('This employee belongs to another company.')", 'already has an exit', 'already has a resignation in progress']) {
     const i = src.indexOf(g); assert.ok(i !== -1 && i < insert, g)
   }
-  assert.ok(/if \(done\) \{\s*applied = await applyExit/.test(src), 'started fully approved → applied')
-  assert.ok(/if \(status === 'APPROVED'\) \{\s*applied = await applyExit/.test(src), 'last approval → applied')
+  assert.ok(/if \(done\) \{\s*applied = await applyCompanyExit/.test(src), 'started fully approved → applied')
+  assert.ok(/if \(status === 'APPROVED'\) \{\s*applied = await applyCompanyExit/.test(src), 'last approval → applied')
+  assert.ok(/abscond \? \{ chain: built, current: null, done: false \}/.test(src), 'abscond waits for the reminders')
+  assert.ok(/body\.target_id/.test(src) && !/body\.employee_id/.test(src), 'the target is target_id, never employee_id (lib/ess/asked)')
   assert.ok(/\.eq\('status', 'PENDING'\)\.eq\('current_step', row\.current_step\)/.test(src), 'two approvers cannot both act')
 })
 
