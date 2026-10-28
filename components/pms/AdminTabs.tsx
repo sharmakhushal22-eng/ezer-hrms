@@ -599,7 +599,17 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
   /** The open period. Without it the commit has nowhere to write. */
   periodId?: string | null
   periodLabel?: string
-  onCommitted?: () => void
+  /**
+   * Called with the success sentence, NOT just as a refresh signal.
+   *
+   * The parent reloads on commit, and the reload unmounts this tab — the
+   * whole tab block sits behind `!loading`. So a success banner held in local
+   * state disappears the instant it is set: the upload worked, the file
+   * cleared, and the screen said nothing at all about what had happened.
+   * Observed after a commit that landed correctly. The message has to be held
+   * by whoever survives the reload.
+   */
+  onCommitted?: (message: string) => void
 } = {}) {
   const [rows, setRows] = useState<UploadRow[] | null>(null)
   const [name, setName] = useState('')
@@ -765,13 +775,14 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
                             rows: preview.rows.map(x => x.row) })
                         setBusy(false)
                         if (r.error) { setResult({ ok: false, text: r.error.message }); return }
-                        setResult({ ok: true, text: r.data?.message ?? 'Committed.' })
+                        const msg = r.data?.message ?? 'Committed.'
+                        setResult({ ok: true, text: msg })
                         // The file is spent: its preview was computed against
                         // ratings this commit has just changed, so leaving it
                         // on screen would invite a second application of the
                         // same batch against different numbers.
                         setRows(null); setName('')
-                        onCommitted?.()
+                        onCommitted?.(msg)
                       }}>
                 {busy ? 'Committing…'
                   : preview.canCommit

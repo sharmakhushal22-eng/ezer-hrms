@@ -69,6 +69,10 @@ export default function PmsPage() {
   const [naming, setNaming] = useState<PeriodNaming | null>(null)
   /** The open period's id — §6.4 commits against it. */
   const [periodId, setPeriodId] = useState<string | null>(null)
+  /** Held HERE and not in UploadTab: committing reloads, the reload unmounts
+   *  the tab block, and a banner inside it would vanish the moment it was
+   *  set — which is what happened to the first successful commit. */
+  const [commitNote, setCommitNote] = useState<string | null>(null)
   const [deptNames, setDeptNames] = useState<Record<string, string>>({})
   const [freq, setFreq] = useState<Frequency>('QUARTERLY')
   const [policies, setPolicies] = useState<Policy[]>([])
@@ -314,6 +318,22 @@ export default function PmsPage() {
         {TABS.find(t => t.k === tab)?.hint}
       </div>
 
+      {commitNote && (
+        <Card>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <span aria-hidden="true">✓</span>
+            <div style={{ fontSize: F.small, lineHeight: 1.6 }}>
+              {commitNote}
+              <button type="button" onClick={() => setCommitNote(null)}
+                      style={{ marginLeft: 10, background: 'none', border: 'none',
+                               color: TK.muted, cursor: 'pointer', fontSize: F.small,
+                               textDecoration: 'underline', padding: 0 }}>
+                dismiss
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
       {loading && <Card><div style={{ color: TK.muted, fontSize: F.small }}>Loading…</div></Card>}
 
       {!loading && err && (
@@ -346,7 +366,7 @@ export default function PmsPage() {
           {tab === 'upload'   && <UploadTab rows={fill} scale={scale}
                                improvementAtOrBelow={improvementAtOrBelow}
                                periodId={periodId} periodLabel={naming?.title}
-                               onCommitted={load} />}
+                               onCommitted={m => { setCommitNote(m); load() }} />}
           {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}
           {tab === 'reports'  && <ReportsTab />}
           {tab === 'chain'    && <FlowTab chainCoverage={cov ? <ChainCoverage cov={cov} /> : null} />}
