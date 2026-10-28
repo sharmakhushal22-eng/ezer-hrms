@@ -23,7 +23,7 @@ import { checkKras, canAdd, canDelete, meter, suggestSplit,
          CATEGORIES, CATEGORY_LABEL, type Kra, type Category } from '@/lib/pms/kra'
 import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
          TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL,
-         type Log, type DiscussionType, type Mode } from '@/lib/pms/oneToOne'
+         type Log, type DiscussionType, type Mode, type WeightageChange } from '@/lib/pms/oneToOne'
 import { score, gap, byCategory, bandForScore, bandFor, DEFAULT_BANDS, type Band,
          type Line } from '@/lib/pms/scoring'
 import { STAGES, humanDate, type StageKey } from '@/lib/pms/cycle'
@@ -346,14 +346,31 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
 
 // ── §3.3 One-to-One Log ──────────────────────────────────────────────────
 
-export function OneToOneTab({ logs, managerName, onLog, saving }: {
+export function OneToOneTab({ logs, managerName, onLog, saving, kras = [] }: {
   logs: Log[]; managerName: string
   onLog?: (l: Log) => void; saving?: boolean
+  /** The current KRA set, so an agreed weightage change can name the KRA it
+   *  applies to rather than asking the employee to remember a seq_no. */
+  kras?: { seq_no: number; kra_title: string; weightage: number }[]
 }) {
   const [type, setType] = useState<DiscussionType>('KRA_SETTING')
   const [date, setDate] = useState('')
   const [mode, setMode] = useState<Mode>('IN_PERSON')
   const [points, setPoints] = useState('')
+  const [mins, setMins] = useState('')
+  /**
+   * The weightage changes agreed in the meeting.
+   *
+   * pms_one_to_one.weightage_changes has carried the shape
+   * [{seq_no, old_wt, new_wt, reason}] since 066 and nothing has ever written
+   * it. The spec update is explicit that the log captures "any changes to
+   * weightages", and this is the only place that knows what the weightages
+   * WERE before the employee edits them — once the goals row is updated the
+   * old number is gone, so recording it afterwards is impossible.
+   */
+  const [wtChanges, setWtChanges] = useState<WeightageChange[]>([])
+  const addChange = () => setWtChanges(c => [...c,
+    { seq_no: kras[0]?.seq_no ?? 1, old_wt: kras[0]?.weightage ?? 0, new_wt: 0, reason: '' }])
   const lock = canLockWeightage(logs)
   const publish = canPublishResult(logs)
   const rows = logRows(logs)
@@ -373,7 +390,8 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
           <table>
             <thead>
               <tr>
-                <th>Date</th><th>Type</th><th>With</th><th>What was discussed</th>
+                <th>Date</th><th>Type</th><th>With</th><th className="num">Mins</th>
+                <th>What was discussed</th><th>Weightage changes</th>
                 <th>You</th><th>Manager</th>
               </tr>
             </thead>
@@ -393,10 +411,26 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
                       </span>
                     </td>
                     <td>{managerName || '-'}</td>
+                    <td className="num">{l.duration_minutes ?? '-'}</td>
                     <td className={l.placeholder ? 'k' : undefined}>
                       {l.placeholder
                         ? TYPE_PURPOSE[l.discussion_type]
                         : (l.discussion_points || '-')}
+                    </td>
+                    {/* Shown, not merely stored. A weightage change recorded
+                        where nobody can see it is no better than not recording
+                        it — this column is the evidence of what was agreed. */}
+                    <td className="k">
+                      {!l.weightage_changes?.length ? '-' : (
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {l.weightage_changes.map((c, i) => (
+                            <li key={i}>
+                              KRA {c.seq_no}: {c.old_wt} → {c.new_wt}
+                              {c.reason ? ` · ${c.reason}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </td>
                     <td>{l.employee_ack
                       ? <span className="pill p-green">✓ acknowledged</span>
@@ -438,17 +472,101 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
               </select>
             </div>
           </div>
+          <div className="grid g3">
+            <div className="fld">
+              <label htmlFor="o2o-mins">How long (minutes)</label>
+              <input id="o2o-mins" type="number" min={1} max={480} value={mins}
+                     onChange={e => setMins(e.target.value)} placeholder="e.g. 30" />
+              <div className="k">Optional, but a four-minute discussion and an
+                hour-long one are different events.</div>
+            </div>
+          </div>
           <div className="fld">
             <label htmlFor="o2o-points">What was discussed</label>
             <textarea id="o2o-points" value={points} onChange={e => setPoints(e.target.value)}
                       placeholder="Weightage changes and why, targets agreed, support asked for" />
           </div>
+          {/* §3's update: the log captures any changes to weightages. This is
+              the only moment that knows the OLD number — once the employee
+              applies the change, the previous weightage is gone. */}
+          {type === 'KRA_SETTING' && (
+            <>
+              <div className="divider" />
+              <h4 style={{ fontSize: 12, fontWeight: 700, margin: '0 0 8px' }}>Weightage changes agreed</h4>
+              {wtChanges.length === 0 && (
+                <div className="k" style={{ marginBottom: 8 }}>
+                  None. Add one for each weightage the two of you agreed to move —
+                  the old figure is recorded here because after you edit your KRAs
+                  it cannot be recovered.
+                </div>
+              )}
+              {wtChanges.map((c, i) => (
+                <div className="grid g4" key={i}>
+                  <div className="fld">
+                    <label htmlFor={`wc-k-${i}`}>Which KRA</label>
+                    <select id={`wc-k-${i}`} value={c.seq_no}
+                            onChange={e => {
+                              const seq = Number(e.target.value)
+                              const k = kras.find(x => x.seq_no === seq)
+                              setWtChanges(a => a.map((x, j) => j === i
+                                ? { ...x, seq_no: seq, old_wt: k?.weightage ?? x.old_wt } : x))
+                            }}>
+                      {kras.length === 0
+                        ? <option value={c.seq_no}>KRA {c.seq_no}</option>
+                        : kras.map(k => (
+                            <option key={k.seq_no} value={k.seq_no}>
+                              {k.seq_no}. {k.kra_title.slice(0, 40)}
+                            </option>))}
+                    </select>
+                  </div>
+                  <div className="fld">
+                    <label htmlFor={`wc-o-${i}`}>Was</label>
+                    <input id={`wc-o-${i}`} type="number" value={c.old_wt}
+                           onChange={e => setWtChanges(a => a.map((x, j) =>
+                             j === i ? { ...x, old_wt: Number(e.target.value) } : x))} />
+                  </div>
+                  <div className="fld">
+                    <label htmlFor={`wc-n-${i}`}>Now</label>
+                    <input id={`wc-n-${i}`} type="number" value={c.new_wt}
+                           onChange={e => setWtChanges(a => a.map((x, j) =>
+                             j === i ? { ...x, new_wt: Number(e.target.value) } : x))} />
+                  </div>
+                  <div className="fld">
+                    <label htmlFor={`wc-r-${i}`}>Why</label>
+                    <input id={`wc-r-${i}`} value={c.reason ?? ''}
+                           onChange={e => setWtChanges(a => a.map((x, j) =>
+                             j === i ? { ...x, reason: e.target.value } : x))} />
+                  </div>
+                </div>
+              ))}
+              <div className="btnrow">
+                <button className="btn ghost sm" type="button" onClick={addChange}>
+                  + Add a weightage change
+                </button>
+                {wtChanges.length > 0 && (
+                  <button className="btn ghost sm" type="button"
+                          onClick={() => setWtChanges(c => c.slice(0, -1))}>
+                    Remove the last
+                  </button>
+                )}
+              </div>
+            </>
+          )}
           <div className="k">{TYPE_PURPOSE[type]}</div>
           <div className="btnrow">
             <button className="btn" type="button" disabled={!date || !points.trim() || saving}
-                    onClick={() => { onLog({ discussion_type: type, discussion_date: date,
-                                             mode, discussion_points: points, employee_ack: true })
-                                     setPoints(''); setDate('') }}>
+                    onClick={() => {
+                      // Only send weightage changes that actually say something.
+                      // A row left at 0 -> 0 is somebody who clicked Add and
+                      // changed their mind, and storing it would make the log
+                      // claim a change that never happened.
+                      const changes = wtChanges.filter(c => c.old_wt !== c.new_wt)
+                      onLog({ discussion_type: type, discussion_date: date,
+                              mode, discussion_points: points,
+                              duration_minutes: mins.trim() ? Number(mins) : null,
+                              weightage_changes: changes.length ? changes : null,
+                              employee_ack: true })
+                      setPoints(''); setDate(''); setMins(''); setWtChanges([]) }}>
               {saving ? 'Saving…' : 'Log it and acknowledge'}
             </button>
           </div>

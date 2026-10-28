@@ -395,7 +395,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     setGoals(g.data ?? [])
 
     const l = await supabase.from('pms_one_to_one')
-      .select('id,discussion_type,discussion_date,mode,discussion_points,employee_ack,manager_ack')
+      .select('id,discussion_type,discussion_date,mode,discussion_points,employee_ack,manager_ack,duration_minutes,weightage_changes')
       .eq('employee_id', employeeId).eq('period_id', period.id)
       .order('discussion_date', { ascending: true })
     setLogs((l.data ?? []) as unknown as Log[])
@@ -624,6 +624,13 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       period_id: period.id, employee_id: employeeId,
       discussion_type: l.discussion_type, discussion_date: l.discussion_date,
       mode: l.mode, discussion_points: l.discussion_points,
+      // Both of these columns have existed since 066 and nothing had ever
+      // written them. The spec update asks the log to capture the duration and
+      // any agreed weightage changes, and the weightage change in particular
+      // CANNOT be reconstructed later — once the employee edits the goal the
+      // old number is gone.
+      duration_minutes: l.duration_minutes ?? null,
+      weightage_changes: l.weightage_changes ?? null,
       employee_ack: true, employee_ack_at: new Date().toISOString(),
     })
     setSaving(false)
@@ -655,7 +662,8 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
                 lockGate={lockGate} onSubmit={submitKras} saving={saving} />
       )}
       {tab === 'oneToOne' && (
-        <OneToOneTab logs={logs} managerName="your manager"
+        <OneToOneTab kras={kras.map(k => ({ seq_no: k.seq_no, kra_title: k.kra_title, weightage: k.weightage }))}
+                     logs={logs} managerName="your manager"
                      onLog={logDiscussion} saving={saving} />
       )}
       {tab === 'self' && (
