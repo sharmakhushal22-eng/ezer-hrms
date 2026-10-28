@@ -1,0 +1,158 @@
+// lib/pms/__tests__/one-to-one-by-tick.test.ts
+//
+// Requested: the one-to-one log should be automatic — a mandatory checkbox at
+// every stage saying the discussion happened, which records the log when it is
+// ticked, instead of a separate form. Confirmed: all three manager stages
+// (RM L1, RM L2, HOD) get one, and manager == RM L1.
+//
+// A CHANGE OF MECHANISM, NOT OF RULE. Both gates still need two
+// acknowledgements. What goes away is the form standing between the intent and
+// the record — which is why FINAL_REVIEW rows existed for 7 of 395 enrolments
+// and why a HOD could be blocked by a gate only the employee could open.
+
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { autoLogFor, CONFIRM_STAGES, CONFIRM_LABEL, CONFIRM_WHY,
+         DISCUSSION_TYPES } from '../oneToOne.ts'
+
+const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
+const PERF = read('components/ess/Performance.tsx')
+const MGR = read('components/pms/ManagerTabs.tsx')
+const EMP = read('components/pms/EmployeeTabs.tsx')
+
+test('the employee and RM L1 land on the SAME row', () => {
+  // One conversation, two acknowledgements — which is exactly what
+  // pms_lock_kras counts. A second row would leave both halves
+  // unacknowledged and the weightage permanently unlockable.
+  const emp = autoLogFor('EMPLOYEE')
+  const l1 = autoLogFor('RM_L1')
+  assert.equal(emp.discussion_type, 'KRA_SETTING')
+  assert.equal(l1.discussion_type, 'KRA_SETTING')
+  assert.equal(emp.manager_role, l1.manager_role)
+  // Opposite sides of it.
+  assert.equal(emp.side, 'employee')
+  assert.equal(l1.side, 'manager')
+})
+
+test('manager and RM L1 are the same stage, not two', () => {
+  // There is no separate 'MANAGER' stage: the employee's reporting manager IS
+  // RM L1, and a second concept would mean two rows for one conversation.
+  assert.deepEqual([...CONFIRM_STAGES], ['EMPLOYEE', 'RM_L1', 'RM_L2', 'HOD'])
+  assert.ok(!CONFIRM_STAGES.includes('MANAGER' as never))
+})
+
+test('the later rungs get their own rows, correctly attributed', () => {
+  const l2 = autoLogFor('RM_L2')
+  const hod = autoLogFor('HOD')
+  assert.equal(l2.manager_role, 'RM_L2')
+  assert.equal(hod.manager_role, 'HOD')
+  assert.equal(hod.discussion_type, 'FINAL_REVIEW')
+  // ADHOC is the only remaining type that fits an L2's review: the schema
+  // allows KRA_SETTING, MID_PERIOD, FINAL_REVIEW and ADHOC, and MID_PERIOD
+  // would be a lie about when it happened.
+  assert.equal(l2.discussion_type, 'ADHOC')
+  assert.ok(DISCUSSION_TYPES.includes(l2.discussion_type))
+})
+
+test('manager_role is set for every stage — it never was before', () => {
+  // The column has existed since 066 and NOTHING ever wrote it: all 13 rows in
+  // the live database say RM_L1 because that is the default, including
+  // FINAL_REVIEW rows a HOD logged. A log that cannot say which stage it
+  // belongs to is most of the way to not being a log.
+  for (const s of CONFIRM_STAGES) {
+    const spec = autoLogFor(s)
+    assert.ok(['RM_L1', 'RM_L2', 'HOD'].includes(spec.manager_role), `${s}`)
+    // discussion_points is NOT NULL, so a tick has to supply one.
+    assert.ok(spec.discussion_points.length > 30, `${s} has no usable record text`)
+  }
+})
+
+test('every stage has a label and a reason, in the first person', () => {
+  for (const s of CONFIRM_STAGES) {
+    assert.ok(CONFIRM_LABEL[s]?.startsWith('I have'),
+      `${s}: the label is not what the person is asserting`)
+    assert.ok(CONFIRM_WHY[s]?.length > 20, `${s} has no explanation`)
+  }
+})
+
+// ── the wiring ───────────────────────────────────────────────────────────
+
+test('the employee cannot submit without ticking it', () => {
+  // ANCHORED ON THE `disabled` EXPRESSION, not on the condition anywhere in
+  // the file. The condition appears twice — once gating the button and once
+  // choosing its label — so a bare match passed with the gate removed and
+  // only the label left. Found by mutation: deleting the gate did not fail
+  // this test until it was anchored.
+  const btn = EMP.slice(EMP.indexOf('{(!locked || !selfSubmitted) && (\n          <div className="btnrow">'))
+  const dis = btn.slice(btn.indexOf('disabled={'), btn.indexOf('onClick={onSubmit}'))
+  assert.ok(dis.length > 20, 'could not isolate the submit button\'s disabled expression')
+  assert.match(dis, /oneToOneRequired && !oneToOneAlready && !confirmOneToOne/,
+    'the submit button is not gated on the confirmation')
+  assert.match(EMP, /Confirm the one-to-one above first/,
+    'the button does not say what is missing')
+  // And it must not be demanded where the policy does not ask for the
+  // conversation at all.
+  assert.match(EMP, /oneToOneRequired && !oneToOneAlready && onConfirmOneToOne/,
+    'the checkbox renders regardless of policy')
+  assert.match(PERF, /oneToOneRequired=\{policy\?\.one_to_one_mandatory !== false\}/,
+    'the requirement is not read from the policy')
+})
+
+test('a manager cannot approve without ticking it', () => {
+  assert.match(MGR, /const mayApprove = alreadyConfirmed \|\| !!confirmed\[id\]/,
+    'approval is not gated on the confirmation')
+  assert.match(MGR, /disabled=\{!onApprove \|\| !ratingOk \|\| !mayApprove\}/)
+  assert.match(MGR, /Confirm the one-to-one first/)
+  // Already-confirmed rows show it ticked and disabled, so a manager can see
+  // the confirmation stands rather than wondering whether it saved.
+  assert.match(MGR, /disabled=\{alreadyConfirmed\}/)
+})
+
+test('rejecting does NOT require a confirmation', () => {
+  // Sending a set back with a remark is not a claim that a conversation
+  // happened, and demanding one would stop a manager returning an obviously
+  // wrong set until they had held a meeting about it.
+  const cell = MGR.slice(MGR.indexOf('if (rejecting[id])'),
+                         MGR.indexOf('if (rejecting[id])') + 1800)
+  assert.ok(cell.length > 500, 'could not isolate the rejection branch')
+  assert.ok(!/mayApprove|confirmed\[id\]/.test(cell),
+    'the rejection path is gated on the one-to-one confirmation')
+})
+
+test('each stage is recorded as its own stage', () => {
+  for (const s of ["'EMPLOYEE'", "'RM_L1'", "'HOD'"]) {
+    assert.ok(PERF.includes(`stage: ${s}`), `nothing records stage ${s}`)
+  }
+  assert.match(PERF, /stage: myRung/,
+    'the chain approval does not record the rung it is acting as')
+})
+
+// ── the detailed KRA view ────────────────────────────────────────────────
+
+test('L1, L2 and the HOD can read the form the employee filled', () => {
+  assert.match(MGR, /export function KraDetail/, 'there is no detailed view')
+  assert.match(MGR, /View their form/, 'nothing opens it')
+  assert.match(PERF, /const openKras = useCallback/, 'nothing loads it')
+  // The employee's OWN rating is the half a manager most needs before
+  // approving — rater_role SELF, not their own rating of them.
+  assert.match(PERF, /\.eq\('rater_role', 'SELF'\)/,
+    'the detail view does not load the employee\'s self rating')
+  // Loaded on demand: a manager with 30 reportees must not pull 30 KRA sets
+  // to render a table of counts.
+  assert.ok(!/select\('id,seq_no,kra_title[\s\S]{0,400}\.in\('employee_id'/.test(PERF),
+    'the KRA detail is loaded for the whole roster rather than on demand')
+})
+
+test('the detailed view is read-only', () => {
+  // Editing a reportee's KRA changes what somebody is measured against after
+  // they agreed it. That belongs behind its own control, not inside a view
+  // opened to have a look — the chain's edit path is the send-back.
+  const v = MGR.slice(MGR.indexOf('export function KraDetail'),
+                      MGR.indexOf('// ── §4.3 Rate My Team'))
+  assert.ok(v.length > 800, 'could not isolate the detail view')
+  for (const bad of ['<input', '<textarea', '<select', 'onChange']) {
+    assert.ok(!v.includes(bad), `the detail view offers ${bad}`)
+  }
+})

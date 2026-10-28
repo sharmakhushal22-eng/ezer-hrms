@@ -262,35 +262,79 @@ test('the HOD publish path also closes the stage out', () => {
 
 // ── the final-review gate must be openable from BOTH sides ───────────────
 
-test('a manager or HOD can LOG the final review, not only acknowledge one', () => {
-  // THE BUG: pms_finalise refuses until a FINAL_REVIEW one-to-one carries both
-  // acknowledgements, and the ONLY code that could create that row was the
-  // employee's own one-to-one form. The manager's acknowledge path updates an
-  // existing row; it cannot bring one into being. So a HOD with every other
-  // gate satisfied was blocked permanently and told to go ask the employee to
-  // log a meeting the HOD runs. Observed on Anil Verma (STC9030).
-  assert.match(PERF, /async function insertFinalReview/,
-    'nothing can create a FINAL_REVIEW row from the manager side')
-  // At MODULE scope, because the RM surface and the HOD surface are separate
-  // components and the first version of this fix lived inside the RM one —
-  // where the HOD, the person actually blocked, could not reach it.
-  const fnAt = PERF.indexOf('async function insertFinalReview')
-  const firstComponent = PERF.indexOf('function usePeriod')
-  assert.ok(fnAt < firstComponent || /^async function insertFinalReview/m.test(PERF),
-    'insertFinalReview is nested inside a component, so only one surface has it')
-  // Both surfaces must call it.
-  const calls = [...PERF.matchAll(/insertFinalReview\(\{/g)]
-  assert.ok(calls.length >= 2,
-    `only ${calls.length} surface(s) can log a final review; the RM and HOD sides both need it`)
-  // And it must set the manager's own tick as it creates the row — logging it
-  // IS the manager asserting the conversation happened.
-  const body = PERF.slice(fnAt, fnAt + 2500)
-  assert.match(body, /manager_ack: true/)
-  // It must NOT set the employee's tick: a two-party gate the manager can
-  // satisfy alone is not a gate.
-  assert.ok(!/employee_ack: true/.test(body),
-    'logging from the manager side also ticks the employee — that lets a HOD '
-    + 'satisfy a two-party gate unilaterally')
+test('one recorder creates the one-to-one for EVERY stage', () => {
+  // THE BUG THIS STARTED AS: pms_finalise refuses until a FINAL_REVIEW row
+  // exists, and the ONLY code that could create one was the employee's own
+  // one-to-one form. A HOD with every other gate satisfied was blocked
+  // permanently — observed on Anil Verma (STC9030).
+  //
+  // The fix was a manager-side insert; it has since become ONE recorder for
+  // all four stages, because they are the same act seen from different sides
+  // and four near-copies is how they drift. This test followed the rename
+  // rather than being deleted: the property it guards is still "something can
+  // create the log from the manager side", only now it is stage-aware.
+  assert.match(PERF, /async function recordOneToOne/,
+    'nothing can create a one-to-one from the manager side')
+  // AT MODULE SCOPE, checked by INDENTATION rather than by position. The
+  // first version of this compared the offset against usePeriod, which is
+  // itself module-scope and happens to appear earlier in the file — so a
+  // correct implementation failed. A declaration at column 0 is the actual
+  // property: nested inside a component it would be indented, and only one
+  // surface could reach it. That mattered: the first cut of this fix lived
+  // inside the RM component, where the HOD — the person actually blocked —
+  // could not reach it.
+  assert.match(PERF, /^async function recordOneToOne/m,
+    'the recorder is nested inside a component, so only one surface has it')
+  const fnAt = PERF.indexOf('async function recordOneToOne')
+
+  const body = PERF.slice(fnAt, fnAt + 3500)
+  // IDEMPOTENT: ticking twice must not leave two records of one meeting.
+  assert.match(body, /if \(existing\.data\?\.length\)/,
+    'the recorder does not check for an existing row')
+  assert.match(body, /return 'ALREADY'/)
+  // manager_role, which NOTHING had ever written: every row in the database
+  // says RM_L1 because that is the column default, including FINAL_REVIEW
+  // rows a HOD logged.
+  assert.match(body, /manager_role: spec\.manager_role/,
+    'the log still cannot say which stage it belongs to')
+  // The side is decided by the stage, not hardcoded, so the employee's tick
+  // writes employee_ack and a manager's writes manager_ack.
+  assert.match(body, /spec\.side === 'employee' \? 'employee_ack' : 'manager_ack'/)
+})
+
+test('every stage records through the one recorder, and RM L1 before it locks', () => {
+  // Requested: a checkbox at every stage, mandatory to move further, which
+  // records the log when ticked.
+  for (const stage of ["'EMPLOYEE'", "'RM_L1'", "'HOD'"]) {
+    assert.ok(PERF.includes(`stage: ${stage}`), `no recorder call for stage ${stage}`)
+  }
+  // RM L2 and HOD come through the chain approval, which passes the viewer's
+  // own rung rather than a literal.
+  assert.match(PERF, /stage: myRung/,
+    'the chain approval does not record the rung it is acting as')
+
+  // ORDER IS LOAD-BEARING at RM L1: the approval calls pms_lock_kras, which
+  // counts a KRA_SETTING row carrying BOTH acknowledgements. Recording after
+  // approving would make the lock look for a row that does not exist yet and
+  // refuse, and the manager would read "not locked" on an approval that had
+  // just succeeded.
+  const rec = PERF.indexOf('stage: myRung')
+  const rpc = PERF.indexOf("rpc('pms_chain_approve'")
+  assert.ok(rec > 0 && rpc > 0 && rec < rpc,
+    'the one-to-one is recorded AFTER the approval, so the weightage lock will '
+    + 'refuse for want of a row that is about to exist')
+})
+
+test('the employee\'s tick names the FROZEN manager, not the live one', () => {
+  // employees.l1_manager_id is the live value; every gate reads the frozen
+  // pms_overall_rating.rm_l1_id. Three of the 395 enrolments have them
+  // pointing at different people — Meera Singh, Meera Verma and Amit Gupta
+  // changed manager mid-cycle, so their appraisals route to Ishaan Gupta while
+  // the live field names Yash Dhawan. A log naming the live manager records
+  // the conversation against somebody the appraisal was never with.
+  assert.match(PERF, /const counterpart = overall\?\.rm_l1_id \?\? managerId/,
+    'the employee\'s one-to-one is logged against the live manager')
+  assert.match(PERF, /rm_l1_id/, 'the frozen L1 is never selected')
 })
 
 test('the employee can acknowledge a one-to-one somebody else logged', () => {

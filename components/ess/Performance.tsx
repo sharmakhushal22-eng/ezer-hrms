@@ -42,15 +42,16 @@ import {
 } from '@/components/pms/EmployeeTabs'
 import {
   MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab,
-  TeamAnalyticsTab, FinaliseTab, FeedbackTab, PublishedResultsTab,
+  TeamAnalyticsTab, FinaliseTab, FeedbackTab, PublishedResultsTab, KraDetail,
   BENEFIT_LABEL,
   type MgrTab, type HodTab, type RateRow, type BenefitType,
-  type PublishedResult,
+  type PublishedResult, type KraLine,
 } from '@/components/pms/ManagerTabs'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
 import { rungFor } from '@/lib/pms/chain'
 import { showFinaliserFeedbackTab, type PostFinalOwner } from '@/lib/pms/postFinal'
+import { autoLogFor, CONFIRM_LABEL, CONFIRM_WHY, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { reached, WORKFLOW } from '@/lib/pms/status'
@@ -93,6 +94,9 @@ interface Policy {
   carry_forward_kras?: boolean | null
   /** 202: who runs the appraisal after the rating is settled. */
   post_final_owner?: string | null
+  /** Whether the KRA one-to-one is required at all. A policy that does not
+   *  ask for the conversation must not block a submission on confirming it. */
+  one_to_one_mandatory?: boolean | null
   /** The KRA rules. DEFAULT_RULES (4/10/100/5) was being used as though it
    *  were the live rule in the employee screen, the manager's approve check
    *  and the cycle header — so an admin could change min_kra_count and
@@ -115,6 +119,16 @@ interface Overall {
   sent_back_to?: string | null
   sent_back_reason?: string | null
   sent_back_at?: string | null
+  /**
+   * The FROZEN RM L1. Carried so the employee's one-to-one tick records the
+   * manager their appraisal is actually routed to.
+   *
+   * employees.l1_manager_id is the live value and the two diverge: three of
+   * the 395 enrolments changed manager mid-cycle, so their appraisal routes to
+   * Ishaan Gupta while the live field names Yash Dhawan. Every gate reads the
+   * snapshot, so the log has to as well.
+   */
+  rm_l1_id?: string | null
 }
 interface Roles { isRM: boolean; isHOD: boolean; reportees: number; deptCount: number }
 
@@ -191,7 +205,8 @@ function usePeriod(employeeId: string) {
       const po = await supabase.from('pms_policies')
         .select('approval_chain,who_can_finalise,final_review_one_to_one,'
               + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra,'
-              + 'new_joiner_cutoff_days,carry_forward_kras,post_final_owner')
+              + 'new_joiner_cutoff_days,carry_forward_kras,post_final_owner,'
+              + 'one_to_one_mandatory')
         .eq('id', pid).maybeSingle()
       if (po.error) console.error('[pms] could not read the policy:', po.error)
       setPolicy(po.error ? null : (po.data as Policy | null))
@@ -200,7 +215,7 @@ function usePeriod(employeeId: string) {
     }
 
     const o = await supabase.from('pms_overall_rating')
-      .select('workflow_status,self_score,final_rating,final_rating_code,is_readonly,chain_stage,sent_back_to,sent_back_reason,sent_back_at')
+      .select('workflow_status,self_score,final_rating,final_rating_code,is_readonly,chain_stage,sent_back_to,sent_back_reason,sent_back_at,rm_l1_id')
       .eq('employee_id', employeeId).eq('period_id', p.data.id).maybeSingle()
     setOverall(o.error ? null : (o.data as Overall | null))
 
@@ -248,67 +263,87 @@ function usePeriod(employeeId: string) {
  *  yesterday for anybody east of Greenwich after 05:30 IST, and these dates
  *  decide whether a window is open. */
 /**
- * Create the FINAL_REVIEW one-to-one, from the manager's or HOD's side.
+ * Record the one-to-one for a stage, from a tick.
  *
- * AT MODULE SCOPE because both sides need it and it must behave identically
- * on each. The RM surface and the HOD surface are separate components, and
- * the first version of this fix lived inside the RM one — where the HOD, the
- * person actually blocked, could not reach it.
+ * ONE FUNCTION FOR ALL FOUR STAGES, because they are the same act seen from
+ * different sides and the first version of this was four near-copies. The
+ * employee's tick and RM L1's tick land on the SAME KRA_SETTING row — one
+ * conversation, two acknowledgements, which is exactly what pms_lock_kras
+ * checks. RM L2 and the HOD get their own rows because they are different
+ * conversations.
  *
- * THE DEAD END THIS REMOVES. pms_finalise refuses until a FINAL_REVIEW
- * discussion exists with BOTH acknowledgements, and the only code anywhere
- * that could create such a row was the employee's own one-to-one form. The
- * manager's acknowledge path can add a tick to an existing row; it cannot
- * bring one into being. So if the employee never logged a final review, the
- * HOD was blocked permanently, and the screen told them to go and ask the
- * employee to log it — for a meeting the HOD runs.
+ * WHY THE TICK AND NOT A FORM. Requested: the log should be automatic, a
+ * mandatory checkbox at each stage rather than a separate screen. The form is
+ * why FINAL_REVIEW rows existed for 7 of 395 enrolments and why a HOD could
+ * be blocked by a gate only the employee could open — a form nobody is
+ * standing in front of does not get filled. The detailed log still exists for
+ * the duration, the discussion points and the agreed weightage changes; this
+ * is the floor, not the ceiling.
  *
- * Observed live, and what prompted it: Anil Verma (STC9030) had four locked
- * KRAs totalling 100, SELF, RM L1 and RM L2 ratings all in, and chain_stage
- * HOD. Kiran Patel is his frozen HOD and the policy is HOD_ONLY, so every
- * gate was satisfied except this one — and nothing in the product could
- * satisfy it.
- *
- * ALREADY PERMITTED: §2's matrix gives log_one_to_one to RM L1, RM L2 and HOD
- * as well as the employee — [Y, Y, Y, Y, N, N, N]. The right was always
- * there; only the button was missing.
- *
- * The manager's own tick goes on as it is created, because logging it IS the
- * manager asserting the conversation happened. The employee still has to
- * acknowledge — so this does not let a HOD finalise unilaterally, it gives a
- * two-party gate its second door.
+ * IDEMPOTENT. Ticking twice must not create a second row: the finalise gate
+ * counts rows carrying both acknowledgements, so duplicates would not break
+ * it, but two records of one meeting is a mess in the log and the other party
+ * would not know which to acknowledge.
  */
-async function insertFinalReview(o: {
+async function recordOneToOne(o: {
   companyId: string; periodId: string; employeeId: string
-  managerId: string; today: string; points: string
-}): Promise<'CREATED' | 'ALREADY' | 'ERROR'> {
-  // Don't create a second row. The finalise gate counts rows with both acks so
-  // a duplicate would not break it, but two records of one meeting is a mess
-  // in the log and the employee would not know which to acknowledge.
-  const existing = await supabase.from('pms_one_to_one')
-    .select('id').eq('employee_id', o.employeeId).eq('period_id', o.periodId)
-    .eq('discussion_type', 'FINAL_REVIEW').limit(1)
-  if (existing.data?.length) return 'ALREADY'
+  /**
+   * The OTHER party, by id.
+   *
+   * For the employee's own tick this must be the FROZEN RM L1 from
+   * pms_overall_rating, not employees.l1_manager_id. Three of the 395
+   * enrolments have those pointing at different people — Meera Singh, Meera
+   * Verma and Amit Gupta changed manager mid-cycle, so their appraisals still
+   * route to Ishaan Gupta while the live field names Yash Dhawan. Every gate
+   * in the module reads the snapshot; a log that names the live manager
+   * records the conversation against somebody the appraisal was never with.
+   */
+  managerId: string
+  stage: ConfirmStage
+  today: string
+}): Promise<'RECORDED' | 'ALREADY' | 'ERROR'> {
+  const spec = autoLogFor(o.stage)
+  const ackCol = spec.side === 'employee' ? 'employee_ack' : 'manager_ack'
+  const atCol = spec.side === 'employee' ? 'employee_ack_at' : 'manager_ack_at'
 
-  // manager_id is NOT NULL: the row names both people. Here the other party is
-  // the viewer, who is the manager or HOD holding the conversation.
-  // mode is constrained to IN_PERSON / VIDEO / PHONE by 066.
-  const { error } = await supabase.from('pms_one_to_one').insert({
-    company_id: o.companyId, manager_id: o.managerId,
-    period_id: o.periodId, employee_id: o.employeeId,
-    discussion_type: 'FINAL_REVIEW',
+  const existing = await supabase.from('pms_one_to_one')
+    .select(`id,${ackCol}`)
+    .eq('employee_id', o.employeeId).eq('period_id', o.periodId)
+    .eq('discussion_type', spec.discussion_type).limit(1)
+
+  if (existing.data?.length) {
+    const row = existing.data[0] as Record<string, unknown>
+    if (row[ackCol] === true) return 'ALREADY'
+    const up = await supabase.from('pms_one_to_one')
+      .update({ [ackCol]: true, [atCol]: new Date().toISOString() })
+      .eq('id', String(row.id))
+    if (up.error) { console.error('[pms] one-to-one ack refused:', up.error); return 'ERROR' }
+    return 'RECORDED'
+  }
+
+  // manager_id and discussion_points are both NOT NULL, and manager_role has
+  // never been written by anything: every row in the database says RM_L1
+  // because that is the column default, including FINAL_REVIEW rows a HOD
+  // logged. A log that cannot say which stage it belongs to is most of the way
+  // to not being a log.
+  const ins = await supabase.from('pms_one_to_one').insert({
+    company_id: o.companyId, period_id: o.periodId, employee_id: o.employeeId,
+    manager_id: o.managerId,
+    manager_role: spec.manager_role,
+    discussion_type: spec.discussion_type,
     discussion_date: o.today,
     mode: 'IN_PERSON',
-    discussion_points: o.points.trim() || 'Final review discussion held.',
-    manager_ack: true, manager_ack_at: new Date().toISOString(),
+    discussion_points: spec.discussion_points,
+    [ackCol]: true, [atCol]: new Date().toISOString(),
   })
-  if (error) { console.error('[pms] final review log refused:', error); return 'ERROR' }
-  return 'CREATED'
+  if (ins.error) { console.error('[pms] one-to-one insert refused:', ins.error); return 'ERROR' }
+  return 'RECORDED'
 }
 
 const FINAL_REVIEW_LOGGED =
-  'Final review logged and acknowledged by you. They acknowledge it from their '
-  + 'own One-to-One Log, and then the rating can be settled.'
+  'Final review confirmed and recorded against your name. The rating can be '
+  + 'settled now; publishing it waits on the employee confirming the '
+  + 'conversation too.'
 
 function localToday(): string {
   const d = new Date()
@@ -453,6 +488,16 @@ export default function Performance({ employeeId }: { employeeId: string }) {
 
 function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const { period, overall, loading, reload, companyId, managerId, bands, rules, policy } = usePeriod(employeeId)
+  /**
+   * THE EMPLOYEE'S ONE-TO-ONE TICK. Mandatory before submitting when the
+   * policy asks for the conversation — the log is recorded by ticking it
+   * rather than by a separate form.
+   *
+   * Not persisted: it is a confirmation made at the moment of submitting, and
+   * a half-remembered tick from a previous visit is not a confirmation. Once
+   * the log exists, oneToOneAlready hides the box entirely.
+   */
+  const [confirmOneToOne, setConfirmOneToOne] = useState(false)
   const [who, setWho] = useState<Who>({ name: '', code: '' })
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
   /** Last period's locked KRAs, offered as this period's starting point.
@@ -595,6 +640,17 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const lockGate = canLockWeightage(logs)
   const publishGate = canPublishResult(logs)
   const locked = goals.length > 0 && goals.every(g => g.status === 'LOCKED')
+  /**
+   * Is the employee's half of the KRA one-to-one already on record?
+   *
+   * Either from a previous submission's tick or from the detailed form, which
+   * still exists. Nothing is gained by asking somebody to confirm the same
+   * conversation twice, and a box that reappears after it has been satisfied
+   * reads as though the first tick did not take.
+   */
+  const oneToOneAlready = logs.some(
+    l => l.discussion_type === 'KRA_SETTING' && l.employee_ack === true)
+
   const selfSubmitted = !!(overall?.workflow_status && overall.workflow_status !== 'NOT_STARTED'
     && overall.self_score != null)
   /**
@@ -894,6 +950,35 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
      * way, but "saved" and "with your manager" are different states and the
      * employee is the one who has to know which they are in.
      */
+    /**
+     * THE ONE-TO-ONE, RECORDED BY THE TICK.
+     *
+     * Before the chain submit, because pms_chain_submit hands the set to the
+     * manager and the conversation that settled it should already be on
+     * record by then. Before the lock too: pms_lock_kras counts a KRA_SETTING
+     * row with BOTH acknowledgements, and this is the employee's half.
+     *
+     * The manager named is the FROZEN rm_l1_id, falling back to the live
+     * l1_manager_id only when there is no snapshot — see the Overall type.
+     */
+    let oneToOneWarning = ''
+    if (!error && confirmOneToOne && !oneToOneAlready) {
+      const counterpart = overall?.rm_l1_id ?? managerId
+      if (!counterpart) {
+        oneToOneWarning = ' Your record does not say who your reporting manager is, '
+          + 'so the discussion could not be logged — ask HR to set your manager.'
+      } else {
+        const rec = await recordOneToOne({
+          companyId: companyId!, periodId: period.id, employeeId,
+          managerId: counterpart, stage: 'EMPLOYEE', today,
+        })
+        if (rec === 'ERROR') {
+          oneToOneWarning = ' The one-to-one could not be logged, though — '
+            + 'your weightages cannot lock until it is. Tell HR.'
+        }
+      }
+    }
+
     let chainWarning = ''
     if (!error && ratedCount && !ratingWarning) {
       const ch = await supabase.rpc('pms_chain_submit',
@@ -917,9 +1002,9 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           ratedCount && !kraLocked
             ? `${ratedCount} ${ratedCount === 1 ? 'rating' : 'ratings'} went with it.` : '',
           changes.length ? `${changes.length} ${changes.length === 1 ? 'change' : 'changes'} recorded against the one-to-one.` : '',
-          ratingWarning, logWarning, chainWarning,
+          ratingWarning, logWarning, oneToOneWarning, chainWarning,
         ].filter(Boolean).join(' '))
-    if (!error) { setDraftKras(null); setSelfBySeq(null); loadPeriodData(); reload() }
+    if (!error) { setDraftKras(null); setSelfBySeq(null); setConfirmOneToOne(false); loadPeriodData(); reload() }
   }
 
   const submitSelf = async () => {
@@ -1058,7 +1143,13 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
                 rateRequired={logs.some(l => l.discussion_type === 'KRA_SETTING'
                                           && (l.employee_ack || l.manager_ack))}
                 kras={kras} onChange={setDraftKras} locked={locked}
-                lockGate={lockGate} onSubmit={submitKras} saving={saving} />
+                lockGate={lockGate} onSubmit={submitKras} saving={saving}
+                // The tick that records the one-to-one. Required only where
+                // the policy asks for the conversation at all.
+                confirmOneToOne={confirmOneToOne}
+                onConfirmOneToOne={setConfirmOneToOne}
+                oneToOneRequired={policy?.one_to_one_mandatory !== false}
+                oneToOneAlready={oneToOneAlready} />
       )}
       {tab === 'oneToOne' && (
         <OneToOneTab kras={kras.map(k => ({ seq_no: k.seq_no, kra_title: k.kra_title, weightage: k.weightage }))}
@@ -1184,9 +1275,9 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
     // one: pms_finalise refuses outright without it when the policy asks for
     // it, so a screen that does not look leaves the HOD guessing.
     const { data: talks } = await supabase.from('pms_one_to_one')
-      .select('employee_id,discussion_type,employee_ack,manager_ack')
+      .select('employee_id,discussion_type,manager_role,employee_ack,manager_ack')
       .eq('period_id', period.id)
-      .in('discussion_type', ['KRA_SETTING', 'FINAL_REVIEW'])
+      .in('discussion_type', ['KRA_SETTING', 'FINAL_REVIEW', 'ADHOC'])
       .in('employee_id', ids)
     const ackedOf = (kind: string) => new Set((talks ?? [])
       .filter(t => (t as { discussion_type?: string }).discussion_type === kind
@@ -1202,6 +1293,14 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
     // "waiting on them" and offer the right button rather than a dead label.
     const finalMgrAcked = new Set((talks ?? [])
       .filter(t => (t as { discussion_type?: string }).discussion_type === 'FINAL_REVIEW'
+                && (t as { manager_ack?: boolean }).manager_ack)
+      .map(t => String((t as { employee_id: string }).employee_id)))
+    // RM L2's own confirmation. ADHOC is the type autoLogFor assigns that
+    // rung: the schema allows KRA_SETTING, MID_PERIOD, FINAL_REVIEW and ADHOC,
+    // and an L2's review conversation is none of the first three.
+    const l2Confirmed = new Set((talks ?? [])
+      .filter(t => (t as { discussion_type?: string }).discussion_type === 'ADHOC'
+                && (t as { manager_role?: string }).manager_role === 'RM_L2'
                 && (t as { manager_ack?: boolean }).manager_ack)
       .map(t => String((t as { employee_id: string }).employee_id)))
 
@@ -1240,6 +1339,7 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
         finalReviewDone: finalAcked.has(String(d.employee_id)),
         finalReviewLogged: finalLogged.has(String(d.employee_id)),
         finalReviewMgrAcked: finalMgrAcked.has(String(d.employee_id)),
+        rmL2ConfirmedOneToOne: l2Confirmed.has(String(d.employee_id)),
         selfSubmitted: d.self_score != null,
         selfScore: d.self_score == null ? null : Number(d.self_score),
         rmL1Score: d.rm_l1_score == null ? null : Number(d.rm_l1_score),
@@ -1371,20 +1471,25 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    * shape of bug this module has already had twice.
    */
   const acknowledge = async (id: string) => {
+    if (!companyId) { setMsg(NO_COMPANY); return }
     setSaving(true); setMsg(null)
-    const ack = await supabase.from('pms_one_to_one')
-      .update({ manager_ack: true, manager_ack_at: new Date().toISOString() })
-      .eq('employee_id', id).eq('period_id', period!.id)
-      .eq('discussion_type', 'KRA_SETTING')
-      .select('id')
-    if (ack.error) {
-      console.error('[pms] manager acknowledge refused:', ack.error)
+    /**
+     * RM L1'S TICK, through the shared recorder.
+     *
+     * It used to UPDATE a KRA_SETTING row and refuse if none existed — "they
+     * log it from their own Performance screen" — which made the manager
+     * dependent on the employee having filled a form. The employee's tick
+     * creates that row now, but the manager's tick must also be able to
+     * create it: a conversation the manager held and the employee has not yet
+     * confirmed is still a conversation, and the lock will simply wait for the
+     * second acknowledgement rather than for a form.
+     */
+    const rec = await recordOneToOne({
+      companyId, periodId: period!.id, employeeId: id,
+      managerId: employeeId, stage: 'RM_L1', today,
+    })
+    if (rec === 'ERROR') {
       setSaving(false); setMsg(SAVE_FAILED('acknowledgement')); return
-    }
-    if (!ack.data?.length) {
-      setSaving(false)
-      setMsg('There is no KRA-setting discussion logged for them yet, so there is nothing to acknowledge. They log it from their own Performance screen.')
-      return
     }
     const lock = await supabase.rpc('pms_lock_kras',
       { p_employee_id: id, p_period_id: period!.id, p_manager_id: employeeId })
@@ -1445,13 +1550,13 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   const logFinalReview = async (id: string, points: string) => {
     if (!companyId) { setMsg(NO_COMPANY); return }
     setSaving(true); setMsg(null)
-    const r = await insertFinalReview({
+    const r = await recordOneToOne({
       companyId, periodId: period!.id, employeeId: id,
-      managerId: employeeId, today, points,
+      managerId: employeeId, stage: 'HOD', today,
     })
     setSaving(false)
-    setMsg(r === 'CREATED' ? FINAL_REVIEW_LOGGED
-         : r === 'ALREADY' ? 'A final review is already logged for them. Acknowledge that one instead.'
+    setMsg(r === 'RECORDED' ? FINAL_REVIEW_LOGGED
+         : r === 'ALREADY' ? 'You have already confirmed the final review for them.'
          : SAVE_FAILED('final review'))
     reload(); reloadRoster()
   }
@@ -1496,6 +1601,48 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    *
    * Read from the frozen chain on the row, same as everything else here.
    */
+  /**
+   * THE EMPLOYEE'S FILLED FORM, loaded on demand.
+   *
+   * On demand and not with the queue: a manager with 30 reportees would
+   * otherwise pull 30 KRA sets and 30 sets of self ratings to render a table
+   * of counts. Opened one at a time, which is how it is read.
+   */
+  const [kraFor, setKraFor] = useState<string | null>(null)
+  const [kraLines, setKraLines] = useState<KraLine[] | null>(null)
+  const openKras = useCallback(async (id: string) => {
+    setKraFor(id); setKraLines(null)
+    if (!period) return
+    const [g, rv] = await Promise.all([
+      supabase.from('pms_employee_goals')
+        .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage,status,source')
+        .eq('employee_id', id).eq('period_id', period.id).order('seq_no'),
+      // The employee's OWN rating, which is the half a manager most needs to
+      // read before approving: rater_role SELF, not their own rating of them.
+      supabase.from('pms_reviews')
+        .select('goal_id,achievement_value,rating,comments')
+        .eq('employee_id', id).eq('period_id', period.id).eq('rater_role', 'SELF'),
+    ])
+    const selfBy = new Map((rv.data ?? []).map(r => {
+      const x = r as { goal_id: string; achievement_value?: string; rating?: number; comments?: string }
+      return [String(x.goal_id), x]
+    }))
+    setKraLines((g.data ?? []).map(row => {
+      const x = row as Record<string, unknown>
+      const s = selfBy.get(String(x.id))
+      return {
+        seqNo: Number(x.seq_no), title: String(x.kra_title ?? ''),
+        kpi: (x.kpi_metric as string) ?? null, target: (x.target_value as string) ?? null,
+        category: (x.category as string) ?? null,
+        weightage: Number(x.weightage) || 0,
+        status: (x.status as string) ?? null, source: (x.source as string) ?? null,
+        achievement: s?.achievement_value ?? null,
+        selfRating: s?.rating == null ? null : Number(s.rating),
+        selfComment: s?.comments ?? null,
+      }
+    }))
+  }, [period])
+
   const chainRoleFor = useCallback((id: string) => {
     const m = rows.find(r => r.employeeId === id)
     return m ? rungFor(m, employeeId) : null
@@ -1569,7 +1716,34 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       setMsg('You are not recorded in this employee’s chain for this period, so you cannot approve it.')
       return
     }
+    if (!companyId) { setMsg(NO_COMPANY); return }
     setSaving(true); setMsg(null)
+
+    /**
+     * THE TICK IS RECORDED BEFORE THE APPROVAL, not after.
+     *
+     * ChainApprovals will not call this until the checkbox is ticked, so the
+     * confirmation is already given by the time we are here — but the ORDER
+     * matters beyond bookkeeping. At RM L1 the approval calls pms_lock_kras,
+     * which counts a KRA_SETTING row carrying BOTH acknowledgements; recording
+     * afterwards would mean the lock looks for a row that does not exist yet
+     * and refuses, and the manager would see "not locked" on an approval that
+     * had just succeeded.
+     *
+     * A failure here stops the approval rather than being reported alongside
+     * it: approving without the conversation on record is the thing the tick
+     * exists to prevent.
+     */
+    const rec = await recordOneToOne({
+      companyId, periodId: period!.id, employeeId: id,
+      managerId: employeeId, stage: myRung, today,
+    })
+    if (rec === 'ERROR') {
+      setSaving(false)
+      setMsg('The one-to-one could not be recorded, so nothing was approved. Try again.')
+      return
+    }
+
     const r = await supabase.rpc('pms_chain_approve', {
       p_employee_id: id, p_period_id: period!.id,
       p_actor_id: employeeId, p_actor_role: myRung,
@@ -1747,6 +1921,12 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                         viewerId={employeeId}
                                         chain={policy?.approval_chain as Chain | undefined ?? 'SELF_RM1_RM2_HOD'}
                                         onApprove={approveInChain}
+                                        onOpenKras={openKras}
+                                        kraDetail={kraFor && rows.find(r => r.employeeId === kraFor)
+                                          ? <KraDetail member={rows.find(r => r.employeeId === kraFor)!}
+                                                       lines={kraLines}
+                                                       onClose={() => { setKraFor(null); setKraLines(null) }} />
+                                          : null}
                                         bands={bands.length ? bands : undefined} />}
       {tab === 'rate' && (
         <RateTab flagRules={flagRules} rules={rules} bands={bands.length ? bands : undefined}
@@ -1788,13 +1968,13 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
   const logFinalReview = async (id: string) => {
     if (!companyId) { setMsg(NO_COMPANY); return }
     setSaving(true); setMsg(null)
-    const r = await insertFinalReview({
+    const r = await recordOneToOne({
       companyId, periodId: period!.id, employeeId: id,
-      managerId: employeeId, today, points: '',
+      managerId: employeeId, stage: 'HOD', today,
     })
     setSaving(false)
-    setMsg(r === 'CREATED' ? FINAL_REVIEW_LOGGED
-         : r === 'ALREADY' ? 'A final review is already logged for them. Acknowledge that one instead.'
+    setMsg(r === 'RECORDED' ? FINAL_REVIEW_LOGGED
+         : r === 'ALREADY' ? 'You have already confirmed the final review for them.'
          : SAVE_FAILED('final review'))
     reloadRoster()
   }

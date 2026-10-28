@@ -27,7 +27,8 @@ import { teamQueue, finaliseQueue, teamStats, distribution,
 import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
          DEFAULT_BANDS, type Band, type Line } from '@/lib/pms/scoring'
-import { canPublishResult, type Log } from '@/lib/pms/oneToOne'
+import { canPublishResult, CONFIRM_LABEL, CONFIRM_WHY,
+         type Log, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
 import { approvalFinalises, mayReject, rejectDestination, remarkOk, MIN_REMARK,
@@ -251,7 +252,7 @@ export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES, fl
  * they are making before they type the remark, not after.
  */
 function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
-                          onApprove, onReject, bands }: {
+                          onApprove, onReject, onOpenKras, bands }: {
   members: TeamMember[]; today: string
   flagRules?: FlagRules
   rules: Rules
@@ -262,11 +263,26 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
   chain: Chain
   onApprove?: (id: string, rating?: number) => void
   onReject?: (id: string, remark: string) => void
+  /** Open the employee's filled KRA form. See KraDetail. */
+  onOpenKras?: (id: string) => void
   bands?: Band[]
 }) {
   const [remark, setRemark] = useState<Record<string, string>>({})
   const [rating, setRating] = useState<Record<string, string>>({})
   const [rejecting, setRejecting] = useState<Record<string, boolean>>({})
+  /**
+   * THE ONE-TO-ONE TICK, per row.
+   *
+   * Requested: a mandatory checkbox at every stage confirming the discussion
+   * happened, which records the log when it is ticked. Per row and not per
+   * screen — a manager clears a queue of eight people and the confirmation is
+   * about one of them.
+   *
+   * Not needed to REJECT. Sending a set back with a remark is not a claim that
+   * a conversation happened, and demanding one would stop a manager returning
+   * an obviously wrong set until they had held a meeting about it.
+   */
+  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({})
 
   // Only what is actually with this person, on the rung they hold for THAT
   // employee. A manager holding RM_L1 must not be offered an approval on a set
@@ -296,6 +312,14 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
           const held = heldBy(r.member)
           const finalises = approvalFinalises(chain, myStage, held)
           const canReject = mayReject(myStage)
+          // Already on record: RM L1's tick completes the KRA one-to-one the
+          // employee started, so for them "confirmed" means the row carries
+          // the manager's half. The later rungs have their own rows.
+          const alreadyConfirmed = myStage === 'RM_L1'
+            ? r.member.oneToOneDone === true
+            : myStage === 'HOD' ? r.member.finalReviewMgrAcked === true
+            : r.member.rmL2ConfirmedOneToOne === true
+          const mayApprove = alreadyConfirmed || !!confirmed[id]
           const rk = remark[id] ?? ''
           const rt = rating[id] ?? ''
           const num = Number(rt)
@@ -349,17 +373,42 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
                          value={rt}
                          onChange={e => setRating(p => ({ ...p, [id]: e.target.value }))} />
                 )}
+                {/* Ticking this is what records the log — see
+                    recordOneToOne. Already-confirmed rows show it ticked and
+                    disabled rather than hiding it, so the manager can see the
+                    confirmation stands rather than wondering whether it
+                    saved. */}
+                <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start',
+                                cursor: alreadyConfirmed ? 'default' : 'pointer',
+                                lineHeight: 1.5 }}>
+                  <input type="checkbox" style={{ marginTop: 2, flex: '0 0 auto' }}
+                         checked={alreadyConfirmed || !!confirmed[id]}
+                         disabled={alreadyConfirmed}
+                         onChange={e => setConfirmed(p => ({ ...p, [id]: e.target.checked }))} />
+                  <span className="k">{CONFIRM_LABEL[myStage as ConfirmStage]}</span>
+                </label>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <button className="btn sm" type="button"
-                          disabled={!onApprove || !ratingOk}
+                          disabled={!onApprove || !ratingOk || !mayApprove}
+                          title={mayApprove ? undefined : CONFIRM_WHY[myStage as ConfirmStage]}
                           onClick={() => onApprove?.(id, finalises ? num : undefined)}>
-                    {finalises ? 'Approve & finalise' : 'Approve'}
+                    {!mayApprove ? 'Confirm the one-to-one first'
+                      : finalises ? 'Approve & finalise' : 'Approve'}
                   </button>
                   {canReject && (
                     <button className="btn ghost sm" type="button"
                             disabled={!onReject}
                             onClick={() => setRejecting(p => ({ ...p, [id]: true }))}>
                       Reject
+                    </button>
+                  )}
+                  {/* Read what you are approving. The queue shows counts; the
+                      text of the KRAs lived only on Rate My Team, which an L2
+                      and a HOD do not use. */}
+                  {onOpenKras && (
+                    <button className="btn ghost sm" type="button"
+                            onClick={() => onOpenKras(id)}>
+                      View their form
                     </button>
                   )}
                 </div>
@@ -380,13 +429,17 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
 export function ApproveTab({ members, today, onSendBack, onAcknowledge,
                              onAcknowledgeFinalReview, rules = DEFAULT_RULES, flagRules,
                              viewerId = '', chain = 'SELF_RM1_RM2_HOD',
-                             onApprove, bands}: {
+                             onApprove, onOpenKras, kraDetail, bands}: {
   /** The viewer's id and the policy's chain — see ChainApprovals. Defaulted so
    *  a call site that has not been updated renders the tab without the
    *  approval card rather than crashing. */
   viewerId?: string
   chain?: Chain
   onApprove?: (id: string, rating?: number) => void
+  /** Open and render the employee's filled KRA form. The panel is rendered by
+   *  the parent so one loader serves every surface that wants it. */
+  onOpenKras?: (id: string) => void
+  kraDetail?: React.ReactNode
   bands?: Band[]
   /**
    * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
@@ -433,7 +486,9 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
           cannot be undone: approving at the last rung settles the rating. */}
       <ChainApprovals members={members} today={today} flagRules={flagRules}
                       rules={rules} viewerId={viewerId} chain={chain}
-                      onApprove={onApprove} onReject={onSendBack} bands={bands} />
+                      onApprove={onApprove} onReject={onSendBack}
+                      onOpenKras={onOpenKras} bands={bands} />
+      {kraDetail}
       <Card title="Waiting on the discussion"
             sub="Sets to check, and the one-to-ones that lock them.">
         <QueueTable
@@ -496,6 +551,109 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
         </Card>
       )}
     </>
+  )
+}
+
+// ── the form the employee actually filled ────────────────────────────────
+
+export interface KraLine {
+  seqNo: number
+  title: string
+  kpi?: string | null
+  target?: string | null
+  category?: string | null
+  weightage: number
+  status?: string | null
+  source?: string | null
+  /** What the employee said they delivered, and how they rated it. */
+  achievement?: string | null
+  selfRating?: number | null
+  selfComment?: string | null
+}
+
+/**
+ * §(none) — requested: "there should be a detailed view of kra form filled by
+ * employee to l1, l2 and hod on clicking it".
+ *
+ * WHY THE QUEUES WERE NOT ENOUGH. Every manager surface showed COUNTS — four
+ * KRAs, weightage 100, self score 3.55 — and the only place the actual text
+ * appeared was Rate My Team, which an L2 and a HOD do not use for approving.
+ * So the people deciding whether to approve a set could see that it totalled
+ * 100 and not what was in it. A chain that can reject with a remark is worth
+ * little if the rejecter cannot read what they are rejecting.
+ *
+ * READ-ONLY, deliberately. Editing a reportee's KRA is a different act with
+ * different consequences — it changes what somebody is measured against after
+ * they agreed it — and it belongs behind its own control, not inside a view
+ * opened to have a look. The chain's edit path is the send-back with a remark.
+ */
+export function KraDetail({ member, lines, loading, onClose }: {
+  member: TeamMember
+  lines: KraLine[] | null
+  loading?: boolean
+  onClose?: () => void
+}) {
+  const total = (lines ?? []).reduce((s, l) => s + (Number(l.weightage) || 0), 0)
+  const rated = (lines ?? []).filter(l => l.selfRating != null).length
+
+  return (
+    <Card title={`${member.name} — ${member.code}`}
+          sub={`The KRA form as they filled it. ${lines?.length ?? 0} KRAs, weightage ${total}, ${rated} self-rated.`}>
+      {loading || lines === null ? <div className="k">Loading their form…</div>
+        : !lines.length ? (
+          <div style={{ padding: '18px 14px', textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Nothing written yet</div>
+            <div className="k">They have not saved any KRAs for this period.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {lines.map(l => (
+              <div key={l.seqNo} className="card" style={{ margin: 0 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline',
+                              flexWrap: 'wrap', marginBottom: 6 }}>
+                  <b>{l.seqNo}. {l.title || <span className="k">untitled</span>}</b>
+                  <span className="pill p-brand">{l.weightage}%</span>
+                  {l.category && <span className="pill p-grey">{l.category.toLowerCase()}</span>}
+                  {l.status && <span className={`pill ${l.status === 'LOCKED' ? 'p-green' : 'p-amber'}`}>
+                    {l.status.replace(/_/g, ' ').toLowerCase()}
+                  </span>}
+                  {/* CARRIED_FORWARD is worth surfacing: a set that is last
+                      quarter's, unchanged, is a different thing to approve
+                      than one written fresh. */}
+                  {l.source === 'CARRIED_FORWARD' &&
+                    <span className="pill p-blue">carried forward</span>}
+                </div>
+                <div className="grid g2" style={{ gap: 8 }}>
+                  <div>
+                    <div className="lbl">How it is measured</div>
+                    <div className="k">{l.kpi || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="lbl">Target</div>
+                    <div className="k">{l.target || '—'}</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <div className="lbl">What they say they delivered</div>
+                  <div className="k">{l.achievement || <i>Nothing recorded.</i>}</div>
+                </div>
+                <div style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                  <div className="lbl" style={{ margin: 0 }}>Their rating</div>
+                  {l.selfRating == null
+                    ? <span className="k">not rated</span>
+                    : <b>{l.selfRating}</b>}
+                  {l.selfComment && <span className="k">— {l.selfComment}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      {onClose && (
+        <div className="btnrow">
+          <button className="btn ghost sm" type="button" onClick={onClose}>Close</button>
+        </div>
+      )}
+    </Card>
   )
 }
 

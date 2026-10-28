@@ -71,6 +71,17 @@ export interface TeamMember extends Employment {
    */
   finalReviewMgrAcked?: boolean
   /**
+   * Has RM L2 confirmed their one-to-one about these KRAs?
+   *
+   * Its own row, unlike RM L1's: the KRA-setting conversation is one meeting
+   * with two acknowledgements, while an L2's review is a separate
+   * conversation. The schema has carried manager_role ('RM_L1' | 'RM_L2' |
+   * 'HOD') since 066 and nothing had ever written it — every row in the
+   * database says RM_L1 because that is the column default — so this is the
+   * first thing that can tell the stages apart.
+   */
+  rmL2ConfirmedOneToOne?: boolean
+  /**
    * Are the weightages actually locked — from pms_employee_goals.status, not
    * inferred from the one-to-one.
    *

@@ -206,7 +206,12 @@ export function rejectDestination(
 export function rungFor(
   m: { rmL1Id?: string | null; rmL2Id?: string | null; hodId?: string | null },
   viewerId: string,
-): Stage | null {
+  // NARROWER THAN Stage, because this can only ever return a rung a PERSON
+  // occupies. HR is a role with nobody named in the snapshot and DONE is not a
+  // rung at all, so widening the return type to Stage made every caller handle
+  // two cases that cannot happen — and one of them (the one-to-one recorder,
+  // which takes a ConfirmStage) could not accept the value at all.
+): 'RM_L1' | 'RM_L2' | 'HOD' | null {
   if (!viewerId) return null
   if (m.rmL1Id && m.rmL1Id === viewerId) return 'RM_L1'
   if (m.rmL2Id && m.rmL2Id === viewerId) return 'RM_L2'

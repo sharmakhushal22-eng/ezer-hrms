@@ -28,6 +28,7 @@ import { score, gap, byCategory, bandForScore, bandFor, DEFAULT_BANDS, type Band
          type Line } from '@/lib/pms/scoring'
 import { STAGES, humanDate, type StageKey } from '@/lib/pms/cycle'
 import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
+import { CONFIRM_LABEL, CONFIRM_WHY } from '@/lib/pms/oneToOne'
 
 export type EmpTab = 'dashboard' | 'kras' | 'oneToOne' | 'self' | 'result' | 'analytics'
 
@@ -248,7 +249,7 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
 
 // ── §3.2 My KRAs ─────────────────────────────────────────────────────────
 
-export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom, self, onSelfChange, bands = DEFAULT_BANDS, rateRequired = false, selfSubmitted = false}: {
+export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom, self, onSelfChange, bands = DEFAULT_BANDS, rateRequired = false, selfSubmitted = false, confirmOneToOne, onConfirmOneToOne, oneToOneRequired = false, oneToOneAlready = false}: {
   /** §3's merge: the employee rates each KRA as they write it, and the KRAs
    *  and the ratings go to the manager together. Optional, so a caller that
    *  has not wired rating still renders. */
@@ -281,6 +282,21 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   locked: boolean
   lockGate: { open: boolean; because: string }
   onSubmit: () => void
+  /**
+   * THE TICK THAT RECORDS THE ONE-TO-ONE. Requested: the log should be
+   * automatic — a mandatory checkbox at each stage rather than a separate
+   * form. The employee's half is here, on the submit, because that is the
+   * moment they are asserting the conversation happened.
+   */
+  confirmOneToOne?: boolean
+  onConfirmOneToOne?: (v: boolean) => void
+  /** pms_policies.one_to_one_mandatory. When false the tick is not required
+   *  and is not shown — a policy that does not ask for the conversation must
+   *  not block a submission on confirming it. */
+  oneToOneRequired?: boolean
+  /** Already on record from a previous submission or the detailed form, in
+   *  which case there is nothing to confirm again. */
+  oneToOneAlready?: boolean
   saving?: boolean
 }) {
   const check = checkKras(kras)
@@ -472,13 +488,41 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
             the self rating outstanding is the normal state at §1 Stage 4, and
             hiding the button there left the employee with no way to submit the
             rating the stage exists for. */}
+        {/* THE ONE-TO-ONE, CONFIRMED HERE RATHER THAN ON A SEPARATE FORM.
+            It used to live in its own tab, which is why FINAL_REVIEW rows
+            existed for 7 of 395 enrolments: a form nobody is standing in
+            front of does not get filled. Ticking this records the
+            KRA_SETTING log with the employee's acknowledgement, and the
+            manager's own tick completes the same row — one conversation, two
+            acknowledgements, which is what pms_lock_kras checks.
+
+            Hidden when the policy does not ask for the conversation, and once
+            it is already on record. */}
+        {(!locked || !selfSubmitted) && oneToOneRequired && !oneToOneAlready && onConfirmOneToOne && (
+          <div className="card" style={{ marginBottom: 10 }}>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start',
+                            cursor: 'pointer', lineHeight: 1.6 }}>
+              <input type="checkbox" checked={!!confirmOneToOne}
+                     style={{ marginTop: 3, flex: '0 0 auto' }}
+                     onChange={e => onConfirmOneToOne(e.target.checked)} />
+              <span>
+                <b>{CONFIRM_LABEL.EMPLOYEE}</b>
+                <div className="k" style={{ marginTop: 4 }}>{CONFIRM_WHY.EMPLOYEE}</div>
+              </span>
+            </label>
+          </div>
+        )}
+
         {(!locked || !selfSubmitted) && (
           <div className="btnrow">
             <button className="btn" type="button"
-                    disabled={(locked ? unrated > 0 : !canGo) || selfSubmitted || saving}
+                    disabled={(locked ? unrated > 0 : !canGo) || selfSubmitted || saving
+                              || (oneToOneRequired && !oneToOneAlready && !confirmOneToOne)}
                     onClick={onSubmit}>
               {saving ? 'Saving…'
                 : selfSubmitted ? 'Already sent'
+                : (oneToOneRequired && !oneToOneAlready && !confirmOneToOne)
+                  ? 'Confirm the one-to-one above first'
                 // Locked: the KRAs are settled, so only the rating is in play
                 // and the KRA validation no longer has anything to say.
                 : locked
