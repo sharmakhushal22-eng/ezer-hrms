@@ -85,6 +85,9 @@ interface Policy {
   /** §8's NEW_JOINER cutoff. Configurable per policy and, until now,
    *  enforced nowhere — DEFAULT_FLAG_RULES's 30 days always won. */
   new_joiner_cutoff_days?: number | null
+  /** §13.2(3): carry the previous period's locked KRAs forward. Default true
+   *  in the schema, so an absent value means ON rather than OFF. */
+  carry_forward_kras?: boolean | null
   /** The KRA rules. DEFAULT_RULES (4/10/100/5) was being used as though it
    *  were the live rule in the employee screen, the manager's approve check
    *  and the cycle header — so an admin could change min_kra_count and
@@ -176,7 +179,7 @@ function usePeriod(employeeId: string) {
       const po = await supabase.from('pms_policies')
         .select('approval_chain,who_can_finalise,final_review_one_to_one,'
               + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra,'
-              + 'new_joiner_cutoff_days')
+              + 'new_joiner_cutoff_days,carry_forward_kras')
         .eq('id', pid).maybeSingle()
       if (po.error) console.error('[pms] could not read the policy:', po.error)
       setPolicy(po.error ? null : (po.data as Policy | null))
@@ -374,7 +377,7 @@ export default function Performance({ employeeId }: { employeeId: string }) {
 // ── the employee's own side ──────────────────────────────────────────────
 
 function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
-  const { period, overall, loading, reload, companyId, managerId, bands, rules } = usePeriod(employeeId)
+  const { period, overall, loading, reload, companyId, managerId, bands, rules, policy } = usePeriod(employeeId)
   const [who, setWho] = useState<Who>({ name: '', code: '' })
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
   /** Last period's locked KRAs, offered as this period's starting point.
@@ -428,7 +431,13 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
      * the one-to-one, and that change is what pms_one_to_one.weightage_changes
      * now records.
      */
-    if (!(g.data ?? []).length && companyId) {
+    // §13.2(3) makes this a policy choice defaulting to ON. `!== false` and
+    // not `=== true`: the column is NOT NULL DEFAULT true, but the policy may
+    // not have loaded yet on first paint, and treating "not loaded" as OFF
+    // would flash an empty form at an employee whose KRAs were about to
+    // appear.
+    const mayCarry = policy?.carry_forward_kras !== false
+    if (mayCarry && !(g.data ?? []).length && companyId) {
       const prev = await supabase.from('pms_periods')
         .select('id,period_code,period_start')
         .eq('company_id', companyId).lt('period_start', period.period_start ?? '9999-12-31')

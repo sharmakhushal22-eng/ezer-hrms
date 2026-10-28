@@ -246,6 +246,7 @@ function PolicyPanel({ policies, companies, reload }: {
           ['final_review_one_to_one', 'Final review is a one-to-one'],
           ['include_notice_period',   'Include people on notice'],
           ['include_exited',          'Include people who have left'],
+          ['carry_forward_kras',      'Carry KRAs forward each cycle'],
           ['applies_to_all',          'Applies to everybody'],
           ['is_active',               'Policy is active'],
         ] as const).map(([k, label]) => (

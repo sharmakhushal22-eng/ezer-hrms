@@ -49,6 +49,11 @@ const POLICY_COLS = [
   'final_review_one_to_one', 'approval_chain', 'who_can_finalise',
   'self_rating_mandatory', 'rating_scale_type', 'new_joiner_cutoff_days',
   'include_notice_period', 'include_exited', 'is_active',
+  // §13.2(3). Allowlisted rather than assumed: this file names every column a
+  // caller may write, so a new policy field is inert until it is listed here
+  // — which is the right default for a table that decides how everybody is
+  // rated, but it does mean the list has to be kept up.
+  'carry_forward_kras',
 ] as const
 
 /** A period's own windows, and its status.
