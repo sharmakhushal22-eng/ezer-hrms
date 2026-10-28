@@ -72,6 +72,11 @@ export interface PolicyConfig {
    *  imply it is describing all of them. */
   policyName?: string | null
   companyName?: string | null
+  /** Identity, so the tab can offer a choice between policies rather than
+   *  silently describing whichever one came back first — the bug that made
+   *  edits in Setup & Controls look as though they had not applied. */
+  policyId?: string | null
+  companyId?: string | null
   policyCount?: number
   minKra: number
   maxKra: number
@@ -228,10 +233,15 @@ const FREQ_LABEL: Record<Frequency, string> = {
  * `policy` is optional so the screen still renders before the first load, and
  * says so rather than printing confident defaults.
  */
-export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy }: {
+export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy,
+                            choices = [], onChoosePolicy }: {
   freq: Frequency; onFreq: (f: Frequency) => void
   fyStart: string; fyLabel: string; today: string
   policy?: PolicyConfig | null
+  /** Every policy in scope. More than one means this tab MUST let the admin
+   *  say which it is describing — see the note on the selector below. */
+  choices?: PolicyConfig[]
+  onChoosePolicy?: (policyId: string) => void
 }) {
   const yn = (v: boolean | null | undefined, yes: string, no: string) =>
     v === null || v === undefined ? '—' : v ? yes : no
@@ -244,13 +254,31 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy }: {
           {/* NOT "All companies". Three policies exist, one per company, and
               this screen reads one of them — saying "all" was a claim it could
               not support and hid the fact that the others may differ. */}
-          <Fixed label="Policy shown here"
-                 value={policy?.policyName
-                   ? `${policy.policyName}${policy.companyName ? ' · ' + policy.companyName : ''}`
-                   : '—'}
-                 hint={policy?.policyCount && policy.policyCount > 1
-                   ? `One of ${policy.policyCount} policies. The others may differ — see Policy Builder.`
-                   : undefined} />
+          {/* A SELECTOR, NOT A LABEL, once there is more than one policy.
+              This tab used to describe whichever policy came back first from
+              an unordered query, with no company shown — so editing one
+              company's policy in Setup & Controls and returning here showed a
+              different company's settings, unchanged, and the edit looked lost.
+              The name alone cannot distinguish them: all three are called
+              "Standard Quarterly". */}
+          {choices.length > 1 && onChoosePolicy ? (
+            <Field label="Policy shown here"
+                   hint={`${choices.length} policies exist and they differ. Pick the one you edited.`}>
+              <select value={policy?.policyId ?? ''}
+                      onChange={e => onChoosePolicy(e.target.value)}>
+                {choices.map(c => (
+                  <option key={c.policyId ?? ''} value={c.policyId ?? ''}>
+                    {c.companyName ? `${c.companyName} · ` : ''}{c.policyName ?? 'Policy'}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : (
+            <Fixed label="Policy shown here"
+                   value={policy?.policyName
+                     ? `${policy.companyName ? policy.companyName + ' · ' : ''}${policy.policyName}`
+                     : '—'} />
+          )}
           <Fixed label="Financial year" value={fyLabel} hint={`Starts ${shortDate(fyStart)}`} />
           {/* A preview control, and now labelled as one. It sat beside real
               settings reading just "Frequency", so changing it looked like a

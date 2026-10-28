@@ -15,7 +15,7 @@
 // swallow. A blank page here would read as a broken feature rather than a
 // pending migration, and someone would spend an afternoon debugging the app.
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { companyFilter, canSeeScreen } from '@/lib/rms/resolve'
@@ -99,8 +99,36 @@ export default function PmsPage() {
    *  the tab block, and a banner inside it would vanish the moment it was
    *  set — which is what happened to the first successful commit. */
   const [commitNote, setCommitNote] = useState<string | null>(null)
-  /** §6.1's values, read from the policy rather than hardcoded. */
-  const [config, setConfig] = useState<PolicyConfig | null>(null)
+  /**
+   * §6.1's values, read from the policy rather than hardcoded — one entry per
+   * policy, because there are three and they differ. `config` below is
+   * whichever one the admin has chosen to look at.
+   */
+  const [configs, setConfigs] = useState<PolicyConfig[]>([])
+  const [configPolicyId, setConfigPolicyId] = useState<string | null>(null)
+  const [companyNames, setCompanyNames] = useState<Record<string, string>>({})
+
+  /**
+   * The policy §6.1 is describing: the one the admin chose, or the first.
+   *
+   * Named here rather than stored, so a reload cannot leave the screen
+   * describing a policy that no longer exists — and so the company name is
+   * resolved in one place instead of being baked into each entry at fetch
+   * time, when the names had not loaded yet.
+   */
+  const withCompany = useCallback((c: PolicyConfig): PolicyConfig => ({
+    ...c, companyName: c.companyId ? companyNames[c.companyId] ?? null : null,
+  }), [companyNames])
+
+  const config = useMemo(() => {
+    if (!configs.length) return null
+    const hit = configs.find(c => c.policyId === configPolicyId) ?? configs[0]
+    return withCompany(hit)
+  }, [configs, configPolicyId, withCompany])
+
+  /** Every policy, labelled, for the selector. */
+  const configChoices = useMemo(
+    () => configs.map(withCompany), [configs, withCompany])
   const [deptNames, setDeptNames] = useState<Record<string, string>>({})
   const [freq, setFreq] = useState<Frequency>('QUARTERLY')
   const [policies, setPolicies] = useState<Policy[]>([])
@@ -167,7 +195,12 @@ export default function PmsPage() {
               + ' self_rating_mandatory, new_joiner_cutoff_days,'
               + ' include_notice_period, include_exited')
       if (co) polQ = polQ.eq('company_id', co)
-      const pol = await polQ.limit(50)
+      // ORDER BY, because "the first policy" was meaningless without one.
+      // Postgres makes no promise about unordered row order, and an UPDATE
+      // physically moves a row — so saving a policy could change which one
+      // this screen called first. Ordered by company then name, which is also
+      // the order the selector lists them in.
+      const pol = await polQ.order('company_id').order('policy_name').limit(50)
       if (!pol.error) {
         setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
           id: String(r.id), name: String(r.policy_name ?? 'Policy'),
@@ -178,33 +211,79 @@ export default function PmsPage() {
           minWeightagePerKra: Number(r.min_weightage_per_kra) || 5,
           whoCanFinalise: (r.who_can_finalise as Policy['whoCanFinalise']) ?? 'RM1_RM2_HOD',
         })))
-        const first = (pol.data ?? [])[0] as unknown as Record<string, unknown> | undefined
-        if (first?.frequency) setFreq(first.frequency as Frequency)
-        // The config screen reads ONE policy. With more than one per company
-        // that is a real limitation, and §6.2's Policy Builder is the screen
-        // that lists them all — so this takes the first and the config screen
-        // says which policy it is describing rather than implying "the" config.
-        setConfig(first ? {
-          policyName: (first.policy_name as string) ?? null,
-          companyName: null,   // filled below once department/company names load
-          policyCount: (pol.data ?? []).length,
-          minKra: Number(first.min_kra_count) || 4,
-          maxKra: Number(first.max_kra_count) || 10,
-          totalWeightage: Number(first.total_weightage) || 100,
-          minWeightagePerKra: Number(first.min_weightage_per_kra) || 5,
-          kraCreatedBy: (first.kra_created_by as string) ?? null,
-          oneToOneMandatory: first.one_to_one_mandatory as boolean ?? null,
-          midPeriodCheckin: first.mid_period_checkin as boolean ?? null,
-          finalReviewOneToOne: first.final_review_one_to_one as boolean ?? null,
-          approvalChain: (first.approval_chain as string) ?? null,
-          whoCanFinalise: (first.who_can_finalise as string) ?? null,
-          ratingScaleType: (first.rating_scale_type as string) ?? null,
-          selfRatingMandatory: first.self_rating_mandatory as boolean ?? null,
-          newJoinerCutoffDays: first.new_joiner_cutoff_days == null
-            ? null : Number(first.new_joiner_cutoff_days),
-          includeNoticePeriod: first.include_notice_period as boolean ?? null,
-          includeExited: first.include_exited as boolean ?? null,
-        } : null)
+        /**
+         * ONE CONFIG PER POLICY, not one config full stop.
+         *
+         * THE BUG THIS FIXES, reported twice. Every company is seeded with a
+         * policy called "Standard Quarterly" — three of them, one per company.
+         * This screen built its config from row [0] of an UNORDERED query, and
+         * companyFilter returns NULL for a cross-company admin, so the query
+         * was unfiltered and [0] was whichever of the three Postgres handed
+         * back first. Edit Sharma Sons' policy in Setup & Controls, come back
+         * here, and you are looking at Sharma Trading's — unchanged, because
+         * it was never the one you edited. The edit DID save; the screen was
+         * reading a different row.
+         *
+         * Worse than merely arbitrary: an UPDATE rewrites a row and moves it
+         * in the heap, so [0] can change identity after a save. The screen
+         * could show you a different policy BECAUSE you saved.
+         *
+         * Two things were needed. An ORDER BY, so "first" means something
+         * stable. And a way to look at the policy you actually edited, which
+         * is what the selector below is for — companyName was already read by
+         * ConfigTab and was hardcoded null with a comment claiming it was
+         * "filled below", which nothing did.
+         */
+        const polRows = ((pol.data ?? []) as unknown as Record<string, unknown>[])
+        const toConfig = (p: Record<string, unknown>): PolicyConfig => ({
+          policyId: String(p.id),
+          policyName: (p.policy_name as string) ?? null,
+          companyName: null,   // filled in by the effect once companies load
+          companyId: (p.company_id as string) ?? null,
+          policyCount: polRows.length,
+          minKra: Number(p.min_kra_count) || 4,
+          maxKra: Number(p.max_kra_count) || 10,
+          totalWeightage: Number(p.total_weightage) || 100,
+          minWeightagePerKra: Number(p.min_weightage_per_kra) || 5,
+          kraCreatedBy: (p.kra_created_by as string) ?? null,
+          oneToOneMandatory: p.one_to_one_mandatory as boolean ?? null,
+          midPeriodCheckin: p.mid_period_checkin as boolean ?? null,
+          finalReviewOneToOne: p.final_review_one_to_one as boolean ?? null,
+          approvalChain: (p.approval_chain as string) ?? null,
+          whoCanFinalise: (p.who_can_finalise as string) ?? null,
+          ratingScaleType: (p.rating_scale_type as string) ?? null,
+          selfRatingMandatory: p.self_rating_mandatory as boolean ?? null,
+          newJoinerCutoffDays: p.new_joiner_cutoff_days == null
+            ? null : Number(p.new_joiner_cutoff_days),
+          includeNoticePeriod: p.include_notice_period as boolean ?? null,
+          includeExited: p.include_exited as boolean ?? null,
+        })
+        setConfigs(polRows.map(toConfig))
+
+        /**
+         * THE COMPANY NAMES, which nothing had ever fetched.
+         *
+         * ConfigTab already renders `policy.companyName` beside the policy
+         * name, and PolicyConfig has carried the field all along — it was
+         * hardcoded to null with the comment "filled below once
+         * department/company names load", and there was no such code anywhere
+         * in this file. So the screen showed "Standard Quarterly" with nothing
+         * to distinguish it from the other two policies of the same name, and
+         * an admin had no way to notice they were looking at a different
+         * company's settings than the ones they had just edited.
+         */
+        let coQ = supabase.from('companies').select('id, company_name')
+        if (co) coQ = coQ.eq('id', co)
+        const cos = await coQ.limit(200)
+        if (!cos.error) {
+          setCompanyNames(Object.fromEntries(
+            ((cos.data ?? []) as unknown as { id: string; company_name?: string }[])
+              .map(c => [String(c.id), String(c.company_name ?? '')])))
+        }
+        // The frequency preview follows whichever policy is being shown, which
+        // the selector decides; seeded from the first so the screen is not
+        // blank before anything is chosen.
+        if (polRows[0]?.frequency) setFreq(polRows[0].frequency as Frequency)
       }
 
       // §6.3's export is specified as "all columns", so the columns have to be
@@ -550,7 +629,9 @@ export default function PmsPage() {
                                onPublish={publishOne} publishing={publishing}
                                periodLabel={naming?.title} />}
           {tab === 'config'   && <ConfigTab policy={config} freq={freq} onFreq={setFreq} fyStart={fyStart}
-                                            fyLabel={fyLabel} today={localToday()} />}
+                                            fyLabel={fyLabel} today={localToday()}
+                                            choices={configChoices}
+                                            onChoosePolicy={setConfigPolicyId} />}
           {tab === 'setup'    && <AdminEditor />}
           {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}
           {tab === 'upload'   && <UploadTab rows={fill} scale={scale}
