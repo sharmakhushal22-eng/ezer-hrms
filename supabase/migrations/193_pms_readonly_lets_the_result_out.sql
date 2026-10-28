@@ -68,6 +68,10 @@ DECLARE
   v_old jsonb;
   v_new jsonb;
   v_changed text;
+  -- RAISE's format must be a STRING LITERAL. It cannot be an expression, so a
+  -- message assembled with || is a syntax error there, not a runtime one —
+  -- which is why this is built here and passed through a single '%'.
+  v_why text;
 BEGIN
   -- Not locked: nothing to police. Rule 12 only bites once the record is
   -- read-only, which pms_finalise sets for an EXITED employee.
@@ -82,11 +86,9 @@ BEGIN
     SELECT string_agg(key, ', ' ORDER BY key) INTO v_changed
       FROM jsonb_each(v_new) n
      WHERE n.value IS DISTINCT FROM (v_old -> n.key);
-    -- One % per argument. RAISE's placeholder is %, not %s: written '%s' the
-    -- argument fills the % and the 's' is left stranded in the sentence.
-    RAISE EXCEPTION 'Record is read-only (employee exited and rating '
-                 || 'finalised). Cannot change: %',
-      COALESCE(v_changed, '(unknown column)');
+    v_why := 'Record is read-only (employee exited and rating finalised). '
+          || 'Cannot change: ' || COALESCE(v_changed, '(unknown column)');
+    RAISE EXCEPTION '%', v_why;
   END IF;
 
   -- workflow_status may move, but only onward to delivery. Without this the
@@ -94,9 +96,10 @@ BEGIN
   -- which is not delivery, it is reopening.
   IF NEW.workflow_status IS DISTINCT FROM OLD.workflow_status
      AND NEW.workflow_status NOT IN ('PUBLISHED','ACKNOWLEDGED') THEN
-    RAISE EXCEPTION 'Record is read-only (employee exited and rating '
-                 || 'finalised). The status can only move on to PUBLISHED or '
-                 || 'ACKNOWLEDGED, not to %', NEW.workflow_status;
+    v_why := 'Record is read-only (employee exited and rating finalised). '
+          || 'The status can only move on to PUBLISHED or ACKNOWLEDGED, not to '
+          || NEW.workflow_status;
+    RAISE EXCEPTION '%', v_why;
   END IF;
 
   RETURN NEW;

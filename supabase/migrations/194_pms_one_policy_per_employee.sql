@@ -180,7 +180,16 @@ END $$;
 -- ── and prevent the overlap being created in the first place ───────────────
 CREATE OR REPLACE FUNCTION pms_policy_no_overlap() RETURNS trigger
 LANGUAGE plpgsql AS $$
-DECLARE v_tier int; v_other record; v_clash text := '';
+DECLARE
+  v_tier int; v_other record; v_clash text := '';
+  -- A CASE EXPRESSION CANNOT BE AN IF CONDITION DIRECTLY. plpgsql scans the
+  -- condition up to the first THEN, and a CASE contains its own, so
+  -- `IF CASE ... END THEN` terminates the condition after `CASE v_tier WHEN 4`
+  -- and the parser then runs off the end of the function. Evaluated into a
+  -- boolean first instead.
+  v_hit boolean;
+  -- RAISE's format has to be a string literal, so the sentence is built here.
+  v_why text;
 BEGIN
   -- An inactive policy constrains nothing; deactivating is how an admin
   -- resolves a clash, so it must never be blocked.
@@ -208,24 +217,26 @@ BEGIN
       CONTINUE;
     END IF;
 
-    IF CASE v_tier
-         WHEN 4 THEN NEW.applies_location_ids && v_other.applies_location_ids
-         WHEN 3 THEN EXISTS (SELECT 1 FROM unnest(NEW.applies_grades) a
-                             JOIN unnest(v_other.applies_grades) b
-                               ON btrim(upper(a)) = btrim(upper(b)))
-         WHEN 2 THEN NEW.applies_department_ids && v_other.applies_department_ids
-         WHEN 1 THEN true   -- two catch-alls in one company
-         ELSE false
-       END THEN
+    v_hit := CASE v_tier
+      WHEN 4 THEN NEW.applies_location_ids && v_other.applies_location_ids
+      WHEN 3 THEN EXISTS (SELECT 1 FROM unnest(NEW.applies_grades) a
+                          JOIN unnest(v_other.applies_grades) b
+                            ON btrim(upper(a)) = btrim(upper(b)))
+      WHEN 2 THEN NEW.applies_department_ids && v_other.applies_department_ids
+      WHEN 1 THEN true   -- two catch-alls in one company
+      ELSE false
+    END;
+    IF v_hit THEN
       v_clash := v_clash || v_other.policy_code || ' ';
     END IF;
   END LOOP;
 
   IF v_clash <> '' THEN
-    RAISE EXCEPTION
-      'This policy would overlap % at the % level, and an employee can only '
-      'be in one active policy (rule 14). Narrow one scope, or deactivate the '
-      'other policy first.', btrim(v_clash), pms_tier_name(v_tier);
+    v_why := 'This policy would overlap ' || btrim(v_clash) || ' at the '
+          || pms_tier_name(v_tier) || ' level, and an employee can only be in '
+          || 'one active policy (rule 14). Narrow one scope, or deactivate the '
+          || 'other policy first.';
+    RAISE EXCEPTION '%', v_why;
   END IF;
 
   RETURN NEW;
