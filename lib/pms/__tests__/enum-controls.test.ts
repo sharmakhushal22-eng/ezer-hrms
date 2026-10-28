@@ -93,14 +93,24 @@ test('the chain and finaliser dropdowns cannot offer a value the DB rejects', ()
   }
 })
 
-test('a chain the schema allows but the module cannot run is NOT offered', () => {
-  // SELF_RM1_RM2_HOD_MD is in the CHECK and in §6.2's example policy table,
-  // but lib/pms/hierarchy has no MD step: no CHAIN_STEPS entry, no finaliser,
-  // nothing in the queues. Offering it would let an admin configure a chain
-  // the module cannot execute, which is worse than not offering it at all.
+test('the MD chain is deliberately not offered — HOD finalises', () => {
+  // A DECISION, not a gap. EZER_PMS_Module_Spec_v2 §6.1 lists a "Strategic
+  // Leadership" policy whose chain is RM2 → HOD → MD, and the schema's CHECK
+  // permits SELF_RM1_RM2_HOD_MD to match it. The product owner has ruled that
+  // the HOD finalises and no MD approval step is required, so the MD rung is
+  // out of scope and this value stays unsupported on purpose.
   //
-  // This test is the record of that gap, not an endorsement of it. When MD is
-  // implemented, add it to CHAINS and this flips to requiring it.
+  // Worth recording what was already half-built, in case it is ever revisited:
+  // pms_resolve_chain (067) ALREADY resolves an md_id from
+  // companies.md_employee_id and can return a MD_DIRECT shape, and both
+  // pms_reviews.rater_role and pms_overall_rating.finalised_by_role already
+  // permit 'MD'. What is missing is a column on pms_overall_rating to store
+  // the resolved md_id, a who_can_finalise value admitting an MD, and an
+  // identity check in pms_finalise. None of that is being added.
+  //
+  // The dropdown therefore offers three of the four permitted values, and
+  // offering the fourth would let an admin configure a chain the module does
+  // not execute — worse than not offering it.
   const dbAllows = ENUMS.approval_chain
   const appKnows = CHAINS as readonly string[]
   const unsupported = dbAllows.filter(c => !appKnows.includes(c))
