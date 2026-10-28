@@ -2091,7 +2091,9 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
                        appreciation={draft.appreciation} improvement={draft.improvement}
                        benefits={draft.benefits} logs={logs}
                        onChange={patch => setDraft(d => ({ ...d, ...patch }))}
-                       onPublish={publishResult} saving={saving} />
+                       onPublish={publishResult}
+                       onAcknowledgeFinalReview={picked ? () => acknowledgeFinalReview(picked) : undefined}
+                       saving={saving} />
         </>
       )}
       {tab === 'published' && (

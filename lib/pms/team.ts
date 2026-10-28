@@ -261,7 +261,22 @@ export function finaliseQueue<T extends TeamMember>(
     // person, and the screen's only advice was to chase the rung that is not
     // there. That is the last gate in the cycle, so nothing could complete.
     const waiting = hasRmL2(r.member, chain) && r.member.rmL2Score === null
-    const needsFinalReview = finalReviewRequired && r.member.finalReviewDone === false
+    /**
+     * 200: FINALISING NEEDS THE LOG, NOT THE SIGNATURES.
+     *
+     * This read finalReviewDone — both sides acknowledged — which is the
+     * PUBLICATION gate, not the finalisation one. The spec separates them:
+     * §389 has pms_finalise abort "if final review 1-on-1 dialogue logs are
+     * missing", while Stage 6 and §230 halt PUBLICATION until the log is
+     * "mutually signed off".
+     *
+     * Conflating them left a HOD waiting on an employee to acknowledge a
+     * conversation about a rating that did not exist yet. The employee's
+     * acknowledgement still gates the result reaching them — canPublishResult
+     * in lib/pms/oneToOne.ts, and trg_pms_publish_needs_signoff in the
+     * database — which is the step it actually protects.
+     */
+    const needsFinalReview = finalReviewRequired && !r.member.finalReviewLogged
 
     /**
      * 199's PRECEDING-RUNG RULE, mirrored so the screen and the database
@@ -308,13 +323,15 @@ export function finaliseQueue<T extends TeamMember>(
     // form — so a HOD read a true sentence about a gate they had no way to
     // open. Observed on Anil Verma (STC9030): every other condition satisfied,
     // permanently stuck. The Finalise tab now offers "Log final review" on
-    // exactly these rows (§2's matrix always permitted it), 198 rewrote the
-    // refusal to say who can do what, and this text says whose turn it is.
-    else if (needsFinalReview) insteadDo = r.member.finalReviewLogged
-      ? (r.member.finalReviewMgrAcked
-          ? 'Waiting on them to acknowledge the final review one-to-one.'
-          : 'The final review is logged. Acknowledge it to settle the rating.')
-      : 'No final review one-to-one yet. Log it here, or ask them to log it — this policy needs both of you to acknowledge it before the rating can be settled.'
+    // exactly these rows (§2's matrix always permitted it).
+    //
+    // IT NO LONGER MENTIONS THEIR ACKNOWLEDGEMENT, because 200 established
+    // that the signatures gate PUBLICATION and not this step. A sentence here
+    // about waiting on the employee would send a HOD to chase somebody whose
+    // acknowledgement cannot change what this screen is for.
+    else if (needsFinalReview) insteadDo =
+      'No final review one-to-one on record. Log it here, or ask them to log '
+      + 'it — the conversation has to be on record before the rating is settled.'
     /**
      * Is everyone BEFORE this actor finished? 199's question, and the one that
      * decides whether the final review may even be logged — the trigger it

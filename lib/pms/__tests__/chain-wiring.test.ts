@@ -300,14 +300,19 @@ test('the finalise queue offers an action instead of a dead label', () => {
   // the blocker — a true sentence about a gate with no door.
   assert.match(MGR, /onLogFinalReview\?\.\(r\.member\.employeeId\)/,
     'the finalise queue has no Log final review action')
-  assert.match(MGR, /onAcknowledgeFinalReview\?\.\(r\.member\.employeeId\)/,
-    'the finalise queue has no acknowledge action')
-  // Three distinct states; one button cannot serve them.
-  assert.match(MGR, /!r\.member\.finalReviewLogged \? \(/)
-  assert.match(MGR, /!r\.member\.finalReviewMgrAcked \? \(/)
-  // And the HOD surface must pass both handlers, since that is who gets stuck.
+  // ONE BUTTON, not three. This test originally pinned a three-state cell —
+  // log / acknowledge / waiting-on-them — and 200 collapsed it deliberately:
+  // the mutual sign-off gates PUBLICATION, not finalisation, so once the log
+  // exists the row is finalisable and the other two states belong on the tab
+  // that publishes. The test failed against correct code and was the right
+  // kind of failure: it had encoded a structure that turned out to be wrong.
+  assert.match(MGR, /finalReviewRequired && !r\.member\.finalReviewLogged && r\.precedingDone/,
+    'the finalise cell no longer keys off whether the review is logged')
+  assert.ok(!/!r\.member\.finalReviewMgrAcked \? \(/.test(MGR),
+    'the finalise queue still branches on the manager acknowledgement, which '
+    + '200 moved to the publishing tab')
+  // The HOD surface must still pass the log handler — that is who gets stuck.
   assert.match(PERF, /onLogFinalReview=\{logFinalReview\}/)
-  assert.match(PERF, /onAcknowledgeFinalReview=\{acknowledgeFinalReview\}/)
 })
 
 test('finalising hands the appraisal to HR, whichever path was used', () => {

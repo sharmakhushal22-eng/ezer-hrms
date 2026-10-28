@@ -987,7 +987,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                                 onClick={() => onNudge?.(r.member.employeeId)}>
                           Nudge RM L2
                         </button>
-                      ) : finalReviewRequired && !r.member.finalReviewDone && r.precedingDone ? (
+                      ) : finalReviewRequired && !r.member.finalReviewLogged && r.precedingDone ? (
                         /* THE DEAD END THIS REPLACES. When the final-review
                            one-to-one was the only thing blocking a rating,
                            this cell printed insteadDo as plain text and
@@ -1004,32 +1004,26 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                            Three states, because one button cannot serve them:
                            nothing logged, logged and awaiting MY tick, and
                            logged with my tick and awaiting theirs. */
-                        !r.member.finalReviewLogged ? (
-                          /* Reached only once r.precedingDone — see the branch
-                             condition above. 199 put a trigger on
-                             pms_one_to_one that refuses an early FINAL_REVIEW
-                             with a database exception, so this button must not
-                             exist before the chain has caught up; and gating
-                             it with `disabled` instead would REPLACE the
-                             insteadDo sentence naming who is outstanding with
-                             a dead control, which is less useful than the
-                             sentence. */
-                          <button className="btn sm" type="button"
-                                  disabled={!onLogFinalReview || saving}
-                                  onClick={() => onLogFinalReview?.(r.member.employeeId)}>
-                            Log final review
-                          </button>
-                        ) : !r.member.finalReviewMgrAcked ? (
-                          <button className="btn sm" type="button"
-                                  disabled={!onAcknowledgeFinalReview || saving}
-                                  onClick={() => onAcknowledgeFinalReview?.(r.member.employeeId)}>
-                            Acknowledge it
-                          </button>
-                        ) : (
-                          <span className="k">
-                            Waiting on {r.member.name.split(' ')[0]} to acknowledge the final review
-                          </span>
-                        )
+                        /* ONE BUTTON NOW. Reached only once r.precedingDone and
+                           only while no final review is on record.
+
+                           200 removed the two states that used to follow this:
+                           the mutual sign-off gates PUBLICATION, not this step,
+                           so once the log exists the row becomes finalisable and
+                           this branch is not entered at all. The employee's
+                           acknowledgement is chased on the Feedback &
+                           Recognition tab, where it actually blocks something.
+
+                           199's trigger refuses an early FINAL_REVIEW with a
+                           database exception, which is why the branch above
+                           requires precedingDone rather than disabling this —
+                           a dead control would replace the sentence naming who
+                           is still outstanding. */
+                        <button className="btn sm" type="button"
+                                disabled={!onLogFinalReview || saving}
+                                onClick={() => onLogFinalReview?.(r.member.employeeId)}>
+                          Log final review
+                        </button>
                       ) : <span className="k">{r.insteadDo}</span>}
                   </td>
                 </tr>
@@ -1196,7 +1190,7 @@ export function PublishedResultsTab({ members, bands = DEFAULT_BANDS, results = 
 }
 
 export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs, bands = DEFAULT_BANDS,
-                              onChange, onPublish, saving }: {
+                              onChange, onPublish, onAcknowledgeFinalReview, saving }: {
   member: TeamMember | null
   rating: number | null
   appreciation: string; improvement: string
@@ -1205,6 +1199,9 @@ export function FeedbackTab({ member, rating, appreciation, improvement, benefit
   onChange: (patch: { appreciation?: string; improvement?: string
                       benefits?: { type: BenefitType; note: string }[] }) => void
   onPublish?: () => void
+  /** The manager's half of the final-review sign-off, which 200 made a
+   *  PUBLICATION gate rather than a finalisation one. */
+  onAcknowledgeFinalReview?: () => void
   saving?: boolean
   /** The configured rating scale; falls back to the built-in list. */
   bands?: Band[]
@@ -1293,6 +1290,19 @@ export function FeedbackTab({ member, rating, appreciation, improvement, benefit
                 onClick={onPublish}>
           {saving ? 'Publishing…' : canPublish ? 'Publish the result' : 'Cannot publish yet'}
         </button>
+        {/* THE SIGN-OFF IS CHASED HERE NOW, because this is the step it gates.
+            200 moved the mutual acknowledgement off finalisation — where the
+            spec never put it — and onto publication, so the Finalise queue no
+            longer asks for it and this screen has to. The manager's own half
+            is a button; the employee's half is theirs to give, and the banner
+            above says so. */}
+        {!publish.open && logs.some(l => l.discussion_type === 'FINAL_REVIEW' && !l.manager_ack)
+          && onAcknowledgeFinalReview && (
+          <button className="btn ghost" type="button" disabled={saving}
+                  onClick={onAcknowledgeFinalReview}>
+            Acknowledge the final review
+          </button>
+        )}
       </div>
     </>
   )
