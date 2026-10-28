@@ -48,7 +48,7 @@ import {
 } from '@/components/pms/ManagerTabs'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
-import { type Kra, type Category } from '@/lib/pms/kra'
+import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { reached, WORKFLOW } from '@/lib/pms/status'
 import { bandsFromScale, type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
@@ -606,6 +606,39 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     // the window sat open across three companies. Nobody saw a reason to look,
     // because the form validated perfectly right up to the moment it failed.
     if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
+
+    /**
+     * §3's change log, from the FIRST ACKNOWLEDGEMENT ONWARD.
+     *
+     * The spec update asks for a JSON record of the old-to-new transition when
+     * modifications are agreed in the one-to-one. Before anybody has
+     * acknowledged, the employee is still drafting: logging every save then
+     * would bury the handful of agreed changes under every typo correction,
+     * and the noise would make the log useless for the thing it exists for.
+     *
+     * Read FRESH rather than trusting the `goals` state. That state was loaded
+     * when the screen opened, and if a manager sent the set back or HR
+     * corrected it in the meantime, the diff would report changes against a
+     * version that is no longer there — inventing edits the employee never
+     * made.
+     */
+    const ack = await supabase.from('pms_one_to_one')
+      .select('employee_ack,manager_ack')
+      .eq('employee_id', employeeId).eq('period_id', period.id)
+      .eq('discussion_type', 'KRA_SETTING')
+    const acknowledged = (ack.data ?? []).some(r =>
+      (r as { employee_ack?: boolean }).employee_ack
+      || (r as { manager_ack?: boolean }).manager_ack)
+
+    let changes: KraChange[] = []
+    if (acknowledged) {
+      const before = await supabase.from('pms_employee_goals')
+        .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage')
+        .eq('employee_id', employeeId).eq('period_id', period.id)
+      changes = diffKras((before.data ?? []) as unknown as Parameters<typeof diffKras>[0],
+                         kras as unknown as Parameters<typeof diffKras>[1])
+    }
+
     // UPSERT, NOT INSERT. The editable set is seeded from the rows already
     // saved (see `kras` above), so a second submit — which is the normal path
     // after a manager sends a set back — used to write a SECOND full set and
@@ -645,12 +678,32 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
         .gt('seq_no', kras.length).neq('status', 'LOCKED')
       if (tail.error) console.error('[pms] could not remove trailing KRAs:', tail.error)
     }
+    // The log is written AFTER the change lands, so a refused save never
+    // leaves a record of a modification that did not happen.
+    let logWarning = ''
+    if (!error && changes.length) {
+      const audit = await supabase.from('pms_audit_log').insert(changes.map(c => ({
+        period_id: period.id, employee_id: employeeId,
+        table_name: 'pms_employee_goals', record_id: c.record_id,
+        action: c.action, old_value: c.old_value, new_value: c.new_value,
+        actor_id: employeeId, actor_role: 'EMPLOYEE',
+      })))
+      if (audit.error) {
+        // Not fatal: the KRAs are the thing that had to be saved. But a silent
+        // failure would leave the audit trail with a hole in it and nobody
+        // aware, so it is said out loud.
+        console.error('[pms] KRA change log refused:', audit.error)
+        logWarning = ' The change log could not be written, though — tell HR.'
+      }
+    }
     setSaving(false)
     setMsg(error
       ? ((error as { code?: string }).code === MISSING_TABLE
           ? 'The performance module is not live yet: migration 066 has not been applied.'
           : (console.error('[pms] KRA insert refused:', error), SAVE_FAILED('KRAs')))
-      : 'Sent to your reporting manager.')
+      : changes.length
+        ? `Sent to your reporting manager. ${changes.length} ${changes.length === 1 ? 'change' : 'changes'} recorded against the one-to-one.${logWarning}`
+        : 'Sent to your reporting manager.')
     if (!error) { setDraftKras(null); loadPeriodData() }
   }
 
