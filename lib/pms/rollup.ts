@@ -35,6 +35,7 @@ export interface FillRow {
   finalised_by_role?: string | null
   workflow_status?: string | null
   last_action_at?: string | null
+  period_code?: string | null
 }
 
 export interface Rollup {

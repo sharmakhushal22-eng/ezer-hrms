@@ -589,10 +589,63 @@ const FILL_MEANING_SHORT: Record<FillStatus, string> = {
 
 // ── §6.4 Final Rating Upload ─────────────────────────────────────────────
 
-export function UploadTab() {
+export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow }: {
+  /** vw_pms_fill_status for the open period. Null while loading. */
+  rows?: FillRow[] | null
+  scale?: number[]
+  improvementAtOrBelow?: number | null
+} = {}) {
   const [rows, setRows] = useState<UploadRow[] | null>(null)
   const [name, setName] = useState('')
-  const preview = rows ? checkUpload(rows, KNOWN_NOTHING) : null
+
+  /**
+   * THE REAL LOOKUP. This was KNOWN_NOTHING, which answered "no such
+   * employee" to everything — the honest answer while nothing was loaded, but
+   * it meant the validation preview could only ever show 24 red rows, so the
+   * one screen whose whole purpose is checking a file before it is applied
+   * could not check anything.
+   *
+   * `computed` is the rating the system currently holds, which is
+   * final_rating. The fill-status view does not carry rm_l1_score,
+   * rm_l2_score or hod_score, so for a row that has not been finalised there
+   * is no system rating to compare against and the Change column honestly
+   * reads "-" rather than inventing a delta against nothing.
+   *
+   * `readOnly` is DERIVED, because the view does not expose is_readonly:
+   * exited AND already rated is what rule 12 locks. Erring here is one-way —
+   * a false positive refuses a row an admin could then query, a false
+   * negative would let an upload overwrite a locked record.
+   */
+  const known = useMemo(() => {
+    const by = new Map<string, FillRow>()
+    for (const r of enrolled ?? []) {
+      const code = String(r.employee_code ?? '').trim().toUpperCase()
+      if (code) by.set(code, r)
+    }
+    return {
+      lookup: (empCode: string, periodCode: string) => {
+        const r = by.get(String(empCode ?? '').trim().toUpperCase())
+        if (!r) return null
+        // The period must be the one actually loaded. A file naming last
+        // quarter would otherwise be validated against this quarter's data
+        // and look fine.
+        const pc = String(r.period_code ?? '').trim().toUpperCase()
+        const want = String(periodCode ?? '').trim().toUpperCase()
+        if (pc && want && pc !== want) return null
+        const flag = String(r.employment_flag ?? '').toUpperCase()
+        const rated = r.final_rating !== null && r.final_rating !== undefined
+        return {
+          computed: rated ? Number(r.final_rating) : null,
+          eligible: flag !== 'NEW_JOINER',
+          readOnly: flag === 'EXITED' && rated,
+        }
+      },
+      scale: scale?.length ? scale : [1, 2, 3, 4, 5],
+      improvementMandatoryAtOrBelow: improvementAtOrBelow ?? 2,
+    }
+  }, [enrolled, scale, improvementAtOrBelow])
+
+  const preview = rows ? checkUpload(rows, enrolled ? known : KNOWN_NOTHING) : null
 
   return (
     <>
@@ -677,8 +730,14 @@ export function UploadTab() {
         {preview && (
           <>
             <div className="btnrow">
-              <button className="btn ghost sm" type="button" disabled={!preview.errorCount}>
-                ⬇ Download error rows
+              {/* The rejected rows, in the SAME shape as the template plus a
+                  reason column — so the admin fixes this file and uploads it
+                  again, rather than hunting the originals by eye. Keeping the
+                  original line number is the point: "row 14" is how they find
+                  it in their spreadsheet. */}
+              <button className="btn ghost sm" type="button" disabled={!preview.errorCount}
+                      onClick={() => exportErrorRows(preview)}>
+                ⬇ Download error rows ({preview.errorCount})
               </button>
               <button className="btn dark sm" type="button" disabled={!preview.canCommit}>
                 {preview.canCommit
@@ -714,6 +773,26 @@ const KNOWN_NOTHING = {
   lookup: () => null,
   scale: [1, 2, 3, 4, 5],
   improvementMandatoryAtOrBelow: 2,
+}
+
+/** §6.4's rejected rows, re-exported for correction and re-upload. */
+function exportErrorRows(preview: { rows: { row: UploadRow; line: number; errors: string[] }[] }): void {
+  const bad = preview.rows.filter(r => r.errors.length)
+  const head = ['source_row', ...TEMPLATE_COLUMNS, 'what_is_wrong']
+  const body = bad.map(r => [
+    r.line,
+    ...TEMPLATE_COLUMNS.map(c => (r.row as Record<string, unknown>)[c]),
+    // Every error, not just the first: the table shows one to stay readable,
+    // but a file for fixing should not hide a second problem that will bounce
+    // the row again on the next attempt.
+    r.errors.map(e => ERROR_TEXT[e as keyof typeof ERROR_TEXT] ?? e).join(' '),
+  ])
+  const blob = new Blob(['﻿' + csvText(head, body)], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `pms-upload-errors-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
 }
 
 function downloadTemplate() {

@@ -70,6 +70,10 @@ export default function PmsPage() {
   const [deptNames, setDeptNames] = useState<Record<string, string>>({})
   const [freq, setFreq] = useState<Frequency>('QUARTERLY')
   const [policies, setPolicies] = useState<Policy[]>([])
+  /** §6.4's validator reads the real scale, not a constant. Defaults only
+   *  until the first load answers; an empty scale would reject every rating. */
+  const [scale, setScale] = useState<number[]>([1, 2, 3, 4, 5])
+  const [improvementAtOrBelow, setImprovementAtOrBelow] = useState<number | null>(2)
   // The Indian financial year. Periods are generated from it, so the preview
   // has to start where the real thing starts.
   const fyStart = `${new Date().getMonth() >= 3 ? new Date().getFullYear()
@@ -144,9 +148,31 @@ export default function PmsPage() {
       const f = await supabase.from('vw_pms_fill_status')
         .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage,'
               + 'employment_flag, one_to_one_status, self_score, final_rating, final_rating_code,'
-              + 'finalised_by_role, workflow_status, last_action_at')
+              + 'finalised_by_role, workflow_status, last_action_at, period_code')
         .eq('period_id', row.id).limit(2000)
       if (!f.error) setFill((f.data ?? []) as unknown as FillRow[])
+
+      // THE SCALE THE COMPANY CONFIGURED, for §6.4's validator. It was
+      // hardcoded [1,2,3,4,5] with improvement mandatory at or below 2, which
+      // happens to match the seeded scale and would silently stop matching
+      // the moment an admin edited it — the same hardcoding that was removed
+      // from the rating screens. improvement_feedback_mandatory is a per-band
+      // flag, so the threshold is the HIGHEST band that still demands it.
+      let scQ = supabase.from('pms_rating_scale')
+        .select('rating_value, improvement_feedback_mandatory, is_active')
+      if (co) scQ = scQ.eq('company_id', co)
+      const sc = await scQ
+      if (!sc.error) {
+        const bands = ((sc.data ?? []) as unknown as {
+          rating_value: number; improvement_feedback_mandatory: boolean; is_active?: boolean
+        }[]).filter(b => b.is_active !== false)
+        if (bands.length) {
+          setScale(bands.map(b => Number(b.rating_value)).sort((a, b) => a - b))
+          const mandatory = bands.filter(b => b.improvement_feedback_mandatory)
+            .map(b => Number(b.rating_value))
+          setImprovementAtOrBelow(mandatory.length ? Math.max(...mandatory) : null)
+        }
+      }
     } else {
       setFill([])
     }
@@ -314,7 +340,8 @@ export default function PmsPage() {
                                             fyLabel={fyLabel} today={localToday()} />}
           {tab === 'setup'    && <AdminEditor />}
           {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}
-          {tab === 'upload'   && <UploadTab />}
+          {tab === 'upload'   && <UploadTab rows={fill} scale={scale}
+                               improvementAtOrBelow={improvementAtOrBelow} />}
           {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}
           {tab === 'reports'  && <ReportsTab />}
           {tab === 'chain'    && <FlowTab chainCoverage={cov ? <ChainCoverage cov={cov} /> : null} />}
