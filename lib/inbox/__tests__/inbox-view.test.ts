@@ -21,6 +21,31 @@ import { MOCK_CONVERSATIONS, MOCK_WALL } from '../../../components/ess/inbox/__p
 
 const min = (n: number) => new Date(Date.now() - n * 60_000).toISOString()
 
+/**
+ * A PINNED `now`, and a timestamp that is yesterday relative to it.
+ *
+ * Both relTime and dayLabel take `now` as a second parameter precisely so a
+ * test can control it, and these two assertions were ignoring that and using
+ * the wall clock. They passed on 28 October and failed on the 29th with no
+ * code change.
+ *
+ * NO FIXED OFFSET CAN MEAN "YESTERDAY" FOR relTime. It returns `${h}h` for
+ * anything under 1440 minutes and only checks the calendar after that, so its
+ * "Yesterday" needs a timestamp that is BOTH at least 24 hours old AND
+ * yesterday by the calendar. That window runs from yesterday-midnight to
+ * now-minus-24h, so its width is however far into the day the clock happens to
+ * be — 30 minutes wide at 00:30, 23 hours wide at 23:00. The original
+ * min(26 * 60) sat inside it for most of the day and outside it before 02:00.
+ *
+ * Pinning both ends removes the clock from the question: 15:00 today, against
+ * 14:00 yesterday, is 25 hours and one calendar day whenever it is run.
+ */
+const pinned = () => {
+  const now = new Date(); now.setHours(15, 0, 0, 0)
+  const yday = new Date(now); yday.setDate(yday.getDate() - 1); yday.setHours(14, 0, 0, 0)
+  return { now: now.getTime(), yesterday: yday.toISOString() }
+}
+
 // ── selectConversations ──────────────────────────────────────────────────
 
 test('filters by folder', () => {
@@ -114,13 +139,13 @@ test('relTime speaks the inbox voice', () => {
   assert.equal(relTime(min(1)), 'now')
   assert.equal(relTime(min(12)), '12m')
   assert.equal(relTime(min(3 * 60)), '3h')
-  assert.equal(relTime(min(26 * 60)), 'Yesterday')
+  { const p = pinned(); assert.equal(relTime(p.yesterday, p.now), 'Yesterday') }
   assert.match(relTime(min(6 * 24 * 60)), /\d{2} \w{3}/)
 })
 
 test('dayLabel labels days in a thread', () => {
   assert.equal(dayLabel(min(10)), 'Today')
-  assert.equal(dayLabel(min(26 * 60)), 'Yesterday')
+  { const p = pinned(); assert.equal(dayLabel(p.yesterday, p.now), 'Yesterday') }
 })
 
 test('messages group inside a 5-minute window', () => {

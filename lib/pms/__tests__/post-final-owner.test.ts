@@ -141,3 +141,63 @@ test('the summary covers everyone, not just the settled', () => {
   assert.match(page, /summary: 'pms\.fill'/,
     'the summary tab has no seeded screen key and will be invisible')
 })
+
+// ── the summary spans companies ──────────────────────────────────────────
+
+test('the loader covers EVERY open period, not one', () => {
+  // companyFilter returns NULL for a cross-company caller, so the query was
+  // unfiltered — and then `.limit(1)` picked whichever single period sorted
+  // first. An HR Head over three companies saw one company's cycle: 395
+  // enrolments exist and the summary could reach about a third of them.
+  const page = read('app/dashboard/pms/page.tsx')
+  const q = page.slice(page.indexOf('let perQ = supabase.from(\'pms_periods\')'),
+                       page.indexOf('const row = openPeriods[0]'))
+  assert.ok(q.length > 100, 'could not isolate the period query')
+  assert.ok(!/\.limit\(1\)\.maybeSingle\(\)/.test(q),
+    'the period query still takes a single period, so the summary cannot span companies')
+  assert.match(q, /const openPeriods =/, 'the open periods are not collected')
+  // The dataset must then read across all of them.
+  assert.match(page, /\.in\('period_id', periodIds\)/,
+    'the ratings are still fetched for one period')
+  // Scoping for everybody else is untouched: a company-pinned HR user still
+  // gets companyFilter's eq(). This widens nothing, it stops narrowing.
+  assert.match(page, /if \(co\) perQ = perQ\.eq\('company_id', co\)/,
+    'the company filter was removed — that would widen scope, not just span it')
+})
+
+test('rows are keyed on (period, employee), not employee alone', () => {
+  // Safe while this read one period; across several it shows one period's
+  // feedback against another period's rating.
+  const page = read('app/dashboard/pms/page.tsx')
+  assert.match(page, /const K = \(pid: unknown, eid: unknown\)/,
+    'there is no composite key, so cross-period rows can collide')
+  for (const m of ['fbBy.get(K(', 'benBy.get(K(', 'signed.has(K(']) {
+    assert.ok(page.includes(m), `${m}…) is not keyed on the period`)
+  }
+})
+
+test('publishing acts on the row\'s period, never the page\'s', () => {
+  // The page's "current period" is one of several once this spans companies.
+  // Using it would write another company's feedback against the wrong period.
+  const page = read('app/dashboard/pms/page.tsx')
+  const hits = page.match(/const periodId = pubRows\?\.find\(r => r\.employeeId === employeeId\)\?\.periodId/g) ?? []
+  assert.equal(hits.length, 2,
+    `expected both publishOne and saveFeedback to resolve the row's period, found ${hits.length}`)
+})
+
+test('the summary distinguishes the companies it is now mixing', () => {
+  const admin = read('components/pms/AdminTabs.tsx')
+  const tab = admin.slice(admin.indexOf('export function SummaryTab'),
+                          admin.indexOf('// ── §6.4 Final Rating Upload'))
+  assert.ok(tab.length > 800, 'could not isolate the summary')
+  assert.match(tab, /const spansCompanies = cos\.length > 1/,
+    'the summary has no notion of spanning companies')
+  // Department names are not unique across companies, so the department list
+  // has to follow the company choice.
+  assert.match(tab, /const depts = \[\.\.\.new Set\(byCo\./,
+    'the department list is built from every company at once')
+  assert.match(tab, /setCo\(e\.target\.value\); setDept\('all'\)/,
+    'changing company leaves a stale department filter applied')
+  // The column appears only when it carries information.
+  assert.match(tab, /\{spansCompanies && <th>Company<\/th>\}/)
+})

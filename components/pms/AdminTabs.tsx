@@ -736,6 +736,17 @@ export interface PublishRow {
   name: string
   code: string
   departmentId?: string | null
+  /**
+   * WHICH CYCLE AND WHICH COMPANY this row belongs to.
+   *
+   * HR Head spans companies, and each company runs its own period. Without
+   * these the summary is three organisations' ratings in one undifferentiated
+   * list, and publishing would have to guess which period it was acting on —
+   * so the actions take the period from the row rather than from the page.
+   */
+  periodId?: string | null
+  periodLabel?: string | null
+  companyName?: string | null
   finalRating: number | null
   finalRatingCode: string | null
   finalisedByRole: string | null
@@ -928,7 +939,10 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
 
       {member && (
         <Card title={`${member.name} — ${member.code}`}
-              sub={`Rated ${member.finalRating ?? '—'}${band ? ` · ${band.label}` : ''} by ${member.finalisedByRole ?? 'the chain'}. You are writing what they read.`}>
+              sub={`Rated ${member.finalRating ?? '—'}${band ? ` · ${band.label}` : ''} by ${member.finalisedByRole ?? 'the chain'}`
+                   + `${member.companyName ? ` · ${member.companyName}` : ''}`
+                   + `${member.periodLabel ? ` · ${member.periodLabel}` : ''}`
+                   + '. You are writing what they read.'}>
           {!canAct ? (
             <Note tone="warn">
               Under this policy the finaliser writes the feedback and publishes.
@@ -1087,9 +1101,20 @@ export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLa
   periodLabel?: string | null
 }) {
   const [dept, setDept] = useState('all')
+  const [co, setCo] = useState('all')
   if (loading || rows === null) return <div className="k">Loading…</div>
 
-  const inScope = dept === 'all' ? rows : rows.filter(r => (r.departmentId ?? '') === dept)
+  /**
+   * COMPANY FIRST, then department.
+   *
+   * An HR Head over three companies gets all of them here — the loader stopped
+   * narrowing to one open period, which was quietly showing a third of the
+   * organisation. Department names are not unique across companies, so the
+   * department list has to follow the company choice or "Operations" means two
+   * different teams in one dropdown.
+   */
+  const byCo = co === 'all' ? rows : rows.filter(r => (r.companyName ?? '') === co)
+  const inScope = dept === 'all' ? byCo : byCo.filter(r => (r.departmentId ?? '') === dept)
   const rated = inScope.filter(r => r.finalRating != null)
   const avg = rated.length
     ? rated.reduce((s, r) => s + (r.finalRating ?? 0), 0) / rated.length : null
@@ -1101,7 +1126,9 @@ export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLa
   }))
   const widest = Math.max(1, ...buckets.map(b => b.n))
 
-  const depts = [...new Set(rows.map(r => r.departmentId ?? '').filter(Boolean))]
+  const depts = [...new Set(byCo.map(r => r.departmentId ?? '').filter(Boolean))]
+  const cos = [...new Set(rows.map(r => r.companyName ?? '').filter(Boolean))].sort()
+  const spansCompanies = cos.length > 1
 
   return (
     <>
@@ -1115,14 +1142,25 @@ export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLa
 
       <Card title={`Distribution${periodLabel ? ` — ${periodLabel}` : ''}`}
             sub="Against the configured rating scale.">
-        <div className="fld" style={{ maxWidth: 320, marginBottom: 12 }}>
-          <label htmlFor="sum-dept">Department</label>
-          <select id="sum-dept" value={dept} onChange={e => setDept(e.target.value)}>
-            <option value="all">All departments</option>
-            {depts.map(d => (
-              <option key={d} value={d}>{deptNames[d] ?? d.slice(0, 8)}</option>
-            ))}
-          </select>
+        <div className="grid g2" style={{ marginBottom: 12 }}>
+          {spansCompanies && (
+            <Field label="Company"
+                   hint={`${cos.length} companies are running a cycle.`}>
+              <select value={co}
+                      onChange={e => { setCo(e.target.value); setDept('all') }}>
+                <option value="all">All companies</option>
+                {cos.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Department">
+            <select value={dept} onChange={e => setDept(e.target.value)}>
+              <option value="all">All departments</option>
+              {depts.map(d => (
+                <option key={d} value={d}>{deptNames[d] ?? d.slice(0, 8)}</option>
+              ))}
+            </select>
+          </Field>
         </div>
         {!buckets.length ? (
           <Empty what="No rating scale configured"
@@ -1160,7 +1198,9 @@ export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLa
             <table>
               <thead>
                 <tr>
-                  <th>Code</th><th>Employee</th><th>Department</th>
+                  <th>Code</th><th>Employee</th>
+                  {spansCompanies && <th>Company</th>}
+                  <th>Department</th>
                   <th className="num">Rating</th><th>Settled by</th>
                   <th>Stage</th><th>Recognition</th>
                 </tr>
@@ -1172,6 +1212,7 @@ export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLa
                   <tr key={r.employeeId}>
                     <td>{r.code}</td>
                     <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    {spansCompanies && <td className="k">{r.companyName ?? '—'}</td>}
                     <td className="k">{deptNames[r.departmentId ?? ''] ?? '—'}</td>
                     <td className="num">
                       {r.finalRating == null ? <span className="k">not rated</span>

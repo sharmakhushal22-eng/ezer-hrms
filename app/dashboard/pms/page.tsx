@@ -182,11 +182,32 @@ export default function PmsPage() {
             + ' status, pms_policies(frequency)')
       .in('status', PERIOD_OPEN)
     if (co) perQ = perQ.eq('company_id', co)
-    const per = await perQ
-      .order('period_start', { ascending: false }).limit(1).maybeSingle()
+    perQ = perQ.select('id, period_name, period_code, financial_year, period_no,'
+                     + ' period_start, period_end, status, company_id,'
+                     + ' pms_policies(frequency)')
+    const per = await perQ.order('period_start', { ascending: false }).limit(50)
 
-    const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null
+    /**
+     * EVERY open period in scope, not one.
+     *
+     * The page header, the frequency preview and §6.4's upload commit are all
+     * single-period ideas and still use `row` — the newest open period. But
+     * Ratings Summary and Publish Results are HR's view of the whole
+     * organisation, and an HR Head over three companies was seeing one
+     * company's cycle: companyFilter returns NULL for a cross-company caller,
+     * so the query was unfiltered and `.limit(1)` then picked whichever single
+     * period sorted first. 395 enrolments exist and the summary could reach
+     * about a third of them.
+     *
+     * Scoping is unchanged for everybody else. A company-pinned HR user still
+     * gets companyFilter's eq(), so this widens nothing: it stops narrowing
+     * where the caller was never meant to be narrowed.
+     */
+    const openPeriods = ((per.data ?? []) as unknown as
+      (Record<string, string | null> & { id: string })[])
+    const row = openPeriods[0] ?? null
     setPeriodId(row?.id ?? null)
+    let coNames: Record<string, string> = {}
     if (row) {
       const freq = ((row as unknown as { pms_policies?: { frequency?: string } })
         .pms_policies?.frequency) ?? null
@@ -295,9 +316,13 @@ export default function PmsPage() {
         if (co) coQ = coQ.eq('id', co)
         const cos = await coQ.limit(200)
         if (!cos.error) {
-          setCompanyNames(Object.fromEntries(
+          // Held in a local as well as in state: the publish/summary dataset is
+          // assembled later in THIS SAME pass and needs the names now, and
+          // React state is not readable synchronously after setting it.
+          coNames = Object.fromEntries(
             ((cos.data ?? []) as unknown as { id: string; company_name?: string }[])
-              .map(c => [String(c.id), String(c.company_name ?? '')])))
+              .map(c => [String(c.id), String(c.company_name ?? '')]))
+          setCompanyNames(coNames)
         }
         // The frequency preview follows whichever policy is being shown, which
         // the selector decides; seeded from the first so the screen is not
@@ -358,11 +383,12 @@ export default function PmsPage() {
       // Ratings Summary, whose whole job is "all the employees" — including
       // the ones still in the chain, shown as such. Fetching twice would be
       // two queries disagreeing about the same period.
+      const periodIds = openPeriods.map(x => x.id)
       const pub = await supabase.from('pms_overall_rating')
-        .select('employee_id, final_rating, final_rating_code, finalised_by_role,'
-              + 'finalised_at, chain_stage, workflow_status, employee_ack')
-        .eq('period_id', row.id)
-        .limit(2000)
+        .select('employee_id, period_id, company_id, final_rating, final_rating_code,'
+              + 'finalised_by_role, finalised_at, chain_stage, workflow_status, employee_ack')
+        .in('period_id', periodIds)
+        .limit(4000)
       if (pub.error) {
         // Before 197 is applied there is no chain_stage column at all, and
         // that is a waiting state rather than a fault: every other tab works.
@@ -377,8 +403,17 @@ export default function PmsPage() {
          * was found rather than guessed. The same `as unknown as` the fill
          * query above uses, for the same reason.
          */
+        // Labels for the period and company each row belongs to, so a
+        // cross-company summary can say which cycle a rating came from
+        // instead of mixing three companies into one undifferentiated list.
+        const periodLabelOf = new Map(openPeriods.map(x =>
+          [String(x.id), String(x.period_code ?? x.period_name ?? '')]))
+        const companyOf = new Map(Object.entries(coNames))
+
         const pubData = (pub.data ?? []) as unknown as {
           employee_id: string
+          period_id: string
+          company_id?: string | null
           final_rating?: number | string | null
           final_rating_code?: string | null
           finalised_by_role?: string | null
@@ -396,24 +431,30 @@ export default function PmsPage() {
         const [emps, fbs, bens, frs] = ids.length ? await Promise.all([
           supabase.from('employees').select('id, emp_code, full_name, department_id').in('id', ids),
           supabase.from('pms_feedback')
-            .select('employee_id, appreciation_remark, improvement_feedback')
-            .eq('period_id', row.id).in('employee_id', ids),
+            .select('employee_id, period_id, appreciation_remark, improvement_feedback')
+            .in('period_id', periodIds).in('employee_id', ids),
           supabase.from('pms_additional_benefits')
-            .select('employee_id, benefit_type, benefit_note')
-            .eq('period_id', row.id).in('employee_id', ids),
+            .select('employee_id, period_id, benefit_type, benefit_note')
+            .in('period_id', periodIds).in('employee_id', ids),
           supabase.from('pms_one_to_one')
-            .select('employee_id, employee_ack, manager_ack')
-            .eq('period_id', row.id).eq('discussion_type', 'FINAL_REVIEW')
+            .select('employee_id, period_id, employee_ack, manager_ack')
+            .in('period_id', periodIds).eq('discussion_type', 'FINAL_REVIEW')
             .in('employee_id', ids),
         ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }] as const
+        // KEYED ON (period, employee). Keying on the employee alone was safe
+        // while this read one period; across several it silently shows one
+        // period's feedback against another's rating.
+        const K = (pid: unknown, eid: unknown) => `${String(pid)}|${String(eid)}`
         const fbBy = new Map((fbs.data ?? []).map(x => {
-          const r = x as { employee_id: string; appreciation_remark?: string; improvement_feedback?: string }
-          return [String(r.employee_id), r]
+          const r = x as { employee_id: string; period_id: string
+                           appreciation_remark?: string; improvement_feedback?: string }
+          return [K(r.period_id, r.employee_id), r]
         }))
         const benBy = new Map<string, { type: string; note: string }[]>()
         for (const b of bens.data ?? []) {
-          const r = b as { employee_id: string; benefit_type: string; benefit_note?: string }
-          const k = String(r.employee_id)
+          const r = b as { employee_id: string; period_id: string
+                           benefit_type: string; benefit_note?: string }
+          const k = K(r.period_id, r.employee_id)
           benBy.set(k, [...(benBy.get(k) ?? []),
                         { type: String(r.benefit_type), note: String(r.benefit_note ?? '') }])
         }
@@ -423,7 +464,8 @@ export default function PmsPage() {
         const signed = new Set((frs.data ?? [])
           .filter(x => (x as { employee_ack?: boolean }).employee_ack
                     && (x as { manager_ack?: boolean }).manager_ack)
-          .map(x => String((x as { employee_id: string }).employee_id)))
+          .map(x => { const r = x as { employee_id: string; period_id: string }
+                      return K(r.period_id, r.employee_id) }))
         const byId = new Map((emps.data ?? []).map(e => {
           const r = e as { id: string; emp_code?: string; full_name?: string; department_id?: string }
           return [r.id, r]
@@ -442,10 +484,13 @@ export default function PmsPage() {
             finalisedByRole: r.finalised_by_role ?? null,
             finalisedAt: r.finalised_at ?? null,
             departmentId: e?.department_id ?? null,
-            appreciation: fbBy.get(String(r.employee_id))?.appreciation_remark ?? null,
-            improvement: fbBy.get(String(r.employee_id))?.improvement_feedback ?? null,
-            benefits: benBy.get(String(r.employee_id)) ?? [],
-            signedOff: signed.has(String(r.employee_id)),
+            periodId: String(r.period_id),
+            periodLabel: periodLabelOf.get(String(r.period_id)) ?? null,
+            companyName: companyOf.get(String(r.company_id ?? '')) ?? null,
+            appreciation: fbBy.get(K(r.period_id, r.employee_id))?.appreciation_remark ?? null,
+            improvement: fbBy.get(K(r.period_id, r.employee_id))?.improvement_feedback ?? null,
+            benefits: benBy.get(K(r.period_id, r.employee_id)) ?? [],
+            signedOff: signed.has(K(r.period_id, r.employee_id)),
             acknowledged: r.employee_ack === true,
             // Either marker counts. The stage is what this screen moves, the
             // status is what the employee's screen reads, and a row that has
@@ -618,6 +663,11 @@ export default function PmsPage() {
     appreciation: string; improvement: string
     benefits: { type: string; note: string }[]
   }) => {
+    // THE ROW'S PERIOD, not the page's. HR Head spans companies and each runs
+    // its own cycle, so the page's "current period" is one of several — using
+    // it would write another company's feedback against the wrong period, or
+    // silently against nothing.
+    const periodId = pubRows?.find(r => r.employeeId === employeeId)?.periodId
     if (!periodId) return
     setCommitNote(null)
     const co = companyFilter(grant, grant.companyId)
@@ -654,9 +704,10 @@ export default function PmsPage() {
     }
     setCommitNote('Saved. Not released to them until you publish.')
     load()
-  }, [periodId, grant, load])
+  }, [pubRows, grant, load])
 
   const publishOne = useCallback(async (employeeId: string) => {
+    const periodId = pubRows?.find(r => r.employeeId === employeeId)?.periodId
     if (!periodId) return
     setPublishing(employeeId)
     setCommitNote(null)
@@ -683,7 +734,7 @@ export default function PmsPage() {
       ? 'Published — the employee can see their rating. The feedback could not be opened to them, though; check it before telling them it is all there.'
       : 'Published. The employee can see their rating and feedback now.')
     load()
-  }, [periodId, load])
+  }, [pubRows, load])
 
   const roll: Rollup | null = fill ? rollUp(fill) : null
   const depts: DeptRollup[] = fill ? byDepartment(fill) : []

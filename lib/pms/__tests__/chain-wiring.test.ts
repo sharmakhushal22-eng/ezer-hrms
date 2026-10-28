@@ -188,8 +188,11 @@ test('the publish queue cannot miss a settled rating', () => {
     + 'bug that hid finalised appraisals from HR entirely')
   assert.ok(!/\.eq\('workflow_status'/.test(q),
     'the loader pins a single workflow_status and will miss the rest')
-  // It must still be scoped to the period, or it reads the whole table.
-  assert.match(q, /\.eq\('period_id', row\.id\)/)
+  // It must still be scoped to periods, or it reads the whole table. `in`
+  // rather than `eq` since the summary spans every open period: an HR Head
+  // over three companies was seeing one company's cycle.
+  assert.match(q, /\.in\('period_id', periodIds\)/,
+    'the loader is not scoped to the open periods')
 })
 
 test('HR cannot change a rating or a KRA from the publish screen', () => {
