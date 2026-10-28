@@ -86,11 +86,19 @@ const loadImage = (url: string): Promise<HTMLImageElement | null> =>
     probe.src = url
   })
 
-/** BYTES. Was 8 MB, which quietly made PNG a second-class format: PNG is
- *  lossless, so a plain screenshot clears 8 MB without being a large picture
- *  in any sense that matters. Nothing downstream cares — the crop leaves here
- *  as a square JPEG of about 120 KB whatever arrives. */
-const MAX_BYTES = 40 * 1024 * 1024
+/** BYTES. The usual HRMS / social limit for a profile photo is 5–10 MB (Zoho People
+ *  and Darwinbox 5 MB, LinkedIn 8 MB). 10 MB lets any phone camera photo through —
+ *  a 48 MP JPEG or HEIC is 4–8 MB — while refusing raw scans and huge PNG exports.
+ *  Whatever arrives, the crop leaves here as a ~120 KB square JPEG. Was 40 MB. */
+const MAX_BYTES = 10 * 1024 * 1024
+
+/** Smallest side worth cropping a face from: the ID card draws the photo at ~300 px,
+ *  and below 200 px the result is visibly soft. */
+const MIN_SIDE = 200
+
+/** Still-image formats accepted (HEIC/HEIF are detected from the bytes, see isHeif). */
+const TYPES_OK = ['image/jpeg', 'image/png', 'image/webp']
+export const PHOTO_RULE = 'JPG, PNG, WebP or HEIC · up to 10 MB · at least 200 × 200 px'
 
 /** PIXELS, which is the limit that actually protects anything. Bytes say
  *  nothing about decode cost: a 2 MB PNG can be 100 megapixels and ask for
@@ -325,7 +333,7 @@ export default function PhotoUploader({
   const load = useCallback((f?: File | null) => {
     if (!f) return;
     if (f.size > MAX_BYTES) {
-      return setErr(`That image is ${(f.size / 1048576).toFixed(0)} MB, over the ${MAX_BYTES / 1048576} MB limit.`);
+      return setErr(`That image is ${(f.size / 1048576).toFixed(1)} MB, over the ${MAX_BYTES / 1048576} MB limit.`);
     }
     setErr(null); setReady(false); setSrc(null);
 
@@ -336,6 +344,10 @@ export default function PhotoUploader({
         // image, because iOS often reports no type at all for a HEIC.
         if (!heif && !f.type.startsWith('image/')) {
           setErr('That file is not an image. Use JPG or PNG.'); return;
+        }
+        // GIF, SVG, BMP, TIFF… are images but not photos: animated, vector or uncompressed.
+        if (!heif && f.type && !TYPES_OK.includes(f.type)) {
+          setErr('Use a JPG, PNG, WebP or HEIC photo.'); return;
         }
 
         setBusy(heif ? 10 : 8);
@@ -355,6 +367,11 @@ export default function PhotoUploader({
         }
 
         let w = el.naturalWidth, h = el.naturalHeight;
+        if (Math.min(w, h) < MIN_SIDE) {
+          URL.revokeObjectURL(url);
+          setErr(`That image is only ${w}×${h} px. Use a photo at least ${MIN_SIDE}×${MIN_SIDE} px so it stays sharp on your ID card.`);
+          setBusy(0); return;
+        }
         if (w * h > MAX_PIXELS) {
           URL.revokeObjectURL(url);
           setErr(`That image is ${w}x${h}, too large to crop in the browser. Scale it down and try again.`);
@@ -461,6 +478,7 @@ export default function PhotoUploader({
         <div className="ez-mh">
           <h3>Profile photo</h3>
           <p>Drag to move, pinch or scroll to zoom, double-click to fill. Saved as a {OUT} by {OUT} square.</p>
+          <p style={{ marginTop: 4, fontSize: 12, opacity: .8 }}>{PHOTO_RULE}</p>
         </div>
         <div className="ez-mb">
           <div
@@ -484,8 +502,9 @@ export default function PhotoUploader({
                 Drop an image here or{' '}
                 <label className="ez-btn ez-sm" style={{ marginLeft: 4, display: 'inline-flex' }}>
                   choose a file
-                  <input type="file" accept="image/*,.heic,.heif" hidden onChange={pick} />
+                  <input type="file" accept="image/jpeg,image/png,image/webp,.heic,.heif" hidden onChange={pick} />
                 </label>
+                <span style={{ display: 'block', marginTop: 10, fontSize: 11.5 }}>{PHOTO_RULE}</span>
               </span>
             )}
             {src && (
@@ -546,7 +565,7 @@ export default function PhotoUploader({
               that state is what made a second upload impossible. */}
           <label className="ez-btn" style={{ marginRight: 'auto', display: 'inline-flex', alignItems: 'center' }}>
             {src ? 'Choose a different photo' : 'Choose a file'}
-            <input type="file" accept="image/*,.heic,.heif" hidden onChange={pick} />
+            <input type="file" accept="image/jpeg,image/png,image/webp,.heic,.heif" hidden onChange={pick} />
           </label>
           <button className="ez-btn" onClick={onClose}>Cancel</button>
           <button className="ez-btn ez-pri" onClick={save} disabled={busy > 0 || !src || !ready}>

@@ -43,6 +43,12 @@ export default function AttendanceReportsPage() {
   const [busy, setBusy] = useState(false)
   const [out, setOut] = useState<ReportOutput | null>(null)
   const [err, setErr] = useState('')
+  // The filters the shown result was generated with. Once any filter on screen moves
+  // away from them, the result no longer matches what HR is looking at, so Export is
+  // held until the report is generated again.
+  const filterKey = [reportId, companyId, departmentId, locationId, employeeId, codesText.trim(), from, to].join('|')
+  const [outKey, setOutKey] = useState('')
+  const stale = !!out && outKey !== filterKey
 
   const report = useMemo(() => REPORTS.find(r => r.id === reportId)!, [reportId])
 
@@ -78,13 +84,13 @@ export default function AttendanceReportsPage() {
       const codes = codesText.split(/[\s,]+/).map(c => c.trim().toUpperCase()).filter(Boolean)
       const co = companyFilter(grant, companyId)
       const res = await runReport(reportId, { companyId: co || '', departmentId: departmentId || undefined, locationId: locationId || undefined, employeeId: report.singleEmp ? employeeId : undefined, employeeCodes: (!report.singleEmp && codes.length) ? codes : undefined, from, to })
-      setOut(res)
+      setOut(res); setOutKey(filterKey)
     } catch (e: any) { setErr(e?.message || 'Report failed.') }
     setBusy(false)
   }
 
   function exportXlsx() {
-    if (!out) return
+    if (!out || stale) return
     try {
       // Excel sheet names can't contain : \ / ? * [ ] and max 31 chars.
       const sheetName = (report.label.replace(/[:\\/?*[\]]/g, '-').slice(0, 28) || 'Report')
@@ -181,8 +187,9 @@ export default function AttendanceReportsPage() {
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{out.rows.length ? `${report.label} ready` : 'No matching data'}</div>
                   <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{out.rows.length ? <><b style={{ color: C.navy }}>{out.rows.length}</b> row{out.rows.length !== 1 ? 's' : ''}{out.note ? ` · ${out.note}` : ''} · {out.columns.length} columns</> : 'No records for these filters. Try a wider date range or different filters.'}</div>
                 </div>
+                {stale && <div style={{ fontSize: 12, color: C.amber, flexBasis: '100%' }}>The filters have changed since this was generated. Generate the report again to export what the filters now select.</div>}
                 {out.rows.length > 0 && (
-                  <button onClick={exportXlsx} style={{ padding: '11px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.positive},${TK.positive})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(5,150,105,0.30)', whiteSpace: 'nowrap' }}>⬇ Export Excel</button>
+                  <button onClick={exportXlsx} disabled={stale} title={stale ? 'Generate the report again: the filters have changed' : undefined} style={{ padding: '11px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.positive},${TK.positive})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: stale ? 'not-allowed' : 'pointer', opacity: stale ? 0.55 : 1, boxShadow: '0 4px 12px rgba(5,150,105,0.30)', whiteSpace: 'nowrap' }}>⬇ Export Excel ({out.rows.length})</button>
                 )}
               </div>
             )}

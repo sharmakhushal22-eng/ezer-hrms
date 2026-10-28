@@ -5075,3 +5075,15 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
   .rx-mc-tiles .rx-mt-money .rx-mt-l{flex-basis:100%}
   .rx-mc-tiles .rx-mt-money b.rx-mt-amt{font-size:17px}
 }
+
+/* Docked rail over the page header (28 Oct 2026).
+   .rx-head sits on --ez-z-band (25) and the rail on --ez-z-rail (20). In flow the
+   header is BELOW the rail, so on scroll it slid up underneath the docked rail —
+   and, being higher, painted over it: "Candidate pipeline" lay across the tabs and
+   the tabs stopped taking clicks. The rail now stacks one above the band (still
+   below the portal's sticky top bar at 30 and every menu/modal), and once docked
+   it is a solid surface rather than an 88% wash, so scrolled content cannot show
+   through it. Its own help popover tier (28) is unaffected: popovers open from the
+   header downward, away from the rail. */
+.rx-rail{z-index:calc(var(--ez-z-band) + 1)}
+.rx-rail.is-stuck{background:var(--ez-surface)}

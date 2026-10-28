@@ -1045,32 +1045,46 @@ export default function EmployeeMaster() {
   const exportExcel = async () => {
     setExporting(true)
     try {
-      let q = supabase.from('employees')
-        .select('*, companies!employees_company_id_fkey(company_name, company_code), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, city)')
-        .neq('is_test', true).order('emp_code')
-      { const co = companyFilter(grant, filterCompany); if (co) q = q.eq('company_id', co) }
-      if (filterLocation) q = q.eq('location_id', filterLocation)
-      if (filterDept)     q = q.eq('department_id', filterDept)
-      if (filterType)     q = q.eq('employment_type', filterType)
-      if (filterStatus)   q = q.eq('employment_status', filterStatus)
-      if (filterGrade)    q = q.eq('grade', filterGrade)
-      if (search.trim())  q = q.or(orIlike(['full_name', 'emp_code', 'common_code', 'designation', 'mobile'], search.trim()))
-      const { data, error: err } = await q
-      if (err) throw err
-      const list = (data as any[] || [])
+      const build = () => {
+        let q = supabase.from('employees')
+          .select('*, companies!employees_company_id_fkey(company_name, company_code), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, city)')
+          .neq('is_test', true).order('emp_code')
+        { const co = companyFilter(grant, filterCompany); if (co) q = q.eq('company_id', co) }
+        if (filterLocation) q = q.eq('location_id', filterLocation)
+        if (filterDept)     q = q.eq('department_id', filterDept)
+        if (filterType)     q = q.eq('employment_type', filterType)
+        if (filterStatus)   q = q.eq('employment_status', filterStatus)
+        if (filterGrade)    q = q.eq('grade', filterGrade)
+        if (search.trim())  q = q.or(orIlike(['full_name', 'emp_code', 'common_code', 'designation', 'mobile'], search.trim()))
+        return q
+      }
+      // The API hands back at most 1,000 rows per request, so a filter matching more than
+      // that is read page by page — the file must hold every employee the filter matches
+      // (the "N employees" the screen shows), not the first thousand of them.
+      const list: any[] = []
+      for (let from = 0; ; from += 1000) {
+        const { data, error: err } = await build().range(from, from + 999)
+        if (err) throw err
+        list.push(...((data as any[]) || []))
+        if (!data || data.length < 1000) break
+      }
       if (!list.length) { alert('No employees to export for the current filters.'); setExporting(false); return }
 
       const ids = list.map(e => e.id)
       const ctcMap = new Map<string, any>()
       const salMap = new Map<string, any>()
-      try {
-        const { data: ctc } = await supabase.from('ctc_master').select('*').in('employee_id', ids).order('created_at', { ascending: false })
-        for (const c of (ctc || []) as any[]) if (!ctcMap.has(c.employee_id)) ctcMap.set(c.employee_id, c)
-      } catch { /* ctc_master optional */ }
-      try {
-        const { data: sal } = await supabase.from('salary_structures').select('*').in('employee_id', ids).order('effective_date', { ascending: false })
-        for (const sr of (sal || []) as any[]) if (!salMap.has(sr.employee_id)) salMap.set(sr.employee_id, sr)
-      } catch { /* salary_structures optional */ }
+      // Looked up in slices: a 2,000-id IN list overflows the request URL.
+      for (let i = 0; i < ids.length; i += 300) {
+        const slice = ids.slice(i, i + 300)
+        try {
+          const { data: ctc } = await supabase.from('ctc_master').select('*').in('employee_id', slice).order('created_at', { ascending: false })
+          for (const c of (ctc || []) as any[]) if (!ctcMap.has(c.employee_id)) ctcMap.set(c.employee_id, c)
+        } catch { /* ctc_master optional */ }
+        try {
+          const { data: sal } = await supabase.from('salary_structures').select('*').in('employee_id', slice).order('effective_date', { ascending: false })
+          for (const sr of (sal || []) as any[]) if (!salMap.has(sr.employee_id)) salMap.set(sr.employee_id, sr)
+        } catch { /* salary_structures optional */ }
+      }
       const addPrefixed = (flat: Record<string, any>, obj: any, prefix: string, skip: string[]) => {
         if (!obj) return
         for (const [k, v] of Object.entries(obj)) {
@@ -1228,7 +1242,7 @@ export default function EmployeeMaster() {
             : `${stats.total.toLocaleString('en-IN')} on record · ${stats.active.toLocaleString('en-IN')} active · showing ${employees.length.toLocaleString('en-IN')}`}
           actions={<>
             <Button icon={<IconDownload size={16} />} disabled={exporting} onClick={exportExcel}>
-              {exporting ? 'Exporting…' : 'Export Excel'}
+              {exporting ? 'Exporting…' : `Export Excel (${total})`}
             </Button>
             <Button icon={<IconUpload size={16} />} onClick={() => setShowBulk(true)}>Bulk Upload</Button>
             <Button variant="primary" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>Add Employee</Button>

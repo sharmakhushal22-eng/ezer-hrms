@@ -206,7 +206,7 @@ export default function StatutoryLeavePage() {
           <div><label style={C.lbl}>State</label><input style={{ ...C.input, width:160 }} placeholder="filter…" value={fState} onChange={e => setFState(e.target.value)} /></div>
           <div style={{ marginLeft:'auto', display:'flex', gap:8, flexWrap:'wrap' }}>
             <button style={C.out} onClick={() => setCopyOpen(true)}>Copy to FY</button>
-            <button style={C.out} onClick={exportXlsx}>⬇ Export</button>
+            <button style={C.out} onClick={exportXlsx}>⬇ Export ({filtered.length})</button>
             <label style={{ ...C.out, display:'inline-flex', alignItems:'center' }}>⬆ Import<input type="file" accept=".xlsx,.xls" style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) importXlsx(f); e.target.value = '' }} /></label>
             <button style={C.pri} onClick={() => setEditing('new')}>+ Add row</button>
           </div>
