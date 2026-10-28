@@ -307,6 +307,24 @@ BEGIN
     SELECT e.id INTO v_emp FROM employees e
      WHERE upper(btrim(e.emp_code)) = upper(v_code);
 
+    -- MARKED BEFORE FINALISING, NOT AFTER, AND THE ORDER IS LOAD-BEARING.
+    --
+    -- pms_finalise sets is_readonly = true for an EXITED employee (rule 12),
+    -- and trg_pms_readonly then refuses every later UPDATE of that row — in
+    -- this transaction included. Doing this afterwards therefore raised
+    -- "Record is read-only (employee exited and rating finalised)" and rolled
+    -- the whole batch back, which meant §6.4 could not process an exited
+    -- employee AT ALL. They are the one category with a hard deadline, and
+    -- report #7 exists specifically to chase their pending ratings.
+    --
+    -- Observed, not reasoned: committing a rating for STC0003 returned that
+    -- error with nothing applied. Set first, while the row is still unlocked.
+    -- pms_finalise does not touch rating_source, so it survives, and a later
+    -- RAISE still rolls this back with everything else.
+    UPDATE pms_overall_rating
+       SET rating_source = 'HR_OVERRIDE', updated_at = now()
+     WHERE employee_id = v_emp AND period_id = p_period_id;
+
     SELECT pms_finalise(v_emp, p_period_id, p_actor_id, p_actor_role, v_up, v_reason)
       INTO v_res;
 
@@ -315,11 +333,6 @@ BEGIN
         'Upload rolled back at %: %. Nothing in this batch was applied.',
         v_code, COALESCE(v_res, 'pms_finalise returned nothing');
     END IF;
-
-    -- Distinguishable from a rating the engine produced.
-    UPDATE pms_overall_rating
-       SET rating_source = 'HR_OVERRIDE', updated_at = now()
-     WHERE employee_id = v_emp AND period_id = p_period_id;
 
     -- The template's prose columns, where given. visible_to_employee stays
     -- false: finalising is not publishing.
