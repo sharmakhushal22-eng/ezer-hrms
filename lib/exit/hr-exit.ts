@@ -42,7 +42,15 @@ export const HR_EXIT_REASONS: HrExitReason[] = [
     chain: ['HR_MANAGER', 'HR_HEAD', 'MD'], lwd: 'NOTICE', lwdHint: "Today + the employee's notice period", rehire: 'GREEN' },
   { code: 'TRANSFER', label: 'Transfer (Inter-Company)', subReasons: ['Same Branch Transfer', 'Different Branch', 'Different Company Same Group', 'Relocation with Transfer'],
     chain: ['HR_MANAGER', 'DEST_HR_MANAGER', 'HR_HEAD'], lwd: 'MONTH_END', lwdHint: 'Transfer date − 1 day: the last day in this company (new DOJ is the day after)', rehire: null },
+  // Not in the spec's seven; added on request. The family is the one paid: gratuity with no
+  // minimum service, no notice recovery, the PF / EDLI nominee claim, and nothing is sent to
+  // the employee's own bell or mail.
+  { code: 'DEATH', label: 'Death in Service', subReasons: ['Illness', 'Accident', 'Other'],
+    chain: ['HR_MANAGER', 'HR_HEAD'], lwd: 'TODAY', lwdHint: 'Date of death', rehire: null },
 ]
+/** Exits where nothing is sent to the employee themself (their bell / mail). */
+export const SILENT_REASONS = ['DEATH']
+export const isSilent = (code: string | null | undefined) => SILENT_REASONS.includes(String(code || '').toUpperCase())
 export const reasonOf = (code: string | null | undefined) => HR_EXIT_REASONS.find(r => r.code === code) || null
 
 const addDays = (iso: string, n: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }

@@ -100,6 +100,19 @@ export async function exitLetterPdf(x: LetterInput): Promise<{ name: string; con
       para(`Your employment with ${companyName} stands terminated with effect from ${day(x.lwd)}, which is your last working day.`)
       para('Your dues up to that date will be settled in your Full & Final settlement after recovery of any amounts owed to the company. Return all company property in your possession immediately.')
       sign()
+    } else if (x.kind === 'PF_GUIDANCE' && x.reason.code === 'DEATH') {
+      // Death in service: the claim is the nominee's / family's.
+      para(`To the nominee / family of the late ${name} (Employee Code: ${e.emp_code || '-'}). Please accept our deepest condolences. This note explains the Provident Fund, pension and insurance claims that are payable to you.`)
+      kv([['UAN', e.uan || 'Not on record: contact HR'], ['Service period', `${day(e.doj)} to ${day(x.lwd)}`], ['Date of death', day(x.lwd)]])
+      heading('Form 20: Provident Fund balance')
+      para('The PF balance is paid to the nominee (or, without a nomination, to the legal heirs). Submit Form 20 with the death certificate and the claimant’s bank details; it can be filed online on the EPFO portal by the nominee.')
+      heading('Form 10D: family / widow(er) pension (EPS)')
+      para('The family pension under the Employees’ Pension Scheme is payable to the spouse and children (or the nominee) with no minimum service. Submit Form 10D with the death certificate, the claimants’ photographs and bank details.')
+      heading('Form 5(IF): EDLI insurance')
+      para('The Employees’ Deposit Linked Insurance assurance benefit is payable to the nominee. Submit Form 5(IF) along with Form 20; the company attests it.')
+      heading('Gratuity and the Full & Final settlement')
+      para(`Gratuity is payable on death without the five-year condition, and the Full & Final settlement from ${companyName} is paid to the nominee. HR will help you with the attestations and the documents required.`)
+      sign()
     } else if (x.kind === 'PF_GUIDANCE') {
       para(`Dear ${name}, this note helps you withdraw or transfer your Provident Fund after leaving ${companyName}.`)
       kv([['UAN', e.uan || 'Not on record: contact HR'], ['Service period', `${day(e.doj)} to ${day(x.lwd)}`], ['Bank (for the claim)', e.bank || 'Update your bank in ESS'], ['Personal email', e.personal_email || '-']])

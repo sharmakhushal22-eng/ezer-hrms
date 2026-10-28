@@ -16,7 +16,7 @@ test('the hiring and HR roles may exit others; everyone else may not', () => {
 })
 
 test('the company reasons and their chains follow the spec', () => {
-  assert.deepEqual(HR_EXIT_REASONS.map(r => r.code), ['ABSCOND', 'FRAUD', 'LAYOFF', 'TERMINATION', 'DISCONTINUE', 'TRANSFER'])
+  assert.deepEqual(HR_EXIT_REASONS.map(r => r.code), ['ABSCOND', 'FRAUD', 'LAYOFF', 'TERMINATION', 'DISCONTINUE', 'TRANSFER', 'DEATH'])
   const by = Object.fromEntries(HR_EXIT_REASONS.map(r => [r.code, r]))
   assert.deepEqual(by.ABSCOND.chain, ['HR_MANAGER', 'HR_HEAD'])
   assert.deepEqual(by.FRAUD.chain, ['HR_MANAGER', 'LEGAL', 'HR_HEAD', 'MD'])

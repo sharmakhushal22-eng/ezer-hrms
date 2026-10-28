@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden, audit, notify } from '@/lib/ess/session'
 import {
-  canExitOthers, OPEN_EXIT, HR_EXIT_REASONS, STAGES, SHOWN_STATUSES, reasonOf, suggestedLwd, startProblems,
+  canExitOthers, isSilent, OPEN_EXIT, HR_EXIT_REASONS, STAGES, SHOWN_STATUSES, reasonOf, suggestedLwd, startProblems,
   buildChain, advance, decide, waitingOn, type ChainStep, type Person,
 } from '@/lib/exit/hr-exit'
 import { effectiveNoticeDays } from '@/lib/exit/notice'
@@ -254,7 +254,7 @@ export async function POST(req: NextRequest) {
         await sb.from('fnf_settlements').delete().eq('resignation_id', row.resignation_id).eq('status', 'CALCULATED').then(() => null, () => null)
       }
       if (row.onboarding_candidate_id) await sb.from('onboarding_candidates').update({ status: 'REJECTED', hr_notes: 'Transfer cancelled' }).eq('id', row.onboarding_candidate_id).then(() => null, () => null)
-      await notify(row.employee_id, 'Your exit has been cancelled', `HR has cancelled your exit (${row.reason_label}). You continue in your role.`, '/ess', 'COMPLIANCE').catch(() => null)
+      if (!isSilent(row.reason_code)) await notify(row.employee_id, 'Your exit has been cancelled', `HR has cancelled your exit (${row.reason_label}). You continue in your role.`, '/ess', 'COMPLIANCE').catch(() => null)
     }
     if (row.reason_code === 'ABSCOND') await sb.from('employees').update({ abscond_marked_at: null }).eq('id', row.employee_id)
     if (action === 'cancel' && row.status === 'PENDING') {

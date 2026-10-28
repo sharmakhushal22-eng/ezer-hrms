@@ -172,7 +172,7 @@ function StartForm({ reasons, companies, busy, onStart }: { reasons: Reason[]; c
       {r && (
         <div style={{ marginTop: S.md, fontSize: F.small, color: C.inkSoft, background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.md, padding: `${S.sm}px ${S.md}px`, lineHeight: 1.6 }}>
           {r.code === 'ABSCOND' && <>Three reminders go to the employee a week apart (the first now); after 21 days with no response the approval starts. </>}
-          Approval flow: <b>{r.chain.join(' → ')}</b>. Nothing changes for the employee until the last approval.{r.rehire ? ` Rehire flag: ${r.rehire}.` : ' Group date of joining is kept; the new company onboards them from the day after.'}
+          Approval flow: <b>{r.chain.join(' → ')}</b>. Nothing changes for the employee until the last approval.{r.rehire ? ` Rehire flag: ${r.rehire}.` : ''}{r.code === 'TRANSFER' ? ' Group date of joining is kept; the new company onboards them from the day after.' : ''}{r.code === 'DEATH' ? ' Nothing is sent to the employee’s own bell or mail; gratuity (no minimum service), the F&F and the PF / EDLI claim go to the nominee.' : ''}
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: S.lg }}>

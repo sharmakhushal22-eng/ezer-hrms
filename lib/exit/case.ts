@@ -9,7 +9,7 @@ import { roleHolders } from '@/lib/recruitment/offer-approval-notify'
 import { sendMail, mailConfigured } from '@/lib/mail/send'
 import { CLEARANCE_FORMS, DEPTS, isCleared, recoveryOf, payableOf, clearanceEscalation, type Dept } from './clearance'
 import { gratuityOf, pendingSalaryOf, noticeShortfallOf, fnfTotals, lettersFor, WITHHOLD_GRATUITY, NO_NOTICE_RECOVERY, NO_EL_ENCASHMENT, rupees, type FnfLine } from './fnf'
-import { STAGES, reasonOf, type ChainStep } from './hr-exit'
+import { STAGES, reasonOf, isSilent, type ChainStep } from './hr-exit'
 import { effectiveNoticeDays } from './notice'
 import { revokeAccess } from '@/lib/offboarding/run'
 
@@ -153,7 +153,7 @@ export async function startClearance(sb: Sb, resignationId: string): Promise<{ s
   const lwd = String(res.final_lwd || res.lwd_as_per_policy || today())
   const facts = await exitFacts(sb, emp.id)
   const reason = await exitReasonOf(sb, resignationId)
-  const g = gratuityOf(facts.basicMonthly, emp.company_doj || emp.date_of_joining, lwd)
+  const g = gratuityOf(facts.basicMonthly, emp.company_doj || emp.date_of_joining, lwd, { death: reason.code === 'DEATH' })
   const rehire = emp.rehire_flag || reasonOf(reason.code)?.rehire || (reason.code === 'SELF' ? 'GREEN' : null)
   let started = 0
   for (const dept of missing) {
@@ -168,7 +168,7 @@ export async function startClearance(sb: Sb, resignationId: string): Promise<{ s
     await Promise.all(approvers.map(id => bell(sb, id, `Exit clearance: ${who(emp)}`, `${def.label} clearance (${def.formId}-${emp.emp_code || ''}) is waiting on you. Last working day ${day(lwd)}. Fill it in Tasks & Approvals.`, APPROVALS_LINK)))
   }
   if (started) {
-    await bell(sb, emp.id, 'Your exit clearance has started', `IT, Admin, Finance, HR and your manager will clear your exit before ${day(lwd)}. Return company property and hand over your work.`, '/ess/exit', 'COMPLIANCE')
+    if (!isSilent(reason.code)) await bell(sb, emp.id, 'Your exit clearance has started', `IT, Admin, Finance, HR and your manager will clear your exit before ${day(lwd)}. Return company property and hand over your work.`, '/ess/exit', 'COMPLIANCE')
     const hrs = await roleHolders(sb as any, emp.company_id, ['HR_MANAGER'])
     await Promise.all(hrs.map(h => bell(sb, h.id, `Clearance started: ${who(emp)}`, `Five department forms are open. Last working day ${day(lwd)}.`, EXIT_LINK, 'APPROVAL')))
   }
@@ -198,7 +198,7 @@ export async function computeFnf(sb: Sb, resignationId: string, o: { force?: boo
     earnings.push({ key: 'salary', label: 'Pending salary', amount: ps.amount, note: `${ps.note}${f.salaryNote ? ` (${f.salaryNote})` : ''}`, editable: true })
     const elAmt = NO_EL_ENCASHMENT.includes(reason.code) ? 0 : Math.round(f.elBalance * f.basicMonthly / 30)
     earnings.push({ key: 'el', label: 'Earned leave encashment', amount: elAmt, note: NO_EL_ENCASHMENT.includes(reason.code) ? 'Not payable on abscond' : `${f.elBalance} EL day(s) × (Basic ${rupees(f.basicMonthly)} ÷ 30)`, editable: true })
-    const g = gratuityOf(f.basicMonthly, emp?.company_doj || emp?.date_of_joining || null, lwd, { withhold: WITHHOLD_GRATUITY.includes(reason.code) })
+    const g = gratuityOf(f.basicMonthly, emp?.company_doj || emp?.date_of_joining || null, lwd, { withhold: WITHHOLD_GRATUITY.includes(reason.code), death: reason.code === 'DEATH' })
     earnings.push({ key: 'gratuity', label: 'Gratuity', amount: g.amount, note: g.note, editable: true })
     const pay = Math.round(Number(byDept.FINANCE?.payable) || 0)
     if (pay) earnings.push({ key: 'reimbursements', label: 'Pending reimbursements (Finance clearance)', amount: pay, editable: true })
@@ -234,7 +234,7 @@ export async function computeFnf(sb: Sb, resignationId: string, o: { force?: boo
     await Promise.all(payroll.map(p => bell(sb, p.id, `F&F ready to review: ${who(e)}`, `All five clearances are in. Net payable ${rupees(t.net)}. Review it in HR Services → Exit Clearance & F&F.`, EXIT_LINK)))
     const hrs = await roleHolders(sb as any, emp?.company_id || null, ['HR_MANAGER'])
     await Promise.all(hrs.map(p => bell(sb, p.id, `All clearances done: ${who(e)}`, `F&F calculated: net payable ${rupees(t.net)}.`, EXIT_LINK)))
-    await bell(sb, res.employee_id, 'Your exit clearance is complete', 'All departments have cleared your exit. Your Full & Final settlement is being prepared.', '/ess/exit', 'COMPLIANCE')
+    if (!isSilent(reason.code)) await bell(sb, res.employee_id, 'Your exit clearance is complete', 'All departments have cleared your exit. Your Full & Final settlement is being prepared.', '/ess/exit', 'COMPLIANCE')
   }
   return data
 }
@@ -397,8 +397,14 @@ export async function applyCompanyExit(sb: Sb, row: any, by: Person): Promise<{ 
   const body = transfer
     ? `Your last working day in the current company is ${day(lwd)}. Your onboarding in the new company is ready; your group date of joining stays the same.`
     : `HR has processed your exit (${row.reason_label}). Your last working day is ${day(lwd)}. Download your payslips and documents before then; ESS access ends on that day.`
-  await bell(sb, emp.id, title, body, '/ess/exit', 'COMPLIANCE')
   let mailed = false
+  if (isSilent(row.reason_code)) {
+    // Death in service: nothing to the employee's own bell or mail; HR handles the family.
+    const hrs = await roleHolders(sb as any, emp.company_id, ['HR_MANAGER', 'HR_HEAD'])
+    await Promise.all(hrs.map(h => bell(sb, h.id, `Death in service recorded: ${who(emp)}`, `Last working day ${day(lwd)}. Clearance is open; the F&F, gratuity and the PF / EDLI claim are paid to the nominee.`, EXIT_LINK, 'APPROVAL')))
+    return { resignationId: res?.id || null, revokedNow, mailed, onboardingId }
+  }
+  await bell(sb, emp.id, title, body, '/ess/exit', 'COMPLIANCE')
   const to = emp.personal_email || emp.office_email
   if (to && mailConfigured()) {
     const text = row.reason_code === 'ABSCOND'

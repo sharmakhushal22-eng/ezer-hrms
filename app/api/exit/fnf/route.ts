@@ -14,6 +14,7 @@ import { essRoute, forbidden, audit, notify } from '@/lib/ess/session'
 import { DEPTS } from '@/lib/exit/clearance'
 import { fnfTotals, lettersFor, rupees, LETTER_LABEL, type FnfLine } from '@/lib/exit/fnf'
 import { computeFnf, exitReasonOf } from '@/lib/exit/case'
+import { isSilent } from '@/lib/exit/hr-exit'
 import { handleLoanOnExit } from '@/lib/loans/payroll-sync'
 import { sendMail, mailConfigured } from '@/lib/mail/send'
 
@@ -155,9 +156,10 @@ export async function POST(req: NextRequest) {
     await handleLoanOnExit(sb as any, f.employee_id).catch(() => null)
     await sb.from('employee_resignation').update({ status: 'RECOVERY_PENDING' }).eq('id', f.resignation_id).in('status', ['INITIATED', 'PENDING_HR_MANAGER'])
     const letters = (upd.letters || []).map((k: string) => (LETTER_LABEL as any)[k] || k)
-    await notify(f.employee_id, 'Your Full & Final settlement is approved', `Net payable ${rupees(Number(f.net_payable))}. Your letters are ready: ${letters.join(', ')}. Download them from ESS → HR Services → Exit.`, '/ess/exit', 'COMPLIANCE').catch(() => null)
+    const silent = isSilent(f.reason_code)
+    if (!silent) await notify(f.employee_id, 'Your Full & Final settlement is approved', `Net payable ${rupees(Number(f.net_payable))}. Your letters are ready: ${letters.join(', ')}. Download them from ESS → HR Services → Exit.`, '/ess/exit', 'COMPLIANCE').catch(() => null)
     const to = emp?.personal_email || emp?.office_email
-    if (to && mailConfigured()) {
+    if (to && mailConfigured() && !silent) {
       await sendMail({ to, fromName: 'EZER HR Team', subject: `Your Full & Final settlement: ${rupees(Number(f.net_payable))}`,
         text: `Hi ${emp?.full_name},\n\nYour Full & Final settlement for the last working day ${day(f.last_working_day)} has been approved.\n\nNet payable: ${rupees(Number(f.net_payable))}\n\nYour letters (${letters.join(', ')}) and the F&F statement are in ESS → HR Services → Exit, available for the next 12 months.\n\nEZER HR Team` }).catch(() => null)
     }
@@ -175,7 +177,7 @@ export async function POST(req: NextRequest) {
     const upd = await move('APPROVED', { status: 'PAID', paid_by: me, paid_by_name: myName, paid_at: now, paid_ref: ref.slice(0, 120) })
     if (!upd) return bad('Only an approved statement can be paid.', 409)
     await sb.from('employee_resignation').update({ status: 'SETTLED' }).eq('id', f.resignation_id)
-    await notify(f.employee_id, 'Your F&F has been paid', `${rupees(Number(f.net_payable))} released (ref ${ref}).`, '/ess/exit', 'COMPLIANCE').catch(() => null)
+    if (!isSilent(f.reason_code)) await notify(f.employee_id, 'Your F&F has been paid', `${rupees(Number(f.net_payable))} released (ref ${ref}).`, '/ess/exit', 'COMPLIANCE').catch(() => null)
     await audit(ctx.caller, 'FNF_PAID', f.employee_id, { fnf_id: f.id, ref })
     return NextResponse.json({ ok: true, fnf: upd })
   }
