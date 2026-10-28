@@ -74,7 +74,8 @@ const NO_COMPANY =
 const SAVE_FAILED = (what: string) =>
   `Your ${what} could not be saved. Nothing was lost — try again, and tell HR if it keeps happening.`
 
-interface Period { id: string; period_code: string; status: string; policy_id?: string | null }
+interface Period { id: string; period_code: string; status: string; policy_id?: string | null
+                   period_start?: string | null }
 /** The three policy columns the review screens have to agree with pms_finalise
  *  about. Widened from the CHECK constraints in 066 rather than from memory. */
 interface Policy {
@@ -152,7 +153,7 @@ function usePeriod(employeeId: string) {
     setManagerId(row?.l1_manager_id ?? null)
 
     let q = supabase.from('pms_periods')
-      .select('id,period_code,status,policy_id')
+      .select('id,period_code,status,policy_id,period_start')
       .not('status', 'in', '("CLOSED","SCHEDULED")')
     if (companyId) q = q.eq('company_id', companyId)
     const p = await q.order('period_start', { ascending: false }).limit(1).maybeSingle()
@@ -364,6 +365,11 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const { period, overall, loading, reload, companyId, managerId, bands, rules } = usePeriod(employeeId)
   const [who, setWho] = useState<Who>({ name: '', code: '' })
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
+  /** Last period's locked KRAs, offered as this period's starting point.
+   *  Null when there is nothing to carry or this period already has its own. */
+  const [carried, setCarried] = useState<{
+    fromPeriodId: string; fromPeriodCode: string; kras: Kra[]
+  } | null>(null)
   const [logs, setLogs] = useState<Log[]>([])
   const [reviews, setReviews] = useState<Record<string, unknown>[]>([])
   const [feedback, setFeedback] = useState<Record<string, unknown> | null>(null)
@@ -393,6 +399,46 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage,status')
       .eq('employee_id', employeeId).eq('period_id', period.id).order('seq_no')
     setGoals(g.data ?? [])
+
+    /**
+     * CARRY-FORWARD. §3's update: last quarter's KRAs/KPIs remain the default.
+     *
+     * Only when this period has none of its own — a carried default must never
+     * overwrite work the employee has already started. Taken from the previous
+     * period's LOCKED set, because a draft or sent-back set from last quarter
+     * was never agreed and carrying it would propagate something unfinished.
+     *
+     * The weightages come across as they were. They may well be changed in
+     * the one-to-one, and that change is what pms_one_to_one.weightage_changes
+     * now records.
+     */
+    if (!(g.data ?? []).length && companyId) {
+      const prev = await supabase.from('pms_periods')
+        .select('id,period_code,period_start')
+        .eq('company_id', companyId).lt('period_start', period.period_start ?? '9999-12-31')
+        .order('period_start', { ascending: false }).limit(1).maybeSingle()
+      const prevRow = prev.data as { id: string; period_code?: string } | null
+      if (prevRow?.id) {
+        const pg = await supabase.from('pms_employee_goals')
+          .select('seq_no,kra_title,kpi_metric,target_value,category,weightage')
+          .eq('employee_id', employeeId).eq('period_id', prevRow.id)
+          .eq('status', 'LOCKED').order('seq_no')
+        if (!pg.error && (pg.data ?? []).length) {
+          setCarried({
+            fromPeriodId: prevRow.id,
+            fromPeriodCode: String(prevRow.period_code ?? ''),
+            kras: (pg.data ?? []).map(k => ({
+              seq_no: Number(k.seq_no), kra_title: String(k.kra_title ?? ''),
+              kpi_metric: String(k.kpi_metric ?? ''), target_value: String(k.target_value ?? ''),
+              category: (String(k.category ?? 'BUSINESS')) as Category,
+              weightage: Number(k.weightage) || 0,
+              source: 'CARRIED_FORWARD' as const,
+              carried_from_period_id: prevRow.id,
+            })),
+          })
+        } else setCarried(null)
+      } else setCarried(null)
+    } else setCarried(null)
 
     const l = await supabase.from('pms_one_to_one')
       .select('id,discussion_type,discussion_date,mode,discussion_points,employee_ack,manager_ack,duration_minutes,weightage_changes')
@@ -439,7 +485,12 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       }))
     // The policy's minimum, not the constant: on a policy of 5 an employee
     // was handed 4 blank rows and had to notice the shortfall themselves.
-    : Array.from({ length: rules.minKra }, (_, i) => blankKra(i + 1)))
+    // Carried forward beats blank rows: last quarter's agreed set is a far
+    // better starting point than an empty form, and §3's update makes it the
+    // documented default. Blanks only when there is nothing to carry.
+    : carried?.kras.length
+      ? carried.kras
+      : Array.from({ length: rules.minKra }, (_, i) => blankKra(i + 1)))
 
   const lockGate = canLockWeightage(logs)
   const publishGate = canPublishResult(logs)
@@ -565,8 +616,23 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     // This was unreachable while nothing saved at all. Making the save work is
     // what exposed it, so it is fixed in the same breath.
     const { error } = await supabase.from('pms_employee_goals').upsert(
-      kras.map(k => ({ ...k, company_id: companyId, employee_id: employeeId,
-                       period_id: period.id, status: 'PENDING_RM_APPROVAL' })),
+      // NAMED COLUMNS, not { ...k }. The spread worked only because Kra
+      // happened to contain exactly the columns this table has — the moment
+      // somebody adds a UI-only field to Kra (a validation flag, an open/closed
+      // state) the upsert would try to write a column that does not exist and
+      // fail for reasons nowhere near the change that caused it.
+      //
+      // source and carried_from_period_id are what make §3's carry-forward
+      // survive the save. Left undefined on a fresh KRA so the column default
+      // 'MANUAL' applies rather than this code asserting it.
+      kras.map(k => ({
+        company_id: companyId, employee_id: employeeId, period_id: period.id,
+        seq_no: k.seq_no, kra_title: k.kra_title, kpi_metric: k.kpi_metric,
+        target_value: k.target_value, category: k.category, weightage: k.weightage,
+        source: k.source ?? 'MANUAL',
+        carried_from_period_id: k.carried_from_period_id ?? null,
+        status: 'PENDING_RM_APPROVAL',
+      })),
       { onConflict: 'period_id,employee_id,seq_no' })
     // A SHORTER SET LEAVES A TAIL. Going from six KRAs to four upserts rows
     // 1-4 and leaves 5 and 6 behind, which would still count towards the
@@ -658,7 +724,9 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           actionNote={actionNotes(rules)[stage] ?? ''} />
       )}
       {tab === 'kras' && (
-        <KraTab rules={rules} kras={kras} onChange={setDraftKras} locked={locked}
+        <KraTab rules={rules}
+                carriedFrom={!goals.length && carried ? carried.fromPeriodCode : null}
+                kras={kras} onChange={setDraftKras} locked={locked}
                 lockGate={lockGate} onSubmit={submitKras} saving={saving} />
       )}
       {tab === 'oneToOne' && (

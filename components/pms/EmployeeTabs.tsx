@@ -178,7 +178,10 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
 
 // ── §3.2 My KRAs ─────────────────────────────────────────────────────────
 
-export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES}: {
+export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom}: {
+  /** The period code these KRAs were carried from, when they were. Shown so a
+   *  carried set is visibly not a blank form the employee forgot to fill in. */
+  carriedFrom?: string | null
   /** The policy's KRA rules. DEFAULT_RULES is a FALLBACK, not the rule:
    *  reading the constant directly meant an admin could change min_kra_count
    *  and this screen would go on holding the employee to 4. */
@@ -246,6 +249,18 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
 
       <Card title="My KRAs"
             sub={`At least ${rules.minKra}, at most ${rules.maxKra}, and the weightages must total exactly ${rules.totalWeightage}.`}>
+            {carriedFrom && (
+              <div className="banner b-blue">
+                <span aria-hidden="true">↻</span>
+                <div>
+                  These are your KRAs from <b>{carriedFrom}</b>, carried forward as
+                  the starting point. Change whatever the new quarter needs — and
+                  anything the two of you agree in the one-to-one gets recorded
+                  there, including the weightage moves. Nothing is saved until you
+                  send it to your manager.
+                </div>
+              </div>
+            )}
         <div className="tblwrap">
           <table>
             <thead>

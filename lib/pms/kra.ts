@@ -32,6 +32,20 @@ export interface Kra {
   target_value: string
   category: Category
   weightage: number
+  /**
+   * WHERE THIS KRA CAME FROM. pms_employee_goals.source, which has allowed
+   * 'MANUAL' | 'LIBRARY' | 'AI_SUGGESTED' | 'CARRIED_FORWARD' since 066 and
+   * was never written by anything — every row was saved as the default
+   * MANUAL, including rows that were plainly carried over.
+   *
+   * It matters beyond bookkeeping: a carried-forward KRA arrives already
+   * agreed from last quarter, so the one-to-one is reviewing a change rather
+   * than settling something new, and the employee should be told which of
+   * their KRAs is which.
+   */
+  source?: 'MANUAL' | 'LIBRARY' | 'AI_SUGGESTED' | 'CARRIED_FORWARD'
+  /** The period it was carried from, when it was. */
+  carried_from_period_id?: string | null
 }
 
 export interface KraFault {
