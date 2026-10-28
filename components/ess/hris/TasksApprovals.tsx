@@ -100,7 +100,7 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
       <div className="hx-card pad">
         <div className="hx-sec">
           <h2>Approvals</h2><span className="grow" />
-          <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <span className="hx-chiprow" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {CHIPS.map(([k, l]) => (
               <button key={k} className="hx-chip" aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>
             ))}

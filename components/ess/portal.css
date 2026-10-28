@@ -203,7 +203,9 @@
 .ess-tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; display: flex;
   padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
-  background: var(--ess-glass-strong); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  /* Solid: through the old 80% glass, the text of whatever card sat behind the bar
+     read as a second line of labels under Home / Payroll / Leave. */
+  background: var(--ez-surface);
   border-top: 1px solid var(--ess-hair); box-shadow: 0 -8px 24px -16px rgba(30, 58, 138, .3);
 }
 .ess-tabbar button {
@@ -215,9 +217,10 @@
 .ess-tabbar button[data-on="1"] { color: var(--ess-chip-ink); }
 .ess-tabbar button[data-on="1"] .ess-tab-ic { background: var(--ess-grad); color: #FFFFFF; box-shadow: 0 6px 14px -6px var(--ess-a2); }
 
-/* The eye-comfort dock (app/layout.tsx) sits bottom-right. On a phone ESS puts its
-   tab bar there, so the dock moves up above it instead of covering "More". */
-body:has(.ess-tabbar) [data-ez-dock] { bottom: 82px !important; }
+/* The eye-comfort dock (app/layout.tsx) floats bottom-right. On a phone it sat on top
+   of whatever card was under it — a button, an amount, the end of a line — on every
+   screen. ESS phones get the same control inside the "More" sheet instead. */
+body:has(.ess-tabbar) [data-ez-dock] { display: none !important; }
 
 /* ── "More" sheet on phones ─────────────────────────────────────────────── */
 .ess-sheet-tile {
@@ -249,3 +252,21 @@ body:has(.ess-tabbar) [data-ez-dock] { bottom: 82px !important; }
 
 /* Admin modules opened inside ESS paint their own flat canvas; let the portal's show through. */
 .ess-main .ezob { background: transparent !important; }
+
+/* ── Phones ──────────────────────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  /* Safety net: nothing inside a screen may widen the page past the phone. A wide
+     table belongs in its own scroller; when one escapes (an absolutely positioned
+     child, a fixed min-width) it used to drag the whole portal sideways and push the
+     tab bar off screen. clip, not hidden: it creates no scroll container, so the
+     sticky top bar still sticks. */
+  .ess-main { overflow-x: clip; }
+  .ess-head { gap: 12px; margin-bottom: 16px; align-items: flex-start; }
+  .ess-head-ic { width: 42px; height: 42px; border-radius: 13px; }
+  .ess-head h1 { font-size: 21px; }
+  .ess-head p { font-size: 13px; }
+  /* The segmented sub-tabs scroll; let them run to the screen edge so the cut-off
+     tab reads as "swipe for more" rather than as a clipped box. */
+  .ess-seg { max-width: none; margin-left: -14px; margin-right: -14px; border-radius: 0; border-left: 0; border-right: 0; padding: 4px 14px; width: auto; }
+  .ess-seg button { height: 36px; padding: 0 13px; }
+}

@@ -369,6 +369,30 @@
   .hx-head-in{padding:14px 16px 0}.hx-main{padding:16px 16px 48px}
   .hx-title h1{font-size:20px}.hx-grid{grid-template-columns:1fr}
   .hx-head-tools .hx-search{display:none}
+  /* The mark and the title share a row, as every other ESS heading does; with wrap
+     on, the long description pushed the title under the icon. */
+  .hx-head-top{flex-wrap:nowrap;align-items:flex-start}
+  .hx-mark{width:44px;height:44px;border-radius:13px}
+  .hx-title{flex:1}
+  .hx-title .desc{font-size:13px}
+  .hx-head-tools{display:none}   /* only the search lives here; the directory has its own */
+}
+/* Five tabs do not fit a phone. The strip scrolls sideways inside itself — it used
+   to push the whole page out to ~730px, which hid the tab bar and broke scrolling.
+   The bleed to the screen edge shows there is more to swipe to. */
+@media (max-width:760px){
+  .hx-nav{overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+    margin:12px -16px 0;padding:4px 16px 0}
+  .hx-nav::-webkit-scrollbar{display:none}
+  .hx-nav-track{width:max-content;min-width:100%}
+  .hx-tab{padding:10px 12px 12px;font-size:13px}
+  /* Section filter chips (Approvals): their own swipeable row under the title, rather
+     than a right-aligned block wrapping beside it. */
+  .hx-sec{flex-wrap:wrap}
+  .hx-chiprow{flex:1 0 100%;flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;
+    margin:2px -18px 0;padding:0 18px 2px}
+  .hx-chiprow::-webkit-scrollbar{display:none}
+  .hx-chiprow>*{flex:none}
 }
 @media (prefers-reduced-motion:reduce){
   .hx *,.hx *::before,.hx *::after{animation-duration:.001ms!important;transition-duration:.001ms!important}

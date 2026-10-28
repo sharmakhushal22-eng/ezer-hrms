@@ -186,6 +186,10 @@
 .pms .tblwrap {
   overflow-x: auto; border: 1px solid var(--ez-line); border-radius: 12px;
   min-width: 0; max-width: 100%;
+  /* The containing block for the .sr-only labels in the cells. Without it they are
+   * placed against the page instead, escape this scroller, and on a phone pushed
+   * the document out to the table's full width (~770px). */
+  position: relative;
 }
 .pms table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .pms th {

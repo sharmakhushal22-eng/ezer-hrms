@@ -80,9 +80,9 @@ export function TeamRoster({ employeeId, isHod, isRm }: { employeeId: string; is
                 <tr key={r.id}>
                   <td className="tm-code">{r.code || '-'}</td>
                   <td className="tm-nm">{r.name}</td>
-                  <td>{r.designation || '-'}</td>
-                  {dept && <td>{r.direct ? 'Direct' : <span className="tm-dim">-</span>}</td>}
-                  <td>
+                  <td className="tm-des">{r.designation || '-'}</td>
+                  {dept && <td className="tm-dir">{r.direct ? 'Direct' : <span className="tm-dim">-</span>}</td>}
+                  <td className="tm-st">
                     <span className={`tm-pill ${r.tone === 'warn' ? 'warn' : r.tone === 'info' ? 'info' : 'ok'}`}>{r.status}</span>
                   </td>
                 </tr>
