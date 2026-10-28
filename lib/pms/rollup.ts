@@ -15,31 +15,6 @@
 // not resolve at all.
 import { FILL_ORDER, FILL_LABEL, type FillStatus } from './status.ts'
 
-/**
- * One CSV cell, quoted whenever it has to be.
- *
- * NOT OPTIONAL, and it lives here rather than in the component so it can be
- * tested: an unquoted comma shifts every later column on that row by one, so
- * the file opens, looks plausible, and is wrong. A ratings export that
- * silently misaligns is worse than a download that fails. Employee and
- * department names in this database contain commas and ampersands, and a
- * comment field can contain anything at all.
- *
- * Doubles embedded quotes, per RFC 4180. Newlines force quoting too, or one
- * cell becomes two rows.
- */
-export function csvCell(v: unknown): string {
-  if (v === null || v === undefined) return ''
-  const s = String(v)
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
-
-/** A whole CSV, header included. Rows are already-stringified cells. */
-export function csvText(head: string[], rows: unknown[][]): string {
-  return [head.map(csvCell).join(','), ...rows.map(r => r.map(csvCell).join(','))]
-    .join('\n') + '\n'
-}
-
 /** One row of vw_pms_fill_status, narrowed to what a roll-up needs.
  *
  *  The second group is not used by the roll-up at all — it is what §6.3's

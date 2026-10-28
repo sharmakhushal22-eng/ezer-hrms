@@ -58,7 +58,8 @@ import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL, FLOW, FLOW_ENDS,
          REPORTING_LINE, type Role } from '@/lib/pms/hierarchy'
 import { DEFAULT_RULES } from '@/lib/pms/cycle'
 import { FILL_ORDER, FILL_LABEL, type FillStatus } from '@/lib/pms/status'
-import { rollUp, csvText, type FillRow } from '@/lib/pms/rollup'
+import { rollUp, type FillRow } from '@/lib/pms/rollup'
+import { csvText, parseCsv } from '@/lib/pms/csv'
 import { humanDate } from '@/lib/pms/cycle'
 
 export type AdminTab =
@@ -542,8 +543,8 @@ export function FillTab({ rows, deptNames, loading }: {
 
 /** §6.3's export. Columns in the order the spec lists them, as far as the
  *  view actually carries them. The CSV text is built by csvText in
- *  lib/pms/rollup.ts, where the quoting rules can be tested; this half is
- *  only the browser download, which cannot be. */
+ *  lib/pms/csv.ts, where the quoting rules can be tested against the reader
+ *  that has to parse them back; this half is only the browser download. */
 function exportFill(rows: FillRow[], deptNames: Record<string, string>, name: string): void {
   const head = ['Code', 'Name', 'Department', 'Employment flag', 'KRA count',
                 'Total weightage', 'One-to-one', 'Self score', 'Fill status',
@@ -713,19 +714,6 @@ const KNOWN_NOTHING = {
   lookup: () => null,
   scale: [1, 2, 3, 4, 5],
   improvementMandatoryAtOrBelow: 2,
-}
-
-/** Minimal CSV read — the template has no quoted commas in it. */
-function parseCsv(text: string): UploadRow[] {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) return []
-  const head = lines[0].split(',').map(h => h.trim())
-  return lines.slice(1).map(line => {
-    const cells = line.split(',')
-    const row: Record<string, string> = {}
-    head.forEach((h, i) => { row[h] = (cells[i] ?? '').trim() })
-    return row as unknown as UploadRow
-  })
 }
 
 function downloadTemplate() {
