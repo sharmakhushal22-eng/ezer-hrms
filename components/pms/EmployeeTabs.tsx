@@ -178,7 +178,7 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
 
 // ── §3.2 My KRAs ─────────────────────────────────────────────────────────
 
-export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom, self, onSelfChange, bands = DEFAULT_BANDS, rateRequired = false}: {
+export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom, self, onSelfChange, bands = DEFAULT_BANDS, rateRequired = false, selfSubmitted = false}: {
   /** §3's merge: the employee rates each KRA as they write it, and the KRAs
    *  and the ratings go to the manager together. Optional, so a caller that
    *  has not wired rating still renders. */
@@ -189,6 +189,16 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
    *  every KRA must carry a rating. Before that the employee is drafting and a
    *  half-rated set is a reasonable thing to save. */
   rateRequired?: boolean
+  /**
+   * Has the self rating already been submitted?
+   *
+   * NOT the same thing as `locked`, and conflating them was a real bug. The
+   * weightage lock freezes the KRAs — §1 Stage 3 — and the self-appraisal
+   * happens AFTER it, at Stage 4. Gating the rating fields on `locked` killed
+   * them at exactly the moment the employee is supposed to use them, and
+   * removed the submit button with them.
+   */
+  selfSubmitted?: boolean
   /** The period code these KRAs were carried from, when they were. Shown so a
    *  carried set is visibly not a blank form the employee forgot to fill in. */
   carriedFrom?: string | null
@@ -333,11 +343,11 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                     {onSelfChange && (
                       <>
                         <td>
-                          <input value={self?.[k.seq_no]?.achievement ?? ''} readOnly={locked}
+                          <input value={self?.[k.seq_no]?.achievement ?? ''} readOnly={selfSubmitted}
                                  aria-label={`Achievement for KRA ${i + 1}`}
                                  placeholder="The number you actually hit"
                                  onChange={e => onSelfChange(k.seq_no, { achievement: e.target.value })} />
-                          <input value={self?.[k.seq_no]?.comment ?? ''} readOnly={locked}
+                          <input value={self?.[k.seq_no]?.comment ?? ''} readOnly={selfSubmitted}
                                  aria-label={`Comment for KRA ${i + 1}`}
                                  placeholder="Evidence a manager could check"
                                  style={{ marginTop: 4 }}
@@ -347,7 +357,7 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                           <div className="btnrow" role="group"
                                aria-label={`Your rating for KRA ${i + 1}`}>
                             {bands.map(b => (
-                              <button key={b.value} type="button" disabled={locked}
+                              <button key={b.value} type="button" disabled={selfSubmitted}
                                       className={self?.[k.seq_no]?.rating === b.value ? 'btn sm' : 'btn ghost sm'}
                                       title={`${b.value}: ${b.label}`}
                                       onClick={() => onSelfChange(k.seq_no, { rating: b.value })}>
@@ -388,11 +398,23 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
           </div>
         )}
 
-        {!locked && (
+        {/* Shown while there is still something to send. A locked KRA set with
+            the self rating outstanding is the normal state at §1 Stage 4, and
+            hiding the button there left the employee with no way to submit the
+            rating the stage exists for. */}
+        {(!locked || !selfSubmitted) && (
           <div className="btnrow">
-            <button className="btn" type="button" disabled={!canGo || saving}
+            <button className="btn" type="button"
+                    disabled={(locked ? unrated > 0 : !canGo) || selfSubmitted || saving}
                     onClick={onSubmit}>
               {saving ? 'Saving…'
+                : selfSubmitted ? 'Already sent'
+                // Locked: the KRAs are settled, so only the rating is in play
+                // and the KRA validation no longer has anything to say.
+                : locked
+                  ? (unrated > 0
+                      ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+                      : 'Send my ratings to my manager')
                 : !check.canSubmit ? `Cannot send yet: ${check.faults.length} to fix`
                 : unrated > 0
                   ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`

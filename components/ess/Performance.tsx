@@ -657,8 +657,21 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       (r as { employee_ack?: boolean }).employee_ack
       || (r as { manager_ack?: boolean }).manager_ack)
 
+    /**
+     * ONCE THE WEIGHTAGES ARE LOCKED, THIS SUBMISSION IS THE RATING ONLY.
+     *
+     * §1 Stage 3 locks the weightages; Stage 4 is the self-appraisal that
+     * follows. The goals upsert below writes status PENDING_RM_APPROVAL, so
+     * running it on a locked set would silently UNLOCK it — undoing the thing
+     * the one-to-one gate exists to produce, and without anybody being told.
+     * So a locked set is left entirely alone: no upsert, no tail delete, no
+     * change log, because nothing about the KRAs has changed.
+     */
+    const kraLocked = goals.length > 0
+      && goals.every(g => String((g as { status?: string }).status) === 'LOCKED')
+
     let changes: KraChange[] = []
-    if (acknowledged) {
+    if (acknowledged && !kraLocked) {
       const before = await supabase.from('pms_employee_goals')
         .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage')
         .eq('employee_id', employeeId).eq('period_id', period.id)
@@ -675,7 +688,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     //
     // This was unreachable while nothing saved at all. Making the save work is
     // what exposed it, so it is fixed in the same breath.
-    const { error } = await supabase.from('pms_employee_goals').upsert(
+    const { error } = kraLocked ? { error: null } : await supabase.from('pms_employee_goals').upsert(
       // NAMED COLUMNS, not { ...k }. The spread worked only because Kra
       // happened to contain exactly the columns this table has — the moment
       // somebody adds a UI-only field to Kra (a validation flag, an open/closed
@@ -699,7 +712,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     // maximum of ten and the total of a hundred — and the manager's screen
     // counts raw rows. Removed after the upsert rather than before: if the
     // write fails, the old set is still intact.
-    if (!error && kras.length) {
+    if (!error && !kraLocked && kras.length) {
       const tail = await supabase.from('pms_employee_goals').delete()
         .eq('employee_id', employeeId).eq('period_id', period.id)
         .gt('seq_no', kras.length).neq('status', 'LOCKED')
@@ -770,8 +783,10 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           ? 'The performance module is not live yet: migration 066 has not been applied.'
           : (console.error('[pms] KRA insert refused:', error), SAVE_FAILED('KRAs')))
       : [
-          'Sent to your reporting manager.',
-          ratedCount ? `${ratedCount} ${ratedCount === 1 ? 'rating' : 'ratings'} went with it.` : '',
+          kraLocked ? 'Your ratings are in with your manager.'
+                    : 'Sent to your reporting manager.',
+          ratedCount && !kraLocked
+            ? `${ratedCount} ${ratedCount === 1 ? 'rating' : 'ratings'} went with it.` : '',
           changes.length ? `${changes.length} ${changes.length === 1 ? 'change' : 'changes'} recorded against the one-to-one.` : '',
           ratingWarning, logWarning,
         ].filter(Boolean).join(' '))
@@ -860,6 +875,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
                 // Required only once the one-to-one is acknowledged: at that
                 // point this submission is the final one the brief describes,
                 // carrying the updated KRAs and the final self rating together.
+                selfSubmitted={selfSubmitted}
                 rateRequired={logs.some(l => l.discussion_type === 'KRA_SETTING'
                                           && (l.employee_ack || l.manager_ack))}
                 kras={kras} onChange={setDraftKras} locked={locked}
