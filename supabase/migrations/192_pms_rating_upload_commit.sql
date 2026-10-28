@@ -104,6 +104,8 @@ DECLARE
   v_res      text;
   v_claimed  text;
   v_benefit  text;
+  v_raw      text;   -- the rating cell exactly as the file had it
+  v_need121  boolean;  -- does this period's policy demand a final review?
 BEGIN
   IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' THEN
     RETURN jsonb_build_object('ok', false,
@@ -142,6 +144,15 @@ BEGIN
               || 'be validated. Configure the scale first.');
   END IF;
 
+  -- Does this period's policy demand a final-review one-to-one before a
+  -- rating can be settled? Pre-checked per row below so the batch is refused
+  -- cleanly instead of rolling back halfway through the apply pass. See the
+  -- note on defence in depth at the pass-one check.
+  SELECT p.final_review_one_to_one INTO v_need121
+    FROM pms_policies p
+    JOIN pms_periods pe ON pe.policy_id = p.id
+   WHERE pe.id = p_period_id;
+
   -- ── pass one: validate, and log every row ────────────────────────────────
   FOR r IN SELECT * FROM jsonb_array_elements(p_rows) LOOP
     v_total  := v_total + 1;
@@ -160,8 +171,9 @@ BEGIN
     -- `'abc'::numeric` raises, which would abort the whole run before a single
     -- row was logged — a typo in one cell losing the audit trail for all of
     -- them.
+    v_raw := NULLIF(btrim(COALESCE(r->>'final_rating', '')), '');
     BEGIN
-      v_up := NULLIF(btrim(COALESCE(r->>'final_rating', '')), '')::numeric;
+      v_up := v_raw::numeric;
     EXCEPTION WHEN invalid_text_representation THEN
       v_up := NULL;
     END;
@@ -199,7 +211,11 @@ BEGIN
 
     IF v_status = 'OK' AND (v_up IS NULL OR NOT (v_up = ANY(v_scale))) THEN
       v_status := 'ERROR_INVALID_RATING';
-      v_msg := COALESCE(v_up::text, '(blank)') || ' is not on this company''s rating scale.';
+      -- Echo what the FILE said, not the parsed value. A cell reading 'abc'
+      -- parses to NULL, and reporting that as "(blank) is not on the scale"
+      -- sends an admin hunting an empty cell that is not empty.
+      v_msg := COALESCE('"' || v_raw || '"', '(blank)')
+            || ' is not on this company''s rating scale.';
     END IF;
 
     -- A reason only where the number moves. See the header.
@@ -207,6 +223,31 @@ BEGIN
       v_status := 'ERROR_REASON_MISSING';
       v_msg := v_code || ': the rating changes from ' || v_cur || ' to ' || v_up
             || ', so a reason is required.';
+    END IF;
+
+    -- THE GATE THAT USED TO SURFACE AS A ROLLBACK.
+    --
+    -- pms_finalise refuses without a FINAL_REVIEW discussion acknowledged by
+    -- both sides where the policy asks for one. That refusal arrives during
+    -- the apply pass, which raises and discards the whole batch — correct, but
+    -- a rotten way to find out, and it loses the log. Observed live: a file
+    -- whose single row passed every validation came back "Upload rolled back
+    -- at SRS9088: BLOCKED: final review one-to-one not logged."
+    --
+    -- So the same question is asked here, where it becomes an ordinary
+    -- per-row error with the other five. This is deliberately a SECOND copy
+    -- of pms_finalise's rule, and that is defence in depth rather than
+    -- divergence: pms_finalise remains the authority and the rollback stays
+    -- as the backstop. A pre-flight check that disagrees can only ever be
+    -- more cautious than the gate it precedes.
+    IF v_status = 'OK' AND COALESCE(v_need121, false)
+       AND NOT EXISTS (SELECT 1 FROM pms_one_to_one t
+                        WHERE t.employee_id = v_emp AND t.period_id = p_period_id
+                          AND t.discussion_type = 'FINAL_REVIEW'
+                          AND t.employee_ack AND t.manager_ack) THEN
+      v_status := 'ERROR_NOT_ELIGIBLE';
+      v_msg := v_code || ': this policy requires a final review one-to-one, '
+            || 'acknowledged by both sides, before a rating can be settled.';
     END IF;
 
     -- A benefit_type the CHECK constraint rejects has to be caught HERE.
