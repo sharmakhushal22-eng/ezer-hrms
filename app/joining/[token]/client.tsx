@@ -2,6 +2,7 @@
 // EZER HRMS — Employee Joining Form (Complete, AI-powered, Bug-free)
 'use client'
 import { useState } from 'react'
+import { maskPan, maskAadhaar, maskMobile } from '@/lib/ids/mask'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -190,7 +191,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
             <strong>Legal basis:</strong> IT Act 2000, Section 3A — legally valid Aadhaar eSign
           </div>
           <Fld label="Aadhaar Number (confirm)" conf="manual">
-            <input style={S.inp('manual')} value={aadhaarInput} onChange={e => setAadhaarInput(e.target.value)} placeholder="XXXX-XXXX-XXXX" maxLength={14}/>
+            <input style={S.inp('manual')} value={aadhaarInput} inputMode="numeric" onChange={e => setAadhaarInput(maskAadhaar(e.target.value, true))} placeholder="XXXX XXXX XXXX" maxLength={14}/>
           </Fld>
           {!otpSent ? (
             <button onClick={() => { setOtpSent(true); alert('OTP sent to your Aadhaar-linked mobile number') }} style={{ ...S.btnP, width: '100%' }}>Send OTP to Aadhaar Mobile
@@ -379,10 +380,10 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
             </select>
           </Fld>
           {form.marital_status === 'Married' && <Fld label="Spouse Name"><input style={S.inp()} value={form.spouse_name} onChange={e => F('spouse_name', e.target.value)}/></Fld>}
-          <Fld label="Mobile" conf={conf('mobile')}><input style={S.inp(conf('mobile'))} value={form.mobile} onChange={e => F('mobile', e.target.value)}/></Fld>
+          <Fld label="Mobile" conf={conf('mobile')}><input style={S.inp(conf('mobile'))} value={form.mobile} inputMode="numeric" maxLength={10} onChange={e => F('mobile', maskMobile(e.target.value))}/></Fld>
           <Fld label="Personal Email" conf={conf('email')}><input style={S.inp(conf('email'))} value={form.email} onChange={e => F('email', e.target.value)}/></Fld>
-          <Fld label="Aadhaar Number *" conf={conf('aadhaar')}><input style={S.inp(conf('aadhaar'))} value={form.aadhaar} onChange={e => F('aadhaar', e.target.value)} placeholder="XXXX-XXXX-XXXX" maxLength={14}/></Fld>
-          <Fld label="PAN Number" conf={conf('pan')}><input style={S.inp(conf('pan'))} value={form.pan} onChange={e => F('pan', e.target.value.toUpperCase())} maxLength={10}/></Fld>
+          <Fld label="Aadhaar Number *" conf={conf('aadhaar')}><input style={S.inp(conf('aadhaar'))} value={form.aadhaar} inputMode="numeric" onChange={e => F('aadhaar', maskAadhaar(e.target.value, true))} placeholder="XXXX XXXX XXXX" maxLength={14}/></Fld>
+          <Fld label="PAN Number" conf={conf('pan')}><input style={S.inp(conf('pan'))} value={form.pan} onChange={e => F('pan', maskPan(e.target.value))} placeholder="ABCDE1234F" maxLength={10}/></Fld>
         </div>
       </div>
     ),
@@ -419,7 +420,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
                 <option value="">Select</option><option>Spouse</option><option>Father</option><option>Mother</option><option>Sibling</option><option>Other</option>
               </select>
             </Fld>
-            <Fld label="Mobile *" conf="manual"><input style={S.inp('manual')} value={(form as any)[`emrg${n}_mobile`]} onChange={e => F(`emrg${n}_mobile`, e.target.value)}/></Fld>
+            <Fld label="Mobile *" conf="manual"><input style={S.inp('manual')} value={(form as any)[`emrg${n}_mobile`]} inputMode="numeric" maxLength={10} onChange={e => F(`emrg${n}_mobile`, maskMobile(e.target.value))}/></Fld>
           </div>
         ))}
       </div>
@@ -488,7 +489,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
                   <option value="">Select</option><option>Reporting Manager</option><option>Skip Level</option><option>Colleague</option><option>Mentor</option>
                 </select>
               </Fld>
-              <Fld label="Mobile *" conf="manual"><input style={S.inp('manual')} value={(form as any)[`ref${n}_mobile`]} onChange={e => F(`ref${n}_mobile`, e.target.value)}/></Fld>
+              <Fld label="Mobile *" conf="manual"><input style={S.inp('manual')} value={(form as any)[`ref${n}_mobile`]} inputMode="numeric" maxLength={10} onChange={e => F(`ref${n}_mobile`, maskMobile(e.target.value))}/></Fld>
               <Fld label="Email *" conf="manual"><input style={S.inp('manual')} value={(form as any)[`ref${n}_email`]} onChange={e => F(`ref${n}_email`, e.target.value)}/></Fld>
             </div>
           </div>

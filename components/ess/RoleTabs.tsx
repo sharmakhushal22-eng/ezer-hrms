@@ -20,6 +20,7 @@ import { C as TK, Z } from '@/lib/ui'
 import MrfForm, { mrfToForm } from './MrfForm'
 import InterviewFeedbackForm, { type Feedback as InterviewFeedback } from '@/components/recruitment/InterviewFeedbackForm'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+import { isHandOff } from '@/lib/recruitment/mrf-handoff'
 import OnboardingApprovals from './OnboardingApprovals'
 
 const C = {
@@ -110,7 +111,7 @@ function Kpis({ items }: { items: { label: string; value: string | number; note?
 interface PendingItem {
   kind: 'LEAVE' | 'LEAVE_CANCEL' | 'REGULARISATION' | 'TRAVEL' | 'RESIGNATION'; id: string; employee_id: string; who: string; what: string; meta: string; stage: string
   raised_at: string | null; surfaced_via: string; mine: boolean; actions: string[]; tone?: 'w' | 'd'; link?: string
-  facts?: string[]; alert?: string | null
+  facts?: string[]; alert?: string | null; lwd_policy?: string | null; lwd_proposed?: string | null; notice_days?: number | null
 }
 
 /** One pending item with its actions. Resignation actions that need input (a date,
@@ -133,7 +134,11 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
       try { const r = await api(`/api/ess/approvals?resignation_id=${item.id}`, employeeId); setChain(r.chain || []) } catch (e: any) { setErr(e.message) }
       return
     }
-    if (needsInput(a) && ask !== a) { setAsk(a); return }
+    if (needsInput(a) && ask !== a) {
+      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
+      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      setAsk(a); return
+    }
     if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
     setBusy(true)
     try {
@@ -167,7 +172,9 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
       {ask && (
         <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: C.bg, display: 'grid', gap: 8 }}>
           {(ask === 'Accept with my date' || ask === 'Set final LWD') && (
-            <div><label style={S.label}>{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label><input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} /></div>
+            <div><label style={S.label}>{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label><input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} />
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>{item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.` : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.` : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''}</div>
+            </div>
           )}
           {ask === 'Set final LWD' && (
             <div><label style={S.label}>Regrettable exit?</label>
@@ -386,7 +393,8 @@ export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employee
 
       {reviewFor && createPortal((() => {
         const m = reviewFor
-        const isHrHead = curRole(m) === 'HR_HEAD'
+        // The step that opens the requisition (HR Head, or whichever is last) hands it to a hiring manager.
+        const isHrHead = isHandOff(m.approval_chain)
         const onAssignStep = isHrHead && reviewStep === 'assign'
         const money = (v: any) => (v || v === 0) ? `₹${Number(v).toLocaleString('en-IN')}` : ''
         const groups: [string, [string, any][]][] = [
@@ -562,8 +570,38 @@ export function RaiseMrfSection({ employeeId, notify, go, adminMode }: { employe
 // task. "Review" opens the full request — candidate, previous employer, offered package,
 // joining details, remarks — and the HR Head approves or rejects RIGHT HERE (same writes
 // and notifications as Recruitment → HR Head, which stays available as a link).
+const REPLY: Record<string, [string, 'ok' | 'warn' | 'dang' | 'info' | 'mut']> = {
+  ACCEPTED: ['Accepted by candidate', 'ok'], AWAITING: ['Sent · awaiting reply', 'info'],
+  REVISION: ['Revision asked', 'warn'], BACKOUT: ['Backed out', 'dang'],
+}
+/** Where each offer on my MRFs has got to: with the HR Head, approved, sent, accepted… */
+function MyOffersCard({ rows }: { rows: any[] }) {
+  const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
+  const day = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  const stateOf = (o: any): [string, 'ok' | 'warn' | 'dang' | 'info' | 'mut'] =>
+    o.reply ? REPLY[o.reply] : o.status === 'SUBMITTED' ? ['With HR Head', 'warn'] : o.status === 'HR_HEAD_APPROVED' ? ['Approved · ready to send', 'ok'] : o.status === 'HR_HEAD_REJECTED' ? ['Rejected by HR Head', 'dang'] : ['Sent', 'info']
+  const accepted = rows.filter(o => o.reply === 'ACCEPTED').length
+  return (
+    <div style={S.card}>
+      <div style={S.section}>My offers · {rows.length}{accepted ? ` · ${accepted} accepted` : ''}</div>
+      {rows.map((o: any) => {
+        const [label, tone] = stateOf(o)
+        return (
+          <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{o.candidate} · {o.designation || '-'}{o.mrf_number ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.purpleD, background: C.soft, padding: '1px 6px', borderRadius: 99 }}>{o.mrf_number}</span> : null}</div>
+              <div style={{ fontSize: 11.5, color: C.muted }}>{lakh(o.offered_ctc)}{o.proposed_doj ? ` · DOJ ${day(o.proposed_doj)}` : ''}{o.offer_sent_at ? ` · sent ${day(o.offer_sent_at)}` : ` · submitted ${day(o.submitted_at)}`}</div>
+            </div>
+            <span style={pill(tone)}>{label}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employeeId: string; notify?: (m: string, t?: 'success' | 'error') => void; focusId?: string; onDone?: () => void }) {
-  const [d, setD] = useState<{ isHrHead: boolean; isHrManager?: boolean; pending: any[]; recent: any[]; awaiting?: any[]; ready?: any[] } | null>(null)
+  const [d, setD] = useState<{ isHrHead: boolean; isHrManager?: boolean; pending: any[]; recent: any[]; awaiting?: any[]; ready?: any[]; mine?: any[] } | null>(null)
   const [open, setOpen] = useState<any | null>(null)
   const [mode, setMode] = useState<'view' | 'reject'>('view')
   const [reason, setReason] = useState('')
@@ -597,11 +635,15 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
   const day = (v?: string | null) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   // HR Manager: nothing to decide here — a task-style card per offer that is still with the HR
   // Head ("yet to be approved"), and the approved ones that are ready to send from Recruitment.
+  // Offers on the MRFs this person runs as hiring manager — they sent them, so they keep
+  // seeing them after they go out and once the candidate accepts (not only the HR Head).
+  const mineCard = !focusId && !d.isHrHead && d.mine?.length ? <MyOffersCard rows={d.mine} /> : null
   if (!d.isHrHead && d.isHrManager && !focusId) {
     const awaiting = d.awaiting || [], ready = d.ready || []
-    if (awaiting.length === 0 && ready.length === 0) return null
+    if (awaiting.length === 0 && ready.length === 0) return mineCard
     const goSend = () => { window.location.href = '/ess/recruitment/sendoffer' }
     return (
+      <>
       <div style={S.card}>
         <div style={S.section}>Offer letters · HR Manager{awaiting.length ? ` · ${awaiting.length} yet to be approved` : ''}{ready.length ? ` · ${ready.length} ready to send` : ''}</div>
         {awaiting.map((o: any) => (
@@ -626,9 +668,11 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
           </div>
         ))}
       </div>
+      {mineCard}
+      </>
     )
   }
-  if (!d.isHrHead) return focusId ? <div style={{ ...S.card, textAlign: 'center', padding: 28, color: C.muted, fontSize: 13 }}>Only the HR Head of the company can review offer approvals.</div> : null
+  if (!d.isHrHead) return focusId ? <div style={{ ...S.card, textAlign: 'center', padding: 28, color: C.muted, fontSize: 13 }}>Only the HR Head of the company can review offer approvals.</div> : mineCard
   if (d.pending.length === 0 && d.recent.length === 0 && !focusId) return null
   const say = (m: string, t?: 'success' | 'error') => notify ? notify(m, t) : (t === 'error' ? alert(m) : null)
 
@@ -763,37 +807,39 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
 // a PANELIST. Everyone sees the details and acknowledges; only the main
 // interviewer's row turns into a blue "Give feedback" (8 parameters + a
 // Hold / Reject / Shortlist decision). A panelist's row is done once acknowledged.
+// It lives in the ESS notification panel (the bell), not Tasks & Approvals: the
+// interviewer acknowledges and gives feedback from the notification itself.
 const isMain = (i: any) => (i.role || 'MAIN') === 'MAIN'
 
-export function InterviewInvites({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+export function InterviewInvites({ employeeId, notify, onDone }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void; onDone?: () => void }) {
   const [invites, setInvites] = useState<any[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [fbFor, setFbFor] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const load = useCallback(() => api('/api/ess/interview', employeeId).then(d => setInvites(d.invites || [])).catch(() => setInvites([])), [employeeId])
   useEffect(() => { load() }, [load])
-  if (!invites || invites.length === 0) return null
-
   // Main interviewers are done once feedback is in; panelists once they've acknowledged.
-  const pending = invites.filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  // Only what still needs doing is listed; a finished interview leaves the panel.
+  const pending = (invites || []).filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  if (pending.length === 0) return null
   const ack = async (id: string) => {
     setBusy(id)
-    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify('Acknowledged. Record your feedback after the interview.'); await load() }
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify(isMain(pending.find((i: any) => i.id === id)) ? 'Acknowledged. Give your feedback here after the interview.' : 'Acknowledged.'); await load(); onDone?.() }
     catch (e: any) { notify(e.message, 'error') }
     setBusy(null)
   }
   const submit = async (fb: InterviewFeedback) => {
     if (!fbFor) return
     setSaving(true)
-    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load() }
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load(); onDone?.() }
     catch (e: any) { notify(e.message, 'error') }
     setSaving(false)
   }
 
   return (
     <div style={S.card}>
-      <div style={S.section}>Interviews to conduct ({pending.length || invites.length})</div>
-      {invites.map((i: any) => {
+      <div style={S.section}>Interviews to conduct ({pending.length})</div>
+      {pending.map((i: any) => {
         const when = i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'time to be confirmed'
         return (
           <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
@@ -820,7 +866,7 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
       })}
 
       {fbFor && createPortal(
-        <div onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
+        <div data-ez-keep-open onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 4000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '24px 16px' }}>
           <div style={{ background: C.card, borderRadius: 16, width: 'min(1000px, 100%)', boxShadow: '0 24px 70px rgba(30,27,75,0.3)', padding: '18px 20px', margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -833,6 +879,98 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
               onSubmit={submit} onClose={() => !saving && setFbFor(null)} />
           </div>
         </div>, document.body)}
+    </div>
+  )
+}
+
+// ── Exits to approve — the company-started exits (People → Employees → HR Actions → Exit)
+// waiting on you. Same chain and same buttons as a resignation: the Reporting Manager, L2 and
+// HOD acknowledge, accept with their date or request retention (then resume); the HR Manager
+// sets the final last working day, which puts the exit into effect. The chain itself is
+// app/api/ess/exit-employee (lib/exit/hr-exit.ts).
+const fmtDay = (d?: string | null) => d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
+const stepText = (s: any) => s.status === 'HOLD' ? 'retention requested' : s.status === 'PENDING' ? 'waiting' : s.status === 'SKIPPED' ? 'skipped'
+  : s.status === 'REJECTED' ? 'rejected' : s.status === 'WAITING' ? 'next'
+  : s.action === 'STARTED' ? 'started it' : s.action === 'ACCEPTED_WITH_DATE' ? `accepted with ${fmtDay(s.lwd)}` : s.action === 'FINAL_LWD_SET' ? `final LWD ${fmtDay(s.lwd)}` : 'acknowledged'
+
+export function HrExitApprovals({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+  const [items, setItems] = useState<any[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  // The input an action collects before it fires: a date, or a retention note.
+  const [open, setOpen] = useState<{ id: string; act: string } | null>(null)
+  const [note, setNote] = useState('')
+  const [lwd, setLwd] = useState('')
+  const load = useCallback(() => api('/api/ess/exit-employee?inbox=1', employeeId).then(d => setItems(d.items || [])).catch(() => setItems([])), [employeeId])
+  useEffect(() => { load() }, [load])
+  if (!items || items.length === 0) return null
+  const fire = async (x: any, act: string) => {
+    setBusy(x.id)
+    try {
+      const d = await api('/api/ess/exit-employee', employeeId, { method: 'POST', body: JSON.stringify({ action: 'act', id: x.id, act, note, lwd }) })
+      notify(act === 'FINAL_LWD_SET' ? `Final last working day set: ${fmtDay(lwd)}. The exit is in effect.`
+        : act === 'REQUESTED_RETENTION' ? 'Retention requested. The exit is on hold until you resume it.'
+        : act === 'RESUMED' ? 'Chain resumed.' : d.request?.status === 'APPROVED' ? 'Done. The exit is in effect.' : 'Forwarded to the next approver.')
+      setOpen(null); setNote(''); setLwd(''); await load()
+    } catch (e: any) { notify(e.message, 'error') }
+    setBusy(null)
+  }
+  const needs = (act: string) => act === 'ACCEPTED_WITH_DATE' || act === 'FINAL_LWD_SET' || act === 'REQUESTED_RETENTION'
+  return (
+    <div style={S.card}>
+      <div style={S.section}>Exits waiting on you ({items.length})</div>
+      {items.map((x: any) => {
+        const step = (x.chain || []).find((s: any) => s.status === 'PENDING' || s.status === 'HOLD')
+        const acts: { code: string; label: string }[] = x.actions || []
+        const isOpen = open?.id === x.id
+        return (
+          <div key={x.id} style={{ padding: '10px 0', borderTop: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{x.employee?.full_name} <span style={{ color: C.muted, fontWeight: 500 }}>{x.employee?.emp_code}{x.employee?.designation ? ` · ${x.employee.designation}` : ''}</span>
+                  <span style={{ ...pill('dang'), marginLeft: 6 }}>{x.reason_label}{x.sub_reason ? ` · ${x.sub_reason}` : ''}</span>
+                  {step?.status === 'HOLD' && <span style={{ ...pill('warn'), marginLeft: 6 }}>Retention hold</span>}</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
+                  Last working day {fmtDay(x.last_working_day)}{x.proposed_lwd ? ` · proposed ${fmtDay(x.proposed_lwd)}` : ''} · started by {x.initiated_by_name || 'HR'} · waiting on you as {step?.label || 'approver'}
+                </div>
+                {x.remarks && <div style={{ fontSize: 12, color: C.ink, marginTop: 4 }}>{x.remarks}</div>}
+                {(x.documents || []).length > 0 && (
+                  <div style={{ fontSize: 11.5, marginTop: 4 }}>Documents: {x.documents.map((d: any) => (
+                    <button key={d.path} type="button" onClick={() => api(`/api/exit/documents?request_id=${x.id}&path=${encodeURIComponent(d.path)}`, employeeId).then(j => window.open(j.url, '_blank', 'noopener')).catch((e: any) => notify(e.message, 'error'))}
+                      style={{ border: 'none', background: 'none', padding: 0, marginRight: 8, color: C.blue, cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>{d.name}</button>
+                  ))}</div>
+                )}
+                <div style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>
+                  {(x.chain || []).map((s: any) => `${s.label}: ${stepText(s)}`).join(' → ')}
+                </div>
+              </div>
+              {!isOpen && acts.map(a => (
+                <button key={a.code} disabled={busy === x.id}
+                  onClick={() => { if (needs(a.code)) { setOpen({ id: x.id, act: a.code }); setNote(''); setLwd(a.code === 'REQUESTED_RETENTION' ? '' : (x.proposed_lwd || x.last_working_day || '')) } else void fire(x, a.code) }}
+                  style={a.code === 'REQUESTED_RETENTION' ? S.btnO : { ...S.btn, background: a.code === 'FINAL_LWD_SET' || a.code === 'ACKNOWLEDGED' || a.code === 'RESUMED' ? C.green : undefined, opacity: busy === x.id ? .6 : 1 }}>
+                  {busy === x.id ? '…' : a.label}
+                </button>
+              ))}
+            </div>
+            {isOpen && (
+              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                {open!.act !== 'REQUESTED_RETENTION' && (
+                  <label style={{ fontSize: 12, color: C.muted, display: 'grid', gap: 4, maxWidth: 240 }}>{open!.act === 'FINAL_LWD_SET' ? 'Final last working day' : 'The last working day you accept'}
+                    <input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} /></label>
+                )}
+                <textarea style={{ ...S.input, minHeight: 50, resize: 'vertical' }} value={note} onChange={e => setNote(e.target.value)}
+                  placeholder={open!.act === 'REQUESTED_RETENTION' ? 'Why the employee should be retained (optional)' : 'Note (optional)'} />
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setOpen(null); setNote(''); setLwd('') }} disabled={busy === x.id} style={S.btnO}>Back</button>
+                  <button onClick={() => fire(x, open!.act)} disabled={busy === x.id || (open!.act !== 'REQUESTED_RETENTION' && !lwd)}
+                    style={{ ...S.btn, opacity: busy === x.id || (open!.act !== 'REQUESTED_RETENTION' && !lwd) ? .6 : 1 }}>
+                    {busy === x.id ? '…' : acts.find(a => a.code === open!.act)?.label || 'Confirm'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -851,7 +989,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
     <div>
       <MrfApprovals employeeId={employeeId} notify={notify} />
       <OfferApprovals employeeId={employeeId} notify={notify} />
-      <InterviewInvites employeeId={employeeId} notify={notify} />
+      <HrExitApprovals employeeId={employeeId} notify={notify} />
       <OnboardingApprovals employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },

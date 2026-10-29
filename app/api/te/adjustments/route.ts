@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const direction = needOneOf(body.direction, ['recover', 'pay'] as const, 'direction')
     if (typeof body.amount !== 'number' || !Number.isFinite(body.amount)) throw new TeHttpError(400, 'TE_BAD_REQUEST', 'amount must be a number.')
     const reason = needText(body.reason, 'reason')
-    await t.permit('Finance', 'VIEW')
+    await t.permitFinanceDesk()
     return adjustmentAdd(await t.ctx(), claimId, direction, body.amount, reason)
   })
 }

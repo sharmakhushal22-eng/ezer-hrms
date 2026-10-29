@@ -10,18 +10,24 @@
 //   file       { report }                        save the leg report (the fare, or the mileage)
 //   skip       { reason }                        the leg was not needed
 //   no-gps     { reason, note? }                 the leg happened without GPS
+//   answer     { text }                          answer what a desk asked about this journey
+//
+// All of these are the TRAVELLER's own leg — te__leg_for_actor refuses anybody
+// else's. What a DESK does about a journey lives at ../review, because that is
+// a different person with a different right, and putting the two behind one
+// `action` switch would make the two permission models easy to confuse.
 //
 // fix = { lat, lng, accuracy_m, address?, recorded_at?, is_mock?, device? } from the phone.
 import { NextRequest } from 'next/server'
 import { teRoute } from '@/lib/te/server'
 import { TeHttpError, needOneOf, needText, needUuid, optText } from '@/lib/te/errors'
-import { legContinue, legEnd, legFile, legNoGps, legPings, legPreview, legSkip, legStart, legStop } from '@/lib/te/engine/te-service.js'
+import { legAnswer, legContinue, legEnd, legFile, legNoGps, legPings, legPreview, legSkip, legStart, legStop } from '@/lib/te/engine/te-service.js'
 import type { GpsFix, GpsPing, LegReportInput, StopInput } from '@/lib/te/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const ACTIONS = ['start', 'pings', 'stop', 'continue', 'end', 'preview', 'file', 'skip', 'no-gps'] as const
+const ACTIONS = ['start', 'pings', 'stop', 'continue', 'end', 'preview', 'file', 'skip', 'no-gps', 'answer'] as const
 /** A phone that was offline can send a whole day at once, but not without limit. */
 const MAX_PINGS = 5000
 
@@ -35,6 +41,7 @@ interface Body {
   report?: LegReportInput
   reason?: string
   note?: string
+  text?: string
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -58,6 +65,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       case 'file': return legFile(ctx, legId, body.report ?? {})
       case 'skip': return legSkip(ctx, legId, needText(body.reason, 'reason'))
       case 'no-gps': return legNoGps(ctx, legId, needText(body.reason, 'reason'), optText(body.note))
+      case 'answer': return legAnswer(ctx, legId, needText(body.text, 'text'))
     }
   })
 }

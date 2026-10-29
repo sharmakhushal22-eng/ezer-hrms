@@ -8,7 +8,7 @@
  *   useGrant() → loadAll() → props → adapters → rx views
  */
 
-export type MrfStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'ON_HOLD' | 'REJECTED' | 'CLOSED';
+export type MrfStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'ON_HOLD' | 'REJECTED' | 'CLOSED' | 'NEEDS_REVISION';
 export type Lane = 'Quick Hire' | 'Full MRF';
 export type Tone = '' | 'pos' | 'warn' | 'crit' | 'info' | 'mute';
 
@@ -18,6 +18,12 @@ export interface ChainStepVM {
   /** Raw status from approval_chain, e.g. APPROVED / PENDING / REJECTED. */
   status: string;
   actedAt?: string | null;
+  /* Additive, for the read-only approval tracker. */
+  approverId?: string | null;
+  approverCode?: string | null;
+  comment?: string | null;
+  /** Somebody other than the named approver recorded this step (admin override). */
+  actedByName?: string | null;
 }
 
 export interface MrfVM {
@@ -60,6 +66,11 @@ export interface MrfVM {
   recruiterEmail?: string | null;
   /** Pre-formatted by the tab, so stipend/fees/currency wording stays identical. */
   budgetLabel?: string | null;
+  /** Second line under the budget amount, e.g. "Stipend · max/mo". */
+  budgetCaption?: string | null;
+  /** When it was raised, and by whom — the tracker's "since" for the first step. */
+  raisedAt?: string | null;
+  raisedBy?: string | null;
   raw: unknown;
 }
 

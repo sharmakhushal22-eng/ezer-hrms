@@ -8,12 +8,12 @@
 //      Approvals. Each confirms their checklist (lib/onboarding/checklists.ts: laptop, email,
 //      ID card, salary structure …) and approves, or returns the form with a remark.
 //   3. When the third head has approved, the onboarding is APPROVED and the HR Manager is
-//      told: assign the reporting line and the ESS role (Role assignment on the card,
-//      lib/onboarding/role-assignment.ts), then generate the employee code.
+//      told: press Generate code on the card — the joiner's team, their ESS roles and the code
+//      (lib/onboarding/hr-assignment.ts). The joiner's own managers were assigned on the review
+//      sheet before the form was accepted.
 //
 // Rows live in onboarding_approvals (migration 156; checklist from 166), one per team.
-// The employee code is NOT generated here any more — the HR Manager does that after the
-// role assignment (app/api/onboarding/generate-code).
+// The employee code is NOT generated here — the HR Manager does that (app/api/onboarding/generate-code).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Transporter } from 'nodemailer'
@@ -70,7 +70,7 @@ The HR Manager has accepted the onboarding form of ${who}${oc.date_of_joining ? 
 
 Please open it in EZER ESS → HRIS → Tasks & Approvals → Onboarding approvals, confirm your team's checklist (what is ready for the joiner) and approve. If something in the form is wrong, return it with a remark and the candidate will fix it.
 
-Once IT, Admin and Payroll have all approved, the HR Manager assigns the role and generates the employee code.
+Once IT, Admin and Payroll have all approved, the HR Manager generates the employee code.
 
 — EZER HRMS`
   let n = 0
@@ -103,7 +103,7 @@ export interface DecisionResult {
 
 /** A team's decision (or a checklist save). */
 export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<DecisionResult> {
-  const { data: oc } = await sb.from('onboarding_candidates').select('id, status, full_name, email, designation, company_id, magic_link_token, candidate_id').eq('id', d.onboardingId).maybeSingle()
+  const { data: oc } = await sb.from('onboarding_candidates').select('id, status, full_name, email, designation, company_id, magic_link_token, candidate_id, hiring_track').eq('id', d.onboardingId).maybeSingle()
   if (!oc) return { ok: false, error: 'Onboarding record not found', status: 404 }
   if (oc.status === 'EMPLOYEE_CREATED') return { ok: false, error: 'The employee code is already generated.', status: 409 }
   if (!['SUBMITTED', 'HR_REVIEW', 'APPROVED'].includes(oc.status)) return { ok: false, error: 'The candidate has not submitted the form yet.', status: 409 }
@@ -132,7 +132,7 @@ export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<D
   }
   if (d.action === 'approve' && isHeadTeam(d.team)) {
     const have = checklist ?? all.find(a => a.team === d.team)?.checklist ?? null
-    const missing = missingItems(d.team, have)
+    const missing = missingItems(d.team, have, oc.hiring_track)
     if (missing.length) return { ok: false, error: `Confirm the ${CHECKLISTS[d.team].title.toLowerCase()} first: ${missing.join(', ')}.`, status: 400, missing }
     if (!checklist) checklist = have
   }
@@ -169,13 +169,13 @@ export async function decideApproval(sb: SupabaseClient, d: Decision): Promise<D
   const after = await approvalsOf(sb, d.onboardingId)
   if (!after.every(a => a.status === 'APPROVED')) return { ok: true, all_approved: false }
 
-  // The third head: the onboarding is approved; the HR Manager assigns the role, then the code.
+  // The third head: the onboarding is approved; the HR Manager generates the code (team, roles, code).
   await sb.from('onboarding_candidates').update({ status: 'APPROVED' }).eq('id', d.onboardingId)
   const hr = await roleHolders(sb, oc.company_id, ['HR_MANAGER', 'HR_HEAD'])
   const who = `${oc.full_name}${oc.designation ? ` (${oc.designation})` : ''}`
   for (const p of hr) {
     await notify(p.id, `Approved by IT, Admin and Payroll — ${oc.full_name}`,
-      `${who} is approved by all three teams. Open Onboarding, press Role assignment on the card (L1, L2 and the ESS role), then generate the employee code.`,
+      `${who} is approved by all three teams. Open Onboarding and press Generate code on the card: who reports to them, their ESS roles, and the employee code. Their login goes to them by mail.`,
       '/ess/onboarding', 'ONBOARDING').catch(() => null)
   }
   return { ok: true, all_approved: true }

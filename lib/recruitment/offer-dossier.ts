@@ -23,6 +23,7 @@
 // saves close together cannot put back each other's stale copy.
 
 import { createHash } from 'crypto'
+import { positionMessage } from './position-required'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { linkStatementRows, engagementStatementRows, type StmtRow, type EngagementStatement } from './ctc-statement'
 import { letterKindOf, specOf, isFixedTerm, isApprenticeship, isStipendKind, isFeesKind, stipendBandFor, engagementEnd, SCHEMES, APPRENTICE_MIN_STIPEND, type LetterKind } from './engagement'
@@ -100,7 +101,8 @@ export const FIELDS: Field[] = [
   // Position & joining — the letter's facts; editable
   { key: 'designation', section: 'Position & joining', label: 'Designation', get: c => c.cand.designation || c.mrf?.designation || c.mrf?.position, edit: { table: 'candidates', column: 'designation' } },
   { key: 'company', section: 'Position & joining', label: 'Company', get: c => c.company?.company_name },
-  { key: 'department', section: 'Position & joining', label: 'Department', get: c => c.dept?.dept_name },
+  // From the MRF's department; typed here when the MRF has none (the letter states it).
+  { key: 'department', section: 'Position & joining', label: 'Department', get: c => c.dept?.dept_name || ad(c, 'requisition', 'department'), edit: { table: 'candidates', adPath: ['requisition', 'department'] } },
   { key: 'job_location', section: 'Position & joining', label: 'Job location', get: c => ad(c, 'requisition', 'job_location') || c.loc?.location_name, edit: { table: 'candidates', adPath: ['requisition', 'job_location'] } },
   // The state the job is in — prefilled from the salary calculation (whose minimum wage, PF and PT
   // rules used it), else the MRF location's state. Editing it changes the letter, not the salary.
@@ -255,6 +257,9 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
   if (isApprenticeship(kind) && band && engagement && engagement.monthly < band.amount)
     warnings.push(`Stipend Rs. ${engagement.monthly.toLocaleString('en-IN')}/month is below the prescribed minimum of Rs. ${band.amount.toLocaleString('en-IN')} for a ${band.label.toLowerCase()} (Rule 11, Apprenticeship Rules, 1992, ${APPRENTICE_MIN_STIPEND.notification}). Raise it before the contract is registered.`)
   if (isApprenticeship(kind) && !appDetails?.requisition?.scheme_registration) warnings.push(`No ${SCHEMES[kind as 'NATS' | 'NAPS'].short} registration number yet. The Contract of Apprenticeship must be registered on ${SCHEMES[kind as 'NATS' | 'NAPS'].portal}; add the number in Part 3 once it is.`)
+  // The letter states the position, department and work location — never sent without them.
+  const posMsg = positionMessage(positionOf(rows), 'in the letter. Fill them in Part 1 (Position & joining) before verifying')
+  if (posMsg) warnings.push(posMsg)
   if (isStipendKind(kind) && !appDetails?.requisition?.mentor) warnings.push(`No ${isApprenticeship(kind) ? 'training supervisor' : 'mentor'} named. The letter will fall back to the reporting line.`)
 
   // What the verification vouches for. Documents: the stored file, not its (expiring) signed URL.
@@ -280,6 +285,12 @@ export async function loadDossier(requestId: string): Promise<Dossier | null> {
   return { request: req, candidate: cand, company, mrf, negotiation: neg, ctx, kind, months, rows, documents, interviews, salary, engagement, warnings, verification: { verified, letter }, required, complete, fingerprints, fileHash }
 }
 
+/** Designation / department / work location as the file shows them (lib/recruitment/position-required.ts). */
+export function positionOf(rows: { key: string; value: string | null }[]) {
+  const v = (k: string) => rows.find(r => r.key === k)?.value ?? null
+  return { designation: v('designation'), department: v('department'), location: v('job_location') }
+}
+
 function safeJson(s: string) { try { return JSON.parse(s) || {} } catch { return {} } }
 
 /**
@@ -303,6 +314,8 @@ async function updateDetails(d: Dossier, change: (ad: any, ov: Ov) => void) {
 /** The one checkbox: the HR Manager confirms the whole file as it stands (or withdraws that). */
 export async function setVerified(d: Dossier, on: boolean, by: string) {
   if (!d.required.length) throw new Error('There is nothing to verify')
+  const posMsg = on ? positionMessage(positionOf(d.rows), 'before the file can be verified') : null
+  if (posMsg) throw new Error(posMsg)
   await updateDetails(d, (_ad, ov) => {
     ov.verified = on ? { by, at: new Date().toISOString(), h: d.fileHash } : null
     if (!on) ov.letter = null

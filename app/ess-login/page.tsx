@@ -3,6 +3,9 @@
 // Identifier = email OR employee code. Steps: identifier → login / set-password,
 // plus a forced change-password step when HR issued a temp password (= emp_code).
 import { useState, useEffect } from 'react'
+import { essToken } from '@/lib/ess-session-client'
+import { signOutEverywhere } from '@/components/SessionGuard'
+import { LOGIN_AT_KEY } from '@/lib/session-policy'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -54,7 +57,13 @@ export default function ESSLoginPage() {
   // Already signed in (Back from the portal, a bookmark): straight to the portal, replacing
   // this entry — the login form is not a screen a signed-in person should see.
   useEffect(() => {
-    try { const raw = localStorage.getItem('ezer_ess_session'); if (raw && JSON.parse(raw)?.employee_id) window.location.replace('/ess') } catch { /* no session */ }
+    // Only a LIVE session goes to the portal: an expired one is cleared here, or the
+    // two pages bounce an expired session back and forth (components/SessionGuard.tsx).
+    const expired = new URLSearchParams(window.location.search).get('expired') === '1'
+    let live = false
+    try { const raw = localStorage.getItem('ezer_ess_session'); const o = raw ? JSON.parse(raw) : null; live = !!o?.employee_id && (!o.token || !!essToken()) && !expired } catch { /* no session */ }
+    if (live) { window.location.replace('/ess'); return }
+    if (expired) { void signOutEverywhere(); setError('Your session expired. Please sign in again.') }
   }, [])
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')            // identifier (email or emp_code)
@@ -69,6 +78,7 @@ export default function ESSLoginPage() {
 
   const finish = (data: { employee_id: string; name: string; token?: string | null }) => {
     localStorage.setItem('ezer_ess_session', JSON.stringify({ employee_id: data.employee_id, name: data.name, email: idValue().toLowerCase(), token: data.token || null }))
+    try { localStorage.setItem(LOGIN_AT_KEY, String(Date.now())) } catch { /* private mode */ }
     window.location.replace('/ess')   // replace: Back must never return to the login form
   }
 

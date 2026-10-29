@@ -5,7 +5,7 @@
 // different headings, which is exactly the kind of rule that rots quietly.
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { groupTrips, myTrips, scopeCounts, tripChip, tripGroup, tripMoney, TRIP_GROUPS, linesWaitingInTrips } from '../trips-list.ts'
+import { groupTrips, myTrips, scopeCounts, tripChip, tripGroup, tripMoney, TRIP_GROUPS, linesWaitingInTrips, tripsForLine, tripHero, tripForHomeCard } from '../trips-list.ts'
 import type { TeTrip, TripDisplayStatus } from '../types.ts'
 
 const TODAY = '2026-11-16'
@@ -209,5 +209,168 @@ describe('lines waiting inside trips', () => {
   it('treats a missing amount as nothing rather than NaN', () => {
     const out = linesWaitingInTrips([{ tripId: 't1', status: 'UNCLAIMED' }], trips)
     assert.equal(out[0].total, 0)
+  })
+})
+
+describe('which trips a loose bill can be moved into', () => {
+  // The picker must not offer a trip the server will then refuse: these are the
+  // same conditions te_expense_move_trip (185) enforces.
+  const all = [
+    trip({ id: 'ok1', status: 'APPROVED', start: '2026-11-10', name: 'Mumbai' }),
+    trip({ id: 'ok2', status: 'CLAIMED', start: '2026-11-14', name: 'Pune' }),
+    trip({ id: 'draft', status: 'DRAFT', start: '2026-11-12' }),
+    trip({ id: 'waiting', status: 'PENDING_APPROVAL', start: '2026-11-12' }),
+    trip({ id: 'back', status: 'SENT_BACK', start: '2026-11-12' }),
+    trip({ id: 'closed', status: 'CLOSED', start: '2026-11-12' }),
+    trip({ id: 'gone', status: 'CANCELLED', start: '2026-11-12' }),
+    trip({ id: 'no', status: 'REJECTED', start: '2026-11-12' }),
+  ]
+
+  it('offers only trips that can actually take a line', () => {
+    assert.deepEqual(tripsForLine(all, 'me').map(t => t.id), ['ok2', 'ok1'])
+  })
+
+  it('puts the most recent first, because a late bill is usually the last trip', () => {
+    assert.equal(tripsForLine(all, 'me')[0].id, 'ok2')
+  })
+
+  it('leaves out the trip the line is already in', () => {
+    assert.deepEqual(tripsForLine(all, 'me', { exclude: 'ok2' }).map(t => t.id), ['ok1'])
+  })
+
+  it('offers a trip you were taken on, not one you have nothing to do with', () => {
+    const mates = [
+      trip({ id: 'mine', status: 'APPROVED', start: '2026-11-10' }),
+      trip({ id: 'taken', status: 'APPROVED', start: '2026-11-11', emp: 'someone', co: ['me'] }),
+      trip({ id: 'theirs', status: 'APPROVED', start: '2026-11-12', emp: 'someone', co: [] }),
+    ]
+    assert.deepEqual(tripsForLine(mates, 'me').map(t => t.id), ['taken', 'mine'])
+  })
+
+  it('an employee with no eligible trips gets an empty list, not a crash', () => {
+    assert.deepEqual(tripsForLine([], 'me'), [])
+  })
+})
+
+describe('what the mid-trip hero offers', () => {
+  // THE REGRESSION THIS EXISTS FOR. The first version of this gate asked for
+  // ONGOING, or APPROVED with the first day passed. On the real data that
+  // window was empty for every trip the test traveller had — COMPLETED,
+  // CLAIMED and EXPIRED — and the only ONGOING trip in the database belonged
+  // to somebody else. The screen could not be seen at all, and it looked like
+  // a rendering fault rather than a rule that never opened.
+  const both = { canBill: true, mine: true }
+
+  it('a trip under way offers both', () => {
+    const h = tripHero(trip({ id: 't', status: 'APPROVED', display: 'ONGOING' }), both)
+    assert.deepEqual([h.bill, h.journey, h.any], [true, true, true])
+  })
+
+  it('a trip you have just come back from offers both — the case that was invisible', () => {
+    // status APPROVED, display COMPLETED: every journey closed, nothing
+    // claimed yet. The commonest moment for both acts, and the one the old
+    // rule hid. SRS-TRP-2026-0008 is exactly this.
+    const h = tripHero(trip({ id: 't', status: 'APPROVED', display: 'COMPLETED' }), both)
+    assert.deepEqual([h.bill, h.journey, h.any], [true, true, true])
+  })
+
+  it('an approved trip still to come offers a bill but no journey yet', () => {
+    // There is nothing to record against a trip nobody has travelled, but the
+    // cab to the airport is a real bill.
+    const h = tripHero(trip({ id: 't', status: 'APPROVED', display: 'APPROVED' }), both)
+    assert.deepEqual([h.bill, h.journey], [true, false])
+  })
+
+  it('a claimed trip takes a late bill, but no new journey', () => {
+    // A bill that turns up late is what a supplementary claim is for; a GPS
+    // journey against a trip whose claim has gone is not.
+    const h = tripHero(trip({ id: 't', status: 'CLAIMED', display: 'CLAIMED' }), both)
+    assert.deepEqual([h.bill, h.journey, h.any], [true, false, true])
+  })
+
+  it('a settled trip offers nothing', () => {
+    assert.equal(tripHero(trip({ id: 't', status: 'CLOSED', display: 'CLOSED' }), both).any, false)
+  })
+
+  it('a request still waiting for approval offers nothing', () => {
+    // TRP-2026-0006 is status PENDING_APPROVAL with display EXPIRED — it ran
+    // out of time before anybody approved it. Reading `display` alone would
+    // have made that look like an approved trip whose dates had passed.
+    for (const [status, display] of [
+      ['PENDING_APPROVAL', 'EXPIRED'], ['PENDING_APPROVAL', 'PENDING_APPROVAL'],
+      ['DRAFT', 'DRAFT'], ['SENT_BACK', 'SENT_BACK'],
+    ] as const) {
+      assert.equal(tripHero(trip({ id: 't', status, display }), both).any, false, `${status}/${display}`)
+    }
+  })
+
+  it('a trip called off or refused offers nothing', () => {
+    for (const status of ['CANCELLED', 'REJECTED'] as const) {
+      assert.equal(tripHero(trip({ id: 't', status, display: status }), both).any, false, status)
+    }
+  })
+
+  it('a co-traveller is offered their own bill and no journey', () => {
+    const h = tripHero(trip({ id: 't', status: 'APPROVED', display: 'ONGOING' }),
+      { canBill: true, mine: false })
+    assert.deepEqual([h.bill, h.journey, h.any], [true, false, true])
+  })
+
+  it('somebody with neither right is offered nothing', () => {
+    // A desk or Finance reading a stranger's trip.
+    assert.equal(tripHero(trip({ id: 't', status: 'APPROVED', display: 'ONGOING' }),
+      { canBill: false, mine: false }).any, false)
+  })
+
+  it('the journey tile follows the Route card, not the bill rule', () => {
+    // MISSED is approved-but-never-recorded. The Route card does not offer to
+    // add a journey there and neither does this.
+    const h = tripHero(trip({ id: 't', status: 'APPROVED', display: 'MISSED' }), both)
+    assert.deepEqual([h.bill, h.journey], [true, false])
+  })
+})
+
+describe('which trip Home\'s card is about', () => {
+  const ME = 'me'
+  it('prefers a trip under way over one you are back from, whatever the dates', () => {
+    // The bug: ordering by start alone handed the card to a COMPLETED trip
+    // with a later date while a journey was actually recording on another.
+    const got = tripForHomeCard([
+      trip({ id: 'done', emp: ME, status: 'APPROVED', display: 'COMPLETED', start: '2026-10-20' }),
+      trip({ id: 'live', emp: ME, status: 'APPROVED', display: 'ONGOING', start: '2026-10-12' }),
+    ], ME)
+    assert.equal(got?.id, 'live')
+  })
+
+  it('falls back to the most recent of several finished trips', () => {
+    const got = tripForHomeCard([
+      trip({ id: 'older', emp: ME, status: 'APPROVED', display: 'COMPLETED', start: '2026-10-01' }),
+      trip({ id: 'newer', emp: ME, status: 'APPROVED', display: 'COMPLETED', start: '2026-10-20' }),
+    ], ME)
+    assert.equal(got?.id, 'newer')
+  })
+
+  it('shows a trip you are back from — the case Home had nothing for', () => {
+    assert.equal(tripForHomeCard([
+      trip({ id: 'c', emp: ME, status: 'APPROVED', display: 'COMPLETED', start: '2026-10-20' }),
+    ], ME)?.id, 'c')
+  })
+
+  it('ignores a claimed, expired or unapproved trip', () => {
+    assert.equal(tripForHomeCard([
+      trip({ id: 'a', emp: ME, status: 'CLAIMED', display: 'CLAIMED', start: '2026-10-20' }),
+      trip({ id: 'b', emp: ME, status: 'PENDING_APPROVAL', display: 'EXPIRED', start: '2026-10-19' }),
+      trip({ id: 'c', emp: ME, status: 'CLOSED', display: 'CLOSED', start: '2026-10-18' }),
+    ], ME), null)
+  })
+
+  it('never shows somebody else’s trip', () => {
+    assert.equal(tripForHomeCard([
+      trip({ id: 'theirs', emp: 'someone', status: 'APPROVED', display: 'ONGOING', start: '2026-10-20' }),
+    ], ME), null)
+  })
+
+  it('no trips at all is null, not a crash', () => {
+    assert.equal(tripForHomeCard([], ME), null)
   })
 })

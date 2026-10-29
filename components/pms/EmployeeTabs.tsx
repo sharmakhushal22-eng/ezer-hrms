@@ -23,11 +23,11 @@ import { checkKras, canAdd, canDelete, meter, suggestSplit,
          CATEGORIES, CATEGORY_LABEL, type Kra, type Category } from '@/lib/pms/kra'
 import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
          TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL,
-         type Log, type DiscussionType, type Mode } from '@/lib/pms/oneToOne'
-import { score, gap, byCategory, bandForScore, bandFor, DEFAULT_BANDS,
+         type Log, type DiscussionType, type Mode, type WeightageChange } from '@/lib/pms/oneToOne'
+import { score, gap, byCategory, bandForScore, bandFor, DEFAULT_BANDS, type Band,
          type Line } from '@/lib/pms/scoring'
 import { STAGES, humanDate, type StageKey } from '@/lib/pms/cycle'
-import { DEFAULT_RULES } from '@/lib/pms/cycle'
+import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
 export type EmpTab = 'dashboard' | 'kras' | 'oneToOne' | 'self' | 'result' | 'analytics'
 
@@ -82,14 +82,15 @@ const RATING_VALUES = [1, 2, 3, 4, 5]
 
 /** The 1-5 chip row from the mockup. A radiogroup, not five buttons — arrow
  *  keys are how somebody rates seven KRAs without reaching for the mouse. */
-function Chips({ value, onPick, name, disabled }: {
+function Chips({ value, onPick, name, disabled, bands = DEFAULT_BANDS }: {
   value: number | null; onPick: (n: number) => void; name: string; disabled?: boolean
+  bands?: Band[]
 }) {
   return (
     <div className="chips" role="radiogroup" aria-label={name}>
       {RATING_VALUES.map(n => {
         const on = value === n
-        const band = bandFor(n)
+        const band = bandFor(n, bands)
         return (
           <button key={n} type="button" role="radio" aria-checked={on} disabled={disabled}
                   title={band ? `${n}: ${band.label}` : String(n)}
@@ -97,6 +98,76 @@ function Chips({ value, onPick, name, disabled }: {
                   onClick={() => onPick(n)}>{n}</button>
         )
       })}
+    </div>
+  )
+}
+
+// ── where it is in the chain, and why it came back ───────────────────────
+
+/**
+ * The one thing a rejection is for.
+ *
+ * 197 refuses a rejection without a remark, on the argument that sending
+ * somebody back to guess what to change gets the same set returned wrong a
+ * second time. That argument only holds if the employee SEES the remark —
+ * and nothing did. sent_back_reason has existed since 066 and was written by
+ * the manager's send-back for just as long, with no screen anywhere reading
+ * it. The employee got a set back with no idea why.
+ *
+ * So the remark is a banner, not a field in a tab they might not open, and it
+ * is critical-coloured because it is the only thing on the screen that is
+ * asking them to do something.
+ *
+ * Stage without a remark is the ordinary case — it says who is holding the
+ * appraisal, which otherwise an employee can only infer from which buttons
+ * have gone quiet.
+ */
+export function ChainBanner({ stage, sentBackReason, sentBackAt }: {
+  stage?: string | null
+  sentBackReason?: string | null
+  sentBackAt?: string | null
+}) {
+  // Not submitted yet, or finished. Neither needs narrating: the KRA tab's own
+  // state says the first, and the Result tab says the second.
+  if (!stage || stage === 'DONE') return null
+
+  const backWithYou = stage === 'EMPLOYEE'
+
+  if (backWithYou && sentBackReason) {
+    return (
+      <div className="banner b-red">
+        <span aria-hidden="true">↩️</span>
+        <div>
+          <strong>Sent back to you{sentBackAt ? ` on ${sentBackAt.slice(0, 10)}` : ''}.</strong>{' '}
+          Change what is asked for below and send it again.
+          <div style={{ marginTop: 6, fontStyle: 'italic' }}>“{sentBackReason}”</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Back with the employee but no reason recorded: a pre-197 send-back, or a
+  // row whose remark did not save. Say so plainly rather than inventing one.
+  if (backWithYou) {
+    return (
+      <div className="banner b-amber">
+        <span aria-hidden="true">↩️</span>
+        <div>This is back with you. No reason was recorded — ask your manager
+          what they want changed.</div>
+      </div>
+    )
+  }
+
+  const WITH: Record<string, string> = {
+    RM_L1: 'your reporting manager',
+    RM_L2: 'your second-level manager',
+    HOD:   'your head of department',
+    HR:    'HR, to publish',
+  }
+  return (
+    <div className="banner b-blue">
+      <span aria-hidden="true">⏳</span>
+      <div>Your KRAs and ratings are with {WITH[stage] ?? stage} for approval.</div>
     </div>
   )
 }
@@ -109,7 +180,12 @@ export interface Who {
 }
 
 export function DashboardTab({ who, stages, current, kraCount, weightage, frequency,
-                               periodLabel, lastRating, lastScore, actionLabel, actionNote }: {
+                               periodLabel, lastRating, lastScore, actionLabel, actionNote,
+                               bands = DEFAULT_BANDS, rules = DEFAULT_RULES}: {
+  /** The policy's KRA rules. DEFAULT_RULES is a FALLBACK, not the rule:
+   *  reading the constant directly meant an admin could change min_kra_count
+   *  and this screen would go on holding the employee to 4. */
+  rules?: Rules
   who: Who
   stages: { key: StageKey; state: 'done' | 'active' | 'upcoming' | 'blocked'; detail?: string }[]
   current: StageKey
@@ -117,9 +193,11 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
   frequency: string; periodLabel: string
   lastRating: number | null; lastScore: number | null
   actionLabel: string; actionNote: string
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
-  const setOk = kraCount >= DEFAULT_RULES.minKra && weightage === DEFAULT_RULES.totalWeightage
-  const band = bandFor(lastRating)
+  const setOk = kraCount >= rules.minKra && weightage === rules.totalWeightage
+  const band = bandFor(lastRating, bands)
   return (
     <>
       <Card title={`${who.name} · ${who.code}`}
@@ -147,7 +225,7 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
         <Stat label="My KRAs" value={kraCount}
               note={setOk
                 ? `Totalling ${weightage}. The set is valid`
-                : `Totalling ${weightage}. Needs ${DEFAULT_RULES.minKra}–${DEFAULT_RULES.maxKra} KRAs at exactly ${DEFAULT_RULES.totalWeightage}`}
+                : `Totalling ${weightage}. Needs ${rules.minKra}–${rules.maxKra} KRAs at exactly ${rules.totalWeightage}`}
               tone={setOk ? undefined : 'warn'} />
         <Stat label="How often" value={frequency} note={periodLabel} />
         <Stat label="Last time"
@@ -170,7 +248,34 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
 
 // ── §3.2 My KRAs ─────────────────────────────────────────────────────────
 
-export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
+export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom, self, onSelfChange, bands = DEFAULT_BANDS, rateRequired = false, selfSubmitted = false}: {
+  /** §3's merge: the employee rates each KRA as they write it, and the KRAs
+   *  and the ratings go to the manager together. Optional, so a caller that
+   *  has not wired rating still renders. */
+  self?: Record<number, KraSelf>
+  onSelfChange?: (seq: number, patch: Partial<KraSelf>) => void
+  bands?: Band[]
+  /** Once the one-to-one is acknowledged this submission IS the final one, so
+   *  every KRA must carry a rating. Before that the employee is drafting and a
+   *  half-rated set is a reasonable thing to save. */
+  rateRequired?: boolean
+  /**
+   * Has the self rating already been submitted?
+   *
+   * NOT the same thing as `locked`, and conflating them was a real bug. The
+   * weightage lock freezes the KRAs — §1 Stage 3 — and the self-appraisal
+   * happens AFTER it, at Stage 4. Gating the rating fields on `locked` killed
+   * them at exactly the moment the employee is supposed to use them, and
+   * removed the submit button with them.
+   */
+  selfSubmitted?: boolean
+  /** The period code these KRAs were carried from, when they were. Shown so a
+   *  carried set is visibly not a blank form the employee forgot to fill in. */
+  carriedFrom?: string | null
+  /** The policy's KRA rules. DEFAULT_RULES is a FALLBACK, not the rule:
+   *  reading the constant directly meant an admin could change min_kra_count
+   *  and this screen would go on holding the employee to 4. */
+  rules?: Rules
   kras: Kra[]
   onChange: (next: Kra[]) => void
   locked: boolean
@@ -179,6 +284,12 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
   saving?: boolean
 }) {
   const check = checkKras(kras)
+  // How many KRAs still have no rating. Only a blocker once rateRequired —
+  // see the prop's note.
+  const unrated = rateRequired
+    ? kras.filter(k => (self?.[k.seq_no]?.rating ?? null) === null).length
+    : 0
+  const canGo = check.canSubmit && unrated === 0
   const m = meter(check)
   const add = canAdd(kras)
   const del = canDelete(kras)
@@ -212,12 +323,12 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
           <div className={`bar ${m.tone === 'good' ? 'green' : m.tone === 'bad' ? 'red' : 'amber'}`}
                style={{ marginBottom: 6 }}
                role="progressbar" aria-valuenow={check.total} aria-valuemin={0}
-               aria-valuemax={DEFAULT_RULES.totalWeightage} aria-label="Total weightage">
+               aria-valuemax={rules.totalWeightage} aria-label="Total weightage">
             <span style={{ width: `${m.pct}%` }} />
           </div>
           <div className="k">
             {m.says} · {check.count} {check.count === 1 ? 'KRA' : 'KRAs'}{' '}
-            (minimum {DEFAULT_RULES.minKra}, maximum {DEFAULT_RULES.maxKra})
+            (minimum {rules.minKra}, maximum {rules.maxKra})
           </div>
         </div>
         {!locked && (
@@ -233,7 +344,19 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
       </div>
 
       <Card title="My KRAs"
-            sub={`At least ${DEFAULT_RULES.minKra}, at most ${DEFAULT_RULES.maxKra}, and the weightages must total exactly ${DEFAULT_RULES.totalWeightage}.`}>
+            sub={`At least ${rules.minKra}, at most ${rules.maxKra}, and the weightages must total exactly ${rules.totalWeightage}.`}>
+            {carriedFrom && (
+              <div className="banner b-blue">
+                <span aria-hidden="true">↻</span>
+                <div>
+                  These are your KRAs from <b>{carriedFrom}</b>, carried forward as
+                  the starting point. Change whatever the new quarter needs — and
+                  anything the two of you agree in the one-to-one gets recorded
+                  there, including the weightage moves. Nothing is saved until you
+                  send it to your manager.
+                </div>
+              </div>
+            )}
         <div className="tblwrap">
           <table>
             <thead>
@@ -241,15 +364,20 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
                 <th style={{ width: 34 }}>#</th>
                 <th>KRA / objective</th><th>KPI metric</th><th>Target</th>
                 <th>Category</th><th style={{ width: 104 }} className="num">Weightage</th>
+                {onSelfChange && <><th>What you delivered</th><th>Your rating</th></>}
                 {!locked && <th style={{ width: 40 }}><span className="sr-only">Remove</span></th>}
               </tr>
             </thead>
             <tbody>
+              {/* colSpan is counted, not guessed: 6 base columns, +1 for the
+                  remove button when unlocked, +2 when rating is shown. A wrong
+                  one leaves the empty state squeezed into a single cell. */}
               {kras.length === 0 ? (
-                <tr><td colSpan={locked ? 6 : 7} style={{ textAlign: 'center', padding: '22px 14px' }}>
+                <tr><td colSpan={6 + (locked ? 0 : 1) + (onSelfChange ? 2 : 0)}
+                        style={{ textAlign: 'center', padding: '22px 14px' }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Nothing written yet</div>
                   <div className="k">
-                    Add {DEFAULT_RULES.minKra} to {DEFAULT_RULES.maxKra} KRAs. They are what
+                    Add {rules.minKra} to {rules.maxKra} KRAs. They are what
                     your rating will be measured against, so they are worth the time.
                   </div>
                 </td></tr>
@@ -280,6 +408,36 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
                              style={thin ? { borderColor: 'var(--ez-critical)' } : undefined}
                              onChange={e => set(i, { weightage: Number(e.target.value) || 0 })} />
                     </td>
+                    {/* §3's merge: rated beside the KRA it belongs to, rather
+                        than on a separate screen found afterwards. */}
+                    {onSelfChange && (
+                      <>
+                        <td>
+                          <input value={self?.[k.seq_no]?.achievement ?? ''} readOnly={selfSubmitted}
+                                 aria-label={`Achievement for KRA ${i + 1}`}
+                                 placeholder="The number you actually hit"
+                                 onChange={e => onSelfChange(k.seq_no, { achievement: e.target.value })} />
+                          <input value={self?.[k.seq_no]?.comment ?? ''} readOnly={selfSubmitted}
+                                 aria-label={`Comment for KRA ${i + 1}`}
+                                 placeholder="Evidence a manager could check"
+                                 style={{ marginTop: 4 }}
+                                 onChange={e => onSelfChange(k.seq_no, { comment: e.target.value })} />
+                        </td>
+                        <td>
+                          <div className="btnrow" role="group"
+                               aria-label={`Your rating for KRA ${i + 1}`}>
+                            {bands.map(b => (
+                              <button key={b.value} type="button" disabled={selfSubmitted}
+                                      className={self?.[k.seq_no]?.rating === b.value ? 'btn sm' : 'btn ghost sm'}
+                                      title={`${b.value}: ${b.label}`}
+                                      onClick={() => onSelfChange(k.seq_no, { rating: b.value })}>
+                                {b.value}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                      </>
+                    )}
                     {!locked && (
                       <td>
                         <button className="btn ghost sm" type="button" disabled={!del.allowed}
@@ -310,19 +468,34 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
           </div>
         )}
 
-        {!locked && (
+        {/* Shown while there is still something to send. A locked KRA set with
+            the self rating outstanding is the normal state at §1 Stage 4, and
+            hiding the button there left the employee with no way to submit the
+            rating the stage exists for. */}
+        {(!locked || !selfSubmitted) && (
           <div className="btnrow">
-            <button className="btn" type="button" disabled={!check.canSubmit || saving}
+            <button className="btn" type="button"
+                    disabled={(locked ? unrated > 0 : !canGo) || selfSubmitted || saving}
                     onClick={onSubmit}>
               {saving ? 'Saving…'
-                : check.canSubmit ? 'Send to my manager'
-                : `Cannot send yet: ${check.faults.length} to fix`}
+                : selfSubmitted ? 'Already sent'
+                // Locked: the KRAs are settled, so only the rating is in play
+                // and the KRA validation no longer has anything to say.
+                : locked
+                  ? (unrated > 0
+                      ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+                      : 'Send my ratings to my manager')
+                : !check.canSubmit ? `Cannot send yet: ${check.faults.length} to fix`
+                : unrated > 0
+                  ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+                  : rateRequired ? 'Send KRAs and my ratings to my manager'
+                  : 'Send to my manager'}
             </button>
-            {check.total !== DEFAULT_RULES.totalWeightage && kras.length > 0 && (
+            {check.total !== rules.totalWeightage && kras.length > 0 && (
               <button className="btn ghost" type="button"
                       onClick={() => onChange(kras.map((k, i) =>
                         ({ ...k, weightage: suggestSplit(kras.length)[i] })))}>
-                Split {DEFAULT_RULES.totalWeightage} evenly
+                Split {rules.totalWeightage} evenly
               </button>
             )}
           </div>
@@ -334,14 +507,35 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
 
 // ── §3.3 One-to-One Log ──────────────────────────────────────────────────
 
-export function OneToOneTab({ logs, managerName, onLog, saving }: {
+export function OneToOneTab({ logs, managerName, onLog, onAcknowledge, saving, kras = [] }: {
   logs: Log[]; managerName: string
   onLog?: (l: Log) => void; saving?: boolean
+  /** Acknowledge a discussion somebody else logged. Without this the
+   *  employee's half of a manager-logged final review could never be given,
+   *  and pms_finalise requires both halves. */
+  onAcknowledge?: (logId: string) => void
+  /** The current KRA set, so an agreed weightage change can name the KRA it
+   *  applies to rather than asking the employee to remember a seq_no. */
+  kras?: { seq_no: number; kra_title: string; weightage: number }[]
 }) {
   const [type, setType] = useState<DiscussionType>('KRA_SETTING')
   const [date, setDate] = useState('')
   const [mode, setMode] = useState<Mode>('IN_PERSON')
   const [points, setPoints] = useState('')
+  const [mins, setMins] = useState('')
+  /**
+   * The weightage changes agreed in the meeting.
+   *
+   * pms_one_to_one.weightage_changes has carried the shape
+   * [{seq_no, old_wt, new_wt, reason}] since 066 and nothing has ever written
+   * it. The spec update is explicit that the log captures "any changes to
+   * weightages", and this is the only place that knows what the weightages
+   * WERE before the employee edits them — once the goals row is updated the
+   * old number is gone, so recording it afterwards is impossible.
+   */
+  const [wtChanges, setWtChanges] = useState<WeightageChange[]>([])
+  const addChange = () => setWtChanges(c => [...c,
+    { seq_no: kras[0]?.seq_no ?? 1, old_wt: kras[0]?.weightage ?? 0, new_wt: 0, reason: '' }])
   const lock = canLockWeightage(logs)
   const publish = canPublishResult(logs)
   const rows = logRows(logs)
@@ -361,7 +555,8 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
           <table>
             <thead>
               <tr>
-                <th>Date</th><th>Type</th><th>With</th><th>What was discussed</th>
+                <th>Date</th><th>Type</th><th>With</th><th className="num">Mins</th>
+                <th>What was discussed</th><th>Weightage changes</th>
                 <th>You</th><th>Manager</th>
               </tr>
             </thead>
@@ -381,14 +576,43 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
                       </span>
                     </td>
                     <td>{managerName || '-'}</td>
+                    <td className="num">{l.duration_minutes ?? '-'}</td>
                     <td className={l.placeholder ? 'k' : undefined}>
                       {l.placeholder
                         ? TYPE_PURPOSE[l.discussion_type]
                         : (l.discussion_points || '-')}
                     </td>
+                    {/* Shown, not merely stored. A weightage change recorded
+                        where nobody can see it is no better than not recording
+                        it — this column is the evidence of what was agreed. */}
+                    <td className="k">
+                      {!l.weightage_changes?.length ? '-' : (
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {l.weightage_changes.map((c, i) => (
+                            <li key={i}>
+                              KRA {c.seq_no}: {c.old_wt} → {c.new_wt}
+                              {c.reason ? ` · ${c.reason}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                    {/* A BUTTON, NOT A LABEL, when it is the employee's turn.
+                        This column showed a dead "not yet" pill, and nothing
+                        anywhere let an employee acknowledge a discussion that
+                        somebody ELSE had logged — the employee's own form sets
+                        employee_ack as it inserts, so the only acknowledged
+                        rows were ones they created. A manager-logged final
+                        review could therefore never collect the employee's
+                        half, and pms_finalise needs both. */}
                     <td>{l.employee_ack
                       ? <span className="pill p-green">✓ acknowledged</span>
-                      : <span className="pill p-grey">not yet</span>}</td>
+                      : onAcknowledge && l.id
+                        ? <button className="btn sm" type="button" disabled={saving}
+                                  onClick={() => onAcknowledge(l.id!)}>
+                            Acknowledge
+                          </button>
+                        : <span className="pill p-grey">not yet</span>}</td>
                     <td>{l.manager_ack
                       ? <span className="pill p-green">✓ acknowledged</span>
                       : <span className="pill p-grey">not yet</span>}</td>
@@ -426,17 +650,101 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
               </select>
             </div>
           </div>
+          <div className="grid g3">
+            <div className="fld">
+              <label htmlFor="o2o-mins">How long (minutes)</label>
+              <input id="o2o-mins" type="number" min={1} max={480} value={mins}
+                     onChange={e => setMins(e.target.value)} placeholder="e.g. 30" />
+              <div className="k">Optional, but a four-minute discussion and an
+                hour-long one are different events.</div>
+            </div>
+          </div>
           <div className="fld">
             <label htmlFor="o2o-points">What was discussed</label>
             <textarea id="o2o-points" value={points} onChange={e => setPoints(e.target.value)}
                       placeholder="Weightage changes and why, targets agreed, support asked for" />
           </div>
+          {/* §3's update: the log captures any changes to weightages. This is
+              the only moment that knows the OLD number — once the employee
+              applies the change, the previous weightage is gone. */}
+          {type === 'KRA_SETTING' && (
+            <>
+              <div className="divider" />
+              <h4 style={{ fontSize: 12, fontWeight: 700, margin: '0 0 8px' }}>Weightage changes agreed</h4>
+              {wtChanges.length === 0 && (
+                <div className="k" style={{ marginBottom: 8 }}>
+                  None. Add one for each weightage the two of you agreed to move —
+                  the old figure is recorded here because after you edit your KRAs
+                  it cannot be recovered.
+                </div>
+              )}
+              {wtChanges.map((c, i) => (
+                <div className="grid g4" key={i}>
+                  <div className="fld">
+                    <label htmlFor={`wc-k-${i}`}>Which KRA</label>
+                    <select id={`wc-k-${i}`} value={c.seq_no}
+                            onChange={e => {
+                              const seq = Number(e.target.value)
+                              const k = kras.find(x => x.seq_no === seq)
+                              setWtChanges(a => a.map((x, j) => j === i
+                                ? { ...x, seq_no: seq, old_wt: k?.weightage ?? x.old_wt } : x))
+                            }}>
+                      {kras.length === 0
+                        ? <option value={c.seq_no}>KRA {c.seq_no}</option>
+                        : kras.map(k => (
+                            <option key={k.seq_no} value={k.seq_no}>
+                              {k.seq_no}. {k.kra_title.slice(0, 40)}
+                            </option>))}
+                    </select>
+                  </div>
+                  <div className="fld">
+                    <label htmlFor={`wc-o-${i}`}>Was</label>
+                    <input id={`wc-o-${i}`} type="number" value={c.old_wt}
+                           onChange={e => setWtChanges(a => a.map((x, j) =>
+                             j === i ? { ...x, old_wt: Number(e.target.value) } : x))} />
+                  </div>
+                  <div className="fld">
+                    <label htmlFor={`wc-n-${i}`}>Now</label>
+                    <input id={`wc-n-${i}`} type="number" value={c.new_wt}
+                           onChange={e => setWtChanges(a => a.map((x, j) =>
+                             j === i ? { ...x, new_wt: Number(e.target.value) } : x))} />
+                  </div>
+                  <div className="fld">
+                    <label htmlFor={`wc-r-${i}`}>Why</label>
+                    <input id={`wc-r-${i}`} value={c.reason ?? ''}
+                           onChange={e => setWtChanges(a => a.map((x, j) =>
+                             j === i ? { ...x, reason: e.target.value } : x))} />
+                  </div>
+                </div>
+              ))}
+              <div className="btnrow">
+                <button className="btn ghost sm" type="button" onClick={addChange}>
+                  + Add a weightage change
+                </button>
+                {wtChanges.length > 0 && (
+                  <button className="btn ghost sm" type="button"
+                          onClick={() => setWtChanges(c => c.slice(0, -1))}>
+                    Remove the last
+                  </button>
+                )}
+              </div>
+            </>
+          )}
           <div className="k">{TYPE_PURPOSE[type]}</div>
           <div className="btnrow">
             <button className="btn" type="button" disabled={!date || !points.trim() || saving}
-                    onClick={() => { onLog({ discussion_type: type, discussion_date: date,
-                                             mode, discussion_points: points, employee_ack: true })
-                                     setPoints(''); setDate('') }}>
+                    onClick={() => {
+                      // Only send weightage changes that actually say something.
+                      // A row left at 0 -> 0 is somebody who clicked Add and
+                      // changed their mind, and storing it would make the log
+                      // claim a change that never happened.
+                      const changes = wtChanges.filter(c => c.old_wt !== c.new_wt)
+                      onLog({ discussion_type: type, discussion_date: date,
+                              mode, discussion_points: points,
+                              duration_minutes: mins.trim() ? Number(mins) : null,
+                              weightage_changes: changes.length ? changes : null,
+                              employee_ack: true })
+                      setPoints(''); setDate(''); setMins(''); setWtChanges([]) }}>
               {saving ? 'Saving…' : 'Log it and acknowledge'}
             </button>
           </div>
@@ -448,18 +756,30 @@ export function OneToOneTab({ logs, managerName, onLog, saving }: {
 
 // ── §3.4 Self Rating ─────────────────────────────────────────────────────
 
+/**
+ * The employee's own rating of one KRA, while they are still writing it.
+ *
+ * Keyed by seq_no rather than goal_id, because during authoring the goal row
+ * may not exist yet — pms_reviews.goal_id can only be filled once the upsert
+ * returns. Performance.tsx resolves seq_no to goal_id at submit time.
+ */
+export interface KraSelf { achievement: string; rating: number | null; comment: string }
+
 export interface SelfRow {
   goalId: string; title: string; weightage: number; category: Category
   achievement: string; rating: number | null; comment: string
 }
 
-export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, windowNote }: {
+export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, windowNote,
+                                bands = DEFAULT_BANDS }: {
   rows: SelfRow[]
   onChange: (next: SelfRow[]) => void
   submitted: boolean
   onSubmit: () => void
   saving?: boolean
   windowNote?: string
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   const set = (i: number, patch: Partial<SelfRow>) =>
     onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
@@ -496,7 +816,7 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
         <Stat label="Your weighted score" value={mine === null ? '-' : mine.toFixed(2)}
               note="Weighted by the weightage on each KRA" />
         <Stat label="That lands at"
-              value={bandForScore(mine)?.label ?? '-'}
+              value={bandForScore(mine, bands)?.label ?? '-'}
               note={mine === null ? 'Rate every KRA to see this' : 'What your own ratings average to'} />
       </div>
 
@@ -525,7 +845,7 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
                              placeholder="The number you actually hit"
                              onChange={e => set(i, { achievement: e.target.value })} /></td>
                   <td>
-                    <Chips value={r.rating} disabled={submitted} name={`Rating for ${r.title}`}
+                    <Chips bands={bands} value={r.rating} disabled={submitted} name={`Rating for ${r.title}`}
                            onPick={n => set(i, { rating: n })} />
                   </td>
                   <td><input value={r.comment} readOnly={submitted}
@@ -556,7 +876,8 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
 
 export function ResultTab({ published, lines, finalRating, finalisedBy, finalisedOn,
                             deptAverage, appreciation, improvement, benefits,
-                            onAcknowledge, acknowledged, publishGate }: {
+                            onAcknowledge, acknowledged, publishGate,
+                            bands = DEFAULT_BANDS }: {
   published: boolean
   lines: Line[]
   finalRating: number | null
@@ -569,6 +890,8 @@ export function ResultTab({ published, lines, finalRating, finalisedBy, finalise
   onAcknowledge?: () => void
   acknowledged?: boolean
   publishGate: { open: boolean; because: string }
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   // §3.5: NOTHING is visible before publish. Not the rating, not the comments.
   if (!published) {
@@ -589,7 +912,7 @@ export function ResultTab({ published, lines, finalRating, finalisedBy, finalise
   const selfScore = score(lines, 'self')
   const finalScore = score(lines, 'final')
   const g = gap(selfScore, finalScore)
-  const band = bandFor(finalRating)
+  const band = bandFor(finalRating, bands)
 
   return (
     <>

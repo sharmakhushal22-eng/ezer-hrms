@@ -14,8 +14,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChainRow, PendingItem } from './types'
 import { Ic, type IconKey } from './icons'
 import { CountUp, fmtDateTime, riseStyle, useToast } from './ui'
-import { MrfApprovals, InterviewInvites, OfferApprovals } from '@/components/ess/RoleTabs'
+import { MrfApprovals, OfferApprovals, HrExitApprovals } from '@/components/ess/RoleTabs'
 import OnboardingApprovals from '@/components/ess/OnboardingApprovals'
+import { ClearanceInbox } from './ExitFnf'
 
 type Filter = 'MINE' | 'ALL' | 'LEAVE' | 'ATTENDANCE' | 'TRAVEL' | 'RESIGNATION'
 
@@ -73,13 +74,16 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
 
   return (
     <>
-      {/* MRF hiring approvals + interview tasks — these live in RoleTabs and were
-          not part of the redesigned approvals screen, so they are mounted here so a
-          reporting manager still sees MRFs waiting on them and interviewers see their
-          interview tasks. Each renders nothing when it has no items. */}
+      {/* MRF hiring approvals — these live in RoleTabs and were not part of the
+          redesigned approvals screen, so they are mounted here so a reporting manager
+          still sees MRFs waiting on them. Each renders nothing when it has no items.
+          Interviews to conduct are in the notification panel (the bell). */}
       <MrfApprovals employeeId={employeeId} notify={(m) => toast(m)} />
       <OfferApprovals employeeId={employeeId} notify={(m) => toast(m)} />
-      <InterviewInvites employeeId={employeeId} notify={(m) => toast(m)} />
+      {/* Company-started exits (People → Employees → Exit) waiting on this approver. */}
+      <HrExitApprovals employeeId={employeeId} notify={(m) => toast(m)} />
+      {/* Exit clearance forms waiting on this department / manager (also in Exit Clearance & F&F). */}
+      <ClearanceInbox api={api} />
       {/* The four-team onboarding sign-off (IT / Admin / Payroll / HR Manager). */}
       <OnboardingApprovals employeeId={employeeId} notify={(m) => toast(m)} />
 
@@ -147,7 +151,11 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
       catch (e) { setErr((e as Error).message) }
       return
     }
-    if (needsInput(a) && ask !== a) { setAsk(a); return }
+    if (needsInput(a) && ask !== a) {
+      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
+      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      setAsk(a); return
+    }
     if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
     setBusy(true)
     try {
@@ -200,6 +208,11 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
             <div>
               <label className="hx-label">{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label>
               <input type="date" className="hx-input" value={lwd} onChange={e => setLwd(e.target.value)} />
+              <div style={{ fontSize: 11.5, color: 'var(--ez-muted)', marginTop: 4 }}>
+                {item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.`
+                  : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.`
+                  : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''}
+              </div>
             </div>
           )}
           {ask === 'Set final LWD' && (

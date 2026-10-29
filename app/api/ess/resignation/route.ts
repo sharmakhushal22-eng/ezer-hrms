@@ -6,6 +6,8 @@ import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essCaller, audit, forbidden } from '@/lib/ess/session'
 import { employeeScope } from '@/lib/config/store'
 import { notifyFromTemplate } from '@/lib/config/notify'
+import { mailResignationStep } from '@/lib/exit/mail'
+import { effectiveNoticeDays, onProbation } from '@/lib/exit/notice'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,15 +20,31 @@ export async function GET(req: NextRequest) {
   const [{ data: rows }, { data: reasons }, { data: emp }] = await Promise.all([
     sb.from('employee_resignation').select('*, exit_reason_master(label, category)').eq('employee_id', me).order('created_at', { ascending: false }).limit(3),
     sb.from('exit_reason_master').select('code, category, label').eq('is_active', true).order('sort_order'),
-    sb.from('employees').select('notice_period_days').eq('id', me).maybeSingle(),
+    sb.from('employees').select('notice_period_days, l1_manager_id, l2_manager_id, hod_id, hr_manager_id, department_id, confirmation_status, confirmation_date, company_doj, group_doj, probation_months').eq('id', me).maybeSingle(),
   ])
   const current = (rows || []).find((r: any) => OPEN.includes(r.status)) || (rows || [])[0] || null
   let chain: any[] = []
   if (current) {
-    const { data } = await sb.from('resignation_stage_log').select('stage, action, note, proposed_lwd, actioned_at, approver:employees!resignation_stage_log_approver_id_fkey(full_name, designation)').eq('resignation_id', current.id).order('actioned_at')
+    const { data } = await sb.from('resignation_stage_log').select('stage, action, note, proposed_lwd, actioned_at, approver:employees!resignation_stage_log_approver_id_fkey(full_name, emp_code, designation)').eq('resignation_id', current.id).order('actioned_at')
     chain = data || []
   }
-  return NextResponse.json({ current, chain, reasons: reasons || [], notice_period_days: emp?.notice_period_days ?? 30 })
+  // Who each stage goes to — the same resolution as 071's fn_resignation_stage_approver, so
+  // the timeline can name the L1 / L2 / HOD / HR Manager (with their codes) before they act.
+  const approvers: Record<string, { id: string; full_name: string; emp_code: string | null; designation: string | null } | null> = { RM_L1: null, RM_L2: null, HOD: null, HR_MANAGER: null }
+  if (emp) {
+    let hod = emp.hod_id as string | null
+    if (!hod && emp.department_id) { const { data: d } = await sb.from('departments').select('hod_employee_id').eq('id', emp.department_id).maybeSingle(); hod = d?.hod_employee_id || null }
+    let hr = emp.hr_manager_id as string | null
+    if (!hr) { const { data: r } = await sb.rpc('fn_resignation_stage_approver', { p_employee_id: me, p_stage: 'HR_MANAGER' }); hr = (r as string | null) || null }
+    const ids: [string, string | null][] = [['RM_L1', emp.l1_manager_id], ['RM_L2', emp.l2_manager_id], ['HOD', hod], ['HR_MANAGER', hr]]
+    const want = [...new Set(ids.map(([, id]) => id).filter((x): x is string => !!x && x !== me))]
+    const { data: people } = want.length ? await sb.from('employees').select('id, full_name, emp_code, designation').in('id', want) : { data: [] as any[] }
+    const by = new Map<string, any>(((people || []) as any[]).map(p => [p.id, p]))
+    for (const [stage, id] of ids) approvers[stage] = id && by.get(id) ? { id, full_name: by.get(id).full_name, emp_code: by.get(id).emp_code ?? null, designation: by.get(id).designation ?? null } : null
+  }
+  // Notice by probation (lib/exit/notice.ts): 30 days on probation, 60 once confirmed.
+  const notice = emp ? effectiveNoticeDays(emp as any) : 60
+  return NextResponse.json({ current, chain, approvers, reasons: reasons || [], notice_period_days: notice, on_probation: emp ? onProbation(emp as any) : false })
 }
 
 export async function POST(req: NextRequest) {
@@ -65,6 +83,8 @@ export async function POST(req: NextRequest) {
       { employee_name: meRow?.full_name || 'An employee', emp_code: meRow?.emp_code || '', stage: res.current_stage },
       { scope: await employeeScope(me), link: '/ess?tab=approvals' })
   }
+  // Mail: the employee gets the acknowledgement of receipt, the first approver hears it is with them.
+  await mailResignationStep(sb as any, { resignationId: id, stage: 'EMPLOYEE', action: 'STAMPED', actorId: res?.current_approver_id || null, baseUrl: process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin }).catch(e => console.warn('resignation submit mail failed', e))
   await audit(c.caller, 'RESIGNATION_SUBMITTED', me, { resignation_id: id, reason_code: body.reason_code })
   return NextResponse.json({ ok: true, id, status: res?.status, stage: res?.current_stage })
 }

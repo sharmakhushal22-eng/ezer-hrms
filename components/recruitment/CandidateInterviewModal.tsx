@@ -11,14 +11,15 @@
 //   • Shortlist (or Hold) on the latest round enables "+ Add round": name the
 //     round, then schedule it with ONE main interviewer and any number of
 //     panelists (date/time, meeting link, passcode). Everyone gets the details
-//     in ESS → Tasks & Approvals; only the main interviewer gets "Give feedback".
+//     from the ESS notification panel; only the main interviewer gets "Give feedback".
 //   • The main interviewer's decision moves the candidate: Reject → Rejected
 //     (with remark), Hold → the Hold stage (with remark; a round can still be
 //     added), Shortlist → clears the round.
 //   • After three decided rounds a "Shortlist" button appears beside Add round;
 //     it asks for confirmation and marks the candidate Shortlisted.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { rescheduleProblems, peopleDiff, type RoundSchedule } from '@/lib/recruitment/reschedule'
 import { supabase } from '@/lib/supabase'
 // interview-invite reads and WRITES the candidate's stage, so it is guarded
 // server-side. authHeaders() reads whichever session exists — this modal opens
@@ -29,9 +30,7 @@ import { type Decision, DECISION_LABEL, ROUNDS_BEFORE_SHORTLIST } from '@/lib/re
 import { CONFIDENTIAL_ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/confidential'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
 import { C as TK, E, F, Z } from '@/lib/ui'
-// The move-stage picker adopts the kit's radiogroup. moveOptions() only LABELS
-// the targets; blockedReason() below still decides. See the note on roundVMs.
-import { RxDialog, Icon, moveOptions, type RoundVM } from '@/components/recruitment/rx'
+import { RxDialog } from '@/components/recruitment/rx'
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 //
@@ -67,7 +66,22 @@ interface Invite {
   interviewer_name: string | null; role?: 'MAIN' | 'PANELIST' | null
   scheduled_at: string | null; meet_link: string | null; meet_passcode?: string | null
   scheduled_by_name: string | null; status: string; feedback: Feedback | null; submitted_at: string | null
-  decision?: Decision | null; decision_remark?: string | null
+  decision?: Decision | null; decision_remark?: string | null; acknowledged_at?: string | null
+}
+
+const when = (ts: string) => new Date(ts).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })
+
+/** Where one invited interviewer is: not yet acknowledged, or acknowledged (and when). */
+function InviteStatus({ invite: i }: { invite: Invite }) {
+  const acked = i.status === 'acknowledged' || i.status === 'submitted'
+  const label = !acked ? 'Awaiting acknowledgement'
+    : `Acknowledged${i.acknowledged_at ? ` · ${when(i.acknowledged_at)}` : ''}${isMain(i) ? ' · awaiting feedback' : ''}`
+  return (
+    <span title={acked ? 'Accepted the invite in ESS' : 'Has not accepted the invite in ESS yet'}
+      style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:99, whiteSpace:'nowrap', background: acked ? C.okbg : C.warnbg, color: acked ? C.ok : C.warn }}>
+      {acked ? '✓ ' : '⏳ '}{label}
+    </span>
+  )
 }
 interface Emp { id: string; emp_code: string | null; full_name: string; designation: string | null; company_id: string | null }
 
@@ -104,7 +118,6 @@ export default function CandidateInterviewModal({
   const [confirmShortlist, setConfirmShortlist] = useState(false)
   const [shortlisting, setShortlisting] = useState(false)
   const [stageNow, setStageNow] = useState<string>(candidate.stage)
-  const [target, setTarget] = useState<string | null>(null)   // stage picked in the move radiogroup
 
   // schedule form state
   const [mainPick, setMainPick] = useState<Emp[]>([])
@@ -114,11 +127,9 @@ export default function CandidateInterviewModal({
   const [link, setLink] = useState('')
   const [passcode, setPasscode] = useState('')
   const [sending, setSending] = useState(false)
+  const [editRound, setEditRound] = useState<string | null>(null)   // the scheduled round being edited / rescheduled
 
   useEffect(() => { setStageNow(candidate.stage) }, [candidate.stage])
-  // A move landed (or a decision moved the candidate): clear the picker so it
-  // never shows a selection that is now behind the candidate.
-  useEffect(() => { setTarget(null) }, [stageNow])
 
   const loadInvites = useCallback(async () => {
     try {
@@ -179,33 +190,6 @@ export default function CandidateInterviewModal({
     setNewRound(''); setShowAddRound(false)
     openScheduleFor(name)   // straight into scheduling, per the flow
   }
-
-  // Gating for the manual stage buttons: can't move a candidate to Shortlisted (or beyond)
-  // while any scheduled round is still waiting on its main interviewer's feedback.
-  const blockedReason = useCallback((target: string): string | null => {
-    const shortlistIdx = stages.indexOf('Shortlisted')
-    if (shortlistIdx === -1 || stages.indexOf(target) < shortlistIdx) return null
-    for (const r of Object.keys(invitesByRound)) {
-      if ((invitesByRound[r] || []).length && !roundComplete(r)) return r
-    }
-    return null
-  }, [stages, invitesByRound, roundComplete])
-
-  /**
-   * View models for the kit's stage picker. Built from invitesByRound — the SAME
-   * set blockedReason() walks — so a label can never disagree with the gate: a
-   * round that was named but never scheduled has no invite rows and gates
-   * nothing. moveOptions() reads only `name` and `hasFeedback`.
-   *
-   * This is deliberately NOT the interview_rounds table. That table is what the
-   * pipeline's own RoundVMs come from, and this modal never loads it — feeding
-   * moveOptions an empty array here would report every stage as open and quietly
-   * bypass the feedback gate.
-   */
-  const roundVMs = useMemo<RoundVM[]>(() => Object.keys(invitesByRound).map(r => {
-    const m = mainOf(r)
-    return { name: r, interviewer: m?.interviewer_name || '', at: m?.scheduled_at ?? null, hasFeedback: roundComplete(r) }
-  }), [invitesByRound, mainOf, roundComplete])
 
   const openScheduleFor = (r: string) => {
     setOpenRound(r); setViewing(null); setFbRound(null)
@@ -282,14 +266,8 @@ export default function CandidateInterviewModal({
     setShortlisting(false)
   }
 
-  function tryMove(stage: string) {
-    const reason = blockedReason(stage)
-    if (reason) { showNotify(`Complete the ${reason} round (needs interviewer feedback) before moving to ${stage}`, 'error'); return }
-    onStageChange(candidate.id, stage)
-  }
-
   const initials = (candidate.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
-  const subLine = [mrf?.designation || mrf?.position, candidate.designation, candidate.mrf_id ? `MRF ${(mrf?.mrf_number || '').toString()}` : null].filter(Boolean).join(' · ')
+  const subLine = [mrf?.designation || mrf?.position, candidate.designation, candidate.mrf_id && mrf?.mrf_number ? String(mrf.mrf_number) : null].filter(Boolean).join(' · ')  // mrf_number already reads "MRF-2026-…"; the old "MRF " prefix printed "MRF MRF-2026-…"
   const candMeta = { name: candidate.full_name, sub: subLine, ai_score: candidate.ai_score ?? null }
 
   // ---- feedback viewer (own overlay above the modal) ----
@@ -324,17 +302,6 @@ export default function CandidateInterviewModal({
     )
   }
 
-  // Forward-only targets, mirroring moveStage's own rule.
-  // GUARD: when the candidate is already Rejected they are not in `flow` at all,
-  // so moveOptions' indexOf returns -1, slice(cur+1) becomes slice(0), and it
-  // would offer every stage — including ones behind them.
-  const inFlow = stages.filter(s => s !== 'Rejected').includes(stageNow)
-  const moveOpts = inFlow ? moveOptions(stages, stageNow, roundVMs) : []
-  // Rejected sits past Shortlisted, so blockedReason() already gates it today.
-  // moveOptions strips it from the list entirely, hence its own button.
-  const rejectBlocked = blockedReason('Rejected')
-  const canReject = stages.includes('Rejected') && stageNow !== 'Rejected'
-  const anyGated = !!rejectBlocked || moveOpts.some(o => !o.allowed)
 
   return (
     <Shell onClose={onClose}>
@@ -387,17 +354,22 @@ export default function CandidateInterviewModal({
           const rows = invitesByRound[r] || []
           const main = mainOf(r)
           const decision = decisionOf(main)
-          // Only interviewers who have ACKNOWLEDGED (or submitted feedback) are shown on the
-          // candidate's card — an invite that nobody has picked up yet is not displayed.
-          const shown = rows.filter(i => i.status === 'acknowledged' || i.status === 'submitted')
+          // Every invited interviewer is shown — name, employee code and where they are
+          // (awaiting acknowledgement / acknowledged / feedback in) — main interviewer first.
+          const shown = [...rows].sort((a, b) => Number(isMain(b)) - Number(isMain(a)))
+          const acked = rows.filter(i => i.status === 'acknowledged' || i.status === 'submitted')
           const complete = roundComplete(r)
           const scheduled = rows.length > 0
           const direct = DIRECT_ROUNDS.has(r.toLowerCase())
           // Pill carries its own tint (a var() colour + '18' is invalid CSS).
           const [statLabel, statColor, statBg] = decision ? [DECISION_LABEL[decision], DECISION_COLOR[decision], DECISION_BG[decision]] : complete ? ['Feedback in', C.ok, C.okbg] : scheduled ? ['Scheduled', C.info, C.infobg] : ['Not scheduled', C.faint, C.sunken]
           const isOpen = openRound === r
-          const panelists = shown.filter(i => !isMain(i))
+          const panelists = acked.filter(i => !isMain(i))
           const remark = main?.decision_remark || main?.feedback?.decision_remark || null
+          // Name the main interviewer the round is waiting on for feedback; the rows below
+          // already list every invited interviewer with their acknowledgement status.
+          const nameOf = (i: any) => i?.interviewer_name || i?.interviewer_emp_code || 'Interviewer'
+          const invitedMain = rows.find(i => isMain(i))
           return (
             <div key={r} style={{ border:`1px solid ${isOpen ? C.purple : C.line}`, borderRadius:12, overflow:'hidden' }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 13px', background: decision === 'REJECT' ? TK.criticalTint : complete ? C.okbg : C.card }}>
@@ -407,11 +379,15 @@ export default function CandidateInterviewModal({
                   <div style={{ fontSize:11, color:C.muted }}>
                     {!scheduled ? (direct ? 'Feedback not recorded yet' : 'No interview scheduled yet')
                       : complete ? `Main: ${main?.interviewer_name || '-'}${panelists.length ? ` · ${panelists.length} panelist${panelists.length > 1 ? 's' : ''}` : ''}`
-                      : shown.length === 0 ? 'Awaiting acknowledgement from the invited interviewers'
-                      : `${shown.length} acknowledged · awaiting the main interviewer's feedback`}
+                      : acked.length === 0 ? `Awaiting acknowledgement from ${rows.length} invited interviewer${rows.length > 1 ? 's' : ''}`
+                      : `${acked.length} of ${rows.length} acknowledged · waiting on ${nameOf(main || invitedMain)} (main interviewer) for feedback`}
                   </div>
                 </div>
                 <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statBg, color: statColor }}>{statLabel}</span>
+                {scheduled && !complete && !decision && !pipelineOver && !rows.some(i => i.status === 'submitted') && (
+                  <button onClick={() => setEditRound(r)} title="Change or remove interviewers, move the time, replace the meeting link"
+                    style={{ ...btn.small, background:C.card, color:C.purple, border:`1px solid ${C.line}` }}>✎ Edit / Reschedule</button>
+                )}
                 {!complete && direct && !scheduled ? (
                   <button onClick={() => setFbRound(r)} style={{ ...btn.small, background:C.purple, color:TK.onAccent, border:'none' }}>Give feedback</button>
                 ) : !complete && !scheduled ? (
@@ -426,17 +402,15 @@ export default function CandidateInterviewModal({
                 <div style={{ padding:'6px 13px 10px', fontSize:12, color:C.ink, borderTop:`1px solid ${C.line}` }}><b style={{ color: DECISION_COLOR[decision] }}>{DECISION_LABEL[decision]} remark:</b> {remark}</div>
               ) : null}
 
-              {/* interviewer rows — acknowledged / submitted only */}
-              {scheduled && shown.length === 0 && (
-                <div style={{ padding:'8px 13px 12px', fontSize:11.5, color:C.faint, borderTop:`1px solid ${C.line}` }}>No interviewer has acknowledged yet. They’ll appear here once they accept the invite in ESS.</div>
-              )}
+              {/* interviewer rows — everyone invited, with their acknowledgement status */}
               {shown.length > 0 && (
                 <div style={{ padding:'4px 13px 10px' }}>
                   {shown.map(i => (
                     <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderTop:`1px solid ${C.line}` }}>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:12.5, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                          {i.interviewer_name || i.interviewer_emp_code || 'Interviewer'}
+                          {i.interviewer_name || 'Interviewer'}
+                          {i.interviewer_emp_code && <span style={{ fontSize:11, fontWeight:600, color:C.muted, marginLeft:6 }}>{i.interviewer_emp_code}</span>}
                           <span style={{ fontSize:9.5, fontWeight:800, padding:'2px 7px', borderRadius:99, marginLeft:6, background: isMain(i) ? C.infobg : C.sunken, color: isMain(i) ? C.info : C.muted }}>{isMain(i) ? 'MAIN' : 'PANELIST'}</span>
                         </div>
                         <div style={{ fontSize:10.5, color:C.faint }}>{i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : i.submitted_at ? `recorded ${new Date(i.submitted_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}` : 'time TBC'}{i.meet_link ? ' · link sent' : ''}{i.meet_passcode ? ` · passcode ${i.meet_passcode}` : ''}</div>
@@ -447,9 +421,7 @@ export default function CandidateInterviewModal({
                           <button onClick={() => setViewing(i)} style={{ ...btn.small, background:C.info, color:TK.onAccent, border:'none' }}>View feedback</button>
                         </>
                       ) : (
-                        <span style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:99, background:C.sunken, color: isMain(i) ? C.info : C.muted }}>
-                          {isMain(i) ? 'Acknowledged · awaiting feedback' : 'Acknowledged'}
-                        </span>
+                        <InviteStatus invite={i} />
                       )}
                     </div>
                   ))}
@@ -485,38 +457,17 @@ export default function CandidateInterviewModal({
         })}
       </div>
 
-      {/* stage move — gated */}
-      <SectionTitle>Move stage</SectionTitle>
-      {moveOpts.length === 0 && !canReject ? (
-        <div style={{ fontSize:12, color:C.faint }}>No stage left to move to. This candidate is {stageNow}.</div>
-      ) : (
-        <>
-          <div className="rx-move" role="radiogroup" aria-label="Next stage">
-            {moveOpts.map(o => {
-              // moveOptions does NOT gate Shortlisted itself; blockedReason does,
-              // and it is the authority in this modal. Whichever refuses, wins.
-              const reason = blockedReason(o.stage)
-              const allowed = o.allowed && !reason
-              return (
-                <label key={o.stage} className={allowed ? '' : 'off'}>
-                  <input type="radio" name="mv" disabled={!allowed} checked={target === o.stage} onChange={() => setTarget(o.stage)} />
-                  <b>{o.stage}</b>
-                  <small>{reason ? `Complete the ${reason} round first` : (o.reason ?? '')}</small>
-                </label>
-              )
-            })}
-          </div>
-          <div className="rx-row" style={{ gap:8, marginTop:12, flexWrap:'wrap' }}>
-            <button className="rx-btn p" disabled={!target} onClick={() => { if (target) tryMove(target) }}>Move candidate</button>
-            {canReject && (
-              <button className="rx-btn d" disabled={!!rejectBlocked} onClick={() => tryMove('Rejected')}
-                title={rejectBlocked ? `Complete the ${rejectBlocked} round first` : ''}>Reject</button>
-            )}
-            {anyGated && <span className="rx-why"><Icon name="lock" />Feedback still outstanding</span>}
-          </div>
-        </>
+      {/* No manual stage move here: a recruiter could drop a candidate into any stage, or
+          shortlist without an interview. The stage follows the interview decisions only. */}
+      <div style={{ fontSize:11, color:C.faint, marginTop:4 }}>The stage follows the interview decisions (Reject → Rejected, Hold → Hold, Shortlist → the round's stage). Every scheduled round needs the main interviewer's feedback before Shortlisted.</div>
+
+      {editRound && (
+        <EditRoundDialog round={editRound} rows={invitesByRound[editRound] || []} emps={emps}
+          candidateId={candidate.id} candidateName={candidate.full_name} schedulerId={schedulerId || null}
+          onClose={() => setEditRound(null)}
+          onSaved={async (msg: string) => { setEditRound(null); showNotify(msg); await loadInvites() }}
+          onError={(m: string) => showNotify(m, 'error')} />
       )}
-      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>Interview decisions move the candidate automatically (Reject → Rejected, Hold → Hold, Shortlist → the round's stage). Every scheduled round needs the main interviewer's feedback before Shortlisted or beyond.</div>
 
       {/* Add-round popup — name the round, then it opens straight into scheduling */}
       {showAddRound && (
@@ -551,6 +502,114 @@ export default function CandidateInterviewModal({
 }
 
 // ---- people picker (module scope: never re-mounts, so the search box keeps focus) ----
+/** Edit a scheduled round: change / remove interviewers, move the time, replace the link and
+ *  passcode (both REQUIRED to change — the old ones have gone out; lib/recruitment/reschedule.ts).
+ *  Saving re-mails the candidate and every interviewer, and the interviewers acknowledge again.
+ *  A native <dialog> (showModal) so it opens ABOVE the candidate modal, which is itself one. */
+function EditRoundDialog({ round, rows, emps, candidateId, candidateName, schedulerId, onClose, onSaved, onError }: {
+  round: string; rows: Invite[]; emps: Emp[]; candidateId: string; candidateName: string; schedulerId: string | null
+  onClose: () => void; onSaved: (msg: string) => void | Promise<void>; onError: (m: string) => void
+}) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => { const d = ref.current; if (d && !d.open) d.showModal(); return () => { if (d?.open) d.close() } }, [])
+  const asEmp = (i: Invite): Emp => emps.find(e => e.id === i.interviewer_id) || { id: i.interviewer_id || '', emp_code: i.interviewer_emp_code, full_name: i.interviewer_name || 'Interviewer', designation: null, company_id: null }
+  const mainRow = rows.find(isMain) || rows[0]
+  const prev: RoundSchedule = useMemo(() => ({
+    mainId: mainRow?.interviewer_id || null, panelIds: rows.filter(i => i !== mainRow).map(i => i.interviewer_id || ''),
+    scheduledAt: mainRow?.scheduled_at || null, link: mainRow?.meet_link || '', passcode: mainRow?.meet_passcode || '',
+  }), [rows, mainRow])
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const at = prev.scheduledAt ? new Date(prev.scheduledAt) : null
+  const [main, setMain] = useState<Emp[]>(mainRow ? [asEmp(mainRow)] : [])
+  const [panel, setPanel] = useState<Emp[]>(rows.filter(i => i !== mainRow).map(asEmp))
+  const [date, setDate] = useState(at ? `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}` : '')
+  const [time, setTime] = useState(at ? `${pad(at.getHours())}:${pad(at.getMinutes())}` : '10:00')
+  const [link, setLink] = useState('')
+  const [pass, setPass] = useState('')
+  const [busy, setBusy] = useState(false)
+  const next: RoundSchedule = {
+    mainId: main[0]?.id || null, panelIds: panel.map(p => p.id),
+    scheduledAt: date ? new Date(`${date}T${time || '10:00'}`).toISOString() : null, link, passcode: pass,
+  }
+  const problems = rescheduleProblems(prev, next)
+  const who = peopleDiff(prev, next)
+  const ackOf = (i: Invite) => i.status === 'acknowledged' || i.status === 'submitted'
+
+  async function save() {
+    if (problems.length || busy) return
+    setBusy(true)
+    try {
+      const r = await fetch('/api/recruitment/interview-invite', {
+        method: 'POST', headers: await authHeaders(),
+        body: JSON.stringify({ action: 'reschedule', candidate_id: candidateId, round, main_interviewer_id: next.mainId, panelist_ids: next.panelIds, scheduled_at: next.scheduledAt, meet_link: link.trim(), meet_passcode: pass.trim(), scheduled_by: schedulerId }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { onError(j.error || 'Could not update the interview'); setBusy(false); return }
+      await onSaved(`${round} updated (${j.changed}). ${j.emailSkipped ? 'Everyone notified in ESS (email off).' : `${j.emailed} email(s) sent.`} Interviewers must acknowledge again.`)
+    } catch { onError('Could not update the interview'); setBusy(false) }
+  }
+
+  return (
+    <dialog ref={ref} aria-label={`Edit ${round}`} onCancel={e => { e.preventDefault(); if (!busy) onClose() }}
+      style={{ padding:0, border:0, background:'transparent', maxWidth:'none', maxHeight:'none', width:'100vw', height:'100vh', margin:0, overflow:'hidden' }}>
+      <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }}
+        style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16, fontFamily:font }}>
+        <div style={{ background:C.card, borderRadius:14, width:'min(620px,100%)', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 70px rgba(0,0,0,.3)', overflow:'hidden' }}>
+          <div style={{ padding:'16px 20px 12px', borderBottom:`1px solid ${C.line}` }}>
+            <div style={{ fontSize:16, fontWeight:800, color:C.ink }}>Edit / reschedule: {round}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:3 }}>{candidateName}. Saving sends the new details to the candidate and every interviewer; interviewers must acknowledge again.</div>
+          </div>
+          <div style={{ padding:'14px 20px', overflowY:'auto', flex:1 }}>
+            <div style={{ fontSize:11, fontWeight:800, letterSpacing:.4, textTransform:'uppercase', color:C.muted, marginBottom:6 }}>Currently scheduled</div>
+            <div style={{ background:C.sunken, borderRadius:10, padding:'8px 12px', marginBottom:14, fontSize:12.5, color:C.ink }}>
+              {rows.map(i => (
+                <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0' }}>
+                  <span style={{ flex:1 }}><b>{i.interviewer_name || 'Interviewer'}</b> <span style={{ color:C.muted }}>{i.interviewer_emp_code || ''}</span> <span style={{ fontSize:9.5, fontWeight:800, color: isMain(i) ? C.info : C.muted }}>{isMain(i) ? 'MAIN' : 'PANELIST'}</span></span>
+                  <span style={{ fontSize:10.5, fontWeight:700, color: ackOf(i) ? C.ok : C.warn }}>{ackOf(i) ? '✓ Acknowledged' : '⏳ Awaiting'}</span>
+                </div>
+              ))}
+              <div style={{ color:C.muted, marginTop:4, fontSize:12 }}>{prev.scheduledAt ? new Date(prev.scheduledAt).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : 'time TBC'}{prev.link ? ` · ${prev.link}` : ''}{prev.passcode ? ` · passcode ${prev.passcode}` : ''}</div>
+            </div>
+
+            <PeoplePicker label="Main interviewer" hint="(one person; they give the feedback)" single emps={emps} value={main} exclude={panel} onChange={setMain} placeholder="Search by name or emp code…" />
+            <div style={{ marginTop:10 }}>
+              <PeoplePicker label="Panelists" hint="(optional; × removes someone)" emps={emps} value={panel} exclude={main} onChange={setPanel} placeholder="Add panelists by name or emp code…" />
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:10 }}>
+              <div><label style={lbl}>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={inp} /></div>
+              <div><label style={lbl}>Time</label><input type="time" value={time} onChange={e => setTime(e.target.value)} style={inp} /></div>
+            </div>
+            <div style={{ marginTop:10 }}>
+              <label style={lbl}>New meeting link <span style={{ color:C.dang }}>*</span> <span style={{ color:C.faint, fontWeight:500 }}>(must be different from the one already sent)</span></label>
+              <input value={link} onChange={e => setLink(e.target.value)} placeholder="https://meet.google.com/…" style={inp} />
+            </div>
+            <div style={{ marginTop:10 }}>
+              <label style={lbl}>New meeting passcode <span style={{ color:C.dang }}>*</span> <span style={{ color:C.faint, fontWeight:500 }}>(must be different from the one already sent)</span></label>
+              <input value={pass} onChange={e => setPass(e.target.value)} placeholder="e.g. 4821" style={inp} />
+            </div>
+
+            {(who.added.length > 0 || who.removed.length > 0) && (
+              <div style={{ marginTop:12, fontSize:12, color:C.ink, background:C.brandTint, borderRadius:8, padding:'8px 11px' }}>
+                {who.added.length > 0 && <div>Adding: {who.added.map(id => [...main, ...panel].find(e => e.id === id)?.full_name).filter(Boolean).join(', ')}</div>}
+                {who.removed.length > 0 && <div>Removing: {who.removed.map(id => rows.find(i => i.interviewer_id === id)?.interviewer_name).filter(Boolean).join(', ')} (they are told they are off the panel)</div>}
+              </div>
+            )}
+            {problems.length > 0 && (
+              <ul style={{ margin:'12px 0 0', padding:'8px 12px 8px 28px', fontSize:12, color:C.dang, background:TK.criticalTint, borderRadius:8 }}>
+                {problems.map(p => <li key={p}>{p}</li>)}
+              </ul>
+            )}
+          </div>
+          <div style={{ display:'flex', gap:8, padding:'12px 20px', borderTop:`1px solid ${C.line}` }}>
+            <button onClick={onClose} disabled={busy} style={{ ...btn.ghost, flex:1 }}>Cancel</button>
+            <button onClick={save} disabled={busy || problems.length > 0} style={{ ...btn.pri, flex:1, opacity: busy || problems.length ? .55 : 1, cursor: busy || problems.length ? 'not-allowed' : 'pointer' }}>{busy ? 'Saving…' : 'Save & send new invite'}</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+  )
+}
+
 function PeoplePicker({ label, hint, single, emps, value, exclude, onChange, placeholder }: {
   label: string; hint?: string; single?: boolean; emps: Emp[]; value: Emp[]; exclude?: Emp[]
   onChange: (v: Emp[]) => void; placeholder?: string

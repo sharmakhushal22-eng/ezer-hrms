@@ -10,6 +10,7 @@ import * as XLSX from 'xlsx'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import PayStyles from '@/components/ess/payroll/PayStyles'
 
 const P = {
   navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
@@ -69,22 +70,27 @@ function hraCalcPeriod(monthlyHRA: number, basic: number, rentM: number, fromM: 
 
 const MONTHS = ['April 2026', 'May 2026', 'June 2026', 'July 2026', 'August 2026', 'September 2026', 'October 2026', 'November 2026', 'December 2026', 'January 2027', 'February 2027', 'March 2027']
 
-// ── styles ──
+// ── styles ── The surfaces come from PayStyles (the ezp-* classes, same look as ESS → Leave);
+// these few inline pieces cover what the sheet has no class for, all on theme tokens.
 const s = {
-  card: { background: P.card, border: `1px solid ${P.border}`, borderRadius: 14, padding: 16, marginBottom: 14 } as React.CSSProperties,
-  label: { fontSize: 11, color: P.muted, fontWeight: 600, display: 'block', marginBottom: 4 } as React.CSSProperties,
-  input: { width: '100%', padding: '9px 11px', background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, color: P.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
-  g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
-  btn: { padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: P.purple, color: TK.onAccent } as React.CSSProperties,
-  ghost: { padding: '9px 16px', borderRadius: 10, border: `1px solid ${P.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.surface, color: P.navy } as React.CSSProperties,
-  sec: { fontSize: 11, fontWeight: 700, color: P.purpleDark, textTransform: 'uppercase' as const, letterSpacing: '.04em', margin: '14px 0 8px' } as React.CSSProperties,
+  // A sub-section heading inside a declaration panel (HRA, 80C, …).
+  sec: { fontSize: 11, fontWeight: 700, color: P.muted, textTransform: 'uppercase' as const, letterSpacing: '.05em', margin: '18px 0 10px', paddingTop: 14, borderTop: `1px solid ${P.border}` } as React.CSSProperties,
+  // A sunken well — child boxes, HRA periods.
+  well: { background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, padding: 12, marginBottom: 12 } as React.CSSProperties,
+  // A label · value total line on a sunken strip.
+  tot: { display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, background: TK.sunken, border: `1px solid ${P.border}`, color: P.navy, fontVariantNumeric: 'tabular-nums' } as React.CSSProperties,
+  // The header row of the salary-structure and flexi grid tables.
+  th: { fontSize: 11, fontWeight: 600, color: P.muted, background: TK.sunken, borderBottom: `1px solid ${P.border}` } as React.CSSProperties,
 }
 
 function Fg({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div style={{ marginBottom: 10 }}><label style={s.label}>{label}</label>{children}</div>
+  return <div className="ezp-field" style={{ marginBottom: 12 }}><label className="ezp-label">{label}</label>{children}</div>
 }
 
-export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { employeeId: string; empName?: string; empCode?: string }) {
+/** `sandbox`: the Help → TDS Calculator for HR. Nothing is saved and no declaration is read —
+ *  only the chosen employee's CTC and joining date are prefilled (or nothing, with no employee),
+ *  and every figure stays editable. The employee's own Flexi section is the non-sandbox use. */
+export default function FlexiTdsCalculator({ employeeId, empName, empCode, sandbox = false }: { employeeId: string; empName?: string; empCode?: string; sandbox?: boolean }) {
   const [step, setStep] = useState(1)
   const [f, setF] = useState<Record<string, string>>({
     ctc: '', variable: '', doj: '',
@@ -129,6 +135,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
   // Prefill CTC / variable + DOJ, restore any saved draft/submission, set the default regime.
   useEffect(() => {
+    if (!employeeId) return   // sandbox with nobody chosen: a blank calculator
     (async () => {
       const [{ data: cm }, { data: emp }, declRes, formRes] = await Promise.all([
         supabase.from('ctc_master').select('annual_ctc, annual_variable').eq('employee_id', employeeId).order('effective_from', { ascending: false }).limit(1),
@@ -138,6 +145,12 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       ])
       setCompanyId((emp as any)?.company_id || null)
       const doj = (emp as any)?.company_doj || (emp as any)?.group_doj
+      if (sandbox) {
+        // A calculation, not this employee's declaration: CTC + DOJ only, nothing restored.
+        if (cm?.[0]) setF(p => ({ ...p, ctc: String(Math.round(cm[0].annual_ctc || 0)) || '', variable: String(Math.round(cm[0].annual_variable || 0)) }))
+        if (doj) setF(p => ({ ...p, doj: String(doj).slice(0, 10) }))
+        return
+      }
 
       // ── Restore a previously saved form (draft or submitted) — every field comes back ──
       const savedForm: any = (formRes as any)?.data
@@ -150,15 +163,16 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         if (savedForm.regime) { setChosenRegime(norm(savedForm.regime)); setUserPicked(true) }
         setStatus(savedForm.status === 'SUBMITTED' ? 'SUBMITTED' : 'DRAFT')
         if (savedForm.status === 'SUBMITTED') setSaved(true)
-        // Still backfill CTC/DOJ if the saved form left them blank.
-        if (cm?.[0]) setF(p => ({ ...p, ctc: p.ctc || String(Math.round(cm[0].annual_ctc || 0)) || '', variable: p.variable || String(Math.round(cm[0].annual_variable || 0)) }))
-        if (doj) setF(p => ({ ...p, doj: p.doj || String(doj).slice(0, 10) }))
+        // CTC, variable and DOJ always come from the record, never from the saved form: they
+        // are not the employee's to change, and a form saved before a revision holds stale pay.
+        if (cm?.[0]) setF(p => ({ ...p, ctc: String(Math.round(cm[0].annual_ctc || 0)), variable: String(Math.round(cm[0].annual_variable || 0)) }))
+        if (doj) setF(p => ({ ...p, doj: String(doj).slice(0, 10) }))
         return
       }
 
       // ── No saved form — fresh prefill ──
-      if (cm?.[0]) setF(p => ({ ...p, ctc: p.ctc || String(Math.round(cm[0].annual_ctc || 0)) || '', variable: p.variable || String(Math.round(cm[0].annual_variable || 0)) }))
-      if (doj) setF(p => ({ ...p, doj: p.doj || String(doj).slice(0, 10) }))
+      if (cm?.[0]) setF(p => ({ ...p, ctc: String(Math.round(cm[0].annual_ctc || 0)), variable: String(Math.round(cm[0].annual_variable || 0)) }))
+      if (doj) setF(p => ({ ...p, doj: String(doj).slice(0, 10) }))
 
       // Default regime: submitted declaration → saved tds_regime → (mid-year joiner, no declaration ⇒ NEW).
       const decl: any = (declRes as any)?.data
@@ -175,6 +189,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
   // Persist the full calculator state to flexi_tds_forms (draft or submitted).
   async function persistForm(newStatus: 'DRAFT' | 'SUBMITTED') {
+    if (sandbox) return { error: { message: 'The Help calculator does not save.' } }
     const payload = {
       employee_id: employeeId, company_id: companyId, fy: FY,
       regime: chosenRegime, status: newStatus,
@@ -323,16 +338,16 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
   // ── Stepper ──
   const STEPS = ['Employee & Salary', 'Flexi Declaration', 'Investments', 'TDS Report']
   const Stepper = () => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+    <div className="ezp-panel" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '10px 12px' }}>
       {STEPS.map((lbl, i) => {
         const n = i + 1, active = step === n, done = step > n
         return (
-          <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => n <= step && setStep(n)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, border: `1px solid ${active ? P.purple : P.border}`, background: active ? P.purple : done ? P.purpleBg: TK.surface, color: active ? TK.surface : done ? P.purpleDark : P.muted, fontSize: 12, fontWeight: 600, cursor: n <= step ? 'pointer' : 'default', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-              <span style={{ width: 18, height: 18, borderRadius: 99, background: active ? TK.surface : done ? P.purple : P.border, color: active ? P.purple: TK.surface, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{done ? '' : n}</span>
+          <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={() => n <= step && setStep(n)} style={{ display: 'flex', alignItems: 'center', gap: 7, height: 32, padding: '0 12px 0 6px', borderRadius: 99, border: `1px solid ${active ? TK.brandDeep : done ? TK.brandEdge : P.border}`, background: active ? TK.brand : done ? P.purpleBg : TK.surface, color: active ? TK.onAccent : done ? P.purpleDark : P.muted, fontSize: 12, fontWeight: 600, cursor: n <= step ? 'pointer' : 'default', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+              <span style={{ width: 20, height: 20, borderRadius: 99, background: active ? TK.onAccent : done ? TK.brand : TK.sunken, color: active ? TK.brand : done ? TK.onAccent : P.muted, border: active || done ? 'none' : `1px solid ${P.border}`, fontSize: 10.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{done ? '' : n}</span>
               {lbl}
             </button>
-            {i < 3 && <span style={{ width: 14, height: 2, background: step > n ? P.purple : P.border, borderRadius: 2 }} />}
+            {i < 3 && <span style={{ width: 14, height: 2, background: step > n ? TK.brandEdge : P.border, borderRadius: 2 }} />}
           </div>
         )
       })}
@@ -342,60 +357,69 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
   // ── STEP 1 — Employee & salary ──
   const step1 = (
     <div>
-      <div style={s.card}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Employee Information</div>
-        <div style={{ fontSize: 12, color: P.muted, marginBottom: 12 }}>Prefilled from your record. Adjust CTC / variable if needed.</div>
-        <div style={s.g2}>
-          <Fg label="Employee Name"><input style={{ ...s.input, background: TK.sunken }} value={empName || ''} readOnly /></Fg>
-          <Fg label="Employee Code"><input style={{ ...s.input, background: TK.sunken }} value={empCode || ''} readOnly /></Fg>
-          <Fg label="Annual CTC (₹)"><input style={s.input} type="number" value={f.ctc} onChange={e => set('ctc', e.target.value)} placeholder="e.g. 1500000" /></Fg>
-          <Fg label="Date of Joining"><input style={s.input} type="date" value={f.doj} onChange={e => set('doj', e.target.value)} /></Fg>
-          <Fg label="Annual Variable Pay (₹)"><input style={s.input} type="number" value={f.variable} onChange={e => set('variable', e.target.value)} placeholder="0 if none" /></Fg>
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>Employee Information</h3></div>
+        {/* An employee's CTC, variable and DOJ are HR's record, not inputs — the declaration and
+            the TDS projection must be worked on the pay payroll will actually run. Only the
+            Help → TDS Calculator sandbox (a what-if for hiring managers / HR) edits them. */}
+        <p className="ezp-sub">{sandbox ? 'Prefilled from the record when an employee is picked. Adjust CTC / variable to try a different package.' : 'From your salary record. If any of this is wrong, raise it with HR — it cannot be changed here.'}</p>
+        <div className="ezp-grid2" style={{ columnGap: 12, rowGap: 0 }}>
+          <Fg label="Employee Name"><input className="ezp-input" value={empName || ''} readOnly /></Fg>
+          <Fg label="Employee Code"><input className="ezp-input" value={empCode || ''} readOnly /></Fg>
+          {sandbox ? <>
+            <Fg label="Annual CTC (₹)"><input className="ezp-input" type="number" value={f.ctc} onChange={e => set('ctc', e.target.value)} placeholder="e.g. 1500000" /></Fg>
+            <Fg label="Date of Joining"><input className="ezp-input" type="date" value={f.doj} onChange={e => set('doj', e.target.value)} /></Fg>
+            <Fg label="Annual Variable Pay (₹)"><input className="ezp-input" type="number" value={f.variable} onChange={e => set('variable', e.target.value)} placeholder="0 if none" /></Fg>
+          </> : <>
+            <Fg label="Annual CTC (₹)"><input className="ezp-input" style={{ cursor: 'default' }} value={f.ctc ? R(N(f.ctc)) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+            <Fg label="Date of Joining"><input className="ezp-input" style={{ cursor: 'default' }} value={f.doj ? new Date(f.doj + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+            <Fg label="Annual Variable Pay (₹)"><input className="ezp-input" style={{ cursor: 'default' }} value={f.ctc ? R(N(f.variable)) : 'Not on record'} readOnly tabIndex={-1} /></Fg>
+          </>}
         </div>
       </div>
       {/* Actual salary structure — identical rows, order and figures to
           Employee Master → View → Salary, because both read one loader. */}
       {rd && (
-        <div style={s.card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Your Salary Structure</div>
-            <span style={{ fontSize: 11, background: TK.positiveTint, color: TK.positive, padding: '2px 10px', borderRadius: 99, fontWeight: 700, border: `1px solid ${TK.positiveTint}` }}>
+        <div className="ezp-panel">
+          <div className="ezp-head">
+            <h3>Your Salary Structure</h3>
+            <span className="ezp-chip is-ok">
               ✓ as per your record
             </span>
             {rd.payType && rd.payType !== 'Regular' && (
-              <span style={{ fontSize: 11, background: P.purpleBg, color: P.purpleDark, padding: '2px 10px', borderRadius: 99, fontWeight: 700 }}>{rd.payType}</span>
+              <span className="ezp-chip is-brand">{rd.payType}</span>
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 12 }}>
+          <div className="ezp-stats" style={{ marginBottom: 12 }}>
             {[
-              { l: 'Annual CTC', v: rd.totalCtc || rd.annualCtc, c: TK.brand, bg: TK.canvas },
-              { l: 'Net Take-home / mo', v: rd.net, c: TK.positive, bg: TK.positiveTint },
-              { l: 'Fixed / mo', v: rd.fixedMonthly, c: TK.ink, bg: TK.sunken },
+              { l: 'Annual CTC', v: rd.totalCtc || rd.annualCtc, c: 'is-brand' },
+              { l: 'Net Take-home / mo', v: rd.net, c: 'is-ok' },
+              { l: 'Fixed / mo', v: rd.fixedMonthly, c: '' },
             ].map(x => (
-              <div key={x.l} style={{ background: x.bg, border: `1px solid ${TK.line}`, borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ fontSize: 10, color: TK.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{x.l}</div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: x.c }}>{R(x.v)}</div>
+              <div key={x.l} className="ezp-stat">
+                <div className="ezp-stat-name">{x.l}</div>
+                <div className={`ezp-stat-num ${x.c}`}>{R(x.v)}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ border: `1px solid ${TK.line}`, borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.dark, fontSize: 11, fontWeight: 700, color: TK.onDark, letterSpacing: '.03em' }}>
+          <div className="ezp-table-wrap">
+            <div style={{ ...s.th, display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', letterSpacing: '.03em' }}>
               <span>COMPONENT</span><span style={{ textAlign: 'right' }}>MONTHLY</span><span style={{ textAlign: 'right' }}>ANNUAL</span>
             </div>
             {(() => {
               const M = (v: number) => v * 12
               const Row = ({ label, m, kind }: { label: string; m: number; kind?: 'sub' | 'net' | 'total' }) => (
                 <div style={{
-                  display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '8px 12px', borderTop: `1px solid ${TK.line}`,
-                  background: kind === 'total' ? TK.canvas : kind === 'net' ? TK.positiveTint : kind === 'sub' ? TK.sunken: TK.surface,
-                  fontWeight: kind ? 700 : 400,
-                  color: kind === 'total' ? TK.brand : kind === 'net' ? TK.positive : TK.ink,
+                  display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', borderTop: `1px solid ${TK.line}`,
+                  background: kind === 'total' ? TK.brandTint : kind === 'net' ? TK.positiveTint : kind === 'sub' ? TK.sunken : TK.surface,
+                  fontWeight: kind ? 700 : 400, fontVariantNumeric: 'tabular-nums',
+                  color: kind === 'total' ? TK.brandDeep : kind === 'net' ? TK.positive : TK.ink,
                 }}>
-                  <span style={{ fontSize: 13 }}>{label}</span>
-                  <span style={{ fontSize: 13, textAlign: 'right' }}>{R(m)}</span>
-                  <span style={{ fontSize: 13, textAlign: 'right' }}>{R(M(m))}</span>
+                  <span style={{ fontSize: 12.5 }}>{label}</span>
+                  <span style={{ fontSize: 12.5, textAlign: 'right' }}>{R(m)}</span>
+                  <span style={{ fontSize: 12.5, textAlign: 'right' }}>{R(M(m))}</span>
                 </div>
               )
               return (
@@ -411,7 +435,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                   {rd.erEsic > 0 && <Row label="Employer ESIC" m={rd.erEsic} />}
                   {rd.gratuity > 0 && <Row label="Gratuity" m={rd.gratuity} />}
                   {(rd.eePf > 0 || rd.eeEsic > 0 || rd.pt > 0 || rd.lwf > 0) && (
-                    <div style={{ padding: '6px 12px', background: TK.criticalTint, fontSize: 10, fontWeight: 700, color: TK.critical, letterSpacing: '.04em', borderTop: `1px solid ${TK.line}` }}>DEDUCTIONS</div>
+                    <div style={{ padding: '7px 12px', background: TK.sunken, fontSize: 10.5, fontWeight: 700, color: TK.muted, letterSpacing: '.05em', borderTop: `1px solid ${TK.line}` }}>DEDUCTIONS</div>
                   )}
                   {rd.eePf > 0 && <Row label="Employee PF" m={rd.eePf} />}
                   {rd.eeEsic > 0 && <Row label="Employee ESIC" m={rd.eeEsic} />}
@@ -425,44 +449,44 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
               )
             })()}
           </div>
-          <div style={{ fontSize: 10, color: TK.faint, marginTop: 6 }}>
+          <div className="ezp-hint">
             FY 2026-27 salary structure: the same figures shown in your HR record. Monthly amounts are pro-rated on actual paid days during payroll.
           </div>
         </div>
       )}
 
       {sal.ctc > 0 && (
-        <div style={s.card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>{rd ? 'Flexi Wallet Basis' : 'Salary Breakup'}</div>
-            <span style={{ fontSize: 11, background: P.purpleBg, color: P.purpleDark, padding: '2px 10px', borderRadius: 99, fontWeight: 600 }}>Slab: {SLAB_LABELS[sal.si]}</span>
+        <div className="ezp-panel">
+          <div className="ezp-head">
+            <h3>{rd ? 'Flexi Wallet Basis' : 'Salary Breakup'}</h3>
+            <span className="ezp-chip is-brand">Slab: {SLAB_LABELS[sal.si]}</span>
           </div>
           {/* Monthly is shown first and largest because that is the figure the HR record
               (Employee Master → Salary) displays. The annual number sits beside it, labelled,
               so the wallet budget can't be mistaken for a different Special Allowance. */}
-          <div style={{ marginTop: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, borderRadius: 10, padding: '14px 16px', color: TK.onAccent }}>
-            <div style={{ fontSize: 11, opacity: .85 }}>Flexi Wallet {rd ? '(funded by Special Allowance)' : '(Other Reimbursement)'}</div>
+          <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '14px 16px', color: TK.ink, fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ fontSize: 12, color: P.muted }}>Flexi Wallet {rd ? '(funded by Special Allowance)' : '(Other Reimbursement)'}</div>
             {rd ? (
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', margin: '4px 0 2px' }}>
                 <div>
-                  <span style={{ fontSize: 24, fontWeight: 800 }}>{R(rd.specialGross || rd.special)}</span>
-                  <span style={{ fontSize: 12, opacity: .85, marginLeft: 5 }}>per month</span>
+                  <span style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-.02em', color: TK.brandDeep }}>{R(rd.specialGross || rd.special)}</span>
+                  <span style={{ fontSize: 12, color: P.muted, marginLeft: 5 }}>per month</span>
                 </div>
-                <div style={{ opacity: .55 }}>|</div>
+                <div style={{ color: TK.brandEdge }}>|</div>
                 <div>
                   <span style={{ fontSize: 17, fontWeight: 700 }}>{R(sal.other)}</span>
-                  <span style={{ fontSize: 12, opacity: .85, marginLeft: 5 }}>per year</span>
+                  <span style={{ fontSize: 12, color: P.muted, marginLeft: 5 }}>per year</span>
                 </div>
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 24, fontWeight: 800 }}>{R(sal.other)}</div>
-                <div style={{ fontSize: 11, opacity: .8 }}>Fixed − Basic − HRA − PF</div>
+                <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-.02em', color: TK.brandDeep }}>{R(sal.other)}</div>
+                <div style={{ fontSize: 11.5, color: P.muted }}>Fixed − Basic − HRA − PF</div>
               </>
             )}
-            {rd && <div style={{ fontSize: 11, opacity: .8 }}>Your full Special Allowance: {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
+            {rd && <div style={{ fontSize: 11.5, color: P.muted }}>Your full Special Allowance: {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
           </div>
-          <div style={{ marginTop: 10, background: P.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.amber }}>
+          <div className="ezp-note" style={{ margin: '10px 0 0' }}>
             {rd
               ? <><b>Source:</b> full Special Allowance <b>{R(rd.specialGross || rd.special)}/month</b> × 12 = <b>{R(sal.other)} annual wallet</b>. Declared flexi is deducted from the Special Allowance paid as salary.</>
               : <><b>Formula:</b> {R(sal.fixed)} − {R(sal.basic)} (Basic) − {R(sal.hra)} (HRA) − {R(sal.epf)} (PF) = <b>Flexi Wallet {R(sal.other)}</b></>}
@@ -470,13 +494,13 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         </div>
       )}
       {sal.ctc > 0 && join.mid && (
-        <div style={{ ...s.card, background: TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: TK.info, marginBottom: 4 }}>Mid-year joining: pro-rata applies</div>
-          <div style={{ fontSize: 12, color: TK.brand, lineHeight: 1.65 }}>You are with the company for <b>{join.months} month{join.months === 1 ? '' : 's'}</b> of FY 2026-27, so your salary income is earned for ≈<b>{Math.round(join.pr * 100)}%</b> of the year. Tax is computed on this pro-rated income and the <b>monthly TDS is spread over the {join.months} remaining pay month{join.months === 1 ? '' : 's'}</b>. (Employees who joined on/before 1 Apr 2026 are taxed on the full 12 months.)</div>
+        <div className="ezp-note">
+          <span className="ezp-note-t">Mid-year joining: pro-rata applies</span>
+          <div>You are with the company for <b>{join.months} month{join.months === 1 ? '' : 's'}</b> of FY 2026-27, so your salary income is earned for ≈<b>{Math.round(join.pr * 100)}%</b> of the year. Tax is computed on this pro-rated income and the <b>monthly TDS is spread over the {join.months} remaining pay month{join.months === 1 ? '' : 's'}</b>. (Employees who joined on/before 1 Apr 2026 are taxed on the full 12 months.)</div>
         </div>
       )}
       {sal.ctc > 0 && !join.mid && f.doj && (
-        <div style={{ fontSize: 12, color: P.muted, margin: '0 4px 12px' }}>Joined on/before 1 Apr 2026: taxed on the full financial year.</div>
+        <div className="ezp-hint" style={{ margin: '0 4px 12px' }}>Joined on/before 1 Apr 2026: taxed on the full financial year.</div>
       )}
     </div>
   )
@@ -485,164 +509,166 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
   const carSel = (oFlexi.car || 0) > 0 || (nFlexi.car || 0) > 0
   const WalletBar = ({ title, used, io }: { title: string; used: number; io: boolean }) => {
     const bud = sal.other, pctv = bud > 0 ? Math.min(used / bud * 100, 100) : 0, ov = used > bud + 1
-    const col = ov ? P.red : pctv > 80 ? P.amber : io ? TK.warning : P.green
+    const tone = ov ? 'bad' : pctv > 80 ? 'warn' : io ? 'warn' : 'ok'
     return (
-      <div style={{ ...s.card, marginBottom: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-          <span>{io ? '' : ''} {title}</span>
-          <span style={{ color: col }}>{ov ? 'EXCEEDED!' : R(Math.max(0, bud - used)) + ' left'}</span>
+      <div className="ezp-panel">
+        <div className="ezp-head" style={{ marginBottom: 10 }}>
+          <h3>{io ? '' : ''} {title}</h3>
+          <span className={`ezp-head-meta ezp-num ezp-${tone}`} style={{ fontWeight: 700 }}>{ov ? 'EXCEEDED!' : R(Math.max(0, bud - used)) + ' left'}</span>
         </div>
-        <div style={{ height: 8, background: TK.sunken, borderRadius: 99, overflow: 'hidden' }}><div style={{ width: pctv + '%', height: '100%', background: col, transition: 'width .2s' }} /></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: P.muted, marginTop: 6 }}><span>Used: {R(used)}</span><span>Budget: {R(bud)}</span></div>
-        {ov && <div style={{ marginTop: 8, background: P.redBg, color: P.red, borderRadius: 10, padding: '7px 10px', fontSize: 11 }}>Flexi wallet limit exceeded. Remove some allowances.</div>}
+        <div className="ezp-meter"><i className={`is-${tone}`} style={{ width: pctv + '%' }} /></div>
+        <div className="ezp-meter-cap"><span>Used: {R(used)}</span><span>Budget: {R(bud)}</span></div>
+        {ov && <div className="ezp-note is-bad" style={{ margin: '10px 0 0' }}>Flexi wallet limit exceeded. Remove some allowances.</div>}
       </div>
     )
   }
   const step2 = (
     <div>
       {carSel && (
-        <div style={{ ...s.card, background: P.amberBg, border: `1px solid ${TK.warningTint}` }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Car Lease + Driver: Perquisite Tax Applied</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+        <div className="ezp-note is-warn">
+          <span className="ezp-note-t" style={{ marginBottom: 8 }}>Car Lease + Driver: Perquisite Tax Applied</span>
+          <div className="ezp-stats">
             {[['Car Lease Perq', '₹7,000', 'per month'], ['Driver Perq', '₹3,000', 'per month'], ['Total Perquisite', '₹10,000', '₹1,20,000/yr → taxable']].map(([l, v, sub]) => (
-              <div key={l} style={{ background: TK.surface, borderRadius: 10, padding: '9px 11px', border: `1px solid ${TK.warningTint}` }}>
-                <div style={{ fontSize: 11, color: P.muted }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700, color: P.amber }}>{v}</div><div style={{ fontSize: 10, color: P.muted }}>{sub}</div>
+              <div key={l} className="ezp-stat">
+                <div className="ezp-stat-name">{l}</div><div className="ezp-stat-num is-warn">{v}</div><div className="ezp-muted" style={{ fontSize: 11, marginTop: 2 }}>{sub}</div>
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: TK.critical, marginTop: 8 }}>Car lease is tax-exempt; Car + Driver are always selected together.</div>
+          <div style={{ fontSize: 12, marginTop: 8 }}>Car lease is tax-exempt; Car + Driver are always selected together.</div>
         </div>
       )}
-      <div style={s.card}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>👨‍👩‍👧 Children Details <small style={{ color: P.amber, fontWeight: 400, fontSize: 11 }}>(Old Regime only)</small></div>
-        <div style={{ fontSize: 12, color: P.muted, marginBottom: 10 }}>Affects Children&apos;s Education &amp; Hostel Allowance limits</div>
+      <div className="ezp-panel">
+        <div className="ezp-head"><h3>👨‍👩‍👧 Children Details</h3><span className="ezp-chip is-warn">(Old Regime only)</span></div>
+        <p className="ezp-sub">Affects Children&apos;s Education &amp; Hostel Allowance limits</p>
         <div style={{ maxWidth: 240 }}>
           <Fg label="Number of Children">
-            <select style={s.input} value={child.count} onChange={e => setChild(c => ({ ...c, count: +e.target.value }))}>
+            <select className="ezp-input" value={child.count} onChange={e => setChild(c => ({ ...c, count: +e.target.value }))}>
               <option value={0}>0 children</option><option value={1}>1 child</option><option value={2}>2 children (max)</option>
             </select>
           </Fg>
         </div>
         {child.count > 0 && (
-          <div style={s.g2}>
+          <div className="ezp-grid2">
             {[1, 2].slice(0, child.count).map(n => {
               const cd = n === 1 ? child.c1 : child.c2
               const upd = (patch: any) => setChild(c => ({ ...c, [n === 1 ? 'c1' : 'c2']: { ...cd, ...patch } }))
               return (
-                <div key={n} style={{ background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Child {n}</div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 6, cursor: 'pointer' }}><input type="checkbox" checked={cd.school} onChange={e => upd({ school: e.target.checked })} /> Going to school?</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={cd.hostel} onChange={e => upd({ hostel: e.target.checked })} /> Staying in hostel?</label>
+                <div key={n} style={{ ...s.well, marginBottom: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: P.navy, marginBottom: 8 }}>Child {n}</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: TK.inkSoft, marginBottom: 6, cursor: 'pointer' }}><input type="checkbox" style={{ width: 16, height: 16, accentColor: TK.brand }} checked={cd.school} onChange={e => upd({ school: e.target.checked })} /> Going to school?</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: TK.inkSoft, cursor: 'pointer' }}><input type="checkbox" style={{ width: 16, height: 16, accentColor: TK.brand }} checked={cd.hostel} onChange={e => upd({ hostel: e.target.checked })} /> Staying in hostel?</label>
                 </div>
               )
             })}
           </div>
         )}
       </div>
-      <div style={s.g2}><WalletBar title="Old Regime Wallet" used={oTot} io={true} /><WalletBar title="New Regime Wallet" used={nTot} io={false} /></div>
-      <div style={{ ...s.card, padding: 0, overflow: 'hidden', marginTop: 14 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', background: P.navy, color: TK.onAccent, fontSize: 11, fontWeight: 700, padding: '10px 14px' }}>
+      <div className="ezp-cols"><WalletBar title="Old Regime Wallet" used={oTot} io={true} /><WalletBar title="New Regime Wallet" used={nTot} io={false} /></div>
+      <div className="ezp-panel" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}><div style={{ minWidth: 440 }}>
+        <div style={{ ...s.th, display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', padding: '10px 14px' }}>
           <span>Component</span><span style={{ textAlign: 'center' }}>Old Regime</span><span style={{ textAlign: 'center' }}>New Regime</span>
         </div>
         {COMPS.map(({ k, l, perq }) => {
           const oL = getOldLimit(k), nL = getNewLimit(k)
           const drop = (lim: number, val: number, rg: 'old' | 'new') => lim
-            ? <select style={{ ...s.input, padding: '6px 8px', width: 'auto', minWidth: 92 }} value={val} onChange={e => setFlexi(rg, k, +e.target.value)}><option value={0}>₹0</option><option value={lim}>{R(lim)}</option></select>
-            : <span style={{ fontSize: 11, color: P.muted }}>Not eligible</span>
+            ? <select className="ezp-input" style={{ height: 32, padding: '0 8px', width: 'auto', minWidth: 96 }} value={val} onChange={e => setFlexi(rg, k, +e.target.value)}><option value={0}>₹0</option><option value={lim}>{R(lim)}</option></select>
+            : <span style={{ fontSize: 11.5, color: TK.faint }}>Not eligible</span>
           return (
-            <div key={k} style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', alignItems: 'center', padding: '9px 14px', borderTop: `1px solid ${P.border}`, background: perq ? TK.warningTint: TK.surface }}>
-              <div><div style={{ fontSize: 13, color: P.navy }}>{l}</div>{perq && <span style={{ fontSize: 9, background: P.amberBg, color: P.amber, padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Perquisite Tax</span>}</div>
+            <div key={k} style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', alignItems: 'center', padding: '9px 14px', borderTop: `1px solid ${P.border}`, background: perq ? TK.warningTint : TK.surface }}>
+              <div><div style={{ fontSize: 13, color: P.navy }}>{l}</div>{perq && <span className="ezp-chip is-warn" style={{ height: 18, fontSize: 10, padding: '0 7px', marginTop: 3 }}>Perquisite Tax</span>}</div>
               <div style={{ textAlign: 'center' }}>{drop(oL, oFlexi[k] || 0, 'old')}</div>
               <div style={{ textAlign: 'center' }}>{drop(nL, nFlexi[k] || 0, 'new')}</div>
             </div>
           )
         })}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', padding: '10px 14px', borderTop: `2px solid ${P.border}`, fontWeight: 700, fontSize: 13 }}>
-          <span>Total Selected</span><span style={{ textAlign: 'center', color: oTot > sal.other ? P.red: TK.warning }}>{R(oTot)}</span><span style={{ textAlign: 'center', color: nTot > sal.other ? P.red : P.green }}>{R(nTot)}</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', padding: '10px 14px', borderTop: `1px solid ${TK.lineStrong}`, background: TK.sunken, fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
+          <span>Total Selected</span><span style={{ textAlign: 'center', color: oTot > sal.other ? P.red : TK.warning }}>{R(oTot)}</span><span style={{ textAlign: 'center', color: nTot > sal.other ? P.red : P.green }}>{R(nTot)}</span>
         </div>
+        </div></div>
       </div>
     </div>
   )
 
   // ── STEP 3 — Investments ──
-  const numIn = (k: string, ph = '0') => <input style={s.input} type="number" value={f[k]} onChange={e => set(k, e.target.value)} placeholder={ph} />
+  const numIn = (k: string, ph = '0') => <input className="ezp-input" type="number" value={f[k]} onChange={e => set(k, e.target.value)} placeholder={ph} />
   const c80Total = Math.min(N(f.lic) + N(f.ppf) + N(f.elss) + sal.epf + N(f.tuit) + N(f.hlP), 150000)
   const addITotal = N(f.oi) + N(f.bon) + N(f.iinc) + N(f.varEx) + N(f.iInc)
   const step3 = (
     <div>
-      <div style={s.g2}>
+      <div className="ezp-cols">
         {/* OLD */}
-        <div style={{ ...s.card, borderLeft: `3px solid #C05621` }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: TK.critical }}>Old Regime Declaration</div>
-          <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Std Deduction ₹50,000 | 80C max ₹1,50,000</div>
+        <div className="ezp-panel" style={{ borderTop: `3px solid ${TK.warning}` }}>
+          <div className="ezp-head" style={{ marginBottom: 4 }}><h3>Old Regime Declaration</h3></div>
+          <p className="ezp-sub" style={{ margin: '0 0 12px' }}>Std Deduction ₹50,000 | 80C max ₹1,50,000</p>
           {sal.hra > 0 && (
-            <div style={{ background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: P.purpleDark, marginBottom: 6 }}>Your HRA: Annual {R(sal.hra)} · Monthly {R(sal.hra / 12)}</div>
-              <button style={{ ...s.btn, padding: '5px 12px', fontSize: 11 }} onClick={() => setF(p => ({ ...p, rentM: String(Math.round(sal.hra / 12)), hra1From: '1', hra1To: '12' }))}>Apply suggested rent →</button>
+            <div className="ezp-note" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <span className="ezp-num"><b>Your HRA: Annual {R(sal.hra)} · Monthly {R(sal.hra / 12)}</b></span>
+              <button className="ezp-ghost" onClick={() => setF(p => ({ ...p, rentM: String(Math.round(sal.hra / 12)), hra1From: '1', hra1To: '12' }))}>Apply suggested rent →</button>
             </div>
           )}
           <div style={s.sec}>HRA Exemption (Old Regime only)</div>
-          <div style={{ background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Period 1: Rent Paid</div>
-            <div style={s.g2}>
-              <Fg label="From Month"><select style={s.input} value={f.hra1From} onChange={e => set('hra1From', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
-              <Fg label="To Month"><select style={s.input} value={f.hra1To} onChange={e => set('hra1To', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
+          <div style={s.well}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>Period 1: Rent Paid</div>
+            <div className="ezp-grid2" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', rowGap: 0 }}>
+              <Fg label="From Month"><select className="ezp-input" value={f.hra1From} onChange={e => set('hra1From', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
+              <Fg label="To Month"><select className="ezp-input" value={f.hra1To} onChange={e => set('hra1To', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
             </div>
             <Fg label="Monthly Rent Paid (₹)">{numIn('rentM')}</Fg>
-            <Fg label="City Type"><select style={s.input} value={f.cityType} onChange={e => set('cityType', e.target.value)}><option value="nonmetro">Non-Metro (40% of Basic)</option><option value="metro">Metro (50% of Basic)</option></select></Fg>
-            <Fg label="Landlord PAN (required if annual rent > ₹1,00,000)"><input style={{ ...s.input, textTransform: 'uppercase' }} value={f.landlordPAN} onChange={e => set('landlordPAN', e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></Fg>
+            <Fg label="City Type"><select className="ezp-input" value={f.cityType} onChange={e => set('cityType', e.target.value)}><option value="nonmetro">Non-Metro (40% of Basic)</option><option value="metro">Metro (50% of Basic)</option></select></Fg>
+            <Fg label="Landlord PAN (required if annual rent > ₹1,00,000)"><input className="ezp-input" style={{ textTransform: 'uppercase' }} value={f.landlordPAN} onChange={e => set('landlordPAN', e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></Fg>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: P.purpleDark, marginBottom: 10, padding: '9px 12px', background: P.purpleBg, borderRadius: 10, cursor: 'pointer' }}>
+          <label className="ezp-check" style={{ alignItems: 'center', fontWeight: 600, marginBottom: 12 }}>
             <input type="checkbox" checked={!!f.showHra2} onChange={e => set('showHra2', e.target.checked ? 'y' : '')} /> Changed residence mid-year? Add second HRA period
           </label>
           {f.showHra2 && (
-            <div style={{ background: P.tealBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Period 2</div>
-              <div style={s.g2}>
-                <Fg label="From Month"><select style={s.input} value={f.hra2From} onChange={e => set('hra2From', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
-                <Fg label="To Month"><select style={s.input} value={f.hra2To} onChange={e => set('hra2To', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
+            <div style={s.well}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>Period 2</div>
+              <div className="ezp-grid2" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', rowGap: 0 }}>
+                <Fg label="From Month"><select className="ezp-input" value={f.hra2From} onChange={e => set('hra2From', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
+                <Fg label="To Month"><select className="ezp-input" value={f.hra2To} onChange={e => set('hra2To', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
               </div>
               <Fg label="Monthly Rent Paid (₹)">{numIn('rentM2')}</Fg>
-              <Fg label="City Type"><select style={s.input} value={f.cityType2} onChange={e => set('cityType2', e.target.value)}><option value="nonmetro">Non-Metro (40%)</option><option value="metro">Metro (50%)</option></select></Fg>
+              <Fg label="City Type"><select className="ezp-input" value={f.cityType2} onChange={e => set('cityType2', e.target.value)}><option value="nonmetro">Non-Metro (40%)</option><option value="metro">Metro (50%)</option></select></Fg>
             </div>
           )}
-          {N(f.rentM) > 0 && <div style={{ background: P.greenBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 10, padding: '8px 11px', fontSize: 12, color: P.teal, marginBottom: 10 }}>Total HRA Exempt: <b>{R(hraExempt)}</b></div>}
+          {N(f.rentM) > 0 && <div className="ezp-note is-ok ezp-num">Total HRA Exempt: <b>{R(hraExempt)}</b></div>}
 
           <div style={s.sec}>Section 80C (Max ₹1,50,000)</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', background: TK.sunken, borderRadius: 10, fontSize: 11, marginBottom: 8, border: `1px solid ${P.border}` }}><span style={{ color: P.muted }}>Employee PF (auto)</span><span style={{ fontWeight: 700 }}>{R(sal.epf)}</span></div>
+          <div style={{ ...s.tot, fontWeight: 400, marginBottom: 12 }}><span style={{ color: P.muted }}>Employee PF (auto)</span><span style={{ fontWeight: 700 }}>{R(sal.epf)}</span></div>
           <Fg label="LIC Premium">{numIn('lic')}</Fg><Fg label="PPF">{numIn('ppf')}</Fg><Fg label="ELSS / Mutual Funds">{numIn('elss')}</Fg>
           <Fg label="Tuition Fees">{numIn('tuit')}</Fg><Fg label="Home Loan Principal">{numIn('hlP')}</Fg>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 10, fontSize: 12, fontWeight: 700, background: c80Total >= 150000 ? P.greenBg : P.amberBg, color: c80Total >= 150000 ? P.teal : P.amber }}><span>Total 80C</span><span>{R(c80Total)} / ₹1,50,000</span></div>
+          <div style={{ ...s.tot, background: c80Total >= 150000 ? P.greenBg : P.amberBg, border: `1px solid ${c80Total >= 150000 ? TK.positiveEdge : TK.warningEdge}`, color: c80Total >= 150000 ? P.teal : P.amber }}><span>Total 80C</span><span>{R(c80Total)} / ₹1,50,000</span></div>
 
           <div style={s.sec}>80D, Home Loan &amp; NPS</div>
           <Fg label="80D Self + Family (max ₹25,000)">{numIn('medSelf')}</Fg>
           <Fg label="80D Parents (max ₹50,000)">{numIn('medParents')}</Fg>
           <Fg label="Home Loan Interest Sec 24(b) (max ₹2,00,000)">{numIn('hlInt')}</Fg>
-          <Fg label="NPS Self 80CCD(1B) (max ₹50,000)"><select style={s.input} value={f.npsSelf} onChange={e => set('npsSelf', e.target.value)}><option value="0">₹0: Not investing</option><option value="50000">₹50,000: Max benefit</option></select></Fg>
-          <Fg label="Employer NPS 80CCD(2): 10% of Basic (fully exempt)"><select style={s.input} value={f.emplrNpsOld} onChange={e => set('emplrNpsOld', e.target.value)}><option value="0">₹0: Not applicable</option><option value="on">{R(Math.round(sal.basic * .1))} (Basic × 10%)</option></select></Fg>
+          <Fg label="NPS Self 80CCD(1B) (max ₹50,000)"><select className="ezp-input" value={f.npsSelf} onChange={e => set('npsSelf', e.target.value)}><option value="0">₹0: Not investing</option><option value="50000">₹50,000: Max benefit</option></select></Fg>
+          <Fg label="Employer NPS 80CCD(2): 10% of Basic (fully exempt)"><select className="ezp-input" value={f.emplrNpsOld} onChange={e => set('emplrNpsOld', e.target.value)}><option value="0">₹0: Not applicable</option><option value="on">{R(Math.round(sal.basic * .1))} (Basic × 10%)</option></select></Fg>
 
           <div style={s.sec}>Other Deductions (80E · 80DD · 80DDB · 80G)</div>
           <Fg label="80E: Education Loan Interest (max ₹2,00,000)">{numIn('eduLoan')}</Fg>
-          <Fg label="80DD: Dependent Disability (fixed)"><select style={s.input} value={f.dep80dd} onChange={e => set('dep80dd', e.target.value)}><option value="0">₹0: Not applicable</option><option value="75000">₹75,000: 40–80% (Normal)</option><option value="125000">₹1,25,000: 80%+ Severe</option></select></Fg>
+          <Fg label="80DD: Dependent Disability (fixed)"><select className="ezp-input" value={f.dep80dd} onChange={e => set('dep80dd', e.target.value)}><option value="0">₹0: Not applicable</option><option value="75000">₹75,000: 40–80% (Normal)</option><option value="125000">₹1,25,000: 80%+ Severe</option></select></Fg>
           <Fg label="80DDB: Specified Disease (max ₹1,00,000)">{numIn('dis80ddb')}</Fg>
           <Fg label="80G: PM Relief / PM CARES (100%, max ₹2,00,000)">{numIn('pmFund')}</Fg>
         </div>
         {/* NEW */}
-        <div style={{ ...s.card, borderLeft: `3px solid ${P.green}` }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: TK.ink }}>New Regime Declaration</div>
-          <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Std Deduction ₹75,000 | No HRA / 80C / 80D</div>
-          <div style={{ background: P.greenBg, borderRadius: 10, padding: 12, marginBottom: 13, border: `1px solid ${TK.lineStrong}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span style={{ color: P.teal, fontWeight: 500 }}>Standard Deduction (auto)</span><span style={{ fontWeight: 700 }}>₹75,000</span></div>
-            <div style={{ fontSize: 10, color: P.green }}>HRA · LTA · 80C · 80D · Home Loan: Not applicable</div>
+        <div className="ezp-panel" style={{ borderTop: `3px solid ${TK.positive}` }}>
+          <div className="ezp-head" style={{ marginBottom: 4 }}><h3>New Regime Declaration</h3></div>
+          <p className="ezp-sub" style={{ margin: '0 0 12px' }}>Std Deduction ₹75,000 | No HRA / 80C / 80D</p>
+          <div className="ezp-note is-ok">
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}><span style={{ fontWeight: 600 }}>Standard Deduction (auto)</span><b className="ezp-num">₹75,000</b></div>
+            <div style={{ fontSize: 11.5, color: P.muted }}>HRA · LTA · 80C · 80D · Home Loan: Not applicable</div>
           </div>
-          <Fg label="Employer NPS 80CCD(2): 14% of Basic (fully exempt)"><select style={s.input} value={f.emplrNpsNew} onChange={e => set('emplrNpsNew', e.target.value)}><option value="0">₹0: Not applicable</option><option value="on">{R(Math.round(sal.basic * .14))} (Basic × 14%)</option></select></Fg>
+          <Fg label="Employer NPS 80CCD(2): 14% of Basic (fully exempt)"><select className="ezp-input" value={f.emplrNpsNew} onChange={e => set('emplrNpsNew', e.target.value)}><option value="0">₹0: Not applicable</option><option value="on">{R(Math.round(sal.basic * .14))} (Basic × 14%)</option></select></Fg>
           <div style={s.sec}>Additional Income (FY 2026-27)</div>
           <Fg label="Other Income (rental, freelance)">{numIn('oi')}</Fg>
           <Fg label="Bonus / Commission">{numIn('bon')}</Fg>
           <Fg label="Incentive / Award">{numIn('iinc')}</Fg>
           <Fg label="Variable Pay Expected (rest of year)">{numIn('varEx')}</Fg>
           <Fg label="Interest Income (FD / Savings)">{numIn('iInc')}</Fg>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: P.greenBg, borderRadius: 10, fontSize: 12, fontWeight: 700, color: P.teal, border: `1px solid ${TK.lineStrong}` }}><span>Total Additional Income</span><span>{R(addITotal)}</span></div>
+          <div style={s.tot}><span>Total Additional Income</span><span>{R(addITotal)}</span></div>
         </div>
       </div>
     </div>
@@ -781,6 +807,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
   // Submit the chosen regime → store in DB + LOCK + download. Confirms first (Yes/No).
   async function submitRegime() {
+    if (sandbox) return
     if (!chosenRegime || !T) return
     const isOldR = chosenRegime === 'OLD'
     const emplrNps = f.emplrNpsOld === 'on' || f.emplrNpsNew === 'on'
@@ -837,7 +864,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
   // ── STEP 4 — TDS report ──
   const step4 = (() => {
-    if (!T) return <div style={{ ...s.card, textAlign: 'center', padding: 40, color: P.muted }}>Complete Steps 1–3 first.</div>
+    if (!T) return <div className="ezp-panel"><div className="ezp-empty">Complete Steps 1–3 first.</div></div>
     const rec = T.fO <= T.fN ? 'OLD' : 'NEW', save = Math.abs(T.fO - T.fN)
     const metrics = [
       { l: 'Annual CTC', v: R(sal.ctc), s: SLAB_LABELS[sal.si] }, { l: T.mid ? 'Earned Salary' : 'Flexi Wallet', v: R(T.mid ? sal.ctc * T.pr : sal.other), s: T.mid ? `${T.months} mo · ${Math.round(T.pr * 100)}%` : 'Other Reimb.' },
@@ -847,111 +874,115 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     ]
     const row = (l: string, oV: string, nV: string, exempt = false) => (
       <tr style={{ background: exempt ? P.greenBg : 'transparent' }}>
-        <td style={{ padding: '7px 10px', fontSize: 12, color: exempt ? P.teal : P.navy }} dangerouslySetInnerHTML={{ __html: l }} />
-        <td style={{ padding: '7px 10px', fontSize: 12, textAlign: 'right', color: exempt ? P.teal : P.navy }}>{oV}</td>
-        <td style={{ padding: '7px 10px', fontSize: 12, textAlign: 'right', color: exempt ? P.teal : P.navy }}>{nV}</td>
+        <td style={{ color: exempt ? P.teal : P.navy }} dangerouslySetInnerHTML={{ __html: l }} />
+        <td className="num" style={{ color: exempt ? P.teal : P.navy }}>{oV}</td>
+        <td className="num" style={{ color: exempt ? P.teal : P.navy }}>{nV}</td>
       </tr>
     )
     const bold = (l: string, oV: string, nV: string, bg: string, col = P.navy) => (
-      <tr style={{ background: bg }}><td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 700, color: col }}>{l}</td><td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 700, textAlign: 'right', color: col }}>{oV}</td><td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 700, textAlign: 'right', color: col }}>{nV}</td></tr>
+      <tr style={{ background: bg }}><td style={{ fontSize: 13, fontWeight: 700, color: col, borderTop: `1px solid ${TK.lineStrong}` }}>{l}</td><td className="num" style={{ fontSize: 13, fontWeight: 700, color: col, borderTop: `1px solid ${TK.lineStrong}` }}>{oV}</td><td className="num" style={{ fontSize: 13, fontWeight: 700, color: col, borderTop: `1px solid ${TK.lineStrong}` }}>{nV}</td></tr>
     )
-    const sec = (t: string) => <tr><td colSpan={3} style={{ padding: '8px 10px', fontSize: 11, fontWeight: 700, color: P.purpleDark, background: TK.brandTint, letterSpacing: '.03em' }}>{t}</td></tr>
+    const sec = (t: string) => <tr><td colSpan={3} style={{ fontSize: 11, fontWeight: 700, color: P.muted, background: TK.sunken, letterSpacing: '.05em' }}>{t}</td></tr>
     return (
       <div>
-        <div style={{ ...s.card, background: rec === 'OLD' ? 'linear-gradient(135deg,#B45309,#C2410C)' : 'linear-gradient(135deg,#059669,#047857)', color: TK.onAccent, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <div><div style={{ fontSize: 17, fontWeight: 700 }}>Recommended: {rec === 'OLD' ? 'Old' : 'New'} Regime</div><div style={{ fontSize: 12, opacity: .9 }}>You save <b>{R(save)}</b> annually</div></div>
-          <div style={{ textAlign: 'right' }}><div style={{ fontSize: 32, fontWeight: 800 }}>{R(rec === 'OLD' ? T.fO : T.fN)}</div><div style={{ fontSize: 11, opacity: .85 }}>Annual Tax · Monthly TDS {R(rec === 'OLD' ? T.moO : T.moN)}</div></div>
-        </div>
+        <section className="ezp-hero" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div><div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-.01em' }}>Recommended: {rec === 'OLD' ? 'Old' : 'New'} Regime</div><p className="ezp-hero-label" style={{ margin: '2px 0 0' }}>You save <b className="ezp-num">{R(save)}</b> annually</p></div>
+          <div style={{ textAlign: 'right' }}><p className="ezp-hero-num" style={{ justifyContent: 'flex-end' }}><b>{R(rec === 'OLD' ? T.fO : T.fN)}</b></p><p className="ezp-hero-label ezp-num" style={{ margin: '2px 0 0' }}>Annual Tax · Monthly TDS {R(rec === 'OLD' ? T.moO : T.moN)}</p></div>
+        </section>
 
         {/* ── Save & Submit: choose Old / New regime, save draft, or submit (locks) ── */}
-        <div style={s.card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Save &amp; Submit: Tax Regime</div>
-            {isSubmitted && !editMode && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: P.greenBg, color: P.green }}>Submitted &amp; locked</span>}
-            {editMode && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: P.amberBg, color: P.amber }}>Editing {editMode === 'all' ? 'flexi + investments' : 'flexi only'}</span>}
-            {status === 'DRAFT' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: TK.infoTint, color: TK.info }}>Draft saved</span>}
+        {!sandbox && <div className="ezp-panel">
+          <div className="ezp-head">
+            <h3>Save &amp; Submit: Tax Regime</h3>
+            {isSubmitted && !editMode && <span className="ezp-chip is-ok">Submitted &amp; locked</span>}
+            {editMode && <span className="ezp-chip is-warn">Editing {editMode === 'all' ? 'flexi + investments' : 'flexi only'}</span>}
+            {status === 'DRAFT' && <span className="ezp-chip is-info">Draft saved</span>}
           </div>
           {!userPicked && !isSubmitted && recRegime && (
-            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: TK.brand, marginBottom: 10 }}>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. It gives you the <b>lower annual tax</b>. You can change it below before submitting.
+            <div className="ezp-note">We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. It gives you the <b>lower annual tax</b>. You can change it below before submitting.
             </div>
           )}
           {isSubmitted && !editMode && (
-            <div style={{ background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.purpleDark, marginBottom: 10 }}>You submitted the <b>{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. Your regime is locked. {chosenRegime === 'OLD' ? 'Use Edit to change your flexi & investment declarations.' : 'Use Edit to change your flexi declaration (investment sections don’t apply to the New Regime).'}
+            <div className="ezp-note is-ok">You submitted the <b>{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. Your regime is locked. {chosenRegime === 'OLD' ? 'Use Edit to change your flexi & investment declarations.' : 'Use Edit to change your flexi declaration (investment sections don’t apply to the New Regime).'}
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10, marginBottom: 12 }}>
             {(['OLD', 'NEW'] as const).map(rg => {
               const sel = chosenRegime === rg
               const isOld = rg === 'OLD'
               const tax = isOld ? T.fO : T.fN, mo = isOld ? T.moO : T.moN
               return (
                 <button key={rg} onClick={() => { if (!regimeLocked) { setChosenRegime(rg); setUserPicked(true); setSaved(false) } }} disabled={regimeLocked} style={{
-                  textAlign: 'left', padding: '12px 14px', borderRadius: 10, cursor: regimeLocked ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                  border: `2px solid ${sel ? (isOld ? TK.warningTint : P.green) : P.border}`,
+                  textAlign: 'left', padding: '12px 14px', borderRadius: 10, cursor: regimeLocked ? 'not-allowed' : 'pointer', fontFamily: 'inherit', color: P.navy,
+                  border: `1px solid ${sel ? (isOld ? TK.warning : P.green) : TK.lineStrong}`,
+                  boxShadow: sel ? `0 0 0 1px ${isOld ? TK.warning : P.green}` : 'none',
                   background: sel ? (isOld ? TK.warningTint : P.greenBg) : TK.surface, opacity: regimeLocked && !sel ? .45 : 1,
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 16, height: 16, borderRadius: 99, border: `2px solid ${sel ? (isOld ? '#C05621' : P.green) : P.border}`, background: sel ? (isOld ? '#C05621' : P.green) : TK.surface, display: 'inline-block', flexShrink: 0 }} />
-                    <span style={{ fontSize: 14, fontWeight: 700, color: isOld ? '#9b2c2c' : '#1c4532' }}>{isOld ? 'Old Regime' : 'New Regime'}</span>
-                    {rec === rg && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: P.purpleBg, color: P.purpleDark }}>Recommended</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 16, height: 16, borderRadius: 99, border: `2px solid ${sel ? (isOld ? TK.warning : P.green) : TK.lineStrong}`, background: sel ? (isOld ? TK.warning : P.green) : TK.surface, boxShadow: sel ? `inset 0 0 0 2px ${TK.surface}` : 'none', display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>{isOld ? 'Old Regime' : 'New Regime'}</span>
+                    {rec === rg && <span className="ezp-chip is-brand" style={{ height: 18, fontSize: 10, padding: '0 7px' }}>Recommended</span>}
                     {regimeLocked && sel && <span style={{ fontSize: 10 }}></span>}
                   </div>
-                  <div style={{ fontSize: 11, color: P.muted, marginTop: 6 }}>Annual tax <b style={{ color: P.navy }}>{R(tax)}</b> · Monthly TDS <b style={{ color: P.navy }}>{R(mo)}</b></div>
+                  <div className="ezp-num" style={{ fontSize: 11.5, color: P.muted, marginTop: 6 }}>Annual tax <b style={{ color: P.navy }}>{R(tax)}</b> · Monthly TDS <b style={{ color: P.navy }}>{R(mo)}</b></div>
                 </button>
               )
             })}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {(!isSubmitted || editMode) && (
-              <button onClick={submitRegime} disabled={!chosenRegime || saving} style={{ ...s.btn, opacity: (!chosenRegime || saving) ? .6 : 1 }}>
+              <button className="ezp-btn" onClick={submitRegime} disabled={!chosenRegime || saving}>
                 {saving ? 'Saving…' : editMode ? 'Save & re-submit' : `Submit ${chosenRegime || ''} declaration`}
               </button>
             )}
             {!isSubmitted && (
-              <button onClick={saveDraft} disabled={saving} style={{ ...s.ghost, opacity: saving ? .6 : 1 }}>Save Draft</button>
+              <button className="ezp-ghost" style={{ height: 38 }} onClick={saveDraft} disabled={saving}>Save Draft</button>
             )}
             {isSubmitted && !editMode && (
-              <button onClick={() => setEditMode(chosenRegime === 'OLD' ? 'all' : 'flexi')} style={s.btn}>Edit {chosenRegime === 'OLD' ? 'flexi & investments' : 'flexi'}
+              <button className="ezp-btn" onClick={() => setEditMode(chosenRegime === 'OLD' ? 'all' : 'flexi')}>Edit {chosenRegime === 'OLD' ? 'flexi & investments' : 'flexi'}
               </button>
             )}
             {isSubmitted && !editMode && (
               <>
-                <button onClick={downloadDeclarationPdf} style={s.ghost}>⬇ Download PDF</button>
-                <button onClick={downloadDeclaration} style={s.ghost}>⬇ Excel</button>
+                <button className="ezp-ghost" style={{ height: 38 }} onClick={downloadDeclarationPdf}>⬇ Download PDF</button>
+                <button className="ezp-ghost" style={{ height: 38 }} onClick={downloadDeclaration}>⬇ Excel</button>
               </>
             )}
-            {editMode && <button onClick={() => { setEditMode(null); setStatus('SUBMITTED') }} style={s.ghost}>Cancel edit</button>}
-            {draftMsg && <span style={{ fontSize: 11, color: draftMsg.startsWith('') ? P.red : P.teal, fontWeight: 600 }}>{draftMsg}</span>}
+            {editMode && <button className="ezp-ghost" style={{ height: 38 }} onClick={() => { setEditMode(null); setStatus('SUBMITTED') }}>Cancel edit</button>}
+            {draftMsg && <span style={{ fontSize: 12, color: draftMsg.startsWith('⚠') ? P.red : P.teal, fontWeight: 600 }}>{draftMsg}</span>}
           </div>
-        </div>
+        </div>}
 
         {T.mid && (
-          <div style={{ ...s.card, background: TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>
-            <div style={{ fontSize: 12, color: TK.brand, lineHeight: 1.65 }}>📅 <b>Pro-rated for mid-year joining:</b> salary income taxed for <b>{T.months} of 12 months</b> (≈{Math.round(T.pr * 100)}%). Annual tax above is spread over the <b>{T.months} remaining pay month{T.months === 1 ? '' : 's'}</b>Monthly TDS = Annual Tax ÷ {T.months}. Standard deduction &amp; your actual investment declarations are counted in full.</div>
+          <div className="ezp-note">
+            <div>📅 <b>Pro-rated for mid-year joining:</b> salary income taxed for <b>{T.months} of 12 months</b> (≈{Math.round(T.pr * 100)}%). Annual tax above is spread over the <b>{T.months} remaining pay month{T.months === 1 ? '' : 's'}</b>Monthly TDS = Annual Tax ÷ {T.months}. Standard deduction &amp; your actual investment declarations are counted in full.</div>
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8, marginBottom: 14 }}>
-          {metrics.map(m => <div key={m.l} style={{ ...s.card, marginBottom: 0, padding: 12 }}><div style={{ fontSize: 10, color: P.muted, fontWeight: 600 }}>{m.l}</div><div style={{ fontSize: 16, fontWeight: 700, margin: '2px 0' }}>{m.v}</div><div style={{ fontSize: 10, color: P.muted }}>{m.s}</div></div>)}
+        <div className="ezp-panel">
+          <div className="ezp-stats" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
+            {metrics.map(m => <div key={m.l} className="ezp-stat"><div className="ezp-stat-name">{m.l}</div><div className="ezp-stat-num">{m.v}</div><div className="ezp-muted" style={{ fontSize: 11, marginTop: 2 }}>{m.s}</div></div>)}
+          </div>
         </div>
-        <div style={s.g2}>
+        <div className="ezp-cols">
           {(['OLD', 'NEW'] as const).map(rg => {
             const io = rg === 'OLD', ir = rec === rg
             const tax = io ? T.fO : T.fN, gr = io ? T.gO : T.gN, ded = io ? T.dO : T.dN, tx2 = io ? T.tO : T.tN, mo = io ? T.moO : T.moN, eff = io ? T.efO : T.efN
             return (
-              <div key={rg} style={{ ...s.card, marginBottom: 0, borderLeft: `3px solid ${io ? '#C05621' : P.green}`, boxShadow: ir ? `0 0 0 2px ${P.purple}` : undefined }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: io ? '#9b2c2c' : '#1c4532', display: 'flex', gap: 8, alignItems: 'center' }}>{io ? 'Old' : 'New'} Regime {ir && <span style={{ fontSize: 9, background: P.purple, color: TK.onAccent, padding: '2px 7px', borderRadius: 99 }}>Recommended</span>}</div>
-                <div style={{ fontSize: 26, fontWeight: 800, color: io ? '#C05621' : P.green, margin: '4px 0' }}>{R(tax)}</div>
-                <div style={{ fontSize: 11, color: P.muted, marginBottom: 8 }}>Effective {eff}% · Monthly TDS {R(mo)}</div>
-                {[['Gross Income', R(gr)], ['(–) Deductions', R(ded)], ['= Net Taxable', R(tx2)], ['Annual Tax', R(tax)], ['Monthly TDS', R(mo)]].map(([l, v]) => <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12, borderBottom: `1px solid ${P.border}` }}><span style={{ color: P.muted }}>{l}</span><span style={{ fontWeight: 600 }}>{v}</span></div>)}
+              <div key={rg} className="ezp-panel" style={{ borderTop: `3px solid ${io ? TK.warning : P.green}`, ...(ir ? { borderColor: TK.brandEdge, borderTopColor: io ? TK.warning : P.green, boxShadow: `0 0 0 1px ${TK.brandEdge}` } : {}) }}>
+                <div className="ezp-head" style={{ marginBottom: 4 }}><h3>{io ? 'Old' : 'New'} Regime</h3>{ir && <span className="ezp-chip is-brand">Recommended</span>}</div>
+                <div className="ezp-num" style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-.02em', color: io ? TK.warning : P.green, margin: '2px 0' }}>{R(tax)}</div>
+                <div className="ezp-num" style={{ fontSize: 11.5, color: P.muted, marginBottom: 8 }}>Effective {eff}% · Monthly TDS {R(mo)}</div>
+                {[['Gross Income', R(gr)], ['(–) Deductions', R(ded)], ['= Net Taxable', R(tx2)], ['Annual Tax', R(tax)], ['Monthly TDS', R(mo)]].map(([l, v]) => <div key={l} className="ezp-row"><span>{l}</span><b>{v}</b></div>)}
               </div>
             )
           })}
         </div>
-        <div style={{ ...s.card, padding: 0, overflow: 'hidden', marginTop: 14 }}>
-          <div style={{ padding: '12px 14px', borderBottom: `1px solid ${P.border}` }}><div style={{ fontSize: 13, fontWeight: 700 }}>Taxable Income Breakup (Component-wise)</div><div style={{ fontSize: 11, color: P.muted }}>What is taxable, what is exempt, and how TDS is computed</div></div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ background: TK.brandTint }}><th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: P.muted }}>Component</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: TK.warning }}>Old (₹)</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: P.green }}>New (₹)</th></tr></thead>
+        <div className="ezp-panel">
+          <div className="ezp-head"><h3>Taxable Income Breakup (Component-wise)</h3></div>
+          <p className="ezp-sub">What is taxable, what is exempt, and how TDS is computed</p>
+          <div className="ezp-table-wrap">
+            <table className="ezp-table" style={{ minWidth: 420 }}>
+              <thead><tr><th>Component</th><th className="num" style={{ color: TK.warning }}>Old (₹)</th><th className="num" style={{ color: P.green }}>New (₹)</th></tr></thead>
               <tbody>
                 {sec(T.mid ? `📌 INCOME (${T.months} months · pro-rated ${Math.round(T.pr * 100)}%)` : 'INCOME')}
                 {row('Basic Salary (100% taxable)', R(T.eBasic), R(T.eBasic))}
@@ -964,7 +995,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                 {T.eVari > 0 && row('Variable Pay', R(T.eVari), R(T.eVari))}
                 {T.addI > 0 && row('Additional Income', R(T.addI), R(T.addI))}
                 {(T.oPerq > 0 || T.nPerq > 0) && row('Car+Driver Perquisite (₹10,000/mo)', T.oPerq ? `+${R(T.oPerq)}` : '-', T.nPerq ? `+${R(T.nPerq)}` : '-')}
-                {bold('Gross Taxable Income', R(T.grossO), R(T.grossN), TK.warningTint, TK.critical)}
+                {bold('Gross Taxable Income', R(T.grossO), R(T.grossN), TK.sunken, P.navy)}
                 {sec('DEDUCTIONS')}
                 {row('Standard Deduction', '(₹50,000)', '(₹75,000)', true)}
                 {T.ltaAmt > 0 && row('Leave Travel Allowance', `(${R(T.ltaAmt)})`, 'N/A', true)}
@@ -983,51 +1014,57 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                 {row('Tax on income (slab)', R(T.bO), R(T.bN))}
                 {row('Rebate u/s 87A', T.tO <= 500000 ? `(${R(Math.min(T.bO, 12500))})` : '-', T.tN <= 1200000 ? `(${R(T.bN)})` : '-', true)}
                 {row('Add: 4% Health & Edu Cess', R(Math.round(T.fO / 1.04 * .04)), R(Math.round(T.fN / 1.04 * .04)))}
-                {bold('TOTAL ANNUAL TAX', R(T.fO), R(T.fN), P.navy, TK.surface)}
-                {bold(`MONTHLY TDS (÷${T.months})`, R(T.moO), R(T.moN), TK.warningTint, TK.critical)}
+                {bold('TOTAL ANNUAL TAX', R(T.fO), R(T.fN), TK.brandTint, TK.brandDeep)}
+                {bold(`MONTHLY TDS (÷${T.months})`, R(T.moO), R(T.moN), TK.sunken, P.navy)}
               </tbody>
             </table>
           </div>
         </div>
-        <div style={{ ...s.card, background: P.amberBg, border: `1px solid ${TK.warningTint}` }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 6 }}>Important Disclaimer</div>
-          <div style={{ fontSize: 12, color: TK.warning, lineHeight: 1.7 }}>
+        <div className="ezp-note is-warn">
+          <span className="ezp-note-t">Important Disclaimer</span>
+          <div>
             This is an <b>estimate</b> for comparison &amp; investment planning only. Actual TDS may vary with final proofs, payroll processing, mid-year changes or tax-law amendments. Please confirm with your HR / Finance team and file your full investment declaration on the HRMS portal for accurate TDS. Not tax or financial advice. FY 2026-27 (AY 2027-28).
           </div>
         </div>
-        <button style={s.ghost} onClick={() => setStep(3)}>Back</button>
+        <button className="ezp-ghost" style={{ height: 38 }} onClick={() => setStep(3)}>Back</button>
       </div>
     )
   })()
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+    <div className="ezp">
+      <PayStyles />
+      <div className="ezp-title">
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: P.navy, marginBottom: 2 }}>Flexi &amp; TDS Calculator</div>
-          <div style={{ fontSize: 12, color: P.muted }}>Plan your flexi benefit declaration and compare Old vs New tax regime · FY 2026-27</div>
+          <h2>{sandbox ? 'TDS Calculator' : <>Flexi &amp; TDS Calculator</>}</h2>
+          <p>{sandbox
+            ? <>Work out flexi, deductions and Old vs New regime tax for any figures · FY 2026-27 · <b>nothing here is saved</b> and no one&apos;s declaration changes</>
+            : 'Plan your flexi benefit declaration and compare Old vs New tax regime · FY 2026-27'}</p>
         </div>
+        {sandbox && sal.ctc > 0 && step === 4 && (
+          <button className="ezp-ghost" style={{ height: 38 }} onClick={downloadDeclaration}>Download Excel</button>
+        )}
         {/* Save Draft from any step (pre-submit) — data is stored and returns pre-filled */}
-        {!isSubmitted && (
-          <button onClick={saveDraft} disabled={saving} style={{ ...s.ghost, opacity: saving ? .6 : 1, whiteSpace: 'nowrap' }}>Save Draft</button>
+        {!isSubmitted && !sandbox && (
+          <button className="ezp-ghost" style={{ height: 38 }} onClick={saveDraft} disabled={saving}>Save Draft</button>
         )}
       </div>
-      {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? TK.critical : TK.positive}`, borderRadius: 10, padding: '8px 12px' }}>{draftMsg}</div>}
+      {draftMsg && <div className={`ezp-note ${draftMsg.startsWith('⚠') ? 'is-bad' : 'is-ok'}`} style={{ fontWeight: 600 }}>{draftMsg}</div>}
       {defaultedByRule && !isSubmitted && (
-        <div style={{ marginBottom: 12, fontSize: 12, color: P.amber, background: P.amberBg, border: `1px solid ${P.amber}`, borderRadius: 10, padding: '9px 12px' }}>
+        <div className="ezp-note is-warn">
           <b>New Regime applied by default</b>: no regime was chosen by the 4th of the month{/^\d{4}-/.test(defaultedByRule) ? ` (set on ${new Date(defaultedByRule).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Payroll is taxing you on the New Regime. You can still submit your own choice here; submitting replaces the default.
         </div>
       )}
-      {viewLocked && <div style={{ marginBottom: 12, fontSize: 12, color: P.purpleDark, background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px' }}>This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}
+      {viewLocked && <div className="ezp-note">This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}
       <Stepper />
       {step === 1 && <fieldset disabled={!basicRW} style={fsReset}>{step1}</fieldset>}
       {step === 2 && <fieldset disabled={!flexiRW} style={fsReset}>{step2}</fieldset>}
       {step === 3 && <fieldset disabled={!investRW} style={fsReset}>{step3}</fieldset>}
       {step === 4 && step4}
       {/* Step navigation — kept OUTSIDE the disabled fieldsets so a submitted (locked) employee can still page through and view all steps. */}
-      {step === 1 && sal.ctc > 0 && <div style={{ textAlign: 'right', marginTop: 6 }}><button style={s.btn} onClick={() => setStep(2)}>Next: Flexi Declaration →</button></div>}
-      {step === 2 && <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}><button style={s.ghost} onClick={() => setStep(1)}>Back</button><button style={s.btn} onClick={() => setStep(3)}>Next: Investments →</button></div>}
-      {step === 3 && <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}><button style={s.ghost} onClick={() => setStep(2)}>Back</button><button style={s.btn} onClick={() => setStep(4)}>Calculate TDS →</button></div>}
+      {step === 1 && sal.ctc > 0 && <div style={{ textAlign: 'right', marginTop: 6 }}><button className="ezp-btn" onClick={() => setStep(2)}>Next: Flexi Declaration →</button></div>}
+      {step === 2 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 6 }}><button className="ezp-ghost" style={{ height: 38 }} onClick={() => setStep(1)}>Back</button><button className="ezp-btn" onClick={() => setStep(3)}>Next: Investments →</button></div>}
+      {step === 3 && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 6 }}><button className="ezp-ghost" style={{ height: 38 }} onClick={() => setStep(2)}>Back</button><button className="ezp-btn" onClick={() => setStep(4)}>Calculate TDS →</button></div>}
     </div>
   )
 }

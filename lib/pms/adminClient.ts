@@ -34,6 +34,7 @@ export interface PmsAdminSnapshot {
   kras: Record<string, unknown>[]
   scale: Record<string, unknown>[]
   periods: Record<string, unknown>[]
+  companies: Record<string, unknown>[]
   actor: { employeeId: string | null; name: string | null; legacy: boolean }
 }
 

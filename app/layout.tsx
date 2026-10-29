@@ -7,6 +7,7 @@ import "./globals.css";
 // globals.css is not resolved by the Tailwind pipeline and silently 404s.
 import "@/lib/ui/theme.css";
 import AutoTitleCase from "@/components/AutoTitleCase";
+import SessionGuard from "@/components/SessionGuard";
 import { themeBootScript } from "@/lib/ui/ThemeToggle";
 import { eyeComfortBootScript, EyeComfortLayer, EyeComfortOverlay, EyeComfortDock } from "@/lib/ui/EyeComfort";
 
@@ -48,6 +49,8 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <AutoTitleCase />
+        {/* Signs out expired sessions; reloads a tab after a deploy. */}
+        <SessionGuard />
         <EyeComfortLayer />
         {children}
         {/* Last in the body so it composites over everything, including any

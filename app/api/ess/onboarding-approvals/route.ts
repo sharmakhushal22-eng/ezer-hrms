@@ -11,14 +11,14 @@
 //
 // ESS → HRIS → Tasks & Approvals → Onboarding approvals. The HR Manager accepts the form from
 // the onboarding card (Review form), not here. When the third head approves, the HR Manager
-// assigns the role and generates the code (lib/onboarding/approvals.ts).
+// generates the code — team, roles, code (lib/onboarding/approvals.ts).
 
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden } from '@/lib/ess/session'
 import { teamsFor, decideApproval, TEAMS, HEAD_TEAMS, type Team } from '@/lib/onboarding/approvals'
-import { CHECKLISTS, isHeadTeam } from '@/lib/onboarding/checklists'
+import { CHECKLISTS, fieldsFor, isHeadTeam, confirmationsOnly } from '@/lib/onboarding/checklists'
 import { reviewPayload } from '@/lib/onboarding/review'
 import { loadSalaryBreakdown } from '@/lib/onboarding/salary-breakdown'
 
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     if (!payload) return NextResponse.json({ error: 'Not found in your company' }, { status: 404 })
     // Each head's checklist: what the row holds, else what the candidate's columns already say
     // (the offer's CTC for Payroll, for instance).
-    const { data: cols } = await sb.from('onboarding_candidates').select(['id', 'candidate_id', 'offered_ctc', 'location_id', 'form_data', ...COLUMN_KEYS].join(', ')).eq('id', open).maybeSingle()
+    const { data: cols } = await sb.from('onboarding_candidates').select(['id', 'candidate_id', 'offered_ctc', 'location_id', 'form_data', 'hiring_track', ...COLUMN_KEYS].join(', ')).eq('id', open).maybeSingle()
     // Payroll approves the salary structure, so their form carries the breakdown: the saved
     // negotiation model, the offer letter, or the CTC model on the CTC held — and the CTC and
     // basic % of the checklist start from it.
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     for (const t of HEAD_TEAMS) {
       const row = payload.approvals.find((a: any) => a.team === t)
       const fromCols: Record<string, any> = {}
-      for (const f of CHECKLISTS[t].fields) if (f.column && cols && (cols as any)[f.key] != null) fromCols[f.key] = (cols as any)[f.key]
+      for (const f of fieldsFor(t, (cols as any)?.hiring_track)) if (f.column && cols && (cols as any)[f.key] != null) fromCols[f.key] = (cols as any)[f.key]
       if (t === 'PAYROLL') {
         if (fromCols.annual_ctc == null) fromCols.annual_ctc = salary?.annual_ctc || (cols as any)?.offered_ctc || null
         if (fromCols.basic_pct == null && salary?.basic_pct != null) fromCols.basic_pct = salary.basic_pct
@@ -102,13 +102,16 @@ export async function POST(req: NextRequest) {
   const { data: oc } = await sb.from('onboarding_candidates').select('id, company_id, candidate_id, offered_ctc, annual_ctc, pt_state, location_id, form_data').eq('id', onboardingId).maybeSingle()
   if (!oc || oc.company_id !== ctx.companyId) return forbidden('This onboarding is not in your company.')
   const { data: me } = await sb.from('employees').select('full_name').eq('id', ctx.caller.employeeId).maybeSingle()
-  const checklist: Record<string, any> | null = body.checklist && typeof body.checklist === 'object' ? { ...body.checklist } : null
-  // Payroll approves a salary structure: the breakdown for the CTC they confirmed is kept with
-  // the approval, and the basic % of the checklist follows it.
+  // A head confirms; they never edit a detail. Whatever else the form sent is dropped here, so
+  // the candidate's columns only ever change through HR.
+  const checklist: Record<string, any> | null = body.checklist && typeof body.checklist === 'object' ? confirmationsOnly(team, body.checklist) : null
+  // Payroll approves the salary structure on record: that breakdown is kept with the approval,
+  // and the CTC / basic % it carries are written with the checklist.
   let extra: Record<string, any> | null = null
   if (team === 'PAYROLL' && checklist && action !== 'return') {
-    const s = await loadSalaryBreakdown(sb, oc as any, Number(checklist.annual_ctc) || null)
+    const s = await loadSalaryBreakdown(sb, oc as any)
     if (s.source !== 'none') {
+      if (s.annual_ctc) checklist.annual_ctc = s.annual_ctc
       if (s.basic_pct != null) checklist.basic_pct = s.basic_pct
       extra = { salary_breakdown: { source: s.source, label: s.label, annual_ctc: s.annual_ctc, basic_monthly: s.basic_monthly, basic_pct: s.basic_pct, rows: s.rows, note: s.note || null } }
     }

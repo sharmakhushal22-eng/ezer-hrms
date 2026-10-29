@@ -52,6 +52,6 @@ export async function POST(req: NextRequest) {
     actorId: user.employeeId, actorName: me?.full_name || user.email || null,
     mail: mailer(), baseUrl: process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin,
   })
-  if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status || 500 })
+  if (!out.ok) return NextResponse.json({ error: out.error, needs_managers: !!out.needs_managers }, { status: out.status || 500 })
   return NextResponse.json(out)
 }

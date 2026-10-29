@@ -2,21 +2,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { orIlike } from '@/lib/pg-search'
 import { supabase } from '../../../lib/supabase'
-import { useGrant } from '@/lib/rms/client'
+import { useGrant, authToken } from '@/lib/rms/client'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
-import EmployeeProfileSections from '@/components/employees/EmployeeProfileView'
+import EmployeeProfileSections, { FactsGrid, recordFacts, statusTone } from '@/components/employees/EmployeeProfileView'
 import { UPPERCASE, fieldError } from '@/lib/hr/validate'
 // This page keeps its own local Badge / Field / Section, so the system's
 // equivalents are aliased where the names would clash.
 import {
   Page as UIPage, PageHeader, Button, Person, Th, Td, Tr, Empty, SkeletonRows,
   Badge as Chip, inputStyle, tone,
-  C, F, W, S, R, E, M, numeric, eyebrow,
-  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown,
+  C, F, W, S, R, E, M, Z, numeric, eyebrow,
+  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown, IconChevron, IconCheck,
 } from '@/lib/ui'
 import IdCardsTab from '@/components/employees/IdCardsTab'
 // The same pure check the API route enforces with. Here it only decides whether
@@ -103,8 +103,6 @@ const s = {
   saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:C.onAccent, border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
 }
 
-const initials = (n: string) => n?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'NA'
-const fmt = (v: any) => !v || v === '' ? '-' : String(v)
 const fmtDate = (v: string) => { if(!v) return '-'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
 
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
@@ -754,83 +752,175 @@ function Badge({ val, map }: { val: string; map: Record<string,{bg:string;color:
   return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '-'}</span>
 }
 
-// Profile header strip
-function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any) {
-  const gc = GRADE_COLORS[emp.grade] || {bg:C.sunken,color:C.inkSoft}
+// ─── Employee detail: identity card ───────────────────────────────
+// A light card rather than the dark block it replaced: avatar (the photo when there
+// is one), name, designation · department, chips only for values that exist, then the
+// facts somebody checks first as a label-over-value grid.
+
+/** The employee's photo, signed server-side — employee-photos is a private bucket.
+ *  Null until it arrives, and for good when there is none; the avatar shows initials. */
+function usePhoto(emp: any): string | null {
+  const [url, setUrl] = useState<{ id: string; url: string | null } | null>(null)
+  useEffect(() => {
+    if (!emp?.id || !emp?.photo_path) return
+    let live = true
+    ;(async () => {
+      try {
+        const token = await authToken()
+        if (!token) return
+        const res = await fetch(`/api/employees/photo?id=${encodeURIComponent(emp.id)}`, {
+          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+        })
+        const j = await res.json().catch(() => ({}))
+        if (live) setUrl({ id: emp.id, url: res.ok ? (j?.url ?? null) : null })
+      } catch { /* a missing picture, not a broken screen */ }
+    })()
+    return () => { live = false }
+  }, [emp?.id, emp?.photo_path])
+  return url && url.id === emp?.id ? url.url : null
+}
+
+/** "Name (CODE)" for the L1 manager, or '—'. undefined while loading. */
+function useManagerName(id: string | null | undefined): string | undefined {
+  const [name, setName] = useState<{ id: string; v: string } | null>(null)
+  useEffect(() => {
+    if (!id) return
+    let live = true
+    supabase.from('employees').select('full_name, emp_code').eq('id', id).maybeSingle()
+      .then(({ data }) => {
+        if (live) setName({ id, v: data ? `${(data as any).full_name} (${(data as any).emp_code})` : '-' })
+      })
+    return () => { live = false }
+  }, [id])
+  if (!id) return '-'
+  return name && name.id === id ? name.v : undefined
+}
+
+/** The face on the identity card: a rounded square, the shape ESS Profile uses, so
+ *  a person looks the same on HR's screen as on their own. Photo when there is one,
+ *  otherwise initials on the brand colour. */
+function Face({ name, src, size = 80 }: { name?: string | null; src?: string | null; size?: number }) {
+  const ini = (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
+  const box: React.CSSProperties = {
+    width: size, height: size, borderRadius: R.lg + 4, flexShrink: 0, boxSizing: 'border-box',
+    border: `3px solid ${C.surface}`, boxShadow: E.raised,
+  }
+  return src
+    ? <img src={src} alt="" width={size} height={size} style={{ ...box, objectFit: 'cover', display: 'block', background: C.sunken }} />
+    : (
+      <div aria-hidden style={{
+        ...box, display: 'grid', placeItems: 'center', background: C.brand, color: C.onAccent,
+        fontSize: Math.round(size * 0.32), fontWeight: W.bold, letterSpacing: '.01em',
+      }}>{ini}</div>
+    )
+}
+
+/** The record's tabs as a segmented control: the sub-tab shape the ESS portal uses
+ *  (portal.css .ess-seg), drawn from tokens so it holds on the admin dashboard too,
+ *  where that stylesheet is not loaded. Scrolls sideways rather than wrapping. */
+function SegTabs({ tabs, value, onChange }: {
+  tabs: { key: string; label: string }[]; value: string; onChange: (k: string) => void
+}) {
   return (
-    <div style={{ background:P.navy, padding:'18px 24px 0', borderRadius:'14px 14px 0 0' }}>
-      <div style={{ display:'flex', alignItems:'flex-start', gap:'16px', paddingBottom:'14px' }}>
-        {/* Avatar */}
-        <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:emp.gender==='Female'?'#FCE7F3':P.purpleBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', fontWeight:700, color:emp.gender==='Female'?'#BE185D':P.purple, flexShrink:0, border:'3px solid rgba(255,255,255,.15)' }}>
-          {initials(emp.full_name)}
+    <div role="tablist" aria-label="Employee record" className="ez-scroll" style={{
+      display: 'flex', gap: 2, padding: 4, width: 'max-content', maxWidth: '100%', overflowX: 'auto',
+      boxSizing: 'border-box', borderRadius: R.lg - 1,
+      background: `color-mix(in srgb, ${C.brand} 7%, ${C.surface})`,
+      border: `1px solid color-mix(in srgb, ${C.brand} 14%, transparent)`,
+    }}>
+      {tabs.map(t => {
+        const on = t.key === value
+        return (
+          <button key={t.key} role="tab" aria-selected={on} onClick={() => onChange(t.key)} className="ez-press"
+            style={{
+              flex: 'none', height: 34, padding: '0 15px', border: 'none', borderRadius: R.md,
+              background: on ? C.surface : 'transparent', color: on ? C.brandDeep : C.muted,
+              fontFamily: 'inherit', fontSize: F.small, fontWeight: W.semi, cursor: 'pointer', whiteSpace: 'nowrap',
+              boxShadow: on ? `inset 0 -2.5px 0 ${C.brand}, ${E.flat}` : 'none',
+              transition: `background ${M.quick}, color ${M.quick}`,
+            }}>
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: {
+  emp: any; editMode: boolean; saving: boolean
+  onEdit: () => void; onSave: () => void; onCancel: () => void
+}) {
+  const photo = usePhoto(emp)
+  const l1 = useManagerName(emp.l1_manager_id)
+  const dept = emp.departments?.dept_name
+  const company = emp.companies?.company_name
+  const role = [emp.designation, dept].filter(Boolean)
+  const facts = [
+    { l: 'Company', v: company || '-' },
+    ...recordFacts(emp, { l1: l1 === undefined ? 'Loading…' : l1 }).filter(f => f.l !== 'Department'),
+  ]
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.xl,
+      boxShadow: E.raised, overflow: 'hidden', marginBottom: S.lg,
+    }}>
+      {/* The cover, as on the employee's own ESS Profile: a flat band of the brand
+          tint that the face overlaps. Flat, so it reads as a surface, not a banner. */}
+      <div aria-hidden style={{ height: 64, background: C.brandTint, borderBottom: `1px solid ${C.brandEdge}` }} />
+      <div style={{
+        display: 'flex', gap: `${S.md}px ${S.lg}px`, alignItems: 'flex-start', flexWrap: 'wrap',
+        padding: `${S.md}px ${S.xl}px ${S.lg}px`,
+      }}>
+        {/* Only the face rises into the cover; the name starts below it. */}
+        <div style={{ flexShrink: 0, marginTop: -48 }}>
+          <Face name={emp.full_name} src={photo} />
         </div>
-        {/* Info */}
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:'17px', fontWeight:600, color:C.onAccent, marginBottom:'3px' }}>{emp.full_name}</div>
-          <div style={{ fontSize:'12px', color:C.onAccentDim, marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '-'}</div>
-          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...TYPE_COLORS[emp.employment_type] }}>{emp.employment_type}</span>
-            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...STATUS_COLORS[emp.employment_status] }}>{emp.employment_status}</span>
-            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...gc }}>{emp.grade}</span>
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontSize: F.title + 2, fontWeight: W.bold, color: C.ink, letterSpacing: '-.015em', lineHeight: 1.25, overflowWrap: 'anywhere' }}>
+            {emp.full_name || 'Unnamed employee'}
+          </h2>
+          <div style={{ marginTop: 3, fontSize: F.small, color: role.length ? C.inkSoft : C.faint }}>
+            {role.length ? role.join(' · ') : 'No designation recorded'}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: S.sm + 2 }}>
+            {emp.emp_code && <span style={numeric}><Chip t="brand">{emp.emp_code}</Chip></span>}
+            {emp.employment_status && <Chip t={statusTone(emp.employment_status)} dot>{emp.employment_status}</Chip>}
+            {emp.employment_type && <Chip>{emp.employment_type}</Chip>}
+            {emp.grade && <Chip>Grade {emp.grade}</Chip>}
+            {emp.confirmation_status === 'Probation' && <Chip t="warning">On probation</Chip>}
           </div>
         </div>
-        {/* Actions */}
-        <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+        <div style={{ display: 'flex', gap: S.sm, alignItems: 'center', flexWrap: 'wrap' }}>
           {editMode ? (
             <>
-              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:C.onAccent, border:'1px solid rgba(255,255,255,.25)', borderRadius:'10px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
-              <button onClick={onSave} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? .7 : 1 }}>
-                <span>{saving ? '' : ''}</span>{saving ? 'Saving…' : 'Save changes'}
-              </button>
+              <Button onClick={onCancel} disabled={saving}>Cancel</Button>
+              <Button variant="primary" icon={<IconCheck size={16} />} onClick={onSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </Button>
             </>
           ) : (
-            <button onClick={onEdit} style={{ ...s.priBtn }}>
-              <span></span> Edit profile
-            </button>
+            <>
+              <Button variant="primary" onClick={onEdit}>Edit profile</Button>
+            </>
           )}
         </div>
       </div>
-      {/* Quick stat strip */}
-      <div style={{ background:'rgba(255,255,255,.06)', margin:'0 -24px', padding:'8px 24px', display:'flex', gap:'20px', flexWrap:'wrap', borderTop:'1px solid rgba(255,255,255,.08)' }}>
-        {[
-          { l:'Group DOJ', v: fmtDate(emp.group_doj) },
-          { l:'Company DOJ', v: fmtDate(emp.company_doj) },
-          { l:'Confirmation', v: fmt(emp.confirmation_status) },
-          { l:'Department', v: (emp as any).departments?.dept_name || '-' },
-          { l:'Location', v: (emp as any).locations?.location_name || '-' },
-          { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '-' },
-        ].map(x => (
-          <div key={x.l} style={{ fontSize:'11px', color:C.onAccentDim }}>
-            {x.l}: <span style={{ color:C.onAccent, fontWeight:500 }}>{x.v}</span>
-          </div>
-        ))}
+      <div style={{ borderTop: `1px solid ${C.line}`, background: C.sunken, padding: `${S.md + 2}px ${S.xl}px` }}>
+        <FactsGrid facts={facts} min={140} />
       </div>
     </div>
   )
 }
 
-// Tab bar
-function TabBar({ tabs, active, onChange }: any) {
-  return (
-    <div style={{ display:'flex', background:C.sunken, borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
-      {tabs.map((t: any) => (
-        <button key={t.id} onClick={() => onChange(t.id)} style={{
-          padding:'11px 16px', border:'none', background:'transparent', cursor:'pointer',
-          fontSize:'12px', fontWeight: active===t.id ? 600 : 400,
-          color: active===t.id ? P.purple : P.muted, whiteSpace:'nowrap',
-          borderBottom: active===t.id ? `3px solid ${P.purple}` : '3px solid transparent',
-          transition:'all .12s'
-        }}>
-          {t.icon} {t.label}
-        </button>
-      ))}
-    </div>
-  )
-}
 // ─── Main Component ───────────────────────────────────────────
 export default function EmployeeMaster() {
   const { grant, loading: grantLoading } = useGrant()
   const [employees, setEmployees] = useState<Employee[]>([])
+  // Exits still running for the employees on this page (a company exit in its approval chain, or
+  // the employee's own resignation): the employee stays Active until the final LWD, and the
+  // row says so.
+  const [exiting, setExiting] = useState<Record<string, { label: string; lwd: string | null }>>({})
   const [companies, setCompanies] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [departments, setDepts]   = useState<any[]>([])
@@ -855,6 +945,26 @@ export default function EmployeeMaster() {
   const [selected, setSelected]   = useState<Employee|null>(null)
   const [profileTab, setProfileTab] = useState('personal')
   const [showDrawer, setShowDrawer] = useState(false)
+  // Inside the ESS portal this page sits in the portal's main column. There the record
+  // opens in that column, under the portal's own top bar and beside its rail, the way
+  // every other ESS screen does; a full-window overlay would hide the navigation. On
+  // the admin dashboard it stays a full-screen view.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [inShell, setInShell] = useState(false)
+  /** Height of the portal's sticky top bar, so the record's tabs pin just below it. */
+  const [shellTop, setShellTop] = useState(0)
+  const listScrollY = useRef(0)
+  useEffect(() => { setInShell(!!rootRef.current?.closest('.ess-main')) }, [])
+  useEffect(() => {
+    if (!showDrawer || !inShell) return
+    const bar = rootRef.current?.closest('.ess-main')?.querySelector('.ess-top') as HTMLElement | null
+    setShellTop(bar ? Math.round(bar.getBoundingClientRect().height) : 0)
+    // The record replaces the list in place, so start it at the top and put the list
+    // back where it was on the way out.
+    listScrollY.current = window.scrollY
+    window.scrollTo(0, 0)
+    return () => { const y = listScrollY.current; requestAnimationFrame(() => window.scrollTo(0, y)) }
+  }, [showDrawer, inShell])
   const [editMode, setEditMode]   = useState(false)
   const [editForm, setEditForm]   = useState<any>({})
   const [saving, setSaving]       = useState(false)
@@ -927,6 +1037,23 @@ export default function EmployeeMaster() {
       const { data, error:err, count } = await q
       if (err) throw err
       setEmployees((data as any[])||[]); setTotal(count||0)
+      const ids = ((data as any[]) || []).map(e => e.id)
+      if (ids.length) {
+        const [hx, rs] = await Promise.all([
+          supabase.from('hr_exit_requests').select('employee_id, status, reason_label, last_working_day, chain').in('employee_id', ids).in('status', ['PENDING', 'APPROVED']),
+          supabase.from('employee_resignation').select('employee_id, status, current_stage, final_lwd, lwd_as_per_policy').in('employee_id', ids)
+            .in('status', ['INITIATED', 'PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER', 'RETENTION_HOLD', 'RECOVERY_PENDING']),
+        ])
+        const map: Record<string, { label: string; lwd: string | null }> = {}
+        for (const r of (rs.data as any[]) || []) map[r.employee_id] = {
+          label: r.status === 'RETENTION_HOLD' ? 'Resignation · retention hold' : r.current_stage ? `Resignation · with ${String(r.current_stage).replace('RM_', '').replace('_', ' ')}` : 'Resignation',
+          lwd: r.final_lwd || r.lwd_as_per_policy || null }
+        for (const r of (hx.data as any[]) || []) {
+          const step = (r.chain || []).find((s: any) => s.status === 'PENDING' || s.status === 'HOLD')
+          map[r.employee_id] = { label: r.status === 'APPROVED' ? `${r.reason_label} · leaving` : `${r.reason_label} · ${step ? (step.status === 'HOLD' ? 'retention hold' : `with ${step.label}`) : 'reminders'}`, lwd: r.last_working_day || null }
+        }
+        setExiting(map)
+      } else setExiting({})
     } catch(e:any) { setError(e.message||'Load failed') }
     finally { setLoading(false) }
   }, [search,filterCompany,filterLocation,filterDept,filterType,filterStatus,filterGrade,page,grant]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -936,32 +1063,46 @@ export default function EmployeeMaster() {
   const exportExcel = async () => {
     setExporting(true)
     try {
-      let q = supabase.from('employees')
-        .select('*, companies!employees_company_id_fkey(company_name, company_code), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, city)')
-        .neq('is_test', true).order('emp_code')
-      { const co = companyFilter(grant, filterCompany); if (co) q = q.eq('company_id', co) }
-      if (filterLocation) q = q.eq('location_id', filterLocation)
-      if (filterDept)     q = q.eq('department_id', filterDept)
-      if (filterType)     q = q.eq('employment_type', filterType)
-      if (filterStatus)   q = q.eq('employment_status', filterStatus)
-      if (filterGrade)    q = q.eq('grade', filterGrade)
-      if (search.trim())  q = q.or(orIlike(['full_name', 'emp_code', 'common_code', 'designation', 'mobile'], search.trim()))
-      const { data, error: err } = await q
-      if (err) throw err
-      const list = (data as any[] || [])
+      const build = () => {
+        let q = supabase.from('employees')
+          .select('*, companies!employees_company_id_fkey(company_name, company_code), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, city)')
+          .neq('is_test', true).order('emp_code')
+        { const co = companyFilter(grant, filterCompany); if (co) q = q.eq('company_id', co) }
+        if (filterLocation) q = q.eq('location_id', filterLocation)
+        if (filterDept)     q = q.eq('department_id', filterDept)
+        if (filterType)     q = q.eq('employment_type', filterType)
+        if (filterStatus)   q = q.eq('employment_status', filterStatus)
+        if (filterGrade)    q = q.eq('grade', filterGrade)
+        if (search.trim())  q = q.or(orIlike(['full_name', 'emp_code', 'common_code', 'designation', 'mobile'], search.trim()))
+        return q
+      }
+      // The API hands back at most 1,000 rows per request, so a filter matching more than
+      // that is read page by page — the file must hold every employee the filter matches
+      // (the "N employees" the screen shows), not the first thousand of them.
+      const list: any[] = []
+      for (let from = 0; ; from += 1000) {
+        const { data, error: err } = await build().range(from, from + 999)
+        if (err) throw err
+        list.push(...((data as any[]) || []))
+        if (!data || data.length < 1000) break
+      }
       if (!list.length) { alert('No employees to export for the current filters.'); setExporting(false); return }
 
       const ids = list.map(e => e.id)
       const ctcMap = new Map<string, any>()
       const salMap = new Map<string, any>()
-      try {
-        const { data: ctc } = await supabase.from('ctc_master').select('*').in('employee_id', ids).order('created_at', { ascending: false })
-        for (const c of (ctc || []) as any[]) if (!ctcMap.has(c.employee_id)) ctcMap.set(c.employee_id, c)
-      } catch { /* ctc_master optional */ }
-      try {
-        const { data: sal } = await supabase.from('salary_structures').select('*').in('employee_id', ids).order('effective_date', { ascending: false })
-        for (const sr of (sal || []) as any[]) if (!salMap.has(sr.employee_id)) salMap.set(sr.employee_id, sr)
-      } catch { /* salary_structures optional */ }
+      // Looked up in slices: a 2,000-id IN list overflows the request URL.
+      for (let i = 0; i < ids.length; i += 300) {
+        const slice = ids.slice(i, i + 300)
+        try {
+          const { data: ctc } = await supabase.from('ctc_master').select('*').in('employee_id', slice).order('created_at', { ascending: false })
+          for (const c of (ctc || []) as any[]) if (!ctcMap.has(c.employee_id)) ctcMap.set(c.employee_id, c)
+        } catch { /* ctc_master optional */ }
+        try {
+          const { data: sal } = await supabase.from('salary_structures').select('*').in('employee_id', slice).order('effective_date', { ascending: false })
+          for (const sr of (sal || []) as any[]) if (!salMap.has(sr.employee_id)) salMap.set(sr.employee_id, sr)
+        } catch { /* salary_structures optional */ }
+      }
       const addPrefixed = (flat: Record<string, any>, obj: any, prefix: string, skip: string[]) => {
         if (!obj) return
         for (const [k, v] of Object.entries(obj)) {
@@ -987,7 +1128,7 @@ export default function EmployeeMaster() {
       })
       // Column reference sheet — keep only "Y" employee columns + name/code joins + the
       // CTC / Salary breakup (all Y). Everything else (backend/*_id/unlisted columns) is dropped.
-      const allRaw = Array.from(rows.reduce((set, r) => { Object.keys(r).forEach(k => set.add(k)); return set }, new Set<string>()))
+      const allRaw = Array.from(rows.reduce<Set<string>>((set, r) => { Object.keys(r).forEach(k => set.add(k)); return set }, new Set<string>()))
       const empPresent = EXPORT_EMP_COLS.filter(k => allRaw.includes(k))
       const nameCols = EXPORT_NAME_COLS.filter(k => allRaw.includes(k))
       const ctcKeys = allRaw.filter(k => k.startsWith('CTC_')).sort()
@@ -1109,9 +1250,9 @@ export default function EmployeeMaster() {
 
   // ─── JSX ──────────────────────────────────────────────────────
   return (
-    <div style={s.page}>
+    <div ref={rootRef} style={s.page}>
 
-      <div style={s.body}>
+      <div style={{ ...s.body, display: inShell && showDrawer && selected ? 'none' : undefined }}>
         <PageHeader
           title="Employee Master"
           context={loading
@@ -1119,7 +1260,7 @@ export default function EmployeeMaster() {
             : `${stats.total.toLocaleString('en-IN')} on record · ${stats.active.toLocaleString('en-IN')} active · showing ${employees.length.toLocaleString('en-IN')}`}
           actions={<>
             <Button icon={<IconDownload size={16} />} disabled={exporting} onClick={exportExcel}>
-              {exporting ? 'Exporting…' : 'Export Excel'}
+              {exporting ? 'Exporting…' : `Export Excel (${total})`}
             </Button>
             <Button icon={<IconUpload size={16} />} onClick={() => setShowBulk(true)}>Bulk Upload</Button>
             <Button variant="primary" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>Add Employee</Button>
@@ -1345,6 +1486,12 @@ export default function EmployeeMaster() {
                             LWD {fmtDate(emp.last_working_date)}
                           </div>
                         )}
+                        {emp.employment_status!=='Resigned' && exiting[emp.id] && (
+                          <div title={`Exit in progress: ${exiting[emp.id].label}`} style={{ marginTop:4, display:'inline-flex', flexDirection:'column', gap:1, padding:'2px 8px', borderRadius:R.sm, background:C.warningTint, border:`1px solid ${C.warningEdge}`, maxWidth:190 }}>
+                            <span style={{ fontSize:F.micro, fontWeight:W.semi, color:C.warning, whiteSpace:'nowrap' }}>Exit in progress</span>
+                            <span style={{ fontSize:F.micro, color:C.inkSoft, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{exiting[emp.id].label}{exiting[emp.id].lwd ? ` · LWD ${fmtDate(exiting[emp.id].lwd as string)}` : ''}</span>
+                          </div>
+                        )}
                       </Td>
                       <Td mono style={{ color:C.muted, fontSize:F.tiny, whiteSpace:'nowrap' }}>{fmtDate(emp.company_doj)}</Td>
                       <Td mono style={{ fontSize:F.tiny, whiteSpace:'nowrap' }}>{emp.mobile||'-'}</Td>
@@ -1383,30 +1530,64 @@ export default function EmployeeMaster() {
 
       {/* ── PROFILE DRAWER — full screen, same page ── */}
       {showDrawer && selected && (
-        <div style={{ position:'fixed', inset:0, background:P.page, zIndex:200, display:'flex', flexDirection:'column', overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
-          <div style={{ flex:1, width:'100%', maxWidth:'1060px', margin:'0 auto', display:'flex', flexDirection:'column' }}>
+        <div role={inShell ? 'region' : 'dialog'} aria-modal={inShell ? undefined : true}
+             aria-label={`${selected.full_name}: employee details`}
+             className={inShell ? undefined : 'ez-scroll'}
+             style={inShell
+               ? { fontFamily:F.family, fontSize:F.body, color:C.ink }
+               : { position:'fixed', inset:0, background:C.canvas, zIndex:Z.drawer, overflowY:'auto',
+                   fontFamily:F.family, fontSize:F.body, color:C.ink }}>
+          <div className="ez-fade" style={{ width:'100%', maxWidth:1120, margin:'0 auto',
+                        padding:`${S.lg}px clamp(${S.md}px, 3vw, ${S.xl}px) ${S.huge}px`, boxSizing:'border-box' }}>
 
-            {/* Nav breadcrumb */}
-            <div style={{ padding:'10px 20px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:P.muted }}>
-              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>Employee list</button>
-              <span>›</span>
-              <span style={{ color:P.text, fontWeight:500 }}>{selected.full_name}</span>
-              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'7px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
+            {/* Back + breadcrumb */}
+            <div style={{ display:'flex', alignItems:'center', gap:S.md, flexWrap:'wrap', marginBottom:S.md }}>
+              <Button size="sm" onClick={closeDrawer}
+                      icon={<IconChevron size={14} style={{ transform:'rotate(180deg)' }} />}>
+                Employees
+              </Button>
+              <nav aria-label="Breadcrumb" style={{ display:'flex', alignItems:'center', gap:6, fontSize:F.tiny, color:C.muted, minWidth:0 }}>
+                <span>People</span>
+                <IconChevron size={12} style={{ color:C.faint }} />
+                <button onClick={closeDrawer} style={{ border:'none', background:'none', padding:0, cursor:'pointer',
+                        font:'inherit', color:C.muted }}>Employee Master</button>
+                <IconChevron size={12} style={{ color:C.faint }} />
+                <span style={{ color:C.ink, fontWeight:W.semi, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                  {selected.full_name}
+                </span>
+              </nav>
+              {editMode && <span style={{ marginLeft:'auto' }}><Chip t="warning" dot>Editing</Chip></span>}
             </div>
 
-            {/* Profile header (with edit/save/cancel) */}
-            <div style={{ margin:'0 20px', borderRadius:'14px', overflow:'hidden', border:`1px solid ${P.border}`, marginBottom:'14px' }}>
-              <ProfileHeader emp={selected} editMode={editMode} saving={saving} onEdit={() => openEdit()} onSave={saveEdit} onCancel={cancelEdit} />
+            <ProfileHeader emp={selected} editMode={editMode} saving={saving}
+                           onEdit={() => openEdit()} onSave={saveEdit} onCancel={cancelEdit} />
 
-              {/* Tab bar */}
-              <TabBar tabs={TABS} active={profileTab} onChange={setProfileTab} />
+            {/* Tabs stay in reach while a long tab scrolls. */}
+            <div style={{ position:'sticky', top: inShell ? shellTop : 0, zIndex:Z.sticky,
+                          background:C.canvas,
+                          padding:`${S.sm}px 0 ${S.md}px` }}>
+              <SegTabs tabs={TABS.map(t => ({ key:t.id, label:t.label }))} value={profileTab} onChange={setProfileTab} />
+            </div>
 
-              {/* Tab content */}
-              <div style={{ background:P.card, minHeight:'320px' }}>
-                {renderTab(selected)}
+            <div key={profileTab} className="ez-fade" style={{ minHeight:320 }}>
+              {renderTab(selected)}
+            </div>
+
+            {/* While editing, Save is never more than a glance away. */}
+            {editMode && (
+              <div style={{ position:'sticky', bottom:S.md, zIndex:Z.sticky, marginTop:S.lg,
+                            display:'flex', alignItems:'center', gap:S.sm, flexWrap:'wrap',
+                            background:C.surface, border:`1px solid ${C.line}`, borderRadius:R.lg,
+                            boxShadow:E.floating, padding:`${S.sm + 2}px ${S.lg}px` }}>
+                <span style={{ fontSize:F.small, color:C.muted, flex:'1 1 200px' }}>
+                  Editing {selected.full_name}. Changes are saved together.
+                </span>
+                <Button onClick={cancelEdit} disabled={saving}>Cancel</Button>
+                <Button variant="primary" icon={<IconCheck size={16} />} onClick={saveEdit} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save changes'}
+                </Button>
               </div>
-            </div>
-
+            )}
           </div>
         </div>
       )}

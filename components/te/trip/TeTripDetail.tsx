@@ -11,15 +11,20 @@
 // which card that state gets and what the card says.
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { TeLeg, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
-import { tripChip } from '@/lib/te/trips-list'
+import type { TeCategory, TeLeg, TeMasters, TeTripDetail as TripDetail, TripScope, Uuid } from '@/lib/te/types'
+import { tripChip, tripHero } from '@/lib/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@/lib/te/co-traveller'
 import { foodBalance, foodBalanceText, foodBudget, foodSpent, stayDecisionText } from '@/lib/te/trip-stay'
-import { day, errorText, plural, rs, when } from '@/lib/te/format'
+import { day, dayAt, errorText, plural, rs, when } from '@/lib/te/format'
+import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeStayRequest from './TeStayRequest'
 import TeTripMap from '../plan/TeTripMap'
+import TeJourneyAnswer from '../leg/TeJourneyAnswer'
+import TeTripLedger from './TeTripLedger'
+import TeTripNow from './TeTripNow'
+import TeTripPlan from './TeTripPlan'
 import TeMapLinks from '../plan/TeMapLinks'
 import type { MapPlace } from '@/lib/te/trip-map'
 
@@ -42,8 +47,23 @@ const LEG_STATE: Record<string, string> = {
   ENDED: 'Ended, report to save', SUBMITTED: 'Done', SKIPPED: 'Skipped', CANCELLED: 'Cancelled',
 }
 
-export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
+/** What each approval step's status is called, and how it is coloured. An
+ *  'auto' step was passed by the workflow itself rather than by a person. */
+const STEP_WORD: Record<string, string> = {
+  approved: 'Approved', auto: 'Approved automatically', pending: 'Pending',
+  rejected: 'Rejected', sent_back: 'Sent back', cancelled: 'Cancelled',
+}
+const STEP_TONE: Record<string, string> = {
+  approved: 't-brand', auto: 't-brand', pending: 't-warn',
+  rejected: 't-crit', sent_back: 't-warn', cancelled: 'plain',
+}
+
+export default function TeTripDetail({ tripId, me, today, masters, everyone, cats, onBack, onChanged, onEdit, onOpenClaim, onOpenLeg, onAddLeg, onAddBill, onClaim }: {
   tripId: Uuid
+  /** snap.masters — only so the plan can name the airport or station the
+   *  company has configured for a city, when the traveller did not pick one.
+   *  "The company's airport" is not an answer a desk can buy a ticket from. */
+  masters?: TeMasters
   /** The viewer. A trip can now be opened by somebody who did not plan it, so
    *  "whose claim is this" and "whose trip is this" are no longer the same
    *  question and the screen has to be told which one it is looking at. */
@@ -60,6 +80,13 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
   onOpenLeg: (leg: TeLeg) => void
   /** Add a leg the plan did not have. Only while the trip is under way. */
   onAddLeg: (detail: TripDetail) => void
+  /** Whether this reader may see EVERY traveller's spend on the trip, not just
+   *  their own: a desk member, Finance, or an administrator. Off by default,
+   *  because the person reading a trip is usually the person on it, and what a
+   *  colleague was reimbursed is not theirs to see. */
+  everyone?: boolean
+  /** cfg.cats — the company's own category names and groups, for the ledger. */
+  cats?: TeCategory[]
   /** Open the bill form against this trip. Straight to the form rather than
    *  via the claim screen: a hotel or a meal is a trip-only category, and this
    *  is the only place in the product either can be entered. */
@@ -146,6 +173,16 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
   const nextLeg = legs.find(l => l.status === 'ACTIVE' || l.status === 'PAUSED' || l.status === 'ENDED')
     ?? legs.find(l => l.status === 'PLANNED')
     ?? null
+  /** A journey being recorded right now — the one thing more urgent than
+   *  anything else on the page, because a journey that is never ended cannot
+   *  be claimed. ENDED is deliberately NOT included: that one is waiting to be
+   *  reported, not running. */
+  const runningLeg = legs.find(l => l.status === 'ACTIVE' || l.status === 'PAUSED') ?? null
+  /** Which of the two mid-trip actions this reader gets on this trip. Each
+   *  follows the rule that governs the same action further down the page; see
+   *  tripHero, which is in lib/ and tested because it decides what somebody
+   *  can reach. */
+  const hero = tripHero(t, { canBill, mine })
 
   async function act(what: string, run: () => Promise<string>) {
     setBusy(what); setError('')
@@ -178,7 +215,11 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
             <h1 className="tname">{t.name}</h1>
             <p className="muted">{(t.points || []).map(p => pname(p.place) || '…').join(' → ')}</p>
             <p className="small muted">
-              {t.start ? (t.start === t.end ? day(t.start) : `${day(t.start)} to ${day(t.end)}`) : 'No dates yet'}
+              {t.start
+                ? (t.start === t.end
+                  ? dayAt(t.start, t.points?.[0]?.leaveAt)
+                  : `${dayAt(t.start, t.points?.[0]?.leaveAt)} to ${day(t.end)}`)
+                : 'No dates yet'}
               {t.purpose ? ` · ${t.purpose}` : ''}{t.project ? ` · ${t.project}` : ''}
             </p>
             {t.pax > 1 ? (
@@ -196,6 +237,31 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
         </div>
       </div>
 
+      {/* ── WHILE YOU ARE TRAVELLING ──
+          The two things anybody does mid-trip, at hero size and first on the
+          page, plus the recording strip and the slim bar that takes over once
+          they scroll away. All of it is TeTripNow; see the note there for why
+          it is tiles rather than buttons.
+
+          WHERE THEY USED TO BE. "Add a bill" sat mid-scroll inside "What you
+          spent on this trip" and "Add a journey" was a `btn sm` in the Route
+          card's header — both below the approval chain, the estimate and the
+          ledger. Those two keep their places, because each is contextual where
+          it is when you are reading rather than acting; these are the same two
+          handlers, given the prominence the act deserves. */}
+      {hero.any ? (
+        <TeTripNow
+          tripId={t.id}
+          runningLeg={runningLeg}
+          canBill={hero.bill}
+          mine={hero.journey}
+          nameOf={pname}
+          onAddBill={onAddBill}
+          onAddLeg={() => onAddLeg(detail)}
+          onOpenLeg={onOpenLeg}
+        />
+      ) : null}
+
       {/* ── you did not plan this one; you are on it ── */}
       {note ? (
         <div className="flag info">
@@ -210,7 +276,13 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
       {/* ── waiting, or sent back with a question ── (53, 68) */}
-      {st === 'PENDING_APPROVAL' || st === 'SENT_BACK' ? (
+      {/* SHOWN AT ANY STATUS, not only while the trip is still waiting. It used
+          to be gated to PENDING_APPROVAL and SENT_BACK, which hid it at exactly
+          the moment the travel desk and Finance come looking: once a trip is
+          approved, "who approved it, and did anyone else have to" is the
+          question they are here to answer. The employee's own actions below
+          stay gated on their own states. */}
+      {(t.chain ?? []).length || st === 'PENDING_APPROVAL' || st === 'SENT_BACK' ? (
         <div className="card">
           <div className="ch"><h3>Approval</h3><span className={`chip ${chip.tone}`}>{chip.label}</span></div>
           <div className="stack sm">
@@ -218,7 +290,9 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
               <div key={i} className="row tight">
                 <span className="av sm">{initials(s.whoName || s.role)}</span>
                 <div className="grow"><b>{s.whoName || s.role}</b> <span className="muted small">{s.role}</span></div>
-                <span className={`chip ${s.status === 'approved' ? 't-brand' : 't-warn'}`}>{s.status === 'approved' ? 'Approved' : 'Pending'}</span>
+                {/* Four outcomes, not two. A rejected or sent-back step read
+                    as "Pending" here, which is the opposite of what happened. */}
+                <span className={`chip ${STEP_TONE[s.status] ?? 't-warn'}`}>{STEP_WORD[s.status] ?? 'Pending'}</span>
               </div>
             ))}
           </div>
@@ -276,14 +350,31 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
               {NO_GPS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </label>
-          <label className="fld">
-            <span>What happened</span>
-            <input value={missedNote} onChange={e => setMissedNote(e.target.value)} placeholder="Needed for Other" />
-          </label>
+          {/* Appears on picking Other, and the button stays disabled until it
+              says something. A placeholder reading "Needed for Other" on a
+              permanently visible box was not a requirement, only a hint, and
+              an unexplained Other went through. */}
+          {needsExplanation(missedReason) ? (
+            <>
+              <label className="fld">
+                <span>{whyLabel('gps').label}</span>
+                <textarea
+                  autoFocus
+                  value={missedNote}
+                  placeholder="The tracking screen would not open on my phone"
+                  onChange={e => setMissedNote(e.target.value)}
+                />
+                <small>{whyLabel('gps').hint}</small>
+              </label>
+              {missedNote.trim() && whyProblem(missedReason, missedNote)
+                ? <div className="ferr"><TeIcon name="warn" size="sm" />{whyProblem(missedReason, missedNote)}</div>
+                : null}
+            </>
+          ) : null}
           <button
             type="button"
             className="btn pri wide"
-            disabled={!missedReason || busy === 'missed'}
+            disabled={!missedReason || !!whyProblem(missedReason, missedNote) || busy === 'missed'}
             onClick={() => act('missed', async () => {
               await te.tripRecordMissed(t.id, missedReason, missedNote.trim() || undefined)
               return 'Recorded. Add each journey without GPS, then claim.'
@@ -484,6 +575,14 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
         </div>
       ) : null}
 
+      {/* THE PLAN AS THEY FILLED IT IN, before the route the engine made of
+          it. Every time, stop, note and link the traveller entered lives here;
+          until this was added, t.segs was not referenced anywhere on this
+          screen and the preferences from migrations 171 and 172 reached the
+          desk's work list and no further. Not gated on `mine`: the travel desk
+          and Finance are the readers who need it most. */}
+      <TeTripPlan trip={t} places={detail.places} masters={masters} />
+
       {/* ── the route and its legs ── */}
       <div className="card">
         <div className="ch">
@@ -512,24 +611,37 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
         />
         <div className="tw-legs">
           {legs.map(l => (
-            <div key={l.id} className="row tight tw-leg click" role="button" tabIndex={0}
-              onClick={() => onOpenLeg(l)}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLeg(l) } }}
-            >
-              <span className="ln">{l.n}</span>
-              <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
-              <div className="grow">
-                <b className="small">{pname(l.from)} → {pname(l.to)}</b>
-                <div className="small muted">
-                  {t.scope === 'local' ? '' : `${day(l.date)} · `}
-                  {l.mode}{l.bookedBy === 'desk' ? ', Travel Desk' : ''}
-                  {` · ${l.plannedKm} km`}
-                  {` · ${l.gps === 'checkin' ? 'check-ins' : 'GPS'}`}
-                  {LEG_KIND[l.kind] ? ` · ${LEG_KIND[l.kind]}` : ''}
+            // The row, and — only when a desk has asked something about this
+            // journey — the question and the box to answer it. A Fragment
+            // because the answer must sit OUTSIDE the clickable row: nesting a
+            // textarea inside a role="button" makes typing in it open the leg.
+            <Fragment key={l.id}>
+              <div className="row tight tw-leg click" role="button" tabIndex={0}
+                onClick={() => onOpenLeg(l)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLeg(l) } }}
+              >
+                <span className="ln">{l.n}</span>
+                <span className="ico-b sm"><TeIcon name={MODE_ICON[l.mode] ?? 'route'} size="sm" /></span>
+                <div className="grow">
+                  <b className="small">{pname(l.from)} → {pname(l.to)}</b>
+                  <div className="small muted">
+                    {t.scope === 'local' ? '' : `${day(l.date)} · `}
+                    {l.mode}{l.bookedBy === 'desk' ? ', Travel Desk' : ''}
+                    {` · ${l.plannedKm} km`}
+                    {` · ${l.gps === 'checkin' ? 'check-ins' : 'GPS'}`}
+                    {LEG_KIND[l.kind] ? ` · ${LEG_KIND[l.kind]}` : ''}
+                  </div>
                 </div>
+                {/* A journey a desk has queried says so here rather than only
+                    inside it: this list is where the traveller looks when their
+                    claim will not send. */}
+                {l.review?.backAt ? <span className="chip t-crit">Sent back</span> : null}
+                <span className="chip plain">{LEG_STATE[l.status] ?? l.status}</span>
               </div>
-              <span className="chip plain">{LEG_STATE[l.status] ?? l.status}</span>
-            </div>
+              {mine && l.review?.backAt ? (
+                <TeJourneyAnswer legId={l.id} n={l.n} review={l.review} onDone={onChanged} />
+              ) : null}
+            </Fragment>
           ))}
         </div>
       </div>
@@ -545,6 +657,12 @@ export default function TeTripDetail({ tripId, me, today, onBack, onChanged, onE
           </dl>
         </div>
       ) : null}
+
+      {/* EVERYTHING THIS TRIP COST, in one place: the tickets the desk booked,
+          the hotel, the food, and every journey's fare including the sub-trips
+          added along the way. te_trip_detail has always returned all of it;
+          nothing on this screen ever listed a single line. */}
+      <TeTripLedger detail={detail} me={me} everyone={!!everyone} cats={cats} />
 
       {claims.length ? claims.map(c => (
         <div key={c.id} className="card">

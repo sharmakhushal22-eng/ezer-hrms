@@ -32,7 +32,7 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'app/board/[pairCode]/page.tsx': 1,
   'app/dashboard/admin/page.tsx': 5,
   'app/dashboard/bulk-upload/page.tsx': 6,
-  'app/dashboard/employees/page.tsx': 2,
+  'app/dashboard/employees/page.tsx': 1,
   'app/dashboard/ess/page.tsx': 2,
   'app/dashboard/flexi-claims/page.tsx': 8,
   'app/dashboard/flexi-invoices/page.tsx': 17,
@@ -80,9 +80,9 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/company/GroupEditor.tsx': 3,
   'components/company/GroupHeader.tsx': 1,
   'components/company/Sections.tsx': 1,
-  'components/employees/EmployeeProfileView.tsx': 7,
-  'components/ess/EmployeePortal.tsx': 5,
-  'components/ess/FlexiTdsCalculator.tsx': 21,
+  'components/employees/EmployeeProfileView.tsx': 0,
+  'components/ess/EmployeePortal.tsx': 3,
+  'components/ess/FlexiTdsCalculator.tsx': 14,
   'components/ess/LeaveSection.tsx': 3,
   'components/ess/RoleTabs.tsx': 0,
   'components/ess/today/Toast.tsx': 1,
@@ -115,4 +115,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 194;
+export const THEME_AUDIT_TOTAL = 185;

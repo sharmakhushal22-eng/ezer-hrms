@@ -3,11 +3,13 @@
 // The booking also becomes a company-paid line of the trip, so the trip cost
 // sheet shows it and the employee cannot claim the same ticket.
 //
-// The SQL function does not check who the caller is; the role (Travel Claims,
-// edit) and the trip's company are checked here.
+// Two rights, not one: the role (Travel Claims, edit) and the trip's company
+// are checked here, and "May book" — travel_desk.can_book — is checked here
+// and again in te_booking_record, which is the floor (migration 175).
 import { NextRequest } from 'next/server'
 import { tePermitFor, teRoute } from '@/lib/te/server'
 import { TeHttpError, isUuid, needText, needUuid, optText } from '@/lib/te/errors'
+import { MAY_NOT_BOOK } from '@/lib/te/desks'
 import { bookingRecord, type BookingInput } from '@/lib/te/engine/te-service.js'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +27,10 @@ export async function POST(req: NextRequest) {
     const ticket = optText(body.ticket_url)
     if (ticket) input.ticket_url = ticket
     await tePermitFor(t, 'te_trips', tripId, 'Travel Claims', 'EDIT')
+    // An explicit "no" on the desk outranks the general role: somebody whose
+    // "May book" is unticked must not spend, however broad their dashboard
+    // access. Anybody not on the travel desk is unaffected.
+    if (!(await t.deskMayBook())) throw new TeHttpError(403, 'TE_FORBIDDEN', MAY_NOT_BOOK)
     return bookingRecord(await t.ctx(), input)
   })
 }

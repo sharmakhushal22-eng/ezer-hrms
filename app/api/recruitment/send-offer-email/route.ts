@@ -11,9 +11,10 @@
 // Mail goes through lib/mail/send.ts (GMAIL_USER, GMAIL_APP_PASSWORD, optional
 // GMAIL_FROM_NAME — set in .env.local locally and in Vercel for production).
 import { NextRequest, NextResponse } from 'next/server'
+import { positionMessage } from '@/lib/recruitment/position-required'
 // Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
 import { requireModule } from '@/lib/api-auth'
-import { loadDossier } from '@/lib/recruitment/offer-dossier'
+import { positionOf, loadDossier } from '@/lib/recruitment/offer-dossier'
 import { offerLetterPdf } from '@/lib/recruitment/offer-letter-pdf'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { resolveTemplate, isUuid } from '@/lib/config/store'
@@ -72,6 +73,9 @@ export async function POST(req: NextRequest) {
     if (d.request.status !== 'HR_HEAD_APPROVED') return NextResponse.json({ error: 'The HR Head has not approved this offer.' }, { status: 409 })
     if (!d.complete) return NextResponse.json({ error: 'The offer file has not been verified.' }, { status: 409 })
     if (!d.verification.letter) return NextResponse.json({ error: 'Generate the offer letter before sending it.' }, { status: 409 })
+    const pos = positionOf(d.rows)
+    const posMsg = positionMessage(pos, 'in the offer letter. Fill them in the offer file before sending')
+    if (posMsg) return NextResponse.json({ error: posMsg }, { status: 409 })
     const pdf = await offerLetterPdf(d)
     const attachments = [{ filename: pdf.name, content: pdf.content, contentType: 'application/pdf' }]
 
@@ -84,7 +88,7 @@ export async function POST(req: NextRequest) {
     })
     if (!sent.sent) return NextResponse.json({ error: sent.error || sent.skipped || 'Failed to send email' }, { status: 502 })
 
-    return NextResponse.json({ ok: true, messageId: sent.messageId })
+    return NextResponse.json({ ok: true, messageId: sent.messageId, position: pos })
   } catch (err: any) {
     console.error('send-offer-email failed:', err)
     return NextResponse.json({ error: err?.message || 'Failed to send email' }, { status: 502 })

@@ -36,6 +36,10 @@ export interface PendingItem {
   facts?: string[]
   /** Something that should stop a blind click — shown highlighted. */
   alert?: string | null
+  /** Resignations: the dates the LWD inputs start from — policy (resignation date + notice) and the RM's proposal. */
+  lwd_policy?: string | null
+  lwd_proposed?: string | null
+  notice_days?: number | null
 }
 
 const RES_STAGE_LABEL: Record<string, string> = {
@@ -209,6 +213,7 @@ export async function buildPending(ctx: EssContext): Promise<PendingItem[]> {
       stage: RES_STAGE_LABEL[r.status] || r.status, raised_at: r.submitted_at || r.created_at, surfaced_via: via, mine,
       actions: !mine ? ['View full chain'] : r.status === 'RETENTION_HOLD' ? ['Resume chain', 'View full chain'] : hr ? RES_ACTIONS_HR : RES_ACTIONS_RM,
       tone: hr ? 'w' : r.status === 'RETENTION_HOLD' ? 'd' : 'w',
+      lwd_policy: r.lwd_as_per_policy || null, lwd_proposed: r.proposed_lwd || null, notice_days: r.notice_period_days ?? null,
     })
   }
 

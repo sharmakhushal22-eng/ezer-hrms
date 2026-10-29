@@ -121,7 +121,7 @@ Please join on time. All the best.
 Join link: {{meet_link}}{{/if}}{{#if meet_passcode}}
 Passcode: {{meet_passcode}}{{/if}}
 
-You are the MAIN interviewer{{#if panel_names}} (panel: {{panel_names}}){{/if}}. Please acknowledge in ESS → Tasks & Approvals and record your feedback after the interview.
+You are the MAIN interviewer{{#if panel_names}} (panel: {{panel_names}}){{/if}}. Please acknowledge it from your ESS notifications (the bell) and record your feedback there after the interview.
 
 {{scheduler_name}}`,
     },
@@ -148,7 +148,7 @@ You are the MAIN interviewer{{#if panel_names}} (panel: {{panel_names}}){{/if}}.
 Join link: {{meet_link}}{{/if}}{{#if meet_passcode}}
 Passcode: {{meet_passcode}}{{/if}}
 
-You've been added as a PANELIST. Main interviewer: {{main_interviewer_name}}. Please acknowledge in ESS → Tasks & Approvals.
+You've been added as a PANELIST. Main interviewer: {{main_interviewer_name}}. Please acknowledge it from your ESS notifications (the bell).
 
 {{scheduler_name}}`,
     },

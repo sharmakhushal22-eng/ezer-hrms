@@ -8,12 +8,17 @@
 // items collect in the bar at the foot of the sheet with ONE remark box. Then:
 //   Send to candidate → link reopens 48h, the candidate is mailed the marked items + remark
 //                       + link; the card shows Resend link until they resubmit
-//   Accept form       → (nothing marked) the HR Manager's team approval; the fourth approval
-//                       generates the employee code
-// Read-only after acceptance (View form). API: /api/onboarding/review.
+//   Assign managers   → the joiner's L1, L2 and HOD (AssignManagersModal) — required before
+//   Accept form       → (nothing marked, managers assigned) the HR Manager's team approval,
+//                       which opens the form to the IT, Admin and Payroll heads
+// Read-only after acceptance (View form). API: /api/onboarding/review, /api/onboarding/managers.
 import { useEffect, useMemo, useState } from 'react'
 import { authHeaders } from '@/lib/auth-headers'
 import { C as TK, Z, E } from '@/lib/ui'
+import AssignManagersModal from './AssignManagersModal'
+
+type MgrRef = { id: string; name: string; emp_code: string | null; designation: string | null } | null
+export type Managers = { l1: MgrRef; l2: MgrRef; hod: MgrRef }
 
 export type Doc = { doc_code: string; label: string; file_name: string | null; mime_type: string | null; url: string | null; hr_verified: boolean | null; note: string | null; ai_status: string | null; uploaded_at: string | null }
 export type Approval = { team: string; status: 'PENDING' | 'APPROVED' | 'RETURNED'; acted_by_name: string | null; remark: string | null }
@@ -29,7 +34,7 @@ export const TEAM: Record<string, string> = { IT: 'IT', ADMIN: 'Admin', PAYROLL:
 
 /** The paper sheet's styling — shared with the heads' approval form (components/ess/OnboardingApprovals.tsx). */
 export const SHEET_CSS = `
-  .rv-paper{background:${TK.surface};color:${TK.ink};width:min(920px,100%);margin:0 auto;border-radius:6px;box-shadow:${E.overlay};padding:40px 52px 0;font-size:13px;line-height:1.45;position:relative}
+  .rv-paper{background:${TK.surface};color:${TK.ink};width:min(920px,100%);margin:0 auto 40px;border-radius:6px;box-shadow:${E.overlay};padding:40px 52px 0;font-size:13px;line-height:1.45;position:relative}
   .rv-paper:before{content:'';position:absolute;left:0;right:0;top:0;height:5px;border-radius:6px 6px 0 0;background:${TK.brand}}
   .rv-h{display:flex;align-items:baseline;gap:10px;margin:0;padding-bottom:6px;border-bottom:1px solid ${TK.lineStrong};font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:${TK.brand}}
   .rv-h span{color:${TK.ink};font-size:14px;font-weight:700;letter-spacing:0;text-transform:none}
@@ -263,6 +268,9 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
   const [remark, setRemark] = useState('')
   const [busy, setBusy] = useState(false)
   const [opening, setOpening] = useState('')
+  // The joiner's managers (Assign managers) — Accept form is disabled until the L1 is set.
+  const [mgr, setMgr] = useState<Managers>({ l1: null, l2: null, hod: null })
+  const [assigning, setAssigning] = useState(false)
 
   /** A filled statutory form in a new tab. The route needs the session header, so it is fetched and shown as a blob. */
   async function openForm(form: string, label: string) {
@@ -285,6 +293,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
         if (!res.ok) throw new Error(d.error || 'Could not load the form')
         if (!alive) return
         setData(d)
+        if (d.managers) setMgr(d.managers)
         // While a return stands, the sheet shows what was marked and the remark that went out.
         if (d.hr_review?.outcome === 'RETURNED') {
           const m: Record<string, Mark> = {}
@@ -298,10 +307,10 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
   }, [onboardingId])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy && !assigning) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
+  }, [busy, assigning, onClose])
 
   const item = data?.item
   const canDecide = !readOnly && !!item && ['SUBMITTED', 'HR_REVIEW', 'APPROVED'].includes(item.status) && data.approvals?.find((a: Approval) => a.team === 'HR_MANAGER')?.status !== 'APPROVED'
@@ -311,6 +320,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
 
   async function send(outcome: 'ACCEPTED' | 'RETURNED') {
     if (outcome === 'RETURNED' && !remark.trim()) { onDone('Write a remark for the candidate — it goes in the mail with the marked items.', 'err'); return }
+    if (outcome === 'ACCEPTED' && !mgr.l1) { onDone('Assign the managers first — the L1 is required before the form can be accepted.', 'err'); setAssigning(true); return }
     setBusy(true)
     try {
       const res = await fetch('/api/onboarding/review', {
@@ -323,7 +333,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error || 'Failed')
-      if (outcome === 'ACCEPTED') onDone('Form accepted. IT, Admin and Payroll have been asked to confirm their checklists and approve; after that, assign the role and generate the code from the card.', 'ok')
+      if (outcome === 'ACCEPTED') onDone('Form accepted. IT, Admin and Payroll have been asked to confirm their checklists and approve; after that, press Generate code on the card.', 'ok')
       else onDone(`Sent to ${item.full_name}${d.mailed ? ' — they have been emailed the corrections with the link' : ' (no email on file — use Resend link or share it)'}.`, 'ok')
       onClose()
     } catch (e: any) { onDone(e.message, 'err') } finally { setBusy(false) }
@@ -332,7 +342,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
   const docMarks = list.filter(m => m.kind === 'doc').length, detMarks = list.length - docMarks
 
   return (
-    <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: Z.modal, overflowY: 'auto', padding: '28px 12px 40px', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
+    <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: Z.modal, overflowY: 'auto', padding: '28px 12px 0', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
       <style>{SHEET_CSS}</style>
 
       <div className="rv-paper">
@@ -342,7 +352,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
           <>
             {/* ── Letterhead ── */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: TK.muted }}>Onboarding form · {item.employment_type || 'Employee'}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: TK.muted }}>Onboarding form · {item.employment_type || 'Employee'}{item.hiring_track === 'FOREIGN_IN_INDIA' ? <span style={{ marginLeft: 10, color: TK.brand }}>· Foreign national in India</span> : item.hiring_track === 'OVERSEAS' ? <span style={{ marginLeft: 10, color: TK.brand }}>· Overseas · {item.work_country || '—'}{item.payroll_currency ? ` · ${item.payroll_currency}` : ''}{item.employing_entity ? ` · ${item.employing_entity}` : ''}</span> : null}</div>
               <button onClick={onClose} className="rv-ghost" aria-label="Close">✕ Close</button>
             </div>
             <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
@@ -354,7 +364,7 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {(data.approvals as Approval[]).map(a => {
                   const c = a.status === 'APPROVED' ? TK.positive : a.status === 'RETURNED' ? TK.critical : TK.muted
-                  return <span key={a.team} className="rv-stamp" style={{ color: c, borderColor: c, background: a.status === 'APPROVED' ? TK.positiveTint : a.status === 'RETURNED' ? TK.criticalTint : TK.sunken }} title={a.remark || ''}>{TEAM[a.team]} {a.status === 'APPROVED' ? '✓' : a.status === 'RETURNED' ? '↩' : '·'} {a.status === 'APPROVED' ? (a.acted_by_name || 'approved') : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>
+                  return <span key={a.team} className="rv-stamp" style={{ color: c, borderColor: c, background: a.status === 'APPROVED' ? TK.positiveTint : a.status === 'RETURNED' ? TK.criticalTint : TK.sunken }} title={a.status === 'PENDING' ? 'Not decided yet' : `${a.status === 'APPROVED' ? 'Approved' : 'Returned'}${a.acted_by_name ? ` by ${a.acted_by_name}` : ''}${a.remark ? `: ${a.remark}` : ''}`}>{TEAM[a.team]} {a.status === 'APPROVED' ? '✓' : a.status === 'RETURNED' ? '↩' : '·'} {a.status === 'APPROVED' ? (a.acted_by_name || 'approved') : a.status === 'RETURNED' ? 'returned' : 'pending'}</span>
                 })}
               </div>
             </div>
@@ -363,20 +373,33 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
                 {data.hr_review.outcome === 'ACCEPTED' ? 'Accepted' : data.hr_review.outcome === 'RETURNED' ? 'Sent back to the candidate' : 'Returned, and the candidate has resubmitted since'} · {data.hr_review.by_name || '—'} · {day(data.hr_review.at)}
               </div>
             )}
-            {canDecide && <div style={{ marginTop: 14, fontSize: 12.5, color: TK.inkSoft }}>Read through the sheet. <b>Click any detail, table entry or document that is wrong</b> — it gets marked, and you write one remark at the foot of the page. If everything is right, accept the form.</div>}
+            {/* ── Reporting line (Assign managers) — required before Accept form ── */}
+            {(canDecide || mgr.l1) && (
+              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 10, border: `1px solid ${mgr.l1 ? TK.positiveEdge : TK.warningEdge}`, background: mgr.l1 ? TK.positiveTint : TK.warningTint }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: mgr.l1 ? TK.positive : TK.warning, flex: 'none' }}>{mgr.l1 ? 'Reports to' : 'Managers not assigned'}</div>
+                {mgr.l1 ? (
+                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12.5, color: TK.ink }}>
+                    {([['L1', mgr.l1], ['L2', mgr.l2], ['HOD', mgr.hod]] as [string, MgrRef][]).map(([lv, r]) => <span key={lv}><span style={{ fontSize: 10, fontWeight: 700, color: TK.muted, letterSpacing: '.05em', marginRight: 5 }}>{lv}</span>{r ? <b title={[r.emp_code, r.designation].filter(Boolean).join(' · ')}>{r.name}</b> : <span style={{ color: TK.muted }}>—</span>}</span>)}
+                  </div>
+                ) : <div style={{ fontSize: 12.5, color: TK.inkSoft }}>Pick {item.full_name.split(' ')[0]}'s L1, L2 and HOD — the form can be accepted after that.</div>}
+                {canDecide && <button type="button" className="rv-ghost" onClick={() => setAssigning(true)} style={{ marginLeft: 'auto' }}>{mgr.l1 ? 'Change' : '＋ Assign managers'}</button>}
+              </div>
+            )}
+            {canDecide && <div style={{ marginTop: 14, fontSize: 12.5, color: TK.inkSoft }}>Read through the sheet. <b>Click any detail, table entry or document that is wrong</b> — it gets marked, and you write one remark at the foot of the page. If everything is right, assign the managers and accept the form.</div>}
 
             {/* ── Documents ── */}
             <section style={{ marginTop: 28 }}>
-              <h3 className="rv-h">01 <span>Documents</span><span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: TK.muted, letterSpacing: 0, textTransform: 'none' }}>{docs.length} uploaded</span></h3>
+              <h3 className="rv-h">01 <span>Documents</span><span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: TK.muted, letterSpacing: 0, textTransform: 'none' }}>{docs.length} file{docs.length === 1 ? '' : 's'}</span></h3>
               {docs.length === 0 && <div style={{ fontSize: 12, color: TK.muted, marginTop: 8 }}>No documents uploaded.</div>}
               <div className="rv-docs">{docs.map(doc => <DocCard key={doc.doc_code} doc={doc} on={!!marks[`doc:${doc.doc_code}`]} pick={canDecide} onPick={() => toggle({ key: `doc:${doc.doc_code}`, kind: 'doc', label: doc.label, doc_code: doc.doc_code })} />)}</div>
               {/* The official forms, filled from this sheet — opened in a new tab (the call needs the session header). */}
+              {item.hiring_track === 'OVERSEAS' ? <div style={{ fontSize: 12, color: TK.muted, marginTop: 14 }}>Overseas employee — no Indian statutory forms (PF, gratuity, ESIC) apply.</div> : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
                 <span className="rv-sub" style={{ marginBottom: 0 }}>Statutory forms, filled</span>
                 {([['form11', 'EPF Form 11'], ['form2', 'EPF Form 2'], ['formf', 'Gratuity Form F'], ...(item.esic_applicable ? [['esic1', 'ESIC Form 1']] : [])] as [string, string][]).map(([k, l]) => (
                   <button key={k} type="button" className="rv-view" disabled={!!opening} onClick={() => openForm(k, l)} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{opening === k ? 'Opening…' : `${l} ↗`}</button>
                 ))}
-              </div>
+              </div>)}
             </section>
 
             {/* ── Details, section by section ── */}
@@ -386,9 +409,10 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
             <div className="rv-bar">
               {canDecide ? (
                 list.length === 0 ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                    <button disabled={busy} onClick={() => send('ACCEPTED')} className="rv-btn" style={{ background: TK.positive }}>{busy ? 'Saving…' : '✓ Accept form'}</button>
-                    <span style={{ fontSize: 12, color: TK.muted }}>Nothing is marked. Click a detail or document above if something is wrong.</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <button type="button" disabled={busy} onClick={() => setAssigning(true)} className="rv-btn" style={{ background: mgr.l1 ? TK.surface : TK.brand, color: mgr.l1 ? TK.brandDeep : TK.onAccent, border: mgr.l1 ? `1px solid ${TK.brandEdge}` : 'none' }}>{mgr.l1 ? `Managers ✓ ${mgr.l1.name.split(' ')[0]}` : '1 · Assign managers'}</button>
+                    <button disabled={busy || !mgr.l1} onClick={() => send('ACCEPTED')} className="rv-btn" style={{ background: TK.positive }} title={mgr.l1 ? 'Accept the form — IT, Admin and Payroll are asked to approve next' : 'Assign the managers first'}>{busy ? 'Saving…' : mgr.l1 ? '✓ Accept form' : '2 · Accept form'}</button>
+                    <span style={{ fontSize: 12, color: TK.muted }}>{mgr.l1 ? 'Nothing is marked. Click a detail or document above if something is wrong.' : `Assign ${item.full_name.split(' ')[0]}'s L1, L2 and HOD first — Accept form opens after that.`}</span>
                   </div>
                 ) : (
                   <>
@@ -409,7 +433,9 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
                   <div style={{ flex: '1 1 300px', fontSize: 12.5, color: TK.inkSoft }}>
                     {data.hr_review?.outcome === 'RETURNED' && list.length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>{list.map(m => <span key={m.key} className="rv-chip">{m.label}</span>)}</div>}
                     {data.hr_review?.outcome === 'RETURNED' && remark && <div><b>Remark sent:</b> {remark}</div>}
-                    {readOnly && !data.hr_review && 'Read-only.'}
+                    {readOnly && data.hr_review?.outcome === 'ACCEPTED' && <>Accepted by {data.hr_review.by_name || 'the HR Manager'} on {day(data.hr_review.at)}. The stamps at the top show where IT, Admin and Payroll are.</>}
+                    {readOnly && data.hr_review?.outcome === 'RESUBMITTED' && 'The candidate resubmitted after a return. Open it with Review form to decide.'}
+                    {readOnly && !data.hr_review && 'Read-only view of the submitted form.'}
                     {!readOnly && !canDecide && !data.hr_review && (item.status === 'EMPLOYEE_CREATED' ? 'The employee code is already generated.' : item.status === 'IN_PROGRESS' ? 'The candidate has not submitted the form yet.' : 'Already approved by the HR Manager.')}
                   </div>
                   <button onClick={onClose} className="rv-ghost">Close</button>
@@ -419,6 +445,19 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
           </>
         )}
       </div>
+
+      {/* ── Assign managers (L1, L2, HOD) — on top of the sheet ── */}
+      {assigning && item && (
+        <AssignManagersModal onboardingId={onboardingId} name={item.full_name} designation={item.designation}
+          initial={{ l1: mgr.l1?.id || '', l2: mgr.l2?.id || '', hod: mgr.hod?.id || '' }}
+          onClose={() => setAssigning(false)}
+          onSaved={m => setMgr({
+            l1: m.ids.l1 ? { id: m.ids.l1, name: m.names.l1 || '—', emp_code: null, designation: null } : null,
+            l2: m.ids.l2 ? { id: m.ids.l2, name: m.names.l2 || '—', emp_code: null, designation: null } : null,
+            hod: m.ids.hod ? { id: m.ids.hod, name: m.names.hod || '—', emp_code: null, designation: null } : null,
+          })}
+          onDone={onDone} />
+      )}
     </div>
   )
 }

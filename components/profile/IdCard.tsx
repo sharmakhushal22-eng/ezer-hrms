@@ -30,9 +30,12 @@ const pretty = (v?: string | null) => {
     : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default function IdCard({ name, designation, company, code, doj, blood, emergency }: {
+export default function IdCard({ name, designation, company, code, doj, blood, emergency, photoUrl }: {
   name: string; designation: string; company: string
   code: string; doj?: string | null; blood?: string | null; emergency?: string | null
+  /** The signed avatar URL the profile already holds, so a new photo shows on
+   *  the card the moment it is saved. Initials when there is none. */
+  photoUrl?: string | null
 }) {
   const [back, setBack] = useState(false)
   const [tok, setTok] = useState<Issued | null>(null)
@@ -89,7 +92,8 @@ export default function IdCard({ name, designation, company, code, doj, blood, e
       {!back ? (
         <>
           <div className="top">
-            <div className="ph">{ini(name)}</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <div className="ph">{photoUrl ? <img src={photoUrl} alt="" /> : ini(name)}</div>
             <div style={{ minWidth: 0 }}>
               <div className="nm">{name}</div>
               <div className="ds">{designation}</div>

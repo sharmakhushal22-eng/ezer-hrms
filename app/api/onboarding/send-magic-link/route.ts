@@ -2,10 +2,12 @@
 // Creates or updates onboarding candidate record, sends onboarding link.
 // The email's words come from Configuration → 'Onboarding invitation' for the company.
 import { NextRequest, NextResponse } from 'next/server'
+import { positionMessage } from '@/lib/recruitment/position-required'
 import { createClient } from '@supabase/supabase-js'
 import { requireModule } from '@/lib/api-auth'
 import { renderEmail } from '@/lib/config/store'
 import { sendMail } from '@/lib/mail/send'
+import { trackOf } from '@/lib/onboarding/hiring-track'
 import { importCollectedDocs } from '@/lib/onboarding/import-docs'
 import { seedFormData } from '@/lib/onboarding/seed-form'
 
@@ -28,11 +30,57 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       candidate_id, company_id, full_name, email, mobile,
-      designation, department, department_id, employment_type, date_of_joining, offered_ctc,
+      employment_type, date_of_joining, offered_ctc,
+      hiring_track, work_country, payroll_currency, employing_entity, notice_period_days,
     } = body
+    // Designation, department and work location (lib/recruitment/position-required.ts): typed on
+    // the link form, else — for a recruitment joiner — taken from their MRF and offer.
+    let { designation, department, department_id, location_id } = body as Record<string, string | null | undefined>
+    if (candidate_id && (!designation || !department_id || !location_id)) {
+      const { data: rc } = await supa.from('candidates').select('designation, mrf_id, application_details').eq('id', candidate_id).maybeSingle()
+      const { data: m } = rc?.mrf_id ? await supa.from('manpower_requisitions').select('designation, position, department_id, location_id').eq('id', rc.mrf_id).maybeSingle() : { data: null as any }
+      designation = designation || rc?.designation || m?.designation || m?.position || null
+      department_id = department_id || m?.department_id || null
+      location_id = location_id || m?.location_id || null
+      if (!department) department = (rc?.application_details as any)?.requisition?.department || null
+    }
+    if (department_id && !department) { const { data: d } = await supa.from('departments').select('dept_name').eq('id', department_id).maybeSingle(); department = d?.dept_name || null }
+    // The notice period the joiner will serve: typed by HR, else the offer's (ctc_negotiations /
+    // offer_letters), else the company default. It lands on employees.notice_period_days at code
+    // generation — the number the resignation chain uses for the policy last working day.
+    let noticeDays: number | null = Number(notice_period_days) > 0 ? Math.round(Number(notice_period_days)) : null
+    if (!noticeDays && candidate_id) {
+      const [{ data: ol }, { data: neg }] = await Promise.all([
+        supa.from('offer_letters').select('notice_period_days').eq('candidate_id', candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supa.from('ctc_negotiations').select('notice_period_days').eq('candidate_id', candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      ])
+      noticeDays = Number(ol?.notice_period_days) > 0 ? Number(ol!.notice_period_days) : Number(neg?.notice_period_days) > 0 ? Number(neg!.notice_period_days) : null
+    }
+    if (!noticeDays) { const { data: co } = await supa.from('companies').select('notice_period_days').eq('id', company_id).maybeSingle(); noticeDays = Number(co?.notice_period_days) > 0 ? Number(co!.notice_period_days) : null }
+    // The hiring track (lib/onboarding/hiring-track.ts) decides the portal's steps, documents
+    // and statutory treatment. An overseas employee needs a work country.
+    const track = trackOf(hiring_track)
+    if (track === 'OVERSEAS' && !String(work_country || '').trim()) {
+      return NextResponse.json({ error: 'Pick the work country for an overseas employee.' }, { status: 400 })
+    }
 
     if (!company_id || !full_name || !mobile) {
       return NextResponse.json({ error: 'company_id, full_name, mobile required' }, { status: 400 })
+    }
+    // An overseas employee works abroad: the work country stands in for an office location.
+    const posMsg = positionMessage({ designation, department: department_id || department, location: track === 'OVERSEAS' ? (work_country || 'abroad') : location_id }, 'for onboarding (set them on the MRF, or on the link form)')
+    if (posMsg) return NextResponse.json({ error: posMsg, needs_position: true }, { status: 400 })
+    // The joining date is on the link mail, the review sheet, the employee record (company_doj)
+    // and the ESS Today tab — a joiner without one once crashed the portal on first login.
+    if (!date_of_joining || Number.isNaN(new Date(date_of_joining).getTime())) {
+      return NextResponse.json({ error: 'Set the date of joining first (Edit on the card), then send the link.', needs_doj: true }, { status: 400 })
+    }
+    // The link, the corrections and the ESS login are all emailed — no address, no link.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email || '').trim())) {
+      return NextResponse.json({ error: 'Add a valid email for the candidate first (Edit on the card) — the link and the login go there.', needs_email: true }, { status: 400 })
+    }
+    if (!/^[6-9]\d{9}$/.test(String(mobile).replace(/\D/g, ''))) {
+      return NextResponse.json({ error: 'The mobile number must be a 10-digit Indian number.' }, { status: 400 })
     }
 
     // Insert a fresh onboarding candidate. (No upsert: candidate_id has no unique
@@ -49,9 +97,15 @@ export async function POST(req: NextRequest) {
         designation:     designation || null,
         department:      department || null,
         department_id:   department_id || null,
+        location_id:     location_id || null,
         employment_type: employment_type || 'Employee',
         date_of_joining: date_of_joining || null,
         offered_ctc:     offered_ctc || null,
+        hiring_track:    track,
+        work_country:    track === 'DOMESTIC' ? 'India' : (String(work_country || '').trim() || (track === 'FOREIGN_IN_INDIA' ? 'India' : null)),
+        payroll_currency: String(payroll_currency || '').trim().toUpperCase() || (track === 'OVERSEAS' ? null : 'INR'),
+        employing_entity: String(employing_entity || '').trim() || null,
+        notice_period_days: noticeDays,
         status:          'INVITED',
         token_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         created_by:      body.created_by || null,

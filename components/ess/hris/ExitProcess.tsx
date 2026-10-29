@@ -12,9 +12,10 @@
  * number somebody plans their life around.
  */
 import { useCallback, useEffect, useState } from 'react'
-import type { ChainRow, ResignationRecord, ResignationState } from './types'
+import type { ChainRow, ResignationRecord, ResignationState, StageApprover } from './types'
 import { Ic } from './icons'
 import { fmtDate, fmtDateTime, riseStyle, useToast } from './ui'
+import { MyExitDocuments } from './ExitFnf'
 
 const STAGE_LABEL: Record<string, string> = {
   INITIATED: 'Initiated by HR',
@@ -31,7 +32,13 @@ const STAGE_LABEL: Record<string, string> = {
 const STAGE_ORDER = ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER']
 const CLOSED = ['SETTLED', 'WITHDRAWN']
 
+/** HR Services → Exit: the employee's own exit. Exiting somebody else is the red Exit button on
+ *  People → Employees → employee → HR Actions (components/employees/HrExitSection). */
 export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) => Promise<any> }) {
+  return <OwnExit api={api} />
+}
+
+function OwnExit({ api }: { api: (path: string, init?: RequestInit) => Promise<any> }) {
   const [d, setD] = useState<ResignationState | null>(null)
   const [err, setErr] = useState('')
   const [reason, setReason] = useState('')
@@ -98,7 +105,7 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
             Reason: <b style={{ color: 'var(--ez-ink)' }}>{cur.exit_reason_master?.label || cur.reason_code || '-'}</b>
           </div>
           <div className="hx-sec" style={{ marginBottom: 10 }}><h2 style={{ fontSize: 12.5 }}>Acknowledgement chain</h2></div>
-          <Timeline status={cur.status} chain={d.chain || []} />
+          <Timeline status={cur.status} chain={d.chain || []} approvers={d.approvers || {}} />
           {canWithdraw && (
             <div style={{ marginTop: 16 }}>
               <button className="hx-btn d" disabled={busy} onClick={() => void withdraw()}>Withdraw resignation</button>
@@ -108,12 +115,16 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
             Retention pauses the chain; only you can withdraw it. Your last working day becomes final at the HR stage.
           </div>
         </div>
+        <MyExitDocuments api={api} resignationId={cur.id} />
       </>
     )
   }
 
   /* ----------------------------------------------------------------- form */
   return (
+    <>
+    {/* A settled exit keeps its F&F statement and letters downloadable (12 months, spec §11.2). */}
+    {cur?.status === 'SETTLED' && <MyExitDocuments api={api} resignationId={cur.id} />}
     <div className="hx-card pad">
       <div className="hx-sec"><h2>Resign</h2></div>
       {cur && (
@@ -140,7 +151,7 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
           onChange={e => setRemarks(e.target.value)} />
       </div>
       <div className="hx-note w" style={{ marginTop: 12 }}>
-        Notice period on record: <b>{d.notice_period_days ?? '-'} days</b>. Submitting starts the acknowledgement
+        Your notice period: <b>{d.notice_period_days ?? '-'} days</b>{(d as any).on_probation ? ' (on probation)' : ' (confirmed)'}. Submitting starts the acknowledgement
         chain: your reporting manager first, then L2 / HOD, then HR sets the final last working day.
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -154,14 +165,20 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
         )}
       </div>
     </div>
+    </>
   )
 }
 
 /** The chain as a stepper. Retention parks it: the walked stages stay done and
  *  the hold is appended, because the chain is paused rather than advanced. */
-function Timeline({ status, chain }: { status: string; chain: ChainRow[] }) {
+/** "Aditya Iyer · STC9054 · Assistant Manager" */
+const who = (p?: { full_name?: string | null; emp_code?: string | null; designation?: string | null } | null) =>
+  p?.full_name ? [p.full_name, p.emp_code, p.designation].filter(Boolean).join(' · ') : ''
+
+function Timeline({ status, chain, approvers }: { status: string; chain: ChainRow[]; approvers: Record<string, StageApprover | null> }) {
   const byStage: Record<string, ChainRow> = {}
-  for (const c of chain) byStage[c.stage] = c
+  // The last row per stage (STAMPED first, then the decision); the decision wins.
+  for (const c of chain) if (!byStage[c.stage] || c.action !== 'STAMPED') byStage[c.stage] = c
   const curIdx = STAGE_ORDER.indexOf(status)
   const hold = status === 'RETENTION_HOLD'
 
@@ -169,18 +186,26 @@ function Timeline({ status, chain }: { status: string; chain: ChainRow[] }) {
     <div className="hx-tl">
       {STAGE_ORDER.map((stg, i) => {
         const c = byStage[stg]
-        const cls = hold ? (c ? 'done' : '') : i < curIdx ? 'done' : i === curIdx ? 'cur' : ''
-        const act = c
-          ? `${c.action.toLowerCase().replace(/_/g, ' ')}${c.approver?.full_name ? ` · ${c.approver.full_name}` : ''}${c.proposed_lwd ? ` · LWD ${fmtDate(c.proposed_lwd)}` : ''}`
-          : (i === curIdx && !hold ? 'pending acknowledgement' : 'upcoming')
-        const when = c ? fmtDateTime(c.actioned_at) : (i === curIdx && !hold ? 'waiting now' : '')
+        const key = stg.replace('PENDING_', '')
+        const decided = c && c.action !== 'STAMPED'
+        const skipped = c?.action === 'SKIPPED'
+        const cls = hold ? (decided ? 'done' : '') : i < curIdx ? 'done' : i === curIdx ? 'cur' : ''
+        // Who this stage is with: the person who acted, else the one it is stamped to / resolves to.
+        const person = decided && c.approver?.full_name ? c.approver : (c?.approver?.full_name ? c.approver : approvers[key])
+        const act = skipped
+          ? `skipped${c?.note ? ` · ${c.note.toLowerCase()}` : ''}`
+          : decided
+            ? `${c.action.toLowerCase().replace(/_/g, ' ')}${c.proposed_lwd ? ` · LWD ${fmtDate(c.proposed_lwd)}` : ''}`
+            : (i === curIdx && !hold ? 'pending acknowledgement' : 'upcoming')
+        const when = decided ? fmtDateTime(c.actioned_at) : (i === curIdx && !hold ? 'waiting now' : '')
         return (
           <div className={`hx-tl-item ${cls} hx-rise`} style={riseStyle(i)} key={stg}>
             <span className="hx-tl-dot">{cls === 'done' && <Ic k="check" sw={2.2} />}</span>
             <div className="st">{STAGE_LABEL[stg]}</div>
+            {!skipped && <div className="ac" style={{ fontWeight: 600, color: 'var(--ez-ink)' }}>{who(person) || 'nobody assigned yet'}</div>}
             <div className="ac">{act}</div>
             {when && <div className="tm">{when}</div>}
-            {c?.note && <div className="nt">“{c.note}”</div>}
+            {decided && !skipped && c.note && <div className="nt">“{c.note}”</div>}
           </div>
         )
       })}

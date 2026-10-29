@@ -2,7 +2,7 @@
 // components/recruitment/InterviewFeedbackForm.tsx
 //
 // The interview feedback form, used in two places from one definition:
-//   • mode="fill"  — an interviewer fills it from ESS → Tasks & Approvals.
+//   • mode="fill"  — an interviewer fills it from the ESS notification panel (the bell).
 //   • mode="view"  — the hiring manager reads back what an interviewer recorded,
 //                    inside the candidate popup.
 //
@@ -13,7 +13,7 @@
 // a glance. Same parameter set for every round — that is the whole point: the
 // numbers are only comparable if everyone answers the same questions.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { type Decision, DECISION_LABEL } from '@/lib/recruitment/interview-decision'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
 import { C as TK, F } from '@/lib/ui'
@@ -98,6 +98,44 @@ export function scoreFeedback(params: Record<string, number>) {
   return { total, pct, band: bandOf(pct)[0] }
 }
 
+/** The confirmation before an interview Reject is recorded — rejecting moves the candidate out
+ *  of the pipeline, so it is never one click. Module level.
+ *
+ *  A native <dialog> opened with showModal(), NOT a portal with a z-index: the candidate modal
+ *  this sits in is itself a native <dialog> (components/recruitment/rx/Overlay.tsx) in the
+ *  browser's top layer, which no z-index can rise above — a portalled popup rendered behind it,
+ *  unseen and unclickable. A later showModal() stacks on top. */
+function ConfirmRejectDialog({ name, round, remark, busy, onConfirm, onCancel }: { name: string; round: string; remark: string; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const d = ref.current
+    if (d && !d.open) d.showModal()
+    return () => { if (d?.open) d.close() }
+  }, [])
+  return (
+    <dialog ref={ref} aria-label="Confirm rejection" onCancel={e => { e.preventDefault(); if (!busy) onCancel() }}
+      style={{ padding:0, border:0, background:'transparent', maxWidth:'none', maxHeight:'none', width:'100vw', height:'100vh', margin:0, overflow:'hidden' }}>
+    <div onMouseDown={e => { if (e.target === e.currentTarget && !busy) onCancel() }}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:16, fontFamily:font }}>
+      <div style={{ background:C.card, borderRadius:14, width:'min(440px,100%)', padding:'20px 22px', boxShadow:'0 24px 70px rgba(0,0,0,.3)' }}>
+        <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+          <div style={{ width:38, height:38, borderRadius:10, background:TK.criticalTint, color:C.dang, display:'grid', placeItems:'center', fontSize:18, fontWeight:800, flexShrink:0 }}>!</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:16, fontWeight:800, color:C.navy }}>Reject {name}?</div>
+            <div style={{ fontSize:12.5, color:C.muted, marginTop:4, lineHeight:1.5 }}>Your {round} feedback is saved with a <b style={{ color:C.dang }}>Reject</b> decision and the candidate moves to <b>Rejected</b>, out of the pipeline. No further round can be added.</div>
+            {remark && <div style={{ marginTop:10, fontSize:12.5, color:C.navy, background:TK.criticalTint, borderRadius:8, padding:'8px 10px', whiteSpace:'pre-wrap' }}><b>Remark:</b> {remark}</div>}
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:9, justifyContent:'flex-end', marginTop:18 }}>
+          <button type="button" autoFocus onClick={onCancel} disabled={busy} style={{ padding:'10px 18px', borderRadius:9, border:`1px solid ${C.line}`, background:C.card, color:C.navy, fontFamily:font, fontSize:13.5, fontWeight:700, cursor:'pointer' }}>Cancel</button>
+          <button type="button" onClick={onConfirm} disabled={busy} style={{ padding:'10px 18px', borderRadius:9, border:'none', background:C.dang, color:TK.onAccent, fontFamily:font, fontSize:13.5, fontWeight:700, cursor: busy ? 'default' : 'pointer', opacity: busy ? .6 : 1 }}>{busy ? 'Rejecting…' : 'Yes, reject'}</button>
+        </div>
+      </div>
+    </div>
+    </dialog>
+  )
+}
+
 export default function InterviewFeedbackForm({
   candidate, round, mode, initial, submitting, onSubmit, onClose, questions,
 }: {
@@ -118,6 +156,7 @@ export default function InterviewFeedbackForm({
   const [pending, setPending] = useState<Decision | null>(null)     // decision chosen, remark being typed
   const [dRemark, setDRemark] = useState(initial?.decision_remark || '')
   const [err, setErr] = useState<string | null>(null)
+  const [confirmReject, setConfirmReject] = useState(false)   // the last check before a rejection is recorded
   const readOnly = mode === 'view'
 
   const { total, pct, band } = useMemo(() => scoreFeedback(params), [params])
@@ -145,6 +184,9 @@ export default function InterviewFeedbackForm({
     const remark = dRemark.trim()
     if (d !== 'SHORTLIST' && !remark) { setErr(`A remark is required to ${d === 'HOLD' ? 'put the candidate on hold' : 'reject the candidate'}.`); return }
     setErr(null)
+    // Rejecting takes the candidate out of the pipeline: ask once more, in a popup.
+    if (d === 'REJECT' && !confirmReject) { setConfirmReject(true); return }
+    setConfirmReject(false)
     onSubmit?.({ params, remarks, overall: overall.trim(), recommendation: RECOMM_FOR[d], total, pct, band, decision: d, decision_remark: remark || null })
   }
 
@@ -256,6 +298,8 @@ export default function InterviewFeedbackForm({
                   <textarea autoFocus value={dRemark} onChange={e=>setDRemark(e.target.value)} placeholder={pending === 'HOLD' ? 'Why on hold, and what would change the call (e.g. waiting on a comparison, notice period, budget)…' : 'Why the candidate is not a fit for this role…'}
                     style={{ width:'100%', minHeight:70, padding:'9px 11px', fontFamily:font, fontSize:13, border:`1px solid ${C.line}`, borderRadius:8, outline:'none', color:C.navy, resize:'vertical', boxSizing:'border-box', background:C.card }} />
                   <div style={{ display:'flex', gap:9, marginTop:10 }}>
+                    {confirmReject && <ConfirmRejectDialog name={candidate.name} round={round} remark={dRemark.trim()} busy={!!submitting}
+                      onConfirm={() => finish('REJECT')} onCancel={() => setConfirmReject(false)} />}
                     <button type="button" onClick={() => finish(pending)} disabled={submitting} style={decBtn(DECISION_COLOR[pending], submitting)}>{submitting ? 'Submitting…' : `Confirm ${DECISION_LABEL[pending] === 'On hold' ? 'Hold' : 'Reject'}`}</button>
                     <button type="button" onClick={() => { setPending(null); setErr(null) }} disabled={submitting} style={{ padding:'11px 18px', borderRadius:9, border:`1px solid ${C.line}`, background:C.card, color:C.navy, fontFamily:font, fontSize:14, fontWeight:700, cursor:'pointer' }}>Back</button>
                   </div>

@@ -52,7 +52,7 @@ export async function offerLetterPdf(dossier: Dossier): Promise<{ name: string; 
   const baseLocation = ctx.ad?.requisition?.job_location || ctx.loc?.location_name || null
   const state = jobState(ctx)
   const location = baseLocation && state && !baseLocation.toLowerCase().includes(state.toLowerCase()) ? `${baseLocation}, ${state}` : (baseLocation || state)
-  const dept = ctx.dept?.dept_name || null
+  const dept = ctx.dept?.dept_name || ctx.ad?.requisition?.department || null
   const reportsTo = ctx.manager?.full_name ? `${ctx.manager.full_name}${mrf?.reports_to_designation ? `, ${mrf.reports_to_designation}` : ''}` : (mrf?.reports_to_designation || null)
   const address = ctx.ad?.contact?.permanent_address || ctx.ad?.contact?.current_city || null
   const ctc = Number(req.offered_ctc || 0)

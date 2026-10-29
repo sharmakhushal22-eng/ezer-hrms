@@ -578,7 +578,7 @@ export default function NpsReport({ fy }: { fy: string }) {
           <div style={{ flex: 1 }} />
           <button onClick={() => setPicker(true)} style={{ ...S.btnP, alignSelf: 'center', background: C.green }}>Set NPS for an employee
           </button>
-          <button onClick={download} disabled={!shown.length} style={{ ...S.btnP, alignSelf: 'center', opacity: shown.length ? 1 : 0.5 }}>Download Excel
+          <button onClick={download} disabled={!shown.length} style={{ ...S.btnP, alignSelf: 'center', opacity: shown.length ? 1 : 0.5 }}>Download Excel ({shown.length})
           </button>
           <button onClick={load} style={{ ...S.btnO, alignSelf: 'center' }}>Refresh</button>
         </div>

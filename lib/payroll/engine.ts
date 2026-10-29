@@ -126,7 +126,9 @@ function calcLineFromMonth(
   const ptOn = row.pt_applicable !== false
   const lwfOn = row.lwf_applicable === true
 
-  const epfWage = Math.min(basic, num(row.epf_wage) || 15000)
+  // An International Worker (a foreign national in Indian PF without an SSA certificate) has no
+  // wage ceiling: PF is due on the whole basic.
+  const epfWage = (row as any).international_employee === true ? basic : Math.min(basic, num(row.epf_wage) || 15000)
   // Arrear is wages, so PF is due on it — up to whatever headroom the ceiling left.
   const dedEPF = pfOn ? round(epfWage * 0.12) + arrearEpf : 0
   const erPF = pfOn ? round(epfWage * 0.12) : 0
