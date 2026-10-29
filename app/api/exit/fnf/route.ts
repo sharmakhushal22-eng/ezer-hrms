@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     if (!upd) return bad('Only a calculated statement can be marked reviewed.', 409)
     const { roleHolders } = await import('@/lib/recruitment/offer-approval-notify')
     const hrs = await roleHolders(sb as any, emp?.company_id || null, ['HR_MANAGER'])
-    await Promise.all(hrs.map(h => notify(h.id, `F&F to approve: ${emp?.full_name} (${emp?.emp_code})`, `Reviewed by ${myName}. Net payable ${rupees(Number(f.net_payable))}.`, '/ess/exit-fnf', 'APPROVAL').catch(() => null)))
+    await Promise.all(hrs.map(h => notify(h.id, `F&F to approve: ${emp?.full_name} (${emp?.emp_code})`, `Reviewed by ${myName}. Net payable ${rupees(Number(f.net_payable))}.`, '/ess?tab=approvals', 'APPROVAL').catch(() => null)))
     await audit(ctx.caller, 'FNF_REVIEWED', f.employee_id, { fnf_id: f.id, net: f.net_payable })
     return NextResponse.json({ ok: true, fnf: upd })
   }
@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
     }
     const { roleHolders } = await import('@/lib/recruitment/offer-approval-notify')
     const fin = await roleHolders(sb as any, emp?.company_id || null, FINANCE)
-    await Promise.all(fin.map(p => notify(p.id, `F&F to pay: ${emp?.full_name} (${emp?.emp_code})`, `Approved by ${myName}. Release ${rupees(Number(f.net_payable))} and mark it paid.`, '/ess/exit-fnf', 'APPROVAL').catch(() => null)))
+    await Promise.all(fin.map(p => notify(p.id, `F&F to pay: ${emp?.full_name} (${emp?.emp_code})`, `Approved by ${myName}. Release ${rupees(Number(f.net_payable))} and mark it paid.`, '/ess?tab=approvals', 'APPROVAL').catch(() => null)))
     await audit(ctx.caller, 'FNF_APPROVED', f.employee_id, { fnf_id: f.id, net: f.net_payable })
     return NextResponse.json({ ok: true, fnf: upd })
   }

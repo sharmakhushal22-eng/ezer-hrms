@@ -27,7 +27,6 @@ import { TeamDirectory } from './TeamDirectory'
 import { RaiseRequest } from './RaiseRequest'
 import { TasksApprovals } from './TasksApprovals'
 import { ExitProcess } from './ExitProcess'
-import { ExitFnf } from './ExitFnf'
 
 const TABS: { k: HrisTab; label: string }[] = [
   { k: 'directory', label: 'Team Directory' },
@@ -36,9 +35,6 @@ const TABS: { k: HrisTab; label: string }[] = [
   // Raise MRF removed from HRIS — an MRF is now raised from Recruitment → MRF tab
   // (same auto-filling form). Kept the pane import guarded below in case it is re-enabled.
   { k: 'exit', label: 'Exit Process' },
-  // Clearance forms, the exits dashboard and F&F — for the departments that clear and the HR,
-  // Payroll and Finance roles (the portal decides: canExitFnf).
-  { k: 'exit-fnf', label: 'Exit Clearance & F&F' },
 ]
 
 interface Props {
@@ -54,8 +50,6 @@ interface Props {
    *  one tab this changes: POST /api/ess/mrf refuses a viewAs caller, so the
    *  form must say so on arrival instead of after it has been filled in. */
   adminMode?: boolean
-  /** The clearing departments, managers and the HR / Payroll / Finance roles. */
-  canExitFnf?: boolean
   notify: (m: string, t?: 'success' | 'error') => void
 }
 
@@ -63,10 +57,10 @@ export function HrisShell(p: Props) {
   return <ToastHost><Shell {...p} /></ToastHost>
 }
 
-function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, adminMode, canExitFnf, notify }: Props) {
+function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, adminMode, notify }: Props) {
   const tabs = useMemo(
-    () => TABS.filter(t => (t.k !== 'approvals' || canApprove) && (t.k !== 'raise-mrf' || canRaiseMrf) && (t.k !== 'exit-fnf' || canExitFnf)),
-    [canApprove, canRaiseMrf, canExitFnf],
+    () => TABS.filter(t => (t.k !== 'approvals' || canApprove) && (t.k !== 'raise-mrf' || canRaiseMrf)),
+    [canApprove, canRaiseMrf],
   )
   const [query, setQuery] = useState('')
   const [reqCount, setReqCount] = useState(0)
@@ -187,11 +181,6 @@ function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, adminMode, canExi
           <Pane k="exit" tab={tab} seen={seen}>
             <ExitProcess api={api} />
           </Pane>
-          {canExitFnf && (
-            <Pane k="exit-fnf" tab={tab} seen={seen}>
-              <ExitFnf api={api} />
-            </Pane>
-          )}
         </main>
       </div>
     </div>

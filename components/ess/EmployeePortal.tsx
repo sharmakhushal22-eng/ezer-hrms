@@ -3243,8 +3243,6 @@ const SECTIONS: NavSection[] = [
       // Raise MRF removed from HRIS — an MRF is now raised from Recruitment → MRF tab
       // (the same auto-filling form), so it no longer appears here.
       { k:'exit',        label:'Exit Process' },
-      // Clearance forms, exits in progress and F&F — only for canExitFnf (see sectionItems).
-      { k:'exit-fnf',    label:'Exit Clearance & F&F' },
     ]},
 
   // ── Role-wise tabs (071) — shown only when /api/ess/menu says so ──
@@ -3577,7 +3575,7 @@ const ESS_KEYWORDS: Record<string, string> = {
   attendance: 'attendance punch regularise regularize', leave: 'leave apply holiday time off',
   inbox: 'messages notifications mail', directory: 'team directory people colleagues employees',
   requests: 'raise request helpdesk ticket', approvals: 'tasks approvals pending approve leave travel resignation offers interviews',
-  exit: 'resign resignation exit separation', 'exit-fnf': 'exit clearance full and final fnf f&f settlement relieving experience letter no dues', company: 'company headcount attrition', reports: 'reports export',
+  exit: 'resign resignation exit separation', company: 'company headcount attrition', reports: 'reports export',
   performance: 'pms performance goals kra appraisal review', social: 'social wall fame appreciate', funzone: 'games fun zone',
 }
 
@@ -3774,7 +3772,6 @@ function NotificationBell({ unread, open, onToggle }: { unread: number; open: bo
 /** Every employee screen the portal can show — the SECTIONS items plus the views reached only
  *  by a link or a button (declaration, directory…). Used to read /ess/<view> from the address. */
 /** Who gets HR Services → Exit Clearance & F&F (beside managers, who clear as HOD). */
-const EXIT_FNF_ROLES = ['IT', 'ADMIN_COMPANY', 'ADMIN_SUPER', 'FINANCE_EXECUTIVE', 'PAYROLL', 'PAYROLL_ADMIN', 'CFO', 'HR_MANAGER', 'HR_HEAD', 'CHRO', 'HR_EXECUTIVE', 'BRANCH_HR', 'RECRUITER']
 const VIEW_KEYS: Set<string> = new Set([
   ...SECTIONS.flatMap(s => s.items.map(i => i.k)),
   'home', 'profile', 'leave', 'inbox', 'vpf', 'nps', 'loans', 'flexi', 'declaration', 'proofs', 'flexiclaims', 'claims', 'attendance',
@@ -4009,10 +4006,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // widening the server instead would hand out the right to raise, which is not
   // a UI decision.
   const canRaiseMrf = essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals
-  // Exit Clearance & F&F: the clearing departments, managers (HOD clearance) and HR / Payroll /
-  // Finance. The server decides what each sees (app/api/exit/*).
-  const canExitFnf = essMenu.super_admin || essMenu.is_rm || essMenu.is_hod || essMenu.roles.some(r => EXIT_FNF_ROLES.includes(r.code))
-  const sectionItems = section.items.filter(i => (i.k !== 'raise-mrf' || canRaiseMrf) && (i.k !== 'exit-fnf' || canExitFnf))
+  const sectionItems = section.items.filter(i => i.k !== 'raise-mrf' || canRaiseMrf)
 
   // Everything the feature search may offer — only what this person can open.
   const searchEntries: SearchEntry[] = []
@@ -4021,7 +4015,6 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     for (const it of sec.items) {
       if ((it as any).needs) continue                              // not built yet — a placeholder
       if (it.k === 'raise-mrf' && !canRaiseMrf) continue
-      if (it.k === 'exit-fnf' && !canExitFnf) continue
       searchEntries.push({ id: `ess:${it.k}`, label: it.label, crumb: sec.items.length > 1 ? `${sec.label} › ${it.label}` : 'My portal', icon: sec.k,
         keywords: `${sec.label.toLowerCase()} ${ESS_KEYWORDS[it.k] || ''}`, run: () => go(it.k) })
     }
@@ -4102,11 +4095,9 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       case 'requests':
       case 'approvals':
       case 'raise-mrf':
-      case 'exit':
-      case 'exit-fnf':      return <HrisShell employeeId={emp.id} tab={view} go={go}
+      case 'exit':          return <HrisShell employeeId={emp.id} tab={view} go={go}
                                               canApprove={essMenu.can.approvals}
                                               canRaiseMrf={canRaiseMrf}
-                                              canExitFnf={canExitFnf}
                                               adminMode={adminMode}
                                               notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />

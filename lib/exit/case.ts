@@ -17,8 +17,9 @@ type Sb = SupabaseClient
 const today = () => new Date().toISOString().slice(0, 10)
 const day = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const who = (e: any) => `${e?.full_name || 'Employee'}${e?.emp_code ? ` (${e.emp_code})` : ''}`
-export const EXIT_LINK = '/ess/exit-fnf'
 export const APPROVALS_LINK = '/ess?tab=approvals'
+// The clearance forms sit in Tasks & Approvals (the Exit Clearance & F&F tab was removed).
+export const EXIT_LINK = APPROVALS_LINK
 
 async function bell(sb: Sb, employeeId: string | null | undefined, title: string, body: string, link: string, category = 'APPROVAL') {
   if (!employeeId) return
@@ -231,7 +232,7 @@ export async function computeFnf(sb: Sb, resignationId: string, o: { force?: boo
   if (!existing && data) {
     const payroll = await roleHolders(sb as any, emp?.company_id || null, ['PAYROLL', 'PAYROLL_ADMIN'])
     const { data: e } = await sb.from('employees').select('full_name, emp_code').eq('id', res.employee_id).maybeSingle()
-    await Promise.all(payroll.map(p => bell(sb, p.id, `F&F ready to review: ${who(e)}`, `All five clearances are in. Net payable ${rupees(t.net)}. Review it in HR Services → Exit Clearance & F&F.`, EXIT_LINK)))
+    await Promise.all(payroll.map(p => bell(sb, p.id, `F&F ready to review: ${who(e)}`, `All five clearances are in. Net payable ${rupees(t.net)}.`, EXIT_LINK)))
     const hrs = await roleHolders(sb as any, emp?.company_id || null, ['HR_MANAGER'])
     await Promise.all(hrs.map(p => bell(sb, p.id, `All clearances done: ${who(e)}`, `F&F calculated: net payable ${rupees(t.net)}.`, EXIT_LINK)))
     if (!isSilent(reason.code)) await bell(sb, res.employee_id, 'Your exit clearance is complete', 'All departments have cleared your exit. Your Full & Final settlement is being prepared.', '/ess/exit', 'COMPLIANCE')
@@ -261,7 +262,7 @@ export async function runExitDaily(sb: Sb, now = new Date()): Promise<ExitDaily>
       const level = clearanceEscalation(c.started_at, t)
       if (level === 'NONE' || c.escalated_to === level || (c.escalated_to === 'HR_HEAD')) continue
       const to = await roleHolders(sb as any, c.company_id, [level])
-      await Promise.all(to.map(p => bell(sb, p.id, `Clearance overdue: ${who(c.employees)}`, `${CLEARANCE_FORMS[c.dept as Dept].label} has not cleared in ${level === 'HR_HEAD' ? 7 : 5} business days.${level === 'HR_HEAD' ? ' You can override it with a reason in Exit Clearance & F&F.' : ''}`, EXIT_LINK)))
+      await Promise.all(to.map(p => bell(sb, p.id, `Clearance overdue: ${who(c.employees)}`, `${CLEARANCE_FORMS[c.dept as Dept].label} has not cleared in ${level === 'HR_HEAD' ? 7 : 5} business days.${level === 'HR_HEAD' ? ' You can override it with a reason in Tasks & Approvals.' : ''}`, EXIT_LINK)))
       await sb.from('exit_clearance').update({ escalated_to: level, updated_at: now.toISOString() }).eq('id', c.id)
       out.clearanceEscalated++
     }
