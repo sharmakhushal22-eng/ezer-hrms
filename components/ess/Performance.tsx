@@ -55,7 +55,8 @@ import { autoLogFor, CONFIRM_LABEL, CONFIRM_WHY, type ConfirmStage } from '@/lib
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { reached, WORKFLOW } from '@/lib/pms/status'
-import { bandsFromScale, type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
+import { bandsFromScale, compareRatings,
+         type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
 import { stageStates, currentStage, settled, STAGES, DEFAULT_RULES,
          type Progress, type StageKey, type Rules } from '@/lib/pms/cycle'
 import { DEFAULT_FLAG_RULES, type Flag, type FlagRules } from '@/lib/pms/employment'
@@ -1784,6 +1785,24 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     const missing = lines.filter(l => l.goalId && kraRate[l.goalId]?.rating == null)
     if (!lines.length || missing.length) {
       setMsg(`Rate every KRA before sending it on — ${missing.length} of ${lines.length} still have no rating from you.`)
+      return
+    }
+    // A DIFFERENCE FROM THEIR OWN RATING NEEDS A REASON. The panel disables
+    // the button for this, but a disabled button is a suggestion: the state
+    // can be stale by the time the click lands, and this is the function that
+    // actually writes the row. Same check, from the same helper, so the two
+    // cannot drift into disagreeing about what counts as unexplained.
+    const unexplained = compareRatings(lines.filter(l => l.goalId).map(l => ({
+      goalId: l.goalId!, title: `${l.seqNo}. ${l.title || 'untitled'}`,
+      weightage: Number(l.weightage) || 0,
+      self: l.selfRating ?? null,
+      mine: kraRate[l.goalId!]?.rating ?? null,
+      comment: kraRate[l.goalId!]?.comment ?? null,
+    }))).missingReasons
+    if (unexplained.length) {
+      setMsg('Say why where your rating differs from theirs — '
+        + `${unexplained.length} still unexplained: `
+        + unexplained.map(m => m.title).join(', ') + '.')
       return
     }
 

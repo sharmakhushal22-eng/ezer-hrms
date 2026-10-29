@@ -257,3 +257,100 @@ export function canManagerRate(selfSubmitted: boolean): Gate {
 }
 
 export interface Gate { open: boolean; because: string }
+
+// ── the rater's own view: theirs, mine, and the distance between ─────────
+
+export interface RatingCompare {
+  goalId: string
+  title: string
+  weightage: number
+  /** What the employee said about themselves. */
+  self: number | null
+  /** What this rater is saying. */
+  mine: number | null
+  /**
+   * mine − self. POSITIVE MEANS YOU RATED THEM HIGHER than they rated
+   * themselves.
+   *
+   * The opposite sign to gap() above, which computes self − final because it
+   * speaks to the employee ("you rated yourself higher than your manager
+   * did"). Two functions with opposite conventions is a trap, so the
+   * direction is stated in both and neither is inferred from the other.
+   */
+  delta: number | null
+  flag: GapFlag
+  /**
+   * Does this line need a written reason?
+   *
+   * Any difference at all. Ratings are whole numbers on the band scale, so a
+   * delta of 1 is a whole band — "exceeds" against "meets" — and that is a
+   * judgement the employee will want explained. An unexplained downgrade is
+   * the single most common thing an appraisal is disputed over, and the
+   * cheapest moment to write the sentence is while the rating is being made.
+   */
+  needsReason: boolean
+  hasReason: boolean
+}
+
+export interface CompareSummary {
+  lines: RatingCompare[]
+  /** Weighted, on the rating scale. Null until every line is rated. */
+  selfScore: number | null
+  myScore: number | null
+  /** myScore − selfScore. Positive means you scored them higher overall. */
+  delta: number | null
+  rated: number
+  total: number
+  agreed: number
+  higher: number
+  lower: number
+  /** Lines that differ and carry no explanation. */
+  missingReasons: RatingCompare[]
+}
+
+/**
+ * Compare this rater's scores with the employee's own, line by line.
+ *
+ * Built on score() and gap() rather than recomputing: the weighted mean and
+ * the gap thresholds are already defined once, and a second definition of
+ * "major gap" that disagreed with the employee's own screen would be worse
+ * than no comparison at all.
+ */
+export function compareRatings(
+  rows: { goalId: string; title: string; weightage: number
+          self: number | null; mine: number | null; comment?: string | null }[],
+): CompareSummary {
+  const lines: RatingCompare[] = rows.map(r => {
+    const delta = r.self == null || r.mine == null
+      ? null : Math.round((r.mine - r.self) * 100) / 100
+    // gap() takes (self, final) and returns self − final, so the arguments go
+    // in that order and only the FLAG is used from it — the delta here keeps
+    // this function's own direction.
+    const flag = gap(r.self, r.mine).flag
+    const needsReason = delta !== null && delta !== 0
+    return {
+      goalId: r.goalId, title: r.title, weightage: r.weightage,
+      self: r.self, mine: r.mine, delta, flag,
+      needsReason, hasReason: !!(r.comment && r.comment.trim()),
+    }
+  })
+
+  const asLines = rows.map(r => ({
+    goalId: r.goalId, title: r.title, category: 'BUSINESS' as Category,
+    weightage: r.weightage, self: r.self, final: r.mine,
+  }))
+  const selfScore = score(asLines, 'self')
+  const myScore = score(asLines, 'final')
+
+  return {
+    lines, selfScore, myScore,
+    delta: selfScore == null || myScore == null
+      ? null : Math.round((myScore - selfScore) * 100) / 100,
+    rated: lines.filter(l => l.mine != null).length,
+    total: lines.length,
+    agreed: lines.filter(l => l.delta === 0).length,
+    higher: lines.filter(l => (l.delta ?? 0) > 0).length,
+    lower: lines.filter(l => (l.delta ?? 0) < 0).length,
+    missingReasons: lines.filter(l => l.needsReason && !l.hasReason),
+  }
+}

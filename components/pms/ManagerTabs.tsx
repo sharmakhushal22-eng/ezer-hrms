@@ -26,7 +26,8 @@ import { teamQueue, finaliseQueue, teamStats, distribution,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
 import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
-         DEFAULT_BANDS, type Band, type Line } from '@/lib/pms/scoring'
+         compareRatings, DEFAULT_BANDS,
+         type Band, type Line, type CompareSummary } from '@/lib/pms/scoring'
 import { canPublishResult, CONFIRM_LABEL, CONFIRM_WHY,
          type Log, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
@@ -546,6 +547,130 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
  */
 const BREAK = { overflowWrap: 'anywhere' as const, minWidth: 0 }
 
+/** The id of the reason field for one KRA, so the summary below can send the
+ *  rater to the exact box that is empty rather than make them hunt for it. */
+const whyId = (goalId: string) => `kra-why-${goalId}`
+
+/**
+ * THE COMPARISON, while the rating is still being made.
+ *
+ * Requested: "there should be an interactive panel that shows a
+ * representation of what they self rate them, what you rate them, what's the
+ * difference between both ratings, and ask the reason for rating. it is like
+ * a window summary."
+ *
+ * WHY IT SITS HERE AND NOT ON A REPORT. The gap between a self rating and a
+ * manager's rating already exists everywhere in this module — §3.6 computes
+ * it, the employee's own screen shows it, the calibration view aggregates it.
+ * Every one of those is AFTER the fact. By then the manager has moved on and
+ * the employee is reading a number nobody explained.
+ *
+ * Shown at the moment of rating, the same arithmetic does something else: it
+ * is the last chance to notice that you have just marked somebody two bands
+ * below their own reading of the same quarter, and to write the sentence
+ * while the reason is still in your head. That sentence is the whole point.
+ * An unexplained downgrade is what an appraisal gets disputed over.
+ *
+ * NOT A SECOND OPINION ON THE NUMBERS. Everything here comes from
+ * compareRatings(), which is score() and gap() — the same weighted mean and
+ * the same thresholds the employee will be shown. A panel that computed its
+ * own "major gap" would eventually disagree with the employee's screen about
+ * one number, and then both are worthless.
+ */
+function RatingSummary({ s, onJump }: {
+  s: CompareSummary
+  /** Focus the reason box for a KRA. The "interactive" part: a row that says
+   *  a reason is missing is also the control that takes you to it. */
+  onJump?: (goalId: string) => void
+}) {
+  if (!s.total) return null
+  const nf = (v: number | null) => v === null ? '—' : v.toFixed(2)
+  // Sign is stated, not left to a minus sign the reader has to interpret
+  // against a convention they do not know. Up/down is also the direction
+  // people actually say out loud.
+  const arrow = (d: number | null) =>
+    d === null ? '' : d > 0 ? `+${d} up` : d < 0 ? `${d} down` : 'same'
+
+  return (
+    <Card title="Your rating against theirs"
+          sub={s.rated === 0
+            ? 'Fills in as you rate. They will see this same comparison.'
+            : `${s.rated} of ${s.total} rated · ${s.agreed} the same, ${s.higher} higher, ${s.lower} lower than they said.`}>
+      <div className="grid g3">
+        <Stat label="They rated themselves" value={nf(s.selfScore)}
+              note="Weighted, their own numbers" />
+        <Stat label="You rate them" value={nf(s.myScore)}
+              note={s.rated < s.total ? `${s.total - s.rated} still unrated` : 'All KRAs rated'} />
+        <Stat tone={s.lines.some(l => l.flag === 'MAJOR_GAP') ? 'warn' : undefined}
+              label="Difference" value={s.delta === null ? '—' : arrow(s.delta)}
+              note={s.delta === null ? 'Rate every KRA to compare'
+                    : s.delta === 0 ? 'You read the period the same way'
+                    : s.delta < 0 ? 'You are scoring them below their own reading'
+                    : 'You are scoring them above their own reading'} />
+      </div>
+
+      <div className="tblwrap" style={{ marginTop: 12 }}>
+        <table>
+          <thead>
+            <tr>
+              <th>KRA</th><th className="num">Wt</th>
+              <th className="num">Their rating</th><th className="num">Your rating</th>
+              <th>Difference</th><th>Your reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {s.lines.map(l => (
+              <tr key={l.goalId}>
+                <td style={{ fontWeight: 600, ...BREAK }}>{l.title}</td>
+                <td className="num">{l.weightage}</td>
+                <td className="num">{l.self ?? '—'}</td>
+                <td className="num">{l.mine ?? <span className="k">not yet</span>}</td>
+                <td>
+                  {l.delta === null ? <span className="k">—</span>
+                    : l.flag === 'MAJOR_GAP'
+                      ? <span className="pill p-amber">{arrow(l.delta)}</span>
+                    : l.flag === 'MINOR_GAP'
+                      ? <span className="pill p-blue">{arrow(l.delta)}</span>
+                      : <span className="pill p-green">agreed</span>}
+                </td>
+                <td>
+                  {!l.needsReason ? <span className="k">not needed</span>
+                    : l.hasReason ? <span className="pill p-green">given</span>
+                    : (
+                      <button type="button" className="btn ghost sm"
+                              onClick={() => onJump?.(l.goalId)}>
+                        Say why →
+                      </button>
+                    )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {s.missingReasons.length > 0 && (
+        <div className="banner b-amber" style={{ marginTop: 12, marginBottom: 0 }}>
+          <span aria-hidden="true">!</span>
+          <div>
+            <b>{s.missingReasons.length === 1
+              ? 'One rating differs from theirs and has no reason yet.'
+              : `${s.missingReasons.length} ratings differ from theirs with no reason yet.`}</b>
+            <div className="k" style={{ marginTop: 3 }}>
+              {/* Says why the box is being asked for. A required field with
+                  no stated purpose gets filled with "as discussed". */}
+              They will see your number next to their own. A difference you
+              have not explained is the single most common thing an appraisal
+              is disputed over — and you will not remember the reason in
+              March.
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export interface KraLine {
   /**
    * The goal's own id. pms_reviews is UNIQUE on
@@ -618,6 +743,23 @@ export function KraDetail({ member, lines, loading, onClose,
 }) {
   const total = (lines ?? []).reduce((s, l) => s + (Number(l.weightage) || 0), 0)
   const rated = (lines ?? []).filter(l => l.selfRating != null).length
+
+  // THE COMPARISON, recomputed on every keystroke so the panel moves with the
+  // chips. Only the lines that can actually be rated are in it: a KRA with no
+  // goalId cannot be written to pms_reviews at all (the table is UNIQUE on
+  // the goal), so including it would demand a reason for a rating that has
+  // nowhere to go.
+  const cmp = compareRatings((lines ?? []).filter(l => l.goalId).map(l => ({
+    goalId: l.goalId!,
+    // NUMBERED, matching the heading on the card above ("3. Tech").
+    // Titles repeat in real sets — four KRAs called "Tech" is normal —
+    // so a blocker naming them by title alone says nothing about WHICH.
+    title: `${l.seqNo}. ${l.title || 'untitled'}`,
+    weightage: Number(l.weightage) || 0,
+    self: l.selfRating ?? null,
+    mine: rate?.[l.goalId!]?.rating ?? null,
+    comment: rate?.[l.goalId!]?.comment ?? null,
+  })))
 
   return (
     <Card title={`${member.name} — ${member.code}`}
@@ -695,8 +837,16 @@ export function KraDetail({ member, lines, loading, onClose,
                         )
                       })}
                     </div>
-                    <input style={{ marginTop: 6 }}
-                           placeholder="A line on why — they will read this."
+                    <input style={{ marginTop: 6 }} id={whyId(l.goalId)}
+                           aria-label={`Why you rated ${l.title} this way`}
+                           placeholder={
+                             // The ask changes when the numbers disagree,
+                             // because that is when the sentence matters.
+                             rate?.[l.goalId]?.rating != null
+                             && l.selfRating != null
+                             && rate[l.goalId].rating !== l.selfRating
+                               ? `Why ${rate[l.goalId].rating} and not their ${l.selfRating}? They will read this.`
+                               : 'A line on why — they will read this.'}
                            value={rate?.[l.goalId!]?.comment ?? ''}
                            onChange={e => onRate(l.goalId!, { comment: e.target.value })} />
                   </div>
@@ -711,6 +861,21 @@ export function KraDetail({ member, lines, loading, onClose,
           queue to do it is how the two came apart in the first place. */}
       {myRung && onApprove && (
         <>
+          {/* The summary of the judgement just made, before the act that
+              records it. Placed between the KRAs and the approval because
+              that is the order the decision happens in. */}
+          <div style={{ marginTop: 14 }}>
+            <RatingSummary s={cmp} onJump={g => {
+              const el = document.getElementById(whyId(g))
+              // scrollIntoView then focus, not focus alone: focus scrolls the
+              // box into view at the very edge of the viewport, which hides
+              // the KRA it belongs to and leaves the rater typing a reason
+              // for something they cannot see.
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              el?.focus({ preventScroll: true })
+            }} />
+          </div>
+
           {onConfirm && (
             <label className="checkline" style={{ marginTop: 14 }}
                    title={CONFIRM_LABEL[myRung]}>
@@ -739,7 +904,14 @@ export function KraDetail({ member, lines, loading, onClose,
             const hi = bands.length ? Math.max(...bands.map(x => x.value)) : 5
             const fr = finalRating === '' ? null : Number(finalRating)
             const frOk = !finalises || (fr !== null && fr >= lo && fr <= hi)
-            const ready = allRated && ticked && frOk
+            // EVERY DIFFERENCE IS EXPLAINED before it goes on. Enforced here
+            // and not only suggested in the panel: a reason that can be
+            // skipped is a reason that is skipped, and the record then has a
+            // number with nothing behind it. Agreeing with the employee needs
+            // no justification, so this blocks nobody who scored them as they
+            // scored themselves.
+            const reasoned = cmp.missingReasons.length === 0
+            const ready = allRated && ticked && frOk && reasoned
             return (
               <>
                 {!ready && (
@@ -751,6 +923,11 @@ export function KraDetail({ member, lines, loading, onClose,
                         {!allRated && (
                           <li>Rate every KRA — {rated.length} of {total} done. The
                             next rung cannot settle anything until yours are in.</li>
+                        )}
+                        {!reasoned && (
+                          <li>Say why where your rating differs from theirs —
+                            {' '}{cmp.missingReasons.length} still unexplained
+                            {' '}({cmp.missingReasons.map(m => m.title).join(', ')}).</li>
                         )}
                         {!ticked && <li>Confirm the one-to-one above.</li>}
                         {!frOk && <li>Give the final rating ({lo}&ndash;{hi}).
