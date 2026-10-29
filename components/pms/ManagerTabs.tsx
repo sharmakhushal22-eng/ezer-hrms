@@ -26,7 +26,7 @@ import { teamQueue, finaliseQueue, teamStats, distribution, initials,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
 import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
-         compareRatings, DEFAULT_BANDS,
+         compareRatings, ratingTone, toneVars, DEFAULT_BANDS,
          type Band, type Line, type CompareSummary } from '@/lib/pms/scoring'
 import { canPublishResult, CONFIRM_LABEL, CONFIRM_WHY,
          type Log, type ConfirmStage } from '@/lib/pms/oneToOne'
@@ -925,7 +925,10 @@ function RatingChips({ bands, value, onPick, label }: {
                   // COLOURED ONLY ONCE CHOSEN. Painting all five turns the
                   // control into a traffic light and pulls the eye to the
                   // green one, which is a thumb on the scale.
-                  className={on ? `chip sel b${bd.value}` : 'chip'}
+                  className={on ? 'chip sel ramp' : 'chip'}
+                  // The ramp position for THIS band, so the chosen chip is
+                  // the same colour as the card it scores.
+                  style={on ? toneVars(ratingTone(bd.value, bands)) : undefined}
                   title={bd.label}
                   onKeyDown={e => {
                     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') move(i + 1, e)
@@ -1243,14 +1246,19 @@ export function KraDetail({ member, lines, loading, onClose,
               // "needs" outranks "rated": a rating whose difference is
               // unexplained is the state that stops the whole set, so it is
               // the one the stripe should be showing.
-              const stripe = c?.needsReason && !c.hasReason ? ' needs'
-                           : mine != null ? ' rated' : ''
+              // THE SCORE IS THE COLOUR. `scored` paints the stripe and a
+              // wash from the ramp; `needs` adds the blocking ring on top,
+              // because an unexplained difference has to stay visible on a
+              // card that is already carrying a colour.
+              const tone = ratingTone(mine, bands)
+              const stripe = (tone ? ' scored' : mine != null ? ' rated' : '')
+                           + (c?.needsReason && !c.hasReason ? ' needs' : '')
               const foldable = !!(rating && l.goalId)
               const isFolded = !!(l.goalId && folded[l.goalId])
               const bl = l.selfRating == null ? null : bandFor(l.selfRating, bands)
               return (
               <div key={l.seqNo} className={`card kcard${stripe}${isFolded ? ' folded' : ''}`}
-                   style={{ margin: 0 }}>
+                   style={{ margin: 0, ...toneVars(tone) }}>
                 {/* THE HEAD IS THE FOLD CONTROL. The whole row is the hit
                     target rather than a chevron somebody has to aim at —
                     and when there is nothing to fold (a read-only viewer,

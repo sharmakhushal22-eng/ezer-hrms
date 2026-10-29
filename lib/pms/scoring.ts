@@ -354,3 +354,84 @@ export function compareRatings(
     missingReasons: lines.filter(l => l.needsReason && !l.hasReason),
   }
 }
+
+// ── the rating ramp: red at the bottom, yellow in the middle, green at top ─
+
+/**
+ * WHERE A RATING SITS ON THE RED-YELLOW-GREEN RAMP.
+ *
+ * Requested: a KRA rated 1 shows red, 3 yellow, 5 green, and the values
+ * between them blend — so the colour of a card answers "how did this go"
+ * before a single word is read.
+ *
+ * NOT 1..5. THE SCALE IS POLICY CONFIGURATION. pms_rating_scale sets the
+ * bands per policy, bandsFromScale reads them, and a three-point or
+ * ten-point scale is a setting away. Hardcoding the midpoint at 3 would put
+ * yellow on "exceeds" for a four-point scale and on the bottom band but one
+ * for a ten-point one. So the position is normalised against the bands that
+ * are actually in play: lowest band = 0, highest = 1, and the midpoint is
+ * wherever the policy's own middle falls.
+ *
+ * TWO SEGMENTS, NOT ONE. Mixing red straight into green passes through a
+ * muddy olive at the midpoint rather than yellow, which is the opposite of
+ * what the middle band should look like. So the ramp is red→yellow for the
+ * bottom half and yellow→green for the top, and this returns which of the
+ * two segments the value is in along with how far along it sits.
+ *
+ * TOKENS, NOT COLOURS. It names --ez-* custom properties and never a hex
+ * value: that is what makes the ramp follow the theme, so a card that is
+ * amber in daylight is the dark palette's amber at night rather than a
+ * frozen daytime swatch. The mixing itself is CSS color-mix(), which is
+ * also why the endpoints are returned rather than a blended result —
+ * nothing here can resolve a custom property.
+ */
+export interface RatingTone {
+  /** The --ez-* token the segment starts at. */
+  from: string
+  /** The token it ends at. */
+  to: string
+  /** How far along that segment, 0-100, for color-mix(). */
+  mix: number
+}
+
+// The ramp's three stops, as the PMS-local tokens that define them. Two
+// forward to --ez-critical and --ez-positive; the middle one cannot, because
+// --ez-warning is a dark orange-brown in daylight (picked for text contrast)
+// and a ramp built on it reads brown where it should read yellow. See the
+// block in pms.css.
+export const TONE_LOW = '--pms-ramp-low'
+export const TONE_MID = '--pms-ramp-mid'
+export const TONE_HIGH = '--pms-ramp-high'
+
+export function ratingTone(
+  rating: number | null | undefined, bands = DEFAULT_BANDS,
+): RatingTone | null {
+  if (rating === null || rating === undefined || Number.isNaN(Number(rating))) return null
+  if (!bands.length) return null
+  const vals = bands.map(b => b.value)
+  const lo = Math.min(...vals), hi = Math.max(...vals)
+  // A single-band scale has no ramp to sit on. Neither red nor green is
+  // honest about a scale with one rung, so the card simply stays neutral.
+  if (hi === lo) return null
+  // Clamped: a rating outside the scale is a data problem, not a reason to
+  // compute a colour past the end of the ramp.
+  const t = Math.min(1, Math.max(0, (Number(rating) - lo) / (hi - lo)))
+  const pct = (x: number) => Math.round(x * 1000) / 10
+  return t <= 0.5
+    ? { from: TONE_LOW, to: TONE_MID, mix: pct(t * 2) }
+    : { from: TONE_MID, to: TONE_HIGH, mix: pct((t - 0.5) * 2) }
+}
+
+/**
+ * The same thing as inline style custom properties, which is the only shape
+ * a component can actually use. Returned as a plain object so a caller can
+ * spread it next to its own styles.
+ */
+export function toneVars(t: RatingTone | null): Record<string, string> {
+  if (!t) return {}
+  return {
+    '--kra-from': `var(${t.from})`,
+    '--kra-to': `var(${t.to})`,
+    '--kra-mix': `${t.mix}%`,
+  }
+}

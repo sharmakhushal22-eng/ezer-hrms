@@ -45,6 +45,20 @@
   --pms-exit-fg:         #9A3412;
   --pms-exit-bg:         #FFEDD5;
 
+  /* THE SCORE RAMP — worst red, middle yellow, best green.
+   *
+   * Two of the three are the semantic tokens; the middle one cannot be.
+   * --ez-warning is #B45309 in daylight, a dark orange-brown picked for
+   * 5.02:1 as TEXT, and a ramp built on it reads brown at the midpoint
+   * rather than yellow. These are FILLS — the card text sits on a 9% wash
+   * of them, never on the colour itself — so the midpoint is free to be
+   * the yellow the ramp needs. Same shape as the row washes above: local
+   * tokens with their own light and dark values, so the ramp still follows
+   * the theme. */
+  --pms-ramp-low:  var(--ez-critical);
+  --pms-ramp-mid:  #EAB308;
+  --pms-ramp-high: var(--ez-positive);
+
   font-size: 13px;
   line-height: 1.5;
   color: var(--ez-ink);
@@ -72,6 +86,8 @@
     --pms-row-notice-hover:rgba(234,179,8,.16);
     --pms-exit-fg:         #FDBA74;
     --pms-exit-bg:         rgba(249,115,22,.18);
+  /* Brighter on a dark ground, as every other state token is. */
+  --pms-ramp-mid:        #FBBF24;
   }
 }
 :root[data-ez-theme="dark"] .pms {
@@ -81,6 +97,8 @@
   --pms-row-notice-hover:rgba(234,179,8,.16);
   --pms-exit-fg:         #FDBA74;
   --pms-exit-bg:         rgba(249,115,22,.18);
+  /* Brighter on a dark ground, as every other state token is. */
+  --pms-ramp-mid:        #FBBF24;
 }
 
 /* ── tabs ─────────────────────────────────────────────────────────────── */
@@ -535,10 +553,53 @@
   border-left: 3px solid var(--ez-line);
   transition: border-left-color .2s ease, background .2s ease;
 }
+
+/* ── THE SCORE, AS COLOUR ──────────────────────────────────────────────────
+ *
+ * Requested: worst rating red, middle yellow, best green, blending through
+ * the values between — so a card answers "how did this go" before a word of
+ * it is read.
+ *
+ * The two endpoints and the blend position arrive as custom properties from
+ * ratingTone(), which normalises against the POLICY'S bands rather than
+ * assuming 1-5. color-mix does the blending here rather than JavaScript
+ * because the endpoints are --ez-* tokens: mixing them in CSS means the
+ * ramp follows the theme, and a card that is amber in daylight is the dark
+ * palette's amber at night rather than a frozen daytime swatch.
+ *
+ * oklab, not sRGB. Mixing #C0201F into #D97706 in sRGB dips through a dull
+ * brown around the midpoint; oklab holds the chroma, which is the whole
+ * point of a ramp somebody is meant to read at a glance. */
+.pms .kcard.scored {
+  --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  border-left-color: var(--kra-tone);
+  /* A WASH, NOT A FILL. 9% keeps every one of --ez-ink, --ez-ink-soft and
+   * --ez-muted legible on top of it; a saturated card would make the KRA
+   * title fight its own background. */
+  background: color-mix(in oklab, var(--kra-tone) 9%, var(--ez-surface));
+}
+
+/* An unexplained difference is the one state that stops the whole set — so
+ * it has to stay visible on a card that is already carrying a colour.
+ *
+ * IT CANNOT USE THE BACKGROUND ANY MORE. It used to wash the card amber,
+ * which now means "rated in the middle of the scale": a 3 and a blocked
+ * card would have looked identical. So blocking moved to the ring, which
+ * the score never uses, and the stripe keeps saying what was scored. */
+.pms .kcard.needs {
+  /* THREE SIDES, NOT THE SHORTHAND. `border-color` sets all four edges
+   * including the left one — which is the score stripe — so a blocked card
+   * rated 1, 2 or 3 all came out the same amber and the ramp was invisible
+   * exactly where it mattered most. Measured in the browser: three
+   * different ratings, one identical rgb(180,83,9). */
+  border-top-color: var(--ez-warning);
+  border-right-color: var(--ez-warning);
+  border-bottom-color: var(--ez-warning);
+  box-shadow: 0 0 0 1px var(--ez-warning);
+}
+/* Rated but not yet scored on the ramp — no goal id, so no rating can be
+ * written at all. Neutral rather than green: nothing was judged. */
 .pms .kcard.rated { border-left-color: var(--ez-positive); }
-/* An unexplained difference from the employee's own rating is the one state
- * that stops the whole set, so it outranks "rated" on the stripe. */
-.pms .kcard.needs { border-left-color: var(--ez-warning); background: var(--ez-warning-tint); }
 
 /* The rating chips, coloured by what the number MEANS once chosen.
  * Unselected they stay neutral — colouring all five turns the control into a
@@ -546,11 +607,27 @@
 .pms .chip { transition: transform .12s ease, background .12s ease, border-color .12s ease; }
 .pms .chip:hover:not(.sel) { border-color: var(--ez-brand); color: var(--ez-brand); }
 .pms .chip:active { transform: scale(.94); }
-.pms .chip.sel.b5 { background: var(--ez-positive);   border-color: var(--ez-positive); }
-.pms .chip.sel.b4 { background: var(--ez-brand);      border-color: var(--ez-brand); }
-.pms .chip.sel.b3 { background: var(--ez-brand-deep); border-color: var(--ez-brand-deep); }
-.pms .chip.sel.b2 { background: var(--ez-warning);    border-color: var(--ez-warning); }
-.pms .chip.sel.b1 { background: var(--ez-critical);   border-color: var(--ez-critical); }
+/* THE CHOSEN CHIP TAKES THE SAME RAMP as the card it scores, so the control
+ * and its consequence are never two different colours. The old rule was five
+ * fixed classes — .b1 red, .b2 amber, .b3 BLUE, .b4 blue, .b5 green — which
+ * was neither the requested ramp nor survivable: .b7 on a ten-point policy
+ * scale matched nothing and the chip rendered unselected-looking. */
+.pms .chip.sel.ramp {
+  /* A TINT AND A RING, NOT A FILL — because the ramp passes through
+   * yellow. The old rule filled the chip and inherited .chip.sel's white
+   * text, which is 5.4:1 on the red end and about 1.9:1 on a yellow one:
+   * the middle of the scale would have been the least readable chip on the
+   * screen. A 20% wash takes --ez-ink at better than 12:1 the whole way
+   * along, and the ring carries the hue at full strength.
+   *
+   * inset box-shadow rather than a 2px border: a thicker border would
+   * resize the chip by a pixel as it is chosen and nudge the row. */
+  --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  background: color-mix(in oklab, var(--kra-tone) 20%, var(--ez-surface));
+  border-color: var(--kra-tone);
+  box-shadow: inset 0 0 0 1px var(--kra-tone);
+  color: var(--ez-ink);
+}
 
 /* What the number you just picked actually means, in words, beside it. The
  * band labels existed only in a title attribute — invisible on touch, and on

@@ -210,11 +210,22 @@ test('the band name is shown, not only hovered', () => {
 test('an unselected chip is not coloured', () => {
   // Painting all five turns the control into a traffic light and pulls the
   // eye to the green one, which is a thumb on the scale.
-  assert.match(MGR, /on \? `chip sel b\$\{bd\.value\}` : 'chip'/,
-    'the band colour is applied to unselected chips too')
+  assert.match(MGR, /on \? 'chip sel ramp' : 'chip'/,
+    'the ramp class is applied to unselected chips too')
+  // The colour itself rides on custom properties, so it is doubly gated:
+  // an unselected chip carries neither the class nor the variables.
+  assert.match(MGR, /style=\{on \? toneVars\(ratingTone\(bd\.value, bands\)\) : undefined\}/,
+    'the ramp variables are set on unselected chips')
+  assert.match(CSS, /\.chip\.sel\.ramp \{/, 'the selected chip has no colour')
+})
+
+test('the chip colour is not five hardcoded classes', () => {
+  // It was .b1 red .b2 amber .b3 BLUE .b4 blue .b5 green — neither the
+  // requested ramp nor survivable: .b7 on a ten-point policy scale matched
+  // no rule at all and the chip rendered looking unselected.
   for (const n of [1, 2, 3, 4, 5]) {
-    assert.match(CSS, new RegExp(`\\.chip\\.sel\\.b${n}`),
-      `band ${n} has no colour`)
+    assert.ok(!new RegExp(`\\.chip\\.sel\\.b${n}\\b`).test(CSS),
+      `.chip.sel.b${n} is still a fixed class, so the scale is hardcoded`)
   }
 })
 
@@ -238,13 +249,35 @@ test('progress is only shown to somebody who can make it', () => {
     'the progress bar renders for read-only viewers')
 })
 
-test('an unexplained difference outranks "rated" on the stripe', () => {
-  // It is the state that stops the whole set, so it is the one the stripe
-  // should be showing.
-  const m = MGR.match(/const stripe = [\s\S]{0,180}?''\n/)
-  assert.ok(m, 'the stripe logic moved; this test needs updating')
-  assert.ok(m![0].indexOf('needs') < m![0].indexOf('rated'),
-    `"rated" is tested before "needs", so a blocked KRA shows green: ${m![0]}`)
+test('a blocked KRA stays visibly blocked once the card carries a score', () => {
+  // THE RULE SURVIVED A CHANGE OF MECHANISM. It used to be a priority —
+  // "needs" beat "rated" for the one stripe colour. The stripe now shows
+  // the SCORE on a red-yellow-green ramp, so the two signals no longer
+  // compete for it: `needs` is appended alongside `scored`, not instead of
+  // it, and it marks the card with a ring.
+  // Sliced to the next declaration rather than matched with a non-greedy
+  // window: the expression spans two lines and both of them end in `'')`,
+  // so a lazy match stopped at the first and never saw the part under test.
+  const i = MGR.indexOf('const stripe = ')
+  assert.ok(i > 0, 'the stripe logic moved; this test needs updating')
+  const expr = MGR.slice(i, MGR.indexOf('const foldable', i))
+  assert.match(expr, /\+ \(c\?\.needsReason && !c\.hasReason \? ' needs' : ''\)/,
+    'the blocking state replaces the score colour instead of adding to it')
+  // And it cannot go back to using the background: a wash now means "rated
+  // in the middle of the scale", so an amber card and a 3 would be the
+  // same picture.
+  const needs = CSS.slice(CSS.indexOf('.pms .kcard.needs {'),
+                          CSS.indexOf('}', CSS.indexOf('.pms .kcard.needs {')))
+  assert.ok(!/background/.test(needs),
+    'the blocked state paints the background, which now means the score')
+  assert.match(needs, /border-top-color: var\(--ez-warning\)/,
+    'the blocked state has no marking of its own')
+  // AND IT MUST NOT USE THE SHORTHAND. `border-color` includes the left
+  // edge, which is the score stripe: with it, a blocked KRA rated 1, 2 or 3
+  // all rendered the same amber and the ramp vanished exactly where the
+  // reviewer most needed it.
+  assert.ok(!/(^|[^-])border-color:/.test(needs),
+    'the blocked state uses the border-color shorthand and erases the score stripe')
 })
 
 test('the reason prompt names the two numbers when they differ', () => {
