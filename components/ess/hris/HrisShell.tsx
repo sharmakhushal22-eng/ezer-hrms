@@ -20,7 +20,7 @@ import './hris.css'
 // The same token helper RoleTabs used, so these calls are byte-identical.
 import { authToken } from '@/lib/rms/client'
 import type { HrisTab } from './types'
-import { Ic } from './icons'
+import { Ic, type IconKey } from './icons'
 import { ToastHost } from './ui'
 import { RaiseMrfSection } from '@/components/ess/RoleTabs'
 import { TeamDirectory } from './TeamDirectory'
@@ -28,13 +28,13 @@ import { RaiseRequest } from './RaiseRequest'
 import { TasksApprovals } from './TasksApprovals'
 import { ExitProcess } from './ExitProcess'
 
-const TABS: { k: HrisTab; label: string }[] = [
-  { k: 'directory', label: 'Team Directory' },
-  { k: 'requests', label: 'Raise a Request' },
-  { k: 'approvals', label: 'Tasks & Approvals' },
+const TABS: { k: HrisTab; label: string; ic: IconKey; hint: string }[] = [
+  { k: 'directory', label: 'Team Directory', ic: 'users', hint: 'Find a colleague' },
+  { k: 'requests', label: 'Raise a Request', ic: 'chat', hint: 'Ask HR for help' },
+  { k: 'approvals', label: 'Tasks & Approvals', ic: 'check', hint: 'What is waiting on you' },
   // Raise MRF removed from HRIS — an MRF is now raised from Recruitment → MRF tab
   // (same auto-filling form). Kept the pane import guarded below in case it is re-enabled.
-  { k: 'exit', label: 'Exit Process' },
+  { k: 'exit', label: 'Exit Process', ic: 'door', hint: 'Resign or track it' },
 ]
 
 interface Props {
@@ -79,8 +79,10 @@ function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, adminMode, notify
     if (!nav || !ind) return
     const on = nav.querySelector<HTMLElement>('[aria-selected="true"]')
     if (!on) return
+    // A pill behind the selected tab, sized and placed off the live element.
     ind.style.width = `${on.offsetWidth}px`
-    ind.style.transform = `translateX(${on.offsetLeft}px)`
+    ind.style.height = `${on.offsetHeight}px`
+    ind.style.transform = `translate(${on.offsetLeft}px, ${on.offsetTop}px)`
   }, [])
 
   useLayoutEffect(() => {
@@ -122,37 +124,45 @@ function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, adminMode, notify
       <div className="hx-app">
         <header className="hx-head">
           <div className="hx-head-in">
-            <div className="hx-head-top">
-              <div className="hx-mark" aria-hidden="true"><Ic k="doc" /></div>
-              <div className="hx-title">
-                {/* Matches the portal's sidebar label and its other page headings: no "HRIS"
-                    jargon, no build-status pill. */}
-                <h1>HR Services</h1>
-                <span className="desc">Find colleagues, raise a request, act on approvals, or start your exit</span>
+            {/* The hero: a brand-tinted plane with the title, what the section is for and the
+                directory search. Matches the portal's sidebar label: no "HRIS" jargon. */}
+            <div className="hx-hero">
+              <div className="hx-head-top">
+                <div className="hx-mark" aria-hidden="true"><Ic k="doc" /></div>
+                <div className="hx-title">
+                  <span className="kicker">Employee self-service</span>
+                  <h1>HR Services</h1>
+                  <span className="desc">Find colleagues, raise a request, act on approvals, or start your exit</span>
+                </div>
+                <div className="hx-head-tools">
+                  <label className="hx-search" title="Search the directory">
+                    <Ic k="search" />
+                    <input value={query} placeholder="Search a colleague by name or code…" aria-label="Search directory"
+                      onChange={e => { setQuery(e.target.value); if (tab !== 'directory') go('directory') }} />
+                  </label>
+                </div>
               </div>
-              <div className="hx-head-tools">
-                <label className="hx-search" title="Search the directory">
-                  <Ic k="search" />
-                  <input value={query} placeholder="Search directory…" aria-label="Search directory"
-                    onChange={e => { setQuery(e.target.value); if (tab !== 'directory') go('directory') }} />
-                </label>
-              </div>
-            </div>
 
-            <nav className="hx-nav" aria-label="HRIS screens" ref={navRef}>
-              <div className="hx-nav-track" role="tablist">
-                {tabs.map((t, i) => (
-                  <button key={t.k} className="hx-tab" role="tab" id={`hx-tab-${t.k}`}
-                    aria-controls={`hx-pane-${t.k}`} aria-selected={tab === t.k}
-                    onClick={() => go(t.k)} onKeyDown={e => onTabKey(e, i)}>
-                    {t.label}
-                    {t.k === 'requests' && reqCount > 0 && <span className="ct">{reqCount}</span>}
-                    {t.k === 'approvals' && apprCount > 0 && <span className="ct warn">{apprCount}</span>}
-                  </button>
-                ))}
-              </div>
-              <span className="hx-ind" ref={indRef} aria-hidden="true" />
-            </nav>
+              <nav className="hx-nav" aria-label="HR Services screens" ref={navRef}>
+                <div className="hx-nav-track" role="tablist">
+                  {tabs.map((t, i) => (
+                    <button key={t.k} className="hx-tab" role="tab" id={`hx-tab-${t.k}`}
+                      aria-controls={`hx-pane-${t.k}`} aria-selected={tab === t.k}
+                      onClick={() => go(t.k)} onKeyDown={e => onTabKey(e, i)}>
+                      <span className="ti"><Ic k={t.ic} /></span>
+                      <span className="tl">
+                        <span className="tn">{t.label}
+                          {t.k === 'requests' && reqCount > 0 && <span className="ct">{reqCount}</span>}
+                          {t.k === 'approvals' && apprCount > 0 && <span className="ct warn">{apprCount}</span>}
+                        </span>
+                        <span className="th">{t.hint}</span>
+                      </span>
+                    </button>
+                  ))}
+                  <span className="hx-ind" ref={indRef} aria-hidden="true" />
+                </div>
+              </nav>
+            </div>
           </div>
         </header>
 

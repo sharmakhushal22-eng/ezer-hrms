@@ -29,6 +29,7 @@ import { hasAdminAccess } from '@/lib/rms/resolve'
 import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
+import { authHeaders } from '@/lib/auth-headers'
 import Celebrations from '@/components/ess/Celebrations'
 // Today is the landing tab, so it stays a static import. Splitting it would
 // trade bundle size for a spinner on the one screen everybody sees first.
@@ -3082,13 +3083,23 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
     supabase.from('my_generated_letters').select('*').eq('employee_id', emp.id).order('letter_date', { ascending: false })
       .then(({ data }) => { setRows(data || []); setLoading(false) }, () => setLoading(false))
   }, [emp.id])
-  async function download(fileUrl: string) {
-    const { data } = await supabase.storage.from('generated-letters').createSignedUrl(fileUrl, 300)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  const [err, setErr] = useState('')
+  // Signed on the server (/api/ess/my-letter): the bucket is private. The tab is opened first so
+  // the browser does not treat it as a popup once the link arrives.
+  async function download(id: string) {
+    setErr('')
+    const w = window.open('', '_blank')
+    try {
+      const r = await fetch(`/api/ess/my-letter?id=${encodeURIComponent(id)}&employee_id=${encodeURIComponent(emp.id)}`, { headers: await authHeaders(), cache: 'no-store' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.url) throw new Error(j.error || 'Could not open the letter.')
+      if (w) w.location.href = j.url; else window.open(j.url, '_blank')
+    } catch (e: any) { w?.close(); setErr(e.message) }
   }
   return (
     <div style={T.card}>
       <div style={T.section}>My Letters</div>
+      {err && <div style={{ fontSize:12, color:C.critical, marginBottom:8 }}>{err}</div>}
       {loading ? <div style={{ fontSize:12, color:C.faint }}>Loading…</div> :
         rows.length === 0 ? <div style={{ fontSize:12, color:C.faint }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
         rows.map(r => (
@@ -3098,7 +3109,7 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
               <div style={{ fontSize:13, fontWeight:600 }}>{r.letter_name}</div>
               <div style={{ fontSize:11, color:C.faint }}>{new Date(r.letter_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
             </div>
-            <button onClick={() => download(r.file_url)} style={{ ...T.btnO }}>⬇ Download</button>
+            <button onClick={() => download(r.id)} style={{ ...T.btnO }}>⬇ Download</button>
           </div>
         ))}
     </div>

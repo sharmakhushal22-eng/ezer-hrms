@@ -179,7 +179,7 @@ export default function AppointmentLetterModal({ onboardingId, name, onClose, on
       const d = await res.json()
       if (!res.ok) throw new Error(d.error || 'Send failed')
       setLastSent(d.last_sent || null)
-      onDone(`Letter of Appointment mailed to ${d.sent_to} ✉️`)
+      onDone(d.ess_saved ? `Letter of Appointment mailed to ${d.sent_to} ✉️ and saved in their ESS → My Letters` : `Letter of Appointment mailed to ${d.sent_to}, but NOT saved in ESS: ${d.ess_error}`, d.ess_saved ? 'ok' : 'err')
       onClose()
     } catch (e: any) { setErr(e.message) } finally { setBusy('') }
   }
@@ -229,7 +229,7 @@ export default function AppointmentLetterModal({ onboardingId, name, onClose, on
                 <Field label="CC (optional, comma separated)"><input value={mail.cc} onChange={e => setMail(m => ({ ...m, cc: e.target.value }))} style={inp} /></Field>
                 <Field label="Subject"><input value={mail.subject} onChange={e => setMail(m => ({ ...m, subject: e.target.value }))} style={inp} /></Field>
                 <Field label="Message"><textarea value={mail.body} onChange={e => setMail(m => ({ ...m, body: e.target.value }))} rows={10} style={{ ...inp, height: 'auto', padding: 10, lineHeight: 1.5, resize: 'vertical' }} /></Field>
-                <div style={{ fontSize: 12, color: TK.muted }}>The letter goes as a PDF attachment on the company letterhead.</div>
+                <div style={{ fontSize: 12, color: TK.muted }}>The letter goes as a PDF attachment on the company letterhead, and a copy is saved in the employee’s ESS → Profile → My Letters (a re-send replaces it).</div>
               </div>}
               {tab === 'preview' && pdfUrl && <iframe src={pdfUrl} title="Appointment letter preview" style={{ width: '100%', height: '60vh', border: `1px solid ${TK.line}`, borderRadius: 8 }} />}
             </div>

@@ -1,7 +1,7 @@
 // lib/exit/hr-exit.ts — pure. An exit the company starts (Exit Module spec v2 §2, §4): who may
 // start one, its reasons and sub-reasons, the last-working-day rule per reason, and the approval
 // chain it walks before it takes effect. Used by app/api/ess/exit-employee, the red Exit button on
-// People → Employees → employee detail (components/employees/HrExitButton) and Tasks & Approvals.
+// People → Employees → employee → HR Actions (components/employees/HrExitSection) and Tasks & Approvals.
 
 /** The hiring and HR roles (Hiring Manager / Recruiter, HR Executive, Branch HR, HR Manager,
  *  HR Head, CHRO). The super admin too. */

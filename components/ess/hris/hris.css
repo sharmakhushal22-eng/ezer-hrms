@@ -60,56 +60,78 @@
    sticky; inside the portal there is already a sticky bar above it, and a
    second band pinned under the first ate a chunk of a screen that is mostly
    list. */
-/* The tinted band is gone: every other ESS screen opens on a plain heading over the canvas
-   (components/ess/portal.css .ess-head), so this one does too. The tabs keep a hairline. */
-.hx-head{z-index:20;background:transparent;border-bottom:1px solid var(--ez-line)}
-.hx-head-in{max-width:var(--col);margin:0 auto;padding:24px 28px 0}
-.hx-head-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.hx-mark{width:48px;height:48px;border-radius:15px;flex-shrink:0;display:grid;place-items:center;
-  background:linear-gradient(135deg,#2563EB,#4F46E5);color:#fff;
-  box-shadow:0 12px 24px -12px #4F46E5,inset 0 1px 0 rgba(255,255,255,.25)}
-.hx-mark svg{width:20px;height:20px;display:block}
-.hx-title{display:flex;flex-direction:column;gap:2px;min-width:0}
-.hx-title h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2;color:var(--ez-ink);
+/* The hero: the section opens on a brand-tinted card — soft radial light, the title, what
+   the section is for and the directory search — with the four screens as a segmented
+   control inside it. Every colour is a token mix, so dark mode follows the theme. */
+.hx-head{background:transparent}
+.hx-head-in{max-width:var(--col);margin:0 auto;padding:22px 22px 0}
+.hx-hero{position:relative;overflow:hidden;border-radius:22px;padding:24px 24px 14px;
+  background:
+    radial-gradient(120% 140% at 100% 0%,color-mix(in srgb,var(--ez-brand) 20%,transparent) 0%,transparent 55%),
+    radial-gradient(90% 120% at 0% 100%,color-mix(in srgb,var(--ez-info) 14%,transparent) 0%,transparent 60%),
+    linear-gradient(135deg,color-mix(in srgb,var(--ez-brand) 9%,var(--ez-surface)),var(--ez-surface));
+  border:1px solid color-mix(in srgb,var(--ez-brand) 22%,var(--ez-line));
+  box-shadow:var(--ez-shadow-raised),inset 0 1px 0 color-mix(in srgb,var(--ez-surface) 70%,transparent)}
+.hx-hero::before{content:"";position:absolute;right:-60px;top:-80px;width:260px;height:260px;border-radius:50%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--ez-brand) 18%,transparent),transparent 70%);pointer-events:none}
+.hx-head-top{position:relative;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.hx-mark{width:54px;height:54px;border-radius:17px;flex-shrink:0;display:grid;place-items:center;
+  background:linear-gradient(140deg,var(--ez-brand),var(--ez-brand-deep));color:var(--ez-on-accent);
+  box-shadow:0 14px 28px -14px var(--ez-brand),inset 0 1px 0 color-mix(in srgb,var(--ez-on-accent) 30%,transparent)}
+.hx-mark svg{width:24px;height:24px;display:block}
+.hx-title{display:flex;flex-direction:column;gap:3px;min-width:0}
+.hx-title .kicker{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ez-brand)}
+.hx-title h1{margin:0;font-size:26px;font-weight:750;letter-spacing:-.025em;line-height:1.15;color:var(--ez-ink);
   display:flex;align-items:center;gap:10px}
-.hx-title .desc{font-size:13.5px;color:var(--ez-muted)}
+.hx-title .desc{font-size:13.5px;color:var(--ez-ink-soft)}
 .hx-badge{font-size:10.5px;font-weight:700;padding:4px 11px;border-radius:999px;letter-spacing:.01em;
   background:var(--ez-warning-tint);color:var(--ez-warning);
   border:1px solid color-mix(in srgb,var(--ez-warning) 32%,transparent);white-space:nowrap}
 .hx-head-tools{margin-left:auto;display:flex;align-items:center;gap:8px}
-.hx-search{display:flex;align-items:center;gap:7px;height:36px;padding:0 12px;border-radius:999px;
-  background:color-mix(in srgb,var(--ez-surface) 72%,transparent);border:1px solid var(--ez-head-edge);
-  color:var(--ez-head-faint);font-size:12.5px;min-width:150px;transition:box-shadow .16s var(--ease)}
-.hx-search svg{width:15px;height:15px;flex-shrink:0}
-.hx-search input{border:0;background:transparent;outline:none;color:var(--ez-ink);font-size:12.5px;width:100%}
-.hx-search:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 22%,transparent)}
+.hx-search{display:flex;align-items:center;gap:8px;height:42px;padding:0 15px;border-radius:999px;
+  background:color-mix(in srgb,var(--ez-surface) 86%,transparent);border:1px solid var(--ez-line-strong);
+  color:var(--ez-faint);font-size:13px;min-width:290px;box-shadow:var(--ez-shadow-flat);
+  backdrop-filter:blur(6px);transition:box-shadow .16s var(--ease),border-color .16s var(--ease)}
+.hx-search svg{width:16px;height:16px;flex-shrink:0}
+.hx-search input{border:0;background:transparent;outline:none;color:var(--ez-ink);font-size:13px;width:100%}
+.hx-search:focus-within{border-color:var(--ez-brand);box-shadow:0 0 0 4px color-mix(in srgb,var(--ez-brand) 18%,transparent)}
 .hx-icbtn{height:36px;min-width:36px;padding:0 11px;border-radius:999px;cursor:pointer;
   display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
-  background:color-mix(in srgb,var(--ez-surface) 72%,transparent);border:1px solid var(--ez-head-edge);
-  color:var(--ez-head-muted);transition:transform .12s var(--ease),box-shadow .16s var(--ease)}
+  background:var(--ez-surface);border:1px solid var(--ez-line-strong);
+  color:var(--ez-ink-soft);transition:transform .12s var(--ease),box-shadow .16s var(--ease)}
 .hx-icbtn svg{width:16px;height:16px}
 .hx-icbtn:hover{box-shadow:var(--ez-shadow-flat);transform:translateY(-1px)}
 .hx-icbtn:active{transform:translateY(0)}
 
-/* ---- segmented sub-tab navigator with sliding indicator ---- */
-.hx-nav{position:relative;display:flex;gap:2px;margin-top:15px;padding:4px 4px 0}
-.hx-nav-track{position:relative;display:flex;gap:4px;width:100%}
-.hx-tab{position:relative;z-index:1;appearance:none;border:0;background:transparent;cursor:pointer;
-  display:flex;align-items:center;gap:8px;padding:11px 16px 13px;border-radius:10px 10px 0 0;
-  font-size:13.5px;font-weight:600;color:var(--ez-head-faint);white-space:nowrap;
-  transition:color .2s var(--ease)}
+/* ---- the four screens: a segmented control with a sliding pill ---- */
+.hx-nav{position:relative;margin-top:20px;overflow-x:auto;scrollbar-width:none}
+.hx-nav::-webkit-scrollbar{display:none}
+.hx-nav-track{position:relative;display:flex;gap:4px;padding:5px;border-radius:16px;width:max-content;min-width:100%;
+  background:color-mix(in srgb,var(--ez-sunken) 78%,transparent);border:1px solid var(--ez-line)}
+.hx-tab{position:relative;z-index:1;appearance:none;border:0;background:transparent;cursor:pointer;flex:1 1 0;
+  display:flex;align-items:center;gap:11px;padding:10px 16px 10px 11px;border-radius:12px;text-align:left;
+  color:var(--ez-muted);white-space:nowrap;transition:color .2s var(--ease)}
 .hx-tab:hover{color:var(--ez-ink)}
-.hx-tab[aria-selected="true"]{color:var(--ez-brand)}
+.hx-tab .ti{width:34px;height:34px;border-radius:10px;flex-shrink:0;display:grid;place-items:center;
+  background:var(--ez-surface);border:1px solid var(--ez-line);color:var(--ez-muted);
+  transition:background .2s var(--ease),color .2s var(--ease),border-color .2s var(--ease)}
+.hx-tab .ti svg{width:17px;height:17px}
+.hx-tab .tl{display:flex;flex-direction:column;gap:1px;min-width:0}
+.hx-tab .tn{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:650;color:inherit}
+.hx-tab .th{font-size:11.5px;font-weight:500;color:var(--ez-faint)}
+.hx-tab[aria-selected="true"]{color:var(--ez-ink)}
+.hx-tab[aria-selected="true"] .ti{background:linear-gradient(140deg,var(--ez-brand),var(--ez-brand-deep));
+  color:var(--ez-on-accent);border-color:transparent;box-shadow:0 8px 16px -10px var(--ez-brand)}
 .hx-tab .ct{font-size:10.5px;font-weight:700;line-height:1;padding:3px 7px;border-radius:999px;
-  background:color-mix(in srgb,var(--ez-brand) 15%,transparent);color:var(--ez-head-brand);
+  background:color-mix(in srgb,var(--ez-brand) 15%,transparent);color:var(--ez-brand);
   font-variant-numeric:tabular-nums}
-.hx-tab .ct.warn{background:color-mix(in srgb,var(--ez-warning) 20%,transparent);color:var(--ez-warning)}
-.hx-ind{position:absolute;bottom:0;height:3px;border-radius:3px 3px 0 0;
-  background:linear-gradient(90deg,var(--ez-brand),var(--ez-brand-deep));
-  transition:transform .34s var(--ease-out),width .34s var(--ease-out);will-change:transform,width}
+.hx-tab .ct.warn{background:var(--ez-warning);color:var(--ez-on-accent)}
+.hx-ind{position:absolute;left:0;top:0;border-radius:12px;background:var(--ez-surface);
+  box-shadow:var(--ez-shadow-raised),0 0 0 1px color-mix(in srgb,var(--ez-brand) 18%,transparent);
+  transition:transform .38s var(--ease-out),width .38s var(--ease-out),height .38s var(--ease-out);will-change:transform,width}
 
 /* ---- content column ---- */
-.hx-main{max-width:var(--col);margin:0 auto;width:100%;padding:20px 22px 64px}
+.hx-main{max-width:var(--col);margin:0 auto;width:100%;padding:18px 22px 64px}
 .hx-pane{display:none}
 .hx-pane.on{display:block}
 .hx-pane.enter{animation:hxPane .42s var(--ease-out) both}
@@ -120,12 +142,15 @@
 .hx [hidden]{display:none!important}
 
 /* ---- panels & primitives ---- */
-.hx-card{background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-lg);
+.hx-card{position:relative;background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:18px;
   box-shadow:var(--ez-shadow-raised)}
-.hx-card.pad{padding:16px 18px}
-.hx-sec{display:flex;align-items:center;gap:9px;margin-bottom:14px}
-.hx-sec::before{content:"";width:3px;height:15px;border-radius:2px;background:linear-gradient(var(--ez-brand),var(--ez-brand-deep))}
-.hx-sec h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ez-ink)}
+/* A hairline of brand light along the top edge: the card reads as lit, not flat. */
+.hx-card::before{content:"";position:absolute;left:18px;right:18px;top:-1px;height:1px;border-radius:1px;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--ez-brand) 45%,transparent),transparent)}
+.hx-card.pad{padding:20px 22px}
+.hx-sec{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.hx-sec::before{content:"";width:4px;height:18px;border-radius:3px;background:linear-gradient(var(--ez-brand),var(--ez-brand-deep))}
+.hx-sec h2{margin:0;font-size:15.5px;font-weight:700;letter-spacing:-.015em;color:var(--ez-ink)}
 .hx-sec .grow{margin-left:auto}
 
 .hx-input,.hx-select,.hx-area{width:100%;height:38px;padding:0 12px;font-size:13px;color:var(--ez-ink);
@@ -178,19 +203,20 @@
 .hx-note svg{display:inline-block;width:15px;height:15px;flex-shrink:0;vertical-align:-3px;margin-right:4px}
 
 /* ---- KPI strip (connected cells, not floating cards) ---- */
-.hx-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-  background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-lg);
-  overflow:hidden;box-shadow:var(--ez-shadow-raised);margin-bottom:var(--gap)}
-.hx-kpi{padding:15px 17px;border-right:1px solid var(--ez-line);position:relative}
-.hx-kpi:last-child{border-right:0}
+.hx-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:var(--gap)}
+.hx-kpi{padding:16px 18px;position:relative;overflow:hidden;border-radius:16px;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--ez-brand) 6%,var(--ez-surface)),var(--ez-surface) 60%);
+  border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-flat)}
+.hx-kpi::after{content:"";position:absolute;right:-18px;top:-18px;width:64px;height:64px;border-radius:50%;
+  background:color-mix(in srgb,var(--ez-brand) 9%,transparent)}
 .hx-kpi .k{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ez-muted)}
-.hx-kpi .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:5px;line-height:1;
+.hx-kpi .v{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-top:5px;line-height:1;
   font-variant-numeric:tabular-nums;color:var(--ez-ink)}
 .hx-kpi .v.ok{color:var(--ez-positive)} .hx-kpi .v.warn{color:var(--ez-warning)} .hx-kpi .v.dang{color:var(--ez-critical)}
 .hx-kpi .n{font-size:11px;color:var(--ez-faint);margin-top:3px}
-.hx-kpi .spark{position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent}
-.hx-kpi .v.warn ~ .spark,.hx-kpi.warn .spark{background:linear-gradient(var(--ez-warning),transparent)}
-@media (max-width:640px){.hx-kpi{border-right:0;border-bottom:1px solid var(--ez-line)}.hx-kpi:last-child{border-bottom:0}}
+.hx-kpi .spark{position:absolute;left:0;top:0;right:0;height:3px;background:linear-gradient(90deg,var(--ez-brand),transparent)}
+.hx-kpi .v.warn ~ .spark,.hx-kpi.warn .spark{background:linear-gradient(90deg,var(--ez-warning),transparent)}
+.hx-kpi.warn::after{background:color-mix(in srgb,var(--ez-warning) 12%,transparent)}
 
 /* ================= TEAM DIRECTORY ================= */
 .hx-dir-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
@@ -209,7 +235,8 @@
    whatever height the content above them ended, so a colleague with no
    department tag put its buttons 43px higher than its neighbours'. */
 .hx-person{position:relative;display:flex;flex-direction:column;
-  background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-lg);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--ez-brand) 4%,var(--ez-surface)),var(--ez-surface) 46%);
+  border:1px solid var(--ez-line);border-radius:18px;
   gap:11px;padding:15px 16px 14px 18px;box-shadow:var(--ez-shadow-flat);cursor:pointer;overflow:hidden;
   transition:transform .16s var(--ease),box-shadow .18s var(--ease),border-color .18s var(--ease)}
 .hx-person::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
@@ -256,8 +283,8 @@
 @keyframes hxsh{from{background-position:200% 0}to{background-position:-200% 0}}
 
 /* ================= RAISE A REQUEST ================= */
-.hx-types{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:9px;margin-bottom:14px}
-.hx-type{position:relative;text-align:left;cursor:pointer;padding:12px 13px;border-radius:var(--r-md);
+.hx-types{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px}
+.hx-type{position:relative;text-align:left;cursor:pointer;padding:14px 14px;border-radius:14px;
   background:var(--ez-surface);border:1px solid var(--ez-line-strong);color:var(--ez-ink);
   /* stretch, not flex-start: the text column has to fill the tile before
      margin-top:auto on the routing line has any slack to work with. */
@@ -265,16 +292,18 @@
 .hx-type:hover{border-color:var(--ez-brand-edge);transform:translateY(-2px);box-shadow:var(--ez-shadow-flat)}
 .hx-type[aria-pressed="true"]{border-color:var(--ez-brand);background:var(--ez-brand-tint);box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 16%,transparent)}
 .hx-type[data-posh="1"][aria-pressed="true"]{border-color:var(--ez-critical);background:var(--ez-critical-tint);box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-critical) 14%,transparent)}
-.hx-type .ic{width:30px;height:30px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;
-  background:var(--ez-brand-tint);color:var(--ez-brand);border:1px solid var(--ez-brand-edge)}
+.hx-type{--h:calc(250 + var(--i,0) * 41)}
+.hx-type .ic{width:36px;height:36px;border-radius:11px;flex-shrink:0;display:grid;place-items:center;
+  background:oklch(var(--hx-av-bg-l) var(--hx-av-bg-c) var(--h));color:oklch(var(--hx-av-fg-l) var(--hx-av-fg-c) var(--h));
+  border:1px solid color-mix(in srgb,oklch(var(--hx-av-fg-l) var(--hx-av-fg-c) var(--h)) 22%,transparent)}
 .hx-type[data-posh="1"] .ic{background:var(--ez-critical-tint);color:var(--ez-critical);border-color:color-mix(in srgb,var(--ez-critical) 30%,transparent)}
-.hx-type .ic svg{width:16px;height:16px}
+.hx-type .ic svg{width:18px;height:18px}
 /* Both were inline in the reference, so the label and the routing line ran
    together — "Loan / Advance SalaryRouted to HR". They are separate lines, and
    the routing line is pinned to the bottom: two of the eight labels wrap, and
    without this their "Routed to …" sat lower than every other tile in the row. */
 .hx-type > span:last-child{flex:1;min-width:0;display:flex;flex-direction:column}
-.hx-type .lb{display:block;font-size:12.5px;font-weight:600;line-height:1.3}
+.hx-type .lb{display:block;font-size:13px;font-weight:650;line-height:1.3}
 .hx-type .sub{display:block;font-size:10.5px;color:var(--ez-faint);margin-top:auto;padding-top:2px}
 .hx-reveal{overflow:hidden;max-height:0;opacity:0;transition:max-height .34s var(--ease),opacity .3s var(--ease),margin .3s var(--ease)}
 .hx-reveal.show{max-height:200px;opacity:1;margin-bottom:12px}
@@ -286,8 +315,9 @@
 
 /* ================= TASKS & APPROVALS ================= */
 .hx-appr{display:flex;flex-direction:column;gap:10px}
-.hx-pcard{position:relative;background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-md);
-  padding:14px 15px 13px 17px;overflow:hidden;transition:box-shadow .18s var(--ease),transform .12s var(--ease)}
+.hx-pcard{position:relative;background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:14px;
+  padding:16px 17px 15px 20px;overflow:hidden;transition:box-shadow .18s var(--ease),transform .12s var(--ease),border-color .18s var(--ease)}
+.hx-pcard.mine:hover{box-shadow:var(--ez-shadow-raised);border-color:var(--ez-brand-edge);transform:translateY(-1px)}
 .hx-pcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
 .hx-pcard.mine::before{background:linear-gradient(var(--ez-brand),var(--ez-brand-deep))}
 .hx-pcard.scope::before{background:repeating-linear-gradient(var(--ez-line-strong) 0 6px,transparent 6px 11px)}
@@ -365,10 +395,15 @@
 
 .hx-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 
+@media (max-width:900px){
+  .hx-head-tools{margin-left:0;width:100%}.hx-search{min-width:0;width:100%}
+  .hx-tab .th{display:none}.hx-tab{flex:0 0 auto}
+}
 @media (max-width:560px){
   .hx-head-in{padding:14px 16px 0}.hx-main{padding:16px 16px 48px}
-  .hx-title h1{font-size:20px}.hx-grid{grid-template-columns:1fr}
-  .hx-head-tools .hx-search{display:none}
+  .hx-hero{padding:18px 16px 12px;border-radius:18px}
+  .hx-title h1{font-size:21px}.hx-grid{grid-template-columns:1fr}
+  .hx-mark{width:46px;height:46px;border-radius:14px}
 }
 @media (prefers-reduced-motion:reduce){
   .hx *,.hx *::before,.hx *::after{animation-duration:.001ms!important;transition-duration:.001ms!important}

@@ -7,7 +7,9 @@
 //
 // The draft is whatever the HR Manager left in the popup (lib/onboarding/appointment-letter.ts);
 // the PDF is drawn from it as is and mailed to the candidate. Every send is logged in
-// onboarding_notifications and onboarding_audit_log, so the popup can say when it last went.
+// onboarding_notifications and onboarding_audit_log, so the popup can say when it last went,
+// and saved to the employee's ESS → Profile → My Letters (generated_letters, migration 200) with
+// a bell notification; a re-send replaces the copy there.
 // Guarded by the Onboarding module (VIEW to read, EDIT to preview or send).
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
@@ -20,6 +22,29 @@ export const runtime = 'nodejs' // pdfkit + nodemailer
 export const dynamic = 'force-dynamic'
 const bad = (m: string, s = 400) => NextResponse.json({ error: m }, { status: s })
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/
+
+const LETTER_NAME = 'Letter of Appointment'
+
+/** The sent letter into the employee's ESS → My Letters. Never blocks the send: what went
+ *  wrong is reported back to the popup instead. */
+async function saveToEss(o: { employeeId: string; companyId: string | null; pdf: { name: string; content: Buffer }; by: string | null }): Promise<string | null> {
+  const now = new Date().toISOString()
+  const path = `appointment/${o.employeeId}/${Date.now()}_${o.pdf.name}`
+  const up = await sb.storage.from('generated-letters').upload(path, o.pdf.content, { contentType: 'application/pdf', upsert: false })
+  if (up.error) return `the PDF could not be stored (${up.error.message})`
+  // Only the latest appointment letter stays in My Letters.
+  await sb.from('generated_letters').update({ published_to_ess_at: null }).eq('employee_id', o.employeeId).eq('letter_name', LETTER_NAME).not('published_to_ess_at', 'is', null)
+  const { error } = await sb.from('generated_letters').insert({
+    template_id: null, letter_name: LETTER_NAME, employee_id: o.employeeId, company_id: o.companyId, file_url: path,
+    letter_date: now.slice(0, 10), generated_by: o.by, generated_at: now, emailed_at: now, published_to_ess_at: now,
+  })
+  if (error) {
+    await sb.storage.from('generated-letters').remove([path]).then(() => null, () => null)
+    return /letter_name|template_id|null value/i.test(error.message) ? 'run migration 200_appointment_letter_in_ess.sql in Supabase' : error.message
+  }
+  await sb.from('ess_notifications').insert({ employee_id: o.employeeId, category: 'RECRUITMENT', title: 'Your Letter of Appointment', body: 'Your Letter of Appointment is in Profile → My Letters. Download it, sign every page and share it with HR.', link: '/ess/letters', is_read: false }).then(() => null, () => null)
+  return null
+}
 
 async function lastSent(onboardingId: string) {
   const { data } = await sb.from('onboarding_audit_log').select('created_at, details').eq('onboarding_id', onboardingId).eq('action', 'APPOINTMENT_LETTER_SENT').order('created_at', { ascending: false }).limit(1).maybeSingle()
@@ -102,5 +127,8 @@ export async function POST(req: NextRequest) {
     onboarding_id: id, action: 'APPOINTMENT_LETTER_SENT', actor_type: 'HR', actor_id: user.employeeId || null,
     details: { to, cc, by_name: byName, employee_code: ctx.onboarding.employee_code, ctc_annual: draft.fields.ctc_annual, doj: draft.fields.doj },
   }).then(() => null, () => null)
-  return NextResponse.json({ ok: true, sent_to: to, last_sent: { at: new Date().toISOString(), to, by: byName } })
+  const essError = ctx.onboarding.employee_id
+    ? await saveToEss({ employeeId: ctx.onboarding.employee_id, companyId: ctx.company?.id || null, pdf, by: user.employeeId || null }).catch((e: any) => e?.message || 'could not save')
+    : 'there is no employee record yet'
+  return NextResponse.json({ ok: true, sent_to: to, ess_saved: !essError, ess_error: essError, last_sent: { at: new Date().toISOString(), to, by: byName } })
 }

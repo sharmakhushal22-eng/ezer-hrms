@@ -100,8 +100,10 @@ test('the route guards before writing and takes effect only on the last approval
   assert.ok(/\.eq\('status', 'PENDING'\)\.eq\('current_step', row\.current_step\)/.test(src), 'two approvers cannot both act')
 })
 
-test('the Exit button lives on the employee detail; the ESS checkbox is gone; approvals are in Tasks & Approvals', () => {
-  assert.ok(/<HrExitButton /.test(readFileSync('app/dashboard/employees/page.tsx', 'utf8')))
+test('Exit lives in the employee’s HR Actions in place of Initiate resignation; the ESS checkbox is gone; approvals are in Tasks & Approvals', () => {
+  const panel = readFileSync('components/employees/HRActionPanel.tsx', 'utf8')
+  assert.ok(/<HrExitSection /.test(panel) && !/>Initiate resignation</.test(panel))
+  assert.ok(!/HrExit/.test(readFileSync('app/dashboard/employees/page.tsx', 'utf8')), 'no Exit button on the profile header any more')
   const ess = readFileSync('components/ess/hris/ExitProcess.tsx', 'utf8')
   assert.ok(!/Exit an employee/.test(ess) && !/HrExitPanel/.test(ess))
   assert.ok(/<HrExitApprovals /.test(readFileSync('components/ess/hris/TasksApprovals.tsx', 'utf8')))
