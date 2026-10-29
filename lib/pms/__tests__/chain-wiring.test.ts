@@ -161,15 +161,27 @@ test('HR has a publish screen, reachable through a seeded permission', () => {
   assert.match(ADMIN, /export function PublishTab/, 'no publish tab')
   assert.match(ADMIN, /k: 'publish'/, 'the tab is not listed in ADMIN_TABS')
   assert.match(PAGE, /<PublishTab/, 'the tab is never rendered')
-  // canSeeScreen denies any key absent from the seeded screen config, so a
-  // brand-new 'pms.publish' key would hide the tab from everybody including
-  // admins. It borrows the existing HR-only key instead of the roles module
-  // being touched.
-  assert.match(PAGE, /SCREEN_KEY[\s\S]{0,80}publish:\s*'pms\.upload'/,
-    'the publish tab does not borrow a seeded screen key')
-  assert.ok(!/'pms\.' ?\+ ?t\.k\)/.test(PAGE),
-    'the tab bar still builds the screen key by concatenation, so the mapping '
-    + 'is bypassed and the publish tab will be invisible')
+  // IT HAS ITS OWN KEY NOW, and borrowing is what had to stop.
+  //
+  // It used to ride on 'pms.upload' because canSeeScreen denies any key
+  // absent from the seeded config, and a new key would have hidden the tab.
+  // But 'pms.upload' is held by L1_MANAGER, L2_MANAGER and HOD in
+  // role_screen_access — so HR's publish workspace, where the feedback an
+  // employee reads is written and the result released, was reachable by
+  // every line manager.
+  //
+  // 'pms.publish' is a registered screen instead (lib/rms/screens.ts), which
+  // resolves correctly without seeding anything: the three line roles have
+  // PMS rows and no row for this key, so they are denied; HR Head, HR
+  // Manager and Admin have no PMS rows at all, so the module is
+  // unconfigured for them and they keep it.
+  assert.ok(!/publish:\s*'pms\.upload'/.test(PAGE),
+    'the publish tab still borrows the bulk-upload key, which line managers hold')
+  const screens = read('lib/rms/screens.ts')
+  const pms = screens.slice(screens.indexOf("moduleKey: 'pms'"),
+                            screens.indexOf("moduleKey: 'attendance'"))
+  assert.match(pms, /\{ key: 'publish', label: 'Publish Results' \}/,
+    'pms.publish is not a registered screen, so it cannot be set in Roles & Access')
 })
 
 test('the publish queue cannot miss a settled rating', () => {

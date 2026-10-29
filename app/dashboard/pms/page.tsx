@@ -27,7 +27,8 @@ import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/lan
 import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, PublishTab, SummaryTab,
          UploadTab, PipTab, ReportsTab, FlowTab, type AdminTab, type PipRow,
          type PolicyConfig, type PublishRow } from '@/components/pms/AdminTabs'
-import { mayWritePostFinal, postFinalNote, type PostFinalOwner } from '@/lib/pms/postFinal'
+import { mayWritePostFinal, postFinalNote, pmsRoleOf,
+         type PostFinalOwner } from '@/lib/pms/postFinal'
 import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
 import { type Frequency, type Policy } from '@/lib/pms/policy'
@@ -75,13 +76,30 @@ interface Coverage {
  *
  * Everything not listed governs itself, which is every pre-existing tab.
  */
-const SCREEN_KEY: Partial<Record<Tab, string>> = {
-  publish: 'pms.upload',
-  // Ratings Summary reads what Fill Status reads, so it rides the same seeded
-  // key. Same reasoning as publish: a new 'pms.summary' key would be absent
-  // from the seeded config and the tab invisible to everybody.
-  summary: 'pms.fill',
-}
+/**
+ * NOTHING BORROWS ANY MORE. Both entries here used to point a tab at a
+ * different tab's seeded key, because a brand-new key is denied to any role
+ * the module is configured for — and PMS is configured for L1_MANAGER,
+ * L2_MANAGER and HOD.
+ *
+ * That workaround over-granted. 'pms.upload' is held by those three roles,
+ * so Publish Results — HR's workspace, where the feedback an employee reads
+ * is written and the result released — was reachable by every line manager.
+ * 'pms.fill' did the same for the cross-company Ratings Summary.
+ *
+ * They are registered screens now (lib/rms/screens.ts), which both makes
+ * them switchable in Roles & Access and gives them their own answer:
+ *
+ *   L1 / L2 / HOD   module configured, no row for the new key  → hidden
+ *   HR Head / HR Manager / Admin   module unconfigured          → visible
+ *
+ * WHICH IS WHY NO MIGRATION SEEDS ANYTHING. The roles that should keep
+ * these tabs are the ones with no PMS rows at all, and adding rows for them
+ * would configure the module for those roles and start hiding every tab
+ * they do not have a row for — a privilege removal disguised as a grant,
+ * which is the trap migration 142 documents.
+ */
+const SCREEN_KEY: Partial<Record<Tab, string>> = {}
 const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
 
 export default function PmsPage() {
@@ -695,7 +713,20 @@ export default function PmsPage() {
    * still needs to see where a cycle has got to.
    */
   const postFinalOwner = (config?.postFinalOwner ?? 'HR') as PostFinalOwner
-  const myHrRole = grant.isSuperAdmin ? 'ADMIN' : 'HR_MGR'
+  /**
+   * THE VIEWER'S REAL ROLE, from the roles they hold.
+   *
+   * This was `grant.isSuperAdmin ? 'ADMIN' : 'HR_MGR'` — everybody who
+   * reached this page was HR Manager, so mayWritePostFinal said yes to all
+   * of them. Combined with Publish Results borrowing the seeded
+   * 'pms.upload' key, which L1_MANAGER, L2_MANAGER and HOD all hold in
+   * role_screen_access, a line manager could open HR's publish workspace,
+   * write the feedback an employee reads, and release the result.
+   *
+   * pmsRoleOf reads role_code off the grant the roles module already
+   * produces. Nothing in that module changes; this stops ignoring it.
+   */
+  const myHrRole = pmsRoleOf(grant.roles, grant.isSuperAdmin)
   const canRunPostFinal = mayWritePostFinal(postFinalOwner, myHrRole)
 
   /**

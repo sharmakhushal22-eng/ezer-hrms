@@ -138,8 +138,16 @@ test('the summary covers everyone, not just the settled', () => {
   assert.ok(!/\.in\('workflow_status', \['FINALISED', 'PUBLISHED', 'ACKNOWLEDGED'\]\)/.test(page),
     'the loader still filters to settled rows, so the summary cannot show the chain')
   assert.match(page, /<SummaryTab rows=\{pubRows\}/, 'the summary is never rendered')
-  assert.match(page, /summary: 'pms\.fill'/,
-    'the summary tab has no seeded screen key and will be invisible')
+  // ITS OWN KEY NOW. It rode on 'pms.fill' for the same reason publish rode
+  // on 'pms.upload', and with the same side effect: the three line roles
+  // hold that key, so a cross-company ratings summary was reachable by every
+  // line manager. Registered instead, which denies the configured roles and
+  // leaves the unconfigured HR roles untouched — no seeding, no migration.
+  assert.ok(!/summary: 'pms\.fill'/.test(page),
+    'the summary tab still borrows the fill-tracker key, which line managers hold')
+  const screens = read('lib/rms/screens.ts')
+  assert.match(screens, /\{ key: 'summary', label: 'Ratings Summary' \}/,
+    'pms.summary is not a registered screen, so it cannot be set in Roles & Access')
 })
 
 // ── the summary spans companies ──────────────────────────────────────────

@@ -107,3 +107,74 @@ export function postFinalNote(owner: PostFinalOwner, role: Role): string | null 
 export function showFinaliserFeedbackTab(owner: PostFinalOwner): boolean {
   return owner === 'FINALISER'
 }
+
+// ── who the viewer actually is, from the roles module ────────────────────
+
+/**
+ * THE PMS ROLE OF WHOEVER IS LOOKING, read from the roles they hold.
+ *
+ * Requested: "it will be good if there is the option to give permissions of
+ * pms and finalization, result publish from roles and access."
+ *
+ * The first half of that was already possible and simply not used. The admin
+ * dashboard computed its PMS role as:
+ *
+ *     const myHrRole = grant.isSuperAdmin ? 'ADMIN' : 'HR_MGR'
+ *
+ * — so EVERYBODY who reached the page was HR Manager, and mayWritePostFinal
+ * therefore said yes to all of them. Combined with the Publish Results tab
+ * borrowing the seeded 'pms.upload' key, which L1_MANAGER, L2_MANAGER and
+ * HOD all hold in role_screen_access, a line manager could open HR's publish
+ * workspace, write the feedback an employee reads and release the result.
+ *
+ * Nothing here changes the roles module. It reads role_code off the grant
+ * that module already produces and answers in the PMS's own vocabulary.
+ *
+ * UNKNOWN ROLES ARE NOT HR. The fallback used to be HR_MGR — the most
+ * privileged answer available — for anyone the code could not place. It is
+ * EMPLOYEE now: a role nobody mapped should get the least authority, not the
+ * most, and the PMS's gates are all written as "is this role allowed",
+ * never "is this role forbidden".
+ */
+const RMS_TO_PMS: Record<string, Role> = {
+  // HR, who own the post-finalisation controls under the default policy.
+  HR_HEAD: 'HR_HEAD',
+  HR_MANAGER: 'HR_MGR',
+  HR_MGR: 'HR_MGR',
+  CHRO: 'HR_HEAD',
+  // The escalation path, as 188 exempts it from the finalise identity checks.
+  ADMIN: 'ADMIN',
+  ADMIN_SUPER: 'ADMIN',
+  SUPER_ADMIN: 'ADMIN',
+  // The line. Named so a FINALISER-owned policy can hand these controls back
+  // to them, which is the whole point of that setting.
+  HOD: 'HOD',
+  L1_MANAGER: 'RM_L1',
+  L2_MANAGER: 'RM_L2',
+}
+
+/**
+ * The strongest PMS role among those held.
+ *
+ * Strongest, because roles are additive: somebody holding both HR_MANAGER
+ * and L1_MANAGER is an HR Manager who also has reportees, and taking the
+ * first match in an arbitrary array order would make their authority depend
+ * on how the grant happened to be sorted.
+ */
+const RANK: Role[] = ['EMPLOYEE', 'RM_L1', 'RM_L2', 'HOD', 'HR_MGR', 'HR_HEAD', 'ADMIN']
+
+export function pmsRoleOf(
+  roles: { role_code?: string | null }[] | null | undefined,
+  isSuperAdmin = false,
+): Role {
+  // A super admin is ADMIN whatever else they hold: the roles module already
+  // treats them as seeing everything, and disagreeing with it here would
+  // produce a screen that renders and then refuses.
+  if (isSuperAdmin) return 'ADMIN'
+  let best: Role = 'EMPLOYEE'
+  for (const r of roles ?? []) {
+    const mapped = RMS_TO_PMS[String(r?.role_code ?? '').toUpperCase()]
+    if (mapped && RANK.indexOf(mapped) > RANK.indexOf(best)) best = mapped
+  }
+  return best
+}
