@@ -24,6 +24,9 @@ export interface CreateInput {
   signers: SignerInput[]; fields: FieldInput[]; recipients?: SignerInput[]
   source?: string; sourceRef?: string | null
   sender: { id: string | null; name: string; email: string | null }
+  /** Signing inside another flow (the onboarding portal): the envelope starts as a DRAFT and
+   *  no invite is mailed — the signer is already on our page and signs there. */
+  embedded?: boolean
 }
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -78,7 +81,7 @@ export async function createEnvelopes(i: CreateInput, base: string, req: NextReq
       const { data, error } = await sb.from('esign_envelopes').insert({
         envelope_no: newEnvelopeNo(), title: i.title.trim(), message: i.message || null,
         company_id: i.companyId || null, category: i.category || 'GENERAL', source: bulk ? 'BULK' : (i.source || 'MANUAL'),
-        source_ref: i.sourceRef || null, batch_id: batchId, status: 'SENT', signing_order: i.signingOrder || 'SEQUENTIAL',
+        source_ref: i.sourceRef || null, batch_id: batchId, status: i.embedded ? 'DRAFT' : 'SENT', signing_order: i.signingOrder || 'SEQUENTIAL',
         page_count: pageCount, original_path: 'pending', original_sha256: sha, original_name: i.originalName || null,
         expires_at: expires, created_by_id: i.sender.id, created_by_name: i.sender.name, created_by_email: i.sender.email,
         cc_emails: i.ccEmails || [],
@@ -106,6 +109,7 @@ export async function createEnvelopes(i: CreateInput, base: string, req: NextReq
     if (fErr) throw fErr
 
     await logEvent(env.id, 'CREATED', { actor: i.sender.name, req, details: { pages: pageCount, sha256: sha, signers: rows.length, bulk } })
+    if (i.embedded) { out.push({ id: env.id, envelope_no: env.envelope_no, to: rows.map(r => r.email).join(', '), invited: 0, failed: [], links: [] }); continue }
     await logEvent(env.id, 'SENT', { actor: i.sender.name, req })
     const inv = await inviteActive(env.id, base, { req, actor: i.sender.name })
     out.push({ id: env.id, envelope_no: env.envelope_no, to: rows.map(r => r.email).join(', '), ...inv })
@@ -175,6 +179,12 @@ async function complete(envelopeId: string, base: string): Promise<boolean> {
   const signedSha = sha256Hex(finalBytes)
   await sb.from('esign_envelopes').update({ status: 'COMPLETED', signed_path: signedPath, signed_sha256: signedSha, updated_at: nowIso }).eq('id', envelopeId)
   await logEvent(envelopeId, 'COMPLETED', { actor: 'EZER Sign', details: { sha256: signedSha } })
+  // What signing this document means elsewhere: a signed offer letter is the candidate's
+  // acceptance (lib/recruitment/offer-esign.ts). Loaded lazily — that module imports this one.
+  if (env.source === 'OFFER') {
+    try { await (await import('@/lib/recruitment/offer-esign')).onOfferSigned(env, finalBytes) }
+    catch (e) { console.error('offer acceptance from e-sign failed', e) }
+  }
 
   const to = [...new Set([...(signers || []).map(s => s.email), env.created_by_email, ...(env.cc_emails || [])].filter(Boolean) as string[])]
   const stem = String(env.title || 'document').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60) || 'document'

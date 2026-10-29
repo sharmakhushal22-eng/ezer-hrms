@@ -18,33 +18,18 @@ import { sendMail } from '@/lib/mail/send'
 import { roleHolders } from '@/lib/recruitment/offer-approval-notify'
 import { addToBlacklist } from '@/lib/recruitment/blacklist'
 import { actorName } from '@/lib/recruitment/actor'
+import { OFFER_DOCS_BUCKET, audit, latestRequest, acceptBlocked, recordAcceptance } from '@/lib/recruitment/offer-accept'
 
 export const runtime = 'nodejs'
 
-const BUCKET = 'onboarding-docs'
+const BUCKET = OFFER_DOCS_BUCKET
 const MAX_BYTES = 10 * 1024 * 1024
 const bad = (m: string, s = 400) => NextResponse.json({ error: m }, { status: s })
-const audit = (candidate: any, action_type: string, details: any) =>
-  sb.from('recruitment_audit_logs').insert({ candidate_id: candidate.id, company_id: candidate.company_id || null, action_type, details, created_at: new Date().toISOString() })
-
-/** The offer this response is about: the candidate's latest request. */
-async function latestRequest(candidateId: string) {
-  const { data } = await sb.from('offer_approval_requests').select('*').eq('candidate_id', candidateId).order('submitted_at', { ascending: false }).limit(1).maybeSingle()
-  return data
-}
 
 async function reopenMrf(mrfId: string | null) {
   if (!mrfId) return
   const { data: m } = await sb.from('manpower_requisitions').select('status').eq('id', mrfId).maybeSingle()
   if (m?.status === 'CLOSED') await sb.from('manpower_requisitions').update({ status: 'APPROVED' }).eq('id', mrfId)
-}
-
-async function closeMrfIfFilled(mrfId: string | null) {
-  if (!mrfId) return
-  const { data: m } = await sb.from('manpower_requisitions').select('no_of_openings, openings, status').eq('id', mrfId).maybeSingle()
-  if (!m || m.status === 'CLOSED') return
-  const { count } = await sb.from('candidates').select('id', { count: 'exact', head: true }).eq('mrf_id', mrfId).in('stage', ['Offer Sent', 'Joined'])
-  if ((count || 0) >= Number(m.no_of_openings || m.openings || 1)) await sb.from('manpower_requisitions').update({ status: 'CLOSED' }).eq('id', mrfId)
 }
 
 async function upload(candidateId: string, kind: string, file: File) {
@@ -70,7 +55,7 @@ export async function GET(req: NextRequest) {
     return { view: v?.signedUrl || null, download: d?.signedUrl || null }
   }
   return NextResponse.json({ acceptance: {
-    accepted_at: a.accepted_at, uploaded_by: a.uploaded_by,
+    accepted_at: a.accepted_at, uploaded_by: a.uploaded_by, type: a.acceptance_type,
     signed_offer: { name: a.signed_file_name, ...(await sign(a.signed_file_url, a.signed_file_name)) },
     mail_proof: { name: a.mail_proof_name, ...(await sign(a.mail_proof_url, a.mail_proof_name)) },
   } })
@@ -88,8 +73,8 @@ export async function POST(req: NextRequest) {
   const { data: cand } = await sb.from('candidates').select('*').eq('id', String(body.candidate_id)).maybeSingle()
   if (!cand) return bad('Candidate not found', 404)
   // All three answer a SENT offer that is still waiting for one.
-  if (cand.stage !== 'Offer Sent' || cand.offer_accepted) return bad('This candidate has no offer waiting for a response.', 409)
-  if (cand.offer_response === 'REVISION') return bad('This offer is with the HR Head for revision.', 409)
+  const blocked = acceptBlocked(cand)
+  if (blocked) return bad(blocked, 409)
   const request = await latestRequest(cand.id)
 
   try {
@@ -101,15 +86,8 @@ export async function POST(req: NextRequest) {
       if (!/pdf$/i.test(signed.type) && !/\.pdf$/i.test(signed.name)) return bad('The signed offer letter must be a PDF.')
       if (!/^image\//.test(proof.type) && !/pdf$/i.test(proof.type)) return bad('The mail screenshot must be an image (PNG / JPG) or a PDF.')
       const [signedPath, proofPath] = await Promise.all([upload(cand.id, 'SIGNED_OFFER', signed), upload(cand.id, 'OFFER_ACCEPT_MAIL', proof)])
-      const { error } = await sb.from('offer_acceptances').insert({
-        candidate_id: cand.id, approval_request_id: request?.id || null, company_id: cand.company_id || request?.company_id || null,
-        acceptance_type: 'UPLOAD', signed_file_url: signedPath, signed_file_name: signed.name,
-        mail_proof_url: proofPath, mail_proof_name: proof.name, uploaded_by: by, status: 'ACCEPTED',
-      })
-      if (error) return bad(error.message.includes('mail_proof') ? 'Run migration 134 in Supabase first (offer acceptance columns are missing).' : error.message, 500)
-      await sb.from('candidates').update({ offer_accepted: true, offer_response: 'ACCEPTED' }).eq('id', cand.id)
-      await closeMrfIfFilled(cand.mrf_id)
-      await audit(cand, 'OFFER_ACCEPTED', { name: cand.full_name, by, signed_offer: signed.name, mail_proof: proof.name })
+      const err = await recordAcceptance(cand, { type: 'UPLOAD', by, signedPath, signedName: signed.name, proofPath, proofName: proof.name })
+      if (err) return bad(err, 500)
       return NextResponse.json({ ok: true })
     }
 

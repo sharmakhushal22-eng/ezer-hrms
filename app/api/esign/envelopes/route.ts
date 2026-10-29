@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
     .select('id, envelope_no, title, category, source, batch_id, status, signing_order, page_count, original_name, expires_at, created_by_name, created_at, updated_at, completed_at, void_reason, esign_signers(id, order_no, name, email, status, role_label, auth_method, signed_at, viewed_at, invited_at, declined_at, decline_reason, employee_id)')
     .order('created_at', { ascending: false }).limit(limit)
   const st = sp.get('status')
-  if (st) q = q.in('status', st.split(','))
+  // A DRAFT is a joining-forms bundle the candidate has opened but not signed yet (lib/onboarding/esign.ts).
+  q = st ? q.in('status', st.split(',')) : q.neq('status', 'DRAFT')
   const { data, error } = await q
   if (error) return NextResponse.json({ error: migrationHint(error) || error.message, setup: !!migrationHint(error) }, { status: migrationHint(error) ? 503 : 500 })
 
