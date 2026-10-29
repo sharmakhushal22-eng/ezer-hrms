@@ -22,6 +22,9 @@ import { offerKindOf, OFFER_EMAIL_KEY } from '@/lib/config/offer-mail'
 import { stripMarkup, toEmailHtml } from '@/lib/config/render'
 import { sendMail, mailConfigured } from '@/lib/mail/send'
 
+import { sendOfferForSignature, signBlock } from '@/lib/recruitment/offer-esign'
+import { senderOf, migrationHint } from '@/lib/esign/server'
+
 export const runtime = 'nodejs' // nodemailer needs the Node.js runtime, not Edge
 
 export async function GET(req: NextRequest) {
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
   if (gate.error) return gate.error
 
   try {
-    const { to, cc, subject, body, request_id } = await req.json()
+    const { to, cc, subject, body, request_id, esign } = await req.json()
 
     if (!to || !subject || !body) {
       return NextResponse.json({ error: 'Missing recipient, subject, or body' }, { status: 400 })
@@ -76,19 +79,29 @@ export async function POST(req: NextRequest) {
     const pos = positionOf(d.rows)
     const posMsg = positionMessage(pos, 'in the offer letter. Fill them in the offer file before sending')
     if (posMsg) return NextResponse.json({ error: posMsg }, { status: 409 })
-    const pdf = await offerLetterPdf(d)
+    const pdf = await offerLetterPdf(d, { forSigning: esign === true })
     const attachments = [{ filename: pdf.name, content: pdf.content, contentType: 'application/pdf' }]
+
+    // "Ask the candidate to accept by e-signature" (lib/recruitment/offer-esign.ts): the mail
+    // gains a Review & sign link. If the envelope cannot be made (e.g. migration 174 not run),
+    // the offer still goes out as before and the screen says why there is no link.
+    let sign: { link: string; envelopeNo: string } | null = null, esignError: string | null = null
+    if (esign === true) {
+      try { sign = await sendOfferForSignature({ dossier: d, pdf, to: String(to).trim(), sender: await senderOf(gate.user), req }) }
+      catch (e: any) { esignError = migrationHint(e) || e?.message || String(e); console.error('offer e-sign envelope failed:', e) }
+    }
+    const block = sign ? signBlock(sign.link) : null
 
     const sent = await sendMail({
       to, cc: ccList, subject,
-      text: stripMarkup(String(body)),
+      text: stripMarkup(String(body)) + (block?.text || ''),
       // HTML part: escaped, line breaks kept (the offer letter goes as the PDF attachment).
-      html: toEmailHtml(String(body)),
+      html: toEmailHtml(String(body)) + (block?.html || ''),
       attachments, fromName: 'HR Team',
     })
     if (!sent.sent) return NextResponse.json({ error: sent.error || sent.skipped || 'Failed to send email' }, { status: 502 })
 
-    return NextResponse.json({ ok: true, messageId: sent.messageId, position: pos })
+    return NextResponse.json({ ok: true, messageId: sent.messageId, position: pos, esign: sign ? { envelope_no: sign.envelopeNo } : null, esign_error: esignError })
   } catch (err: any) {
     console.error('send-offer-email failed:', err)
     return NextResponse.json({ error: err?.message || 'Failed to send email' }, { status: 502 })

@@ -9,20 +9,16 @@
 // POST { action: 'submit', signature, kind, consent }   stamps the PDF
 // POST { action: 'decline', reason }
 import { NextRequest, NextResponse } from 'next/server'
-import { sb, logEvent, mailOtp, mailDeclined, appBase, migrationHint } from '@/lib/esign/server'
-import { loadLink, openSession, sessionOk } from '@/lib/esign/signer'
+import { sb, logEvent, mailDeclined, appBase, migrationHint } from '@/lib/esign/server'
+import { loadLink, openSession, sessionOk, sendEmailOtp, verifyEmailOtp } from '@/lib/esign/signer'
 import { applySignature } from '@/lib/esign/flow'
-import { newOtp, sealOtp, otpMatches, isValidAadhaar, maskEmail, OTP_TTL_MIN, OTP_MAX_ATTEMPTS, OTP_MAX_SENDS, AADHAAR_DEMO } from '@/lib/esign/core'
-import { mailConfigured } from '@/lib/mail/send'
+import { newOtp, sealOtp, otpMatches, isValidAadhaar, maskEmail, OTP_TTL_MIN, OTP_MAX_ATTEMPTS, AADHAAR_DEMO } from '@/lib/esign/core'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 type Ctx = { params: Promise<{ token: string }> }
 const bad = (error: string, status = 400, extra: object = {}) => NextResponse.json({ error, ...extra }, { status })
-// Local development has no mail transport (GMAIL_* blank): show the code on screen there,
-// never in production.
-const devEcho = () => process.env.NODE_ENV !== 'production' && !mailConfigured()
 
 export async function GET(req: NextRequest, { params }: Ctx) {
   const { token } = await params
@@ -59,28 +55,14 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
   switch (body.action) {
     case 'send_otp': {
-      if (signer.otp_sent_count >= OTP_MAX_SENDS) return bad('Too many codes requested for this link. Ask the sender to resend the document.', 429)
-      const issued = signer.otp_expires_at ? new Date(signer.otp_expires_at).getTime() - OTP_TTL_MIN * 60_000 : 0
-      if (Date.now() - issued < 30_000) return bad('A code was just sent. Wait 30 seconds before asking for another.', 429)
-      const otp = newOtp()
-      await sb.from('esign_signers').update({ otp_hmac: sealOtp(signer.id, 'email', otp), otp_expires_at: new Date(Date.now() + OTP_TTL_MIN * 60_000).toISOString(), otp_attempts: 0, otp_sent_count: signer.otp_sent_count + 1 }).eq('id', signer.id)
-      const r = await mailOtp({ to: signer.email, name: signer.name, otp, title: env.title })
-      await logEvent(env.id, 'OTP_SENT', { signerId: signer.id, actor, req, details: { to: maskEmail(signer.email), mail: r.sent ? 'sent' : (r.skipped || r.error) } })
-      if (!r.sent && !devEcho()) return bad(`The code could not be e-mailed (${r.error || r.skipped}). Try again in a minute.`, 502)
-      return NextResponse.json({ ok: true, to: maskEmail(signer.email), ...(devEcho() ? { dev_otp: otp } : {}) })
+      const r = await sendEmailOtp(env, signer, req)
+      if (!r.ok) return bad(r.error, r.status)
+      return NextResponse.json(r)
     }
     case 'verify_otp': {
-      if (!signer.otp_hmac || !signer.otp_expires_at || new Date(signer.otp_expires_at).getTime() < Date.now()) return bad('That code has expired. Request a new one.')
-      if (signer.otp_attempts >= OTP_MAX_ATTEMPTS) return bad('Too many wrong attempts. Request a new code.', 429)
-      if (!otpMatches(signer.otp_hmac, signer.id, 'email', String(body.otp || '').trim())) {
-        await sb.from('esign_signers').update({ otp_attempts: signer.otp_attempts + 1 }).eq('id', signer.id)
-        await logEvent(env.id, 'OTP_FAILED', { signerId: signer.id, actor, req })
-        const left = OTP_MAX_ATTEMPTS - signer.otp_attempts - 1
-        return bad(left > 0 ? `That code is not right. ${left} attempt${left === 1 ? '' : 's'} left.` : 'Too many wrong attempts. Request a new code.')
-      }
-      await sb.from('esign_signers').update({ otp_hmac: null, email_verified_at: new Date().toISOString() }).eq('id', signer.id)
+      const r = await verifyEmailOtp(env, signer, body.otp, req)
+      if (!r.ok) return bad(r.error, r.status)
       const session = await openSession(signer.id)
-      await logEvent(env.id, 'OTP_VERIFIED', { signerId: signer.id, actor, req })
       return NextResponse.json({ ok: true, session, need_aadhaar: signer.auth_method === 'EMAIL_AADHAAR_OTP' && !signer.aadhaar_verified_at })
     }
     case 'aadhaar_send': {

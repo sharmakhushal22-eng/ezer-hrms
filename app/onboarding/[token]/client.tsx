@@ -6,7 +6,7 @@
 // progress bar at the top. Hover, focus and the responsive collapse live in onboarding.css.
 'use client'
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { maskPan, maskAadhaar, maskMobile, maskIntlPhone, maskUan } from '@/lib/ids/mask'
+import { maskPan, maskMobile, maskIntlPhone, maskUan } from '@/lib/ids/mask'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import {
@@ -15,6 +15,7 @@ import {
   IconDownload, IconPayroll, IconLeave, IconHome,
 } from '@/lib/ui'
 import './onboarding.css'
+import SignaturePad, { type SignatureKind } from '@/components/esign/SignaturePad'
 import { missingFor, missingFields, describeMissing } from '@/lib/onboarding/required'
 import { trackOf, trackFlags, requiredDocCodes, SSA_COUNTRIES, type HiringTrack } from '@/lib/onboarding/hiring-track'
 
@@ -49,7 +50,7 @@ const BLOCK_NO: React.CSSProperties = { width: 24, height: 24, borderRadius: 8, 
 const REMOVE_BTN: React.CSSProperties = { height: 30, padding: '0 11px', borderRadius: 9, border: `1px solid ${TK.criticalEdge}`, background: TK.surface, color: TK.critical, fontSize: 12, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }
 const ADD_BTN: React.CSSProperties = { height: 42, padding: '0 16px', borderRadius: 12, border: `1px dashed ${TK.brandEdge}`, background: TK.brandTint, color: TK.brand, fontSize: 13.5, fontWeight: 650, fontFamily: 'inherit', cursor: 'pointer', width: '100%' }
 
-const STEPS = ['Welcome', 'Documents', 'AI Review', 'Personal', 'KYC & EPF', 'Nominees', 'ESIC & Family', 'Education', 'Forms Review', 'Policies', 'ACK Doc', 'Aadhaar']
+const STEPS = ['Welcome', 'Documents', 'AI Review', 'Personal', 'KYC & EPF', 'Nominees', 'ESIC & Family', 'Education', 'Forms Review', 'Policies', 'ACK Doc', 'E-Sign']
 
 /** What each step is called on screen, and the line under its title. Index = step - 1. */
 const STEP_META: { title: string; desc: string; phase: number }[] = [
@@ -64,7 +65,7 @@ const STEP_META: { title: string; desc: string; phase: number }[] = [
   { phase: 3, title: 'Review your forms', desc: 'Your EPF and gratuity forms, filled in from your answers. Check each one before you sign.' },
   { phase: 3, title: 'Company policies', desc: 'Read and acknowledge each policy. Mandatory ones must be done before you can continue.' },
   { phase: 3, title: 'Your acknowledgement', desc: 'A summary of what you are confirming. A copy is emailed to you after you sign.' },
-  { phase: 3, title: 'Sign with Aadhaar', desc: 'One OTP e-signs every form and acknowledgement at once.' },
+  { phase: 3, title: 'Sign your forms', desc: 'Review the PDF, add your signature once and confirm with a code sent to your e-mail. It goes on every form.' },
 ]
 const PHASES = ['Get started', 'Documents', 'Your details', 'Review & sign']
 
@@ -737,81 +738,146 @@ function AckPreviewPhase({ token, onBack, onNext }: {
         <button className="ezo-btn is-ghost" onClick={onBack} style={S.btnO}>Back</button>
         <button className="ezo-btn" onClick={onNext}
           style={{ ...S.btnP, flex: 1 }}>
-          Proceed to Aadhaar e-Verify →
+          Proceed to sign →
         </button>
       </div>
     </div>
   )
 }
 
-// ── Phase 11: Aadhaar e-Verify + digital signature (demo OTP) ───────
-// Records the eSign (mock — UIDAI vendor needed for real OTP) then submits.
-function ESignPhase({ token, onBack, onSubmit, submitting }: {
-  token: string; onBack: () => void; onSubmit: () => void; submitting: boolean
+// ── Phase 12: sign the joining forms with EZER Sign, then submit ─────
+// The acknowledgement and every statutory form that applies are built into one PDF with a box
+// wherever the employee signs (lib/onboarding/esign.ts). The candidate reviews it, adopts a
+// signature, proves the e-mail with a one-time code, and one click stamps every box, adds the
+// Certificate of Completion and submits the form. This replaced a demo "Aadhaar OTP" that took
+// any six digits and put no signature on anything. Before migration 174 the e-sign tables are
+// missing; the step then says so and submits without the signature, as before.
+function ESignPhase({ token, name, onBack, ready, final, onSigned, onSubmitUnsigned, submitting }: {
+  token: string; name: string; onBack: () => void
+  /** Runs the portal's own last checks (declaration, required details); false sends them back. */
+  ready: () => boolean
+  final: () => any
+  onSigned: (res: any) => void
+  onSubmitUnsigned: () => void
+  submitting: boolean
 }) {
-  const [aadhaar, setAadhaar] = useState('')
-  const [otpSent, setOtpSent] = useState(false)
+  const [prep, setPrep] = useState<'loading' | 'ready' | 'error' | 'setup'>('loading')
+  const [info, setInfo] = useState<{ envelope_no: string; documents: string[]; boxes: number; email: string } | null>(null)
+  const [err, setErr] = useState('')
+  const [sig, setSig] = useState<{ png: string | null; kind: SignatureKind }>({ png: null, kind: 'DRAWN' })
+  const [consent, setConsent] = useState(false)
+  const [sent, setSent] = useState<{ to: string; dev?: string } | null>(null)
   const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState('')
-  const clean = aadhaar.replace(/\D/g, '')
-  const bundle = ['EPF Form 11 (PF Declaration)', 'EPF Form 2 (Nominee Declaration)', 'Gratuity Form F', 'All Policy Acknowledgements', 'Complete Joining Form (consolidated)']
-  const lbl: React.CSSProperties = S.lbl
-  const inp: React.CSSProperties = { ...S.inp(), height: 54, fontSize: 20, fontWeight: 600, letterSpacing: 4, textAlign: 'center' }
 
-  const sendOtp = () => {
-    if (clean.length !== 12) { setErr('Enter a valid 12-digit Aadhaar number'); return }
-    setErr(''); setOtpSent(true)
-  }
-  const verifyAndSign = async () => {
-    if (otp.replace(/\D/g, '').length !== 6) { setErr('Enter the 6-digit OTP'); return }
-    setBusy(true); setErr('')
+  const prepare = useCallback(async () => {
+    if (!ready()) return
+    setPrep('loading'); setErr(''); setSent(null); setOtp('')
     try {
-      await fetch('/api/onboarding/esign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, aadhaar_last4: clean.slice(-4) }) })
-      await onSubmit()
-    } catch { setErr('Verification failed — please try again.'); setBusy(false) }
+      const j = await api('/api/onboarding/esign', { token, action: 'prepare', final_form_data: final() })
+      if (j.setup) { setPrep('setup'); return }
+      if (!j.ok) { setErr(j.error || 'Your documents could not be prepared.'); setPrep('error'); return }
+      setInfo(j); setPrep('ready')
+    } catch { setErr('Your documents could not be prepared. Check your connection and try again.'); setPrep('error') }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+  useEffect(() => { prepare() }, [prepare])
+
+  const sendCode = async () => {
+    setBusy(true); setErr('')
+    const j = await api('/api/onboarding/esign', { token, action: 'send_otp' }).catch(() => ({ error: 'Could not send the code.' }))
+    setBusy(false)
+    if (!j.ok) { setErr(j.error || 'Could not send the code.'); return }
+    setSent({ to: j.to, dev: j.dev_otp })
   }
+  const sign = async () => {
+    if (!sig.png) { setErr('Add your signature first.'); return }
+    if (!consent) { setErr('Tick the box to agree to sign electronically.'); return }
+    if (otp.replace(/\D/g, '').length !== 6) { setErr('Enter the 6-digit code from your e-mail.'); return }
+    setBusy(true); setErr('')
+    const j = await api('/api/onboarding/esign', { token, action: 'sign', otp: otp.trim(), signature: sig.png, kind: sig.kind, consent: true, final_form_data: final() })
+      .catch(() => ({ error: 'Signing failed. Check your connection and try again.' }))
+    setBusy(false)
+    if (j.success) { onSigned(j); return }
+    setErr(j.error || 'Signing failed.')
+  }
+
+  const inp: React.CSSProperties = { ...S.inp(), height: 54, fontSize: 20, fontWeight: 600, letterSpacing: 4, textAlign: 'center' }
+  const canSign = !!sig.png && consent && !!sent && otp.replace(/\D/g, '').length === 6 && !busy && !submitting
+
+  if (prep === 'setup') return (
+    <div>
+      <div style={{ ...S.card, maxWidth: 620 }}>
+        <Sec icon={<IconLetters size={15} />}>Electronic signature</Sec>
+        <Note tone="warn">Electronic signing isn’t switched on for your company yet. Submit your form now; HR will collect your signature on the forms on your joining day.</Note>
+        <button className="ezo-btn" onClick={onSubmitUnsigned} disabled={submitting} style={{ ...S.btnP, width: '100%' }}>{submitting ? 'Submitting…' : 'Submit my joining form'}</button>
+      </div>
+      <button className="ezo-btn is-ghost" onClick={onBack} style={S.btnO}>Back</button>
+    </div>
+  )
 
   return (
     <div>
       <div style={S.card}>
         <Sec icon={<IconLetters size={15} />}>What you are signing</Sec>
-        <div className="ezo-g2" style={{ gap: 8 }}>
-          {bundle.map(b => (
-            <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, fontWeight: 600, color: TK.ink, padding: '11px 13px', borderRadius: 12, background: TK.sunken, border: `1px solid ${TK.line}` }}>
-              <span style={{ width: 28, height: 28, borderRadius: 8, display: 'grid', placeItems: 'center', background: TK.surface, color: TK.brand, border: `1px solid ${TK.brandEdge}`, flexShrink: 0 }}><IconLetters size={14} /></span>{b}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ ...S.card, maxWidth: 520 }}>
-        <Sec icon={<IconLock size={15} />}>{otpSent ? 'Enter the OTP' : 'Your Aadhaar number'}</Sec>
-        {!otpSent ? (
+        {prep === 'loading' && <div style={{ fontSize: 13.5, color: TK.muted }}>Preparing your documents with the details you entered…</div>}
+        {prep === 'error' && (
           <>
-            <label style={lbl}>Aadhaar Number</label>
-            <input className="ezo-code" style={inp} value={aadhaar} maxLength={14} inputMode="numeric"
-              onChange={e => setAadhaar(maskAadhaar(e.target.value, true))} placeholder="XXXX XXXX XXXX" />
-            <div style={{ fontSize: 12, color: TK.faint, marginTop: 8 }}>An OTP goes to the mobile number linked to your Aadhaar. We only keep the last four digits.</div>
-            <button className="ezo-btn" onClick={sendOtp} style={{ ...S.btnP, marginTop: 14, width: '100%' }}>Send OTP</button>
+            <Note tone="bad">{err}</Note>
+            <button className="ezo-btn" onClick={prepare} style={S.btnO}>Try again</button>
           </>
-        ) : (
+        )}
+        {prep === 'ready' && info && (
           <>
-            <Note tone="ok">OTP sent to your Aadhaar-linked mobile ending {clean.slice(-4)}. <span style={{ color: TK.muted }}>(Demo: any 6 digits work.)</span></Note>
-            <label style={lbl}>Enter OTP</label>
-            <input className="ezo-code" style={inp} value={otp} maxLength={6} inputMode="numeric"
-              onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} placeholder="••••••" autoFocus />
-            <div className="ezo-actions">
-              <button className="ezo-btn is-ghost" onClick={() => { setOtpSent(false); setOtp('') }} style={S.btnO}>Change Aadhaar</button>
-              <button className="ezo-btn" onClick={verifyAndSign} disabled={busy || submitting}
-                style={{ ...S.btnP, flex: 1, background: `linear-gradient(180deg, ${TK.positive}, ${TK.positive})`, boxShadow: 'none', cursor: (busy || submitting) ? 'not-allowed' : 'pointer', opacity: (busy || submitting) ? .7 : 1 }}>
-                {(busy || submitting) ? 'Verifying & signing…' : 'Verify & e-Sign — Submit'}
-              </button>
+            <div className="ezo-g2" style={{ gap: 8 }}>
+              {info.documents.map(b => (
+                <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, fontWeight: 600, color: TK.ink, padding: '11px 13px', borderRadius: 12, background: TK.sunken, border: `1px solid ${TK.line}` }}>
+                  <span style={{ width: 28, height: 28, borderRadius: 8, display: 'grid', placeItems: 'center', background: TK.surface, color: TK.brand, border: `1px solid ${TK.brandEdge}`, flexShrink: 0 }}><IconLetters size={14} /></span>{b}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 14 }}>
+              <a className="ezo-btn" href={`/api/onboarding/esign?token=${encodeURIComponent(token)}&file=preview`} target="_blank" rel="noreferrer" style={{ ...S.btnO, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}><IconDownload size={15} />Read the documents (PDF)</a>
+              <span style={{ fontSize: 12.5, color: TK.muted }}>One signature goes in all {info.boxes} places marked for you. Reference {info.envelope_no}.</span>
             </div>
           </>
         )}
-        {err && <div style={{ marginTop: 12 }}><Note tone="bad">{err}</Note></div>}
       </div>
+
+      {prep === 'ready' && info && (
+        <div className="ezo-g2" style={{ alignItems: 'start' }}>
+          <div style={S.card}>
+            <Sec icon={<IconUser size={15} />}>Your signature</Sec>
+            <SignaturePad name={name} onChange={(png, kind) => setSig({ png, kind })} />
+          </div>
+
+          <div style={S.card}>
+            <Sec icon={<IconLock size={15} />}>Verify it’s you and sign</Sec>
+            <div style={{ fontSize: 13, color: TK.muted, lineHeight: 1.6, marginBottom: 12 }}>We e-mail a 6-digit code to <b style={{ color: TK.ink }}>{info.email}</b>. Entering it ties this signature to you.</div>
+            {!sent ? (
+              <button className="ezo-btn" onClick={sendCode} disabled={busy} style={{ ...S.btnO, width: '100%' }}>{busy ? 'Sending…' : 'Send code to my e-mail'}</button>
+            ) : (
+              <>
+                <Note tone="ok">Code sent to {sent.to}. It is valid for 10 minutes.{sent.dev && <> <span style={{ color: TK.muted }}>(Local testing, e-mail is off: {sent.dev})</span></>}</Note>
+                <label style={S.lbl}>Code from your e-mail</label>
+                <input className="ezo-code" style={inp} value={otp} maxLength={6} inputMode="numeric" autoComplete="one-time-code"
+                  onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} placeholder="••••••" />
+                <button onClick={sendCode} disabled={busy} style={{ border: 'none', background: 'transparent', color: TK.brand, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: '8px 0 0', fontFamily: 'inherit' }}>Send a new code</button>
+              </>
+            )}
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 12.5, color: TK.inkSoft, lineHeight: 1.55, margin: '16px 0 14px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} style={{ marginTop: 2, flexShrink: 0 }} />
+              <span>I have read these documents and agree to sign them electronically. My electronic signature is legally binding, the same as my handwritten signature (Information Technology Act, 2000).</span>
+            </label>
+            <button className="ezo-btn" onClick={sign} disabled={!canSign}
+              style={{ ...S.btnP, width: '100%', background: `linear-gradient(180deg, ${TK.positive}, ${TK.positive})`, boxShadow: 'none', cursor: canSign ? 'pointer' : 'not-allowed', opacity: canSign ? 1 : .6 }}>
+              {busy || submitting ? 'Signing & submitting…' : 'Sign & submit'}
+            </button>
+            {!sig.png && <div style={{ fontSize: 12, color: TK.faint, marginTop: 8, textAlign: 'center' }}>Draw, type or upload your signature first.</div>}
+          </div>
+        </div>
+      )}
+      {err && prep === 'ready' && <Note tone="bad">{err}</Note>}
 
       <button className="ezo-btn is-ghost" onClick={onBack} style={S.btnO}>Back</button>
     </div>
@@ -1038,6 +1104,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   const [otpLoading, setOtpLoading] = useState(false)
   const [docs, setDocs] = useState<Record<string, DocStatus>>(uploadedDocs)
   const [submitted, setSubmitted] = useState(false)
+  /** Signed with EZER Sign in this visit — the done screen then offers the signed copy. */
+  const [signed, setSigned] = useState(false)
   const [employeeCode, setEmployeeCode] = useState<string | null>(null)
 
   const c = candidate
@@ -1323,8 +1391,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   })
 
   // ── Final Submit ─────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!declaration) { showToast('Please accept the declaration', 'err'); return }
+  /** The last checks before anything reaches HR; false (with a toast, and the step to fix) when one fails. */
+  const readyToSubmit = () => {
+    if (!declaration) { showToast('Please accept the declaration', 'err'); return false }
     // Everything required, across every step, one last time before it reaches HR.
     const missingAll = missingFields({
       step_3: personal, step_4: contact, step_5: { ...emergency, prev_employers: prevEmployers, education },
@@ -1335,26 +1404,31 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
       // PAN and bank live on the contact screen (4); only the nominees are on screen 7.
       const first = missingAll[0]
       setStep((first.step === 7 && first.key !== 'pf_nominees' ? 4 : first.step) as any)
-      return
+      return false
     }
+    return true
+  }
+
+  const buildFinal = () => ({
+    step_3: personal,
+    step_4: contact,
+    step_5: { ...emergency, prev_employers: prevEmployers, education },
+    step_7: {
+      ...withLegacyNominees(statutory),
+      gross_monthly: grossMonthly,
+      esic_applicable: esicApplicable,
+      esic_details: esic,
+      insurance,
+      eps_family: epsFamily,
+      eps_fallback: epsFallback,
+    },
+  })
+
+  // Without e-signing (only when the e-sign tables are not set up yet — see ESignPhase).
+  const handleSubmit = async () => {
+    if (!readyToSubmit()) return
     setSubmitting(true)
-
-    const final = {
-      step_3: personal,
-      step_4: contact,
-      step_5: { ...emergency, prev_employers: prevEmployers, education },
-      step_7: {
-        ...withLegacyNominees(statutory),
-        gross_monthly: grossMonthly,
-        esic_applicable: esicApplicable,
-        esic_details: esic,
-        insurance,
-        eps_family: epsFamily,
-        eps_fallback: epsFallback,
-      },
-    }
-
-    const res = await api('/api/onboarding/submit', { token, final_form_data: final })
+    const res = await api('/api/onboarding/submit', { token, final_form_data: buildFinal() })
     setSubmitting(false)
 
     if (res.success) setSubmitted(true)
@@ -1395,6 +1469,22 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               right under the confirmation: the acknowledgement as a PDF on the company's
               letterhead (app/api/onboarding/ack-pdf). It used to be a small outline button
               at the bottom that only printed the web page. */}
+          {signed && (
+            <div className="ezo-dl ezo-noprint">
+              <span className="ezo-dl-ic"><IconLetters size={26} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="ezo-dl-t">Your signed joining forms</div>
+                <div className="ezo-dl-d">The acknowledgement and statutory forms with your e-signature and a Certificate of Completion. A copy is also in your e-mail, and HR has received it.</div>
+              </div>
+              <div className="ezo-dl-acts">
+                <a className="ezo-btn ezo-dl-main" href={`/api/onboarding/esign?token=${encodeURIComponent(token)}&file=signed&mode=download`} download>
+                  <IconDownload size={18} strokeWidth={2.2} />Download PDF
+                </a>
+                <a className="ezo-btn ezo-dl-view" href={`/api/onboarding/esign?token=${encodeURIComponent(token)}&file=signed`} target="_blank" rel="noreferrer">Open</a>
+              </div>
+            </div>
+          )}
+
           <div className="ezo-dl ezo-noprint">
             <span className="ezo-dl-ic"><IconLetters size={26} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -2156,7 +2246,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         )}
 
         {step === 12 && (
-          <ESignPhase token={token} onBack={prevStep} onSubmit={handleSubmit} submitting={submitting} />
+          <ESignPhase token={token} name={personal.full_name || c.full_name || ''} onBack={prevStep} ready={readyToSubmit} final={buildFinal}
+            onSigned={() => { setSigned(true); setSubmitted(true) }} onSubmitUnsigned={handleSubmit} submitting={submitting} />
         )}
         </div>
       </div>
