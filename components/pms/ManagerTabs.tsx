@@ -387,11 +387,10 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
                     flex child will not shrink below its content's intrinsic
                     width without it, so the cell grew instead of the words
                     breaking. */}
-                <label title={CONFIRM_LABEL[myStage as ConfirmStage]}
-                        style={{ display: 'flex', gap: 7, alignItems: 'flex-start',
-                                cursor: alreadyConfirmed ? 'default' : 'pointer',
-                                lineHeight: 1.45 }}>
-                  <input type="checkbox" style={{ marginTop: 1, flex: '0 0 auto' }}
+                <label className="checkline"
+                       title={CONFIRM_LABEL[myStage as ConfirmStage]}
+                       style={{ cursor: alreadyConfirmed ? 'default' : 'pointer' }}>
+                  <input type="checkbox" style={{ marginTop: 1 }}
                          checked={alreadyConfirmed || !!confirmed[id]}
                          disabled={alreadyConfirmed}
                          onChange={e => setConfirmed(p => ({ ...p, [id]: e.target.checked }))} />

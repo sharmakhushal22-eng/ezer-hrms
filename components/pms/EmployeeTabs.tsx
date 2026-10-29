@@ -500,10 +500,9 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
             it is already on record. */}
         {(!locked || !selfSubmitted) && oneToOneRequired && !oneToOneAlready && onConfirmOneToOne && (
           <div className="card" style={{ marginBottom: 10 }}>
-            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start',
-                            cursor: 'pointer', lineHeight: 1.6 }}>
+            <label className="checkline">
               <input type="checkbox" checked={!!confirmOneToOne}
-                     style={{ marginTop: 3, flex: '0 0 auto' }}
+                     style={{ marginTop: 2 }}
                      onChange={e => onConfirmOneToOne(e.target.checked)} />
               {/* A div, not a span: it contains a block, and a block inside
                   an inline element is invalid markup that browsers paper over

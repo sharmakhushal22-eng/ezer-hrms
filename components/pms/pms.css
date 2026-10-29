@@ -238,6 +238,35 @@
   display: block; font-size: 11px; font-weight: 700; color: var(--ez-ink-soft);
   text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px;
 }
+/* A CHECKBOX IS NOT A TEXT FIELD, and the rule below is written for text
+ * fields. width:100% made the box eat its whole row, leaving about one
+ * character of space for the label beside it — which overflow-wrap: anywhere
+ * then broke one letter per line, straight down the side of the card. The
+ * padding and border did the rest.
+ *
+ * Observed in the running app on the employee's KRA screen, not in a
+ * preview: the preview harness renders these components inside .pms too, but
+ * the case that showed it had not been added there yet. */
+.pms input[type="checkbox"], .pms input[type="radio"] {
+  width: auto; min-width: 0; flex: 0 0 auto;
+  padding: 0; margin: 0; border: 0; border-radius: 0;
+  accent-color: var(--ez-brand);
+}
+
+/* A label that captions a control sits ABOVE it, small and tracked — that is
+ * what .pms label below is for. A label that WRAPS a checkbox is a different
+ * thing: it is a sentence the person is agreeing to, and it has to read like
+ * one. Without this it inherits the caption styling and comes out uppercase,
+ * letter-spaced and 11px. */
+.pms label.checkline {
+  display: flex; gap: 9px; align-items: flex-start;
+  font-size: 12px; font-weight: 400; letter-spacing: normal;
+  text-transform: none; color: var(--ez-ink-soft);
+  margin-bottom: 0; line-height: 1.5; cursor: pointer;
+}
+.pms label.checkline > span, .pms label.checkline > div { min-width: 0; }
+.pms label.checkline b { font-weight: 700; color: var(--ez-ink); }
+
 .pms input, .pms select, .pms textarea {
   width: 100%; padding: 8px 10px; border: 1px solid var(--ez-line);
   border-radius: 9px; font-size: 13px; font-family: inherit;

@@ -180,18 +180,21 @@ test('the queue uses the SHORT label, not the full sentence', () => {
 })
 
 test('both checkbox labels can actually wrap', () => {
-  // THE REAL CAUSE, in both places: a flex child will not shrink below its
-  // content's intrinsic width without min-width: 0, so a long sentence pushes
-  // its container instead of breaking. Neither label had it.
-  for (const [file, src] of [['ManagerTabs', MGR], ['EmployeeTabs', EMP]] as const) {
-    const i = src.indexOf("alignItems: 'flex-start'")
-    assert.ok(i > 0, `${file}: could not find the checkbox label`)
-    const label = src.slice(i, i + 700)
-    assert.match(label, /minWidth: 0/,
-      `${file}: the label's text is a flex child with no minWidth: 0, so it cannot wrap`)
-    assert.match(label, /flex: '0 0 auto'/,
-      `${file}: the checkbox itself is not pinned, so it will squash`)
-  }
+  // THE RULE MOVED, so this test moved with it. It used to read the inline
+  // styles on each label; those are now a .checkline class, because the real
+  // cause turned out to be two global rules in pms.css rather than anything
+  // on the elements themselves.
+  //
+  // What still has to hold: a flex child will not shrink below its content's
+  // intrinsic width without min-width: 0, and the checkbox must not be
+  // allowed to grow.
+  const css = read('components/pms/pms.css')
+  assert.match(css, /\.pms label\.checkline > span, \.pms label\.checkline > div \{ min-width: 0; \}/,
+    'the label text can still refuse to shrink, so a long sentence will push its card')
+  const box = css.slice(css.indexOf('.pms input[type="checkbox"]'),
+                        css.indexOf('.pms input[type="checkbox"]') + 260)
+  assert.match(box, /flex: 0 0 auto/,
+    'the checkbox is not pinned, so it will squash or grow')
 })
 
 test('the action cell is bounded, not merely given a minimum', () => {
@@ -278,4 +281,59 @@ test('the preview harness carries content harder than the real data', () => {
     'no long unbroken camelCase token in the fixture')
   assert.match(prev, /https:\/\/internal\.example\.com/,
     'no URL in the fixture — the commonest real cause')
+})
+
+// ── the checkbox renders as a checkbox ───────────────────────────────────
+
+test('a checkbox is exempted from the text-field width rule', () => {
+  // OBSERVED IN THE RUNNING APP, not in a preview: the label rendered ONE
+  // LETTER PER LINE, vertically, in uppercase, down the side of the card.
+  //
+  // Two rules in pms.css, compounding:
+  //   .pms input, .pms select, .pms textarea { width: 100%; padding: 8px 10px }
+  //   .pms label { text-transform: uppercase; letter-spacing: .5px; font-size: 11px }
+  //
+  // A checkbox IS an <input>, so it took width:100% and ate the whole row,
+  // leaving about one character for the text beside it — which the
+  // overflow-wrap: anywhere added for the previous overflow bug then broke
+  // letter by letter. The earlier "fix" made this one look worse.
+  const css = read('components/pms/pms.css')
+  assert.match(css, /\.pms input\[type="checkbox"\], \.pms input\[type="radio"\] \{/,
+    'checkboxes still inherit the text-field rule, so they will eat their row')
+  const rule = css.slice(css.indexOf('.pms input[type="checkbox"]'),
+                         css.indexOf('.pms input[type="checkbox"]') + 260)
+  assert.match(rule, /width: auto/, 'the checkbox still takes width: 100%')
+  assert.match(rule, /padding: 0/, 'the checkbox keeps text-field padding')
+
+  // The exemption must come BEFORE the rule it narrows, or equal specificity
+  // would let the later one win.
+  assert.ok(css.indexOf('.pms input[type="checkbox"]') < css.indexOf('.pms input, .pms select'),
+    'the exemption is declared after the rule it is meant to narrow')
+})
+
+test('a label that wraps a checkbox is not styled as a field caption', () => {
+  // .pms label is for the small tracked caption ABOVE a control. A label
+  // WRAPPING a checkbox is a sentence somebody is agreeing to, and inherited
+  // the caption styling — hence uppercase, 11px and letter-spaced.
+  const css = read('components/pms/pms.css')
+  assert.match(css, /\.pms label\.checkline \{/, 'there is no checkline style')
+  const rule = css.slice(css.indexOf('.pms label.checkline {'),
+                         css.indexOf('.pms label.checkline {') + 320)
+  assert.match(rule, /text-transform: none/, 'the sentence still renders uppercase')
+  assert.match(rule, /letter-spacing: normal/, 'the sentence is still letter-spaced')
+  assert.match(rule, /display: flex/)
+})
+
+test('every PMS checkbox uses it — there are only two, and both must', () => {
+  // A checkbox added later without the class gets the uppercase vertical
+  // treatment again, and nothing else in the suite would notice.
+  for (const [name, src] of [['EmployeeTabs', EMP], ['ManagerTabs', MGR]] as const) {
+    const boxes = (src.match(/type="checkbox"/g) ?? []).length
+    assert.equal(boxes, 1, `${name}: expected one checkbox, found ${boxes}`)
+    const at = src.indexOf('type="checkbox"')
+    // Walk back to the enclosing label and check it carries the class.
+    const before = src.slice(Math.max(0, at - 400), at)
+    assert.match(before, /<label className="checkline"/,
+      `${name}: the checkbox is not inside a label.checkline`)
+  }
 })
