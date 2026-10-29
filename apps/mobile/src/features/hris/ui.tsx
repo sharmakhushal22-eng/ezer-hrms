@@ -113,8 +113,8 @@ export function KpiGrid({ items }: { items: { k: string; v: React.ReactNode; ton
 }
 
 /** A full-screen modal with its own header — the web's centred review modals, phone-sized. */
-export function FullModal({ visible, onClose, title, subtitle, children, footer, closeLabel = 'Close' }: {
-  visible: boolean; onClose: () => void; title: string; subtitle?: string; children: React.ReactNode; footer?: React.ReactNode; closeLabel?: string
+export function FullModal({ visible, onClose, title, subtitle, children, footer, closeLabel = 'Close', scrollRef }: {
+  visible: boolean; onClose: () => void; title: string; subtitle?: string; children: React.ReactNode; footer?: React.ReactNode; closeLabel?: string; scrollRef?: React.Ref<ScrollView>
 }) {
   const { C } = useTheme()
   const insets = useSafeAreaInsets()
@@ -132,7 +132,7 @@ export function FullModal({ visible, onClose, title, subtitle, children, footer,
             <Txt size={F.tiny} w={600} color={C.brandDeep}>{closeLabel}</Txt>
           </Pressable>
         </View>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: S.lg, paddingBottom: footer ? S.lg : insets.bottom + S.xl }}>
+        <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: S.lg, paddingBottom: footer ? S.lg : insets.bottom + S.xl }}>
           {children}
         </ScrollView>
         {footer && (

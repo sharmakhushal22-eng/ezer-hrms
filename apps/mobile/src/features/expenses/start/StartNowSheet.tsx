@@ -20,6 +20,7 @@ import * as React from 'react'
 import { Pressable, View } from 'react-native'
 import type { GpsFix, Snapshot, Uuid } from '@web/te/types'
 import { newPlannerDraft, PURPOSES, setPattern, syncDraft, toTripDraft, type DraftContext, type PlannerDraft } from '@web/te/trip-draft'
+import { needsExplanation, whyLabel, whyProblem } from '@web/te/other-reason'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, S } from '@/ui/theme'
 import { Button, Input, Txt } from '@/ui/primitives'
@@ -179,6 +180,7 @@ function StartNow({ snap, onStarted }: { snap: Snapshot; onStarted: (tripId: Uui
         onChosen={(placeId, pt) => {
           const at = picking
           setPicking(null)
+          void reloadTe() // a place made in the picker is not in this snapshot yet (web onPlaceAdded)
           edit(d => ({ ...d, points: d.points.map((p, i) => (i === (at.kind === 'point' ? at.index : -1) ? { ...p, place: placeId, pt: pt || p.pt } : p)) }))
         }} />
     )
@@ -244,6 +246,14 @@ function StartNow({ snap, onStarted }: { snap: Snapshot; onStarted: (tripId: Uui
           {PURPOSES.map(p => <Opt key={p} label={p} on={draft.purpose === p} onPress={() => edit({ purpose: p })} />)}
         </View>
         <Ferr>{err('purpose')}</Ferr>
+        {/* The most hurried way into the module: an unexplained Other must not get through it either. */}
+        {needsExplanation(draft.purpose) ? (
+          <View style={{ marginTop: S.sm }}>
+            <Input label={whyLabel('purpose').label} multiline autoFocus value={draft.purposeNote} help={whyLabel('purpose').hint}
+              placeholder="Supplier arbitration hearing in Indore" onChangeText={t => edit({ purposeNote: t })} />
+            {tried && whyProblem(draft.purpose, draft.purposeNote) ? <Ferr>{whyProblem(draft.purpose, draft.purposeNote)}</Ferr> : null}
+          </View>
+        ) : null}
       </Sec>
 
       <Sec>

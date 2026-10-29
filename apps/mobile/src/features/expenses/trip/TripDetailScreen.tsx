@@ -14,18 +14,22 @@
 import * as React from 'react'
 import { View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
-import type { TeLeg } from '@web/te/types'
+import type { Snapshot, TeLeg } from '@web/te/types'
 import { F, S } from '@/ui/theme'
 import { Button, Txt } from '@/ui/primitives'
 import { useOverlay } from '@/ui/overlays'
+import { dayAt } from '@web/te/format'
 import { day, errorText, te } from '../api'
-import { reloadTe, useSnap, useTripDetail } from '../data'
+import { reloadTe, useDeskAccess, useSnap, useTripDetail } from '../data'
 import { open, param, teHref } from '../nav'
 import { Chip, FieldErr, Flag, TeCard } from '../ui/kit'
 import { SnapState, TeScreen } from '../ui/TeScreen'
 import { ScopeChip } from './TripsScreen'
 import { ApprovalCard, ClaimCard, CloseEveryCard, DraftCard, ExpiredCard, MissedCard, ReadyCard, type Busy } from './TripStatusCards'
 import { AdvanceCard, BillsCard, ClaimsCards, EstimateCard, HistoryCard, HotelsCard, RouteCard, StaysCard } from './TripSections'
+import { TripLedger } from './TripLedger'
+import { RecordingNow, TripNowTiles } from './TripNow'
+import { TripPlan } from './TripPlan'
 import { tripView, type TripView } from './view'
 import { PATTERN_WORD } from './words'
 
@@ -41,8 +45,15 @@ export default function TripDetailScreen() {
   const q = useTripDetail(id)
   const snap = snapQ.data
   const d = q.data
+  const desks = useDeskAccess()
+  const v = snap && d ? tripView(d, snap.me, snap.today) : null
+  // A journey of THIS trip running: the trip's own sticky strip replaces the
+  // module-wide live bar, so the same journey is not announced twice.
+  const running = v?.runningLeg ?? null
   return (
-    <TeScreen title="Trip" subtitle={d?.trip.no} onRefresh={() => q.refetch()}>
+    <TeScreen title="Trip" subtitle={d?.trip.no} onRefresh={() => q.refetch()} live={!running}>
+      {/* Sticky on the web; TeScreen has no under-header slot yet (`top` replaces the header), so it leads the page. */}
+      {running && v ? <RecordingNow leg={running} nameOf={v.pname} onOpen={l => open(teHref.leg(l.id, v.t.id))} /> : null}
       {!snap ? (
         <SnapState error={snapQ.error} onRetry={() => void snapQ.refetch()} />
       ) : !d ? (
@@ -51,7 +62,7 @@ export default function TripDetailScreen() {
           {q.error ? <View style={{ marginTop: S.md }}><Button size="sm" variant="outline" title="Try again" onPress={() => void q.refetch()} /></View> : null}
         </TeCard>
       ) : (
-        <TripBody v={tripView(d, snap.me, snap.today)} />
+        <TripBody v={v!} snap={snap} everyone={desks.travel || desks.finance} />
       )}
     </TeScreen>
   )
@@ -64,7 +75,9 @@ function TripHeader({ v }: { v: TripView }) {
       <Txt size={F.title + 2} w={700}>{t.name}</Txt>
       <Txt size={F.small} tone="muted" style={{ marginTop: 2 }}>{(t.points || []).map(p => pname(p.place) || '…').join(' → ')}</Txt>
       <Txt size={F.tiny} tone="muted" style={{ marginTop: 2 }}>
-        {t.start ? (t.start === t.end ? day(t.start) : `${day(t.start)} to ${day(t.end)}`) : 'No dates yet'}
+        {t.start
+          ? (t.start === t.end ? dayAt(t.start, t.points?.[0]?.leaveAt) : `${dayAt(t.start, t.points?.[0]?.leaveAt)} to ${day(t.end)}`)
+          : 'No dates yet'}
         {t.purpose ? ` · ${t.purpose}` : ''}{t.project ? ` · ${t.project}` : ''}
       </Txt>
       {t.pax > 1 ? (
@@ -82,9 +95,9 @@ function TripHeader({ v }: { v: TripView }) {
   )
 }
 
-function TripBody({ v }: { v: TripView }) {
+function TripBody({ v, snap, everyone }: { v: TripView; snap: Snapshot; everyone: boolean }) {
   const { notify, confirm } = useOverlay()
-  const { t, st, mine, detail, note, openLegs, isDraftPostFacto, claims, canBill, canAskStay } = v
+  const { t, st, mine, detail, note, openLegs, isDraftPostFacto, claims, canBill, canAskStay, hero } = v
   const [busy, setBusy] = React.useState<Busy>('')
   const [error, setError] = React.useState('')
   const [asking, setAsking] = React.useState(false)
@@ -133,13 +146,20 @@ function TripBody({ v }: { v: TripView }) {
     <View>
       <TripHeader v={v} />
 
+      {/* WHILE YOU ARE TRAVELLING: the two mid-trip actions, first on the page. */}
+      {hero.any ? (
+        <TripNowTiles canBill={hero.bill} mine={hero.journey}
+          onAddBill={() => open(teHref.expense({ trip: t.id }))} onAddLeg={() => open(teHref.addLeg(t.id))} />
+      ) : null}
+
       {note ? (
         <Flag tone="info" icon="people" title="You are travelling on this trip" style={{ marginBottom: S.md }}>{note}</Flag>
       ) : null}
 
       {error ? <View style={{ marginBottom: S.md }}><FieldErr>{error}</FieldErr></View> : null}
 
-      {st === 'PENDING_APPROVAL' || st === 'SENT_BACK' ? (
+      {/* Shown at any status once there is a chain: "who approved it" is what the desks come to read. */}
+      {(t.chain ?? []).length || st === 'PENDING_APPROVAL' || st === 'SENT_BACK' ? (
         <ApprovalCard v={v} busy={busy} onEdit={onEdit}
           onAnswer={text => act('answer', async () => { await te.tripAnswer(t.id, text); return 'Your answer was sent.' })} />
       ) : null}
@@ -168,9 +188,15 @@ function TripBody({ v }: { v: TripView }) {
 
       {(t.stayOptions ?? []).length ? <HotelsCard v={v} /> : null}
 
-      <RouteCard v={v} onAddLeg={() => open(teHref.addLeg(t.id))} onOpenLeg={onOpenLeg} />
+      {/* The plan as they filled it in: every time, stop, note and link (not gated on mine). */}
+      <TripPlan trip={t} places={detail.places} masters={snap.masters} />
+
+      <RouteCard v={v} onAddLeg={() => open(teHref.addLeg(t.id))} onOpenLeg={onOpenLeg} onChanged={onChanged} />
 
       {t.origin !== 'POST_FACTO' && t.estimateTotal ? <EstimateCard v={v} /> : null}
+
+      {/* Everything this trip cost, in one place. */}
+      <TripLedger detail={detail} me={v.me} everyone={everyone} cats={snap.cfg.cats} />
 
       <ClaimsCards v={v} onOpenClaim={id => open(teHref.claim(id))} />
 

@@ -5,7 +5,7 @@
 // full MrfForm. The approve / reject / send-back modal is focus-mode only on the
 // website (app/mrf-approve/[id]) and is not reachable from here.
 import * as React from 'react'
-import { View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/core/api'
 import { openWebsite } from '@/core/links'
@@ -43,6 +43,7 @@ export function MrfBlock({ employeeId }: { employeeId: string }) {
   const q = useMrf(employeeId)
   const [editMrf, setEditMrf] = React.useState<any | null>(null)
   const [busy, setBusy] = React.useState<string | null>(null)
+  const editScroll = React.useRef<ScrollView>(null)
 
   async function acknowledge(id: string) {
     setBusy(id)
@@ -121,12 +122,13 @@ export function MrfBlock({ employeeId }: { employeeId: string }) {
         )
       })}
 
-      <FullModal visible={!!editMrf} onClose={() => setEditMrf(null)} title="Edit & resubmit MRF" closeLabel="← Back">
+      <FullModal visible={!!editMrf} onClose={() => setEditMrf(null)} title="Edit & resubmit MRF" closeLabel="← Back" scrollRef={editScroll}>
         {editMrf && (
           <>
             {!!editMrf.remarks && <NoteBox tone="w" style={{ marginBottom: S.md }}>{`Sent back for changes: “${editMrf.remarks}”. Fix and resubmit below.`}</NoteBox>}
             <MrfForm employeeId={employeeId} initial={mrfToForm(editMrf)} replaceId={editMrf.id}
-              onDone={() => { setEditMrf(null); void afterDecision() }} onCancel={() => setEditMrf(null)} />
+              onDone={() => { setEditMrf(null); void afterDecision() }} onCancel={() => setEditMrf(null)}
+              onShowTop={() => editScroll.current?.scrollTo({ y: 0, animated: false })} />
           </>
         )}
       </FullModal>

@@ -23,6 +23,8 @@ import {
   StepPosition, StepSourcing, StepTimeline, type StepProps,
 } from './steps'
 
+const NO_DEPT = 'Your employee record has no department, and the MRF takes it from there. Ask HR to set your department first.'
+
 const STEP_VIEW: Record<string, (p: StepProps) => React.ReactElement> = {
   meta: StepMeta, pos: StepPosition, emp: StepEmployment, budget: StepBudget, just: StepJustification,
   time: StepTimeline, cand: StepCandidate, appr: StepApproval, src: StepSourcing, att: StepAttachments,
@@ -56,8 +58,10 @@ function SuccessPanel({ done, onAnother, onResubmit, onDone }: { done: { id: str
   )
 }
 
-export default function MrfForm({ employeeId, onDone, onCancel, initial, replaceId }: {
+export default function MrfForm({ employeeId, onDone, onCancel, initial, replaceId, onShowTop }: {
   employeeId: string; onDone: () => void; onCancel: () => void; initial?: Form | null; replaceId?: string | null
+  /** Bring the form's top (the stepper) into view — the host owns the scroll view. */
+  onShowTop?: () => void
 }) {
   const { C } = useTheme()
   const { notify } = useOverlay()
@@ -100,8 +104,11 @@ export default function MrfForm({ employeeId, onDone, onCancel, initial, replace
 
   const STEPS: { id: string; title: string; required?: boolean; gate?: () => string | null }[] = [
     { id: 'meta', title: 'Requisition Meta' },
-    { id: 'pos', title: 'Position Details', required: true, gate: () => String(form.designation || '').trim() ? null : 'Designation is required.' },
-    { id: 'emp', title: 'Employment Details' },
+    // The offer letter states the designation, department and work location
+    // (lib/recruitment/position-required.ts), so none of them may be left blank.
+    { id: 'pos', title: 'Position Details', required: true, gate: () => !String(form.designation || '').trim() ? 'Designation is required.'
+      : !refs?.auto.department_id ? NO_DEPT : null },
+    { id: 'emp', title: 'Employment Details', required: true, gate: () => form.location_id ? null : 'Work location is required.' },
     { id: 'budget', title: 'Budget & Cost', gate: () => {
       const lo = Number(form.budget_min) || 0, hi = Number(form.budget_max) || 0
       return lo && hi && lo > hi ? `${comp.label} range minimum cannot be more than the maximum.` : null
@@ -120,7 +127,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, initial, replace
   const blocked = STEPS[step].gate?.() ?? null
   const requiredTotal = STEPS.filter(s => s.required).length
   const requiredDone = STEPS.filter(s => s.required && !s.gate!()).length
-  const goTo = (i: number) => { setStepIdx(i); scroller.current?.scrollTo({ x: Math.max(0, i * 120 - 60), animated: true }) }
+  const goTo = (i: number) => { setStepIdx(i); scroller.current?.scrollTo({ x: Math.max(0, i * 120 - 60), animated: true }); onShowTop?.() }
   const goNext = () => {
     if (blocked) { notify(blocked, 'error'); return }
     const n = Math.min(step + 1, STEPS.length - 1)
@@ -133,6 +140,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, initial, replace
     const bMin = Number(form.budget_min) || 0, bMax = Number(form.budget_max) || 0
     if (bMin && bMax && bMin > bMax) { notify(`${comp.label} range minimum (₹${bMin.toLocaleString('en-IN')}) cannot be more than the maximum (₹${bMax.toLocaleString('en-IN')}).`, 'error'); return }
     if (status === 'SUBMITTED') {
+      if (!refs?.auto.department_id) { notify(NO_DEPT, 'error'); return }
+      if (!form.location_id) { notify('Work location is required to submit.', 'error'); return }
       if (!form.reason) { notify('Reason for hire is required to submit.', 'error'); return }
       if (!form.target_joining_date) { notify('Target joining date is required to submit.', 'error'); return }
       if (!isQuick && !String(form.skills_required || '').trim() && !String(form.job_description || '').trim()) { notify('Add mandatory skills or a job description to submit a Full MRF.', 'error'); return }
@@ -153,9 +162,12 @@ export default function MrfForm({ employeeId, onDone, onCancel, initial, replace
   function raiseAnother() {
     setForm({ ...EMPTY, raised_by_name: refs?.auto.name || '', raised_by_role: refs?.auto.role || '' })
     setReplaceRef(null); setDone(null); setStepIdx(0); setMaxSeen(0)
-    reserve()
+    reserve(); onShowTop?.()
   }
-  function resubmit() { setReplaceRef(done?.id || null); setDone(null) }
+  function resubmit() {
+    setReplaceRef(done?.id || null); setDone(null)
+    goTo(0); setMaxSeen(STEPS.length - 1)   // every step was filled already — all reachable
+  }
 
   if (rq.error) return <Txt size={F.small} tone="critical">{errMsg(rq.error)}</Txt>
   if (!refs) return <LoadingLine label="Loading form…" />

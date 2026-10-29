@@ -18,12 +18,14 @@
 //   view advances                         /expenses/advances
 //   view limits                           /expenses/limits
 //   view approvals                        /expenses/approvals
+//   view dashboard                        /expenses/dashboard
+//   view traveldesk / financedesk         /expenses/desk/travel · /expenses/desk/finance  (desk members only)
 //   sheet new           (step 1)          /expenses/new                   modal
 //   sheet kind{kind,way}(step 2 / 3)      /expenses/kind?kind=&way=       modal
-//   sheet plan{kind,past,editing}         /expenses/plan?kind=&past=1&edit=<tripId>   modal
+//   sheet plan{kind,past,editing,resuming} /expenses/plan?kind=&past=1&edit=<tripId>&draft=<draftId>   modal
 //   sheet startNow                        /expenses/start                 modal
 //   sheet addLeg{detail}                  /expenses/add-leg?trip=<tripId> modal
-//   sheet expense{line?, tripId?}         /expenses/expense?line=&trip=&claim=        modal
+//   sheet expense{line?, tripId?, resuming?} /expenses/expense?line=&trip=&claim=&draft=<draftId>  modal
 //
 // TeHome's callback contracts (spec Part 0.3) map onto three moves:
 //   open(href)  push a view or a sheet over the current screen
@@ -51,6 +53,9 @@ export const teHref = {
   advances: '/expenses/advances',
   limits: '/expenses/limits',
   approvals: '/expenses/approvals',
+  dashboard: '/expenses/dashboard',
+  travelDesk: '/expenses/desk/travel',
+  financeDesk: '/expenses/desk/finance',
   trip: (id: Uuid) => `/expenses/trip/${id}`,
   tripClaim: (tripId: Uuid) => `/expenses/trip-claim/${tripId}`,
   claim: (id: Uuid) => `/expenses/claim/${id}`,
@@ -58,10 +63,10 @@ export const teHref = {
   // sheets
   newClaim: '/expenses/new',
   kind: (kind: TripScope, way?: WayId | null) => `/expenses/kind${q({ kind, way })}`,
-  plan: (o: { kind: TripScope; past?: boolean; edit?: Uuid | null }) => `/expenses/plan${q({ kind: o.kind, past: !!o.past, edit: o.edit })}`,
+  plan: (o: { kind: TripScope; past?: boolean; edit?: Uuid | null; draft?: Uuid | null }) => `/expenses/plan${q({ kind: o.kind, past: !!o.past, edit: o.edit, draft: o.draft })}`,
   start: '/expenses/start',
   addLeg: (tripId: Uuid) => `/expenses/add-leg${q({ trip: tripId })}`,
-  expense: (o: { line?: Uuid | null; trip?: Uuid | null; claim?: Uuid | null } = {}) => `/expenses/expense${q(o)}`,
+  expense: (o: { line?: Uuid | null; trip?: Uuid | null; claim?: Uuid | null; draft?: Uuid | null } = {}) => `/expenses/expense${q(o)}`,
 }
 
 /** Push a view or a sheet. */

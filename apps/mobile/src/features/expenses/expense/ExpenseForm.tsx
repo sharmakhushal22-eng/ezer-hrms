@@ -14,9 +14,16 @@
 //
 // One addition the module lead asked for: Remove asks first (confirm). The
 // website removes on the first tap.
+//
+// Since 4a92155 (as on the website): unfinished work is kept as a draft
+// (useDraftAutosave, kind 'expense', body {f, file, fileName}); a resumed draft
+// wins over everything; "Save as draft" once touched; the draft is discarded
+// when the line saves; Save is dead while anything blocks, with the reason
+// beside the buttons.
 import * as React from 'react'
 import { View } from 'react-native'
-import type { ExpenseInput, ExpensePreview, Snapshot, TeExpense, TeUploadedFile, Uuid } from '@web/te/types'
+import type { ExpenseDraftBody, ExpenseInput, ExpensePreview, Snapshot, TeDraft, TeExpense, TeUploadedFile, Uuid } from '@web/te/types'
+import { draftTitle, worthSaving } from '@web/te/autosave'
 import type { PickedFile } from '@/core/api'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
@@ -28,6 +35,8 @@ import { Chip, FieldErr, H4, Opt } from '../ui/kit'
 import { FilePickButton } from '../ui/FilePick'
 import { TeSheet } from '../ui/TeSheet'
 import { ErrorFlag, FlagBlock } from '../claims/parts'
+import { useDraftAutosave } from '../drafts/useDraftAutosave'
+import { SavedLine } from '../drafts/SavedLine'
 
 const PAY_MODES = ['UPI', 'Personal card', 'Cash']
 // The engine's own ladders (AIR and RAIL in te-engine.js), in entitlement order.
@@ -99,10 +108,12 @@ function CheckSection({ ready, shown, error }: { ready: boolean; shown: ExpenseP
   )
 }
 
-export function ExpenseForm({ snap, line, tripId, onClose, onSaved }: {
+export function ExpenseForm({ snap, line, tripId, resuming, onClose, onSaved }: {
   snap: Snapshot
   line?: TeExpense
   tripId?: Uuid
+  /** A half-typed line being picked up again (its body is the whole form). */
+  resuming?: TeDraft
   onClose: () => void
   onSaved: (message: string) => void
 }) {
@@ -113,11 +124,14 @@ export function ExpenseForm({ snap, line, tripId, onClose, onSaved }: {
     [snap, tripId],
   )
   const tripName = React.useMemo(() => (tripId ? snap.trips.find(t => t.id === tripId)?.name ?? 'This trip' : ''), [snap, tripId])
+  const draftBody = resuming?.body as ExpenseDraftBody | undefined
   const [f, setF] = React.useState<ExpenseInput>(() => (
-    line ? fromLine(line) : { cat: '', date: snap.today, bill: '', claimed: '', payMode: 'UPI', ...(tripId ? { tripId } : {}) }
+    draftBody?.f ? draftBody.f
+      : line ? fromLine(line)
+      : { cat: '', date: snap.today, bill: '', claimed: '', payMode: 'UPI', ...(tripId ? { tripId } : {}) }
   ))
-  const [file, setFile] = React.useState<TeUploadedFile | null>(null)
-  const [fileName, setFileName] = React.useState(line?.file?.name ?? '')
+  const [file, setFile] = React.useState<TeUploadedFile | null>(draftBody?.file ?? null)
+  const [fileName, setFileName] = React.useState(draftBody?.fileName ?? line?.file?.name ?? '')
   const [preview, setPreview] = React.useState<ExpensePreview | null>(null)
   const [busy, setBusy] = React.useState<Busy>('')
   const [error, setError] = React.useState<{ text: string; field: string | null } | null>(null)
@@ -133,6 +147,25 @@ export function ExpenseForm({ snap, line, tripId, onClose, onSaved }: {
     const n = Math.round((new Date(f.checkOut).getTime() - new Date(f.checkIn).getTime()) / 864e5)
     return n > 0 ? n : 0
   }, [f.checkIn, f.checkOut])
+
+  // Unfinished work is kept: the form plus the attached bill (a storage path by then).
+  const body = React.useMemo<Record<string, unknown>>(
+    () => ({ f, file, fileName }) as unknown as Record<string, unknown>,
+    [f, file, fileName],
+  )
+  const [pristineBody] = React.useState<Record<string, unknown>>(body)
+  const catLabel = React.useCallback((code: string) => cats.find(c => c.id === code)?.name ?? code, [cats])
+  const autosave = useDraftAutosave({
+    kind: 'expense',
+    body,
+    pristine: pristineBody,
+    title: draftTitle('expense', body, catLabel),
+    scope: f.cat || null,
+    tripId: tripId ?? null,
+    resumingId: resuming?.id ?? null,
+    enabled: busy !== 'save' && busy !== 'delete',
+  })
+  const touched = React.useMemo(() => worthSaving(body, pristineBody), [body, pristineBody])
 
   // The live check: 350 ms after the last change, late answers dropped.
   React.useEffect(() => {
@@ -162,6 +195,8 @@ export function ExpenseForm({ snap, line, tripId, onClose, onSaved }: {
     setBusy('save'); setError(null)
     try {
       const r = await te.expenseSave(input)
+      // The line exists now, so the half-typed copy of it has no reason to stay.
+      await autosave.discard()
       onSaved(`Saved ${r.expense_no}. ${rs(r.eligible)} is eligible.`)
     } catch (e) {
       if (e instanceof TeApiError && e.flags.length) setPreview(p => ({ ...(p ?? { eligible: 0, claimed: 0, mileage: null, needsReason: false }), flags: e.flags, blocked: true }))
@@ -187,6 +222,11 @@ export function ExpenseForm({ snap, line, tripId, onClose, onSaved }: {
   }
 
   const shown = ready ? preview : null
+  // Save is dead while anything blocks; the reason sits next to the button.
+  const blocked = !!shown?.blocked
+  const blockedCount = shown ? shown.flags.filter(x => x.block).length : 0
+  const blockedNote = !blocked ? ''
+    : blockedCount ? `${plural(blockedCount, 'thing')} to fix below before this can be saved.` : 'Fix what is marked below before this can be saved.'
   const askReason = !!shown && (shown.needsReason || shown.flags.length > 0 || !!f.reason)
   const canAskException = !!shown && shown.flags.some(x => x.action === 'cap')
   const classes = f.cat === 'air' ? AIR_CLASSES : RAIL_CLASSES
@@ -202,11 +242,16 @@ export function ExpenseForm({ snap, line, tripId, onClose, onSaved }: {
       onClose={onClose}
       footer={<>
         {error ? <FieldErr>{error.text}</FieldErr> : null}
+        {blockedNote ? <Txt size={F.tiny} tone="muted">{blockedNote}</Txt> : null}
+        <SavedLine autosave={autosave} />
         <View style={{ flexDirection: 'row', gap: S.sm }}>
           {line ? <View style={{ flex: 1 }}><Button title="Remove" variant="danger" full disabled={!!busy} onPress={() => void discard()} /></View> : null}
           <View style={{ flex: 1 }}><Button title="Cancel" variant="outline" full onPress={onClose} /></View>
-          <View style={{ flex: 1.4 }}><Button title={busy === 'save' ? 'Saving…' : 'Save expense'} full disabled={!ready || !!busy} onPress={() => void save()} /></View>
+          <View style={{ flex: 1.4 }}><Button title={busy === 'save' ? 'Saving…' : 'Save expense'} full disabled={!ready || !!busy || blocked} onPress={() => void save()} /></View>
         </View>
+        {touched && !busy ? (
+          <Button title="Save as draft" variant="outline" full onPress={() => void autosave.saveNow().then(onClose)} />
+        ) : null}
       </>}
     >
       <H4 style={{ marginTop: 0 }}>What did you spend on?</H4>

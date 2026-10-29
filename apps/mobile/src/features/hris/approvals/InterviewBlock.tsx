@@ -1,6 +1,10 @@
 // Interviews to conduct — RoleTabs.tsx InterviewInvites.
 // GET /api/ess/interview (any error → nothing rendered, as the website);
 // POST acknowledge, POST feedback (main interviewer only — the server checks).
+// On the website this lives in the ESS notification panel (the bell), not Tasks
+// & Approvals (179bb35): the interviewer acknowledges and gives feedback from the
+// notification itself. Only what still needs doing is listed. Exported for the
+// shell's bell; `onDone` lets the host refresh its own counts.
 import * as React from 'react'
 import { Linking, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
@@ -15,7 +19,7 @@ import { afterDecision } from './shared'
 
 const isMain = (i: any) => (i.role || 'MAIN') === 'MAIN'
 
-export function InterviewBlock({ employeeId }: { employeeId: string }) {
+export function InterviewBlock({ employeeId, onDone }: { employeeId: string; onDone?: () => void }) {
   const { C } = useTheme()
   const { notify } = useOverlay()
   const q = useQuery({
@@ -27,27 +31,28 @@ export function InterviewBlock({ employeeId }: { employeeId: string }) {
   const [fbFor, setFbFor] = React.useState<any | null>(null)
   const [saving, setSaving] = React.useState(false)
   const invites = q.data
-  if (!invites || invites.length === 0) return null
-  const pending = invites.filter(i => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  // Main interviewers are done once feedback is in; panelists once they've acknowledged.
+  const pending = (invites || []).filter(i => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  if (pending.length === 0) return null
 
   async function ack(id: string) {
     setBusy(id)
-    try { await api('/api/ess/interview', { method: 'POST', employeeId, body: { action: 'acknowledge', invite_id: id } }); notify('Acknowledged. Record your feedback after the interview.'); void afterDecision() }
+    try { await api('/api/ess/interview', { method: 'POST', employeeId, body: { action: 'acknowledge', invite_id: id } }); notify(isMain(pending.find(i => i.id === id)) ? 'Acknowledged. Give your feedback here after the interview.' : 'Acknowledged.'); void afterDecision(); onDone?.() }
     catch (e) { notify(errMsg(e), 'error') }
     setBusy(null)
   }
   async function submit(fb: Feedback) {
     if (!fbFor) return
     setSaving(true)
-    try { await api('/api/ess/interview', { method: 'POST', employeeId, body: { action: 'feedback', invite_id: fbFor.id, feedback: fb } }); notify('Feedback submitted. Thank you.'); setFbFor(null); void afterDecision() }
+    try { await api('/api/ess/interview', { method: 'POST', employeeId, body: { action: 'feedback', invite_id: fbFor.id, feedback: fb } }); notify('Feedback submitted. Thank you.'); setFbFor(null); void afterDecision(); onDone?.() }
     catch (e) { notify(errMsg(e), 'error') }
     setSaving(false)
   }
 
   return (
     <Card style={{ marginBottom: S.md }}>
-      <SectionTitle>{`Interviews to conduct (${pending.length || invites.length})`}</SectionTitle>
-      {invites.map(i => {
+      <SectionTitle>{`Interviews to conduct (${pending.length})`}</SectionTitle>
+      {pending.map(i => {
         const when = i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'time to be confirmed'
         return (
           <View key={i.id} style={{ paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.line, gap: 6 }}>

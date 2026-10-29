@@ -2,8 +2,9 @@
 //
 // GET /api/ess/offer-approvals → the HR Head's review list (decide here, POST
 // approve / reject) or the HR Manager's "yet to be approved / ready to send"
-// cards. Renders nothing for anyone else, or when there is nothing to show — a
-// GET error renders nothing too, exactly as the website. The rejection reason is
+// cards, plus "My offers" for a hiring manager (offers on MRFs assigned to them:
+// with the HR Head, approved, sent, accepted…). Renders nothing for anyone else,
+// or when there is nothing to show — a GET error renders nothing too, exactly as the website. The rejection reason is
 // mandatory (client and server); it is collected with a prompt.
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
@@ -14,13 +15,42 @@ import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Card, Txt } from '@/ui/primitives'
 import { useOverlay } from '@/ui/overlays'
-import { Chip, day, errMsg, FullModal, Pill, SectionTitle, SolidButton } from '../ui'
+import { Chip, day, errMsg, FullModal, Pill, SectionTitle, SolidButton, type PillTone } from '../ui'
 import { afterDecision } from './shared'
 
 const rs = (n: any) => `₹${Math.round(Number(n || 0)).toLocaleString('en-IN')}`
 const lakh = (n: any) => `₹${(Number(n || 0) / 100000).toFixed(2)}L`
 
-interface OfferData { isHrHead: boolean; isHrManager?: boolean; pending: any[]; recent: any[]; awaiting?: any[]; ready?: any[] }
+interface OfferData { isHrHead: boolean; isHrManager?: boolean; pending: any[]; recent: any[]; awaiting?: any[]; ready?: any[]; mine?: any[] }
+
+const REPLY: Record<string, [string, PillTone]> = {
+  ACCEPTED: ['Accepted by candidate', 'ok'], AWAITING: ['Sent · awaiting reply', 'info'],
+  REVISION: ['Revision asked', 'warn'], BACKOUT: ['Backed out', 'dang'],
+}
+const offerState = (o: any): [string, PillTone] =>
+  o.reply ? REPLY[o.reply] : o.status === 'SUBMITTED' ? ['With HR Head', 'warn'] : o.status === 'HR_HEAD_APPROVED' ? ['Approved · ready to send', 'ok'] : o.status === 'HR_HEAD_REJECTED' ? ['Rejected by HR Head', 'dang'] : ['Sent', 'info']
+
+/** RoleTabs MyOffersCard — where each offer on my MRFs has got to: with the HR Head, approved, sent, accepted… */
+function MyOffersCard({ rows }: { rows: any[] }) {
+  const { C } = useTheme()
+  const accepted = rows.filter(o => o.reply === 'ACCEPTED').length
+  return (
+    <Card style={{ marginBottom: S.md }}>
+      <SectionTitle>{`My offers · ${rows.length}${accepted ? ` · ${accepted} accepted` : ''}`}</SectionTitle>
+      {rows.map(o => {
+        const [label, tone] = offerState(o)
+        return (
+          <View key={o.id} style={{ paddingVertical: 8, borderTopWidth: 1, borderTopColor: C.line, gap: 4 }}>
+            <Txt size={F.small} w={600}>{o.candidate} · {o.designation || '-'}</Txt>
+            {!!o.mrf_number && <Chip label={o.mrf_number} />}
+            <Txt size={11.5} tone="muted">{lakh(o.offered_ctc)}{o.proposed_doj ? ` · DOJ ${day(o.proposed_doj)}` : ''}{o.offer_sent_at ? ` · sent ${day(o.offer_sent_at)}` : ` · submitted ${day(o.submitted_at)}`}</Txt>
+            <Pill tone={tone} label={label} />
+          </View>
+        )
+      })}
+    </Card>
+  )
+}
 
 function Line({ k, v }: { k: string; v: any }) {
   const { C } = useTheme()
@@ -121,11 +151,15 @@ export function OfferBlock({ employeeId }: { employeeId: string }) {
   const [busy, setBusy] = React.useState(false)
   const d = q.data
   if (!d) return null
+  // Offers on the MRFs this person runs as hiring manager — they sent them, so they keep
+  // seeing them after they go out and once the candidate accepts (not only the HR Head).
+  const mineCard = !d.isHrHead && d.mine?.length ? <MyOffersCard rows={d.mine} /> : null
 
   if (!d.isHrHead && d.isHrManager) {
     const awaiting = d.awaiting || [], ready = d.ready || []
-    if (!awaiting.length && !ready.length) return null
+    if (!awaiting.length && !ready.length) return mineCard
     return (
+      <>
       <Card style={{ marginBottom: S.md }}>
         <SectionTitle>{`Offer letters · HR Manager${awaiting.length ? ` · ${awaiting.length} yet to be approved` : ''}${ready.length ? ` · ${ready.length} ready to send` : ''}`}</SectionTitle>
         {awaiting.map(o => (
@@ -159,9 +193,11 @@ export function OfferBlock({ employeeId }: { employeeId: string }) {
           </View>
         ))}
       </Card>
+      {mineCard}
+      </>
     )
   }
-  if (!d.isHrHead) return null
+  if (!d.isHrHead) return mineCard
   if (!d.pending.length && !d.recent.length) return null
 
   async function decide(action: 'approve' | 'reject') {

@@ -4,7 +4,7 @@
 // in one place and in the website's words.
 import type { TeLeg, TeTripDetail, Uuid } from '@web/te/types'
 import type { MapPlace } from '@web/te/trip-map'
-import { tripChip } from '@web/te/trips-list'
+import { tripChip, tripHero } from '@web/te/trips-list'
 import { canBillTrip, coTravellerNote, isCoTraveller, myClaims, withText } from '@web/te/co-traveller'
 import { foodBalance, foodBudget, foodSpent, stayDecisionText } from '@web/te/trip-stay'
 
@@ -36,8 +36,13 @@ export function tripView(detail: TeTripDetail, me: Uuid, today: string) {
   const nextLeg: TeLeg | null = legs.find(l => l.status === 'ACTIVE' || l.status === 'PAUSED' || l.status === 'ENDED')
     ?? legs.find(l => l.status === 'PLANNED')
     ?? null
+  // A journey being recorded right now (ENDED is waiting for its report, not running).
+  const runningLeg: TeLeg | null = legs.find(l => l.status === 'ACTIVE' || l.status === 'PAUSED') ?? null
+  // Which of the two mid-trip actions this reader gets (lib/te/trips-list tripHero).
+  const hero = tripHero(t, { canBill, mine })
   const isDraftPostFacto = st === 'DRAFT' && t.origin === 'POST_FACTO'
   return {
+    runningLeg, hero,
     detail, t, st, me, today, canAskStay, legs, chip, pname, places, started, mine, note, riding, withWho,
     canBill, decided, myLines, food, claims, openLegs, nextLeg, isDraftPostFacto,
   }

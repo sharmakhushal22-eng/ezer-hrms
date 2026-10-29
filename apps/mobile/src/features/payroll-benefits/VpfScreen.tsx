@@ -14,11 +14,9 @@ import { Button, Checkbox, ErrorState, Input, Loading, Txt } from '@/ui/primitiv
 import { useOverlay } from '@/ui/overlays'
 import { Screen } from '@/ui/Screen'
 import { QK, call, errMsg, inr, isNetwork } from './shared'
-import { Box, Bullets, Callout, Heading, Line, SmallAction } from './ui'
+import { Box, Bullets, Callout, Heading, Line, Pill, SmallAction, Tile } from './ui'
 
 const MAX_PCT = 88, HIGH_ALERT = 50
-/** EmployeePortal.tsx hardcodes this amber for the over-80C bar. */
-const OVER_80C = '#EF9F27'
 
 export default function VpfScreen() {
   const employeeId = useEmployeeId()
@@ -79,79 +77,91 @@ export default function VpfScreen() {
 
   return frame(
     <>
-      <Heading title="Voluntary PF (VPF)" sub="Extra PF deducted from your EPF wages. Set your own percentage." />
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: S.sm }}>
+        <View style={{ flex: 1 }}><Heading title="Voluntary PF (VPF)" sub="Extra PF deducted from your EPF wages. Set your own percentage." /></View>
+        {current && <Pill bg={C.positiveTint} fg={C.positive} text={`Active · ${current.vpf_percent}%`} />}
+      </View>
 
       {!e.has_ctc && (
-        <Box bg={C.warningTint} edge={C.warningEdge}>
+        <Callout bg={C.warningTint}>
           <Txt size={F.tiny} color={C.warning}>Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master). Then VPF will calculate correctly.</Txt>
-        </Box>
+        </Callout>
       )}
 
       {current && (
-        <Box bg={C.sunken} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm }}>
-          <Txt size={F.tiny} color={C.positive} style={{ flex: 1 }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo). Modify below</Txt>
+        <Callout bg={C.positiveTint} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm }}>
+          <Txt size={F.tiny} tone="ink" style={{ flex: 1 }}>Active VPF: <Txt size={F.tiny} w={700}>{current.vpf_percent}%</Txt> ({inr(current.monthly_vpf_amount)}/mo). Modify below</Txt>
           <SmallAction title="Stop VPF" color={C.critical} onPress={stop} />
-        </Box>
+        </Callout>
       )}
 
-      <Box bg={C.brandTint}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: S.sm }}>
-          <Txt size={F.tiny} tone="muted" style={{ flexShrink: 1 }}>Your EPF wages (from database)</Txt>
-          <View style={{ paddingHorizontal: 9, paddingVertical: 3, borderRadius: 20, backgroundColor: e.is_capped ? C.brandTint : C.sunken, borderWidth: e.is_capped ? 1 : 0, borderColor: C.brandEdge }}>
-            <Txt size={F.micro} color={e.is_capped ? C.brandDeep : C.positive}>{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</Txt>
+      <Box bg={C.brandTint} edge={C.brandEdge}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: S.sm }}>
+          <View style={{ flexShrink: 1 }}>
+            <Txt size={F.tiny} tone="muted">Your EPF wages (from database)</Txt>
+            <Txt size={24} w={700} color={C.brandDeep} style={{ marginTop: 2 }}>{inr(base)} <Txt size={F.tiny} tone="muted">a month</Txt></Txt>
           </View>
+          <Pill bg={e.is_capped ? C.surface : C.positiveTint} fg={e.is_capped ? C.brandDeep : C.positive} text={e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'} />
         </View>
-        <Txt size={24} w={600} color={C.brandDeep}>{inr(base)}</Txt>
-        <View style={{ marginTop: 10, paddingTop: 3 }}>
-          <Line top label="Current mandatory EPF (12%)" labelSize={12} value={`${inr(e.mandatory_epf_monthly)}/mo`} />
+        <View style={{ flexDirection: 'row', gap: S.sm, marginTop: 4 }}>
+          <Tile name="Current mandatory EPF (12%)" value={inr(e.mandatory_epf_monthly)} unit=" /mo" />
+          <Tile name={`VPF at ${Math.round(rawPct)}%`} value={inr(vpfMonthly)} unit=" /mo" />
         </View>
       </Box>
 
-      <Input label="VPF percentage" value={pctInput} onChangeText={setPctInput} keyboardType="numeric" placeholder="e.g. 25"
-        help="Percentage of your EPF wages." inputStyle={{ fontSize: 15 }}
-        right={<Txt size={16} w={500} color={C.brandDeep} style={{ paddingRight: S.md }}>%</Txt>} />
+      <Box>
+        <Txt size={F.body} w={700} style={{ marginBottom: S.sm }}>VPF percentage</Txt>
+        <Input value={pctInput} onChangeText={setPctInput} keyboardType="numeric" placeholder="e.g. 25" accessibilityLabel="VPF percentage"
+          help="Percentage of your EPF wages." inputStyle={{ fontSize: 16, fontWeight: '600' }}
+          right={<Txt size={15} w={700} color={C.brand} style={{ paddingRight: S.md }}>%</Txt>} />
+        {showHighAlert && (
+          <Callout bg={C.criticalTint} style={{ marginTop: S.sm, marginBottom: 0, paddingVertical: 10, paddingHorizontal: 12 }}>
+            <Txt size={F.tiny} color={C.critical} style={{ lineHeight: 19 }}><Txt size={F.tiny} w={700} color={C.critical}>That high?</Txt> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</Txt>
+          </Callout>
+        )}
+        {capHit && (
+          <Callout bg={C.warningTint} style={{ marginTop: S.sm, marginBottom: 0, paddingVertical: 10, paddingHorizontal: 12 }}>
+            <Txt size={F.tiny} color={C.warning} style={{ lineHeight: 19 }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</Txt>
+          </Callout>
+        )}
+      </Box>
 
-      {showHighAlert && (
-        <Callout bg={C.criticalTint} style={{ paddingVertical: 10, paddingHorizontal: 12 }}>
-          <Txt size={F.tiny} color={C.critical} style={{ lineHeight: 19 }}><Txt size={F.tiny} w={700} color={C.critical}>That high?</Txt> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</Txt>
-        </Callout>
-      )}
-      {capHit && (
-        <Callout bg={C.warningTint} style={{ paddingVertical: 10, paddingHorizontal: 12 }}>
-          <Txt size={F.tiny} color={C.warning} style={{ lineHeight: 19 }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</Txt>
-        </Callout>
-      )}
-
-      <Box bg={C.brandTint}>
-        <Line label="VPF deduction (monthly)" value={inr(vpfMonthly)} valueSize={15} valueWeight={500} valueColor={C.brandDeep} />
+      <Box>
+        <Txt size={F.body} w={700} style={{ marginBottom: 4 }}>Effect on your pay</Txt>
+        <Line label="VPF deduction (monthly)" value={inr(vpfMonthly)} valueWeight={700} valueColor={C.brandDeep} />
         <Line top label="VPF (annual)" value={inr(vpfAnnual)} />
-        <Line top label="Net in-hand impact" labelColor={C.critical} value={`−${inr(vpfMonthly)}/mo`} valueWeight={500} valueColor={C.critical} />
+        <Line top label="Net in-hand impact" labelColor={C.critical} value={`−${inr(vpfMonthly)}/mo`} valueWeight={700} valueColor={C.critical} />
       </Box>
 
-      <Box bg={C.brandTint}>
+      <Box>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, gap: S.sm }}>
-          <Txt size={F.small} tone="muted">80C usage (₹1.5L max)</Txt>
-          <Txt size={F.tiny} w={500}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</Txt>
+          <Txt size={F.body} w={700} style={{ flexShrink: 1 }}>80C usage (₹1.5L max)</Txt>
+          <Txt size={F.tiny} tone="muted">{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</Txt>
         </View>
         <View style={{ height: 8, backgroundColor: C.line, borderRadius: 20, overflow: 'hidden' }}>
-          <View style={{ height: '100%', width: `${barPct}%`, backgroundColor: over80c ? OVER_80C : C.brand, borderRadius: 20 }} />
+          <View style={{ height: '100%', width: `${barPct}%`, backgroundColor: over80c ? C.warning : C.brand, borderRadius: 20 }} />
         </View>
-        <Txt size={F.micro} tone="muted" style={{ marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` (no 80C benefit on ${inr(total80c - e.c80_limit)})` : ''}</Txt>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: S.sm, marginTop: 6 }}>
+          <Txt size={F.micro} tone="muted" style={{ flex: 1 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` (no 80C benefit on ${inr(total80c - e.c80_limit)})` : ''}</Txt>
+          <Txt size={F.micro} tone="muted">{barPct}%</Txt>
+        </View>
       </Box>
 
-      <Callout bg={C.criticalTint}>
-        <Txt size={F.tiny} w={700} color={C.critical}>Choose carefully:</Txt>
-        <Bullets color={C.critical} lines={[
-          <>VPF will <Txt size={F.tiny} w={700} color={C.critical}>reduce your net in-hand salary</Txt></>,
-          <>The 80C exemption only goes <Txt size={F.tiny} w={700} color={C.critical}>up to ₹1.5 lakh</Txt> (EPF + VPF + your other 80C)</>,
+      <Callout bg={C.warningTint}>
+        <Txt size={F.tiny} w={700} color={C.warning}>Choose carefully</Txt>
+        <Bullets color={C.ink} lines={[
+          <>VPF will <Txt size={F.tiny} w={700}>reduce your net in-hand salary</Txt></>,
+          <>The 80C exemption only goes <Txt size={F.tiny} w={700}>up to ₹1.5 lakh</Txt> (EPF + VPF + your other 80C)</>,
           'It is deducted every month until you stop it',
         ]} />
       </Callout>
 
-      <Checkbox checked={ack} onChange={setAck}
-        label={<Txt size={F.tiny} tone="muted" style={{ flex: 1, lineHeight: 19 }}>I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.</Txt>} />
-      <View style={{ height: 14 }} />
-      <Button title={saving ? 'Saving…' : 'Acknowledge & submit'} full disabled={!ack || saving} onPress={submit} />
+      <Box>
+        <Checkbox checked={ack} onChange={setAck}
+          label={<Txt size={F.tiny} tone="soft" style={{ flex: 1, lineHeight: 19 }}>I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.</Txt>} />
+        <View style={{ height: 12 }} />
+        <Button title={saving ? 'Saving…' : 'Acknowledge & submit'} full disabled={!ack || saving} onPress={submit} />
+      </Box>
     </>,
   )
 }

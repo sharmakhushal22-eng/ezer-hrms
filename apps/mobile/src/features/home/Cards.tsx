@@ -22,11 +22,14 @@ function pendingIcon(C: ReturnType<typeof useTheme>['C'], it: Pending): { I: Gly
   return { I: GShield, bg: C.infoTint, fg: C.info } // policy_ack, and the fallback for unknown types
 }
 
+/** Days from now until `d` (read at render, like the website's card). */
+const daysUntil = (d: Date) => (d.getTime() - Date.now()) / 864e5
+
 function PendingRow({ it, prefs }: { it: Pending; prefs: Prefs }) {
   const { C } = useTheme()
   const m = pendingIcon(C, it)
   const due = it.due_on ? new Date(it.due_on) : null
-  const soon = due ? (due.getTime() - Date.now()) / 864e5 <= 21 : false
+  const soon = due ? daysUntil(due) <= 21 : false
   const dueLabel = due ? `Due ${fmtDateCompact(it.due_on!, prefs.date_format === 'long' ? 'short' : prefs.date_format).replace(/^\w{3}, /, '')}` : 'No deadline'
   return (
     <View style={{ flexDirection: 'row', gap: 12, padding: 12, borderRadius: 13, backgroundColor: C.sunken, borderWidth: 1, borderColor: C.line }}>
@@ -107,12 +110,17 @@ export function Journey({ data, prefs }: { data: TodayPayload; prefs: Prefs }) {
   const ready = useMounted(250)
   const [trackW, setTrackW] = React.useState(0)
   const [youW, setYouW] = React.useState(0)
-  const e = data.employee, t = tenure(e.date_of_joining), yrs = t.totalMonths / 12
+  // Journey.tsx (3cb2a47): a joiner whose record has no joining date yet gets the card
+  // without the track — Home must never crash on a blank date.
+  const e = data.employee
+  const dojIso = e.date_of_joining && !Number.isNaN(new Date(e.date_of_joining).getTime()) ? e.date_of_joining : null
+  const t = dojIso ? tenure(dojIso) : { years: 0, months: 0, totalMonths: 0 }
+  const yrs = t.totalMonths / 12
   let pos = POS[3]
   for (let i = 0; i < 3; i++) if (yrs <= STOPS[i + 1]) { pos = POS[i] + ((yrs - STOPS[i]) / (STOPS[i + 1] - STOPS[i])) * (POS[i + 1] - POS[i]); break }
   const at = useTween(ready ? pos : POS[0], 1600, 500, POS[0])
   const fill = useTween(ready ? pos : 0, 1600, 500)
-  const doj = new Date(e.date_of_joining)
+  const doj = dojIso ? new Date(dojIso) : new Date()
   const yearOf = (n: number) => new Date(doj.getFullYear() + n, doj.getMonth(), doj.getDate())
   const toGo = (n: number) => { const m = Math.max(0, n * 12 - t.totalMonths); return m === 0 ? 'Reached' : m < 12 ? `${m} months to go` : `${Math.floor(m / 12)} yr ${m % 12} mo to go` }
   const you = t.years > 0 ? `You, ${t.years} yr${t.years > 1 ? 's' : ''}${t.months ? ` ${t.months} mo` : ''}` : `You, ${t.months} mo`
@@ -122,34 +130,43 @@ export function Journey({ data, prefs }: { data: TodayPayload; prefs: Prefs }) {
   return (
     <HomeCard>
       <CardHead title="My journey at the company" />
-      <View onLayout={ev => setTrackW(ev.nativeEvent.layout.width)} style={{ height: 6, borderRadius: 99, backgroundColor: C.sunken, marginTop: 34, marginBottom: 16 }}>
-        <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fill}%`, borderRadius: 99, backgroundColor: C.brand }} />
-        <View onLayout={ev => setYouW(ev.nativeEvent.layout.width)}
-          style={{ position: 'absolute', top: -30, left: youLeft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandEdge, opacity: trackW && youW ? 1 : 0 }}>
-          <Txt size={11} w={700} tone="brand" numberOfLines={1}>{you}</Txt>
-        </View>
-        {STOPS.map((s, i) => {
-          const done = yrs >= s, isGold = s === 5
-          return (
-            <View key={s} style={{ position: 'absolute', top: -6, left: `${POS[i]}%`, marginLeft: -9, width: 18, height: 18, borderRadius: 9, borderWidth: 3,
-              borderColor: isGold ? gold.fg : done ? C.brand : C.lineStrong, backgroundColor: isGold ? gold.bg : done ? C.brand : C.surface, alignItems: 'center', justifyContent: 'center' }}>
-              {done && !isGold && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' }} />}
-            </View>
-          )
-        })}
-      </View>
-      <View style={{ flexDirection: 'row' }}>
-        <View style={{ flex: 1, paddingHorizontal: 2, alignItems: 'center' }}>
-          <Txt size={10.5} w={700} center>Joined</Txt>
-          <Txt size={10.5} w={600} tone="muted" center>{fmtDateCompact(e.date_of_joining, prefs.date_format)}</Txt>
-        </View>
-        {[1, 3, 5].map(n => (
-          <View key={n} style={{ flex: 1, paddingHorizontal: 2, alignItems: 'center' }}>
-            <Txt size={10.5} w={700} center>{n} year{n > 1 ? 's' : ''}</Txt>
-            <Txt size={10.5} w={600} tone="muted" center>{yrs >= n ? yearOf(n).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : toGo(n)}</Txt>
+      {dojIso ? (
+        <>
+        <View onLayout={ev => setTrackW(ev.nativeEvent.layout.width)} style={{ height: 6, borderRadius: 99, backgroundColor: C.sunken, marginTop: 34, marginBottom: 16 }}>
+          <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fill}%`, borderRadius: 99, backgroundColor: C.brand }} />
+          <View onLayout={ev => setYouW(ev.nativeEvent.layout.width)}
+            style={{ position: 'absolute', top: -30, left: youLeft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandEdge, opacity: trackW && youW ? 1 : 0 }}>
+            <Txt size={11} w={700} tone="brand" numberOfLines={1}>{you}</Txt>
           </View>
-        ))}
-      </View>
+          {STOPS.map((s, i) => {
+            const done = yrs >= s, isGold = s === 5
+            return (
+              <View key={s} style={{ position: 'absolute', top: -6, left: `${POS[i]}%`, marginLeft: -9, width: 18, height: 18, borderRadius: 9, borderWidth: 3,
+                borderColor: isGold ? gold.fg : done ? C.brand : C.lineStrong, backgroundColor: isGold ? gold.bg : done ? C.brand : C.surface, alignItems: 'center', justifyContent: 'center' }}>
+                {done && !isGold && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' }} />}
+              </View>
+            )
+          })}
+        </View>
+        <View style={{ flexDirection: 'row' }}>
+          <View style={{ flex: 1, paddingHorizontal: 2, alignItems: 'center' }}>
+            <Txt size={10.5} w={700} center>Joined</Txt>
+            <Txt size={10.5} w={600} tone="muted" center>{fmtDateCompact(dojIso, prefs.date_format)}</Txt>
+          </View>
+          {[1, 3, 5].map(n => (
+            <View key={n} style={{ flex: 1, paddingHorizontal: 2, alignItems: 'center' }}>
+              <Txt size={10.5} w={700} center>{n} year{n > 1 ? 's' : ''}</Txt>
+              <Txt size={10.5} w={600} tone="muted" center>{yrs >= n ? yearOf(n).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : toGo(n)}</Txt>
+            </View>
+          ))}
+        </View>
+        </>
+      ) : (
+        <View style={{ paddingVertical: 6 }}>
+          <Txt size={10.5} w={700}>Joined</Txt>
+          <Txt size={10.5} w={600} tone="muted">Joining date not on record yet. HR can set it on your employee record.</Txt>
+        </View>
+      )}
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
         {([['Designation', e.designation], ['Reports to', e.reports_to], ['Department', e.department]] as const).map(([k, v]) => (
           <View key={k} style={{ flex: 1, minWidth: 0, backgroundColor: C.sunken, borderRadius: 11, paddingVertical: 9, paddingHorizontal: 10 }}>

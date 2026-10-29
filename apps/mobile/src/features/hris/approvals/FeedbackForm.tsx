@@ -105,6 +105,7 @@ export function FeedbackForm({ candidate, round, questions, submitting, onSubmit
   const [pending, setPending] = React.useState<Decision | null>(null)
   const [dRemark, setDRemark] = React.useState('')
   const [err, setErr] = React.useState<string | null>(null)
+  const [confirmReject, setConfirmReject] = React.useState(false)   // the last check before a rejection is recorded
 
   const { total, pct, band } = React.useMemo(() => scoreFeedback(params), [params])
   const done = FEEDBACK_PARAMS.filter(p => params[p.k]).length
@@ -127,6 +128,9 @@ export function FeedbackForm({ candidate, round, questions, submitting, onSubmit
     const remark = dRemark.trim()
     if (d !== 'SHORTLIST' && !remark) { setErr(`A remark is required to ${d === 'HOLD' ? 'put the candidate on hold' : 'reject the candidate'}.`); return }
     setErr(null)
+    // Rejecting takes the candidate out of the pipeline: ask once more.
+    if (d === 'REJECT' && !confirmReject) { setConfirmReject(true); return }
+    setConfirmReject(false)
     onSubmit({ params, remarks, overall: overall.trim(), recommendation: RECOMM_FOR[d], total, pct, band, decision: d, decision_remark: remark || null })
   }
 
@@ -205,9 +209,20 @@ export function FeedbackForm({ candidate, round, questions, submitting, onSubmit
             <Txt size={F.small} w={800} color={fg(C, DTONE[pending])} style={{ marginBottom: 8 }}>{pending === 'HOLD' ? 'Put the candidate on hold' : 'Reject the candidate'}: add your remark</Txt>
             <Area value={dRemark} onChange={setDRemark} minHeight={70}
               placeholder={pending === 'HOLD' ? 'Why on hold, and what would change the call (e.g. waiting on a comparison, notice period, budget)…' : 'Why the candidate is not a fit for this role…'} />
+            {confirmReject && (
+              <View accessibilityLabel="Confirm rejection" style={{ marginTop: 10, borderWidth: 1, borderColor: C.criticalEdge, backgroundColor: C.surface, borderRadius: R.lg, padding: 14, gap: 6 }}>
+                <Txt size={F.lead} w={800}>Reject {candidate.name}?</Txt>
+                <Txt size={12.5} tone="muted" style={{ lineHeight: 19 }}>Your {round} feedback is saved with a <Txt size={12.5} w={700} tone="critical">Reject</Txt> decision and the candidate moves to <Txt size={12.5} w={700} tone="muted">Rejected</Txt>, out of the pipeline. No further round can be added.</Txt>
+                {!!dRemark.trim() && <View style={{ backgroundColor: C.criticalTint, borderRadius: 8, padding: 10 }}><Txt size={12.5}><Txt size={12.5} w={700}>Remark:</Txt> {dRemark.trim()}</Txt></View>}
+                <View style={{ flexDirection: 'row', gap: S.sm, marginTop: 6 }}>
+                  <Button title="Cancel" variant="outline" disabled={submitting} onPress={() => setConfirmReject(false)} style={{ flex: 1 }} />
+                  <SolidButton title={submitting ? 'Rejecting…' : 'Yes, reject'} tone="critical" disabled={submitting} onPress={() => finish('REJECT')} style={{ flex: 1 }} />
+                </View>
+              </View>
+            )}
             <View style={{ flexDirection: 'row', gap: S.sm, marginTop: 10 }}>
               <SolidButton title={submitting ? 'Submitting…' : `Confirm ${DECISION_LABEL[pending] === 'On hold' ? 'Hold' : 'Reject'}`} tone={DTONE[pending]} disabled={submitting} onPress={() => finish(pending)} style={{ flex: 1 }} />
-              <Button title="Back" variant="outline" disabled={submitting} onPress={() => { setPending(null); setErr(null) }} />
+              <Button title="Back" variant="outline" disabled={submitting} onPress={() => { setPending(null); setErr(null); setConfirmReject(false) }} />
             </View>
           </View>
         )}

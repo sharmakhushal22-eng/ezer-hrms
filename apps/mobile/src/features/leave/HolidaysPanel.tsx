@@ -56,7 +56,9 @@ function HolidayRow({ h, head, today, first }: { h: Holiday; head: string | null
 export function HolidaysPanel({ upcoming, today, noHolidays }: { upcoming: Holiday[]; today: string; noHolidays: boolean }) {
   const [all, setAll] = React.useState(false)
   const shown = all ? upcoming : upcoming.slice(0, PEEK)
-  let lastMonth = ''
+  // The month heading over the first holiday of each month.
+  const monthOf = (h: Holiday) => { const d = fromIso(h.holiday_date); return `${MONTHS[d.getMonth()]} ${d.getFullYear()}` }
+  const heads = shown.map((h, i) => (i === 0 || monthOf(shown[i - 1]) !== monthOf(h) ? monthOf(h) : null))
   return (
     <Card style={{ marginBottom: S.md }}>
       <PanelHead title="Upcoming holidays" meta={upcoming.length ? `${upcoming.length} ahead` : undefined} />
@@ -75,10 +77,7 @@ export function HolidaysPanel({ upcoming, today, noHolidays }: { upcoming: Holid
       ) : (
         <>
           {shown.map((h, i) => {
-            const d = fromIso(h.holiday_date)
-            const mon = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
-            const head = mon !== lastMonth ? (lastMonth = mon) : null
-            return <HolidayRow key={`${h.holiday_date}-${i}`} h={h} head={head} today={today} first={i === 0} />
+            return <HolidayRow key={`${h.holiday_date}-${i}`} h={h} head={heads[i]} today={today} first={i === 0} />
           })}
           {upcoming.length > PEEK && (
             <MoreButton open={all} label={`Show all ${upcoming.length} holidays`} onPress={() => setAll(v => !v)} />

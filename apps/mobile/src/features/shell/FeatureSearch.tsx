@@ -15,7 +15,7 @@ import { IconClose, IconSearch } from '@/ui/icons'
 
 const ESS_KEYWORDS: Record<string, string> = {
   home: 'dashboard today landing', profile: 'my details personal info bank address', documents: 'letter request certificate',
-  letters: 'my letters offer letter appointment', team: 'reportees manager my team', orgchart: 'org chart hierarchy reporting tree',
+  letters: 'my letters offer letter appointment', 'to-sign': 'esign e-sign sign signature documents pending', team: 'reportees manager my team', orgchart: 'org chart hierarchy reporting tree',
   flexi: 'flexi benefits tax', declaration: 'investment declaration 80c tax', proofs: 'investment proofs tax',
   flexiclaims: 'flexi claims bills reimbursement', vpf: 'voluntary pf provident fund', nps: 'corporate nps pension', loans: 'loan advance',
   claims: 'travel claims expense reimbursement', attendance: 'attendance punch regularise regularize', leave: 'leave apply holiday time off',

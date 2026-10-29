@@ -4,7 +4,7 @@
 // the app's tokens. Module-level so inputs keep focus.
 import * as React from 'react'
 import { Pressable, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native'
-import { bandFor } from '@web/pms/scoring'
+import { bandFor, DEFAULT_BANDS, type Band } from '@web/pms/scoring'
 import { useTheme } from '@/ui/ThemeProvider'
 import type { Palette } from '@/ui/theme'
 import { F, FONT, R, S } from '@/ui/theme'
@@ -99,13 +99,13 @@ export function Pill({ kind, label }: { kind: PillKind; label: string }) {
 export const K = ({ children, style }: { children: React.ReactNode; style?: any }) => <Txt size={F.micro} tone="muted" style={[{ lineHeight: 17 }, style]}>{children}</Txt>
 
 /** The 1–5 chip radiogroup (EmployeeTabs.tsx Chips). Tooltip "n: Label" becomes the a11y label. */
-export function Chips({ value, onPick, name, disabled }: { value: number | null; onPick: (n: number) => void; name: string; disabled?: boolean }) {
+export function Chips({ value, onPick, name, disabled, bands = DEFAULT_BANDS }: { value: number | null; onPick: (n: number) => void; name: string; disabled?: boolean; bands?: Band[] }) {
   const { C } = useTheme()
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={name} style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
       {[1, 2, 3, 4, 5].map(n => {
         const on = value === n
-        const band = bandFor(n)
+        const band = bandFor(n, bands)
         return (
           <Pressable key={n} disabled={disabled} onPress={() => onPick(n)} accessibilityRole="radio" accessibilityState={{ checked: on, disabled }}
             accessibilityLabel={band ? `${n}: ${band.label}` : String(n)}

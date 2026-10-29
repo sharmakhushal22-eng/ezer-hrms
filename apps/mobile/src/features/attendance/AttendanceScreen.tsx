@@ -34,7 +34,7 @@ export default function AttendanceScreen() {
   const mq = useMonth(year, month)
   const rq = useRegularisations()
   const monthData = mq.data ?? null
-  const regs: RegularisationRequest[] = rq.data || []   // web: on error, an empty list
+  const regs: RegularisationRequest[] = React.useMemo(() => rq.data || [], [rq.data])   // web: on error, an empty list
   const log = useLogController()
 
   const regByDate = React.useMemo(() => {

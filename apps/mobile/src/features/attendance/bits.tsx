@@ -99,11 +99,17 @@ function Column({ items, value, onPick, label }: { items: string[]; value: strin
 function TimeSheet({ visible, onClose, value, onPick, title }: { visible: boolean; onClose: () => void; value: string; onPick: (v: string) => void; title: string }) {
   const [h, setH] = React.useState('09')
   const [m, setM] = React.useState('00')
-  React.useEffect(() => {
-    if (!visible) return
-    const x = /^(\d{2}):(\d{2})/.exec(value || '')
-    setH(x ? x[1] : '09'); setM(x ? x[2] : '00')
-  }, [visible, value])
+  // Start from the field's value each time the sheet opens (state adjusted while
+  // rendering, React's pattern for "reset when a prop changes").
+  const [seen, setSeen] = React.useState<string | null>(null)
+  const key = visible ? value || '' : null
+  if (key !== seen) {
+    setSeen(key)
+    if (key !== null) {
+      const x = /^(\d{2}):(\d{2})/.exec(key)
+      setH(x ? x[1] : '09'); setM(x ? x[2] : '00')
+    }
+  }
   return (
     <Sheet visible={visible} onClose={onClose} title={title}
       footer={<Button title={`Set ${h}:${m}`} full onPress={() => { onPick(`${h}:${m}`); onClose() }} style={{ marginBottom: S.sm }} />}>

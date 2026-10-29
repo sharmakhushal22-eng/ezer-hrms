@@ -41,8 +41,16 @@ export function resolveLink(r: string | null | undefined): { route: string; quer
   return null
 }
 
+// '/ess?notifications=1' — an interview invite's link — opens the bell on the website
+// (EmployeePortal.tsx). The shell registers how to open it (features/shell/notifications.tsx).
+let bellOpener: (() => void) | null = null
+export function setBellOpener(fn: (() => void) | null) { bellOpener = fn }
+/** Whether a website link asks for the notification panel. */
+export const isBellLink = (r: string | null | undefined) => !!r && /^\/(dashboard\/)?ess\b[^?]*\?(.*&)?notifications=1(&|$)/.test(r)
+
 /** Open a website-style link. Returns false when there is nowhere to go. */
 export function openLink(r: string | null | undefined): boolean {
+  if (isBellLink(r) && bellOpener) { bellOpener(); return true }
   const t = resolveLink(r)
   if (!t) return false
   if ('external' in t) { void WebBrowser.openBrowserAsync(t.external); return true }

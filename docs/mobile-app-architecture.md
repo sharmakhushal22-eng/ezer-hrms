@@ -102,7 +102,7 @@ apps/mobile/                      Expo SDK 57 · React Native 0.86 · TypeScript
 * signs out automatically when the 12 hours run out while the app is open, and on any 401 from the API;
 * on sign-out deletes the token and clears every cached query, so nothing of one person survives into the next sign-in on a shared phone.
 
-One deliberate deviation from the website: `set-password` returns no token, so on the website a first-time employee lands in a portal where every call fails until they sign in again. The app signs in with the new password immediately.
+`set-password` returns a token (the website added this after the app was first built); the app uses it, and falls back to a normal login only if it is missing.
 
 Admin-only surfaces are excluded by construction: the app has no route for any admin module, no "Manage" band, no Admin button and no view-as.
 
@@ -146,6 +146,24 @@ When a new employee-facing section or sub-tab appears in the website's `SECTIONS
 
 If the website only changes the *rules* of an existing screen (a validation, a limit, a status), check whether the rule lives in the API (nothing to do), in a shared `lib/` module (rebuild the app), or in a website component (update the copy in the app, or move it to `lib/`).
 
+### 4.1 Keeping the app in step with the website (the routine)
+
+The app records the last website commit it was compared against:
+
+> **Last synced website commit: `30ca34b`** (origin/NayanAhuja, 30 Oct 2026).
+
+To bring the app up to date after the website changes:
+
+1. `git checkout feat/mobile-app && git merge origin/NayanAhuja` (or the branch the website now lives on). The app's `@web/*` imports pick up every pure `lib/` change automatically.
+2. `cd apps/mobile && npm run check`. A type error here is usually a website type that changed shape (e.g. a field became nullable); fix the app screen that uses it.
+3. List what an employee would see differently:
+   `git log --oneline 30ca34b..HEAD -- components/ess components/profile components/te components/pms components/esign app/api/ess app/api/te app/api/pms app/api/exit app/api/esign lib`
+   and for each module `git diff 30ca34b HEAD -- <its website files>`. The module → website-file map is in `docs/mobile-feature-parity.md`.
+4. Port each employee-facing change into `src/features/<module>/`, following §4. Admin-only changes need nothing.
+5. Update the "Last synced" commit above and the parity table, bump `version` and `android.versionCode` in `app.config.ts`, then build a new APK (§5).
+
+Most website changes are API or `lib/` changes and need no app code at all; only screens (`components/...`) need porting by hand.
+
 ---
 
 ## 5. Build, run and distribute
@@ -153,7 +171,7 @@ If the website only changes the *rules* of an existing screen (a validation, a l
 See `apps/mobile/README.md` for exact commands. In short:
 
 * **Dev:** `cd apps/mobile && npm install && cp .env.example .env.local` (fill the two Supabase public values), then `npx expo start`. Open on a phone via a development build, or `npx expo start --web` for a quick browser check.
-* **Test APK:** `npx eas-cli build --platform android --profile preview`. EAS builds in the cloud and returns a download link and QR code for an installable `.apk`. No Play Store involved.
+* **Test APK:** `npm run build:apk` (= `eas build --platform android --profile preview`), under the Expo project `@girish18/ezer-hrms` (`owner` / `extra.eas.projectId` in `app.config.ts`). EAS builds in the cloud and returns a download link and QR code for an installable `.apk`. No Play Store involved.
 * **Config on EAS:** `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` are set as EAS environment variables (they are public values; never put a secret in an `EXPO_PUBLIC_` variable).
 
 ---

@@ -8,6 +8,9 @@
 // export: the same 768×768 JPEG at q0.92, sent as field `file` named
 // avatar.jpg to POST /api/ess/profile/photo (the route takes JPG/PNG/WebP up to
 // 2 MB). The website's "Straighten" slider has no equivalent here.
+//
+// Limits as PhotoUploader.tsx now sets them: up to 10 MB (was 40), JPG / PNG /
+// WebP / HEIC only (no GIF, SVG, BMP…), and at least 200 × 200 px.
 import * as React from 'react'
 import { Platform, Pressable, View } from 'react-native'
 import { Image } from 'expo-image'
@@ -20,7 +23,12 @@ import { Sheet } from '@/ui/overlays'
 import { uploadPhoto } from './api'
 
 const OUT = 768
-const MAX_BYTES = 40 * 1024 * 1024
+const MAX_BYTES = 10 * 1024 * 1024
+/** Smallest side worth cropping a face from: the ID card draws the photo at ~300 px. */
+const MIN_SIDE = 200
+const TYPES_OK = ['image/jpeg', 'image/png', 'image/webp']
+const PHOTO_RULE = 'JPG, PNG, WebP or HEIC · up to 10 MB · at least 200 × 200 px'
+const isHeif = (t?: string | null, name?: string | null) => /image\/hei[cf]/i.test(t || '') || /\.hei[cf]$/i.test(name || '')
 const UNREADABLE = 'That image could not be opened. Try a JPG or PNG.'
 
 interface Src { uri: string; width: number; height: number }
@@ -77,9 +85,15 @@ function PhotoForm({ onClose, onDone }: { onClose: () => void; onDone: (url: str
     if (r.canceled || !r.assets?.length) return
     const a = r.assets[0]
     if (a.fileSize && a.fileSize > MAX_BYTES) {
-      setErr(`That image is ${(a.fileSize / 1048576).toFixed(0)} MB, over the ${MAX_BYTES / 1048576} MB limit.`); return
+      setErr(`That image is ${(a.fileSize / 1048576).toFixed(1)} MB, over the ${MAX_BYTES / 1048576} MB limit.`); return
     }
-    if (a.mimeType && !a.mimeType.startsWith('image/')) { setErr('That file is not an image. Use JPG or PNG.'); return }
+    const heif = isHeif(a.mimeType, a.fileName)
+    if (!heif && a.mimeType && !a.mimeType.startsWith('image/')) { setErr('That file is not an image. Use JPG or PNG.'); return }
+    // GIF, SVG, BMP, TIFF… are images but not photos.
+    if (!heif && a.mimeType && !TYPES_OK.includes(a.mimeType)) { setErr('Use a JPG, PNG, WebP or HEIC photo.'); return }
+    if (a.width && a.height && Math.min(a.width, a.height) < MIN_SIDE) {
+      setErr(`That image is only ${a.width}×${a.height} px. Use a photo at least ${MIN_SIDE}×${MIN_SIDE} px so it stays sharp on your ID card.`); return
+    }
     setSrc({ uri: a.uri, width: a.width, height: a.height })
     setQuarter(0); setFlip(false)
   }
@@ -107,6 +121,7 @@ function PhotoForm({ onClose, onDone }: { onClose: () => void; onDone: (url: str
       <Txt size={F.small} tone="muted" style={{ marginBottom: S.md }}>
         {Platform.OS === 'web' ? 'Choose a photo; it is cut to a centred square.' : 'Choose a photo, then crop it to a square.'} Saved as a {OUT} by {OUT} square.
       </Txt>
+      <Txt size={F.tiny} tone="muted" style={{ marginTop: -S.sm, marginBottom: S.md }}>{PHOTO_RULE}</Txt>
 
       <View style={{ alignSelf: 'center', width: 240, height: 240, borderRadius: R.lg, overflow: 'hidden', backgroundColor: C.sunken, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' }}>
         {src ? (

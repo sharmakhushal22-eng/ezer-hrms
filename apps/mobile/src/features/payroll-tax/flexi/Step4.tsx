@@ -187,7 +187,7 @@ export function Step4(p: Step4Props) {
         {T.eVari > 0 && <MRow l="Variable Pay" o={R(T.eVari)} n={R(T.eVari)} />}
         {T.addI > 0 && <MRow l="Additional Income" o={R(T.addI)} n={R(T.addI)} />}
         {(T.oPerq > 0 || T.nPerq > 0) && <MRow l="Car+Driver Perquisite (₹10,000/mo)" o={T.oPerq ? `+${R(T.oPerq)}` : '-'} n={T.nPerq ? `+${R(T.nPerq)}` : '-'} />}
-        <BRow l="Gross Taxable Income" o={R(T.grossO)} n={R(T.grossN)} bg={C.warningTint} col={C.critical} />
+        <BRow l="Gross Taxable Income" o={R(T.grossO)} n={R(T.grossN)} bg={C.sunken} col={C.ink} />
         <SecRow t="DEDUCTIONS" />
         <MRow l="Standard Deduction" o="(₹50,000)" n="(₹75,000)" exempt />
         {T.ltaAmt > 0 && <MRow l="Leave Travel Allowance" o={`(${R(T.ltaAmt)})`} n="N/A" exempt />}
@@ -206,8 +206,8 @@ export function Step4(p: Step4Props) {
         <MRow l="Tax on income (slab)" o={R(T.bO)} n={R(T.bN)} />
         <MRow l="Rebate u/s 87A" o={T.tO <= 500000 ? `(${R(Math.min(T.bO, 12500))})` : '-'} n={T.tN <= 1200000 ? `(${R(T.bN)})` : '-'} exempt />
         <MRow l="Add: 4% Health & Edu Cess" o={R(Math.round(T.fO / 1.04 * .04))} n={R(Math.round(T.fN / 1.04 * .04))} />
-        <BRow l="TOTAL ANNUAL TAX" o={R(T.fO)} n={R(T.fN)} bg={C.ink} col={C.surface} />
-        <BRow l={`MONTHLY TDS (÷${T.months})`} o={R(T.moO)} n={R(T.moN)} bg={C.warningTint} col={C.critical} />
+        <BRow l="TOTAL ANNUAL TAX" o={R(T.fO)} n={R(T.fN)} bg={C.brandTint} col={C.brandDeep} />
+        <BRow l={`MONTHLY TDS (÷${T.months})`} o={R(T.moO)} n={R(T.moN)} bg={C.sunken} col={C.ink} />
       </Card>
 
       <Box bg={C.warningTint} edge={C.warningEdge} style={{ padding: S.lg, marginBottom: S.md, borderRadius: 14 }}>

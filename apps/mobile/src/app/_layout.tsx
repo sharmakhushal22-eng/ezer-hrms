@@ -17,6 +17,7 @@ import { queryClient } from '@/core/query'
 import { SessionProvider, useSession } from '@/core/session'
 import { ThemeProvider, useTheme } from '@/ui/ThemeProvider'
 import { OverlayProvider } from '@/ui/overlays'
+import { BellHost } from '@/features/shell/notifications'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
 
@@ -42,6 +43,8 @@ function Gate() {
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.canvas }, animation: 'slide_from_right' }} />
+      {/* The notification bell's one sheet — opened by any top bar or an '/ess?notifications=1' link. */}
+      {status === 'signedIn' && <BellHost />}
     </>
   )
 }

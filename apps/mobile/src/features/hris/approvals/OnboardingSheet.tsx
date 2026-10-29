@@ -1,63 +1,47 @@
 // The heads' onboarding approval sheet — components/ess/OnboardingApprovals.tsx
-// (the open form): letterhead and stamps, "Acting as", the team's checklist,
-// Payroll's live salary structure, the documents (10-minute signed links, opened
-// in the in-app browser and re-fetched when older than 9 minutes), the
-// candidate's form section by section, and the decision bar.
+// (the open form): letterhead and stamps, "Acting as", the team's checklist
+// (only this hiring track's items; the typed details are facts on the record,
+// shown read-only — a head only confirms the yes / no items), Payroll's salary
+// structure as negotiated, the candidate's form section by section (the
+// documents stay with the HR Manager's review), and the decision bar.
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
-import * as WebBrowser from 'expo-web-browser'
-import { CHECKLISTS, missingItems, type ChecklistField, type HeadTeam } from '@web/onboarding/checklists'
+import { CHECKLISTS, fieldsFor, missingItems, type ChecklistField, type HeadTeam } from '@web/onboarding/checklists'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
-import { Button, Input, Txt } from '@/ui/primitives'
-import { SelectSheet } from '@/ui/overlays'
+import { Button, Txt } from '@/ui/primitives'
 import { FullModal, SolidButton } from '../ui'
-import { DocCard, SCHEMA, SectionView, SheetHeading, TEAM, day, type Doc } from './formSections'
+import { SCHEMA, SectionView, SheetHeading, TEAM, day, type Doc } from './formSections'
 import { rebuildFor, type SalaryBreakdown } from './salary'
 
 export type Approval = { team: string; status: 'PENDING' | 'APPROVED' | 'RETURNED'; acted_by_name: string | null; remark: string | null; acted_at: string | null }
 const inr = (n: number | null | undefined) => n == null ? '—' : `₹${Math.round(n).toLocaleString('en-IN')}`
 const TEAM_BLURB: Record<HeadTeam, string> = {
-  IT: 'What the joiner walks in to on day one — tick each item once it is actually ready.',
-  ADMIN: 'What Admin has arranged for the joiner — tick each item once it is actually ready.',
-  PAYROLL: 'The structure the joiner will be paid on. Check the breakdown below; correct the CTC if the offer changed and the structure follows.',
+  IT: 'What the joiner walks in to on day one — tick each item once it is actually ready. The details shown are on record; only HR changes them.',
+  ADMIN: 'What Admin has arranged for the joiner — tick each item once it is actually ready. The details shown are on record; only HR changes them.',
+  PAYROLL: 'The structure the joiner will be paid on, as negotiated. Check the breakdown below and confirm it is entered in payroll; if the figures are wrong, return the form to HR with a remark instead.',
 }
 
-function ChecklistInput({ f, v, need, readOnly, onChange }: { f: ChecklistField; v: any; need: boolean; readOnly: boolean; onChange: (k: string, v: any) => void }) {
+/** A typed detail of the checklist: a fact on the record (kept by HR) — shown, never edited here. */
+function Fact({ f, v }: { f: ChecklistField; v: any }) {
   const { C } = useTheme()
-  const [open, setOpen] = React.useState(false)
-  const label = `${f.label}${f.required ? ' *' : ''}`
-  if (f.kind === 'select') {
-    const cur = f.options?.find(o => o.value === v)?.label
-    return (
-      <View style={{ marginBottom: S.md }}>
-        <Txt size={10} w={600} tone="muted" upper style={{ marginBottom: 4 }}>{label}</Txt>
-        <Pressable disabled={readOnly} onPress={() => setOpen(true)} accessibilityRole="button"
-          style={{ minHeight: 46, borderRadius: 8, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: readOnly ? C.sunken : C.surface, paddingHorizontal: 11, justifyContent: 'center' }}>
-          <Txt size={F.small} color={cur ? C.ink : C.faint}>{cur || '—'}</Txt>
-        </Pressable>
-        <SelectSheet visible={open} onClose={() => setOpen(false)} title={f.label} value={v ?? ''}
-          options={[{ value: '', label: '—' }, ...(f.options || [])]} onPick={x => onChange(f.key, x)} />
-      </View>
-    )
-  }
+  const shown = v == null || v === '' ? '' : f.kind === 'select' ? (f.options?.find(o => o.value === v)?.label || String(v)) : f.kind === 'number' ? `₹${Math.round(Number(v)).toLocaleString('en-IN')}` : String(v)
   return (
-    <View style={{ marginBottom: S.md }}>
-      <Txt size={10} w={600} tone="muted" upper style={{ marginBottom: 4 }}>{label}</Txt>
-      <Input value={v == null ? '' : String(v)} editable={!readOnly} onChangeText={t => onChange(f.key, t)} placeholder={f.hint || ''}
-        keyboardType={f.kind === 'number' ? 'numeric' : 'default'} style={{ marginBottom: 0 }} />
-      {need && <View style={{ height: 2, backgroundColor: C.warning, borderRadius: 1, marginTop: -2 }} />}
+    <View style={{ flexBasis: '47%', flexGrow: 1, minWidth: 0, marginBottom: S.md }}>
+      <Txt size={10} w={600} tone="muted" upper style={{ marginBottom: 3 }}>{f.label}</Txt>
+      <Txt size={F.small} color={shown ? C.ink : C.faint}>{shown || '—'}</Txt>
     </View>
   )
 }
 
-function Checklist({ team, values, onChange, readOnly }: { team: HeadTeam; values: Record<string, any>; onChange: (k: string, v: any) => void; readOnly: boolean }) {
+function Checklist({ team, values, onChange, readOnly, track }: { team: HeadTeam; values: Record<string, any>; onChange: (k: string, v: any) => void; readOnly: boolean; track?: string | null }) {
   const { C } = useTheme()
-  const def = CHECKLISTS[team]
-  const missing = new Set(missingItems(team, values))
-  const bools = def.fields.filter(f => f.kind === 'bool'), inputs = def.fields.filter(f => f.kind !== 'bool')
-  const total = def.fields.filter(f => f.required).length
-  const done = total - def.fields.filter(f => f.required && missing.has(f.label)).length
+  // Only the items of this hiring track (a domestic joiner is not asked about FRRO; an overseas one not about PF).
+  const fields = fieldsFor(team, track)
+  const missing = new Set(missingItems(team, values, track))
+  const bools = fields.filter(f => f.kind === 'bool'), inputs = fields.filter(f => f.kind !== 'bool')
+  const total = fields.filter(f => f.required).length
+  const done = total - fields.filter(f => f.required && missing.has(f.label)).length
   return (
     <View style={{ marginTop: 14 }}>
       <Txt size={12.5} tone="soft">{TEAM_BLURB[team]}</Txt>
@@ -65,7 +49,7 @@ function Checklist({ team, values, onChange, readOnly }: { team: HeadTeam; value
       <View style={{ height: 6, borderRadius: 99, backgroundColor: C.sunken, overflow: 'hidden', marginTop: 6, marginBottom: 14 }}>
         <View style={{ height: '100%', width: `${total ? (done / total) * 100 : 0}%`, backgroundColor: C.positive, borderRadius: 99 }} />
       </View>
-      {inputs.map(f => <ChecklistInput key={f.key} f={f} v={values[f.key]} need={!readOnly && missing.has(f.label)} readOnly={readOnly} onChange={onChange} />)}
+      {inputs.length > 0 && <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: S.lg }}>{inputs.map(f => <Fact key={f.key} f={f} v={values[f.key]} />)}</View>}
       <View style={{ gap: 10 }}>
         {bools.map(f => {
           const on = values[f.key] === true
@@ -137,28 +121,18 @@ function SalaryTable({ s, annual }: { s: SalaryBreakdown; annual: number }) {
 
 export interface OpenState { teams: string[]; item: any; approvals: Approval[]; documents: Doc[]; checklists: Record<string, Record<string, any>>; salary: SalaryBreakdown | null; openedAt: number }
 
-export function OnboardingSheet({ open, teams, team, setTeam, check, setField, busy, onClose, onDecide, onRefreshDocs }: {
+export function OnboardingSheet({ open, teams, team, setTeam, check, setField, busy, onClose, onDecide }: {
   open: OpenState; teams: string[]; team: HeadTeam; setTeam: (t: HeadTeam) => void
   check: Record<string, Record<string, any>>; setField: (k: string, v: any) => void; busy: boolean
-  onClose: () => void; onDecide: (a: 'approve' | 'return' | 'save') => void; onRefreshDocs: () => Promise<Doc[] | null>
+  onClose: () => void; onDecide: (a: 'approve' | 'return' | 'save') => void
 }) {
   const { C } = useTheme()
   const item = open.item
   const mine = open.approvals.find(a => a.team === team) || null
   const decided = mine?.status === 'APPROVED'
-  const missingNow = missingItems(team, check[team])
-  const docs = open.documents || []
+  const missingNow = missingItems(team, check[team], item?.hiring_track)
   const salary = open.salary
   let sec = 0
-
-  async function openDoc(d: Doc) {
-    let url = d.url
-    if (Date.now() - open.openedAt > 9 * 60_000) {
-      const fresh = await onRefreshDocs()
-      url = fresh?.find(x => x.doc_code === d.doc_code)?.url || url
-    }
-    if (url) void WebBrowser.openBrowserAsync(url)
-  }
 
   const footer = item.status === 'EMPLOYEE_CREATED' || decided ? (
     <View style={{ gap: S.sm }}>
@@ -203,17 +177,14 @@ export function OnboardingSheet({ open, teams, team, setTeam, check, setField, b
         : <Txt size={12.5} tone="soft" style={{ marginTop: 14 }}>Confirm your checklist, look through what the candidate filled in, then <Txt size={12.5} w={700}>approve for {TEAM[team]}</Txt>. If something is wrong in the form, return it to the candidate with a remark.</Txt>}
 
       <SheetHeading n={++sec} title={`${CHECKLISTS[team].title} · your checklist`} />
-      <Checklist team={team} values={check[team] || {}} onChange={setField} readOnly={decided} />
+      <Checklist team={team} values={check[team] || {}} onChange={setField} readOnly={decided} track={item?.hiring_track} />
 
       {team === 'PAYROLL' && salary && <>
         <SheetHeading n={++sec} title="Salary structure" />
-        <SalaryTable s={salary} annual={Number(check.PAYROLL?.annual_ctc) || salary.annual_ctc} />
+        <SalaryTable s={salary} annual={salary.annual_ctc} />
       </>}
 
-      <SheetHeading n={++sec} title="Documents" right={`${docs.length} uploaded`} />
-      {docs.length === 0 && <Txt size={F.tiny} tone="muted" style={{ marginTop: 8 }}>No documents uploaded.</Txt>}
-      {docs.map(d => <DocCard key={d.doc_code} doc={d} onOpen={x => void openDoc(x)} />)}
-
+      {/* Details, section by section (read-only; the documents stay with the HR Manager's review). */}
       {SCHEMA.map(s => item.form_data?.[s.step] ? <SectionView key={s.step} n={++sec} sec={s} obj={item.form_data[s.step]} /> : null)}
       <View style={{ height: S.lg }} />
     </FullModal>

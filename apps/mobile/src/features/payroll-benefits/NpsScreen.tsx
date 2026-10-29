@@ -138,8 +138,9 @@ export default function NpsScreen() {
         <Txt size={F.micro} tone="muted" style={{ marginTop: 6 }}>Old regime = 10% of Basic · New regime = 14% of Basic</Txt>
       </Box>
 
+      <Box>
       <View style={{ marginBottom: 12 }}>
-        <Txt size={F.small} tone="muted" style={{ marginBottom: 8 }}>Do you already have an NPS account (PRAN)?</Txt>
+        <Txt size={F.body} w={700} style={{ marginBottom: 8 }}>Do you already have an NPS account (PRAN)?</Txt>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Choice selected={hasPran} label="Yes, I have a PRAN" onPress={() => setHasPran(true)} />
           <Choice selected={!hasPran} label="No, I need one" onPress={() => setHasPran(false)} />
@@ -156,17 +157,18 @@ export default function NpsScreen() {
           <SelectSheet visible={tierOpen} onClose={() => setTierOpen(false)} title="Account tier" options={TIERS} value={tier} onPick={setTier} />
         </>
       ) : (
-        <Box bg={C.brandTint} edge={C.brandEdge} style={{ marginBottom: 12 }}>
+        <Box bg={C.brandTint} edge={C.brandEdge} style={{ marginBottom: 0 }}>
           <Txt size={F.tiny} color={C.brand} style={{ lineHeight: 20 }}>
             <Txt size={F.tiny} w={700} color={C.brand}>A new PRAN will be created for you.</Txt>{'\n'}
             On submit, we&apos;ll email you the PRAN creation form. Generate your PRAN <Txt size={F.tiny} w={700} color={C.brand}>within 3 days</Txt>, then resubmit here. For help, contact the <Txt size={F.tiny} w={700} color={C.brand}>Payroll team</Txt>.
           </Txt>
         </Box>
       )}
+      </Box>
 
       <Callout bg={C.warningTint}>
-        <Txt size={F.tiny} w={700} color={C.warning}>Please read carefully:</Txt>
-        <Bullets color={C.warning} lines={[
+        <Txt size={F.tiny} w={700} color={C.warning}>Please read carefully</Txt>
+        <Bullets color={C.ink} lines={[
           'NPS is a long-term retirement product, locked in until age 60 (limited early withdrawal)',
           'Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))',
           'Recurring monthly contribution, reflects in your salary structure',
@@ -174,11 +176,13 @@ export default function NpsScreen() {
         ]} />
       </Callout>
 
+      <Box>
       <Checkbox checked={ack} onChange={setAck}
-        label={<Txt size={F.tiny} tone="muted" style={{ flex: 1, lineHeight: 19 }}>I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.</Txt>} />
+        label={<Txt size={F.tiny} tone="soft" style={{ flex: 1, lineHeight: 19 }}>I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.</Txt>} />
       <View style={{ height: 14 }} />
       <Button full disabled={!canSubmit || saving} onPress={submit}
         title={saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'} />
+      </Box>
     </>,
   )
 }

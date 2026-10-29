@@ -6,3 +6,5 @@
 | 2 | Home | attendance_punches (Kiran SRS9047, 358c74fb-…) 2026-10-19 | IN 03:39:55Z, OUT 03:40:00Z, source ESS_APP | Kiran's 19 Oct attendance now "Late" (month late marks 5→6) |
 | 3 | Home | ess_user_preferences (Kiran) | written by PUTs | restored to {light,24,long} |
 | 4 | HR Services | ess_service_requests 6cb8bc61-769a-4edc-a556-432e896ea174 | Rohan SRS9042, type LOAN, details "CLAUDE TEST — mobile app parity check, please ignore" | open (no withdraw in UI) |
+| 5 | Profile (30 Oct) | employees SRS9042 `aadhar_last4` | accidental save of '0124' while testing validation | REVERTED to NULL (only column the route writes) |
+| 6 | T&E (30 Oct) | te trip drafts ×~6, expense draft ×1 (Rohan) | "CLAUDE TEST plan" / "CLAUDE TEST draft" | all discarded in the app; Drafts list empty |

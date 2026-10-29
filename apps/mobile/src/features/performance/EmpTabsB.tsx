@@ -2,15 +2,16 @@
 // (website: components/pms/EmployeeTabs.tsx §3.4–3.6).
 import * as React from 'react'
 import { View } from 'react-native'
-import { score, gap, byCategory, bandForScore, bandFor, type Line } from '@web/pms/scoring'
+import { score, gap, byCategory, bandForScore, bandFor, DEFAULT_BANDS, type Band, type Line } from '@web/pms/scoring'
+import { humanDate } from '@web/pms/cycle'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Input, Txt } from '@/ui/primitives'
 import { ABar, B, Banner, Chips, EmptyBlock, Field, K, PCard, PStat, StatGrid } from './ui'
-import type { SelfRow } from './data'
+import type { SelfRow } from './actions'
 
 // ── §3.4 Self Rating ─────────────────────────────────────────────────────
-function SelfCard({ r, i, submitted, onSet }: { r: SelfRow; i: number; submitted: boolean; onSet: (i: number, p: Partial<SelfRow>) => void }) {
+function SelfCard({ r, i, submitted, onSet, bands }: { r: SelfRow; i: number; submitted: boolean; onSet: (i: number, p: Partial<SelfRow>) => void; bands: Band[] }) {
   const { C } = useTheme()
   return (
     <View style={{ borderWidth: 1, borderColor: C.line, borderRadius: R.md, padding: S.md, marginBottom: S.md }}>
@@ -21,15 +22,15 @@ function SelfCard({ r, i, submitted, onSet }: { r: SelfRow; i: number; submitted
       <Input label="What you delivered" value={r.achievement} editable={!submitted} placeholder="The number you actually hit"
         accessibilityLabel={`Achievement for ${r.title}`} onChangeText={t => onSet(i, { achievement: t })} />
       <Txt size={F.micro} w={700} tone="muted" upper style={{ marginBottom: 6 }}>Your rating</Txt>
-      <Chips value={r.rating} disabled={submitted} name={`Rating for ${r.title}`} onPick={n => onSet(i, { rating: n })} />
+      <Chips bands={bands} value={r.rating} disabled={submitted} name={`Rating for ${r.title}`} onPick={n => onSet(i, { rating: n })} />
       <Input label="Comment" value={r.comment} editable={!submitted} placeholder="Evidence a manager could check" style={{ marginTop: S.md, marginBottom: 0 }}
         accessibilityLabel={`Comment for ${r.title}`} onChangeText={t => onSet(i, { comment: t })} />
     </View>
   )
 }
 
-export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving }: {
-  rows: SelfRow[]; onChange: (next: SelfRow[]) => void; submitted: boolean; onSubmit: () => void; saving?: boolean
+export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, bands = DEFAULT_BANDS }: {
+  rows: SelfRow[]; onChange: (next: SelfRow[]) => void; submitted: boolean; onSubmit: () => void; saving?: boolean; bands?: Band[]
 }) {
   const set = (i: number, patch: Partial<SelfRow>) => onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
   const unrated = rows.filter(r => r.rating === null).length
@@ -49,12 +50,12 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving }: {
       <StatGrid>
         <PStat label="KRAs rated" value={`${rows.length - unrated} of ${rows.length}`} note={unrated ? `${unrated} still to do` : 'All done'} tone={unrated ? 'warn' : 'good'} />
         <PStat label="Your weighted score" value={mine === null ? '-' : mine.toFixed(2)} note="Weighted by the weightage on each KRA" />
-        <PStat label="That lands at" value={bandForScore(mine)?.label ?? '-'} note={mine === null ? 'Rate every KRA to see this' : 'What your own ratings average to'} />
+        <PStat label="That lands at" value={bandForScore(mine, bands)?.label ?? '-'} note={mine === null ? 'Rate every KRA to see this' : 'What your own ratings average to'} />
       </StatGrid>
       <PCard title="Self rating" sub="Your achievement, your rating, and a comment on each KRA. It locks when you submit.">
         {rows.length === 0
           ? <EmptyBlock title="No KRAs to rate" note="Your KRA set has to be locked before self rating opens." />
-          : rows.map((r, i) => <SelfCard key={r.goalId} r={r} i={i} submitted={submitted} onSet={set} />)}
+          : rows.map((r, i) => <SelfCard key={r.goalId} r={r} i={i} submitted={submitted} onSet={set} bands={bands} />)}
         {!submitted && rows.length > 0 && (
           <Button full disabled={unrated > 0 || saving} onPress={onSubmit} style={{ marginTop: S.sm }}
             title={saving ? 'Submitting…' : unrated > 0 ? `${unrated} KRA${unrated === 1 ? '' : 's'} still unrated` : 'Submit (this locks it)'} />
@@ -67,10 +68,16 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving }: {
 // ── §3.5 My Result ───────────────────────────────────────────────────────
 const fmt = (v: number | null | undefined) => v === null || v === undefined ? '-' : String(v)
 
-export function ResultTab({ published, lines, finalRating, appreciation, improvement, publishGate }: {
+export function ResultTab({ published, lines, finalRating, finalisedBy = null, finalisedOn = null, deptAverage = null, appreciation, improvement, benefits = [], onAcknowledge, acknowledged, publishGate, saving, bands = DEFAULT_BANDS }: {
   published: boolean; lines: Line[]; finalRating: number | null
+  /** ESS passes these three as null, as on the website. */
+  finalisedBy?: string | null; finalisedOn?: string | null; deptAverage?: number | null
   appreciation?: string | null; improvement?: string | null
+  benefits?: { type: string; note: string }[]
+  onAcknowledge?: () => void; acknowledged?: boolean
   publishGate: { open: boolean; because: string }
+  saving?: boolean
+  bands?: Band[]
 }) {
   const { C } = useTheme()
   if (!published) {
@@ -86,18 +93,20 @@ export function ResultTab({ published, lines, finalRating, appreciation, improve
   const selfScore = score(lines, 'self')
   const finalScore = score(lines, 'final')
   const g = gap(selfScore, finalScore)
-  const band = bandFor(finalRating)
-  // ESS passes finalisedBy / finalisedOn / deptAverage as null and no benefits.
+  const band = bandFor(finalRating, bands)
   return (
     <>
-      <Banner tone="green" glyph="✓">Published.</Banner>
+      <Banner tone="green" glyph="✓">
+        Published{finalisedOn ? ` on ${humanDate(finalisedOn)}` : ''}{finalisedBy ? <> · finalised by <B>{finalisedBy}</B></> : null}.
+      </Banner>
       <StatGrid>
         <PStat tone="accent" label="Final rating" value={finalRating === null ? '-' : `${finalRating}${band ? ` · ${band.label}` : ''}`}
           note={finalScore === null ? '' : `Weighted score ${finalScore.toFixed(2)}`} />
         <PStat label="Your own score" value={selfScore === null ? '-' : selfScore.toFixed(2)}
           note={g.delta === null ? '' : `${g.delta > 0 ? '+' : ''}${g.delta.toFixed(2)} against the final`} />
-        <PStat label="Department average" value="-" note="Not available" />
-        <PStat label="Finalised by" value="-" />
+        <PStat label="Department average" value={deptAverage === null ? '-' : deptAverage.toFixed(2)}
+          note={deptAverage === null || finalScore === null ? 'Not available' : finalScore >= deptAverage ? 'You are at or above it' : 'You are below it'} />
+        <PStat label="Finalised by" value={finalisedBy ?? '-'} note={finalisedOn ? humanDate(finalisedOn) : ''} />
       </StatGrid>
       <PCard title="KRA by KRA" sub="Every rating in the chain, and what each one contributed.">
         {lines.map((l, i) => (
@@ -119,9 +128,14 @@ export function ResultTab({ published, lines, finalRating, appreciation, improve
         {improvement ? <Txt size={F.small} tone="soft">{improvement}</Txt> : <K>Nothing written for this period.</K>}
       </PCard>
       <PCard title="🎁 Recognition">
-        <K>Nothing recorded for this period.</K>
+        {benefits.length === 0 ? <K>Nothing recorded for this period.</K>
+          : benefits.map((b, i) => <Txt key={i} size={F.small} tone="soft" style={{ marginBottom: 4 }}>• <B>{b.type}</B>: {b.note}</Txt>)}
         <K style={{ marginTop: 8 }}>Recognition only: a certificate, a nomination or an award. Never a cash component.</K>
       </PCard>
+      {!!onAcknowledge && (
+        <Button full disabled={acknowledged || saving} onPress={onAcknowledge}
+          title={acknowledged ? '✓ You have acknowledged this' : 'Acknowledge that I have read this'} />
+      )}
     </>
   )
 }

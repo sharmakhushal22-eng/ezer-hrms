@@ -1,4 +1,5 @@
-// src/features/expenses/expense/ExpenseSheet.tsx — /expenses/expense?line=&trip=&claim=
+// src/features/expenses/expense/ExpenseSheet.tsx — /expenses/expense?line=&trip=&claim=&draft=
+// ?draft=<id> resumes an expense draft (TeHome sheet.resuming), found in useDrafts('expense').
 // TeHome's sheet {name:'expense', line?, tripId?}: TeExpenseForm in a TeSheet.
 //
 // Which line: the snapshot's own lines, else a cached claim / trip detail
@@ -16,16 +17,20 @@ import { F } from '@/ui/theme'
 import { Txt } from '@/ui/primitives'
 import { useOverlay } from '@/ui/overlays'
 import { errorText } from '../api'
-import { findLine, reloadTe, useClaimDetail, useSnap, useTripDetail } from '../data'
+import { findLine, reloadTe, useClaimDetail, useDrafts, useSnap, useTripDetail } from '../data'
 import { close, param, swap, teHref } from '../nav'
 import { TeSheet } from '../ui/TeSheet'
 import { SnapState } from '../ui/TeScreen'
 import { ExpenseForm } from './ExpenseForm'
 
 export default function ExpenseSheet() {
-  const p = useLocalSearchParams<{ line?: string; trip?: string; claim?: string }>()
+  const p = useLocalSearchParams<{ line?: string; trip?: string; claim?: string; draft?: string }>()
   const lineId = param(p.line)
-  const tripId = param(p.trip) || undefined
+  const draftId = param(p.draft)
+  const draftsQ = useDrafts('expense')
+  const resuming = draftId ? draftsQ.data?.find(d => d.id === draftId) ?? null : null
+  // A resumed draft carries its own trip (TeDraft.trip_id).
+  const tripId = param(p.trip) || resuming?.trip_id || undefined
   const claimId = param(p.claim) || undefined
   const { notify } = useOverlay()
   const snapQ = useSnap()
@@ -58,6 +63,13 @@ export default function ExpenseSheet() {
       </TeSheet>
     )
   }
+  if (draftId && !resuming) {
+    return (
+      <TeSheet title="Add an expense">
+        <Txt size={F.small} tone="muted">{draftsQ.isLoading ? 'Loading…' : draftsQ.error ? errorText(draftsQ.error) : 'This draft is no longer there.'}</Txt>
+      </TeSheet>
+    )
+  }
   if (lineId && !line) {
     const loading = claimQ.isLoading || tripQ.isLoading
     const err = claimQ.error || tripQ.error
@@ -67,5 +79,5 @@ export default function ExpenseSheet() {
       </TeSheet>
     )
   }
-  return <ExpenseForm key={line?.id ?? 'new'} snap={snap} line={line ?? undefined} tripId={tripId} onClose={close} onSaved={onSaved} />
+  return <ExpenseForm key={resuming?.id ?? line?.id ?? 'new'} snap={snap} line={line ?? undefined} tripId={tripId} resuming={resuming ?? undefined} onClose={close} onSaved={onSaved} />
 }

@@ -125,7 +125,7 @@ export function DayDetailPanel({ date, dayInfo, onRaise, todayStr, correction: f
         </TintBox>
       )}
       {status === 'HALF_DAY' && (
-        <TintBox fg={C.warning} bg={C.warningTint}>Marked half day — the first punch came after the shift's last allowed punch-in time.</TintBox>
+        <TintBox fg={C.warning} bg={C.warningTint}>{'Marked half day — the first punch came after the shift\'s last allowed punch-in time.'}</TintBox>
       )}
       {!!day?.expected_in && !['HOLIDAY', 'WEEKLY_OFF', 'ON_LEAVE'].includes(status) && (
         <Txt size={11.5} tone="muted" style={{ marginBottom: 8 }}>Shift {day.shift_code || ''} · expected {day.expected_in}–{day.expected_out}</Txt>

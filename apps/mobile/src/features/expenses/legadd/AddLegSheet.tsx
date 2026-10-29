@@ -1,11 +1,15 @@
 // src/features/expenses/legadd/AddLegSheet.tsx — a journey that was not planned
 // (components/te/leg/TeLegAdd.tsx), the sheet route /expenses/add-leg?trip=<tripId>.
 //
-// A detour, a cab back because the train was cancelled: added here it stays
-// inside the trip and is tracked and paid like any other journey. The reason
-// is required and goes to the approver.
+// THE GPS SUB-TRIP: a local hop at the destination, a detour, a ride back. Added
+// here it stays inside the trip and is tracked and paid like any other journey.
+// Since 4a92155 (website): the start is prefilled with where the last journey
+// ended; the reason asks "why you are going"; "Add and start now" adds it and
+// starts recording in one tap (the journey is kept even if the GPS then fails);
+// with another journey recording only "Add for later" is offered.
 //
-// TeHome's contract: onAdded(legId, msg) → close the sheet, toast, reload.
+// TeHome's contract: onAdded(legId, msg, {started}) → toast, reload, and either
+// back to the trip or — when recording began — straight into the journey.
 // reloadTe() refetches the open trip detail too, which fixes the web's stale
 // trip screen after "Add a journey" (spec Part 4 "Known defects" 2).
 import * as React from 'react'
@@ -17,8 +21,9 @@ import { Button, Input } from '@/ui/primitives'
 import { useOverlay } from '@/ui/overlays'
 import { errorText, te } from '../api'
 import { reloadTe, useSnap, useTripDetail } from '../data'
-import { close, param } from '../nav'
-import { H4 } from '../ui/kit'
+import { close, param, swap, teHref } from '../nav'
+import { here } from '../leg/gps'
+import { H4, Note } from '../ui/kit'
 import { TeSheet } from '../ui/TeSheet'
 import { SnapState } from '../ui/TeScreen'
 import { Ferr, LocBtn, Mk, ModeChip, Sec, VChip } from '../plan/parts'
@@ -26,9 +31,20 @@ import { PlacePicker } from '../plan/PlacePicker'
 
 const modeIco = (id: string) => (id === 'train' ? 'train' : id === 'public' || id === 'bus' ? 'bus' : id === 'flight' ? 'plane' : 'car')
 
-function LegAdd({ snap, detail, onAdded }: { snap: Snapshot; detail: TeTripDetail; onAdded: (legId: Uuid, message: string) => void }) {
+const LEAD = 'A local hop at the destination, a detour, a ride back — anything on this trip that was not in the plan. It is recorded and paid like any other journey.'
+
+/** Where the last journey left you, else the last place on the route (TeLegAdd startedAt). */
+function startedAt(detail: TeTripDetail): string {
+  const done = (detail.legs ?? []).filter(l => l.status === 'SUBMITTED' || l.status === 'ENDED')
+  const last = done[done.length - 1]
+  if (last?.to) return last.to
+  const pts = detail.trip.points ?? []
+  return pts[pts.length - 1]?.place ?? ''
+}
+
+function LegAdd({ snap, detail, onAdded }: { snap: Snapshot; detail: TeTripDetail; onAdded: (legId: Uuid, message: string, opts?: { started?: boolean }) => void }) {
   const trip = detail.trip
-  const [from, setFrom] = React.useState('')
+  const [from, setFrom] = React.useState(() => startedAt(detail))
   const [to, setTo] = React.useState('')
   const [mode, setMode] = React.useState('')
   const [vehicleId, setVehicleId] = React.useState('')
@@ -42,14 +58,26 @@ function LegAdd({ snap, detail, onAdded }: { snap: Snapshot; detail: TeTripDetai
   const name = (id: string) => detail.places[id]?.s ?? snap.masters.places.find(p => p.id === id)?.s ?? ''
   const ready = !!from && !!to && from !== to && !!mode && !!why.trim() && (mode !== 'own' || !!vehicleId)
   const setSide = (side: 'from' | 'to', id: string) => { if (side === 'from') setFrom(id); else setTo(id); setError('') }
+  // One running journey per person (uq_te_leg_running): say so before the tap.
+  const running = snap.journeys.find(j => j.emp === snap.me && (j.status === 'ACTIVE' || j.status === 'PAUSED')) ?? null
 
-  async function add() {
+  /** Add it, and with `start` begin recording too. The journey is added first and kept. */
+  async function add(start: boolean) {
     setBusy(true); setError('')
+    let legId = ''
+    let legNo = 0
     try {
       const r = await te.legAdd(trip.id, { from, to, mode, vehicleId: vehicleId || null, why: why.trim() })
-      onAdded(r.leg_id, `Journey ${r.leg_no} added. Start it when you set off.`)
+      legId = r.leg_id; legNo = r.leg_no
     } catch (e) {
-      setError(errorText(e)); setBusy(false)
+      setError(errorText(e)); setBusy(false); return
+    }
+    if (!start) { onAdded(legId, `Journey ${legNo} added. Start it when you set off.`); return }
+    try {
+      await te.legStart(legId, await here())
+      onAdded(legId, `Journey ${legNo} is recording.`, { started: true })
+    } catch (e) {
+      onAdded(legId, `Journey ${legNo} was added, but recording could not start: ${errorText(e)}`)
     }
   }
 
@@ -59,16 +87,21 @@ function LegAdd({ snap, detail, onAdded }: { snap: Snapshot; detail: TeTripDetai
     return (
       <PlacePicker snap={snap} onCancel={cancelPick}
         target={{ kind: 'point', index: 0, title: side === 'from' ? 'Where the journey starts' : 'Where the journey goes' }}
-        onChosen={id => { setPicking(null); setSide(side, id) }} />
+        onChosen={id => { setPicking(null); setSide(side, id); void reloadTe() /* a place made in the picker is not in this snapshot yet */ }} />
     )
   }
 
   return (
-    <TeSheet title="Add a journey" lead="A journey on this trip that was not in the plan." onClose={close}
+    <TeSheet title="Add a journey" lead={LEAD} onClose={close}
       footer={
-        <View style={{ flexDirection: 'row', gap: S.sm }}>
-          <Button title="Cancel" variant="outline" style={{ flex: 1 }} onPress={close} />
-          <Button title={busy ? 'Adding…' : 'Add the journey'} style={{ flex: 1.6 }} disabled={!ready || busy} onPress={() => void add()} />
+        <View style={{ gap: S.sm }}>
+          {/* Adding for later is the second button: somebody filling this in is usually about to get in the auto. */}
+          {!running ? <Button full title={busy ? 'Starting…' : 'Add and start now'} disabled={!ready || busy} onPress={() => void add(true)} /> : null}
+          <View style={{ flexDirection: 'row', gap: S.sm }}>
+            <Button title="Cancel" variant="outline" style={{ flex: 1 }} onPress={close} />
+            <Button title={busy && running ? 'Adding…' : 'Add for later'} variant={running ? 'primary' : 'outline'} style={{ flex: 1.6 }}
+              disabled={!ready || busy} onPress={() => void add(false)} />
+          </View>
         </View>
       }>
       <Sec>
@@ -109,10 +142,17 @@ function LegAdd({ snap, detail, onAdded }: { snap: Snapshot; detail: TeTripDetai
       </Sec>
 
       <Sec>
-        <H4 style={{ marginTop: 0 }}>Why it was not planned</H4>
-        <Input label="Reason" value={why} placeholder="The train was cancelled, a second site was added"
-          onChangeText={v => { setWhy(v); setError('') }} help="Your approver sees this: the trip they approved has changed." />
+        <H4 style={{ marginTop: 0 }}>Why you are going</H4>
+        <Input label="Reason for this journey" value={why} placeholder="Second client meeting at their Bandra office"
+          onChangeText={v => { setWhy(v); setError('') }}
+          help="Your approver and the travel desk read this. It was not in the plan they approved, so say what it is for." />
       </Sec>
+
+      {running ? (
+        <Note style={{ marginBottom: S.md }}>
+          {`Journey ${running.n} is still recording, and only one can run at a time. Add this one now and start it once you have ended that one.`}
+        </Note>
+      ) : null}
 
       <Ferr icon="alert">{error}</Ferr>
     </TeSheet>
@@ -125,15 +165,17 @@ export default function AddLegSheet() {
   const { notify } = useOverlay()
   const q = useSnap()
   const d = useTripDetail(tripId)
-  const onAdded = React.useCallback((_legId: Uuid, msg: string) => {
-    close()
+  const onAdded = React.useCallback((legId: Uuid, msg: string, opts?: { started?: boolean }) => {
     notify(msg)
     void reloadTe()
-  }, [notify])
+    // Recording began: open the journey rather than returning to the trip.
+    if (opts?.started && tripId) swap(teHref.leg(legId, tripId))
+    else close()
+  }, [notify, tripId])
 
   if (!q.data || !d.data) {
     return (
-      <TeSheet title="Add a journey" lead="A journey on this trip that was not in the plan.">
+      <TeSheet title="Add a journey" lead={LEAD}>
         <SnapState error={q.error ?? d.error ?? (tripId ? null : new Error('Trip not found.'))}
           onRetry={() => { void q.refetch(); void d.refetch() }} />
       </TeSheet>

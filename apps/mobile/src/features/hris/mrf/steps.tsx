@@ -92,7 +92,7 @@ export function StepEmployment({ form, set, refs }: StepProps) {
       <SectionLine n="3" title="Employment Details" />
       <SelectField label="Employment Type" value={form.employment_type} onChange={v => set('employment_type', v)} options={optsOf(EMP_TYPES)} />
       <SelectField label="Work Mode" value={form.work_mode} onChange={v => set('work_mode', v)} options={optsOf(WORK_MODES)} />
-      <SelectField label="Work Location" value={form.location_id} onChange={v => set('location_id', v)}
+      <SelectField label="Work Location" required value={form.location_id} onChange={v => set('location_id', v)}
         options={[{ value: '', label: 'Select Location' }, ...refs.locations.map(l => ({ value: l.id, label: l.location_name }))]} />
       <SelectField label="Background Verification" value={form.bgv_required} onChange={v => set('bgv_required', v)} options={notSpec('Required', 'Not required')} />
       <TextField label="BGV Package" hint="Which checks — education, employment, criminal, address" value={form.bgv_package} onChange={v => set('bgv_package', v)} placeholder="e.g. Standard 3-check" />

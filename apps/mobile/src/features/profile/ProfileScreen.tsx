@@ -1,47 +1,50 @@
 // src/features/profile/ProfileScreen.tsx — Profile → My Details
 // (components/profile/Profile360.tsx, the live screen).
 //
-// One payload from GET /api/ess/profile; masking is the server's
-// (get_employee_profile strips keys) and the client's maySee() on top. The
-// screen refetches after every edit, request, withdrawal and photo change —
-// and, unlike the website, the change-request list refreshes after a new
-// request too (spec §2.6: on the web it only appears after a remount).
+// One payload from GET /api/ess/profile (plus `self`: what the editors prefill
+// and who a request reaches, by name). Layout as on the website's narrow
+// view: identity header, then the side column (completeness, reporting chain,
+// open requests), then the tabs. Edit profile, Change history, Documents and
+// "How editing works" open as sheets; Digital ID opens its own page.
+//
+// Every Fix opens the editor for THAT item (lib/profile/self-service
+// fixActionFor), not Spouse name for all of them as before. After any save
+// the payload, the request lists and the portal's avatar are refreshed.
 import * as React from 'react'
-import { ScrollView, View } from 'react-native'
+import { Pressable, ScrollView, View } from 'react-native'
 import { router } from 'expo-router'
-import { MODEL, TABS } from '@web/profile/model'
+import { TABS } from '@web/profile/model'
+import { FIX_TAB, fixActionFor } from '@web/profile/self-service'
 import type { ProfileField, TabId } from '@web/profile/types'
 import { invalidate } from '@/core/query'
+import { sectionOf } from '@/core/nav'
+import { useTheme } from '@/ui/ThemeProvider'
 import { Screen } from '@/ui/Screen'
-import { useOverlay } from '@/ui/overlays'
+import { Sheet, useOverlay } from '@/ui/overlays'
 import { F, S } from '@/ui/theme'
 import { Card, Loading, Notice, Segmented, Txt } from '@/ui/primitives'
-import { sectionOf } from '@/core/nav'
 import { useProfile } from './api'
 import { val } from './format'
 import { ProfileSubTabs } from './bits'
-import { ChainCard, CompletenessCard, IdentityCard, KpiStrip } from './Identity'
-import { IdCard, IdCardDownload, StaticIdCard } from './IdCard'
+import { ChainCard, CompletenessCard, HowEditingBody, IdentityCard } from './Identity'
 import { TabPanel } from './TabPanels'
-import { ChangeRequests } from './ChangeRequests'
-import { ChangeSheet } from './ChangeSheet'
+import { ChangeRequests, RequestsSummary, useChangeRequests } from './ChangeRequests'
+import { EditHub } from './EditHub'
+import { DocumentsPanel } from './Documents'
+import { EmergencyEditor, FieldEditor, IdentityEditor } from './Editors'
+import { AddressEditor, BankEditor, NomineeEditor } from './Editors2'
 import { PhotoSheet } from './PhotoSheet'
+import { fieldByKey, ID_HAS, type Editor } from './rules'
 
-/** Profile360 firstRequestable(): the first `request` field in MODEL order —
- *  always "Spouse name". "Request an update" and every "Fix" open it, as on the web. */
-function firstRequestable(): ProfileField | null {
-  for (const gs of Object.values(MODEL)) for (const g of gs ?? []) for (const f of g.fields) if (f.state === 'request') return f
-  return null
-}
+type DrawerId = 'edit' | 'request' | 'history' | 'docs' | 'how'
 
-function Legend() {
+function HowBtn({ onPress }: { onPress: () => void }) {
+  const { C } = useTheme()
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: S.md, rowGap: 4, marginTop: S.sm }}>
-      <Txt size={F.tiny} tone="muted"><Txt size={F.tiny} w={700} tone="positive">Direct</Txt>: change it yourself</Txt>
-      <Txt size={F.tiny} tone="muted"><Txt size={F.tiny} w={700} tone="warning">Request</Txt>: goes for approval</Txt>
-      <Txt size={F.tiny} tone="muted"><Txt size={F.tiny} w={700} tone="muted">Locked</Txt>: HR maintains it</Txt>
-      <Txt size={F.tiny} tone="muted"><Txt size={F.tiny} w={700} tone="info">Event</Txt>: starts another workflow</Txt>
-    </View>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="How editing works" hitSlop={6}
+      style={({ pressed }) => ({ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: C.brandEdge, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? C.brandTint : C.surface })}>
+      <Txt size={F.body} w={700} tone="brand">?</Txt>
+    </Pressable>
   )
 }
 
@@ -50,7 +53,8 @@ export default function ProfileScreen() {
   const q = useProfile()
   const { notify } = useOverlay()
   const [tab, setTab] = React.useState<TabId>('overview')
-  const [editing, setEditing] = React.useState<ProfileField | null>(null)
+  const [editor, setEditor] = React.useState<Editor | null>(null)
+  const [drawer, setDrawer] = React.useState<DrawerId | null>(null)
   const [photoOpen, setPhotoOpen] = React.useState(false)
   // Held locally so a fresh upload shows at once (Profile360 does the same).
   const [photoOverride, setPhotoOverride] = React.useState<string | null>(null)
@@ -58,59 +62,133 @@ export default function ProfileScreen() {
   const p = q.data
   const self = p ? (p.isSelf ?? p.viewer_role === 'self') : false
   const photo = photoOverride ?? p?.photoUrl ?? null
+  const req = useChangeRequests(self)
 
-  const openRequestable = () => { const f = firstRequestable(); if (f) setEditing(f) }
+  /** Every save lands here: say so, reload what the page shows and the request lists. */
+  const afterSave = React.useCallback((msg: string) => {
+    setEditor(null)
+    notify(msg, 'success')
+    void invalidate('profile', 'employee')
+  }, [notify])
+  const closeEditor = React.useCallback(() => setEditor(null), [])
+  const closeDrawer = React.useCallback(() => setDrawer(null), [])
+
+  /** One switchboard for Fix, the Edit sheet and the field cards. */
+  const openAction = (a: string) => {
+    switch (a) {
+      case 'photo': setPhotoOpen(true); return
+      case 'aadhaar': case 'pan': case 'uan': setEditor({ kind: 'identity', which: a }); return
+      case 'bank': setEditor({ kind: 'bank' }); return
+      case 'present_address': setEditor({ kind: 'address', which: 'present' }); return
+      case 'permanent_address': setEditor({ kind: 'address', which: 'permanent' }); return
+      case 'emergency': setEditor({ kind: 'emergency', slot: p?.self?.emergency?.[1] ? 2 : 1 }); return
+      case 'emergency1': setEditor({ kind: 'emergency', slot: 1 }); return
+      case 'emergency2': setEditor({ kind: 'emergency', slot: 2 }); return
+      case 'nominee_pf': setEditor({ kind: 'nominee', scheme: 'pf' }); return
+      case 'nominee_gratuity': setEditor({ kind: 'nominee', scheme: 'gratuity' }); return
+      case 'documents': setDrawer('docs'); return
+      case 'blood_group': { const f = fieldByKey('blood_group'); if (f) setEditor({ kind: 'field', field: f }); return }
+    }
+  }
+  const onFix = (sentence: string) => {
+    const a = fixActionFor(sentence)
+    // A sentence this screen does not know yet: land on the tab that holds it.
+    if (!a) { setDrawer(null); setTab('personal'); return }
+    if (a === 'documents') { setDrawer('docs'); return }
+    setDrawer(null)
+    openAction(a)
+    if (a !== 'photo') setTab(FIX_TAB[a] as TabId)
+  }
+  const onField = (f: ProfileField) => {
+    if (f.editor) { openAction(f.editor); return }
+    setEditor({ kind: 'field', field: f })
+  }
 
   let body: React.ReactNode
   if (q.error) body = <Card><Notice tone="critical">{q.error instanceof Error ? q.error.message : 'Could not reach the server.'}</Notice></Card>
   else if (!p) body = <Card><Loading /></Card>
   else {
-    const emp = p.employee
+    const pendingReqs = req.mine.filter(r => r.status.startsWith('pending')).length
     body = (
       <>
-        <IdentityCard p={p} self={self} photo={photo}
-          onRecords={() => setTab('records')}
-          // The website's "Digital ID" only switches to the Statutory tab and never
-          // reaches the card; on a phone it opens the card itself.
-          onDigitalId={() => (self ? router.push('/profile/id-card') : setTab('statutory'))}
-          onEdit={() => setTab('personal')} onRequest={openRequestable} onPhoto={() => setPhotoOpen(true)} />
-        <KpiStrip p={p} />
+        <IdentityCard p={p} self={self} photo={photo} pendingReqs={pendingReqs}
+          onEdit={() => setDrawer('edit')} onRequest={() => setDrawer('request')}
+          onDigitalId={() => router.push('/profile/id-card')} onHistory={() => setDrawer('history')}
+          onPhoto={() => setPhotoOpen(true)} />
 
         <View style={{ gap: S.md, marginTop: S.md }}>
-          <CompletenessCard p={p} onFix={openRequestable} />
+          <CompletenessCard p={p} self={self} onFix={onFix} />
           <ChainCard p={p} self={self} />
-          {self ? (
-            <>
-              <IdCard name={val(emp.full_name)} designation={val(emp.designation)} company={val(emp.company_name)} code={val(emp.employee_code)}
-                doj={emp.date_of_joining as string | null} blood={emp.blood_group as string | null} emergency={emp.emergency_contact_1 as string | null} />
-              <IdCardDownload />
-            </>
-          ) : <StaticIdCard name={val(emp.full_name)} designation={val(emp.designation)} company={val(emp.company_name)} />}
+          {self && <RequestsSummary req={req} onOpen={() => setDrawer('history')} />}
         </View>
 
-        <View style={{ marginTop: S.xl }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+        <View style={{ marginTop: S.xl, flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 1 }}>
             <Segmented items={TABS.map(t => ({ key: t.id, label: t.label }))} value={tab} onChange={setTab} />
           </ScrollView>
-          <Legend />
+          {self && <HowBtn onPress={() => setDrawer('how')} />}
         </View>
 
-        <TabPanel tab={tab} p={p} self={self} onAct={setEditing} />
-
-        <ChangeRequests canSee={self} />
+        <TabPanel tab={tab} p={p} self={self} onAct={onField} onAction={openAction} openTab={setTab}
+          onDocsChanged={m => { notify(m, 'success'); void invalidate('profile') }} />
       </>
     )
   }
 
+  const emp = p?.employee
   return (
     <Screen title={s?.label || 'Profile'} subtitle={s?.desc} sub={<ProfileSubTabs current="profile" />}
       onRefresh={() => invalidate('profile')}>
       {body}
-      <ChangeSheet field={editing} onClose={() => setEditing(null)}
-        onDone={m => { setEditing(null); notify(m, 'success'); void invalidate('profile') }} />
+
+      {p && self && (drawer === 'edit' || drawer === 'request') && (
+        <Sheet visible onClose={closeDrawer} title="Edit profile" full>
+          <Txt size={F.small} tone="muted" style={{ marginBottom: S.md }}>Pick what to change. Each item says whether it saves at once or goes for approval.</Txt>
+          <EditHub payload={p} focus={drawer} onFix={onFix}
+            onField={f => { setDrawer(null); onField(f) }}
+            onAction={a => { if (a !== 'documents') setDrawer(null); openAction(a) }} />
+        </Sheet>
+      )}
+      {self && drawer === 'history' && (
+        <Sheet visible onClose={closeDrawer} title="Change history" full>
+          <Txt size={F.small} tone="muted" style={{ marginBottom: S.md }}>Everything you have asked to change, and who has it now.</Txt>
+          <ChangeRequests req={req} />
+        </Sheet>
+      )}
+      {self && drawer === 'docs' && (
+        <Sheet visible onClose={closeDrawer} title="Documents" full>
+          <Txt size={F.small} tone="muted" style={{ marginBottom: S.md }}>Uploads save straight away. HR verifies each one.</Txt>
+          <DocumentsPanel onChanged={m => { notify(m, 'success'); void invalidate('profile') }} />
+        </Sheet>
+      )}
+      {drawer === 'how' && (
+        <Sheet visible onClose={closeDrawer} title="How editing works"><HowEditingBody /></Sheet>
+      )}
+
+      {p && emp && editor?.kind === 'field' && (
+        <FieldEditor field={editor.field} current={emp[editor.field.key]} approvers={p.self?.approvers} onClose={closeEditor} onDone={afterSave} />
+      )}
+      {p && emp && editor?.kind === 'identity' && (
+        <IdentityEditor which={editor.which} onFile={!!p.self?.ids?.[ID_HAS[editor.which]]}
+          masked={editor.which === 'pan' ? p.self?.ids?.pan_masked
+            : editor.which === 'aadhaar' && emp.aadhar_last4 ? `•••• •••• ${String(emp.aadhar_last4)}` : val(emp.uan)}
+          onClose={closeEditor} onDone={afterSave} />
+      )}
+      {p && emp && editor?.kind === 'address' && (
+        <AddressEditor which={editor.which} self={p.self}
+          onFile={!!p.self?.addresses?.[editor.which] || !!emp[`${editor.which}_address`]} onClose={closeEditor} onDone={afterSave} />
+      )}
+      {p && editor?.kind === 'emergency' && <EmergencyEditor slot={editor.slot} self={p.self} onClose={closeEditor} onDone={afterSave} />}
+      {p && editor?.kind === 'nominee' && (
+        <NomineeEditor scheme={editor.scheme} nominations={p.nominations} family={p.family} onClose={closeEditor} onDone={afterSave} />
+      )}
+      {p && emp && editor?.kind === 'bank' && (
+        <BankEditor self={p.self} current={{ bank_name: emp.bank_name, ifsc: emp.ifsc }} onClose={closeEditor} onDone={afterSave} />
+      )}
+
       {self && (
         <PhotoSheet open={photoOpen} onClose={() => setPhotoOpen(false)}
-          onDone={url => { setPhotoOverride(url); notify('Profile photo updated.', 'success'); void invalidate('profile', 'employee') }} />
+          onDone={url => { setPhotoOverride(url); afterSave('Profile photo updated.') }} />
       )}
     </Screen>
   )

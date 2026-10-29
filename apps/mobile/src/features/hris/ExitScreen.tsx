@@ -6,9 +6,12 @@
 // stage machine — which lives in migration 071's fn_resignation_* and is
 // enforced there.
 //
-// Kept on purpose (spec §5.2 BUG): the timeline looks chain rows up by
-// 'PENDING_*' while the log stores 'RM_L1'…, so a row never matches and past
-// stages read "upcoming". Which behaviour is right is a product decision.
+// Kept on purpose (spec §5.2 BUG, still so on the website): the timeline looks
+// chain rows up by 'PENDING_*' while the log stores 'RM_L1'…, so a row never
+// matches and past stages read "upcoming". Each stage now names its approver
+// (who acted, else `approvers[RM_L1|…]` from the API, else "nobody assigned yet").
+// Under the form / the open resignation: clearance & settlement (exit/MyExitDocuments).
+// Exiting somebody else is People → Employees → HR Actions on the website (admin side).
 // Changed on purpose: the default "Date of resignation" is today in the phone's
 // local time; the website's toISOString() gives yesterday before 05:30 IST.
 import * as React from 'react'
@@ -24,14 +27,22 @@ import { Screen } from '@/ui/Screen'
 import { DateSheet, fmtDay, SelectSheet, useOverlay, ymd } from '@/ui/overlays'
 import { Ic } from './icons'
 import { errMsg, fmtDate, fmtDateTime, KpiGrid, LoadingLine, NoteBox, SolidButton } from './ui'
+import { MyExitDocuments } from './exit/MyExitDocuments'
 
-interface ChainRow { stage: string; action: string; approver?: { full_name?: string | null } | null; actioned_at: string; note?: string | null; proposed_lwd?: string | null }
+type Person = { full_name?: string | null; emp_code?: string | null; designation?: string | null }
+interface ChainRow { stage: string; action: string; approver?: Person | null; actioned_at: string; note?: string | null; proposed_lwd?: string | null }
+interface StageApprover { id: string; full_name: string; emp_code: string | null; designation: string | null }
 interface ResignationRecord {
   id: string; status: string; submitted_at?: string | null; created_at?: string | null; notice_period_days?: number | null
   lwd_as_per_policy?: string | null; proposed_lwd?: string | null; final_lwd?: string | null; reason_code?: string | null
   exit_reason_master?: { label?: string | null } | null; submitted_by_employee?: boolean | null
 }
-interface ResignationState { current: ResignationRecord | null; chain: ChainRow[]; reasons: { code: string; label: string }[]; notice_period_days: number | null }
+interface ResignationState {
+  current: ResignationRecord | null; chain: ChainRow[]; reasons: { code: string; label: string }[]; notice_period_days: number | null
+  /** Who each stage goes to (RM_L1 / RM_L2 / HOD / HR_MANAGER), resolved from the record; null = stage skipped. */
+  approvers?: Record<string, StageApprover | null>
+  on_probation?: boolean
+}
 
 const STAGE_LABEL: Record<string, string> = {
   INITIATED: 'Initiated by HR',
@@ -47,22 +58,33 @@ const STAGE_LABEL: Record<string, string> = {
 const STAGE_ORDER = ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER']
 const CLOSED = ['SETTLED', 'WITHDRAWN']
 
-function Timeline({ status, chain }: { status: string; chain: ChainRow[] }) {
+/** "Aditya Iyer · STC9054 · Assistant Manager" */
+const who = (p?: Person | null) => p?.full_name ? [p.full_name, p.emp_code, p.designation].filter(Boolean).join(' · ') : ''
+
+function Timeline({ status, chain, approvers }: { status: string; chain: ChainRow[]; approvers: Record<string, StageApprover | null> }) {
   const { C } = useTheme()
   const byStage: Record<string, ChainRow> = {}
-  for (const c of chain) byStage[c.stage] = c
+  // The last row per stage (STAMPED first, then the decision); the decision wins.
+  for (const c of chain) if (!byStage[c.stage] || c.action !== 'STAMPED') byStage[c.stage] = c
   const curIdx = STAGE_ORDER.indexOf(status)
   const hold = status === 'RETENTION_HOLD'
-  const nodes = STAGE_ORDER.map((stg, i) => {
+  const nodes: { key: string; cls: string; st: string; who: string | null; act: string; when: string; note: string | null | undefined }[] = STAGE_ORDER.map((stg, i) => {
     const c = byStage[stg]
-    const cls = hold ? (c ? 'done' : '') : i < curIdx ? 'done' : i === curIdx ? 'cur' : ''
-    const act = c
-      ? `${c.action.toLowerCase().replace(/_/g, ' ')}${c.approver?.full_name ? ` · ${c.approver.full_name}` : ''}${c.proposed_lwd ? ` · LWD ${fmtDate(c.proposed_lwd)}` : ''}`
-      : (i === curIdx && !hold ? 'pending acknowledgement' : 'upcoming')
-    const when = c ? fmtDateTime(c.actioned_at) : (i === curIdx && !hold ? 'waiting now' : '')
-    return { key: stg, cls, st: STAGE_LABEL[stg], act, when, note: c?.note }
+    const key = stg.replace('PENDING_', '')
+    const decided = !!c && c.action !== 'STAMPED'
+    const skipped = c?.action === 'SKIPPED'
+    const cls = hold ? (decided ? 'done' : '') : i < curIdx ? 'done' : i === curIdx ? 'cur' : ''
+    // Who this stage is with: the person who acted, else the one it is stamped to / resolves to.
+    const person = c?.approver?.full_name ? c.approver : approvers[key]
+    const act = skipped
+      ? `skipped${c?.note ? ` · ${c.note.toLowerCase()}` : ''}`
+      : decided
+        ? `${c.action.toLowerCase().replace(/_/g, ' ')}${c.proposed_lwd ? ` · LWD ${fmtDate(c.proposed_lwd)}` : ''}`
+        : (i === curIdx && !hold ? 'pending acknowledgement' : 'upcoming')
+    const when = decided ? fmtDateTime(c.actioned_at) : (i === curIdx && !hold ? 'waiting now' : '')
+    return { key: stg, cls, st: STAGE_LABEL[stg], who: skipped ? null : (who(person) || 'nobody assigned yet'), act, when, note: decided && !skipped ? c.note : null }
   })
-  if (hold) nodes.push({ key: 'hold', cls: 'cur', st: STAGE_LABEL.RETENTION_HOLD, act: 'chain paused: your manager wants to talk', when: '', note: null })
+  if (hold) nodes.push({ key: 'hold', cls: 'cur', st: STAGE_LABEL.RETENTION_HOLD, who: null, act: 'chain paused: your manager wants to talk', when: '', note: null })
   return (
     <View>
       {nodes.map((n, i) => {
@@ -77,6 +99,7 @@ function Timeline({ status, chain }: { status: string; chain: ChainRow[] }) {
             </View>
             <View style={{ flex: 1, paddingBottom: S.md }}>
               <Txt size={F.small} w={700} color={n.cls === 'cur' ? C.brandDeep : C.ink}>{n.st}</Txt>
+              {!!n.who && <Txt size={F.tiny} w={600}>{n.who}</Txt>}
               <Txt size={F.tiny} tone="muted">{n.act}</Txt>
               {!!n.when && <Txt size={11} tone="faint">{n.when}</Txt>}
               {!!n.note && <Txt size={F.tiny} tone="soft">“{n.note}”</Txt>}
@@ -145,15 +168,19 @@ export default function ExitScreen() {
             <Txt size={F.lead} w={700} style={{ marginBottom: S.sm }}>Your resignation</Txt>
             <Txt size={12.5} tone="muted" style={{ marginBottom: 14 }}>Reason: <Txt size={12.5} w={700}>{cur.exit_reason_master?.label || cur.reason_code || '-'}</Txt></Txt>
             <Txt size={12.5} w={700} style={{ marginBottom: 10 }}>Acknowledgement chain</Txt>
-            <Timeline status={cur.status} chain={d.chain || []} />
+            <Timeline status={cur.status} chain={d.chain || []} approvers={d.approvers || {}} />
             {canWithdraw && <Button title="Withdraw resignation" variant="danger" disabled={busy} onPress={() => void withdraw(cur.id)} style={{ marginTop: S.sm }} full />}
             <NoteBox style={{ marginTop: 14 }}>Retention pauses the chain; only you can withdraw it. Your last working day becomes final at the HR stage.</NoteBox>
           </Card>
+          <MyExitDocuments employeeId={employeeId} resignationId={cur.id} />
         </>
       )
     } else {
       const reasonLabel = (d.reasons || []).find(r => r.code === reason)?.label
       body = (
+        <>
+        {/* A settled exit keeps its F&F statement and letters downloadable (12 months, spec §11.2). */}
+        {cur?.status === 'SETTLED' && <View style={{ marginBottom: S.md }}><MyExitDocuments employeeId={employeeId} resignationId={cur.id} /></View>}
         <Card>
           <Txt size={F.lead} w={700} style={{ marginBottom: S.md }}>Resign</Txt>
           {cur && <NoteBox style={{ marginBottom: 12 }}>{`Your previous resignation is ${(STAGE_LABEL[cur.status] || cur.status).toLowerCase()}.`}</NoteBox>}
@@ -162,7 +189,7 @@ export default function ExitScreen() {
           <Input label="Anything you want to say (optional)" value={remarks} onChangeText={setRemarks} multiline placeholder="Share context for your manager and HR…" />
           <NoteBox tone="w">
             <Txt size={F.tiny} tone="warning" style={{ lineHeight: 19 }}>
-              Notice period on record: <Txt size={F.tiny} w={700} tone="warning">{d.notice_period_days ?? '-'} days</Txt>. Submitting starts the acknowledgement chain: your reporting manager first, then L2 / HOD, then HR sets the final last working day.
+              Your notice period: <Txt size={F.tiny} w={700} tone="warning">{d.notice_period_days ?? '-'} days</Txt>{d.on_probation ? ' (on probation)' : ' (confirmed)'}. Submitting starts the acknowledgement chain: your reporting manager first, then L2 / HOD, then HR sets the final last working day.
             </Txt>
           </NoteBox>
           <View style={{ gap: S.sm, marginTop: 14 }}>
@@ -180,6 +207,7 @@ export default function ExitScreen() {
             onPick={v => { setReason(String(v)); setConfirming(false) }} />
           <DateSheet visible={sheet === 'date'} onClose={() => setSheet(null)} value={date} onPick={setDate} title="Date of resignation" />
         </Card>
+        </>
       )
     }
   }

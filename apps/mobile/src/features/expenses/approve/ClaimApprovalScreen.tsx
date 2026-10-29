@@ -27,6 +27,7 @@ import { Chip, KvRow, ListCard, Mono, Note, Seg, TeCard } from '../ui/kit'
 import { TeScreen } from '../ui/TeScreen'
 import { BookingRow, FlagRow, JourneyRow, LineRow } from './ClaimParts'
 import { LegEvidence } from './LegEvidence'
+import { TripPlan } from '../trip/TripPlan'
 import { afterDecision, DecideButton, DetailState, ErrLine, NotYours } from './shared'
 
 export default function ClaimApprovalScreen() {
@@ -169,6 +170,10 @@ export default function ClaimApprovalScreen() {
         </ListCard>
       )}
 
+      {/* What was planned, beside what is being claimed (TeClaimApproval since 4a92155):
+          a bill is judged against the plan — nights asked for, flight time, the stop
+          that explains an extra cab. */}
+      {tq.data?.trip ? <TripPlan trip={tq.data.trip} places={places} claimId={c.id} /> : null}
       {!!detail.bookings?.length && (
         <ListCard head="Stays and tickets" headRight={String(detail.bookings.length)}>
           {detail.bookings.map((b, i) => <BookingRow key={b.id} b={b} claimId={c.id} last={i === detail.bookings.length - 1} />)}

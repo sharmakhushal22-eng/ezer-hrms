@@ -5,14 +5,14 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useTheme } from '@/ui/ThemeProvider'
 import { S } from '@/ui/theme'
 import { Card, Input, Txt } from '@/ui/primitives'
-import { R, SLAB_LABELS, type Form, type Join, type Sal } from '../tax'
+import { N, R, SLAB_LABELS, type Form, type Join, type Sal } from '../tax'
 import type { SalaryBreakup } from '../salary'
-import { B, Box, DateField, NumField, Pill, Tile } from '../ui'
+import { B, Box, Pill, Tile } from '../ui'
 
 function SalRow({ label, m, kind }: { label: string; m: number; kind?: 'sub' | 'net' | 'total' }) {
   const { C } = useTheme()
-  const bg = kind === 'total' ? C.canvas : kind === 'net' ? C.positiveTint : kind === 'sub' ? C.sunken : C.surface
-  const fg = kind === 'total' ? C.brand : kind === 'net' ? C.positive : C.ink
+  const bg = kind === 'total' ? C.brandTint : kind === 'net' ? C.positiveTint : kind === 'sub' ? C.sunken : C.surface
+  const fg = kind === 'total' ? C.brandDeep : kind === 'net' ? C.positive : C.ink
   const w = kind ? 700 : 400
   return (
     <View style={{ flexDirection: 'row', paddingVertical: 8, paddingHorizontal: S.md, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: bg }}>
@@ -106,8 +106,8 @@ function WalletBasis({ rd, sal }: { rd: SalaryBreakup | null; sal: Sal }) {
   )
 }
 
-export function Step1({ f, set, rw, empName, empCode, rd, sal, join }: {
-  f: Form; set: (k: string, v: string) => void; rw: boolean; empName?: string; empCode?: string
+export function Step1({ f, empName, empCode, rd, sal, join }: {
+  f: Form; empName?: string; empCode?: string
   rd: SalaryBreakup | null; sal: Sal; join: Join
 }) {
   const { C } = useTheme()
@@ -115,12 +115,14 @@ export function Step1({ f, set, rw, empName, empCode, rd, sal, join }: {
     <View>
       <Card style={{ marginBottom: S.md }}>
         <Txt size={15} w={700}>Employee Information</Txt>
-        <Txt size={12} tone="muted" style={{ marginBottom: S.md }}>Prefilled from your record. Adjust CTC / variable if needed.</Txt>
+        {/* CTC, variable and DOJ are HR's record, not inputs — the website made them read-only
+            for the employee (only the HR Help sandbox edits them). */}
+        <Txt size={12} tone="muted" style={{ marginBottom: S.md }}>From your salary record. If any of this is wrong, raise it with HR — it cannot be changed here.</Txt>
         <Input label="Employee Name" value={empName || ''} editable={false} />
         <Input label="Employee Code" value={empCode || ''} editable={false} />
-        <NumField label="Annual CTC (₹)" value={f.ctc} onValue={v => set('ctc', v)} placeholder="e.g. 1500000" disabled={!rw} />
-        <DateField label="Date of Joining" value={f.doj} onChange={v => set('doj', v)} disabled={!rw} placeholder="dd-mm-yyyy" />
-        <NumField label="Annual Variable Pay (₹)" value={f.variable} onValue={v => set('variable', v)} placeholder="0 if none" disabled={!rw} />
+        <Input label="Annual CTC (₹)" value={f.ctc ? R(N(f.ctc)) : 'Not on record'} editable={false} />
+        <Input label="Date of Joining" value={f.doj ? new Date(f.doj + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not on record'} editable={false} />
+        <Input label="Annual Variable Pay (₹)" value={f.ctc ? R(N(f.variable)) : 'Not on record'} editable={false} />
       </Card>
       {rd && <StructureCard rd={rd} />}
       {sal.ctc > 0 && <WalletBasis rd={rd} sal={sal} />}

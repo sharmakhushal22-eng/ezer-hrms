@@ -13,6 +13,7 @@
 // what actually protects the data. An expired or rejected token signs the person
 // out with a message saying why.
 import * as React from 'react'
+import { AppState } from 'react-native'
 import { configureApi } from './api'
 import { queryClient } from './query'
 import { secureDel, secureGet, secureSet } from './secure'
@@ -74,7 +75,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     configureApi({
       token: () => (ref.current && usable(ref.current.token) ? ref.current.token : null),
-      onUnauthorized: () => { if (ref.current) void signOut('Your session has expired. Please sign in again.') },
+      onUnauthorized: () => { if (ref.current) void signOut('Your session expired. Please sign in again.') },
     })
   }, [signOut])
 
@@ -90,7 +91,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         setStatus('signedIn')
       } else {
         if (s) await secureDel(KEY)
-        setNotice(s ? 'Your session has expired. Please sign in again.' : null)
+        setNotice(s ? 'Your session expired. Please sign in again.' : null)
         setStatus('signedOut')
       }
     })()
@@ -100,9 +101,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     const exp = tokenExpiry(session?.token)
     if (!exp) return
-    const t = setTimeout(() => void signOut('Your session has expired. Please sign in again.'), Math.max(0, exp - Date.now() - SKEW_MS))
+    const t = setTimeout(() => void signOut('Your session expired. Please sign in again.'), Math.max(0, exp - Date.now() - SKEW_MS))
     return () => clearTimeout(t)
   }, [session?.token, signOut])
+
+  // components/SessionGuard.tsx (397d32c) re-checks whenever the tab is shown again.
+  // A phone's timers stop while the app is in the background, so check on return too.
+  React.useEffect(() => {
+    const sub = AppState.addEventListener('change', st => {
+      if (st === 'active' && ref.current && !usable(ref.current.token)) void signOut('Your session expired. Please sign in again.')
+    })
+    return () => sub.remove()
+  }, [signOut])
 
   /** Keep a login / change-password response as the session — the website's finish(). */
   const adopt = React.useCallback(async (r: { employee_id: string; name: string; token: string | null }, email?: string) => {

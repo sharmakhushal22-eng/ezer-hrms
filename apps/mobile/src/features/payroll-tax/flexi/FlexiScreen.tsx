@@ -199,7 +199,7 @@ export default function FlexiScreen() {
             </Box>
           )}
           <Stepper step={step} onGo={setStep} />
-          {step === 1 && <Step1 f={f} set={set} rw={g.basicRW} empName={empName} empCode={empCode} rd={rd} sal={sal} join={join} />}
+          {step === 1 && <Step1 f={f} empName={empName} empCode={empCode} rd={rd} sal={sal} join={join} />}
           {step === 2 && <Step2 rw={g.flexiRW} budget={sal.other} oFlexi={oFlexi} nFlexi={nFlexi} child={child} setChild={setChild} oLim={oLim} nLim={nLim} onFlexi={onFlexi} oTot={oTot} nTot={nTot} />}
           {step === 3 && <Step3 f={f} set={set} setMany={setMany} rw={g.investRW} sal={sal} hraExempt={hraExempt} c80Total={c80TotalOf(f, sal)} addITotal={addITotalOf(f)} />}
           {step === 4 && (

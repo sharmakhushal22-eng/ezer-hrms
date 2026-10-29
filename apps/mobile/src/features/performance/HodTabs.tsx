@@ -1,38 +1,28 @@
-// src/features/performance/HodTabs.tsx — analytics, the HOD side, and the two
-// manager-audience containers (website: ManagerTabs.tsx §4.5, §5.1–5.3 and
-// Performance.tsx TeamSide / DeptSide). Read-only in ESS: no onFinalise /
-// onNudge, and Feedback & Recognition never has a member picked.
+// src/features/performance/HodTabs.tsx — analytics and the HOD's tabs
+// (website: components/pms/ManagerTabs.tsx §4.5, §5.1–5.3). Live as on the
+// website: Finalise (pms_finalise), Log final review / Acknowledge it, and
+// Feedback & Recognition → Publish. "Nudge RM L2" has no handler in ESS and
+// stays disabled, as on the website.
 import * as React from 'react'
 import { View } from 'react-native'
-import { useQuery } from '@tanstack/react-query'
 import { teamQueue, finaliseQueue, distribution, type TeamMember, type FinaliseRow } from '@web/pms/team'
-import { score, byCategory, bandFor, DEFAULT_BANDS } from '@web/pms/scoring'
-import { CHAIN_LABEL, FINALISER_LABEL } from '@web/pms/hierarchy'
-import { Button, Loading, PickerField } from '@/ui/primitives'
+import { score, byCategory, bandFor, checkFeedback, DEFAULT_BANDS, type Band } from '@web/pms/scoring'
+import { canPublishResult, type Log } from '@web/pms/oneToOne'
+import { CHAIN_LABEL, FINALISER_LABEL, type Chain, type Finaliser, type Role } from '@web/pms/hierarchy'
+import type { FlagRules } from '@web/pms/employment'
+import { useTheme } from '@/ui/ThemeProvider'
+import { F, R, S } from '@/ui/theme'
+import { Button, Input, PickerField, Txt } from '@/ui/primitives'
 import { SelectSheet } from '@/ui/overlays'
 import { ABar, B, Banner, EmptyBlock, Field, K, PCard, Pill, PStat, StatGrid } from './ui'
-import { loadPeriod, loadRoster, localToday } from './data'
-import { NoPeriod } from './Pending'
-import { ApproveTab, EMPTY_TEAM, ExitBanner, PipRequestTab, QueueCard, RateTab, TeamTab } from './MgrTabs'
-
-export type MgrTab = 'team' | 'approve' | 'rate' | 'pip' | 'analytics'
-export type HodTab = 'finalise' | 'feedback' | 'deptAnalytics'
-export const MGR_TABS: { k: MgrTab; label: string; blurb: string }[] = [
-  { k: 'team', label: 'Team Dashboard', blurb: 'who is where, worst deadline first' },
-  { k: 'approve', label: 'KRA Approval & One-to-One', blurb: 'check their sets, then log the discussion' },
-  { k: 'rate', label: 'Rate My Team', blurb: 'rate each KRA against what they delivered' },
-  { k: 'pip', label: 'PIP Request', blurb: 'raise one, and HR decides whether it starts' },
-  { k: 'analytics', label: 'Team Analytics', blurb: 'distribution and gaps, for information' },
-]
-export const HOD_TABS: { k: HodTab; label: string; blurb: string }[] = [
-  { k: 'finalise', label: 'Review & Finalise', blurb: 'sign off, exit and notice cases first' },
-  { k: 'feedback', label: 'Feedback & Recognition', blurb: 'what they read, and what they receive' },
-  { k: 'deptAnalytics', label: 'Department Analytics', blurb: 'the department against the company' },
-]
+import { BENEFIT_LABEL, BENEFIT_TYPES, type BenefitType, type FeedbackDraft } from './data'
+import { EMPTY_TEAM, ExitBanner, QueueCard } from './MgrTabs'
 
 // ── §4.5 / §5.3 analytics (lines are always [] and averages null in ESS) ──
-export function TeamAnalyticsTab({ members, today, scopeLabel }: { members: TeamMember[]; today: string; scopeLabel: string }) {
-  const rows = teamQueue(members, today)
+export function TeamAnalyticsTab({ members, today, scopeLabel, bands = DEFAULT_BANDS, flagRules }: {
+  members: TeamMember[]; today: string; scopeLabel: string; bands?: Band[]; flagRules?: FlagRules
+}) {
+  const rows = teamQueue(members, today, flagRules)
   const dist = distribution(rows)
   const rated = dist.reduce((s, d) => s + d.n, 0)
   const cats = byCategory([], 'final')
@@ -40,7 +30,7 @@ export function TeamAnalyticsTab({ members, today, scopeLabel }: { members: Team
     <>
       <PCard title={`How ${scopeLabel} was rated`} sub="For information. There is no curve to fit. With no pay attached, a forced distribution would be rationing nothing.">
         {rated === 0 ? <K>Nothing has been finalised yet, so there is no distribution to show.</K>
-          : dist.map(d => <ABar key={d.rating} name={`${d.rating} · ${bandFor(d.rating)?.label ?? ''}`} final={d.n / rated} solidOnly value={`${d.n} · ${Math.round((d.n / rated) * 100)}%`} />)}
+          : dist.map(d => <ABar key={d.rating} name={`${d.rating} · ${bandFor(d.rating, bands)?.label ?? ''}`} final={d.n / rated} solidOnly value={`${d.n} · ${Math.round((d.n / rated) * 100)}%`} />)}
       </PCard>
       <StatGrid>
         <PStat label={`${scopeLabel} average`} value="-" />
@@ -55,39 +45,54 @@ export function TeamAnalyticsTab({ members, today, scopeLabel }: { members: Team
   )
 }
 
-function FinaliseCard({ r }: { r: FinaliseRow }) {
+// ── §5.1 Review & Finalise ───────────────────────────────────────────────
+interface FinaliseHandlers {
+  onFinalise?: (id: string, rating: number) => void
+  onLogFinalReview?: (id: string) => void
+  onAcknowledgeFinalReview?: (id: string) => void
+  saving?: boolean
+}
+function FinaliseCard({ r, bands, finalReviewRequired, onFinalise, onLogFinalReview, onAcknowledgeFinalReview, saving }: FinaliseHandlers & {
+  r: FinaliseRow; bands: Band[]; finalReviewRequired: boolean
+}) {
   const [picked, setPicked] = React.useState<number | null>(null)
   const [open, setOpen] = React.useState(false)
-  const band = picked ? DEFAULT_BANDS.find(b => b.value === picked) : null
+  const m = r.member
+  const band = picked ? bands.find(b => b.value === picked) : null
+  let action: React.ReactNode
+  if (m.finalised) action = <K>done</K>
+  else if (r.canFinalise) action = <Button size="sm" title="Finalise" disabled={!picked || !onFinalise || saving} onPress={() => picked && onFinalise?.(m.employeeId, picked)} />
+  else if (r.insteadDo?.startsWith('RM L2')) action = <Button size="sm" variant="ghost" title="Nudge RM L2" disabled />
+  else if (finalReviewRequired && !m.finalReviewDone && r.precedingDone) {
+    action = !m.finalReviewLogged
+      ? <Button size="sm" title="Log final review" disabled={!onLogFinalReview || saving} onPress={() => onLogFinalReview?.(m.employeeId)} />
+      : !m.finalReviewMgrAcked
+        ? <Button size="sm" title="Acknowledge it" disabled={!onAcknowledgeFinalReview || saving} onPress={() => onAcknowledgeFinalReview?.(m.employeeId)} />
+        : <K>Waiting on {m.name.split(' ')[0]} to acknowledge the final review</K>
+  } else action = <K>{r.insteadDo}</K>
   return (
     <QueueCard r={r}>
       <View style={{ marginTop: 8 }}>
-        <Field label="RM L1">{r.member.rmL1Score?.toFixed(2) ?? '-'}</Field>
-        <Field label="RM L2">{r.member.rmL2Score?.toFixed(2) ?? '-'}</Field>
+        <Field label="RM L1">{m.rmL1Score?.toFixed(2) ?? '-'}</Field>
+        <Field label="RM L2">{m.rmL2Score?.toFixed(2) ?? '-'}</Field>
         <Field label="Final rating">
-          {r.member.finalised ? <Pill kind="green" label={`${r.member.finalRating} · finalised`} />
+          {m.finalised ? <Pill kind="green" label={`${m.finalRating} · finalised`} />
             : <PickerField value={band ? `${band.value} · ${band.label}` : ''} placeholder="Choose" disabled={!r.canFinalise}
                 onPress={() => setOpen(true)} style={{ marginBottom: 0 }} />}
         </Field>
-        <Field label="Action">
-          {/* No onFinalise / onNudge in ESS: both buttons stay disabled, as on the website. */}
-          {r.member.finalised ? <K>done</K>
-            : r.canFinalise ? <Button size="sm" title="Finalise" disabled />
-            : r.insteadDo?.startsWith('RM L2') ? <Button size="sm" variant="ghost" title="Nudge RM L2" disabled />
-            : <K>{r.insteadDo}</K>}
-        </Field>
+        <Field label="Action">{action}</Field>
       </View>
       <SelectSheet visible={open} onClose={() => setOpen(false)} title="Final rating" value={picked ?? undefined}
-        options={DEFAULT_BANDS.map(b => ({ value: b.value, label: `${b.value} · ${b.label}` }))} onPick={v => setPicked(Number(v))} />
+        options={bands.map(b => ({ value: b.value, label: `${b.value} · ${b.label}` }))} onPick={v => setPicked(Number(v))} />
     </QueueCard>
   )
 }
 
-// ── §5.1 Review & Finalise (role HOD, chain SELF_RM1_RM2_HOD, RM1_RM2_HOD) ──
-export function FinaliseTab({ members, today, deptName }: { members: TeamMember[]; today: string; deptName: string }) {
-  const chain = 'SELF_RM1_RM2_HOD' as const
-  const whoCanFinalise = 'RM1_RM2_HOD' as const
-  const rows = finaliseQueue(members, today, { role: 'HOD', chain, whoCanFinalise })
+export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName, bands = DEFAULT_BANDS, finalReviewRequired = false, flagRules, ...h }: FinaliseHandlers & {
+  members: TeamMember[]; today: string; role: Role; chain: Chain; whoCanFinalise: Finaliser; deptName: string
+  bands?: Band[]; finalReviewRequired?: boolean; flagRules?: FlagRules
+}) {
+  const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise, finalReviewRequired, rules: flagRules })
   const awaiting = rows.filter(r => !r.member.finalised).length
   const done = rows.filter(r => r.member.finalised).length
   const urgent = rows.filter(r => r.tone !== 'normal' && !r.member.finalised).length
@@ -107,55 +112,72 @@ export function FinaliseTab({ members, today, deptName }: { members: TeamMember[
         <PStat label={`${deptName} average`} value={avg === null ? '-' : avg.toFixed(2)} />
       </StatGrid>
       <PCard title={`Finalisation queue: ${deptName}`} sub="Exit and notice rows are pinned to the top, because after a last working day the record locks for good.">
-        {rows.length === 0 ? <EmptyBlock title="Nothing to finalise" note={EMPTY_TEAM} /> : rows.map(r => <FinaliseCard key={r.member.employeeId} r={r} />)}
+        {rows.length === 0 ? <EmptyBlock title="Nothing to finalise" note={EMPTY_TEAM} />
+          : rows.map(r => <FinaliseCard key={r.member.employeeId} r={r} bands={bands} finalReviewRequired={finalReviewRequired} {...h} />)}
       </PCard>
     </>
   )
 }
 
-// ── §5.2 Feedback & Recognition — `member` is always null in ESS ─────────
-export function FeedbackTab() {
+// ── §5.2 Feedback & Recognition ──────────────────────────────────────────
+function BenefitRow({ b, i, onType, onNote }: { b: FeedbackDraft['benefits'][number]; i: number; onType: (i: number) => void; onNote: (i: number, t: string) => void }) {
+  const { C } = useTheme()
   return (
-    <PCard title="Pick somebody">
-      <K>Choose a person from the finalisation queue to write their feedback.</K>
-    </PCard>
+    <View style={{ borderWidth: 1, borderColor: C.line, borderRadius: R.md, padding: S.md, marginBottom: S.sm }}>
+      <PickerField label="Type" value={BENEFIT_LABEL[b.type]} onPress={() => onType(i)} />
+      <Input label="What for" value={b.note} style={{ marginBottom: 0 }} accessibilityLabel={`Recognition ${i + 1} what for`} onChangeText={t => onNote(i, t)} />
+    </View>
   )
 }
 
-// ── containers ───────────────────────────────────────────────────────────
-function useRosterFor(employeeId: string, as: 'rm' | 'hod') {
-  const periodQ = useQuery({ queryKey: ['pms', 'period', employeeId], queryFn: () => loadPeriod(employeeId), enabled: !!employeeId })
-  const period = periodQ.data?.period ?? null
-  const rosterQ = useQuery({ queryKey: ['pms', 'roster', as, employeeId, period?.id], queryFn: () => loadRoster(employeeId, period!.id, as), enabled: !!period })
-  return { loading: periodQ.isLoading || (!!period && rosterQ.isLoading), period, rows: rosterQ.data ?? [] }
-}
-
-export function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
-  const { loading, period, rows } = useRosterFor(employeeId, 'rm')
-  const today = localToday()
-  if (loading) return <Loading />
-  if (!period) return <NoPeriod />
+export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs, bands = DEFAULT_BANDS, onChange, onPublish, saving }: {
+  member: TeamMember | null; rating: number | null
+  appreciation: string; improvement: string; benefits: FeedbackDraft['benefits']; logs: Log[]
+  bands?: Band[]; onChange: (patch: Partial<FeedbackDraft>) => void; onPublish?: () => void; saving?: boolean
+}) {
+  const [typeFor, setTypeFor] = React.useState<number | null>(null)
+  if (!member) {
+    return (
+      <PCard title="Pick somebody">
+        <K>Choose a person from the finalisation queue to write their feedback.</K>
+      </PCard>
+    )
+  }
+  const check = checkFeedback(rating, { appreciation, improvement }, bands)
+  const publish = canPublishResult(logs)
+  const band = bandFor(rating, bands)
+  const canPublish = check.ok && publish.open
+  const setB = (i: number, patch: Partial<FeedbackDraft['benefits'][number]>) => onChange({ benefits: benefits.map((x, j) => j === i ? { ...x, ...patch } : x) })
   return (
     <>
-      {tab === 'team' && <TeamTab members={rows} today={today} managerName="your team" />}
-      {tab === 'approve' && <ApproveTab members={rows} today={today} />}
-      {tab === 'rate' && <RateTab />}
-      {tab === 'pip' && <PipRequestTab members={rows} today={today} />}
-      {tab === 'analytics' && <TeamAnalyticsTab members={rows} today={today} scopeLabel="your team" />}
-    </>
-  )
-}
-
-export function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
-  const { loading, period, rows } = useRosterFor(employeeId, 'hod')
-  const today = localToday()
-  if (loading) return <Loading />
-  if (!period) return <NoPeriod />
-  return (
-    <>
-      {tab === 'finalise' && <FinaliseTab members={rows} today={today} deptName="your department" />}
-      {tab === 'feedback' && <FeedbackTab />}
-      {tab === 'deptAnalytics' && <TeamAnalyticsTab members={rows} today={today} scopeLabel="your department" />}
+      <StatGrid>
+        <PStat tone="accent" label="Writing feedback for" value={member.name} note={member.code} />
+        <PStat label="Final rating" value={rating === null ? '-' : `${rating}${band ? ` · ${band.label}` : ''}`} />
+        <PStat tone={band?.improvementMandatory ? 'warn' : undefined} label="Improvement feedback" value={band?.improvementMandatory ? 'Required' : 'Optional'}
+          note={band?.improvementMandatory ? 'Mandatory at this rating' : 'Write it anyway if there is something to say'} />
+      </StatGrid>
+      <Input label="🏆 Appreciation" value={appreciation} multiline onChangeText={t => onChange({ appreciation: t })}
+        placeholder="What they did well, specifically enough that they could repeat it" />
+      <Input label="📈 Where to improve" value={improvement} multiline onChangeText={t => onChange({ improvement: t })}
+        placeholder="What would change the rating, and what support goes with it" />
+      <PCard title="🎁 Recognition" sub="Non-monetary only: a certificate, a nomination, an award. Anything with a cash component would touch payroll, and this module does not.">
+        {benefits.map((b, i) => <BenefitRow key={i} b={b} i={i} onType={setTypeFor} onNote={(j, t) => setB(j, { note: t })} />)}
+        <Button size="sm" variant="ghost" title="+ Add recognition" style={{ alignSelf: 'flex-start' }}
+          onPress={() => onChange({ benefits: [...benefits, { type: 'CERTIFICATE', note: '' }] })} />
+      </PCard>
+      {(!check.ok || !publish.open) && (
+        <Banner tone="amber" glyph="!" raw>
+          <Txt size={F.tiny} w={700} tone="warning">Before this can be published:</Txt>
+          {check.faults.map((f, i) => <Txt key={i} size={F.tiny} tone="warning" style={{ marginTop: 4 }}>• {f}</Txt>)}
+          {!publish.open && <Txt size={F.tiny} tone="warning" style={{ marginTop: 4 }}>• {publish.because}</Txt>}
+        </Banner>
+      )}
+      <Button full disabled={!canPublish || !onPublish || saving} onPress={onPublish}
+        title={saving ? 'Publishing…' : canPublish ? 'Publish the result' : 'Cannot publish yet'} />
+      <SelectSheet visible={typeFor !== null} onClose={() => setTypeFor(null)} title="Type"
+        value={typeFor !== null ? benefits[typeFor]?.type : undefined}
+        options={BENEFIT_TYPES.map(t => ({ value: t, label: BENEFIT_LABEL[t] }))}
+        onPick={v => { if (typeFor !== null) setB(typeFor, { type: v as BenefitType }) }} />
     </>
   )
 }

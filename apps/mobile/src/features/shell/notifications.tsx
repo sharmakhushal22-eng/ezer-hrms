@@ -7,17 +7,39 @@
 // One addition on the phone: a row with a `link` also opens the screen it names.
 // The website ignores the link; on a phone a notification you cannot follow is a
 // dead end, and the link is the website's own (resolved by core/links.ts).
+//
+// Interviews to conduct (179bb35): the website's panel opens with InterviewInvites
+// — acknowledge / give feedback right here — and an invite's link
+// ('/ess?notifications=1') opens the bell. The app has ONE sheet (BellHost, mounted
+// by the root layout) driven by openBell(), so a link from anywhere can open it.
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '@/core/api'
 import { useEmployeeId } from '@/core/session'
 import { invalidate } from '@/core/query'
-import { openLink } from '@/core/links'
+import { isBellLink, openLink, setBellOpener } from '@/core/links'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, S } from '@/ui/theme'
 import { Button, Eyebrow, Loading, Txt, ErrorState } from '@/ui/primitives'
 import { Sheet } from '@/ui/overlays'
+import { InterviewInvites } from './InterviewInvites'
+
+// ── The one bell sheet, opened from any top bar or link ─────────────────────
+let bellOpen = false
+const listeners = new Set<() => void>()
+const setBell = (v: boolean) => { if (bellOpen !== v) { bellOpen = v; listeners.forEach(l => l()) } }
+export const openBell = () => setBell(true)
+export const closeBell = () => setBell(false)
+const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
+export const useBellOpen = () => React.useSyncExternalStore(subscribe, () => bellOpen, () => bellOpen)
+
+/** Mounted once, under the signed-in tree (src/app/_layout.tsx). */
+export function BellHost() {
+  const open = useBellOpen()
+  React.useEffect(() => { setBellOpener(openBell); return () => { setBellOpener(null); closeBell() } }, [])
+  return <NotificationsSheet visible={open} onClose={closeBell} />
+}
 
 export interface NotificationRow {
   id: string; category: string; title: string; body: string | null; link: string | null
@@ -74,6 +96,8 @@ export function NotificationsSheet({ visible, onClose }: { visible: boolean; onC
   })
   const open = (n: NotificationRow) => {
     if (!n.is_read) act.mutate({ action: 'read', id: n.id })
+    // An interview invite's link names this panel: its card is already at the top.
+    if (isBellLink(n.link)) return
     if (n.link && openLink(n.link)) onClose()
   }
   const d = q.data
@@ -82,6 +106,9 @@ export function NotificationsSheet({ visible, onClose }: { visible: boolean; onC
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: S.sm }}>
         <Button title="Mark all read" variant="outline" size="sm" onPress={() => act.mutate({ action: 'read_all' })} disabled={!d?.unread} />
       </View>
+      {/* Interviews this person is on: acknowledged, and the main interviewer's
+          feedback given, right here (nothing when there is none). */}
+      {visible && !!employeeId && <InterviewInvites employeeId={employeeId} />}
       {q.isLoading ? <Loading /> : q.error ? <ErrorState error={q.error} onRetry={q.refetch} /> : !d || (!d.role.length && !d.personal.length) ? (
         <Txt size={F.tiny} tone="faint" center style={{ padding: S.xl }}>You&apos;re all caught up. 🎉</Txt>
       ) : (

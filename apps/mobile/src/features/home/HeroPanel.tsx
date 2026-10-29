@@ -147,7 +147,7 @@ function FmtOption({ label, example, on, onPress }: { label: string; example: st
 }
 
 function FormatSheet({ visible, onClose, prefs, onPrefs, now }: { visible: boolean; onClose: () => void; prefs: Prefs; onPrefs: (p: Partial<Prefs>) => void; now: Date }) {
-  const dates: Array<[Prefs['date_format'], string, string]> = [
+  const dates: [Prefs['date_format'], string, string][] = [
     ['long', 'Long', now.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })],
     ['short', 'Short', fmtDate(now, 'short')],
     ['dmy', 'DD/MM/YYYY', fmtDate(now, 'dmy')],

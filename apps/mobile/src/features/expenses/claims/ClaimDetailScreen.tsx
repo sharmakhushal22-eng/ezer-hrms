@@ -10,26 +10,35 @@
 // Differences from the website, on purpose:
 //   · the bill links get `claimId`, so an approver opening a colleague's bill
 //     here works (spec Part 5 "Known gaps"; the server ignores it for own files);
-//   · the trip's place names come from useTripDetail (cached, refetched with the rest).
+//   · the trip's place names come from useTripDetail (cached, refetched with the rest);
+//   · the owner's answer to a send-back autosaves as a draft (as on the website) and,
+//     unlike the website, reopens with that draft (claims/OwnerReply.tsx).
 import * as React from 'react'
 import { BackHandler, View } from 'react-native'
 import { useLocalSearchParams } from 'expo-router'
-import type { TeClaimDetail, TeExpense, TePlaceBrief } from '@web/te/types'
+import type { TeClaimDetail, TeDraft, TeExpense, TePlaceBrief } from '@web/te/types'
 import { F, S } from '@/ui/theme'
 import { Button, Input, Txt } from '@/ui/primitives'
 import { useOverlay } from '@/ui/overlays'
 import { claimChip, claimHolder, errorText, te } from '../api'
-import { catNameOf, reloadTe, useClaimDetail, useSnap, useTripDetail } from '../data'
+import { catNameOf, reloadTe, useClaimDetail, useDrafts, useSnap, useTripDetail } from '../data'
 import { close, open, param, teHref } from '../nav'
 import { Chip, Flag, Mono, Note, TeCard } from '../ui/kit'
 import { TeScreen } from '../ui/TeScreen'
 import { ClaimHistory, ClaimLines, ClaimTotals, ClaimTracker, ErrorFlag, FlagBlock, LegRows, toClaims } from './parts'
 import { LegEvidence } from './LegEvidence'
+import { OwnerReply } from './OwnerReply'
 
 const EMPTY_PLACES: Record<string, TePlaceBrief> = {}
 
 /** The aside's action card: answer, take back, or decide. */
-function ClaimActions({ d, onChanged }: { d: TeClaimDetail; onChanged: (msg: string) => void }) {
+function ClaimActions({ d, onChanged, replyDraft, draftsReady }: {
+  d: TeClaimDetail; onChanged: (msg: string) => void
+  /** My saved, unsent answer to this claim, if any. */
+  replyDraft?: TeDraft
+  /** The drafts list has answered, so the reply can open with what was saved. */
+  draftsReady: boolean
+}) {
   const c = d.claim
   const [text, setText] = React.useState('')
   const [busy, setBusy] = React.useState(false)
@@ -37,13 +46,15 @@ function ClaimActions({ d, onChanged }: { d: TeClaimDetail; onChanged: (msg: str
   const [recalling, setRecalling] = React.useState(false)
   const finance = d.can.stage === 'finance'
 
-  async function run(label: string, act: () => Promise<unknown>, after?: () => void) {
+  async function run(label: string, act: () => Promise<unknown>, after?: () => void): Promise<boolean> {
     setBusy(true); setError('')
     try {
       await act()
       setText(''); after?.(); onChanged(label)
+      return true
     } catch (e) {
       setError(errorText(e))
+      return false
     } finally {
       setBusy(false)
     }
@@ -55,11 +66,10 @@ function ClaimActions({ d, onChanged }: { d: TeClaimDetail; onChanged: (msg: str
       {showCard ? (
         <TeCard>
           {d.can.own && c.status === 'SENT_BACK' ? (
-            <View style={{ marginBottom: S.md }}>
-              <Input label="Your answer" multiline value={text} onChangeText={setText} />
-              <Button title="Send answer" full disabled={busy || !text.trim()}
-                onPress={() => void run('Answer sent.', () => te.claimRespond(c.id, text))} />
-            </View>
+            draftsReady ? (
+              <OwnerReply claimId={c.id} resuming={replyDraft} busy={busy}
+                onSend={answer => run('Answer sent.', () => te.claimRespond(c.id, answer))} />
+            ) : <Txt size={F.tiny} tone="muted" style={{ marginBottom: S.md }}>Loading…</Txt>
           ) : null}
           {d.can.own ? (
             recalling ? (
@@ -108,8 +118,10 @@ function ClaimActions({ d, onChanged }: { d: TeClaimDetail; onChanged: (msg: str
   )
 }
 
-function ClaimBody({ d, catName, onChanged, onFixLine, onEvidence }: {
+function ClaimBody({ d, catName, onChanged, onFixLine, onEvidence, replyDraft, draftsReady }: {
   d: TeClaimDetail
+  replyDraft?: TeDraft
+  draftsReady: boolean
   catName: Map<string, string>
   onChanged: (msg: string) => void
   onFixLine?: (line: TeExpense, tripId?: string) => void
@@ -146,7 +158,7 @@ function ClaimBody({ d, catName, onChanged, onFixLine, onEvidence }: {
 
       <View style={{ height: openFlags.length ? S.sm : 0 }} />
       <ClaimTotals c={c} />
-      <ClaimActions key={`${c.id}-${c.status}`} d={d} onChanged={onChanged} />
+      <ClaimActions key={`${c.id}-${c.status}`} d={d} onChanged={onChanged} replyDraft={replyDraft} draftsReady={draftsReady} />
       <ClaimHistory timeline={d.timeline} />
     </View>
   )
@@ -161,6 +173,9 @@ export default function ClaimDetailScreen() {
   const d = q.data
   // The trip is read alongside for the place names the evidence shows; a failure leaves them blank.
   const places = useTripDetail(d?.trip?.id).data?.places ?? EMPTY_PLACES
+  const draftsQ = useDrafts('claim')
+  const replyDraft = draftsQ.data?.find(x => x.claim_id === id)
+  const draftsReady = draftsQ.isFetched || !!draftsQ.error
   const [evidence, setEvidence] = React.useState<string | null>(null)
   const openLeg = evidence && d ? d.legs.find(l => l.id === evidence) ?? null : null
 
@@ -184,7 +199,7 @@ export default function ClaimDetailScreen() {
       ) : openLeg ? (
         <LegEvidence leg={openLeg} places={places} onBack={() => setEvidence(null)} />
       ) : (
-        <ClaimBody d={d} catName={catName} onChanged={onChanged} onEvidence={setEvidence}
+        <ClaimBody d={d} catName={catName} onChanged={onChanged} onEvidence={setEvidence} replyDraft={replyDraft} draftsReady={draftsReady}
           onFixLine={(line, tripId) => open(teHref.expense({ line: line.id, trip: tripId, claim: d.claim.id }))} />
       )}
     </TeScreen>

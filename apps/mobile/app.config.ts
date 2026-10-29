@@ -46,9 +46,10 @@ const config: ExpoConfig = {
     'expo-sharing',
   ],
   experiments: { typedRoutes: false, reactCompiler: true },
+  // The Expo project the APK builds under (expo.dev → girish18 → ezer-hrms).
+  owner: 'girish18',
   extra: {
-    // Filled in by `eas init` (links this app to your Expo project).
-    eas: { projectId: process.env.EAS_PROJECT_ID || undefined },
+    eas: { projectId: process.env.EAS_PROJECT_ID || '48b17f09-1718-4450-82cd-60b53aa8977f' },
   },
 }
 

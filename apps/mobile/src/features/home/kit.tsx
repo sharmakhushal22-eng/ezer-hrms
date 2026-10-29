@@ -131,7 +131,7 @@ export function useTween(to: number, duration = 1100, delay = 0, from0 = 0) {
   const [v, setV] = React.useState(from0)
   const cur = React.useRef(from0)
   React.useEffect(() => {
-    if (reduce) { cur.current = to; setV(to); return }
+    if (reduce) { cur.current = to; return }
     const from = cur.current
     let raf = 0
     const start = Date.now() + delay
@@ -145,7 +145,7 @@ export function useTween(to: number, duration = 1100, delay = 0, from0 = 0) {
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
   }, [to, duration, delay, reduce])
-  return v
+  return reduce ? to : v
 }
 
 /** hooks.ts useCountUp — counts up from 0 to `to` (450 ms in, 1.1 s long). */

@@ -94,3 +94,14 @@ export function Bullets({ lines, color }: { lines: React.ReactNode[]; color: str
     </View>
   )
 }
+
+/** A figure tile inside a hero card (PayStyles' ezp-tile): a small name over a figure. */
+export function Tile({ name, value, unit }: { name: string; value: string; unit?: string }) {
+  const { C } = useTheme()
+  return (
+    <View style={{ flex: 1, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: R.md, paddingVertical: 10, paddingHorizontal: 12 }}>
+      <Txt size={F.micro} tone="muted">{name}</Txt>
+      <Txt size={F.lead} w={700} style={{ marginTop: 2 }}>{value}{!!unit && <Txt size={F.micro} tone="muted">{unit}</Txt>}</Txt>
+    </View>
+  )
+}

@@ -27,7 +27,7 @@ export function SectionHub({ section }: { section: string }) {
     <Card padded={false} style={{ paddingHorizontal: S.lg }}>
       {items.map((it, i) => (
         <View key={it.k} style={{ borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
-          <ListRow title={it.label} onPress={() => router.push(it.route as any)}
+          <ListRow title={it.label} subtitle={it.hint} onPress={() => router.push(it.route as any)}
             left={<View style={{ width: 34, height: 34, borderRadius: 9, backgroundColor: C.chip, alignItems: 'center', justifyContent: 'center' }}>{I && <I size={17} color={C.chipInk} />}</View>}
             right={it.needs ? <Badge label="Soon" /> : undefined} />
         </View>

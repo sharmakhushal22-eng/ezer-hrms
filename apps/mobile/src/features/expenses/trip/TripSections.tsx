@@ -16,6 +16,7 @@ import { TeIcon } from '../ui/TeIcon'
 import { TripMap, MapLinks } from '../ui/TripMap'
 import { Chip, Flag, KvRow, Mono, TeCard } from '../ui/kit'
 import { CardHead, IcoB, LegNo, Meter } from './parts'
+import { JourneyAnswer } from '../leg/JourneyAnswer'
 import { StayRequest } from './StayRequest'
 import { LEG_KIND, LEG_STATE } from './words'
 import type { TripView } from './view'
@@ -99,13 +100,15 @@ function RouteLeg({ l, v, last, onOpen }: { l: TeLeg; v: TripView; last: boolean
         <Txt size={F.small} w={700}>{`${v.pname(l.from)} → ${v.pname(l.to)}`}</Txt>
         <Txt size={F.tiny} tone="muted">{sub}</Txt>
       </View>
+      {/* A journey a desk has queried says so here, not only inside it. */}
+      {l.review?.backAt ? <Chip tone="t-crit" label="Sent back" /> : null}
       <Chip plain label={LEG_STATE[l.status] ?? l.status} />
     </Pressable>
   )
 }
 
 // ── the route and its journeys ──
-export function RouteCard({ v, onAddLeg, onOpenLeg }: { v: TripView; onAddLeg: () => void; onOpenLeg: (l: TeLeg) => void }) {
+export function RouteCard({ v, onAddLeg, onOpenLeg, onChanged }: { v: TripView; onAddLeg: () => void; onOpenLeg: (l: TeLeg) => void; onChanged: (msg: string) => void }) {
   const { C } = useTheme()
   const { t, legs, mine, st, places, detail } = v
   return (
@@ -125,7 +128,13 @@ export function RouteCard({ v, onAddLeg, onOpenLeg }: { v: TripView; onAddLeg: (
         label={`Map of ${t.name}`} />
       <MapLinks points={(t.points || []).map(p => detail.places[p.place]).filter(Boolean)} scope={t.scope} label={t.name} />
       <View>
-        {legs.map((l, i) => <RouteLeg key={l.id} l={l} v={v} last={i === legs.length - 1} onOpen={onOpenLeg} />)}
+        {/* The answer box sits OUTSIDE the pressable row, so typing in it never opens the leg. */}
+        {legs.map((l, i) => (
+          <React.Fragment key={l.id}>
+            <RouteLeg l={l} v={v} last={i === legs.length - 1 && !(mine && l.review?.backAt)} onOpen={onOpenLeg} />
+            {mine && l.review?.backAt ? <JourneyAnswer legId={l.id} n={l.n} review={l.review} onDone={onChanged} /> : null}
+          </React.Fragment>
+        ))}
       </View>
     </TeCard>
   )

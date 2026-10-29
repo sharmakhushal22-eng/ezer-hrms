@@ -1,32 +1,43 @@
-// src/features/profile/Fields.tsx — Profile360's field card, field groups and
-// record tables, for a phone.
+// src/features/profile/Fields.tsx — Profile360's field card, field groups,
+// key/value list and record tables, for a phone.
 //
-// Field rules (Profile360.tsx Field):
-//   · "Restricted" when maySee() says no OR the key is missing from the payload;
-//   · money() for ctc/gross keys, pretty() otherwise;
-//   · masked fields show dots + Reveal / Hide;
-//   · actionable = maySee && key present && it is your own profile && not locked.
-//     The website tests viewer_role === 'self' here, so an HR-role employee
-//     (viewer_role 'hr' on their own record) cannot edit their own fields there.
-//     Profile360 already switched the photo and ID card to isSelf for exactly
-//     that reason; the app uses isSelf for fields too. The server enforces the
-//     field states either way. A phone has no hover title, so an actionable card
-//     also shows a chevron.
+// Field card (Profile360.tsx FieldCard): each field says what pressing it does
+// — "Edit", "Add", "Request change" — from fieldMode(); a locked field on your
+// own profile shows a lock (HR maintains it). "Restricted" when the key is not
+// yours to see, "Not added" when nobody filled it in, masked values behind
+// Reveal / Hide.
 import * as React from 'react'
 import { Pressable, View, useWindowDimensions } from 'react-native'
-import { maySee, type FieldGroup, type ProfileField, type ProfilePayload, type Row } from '@web/profile/types'
+import Svg, { Path, Rect } from 'react-native-svg'
+import type { FieldGroup, ProfileField, ProfilePayload, Row } from '@web/profile/types'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, FONT, R, S } from '@/ui/theme'
 import { Card, Txt } from '@/ui/primitives'
-import { IconChevron } from '@/ui/icons'
 import { money, pretty, titleise } from './format'
 import { EmptyText, Section } from './bits'
+import { fieldMode, NIL, shownValue, type Mode } from './rules'
 
 const MONO = 'monospace'
 
-export function StateText({ state }: { state: ProfileField['state'] }) {
-  const tone = state === 'direct' ? 'positive' : state === 'request' ? 'warning' : state === 'event' ? 'info' : 'muted'
-  return <Txt size={F.micro} w={700} tone={tone}>{state.charAt(0).toUpperCase() + state.slice(1)}</Txt>
+export function LockGlyph({ color, size = 12 }: { color: string; size?: number }) {
+  return (
+    <Svg viewBox="0 0 16 16" width={size} height={size} fill="none">
+      <Rect x={3.5} y={7} width={9} height={6.5} rx={1.5} stroke={color} strokeWidth={1.6} />
+      <Path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
+  )
+}
+
+/** The `.fa` chip: what pressing the card does. */
+function ModeChip({ mode }: { mode: Mode }) {
+  const { C } = useTheme()
+  const req = mode.kind === 'request'
+  return (
+    <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: R.pill, borderWidth: 1,
+      borderColor: req ? C.warningEdge : C.brandEdge, backgroundColor: req ? C.warningTint : C.brandTint }}>
+      <Txt size={F.micro} w={700} color={req ? C.warning : C.brandDeep}>{mode.label}</Txt>
+    </View>
+  )
 }
 
 /** Two columns on a wide screen, one on a phone — the web's g3 grid, with `wide` spanning. */
@@ -38,33 +49,31 @@ export function useCols() {
 export function FieldCard({ f, payload, self, onAct, cols }: { f: ProfileField; payload: ProfilePayload; self: boolean; onAct: (f: ProfileField) => void; cols: number }) {
   const { C } = useTheme()
   const [shown, setShown] = React.useState(false)
-  const emp = payload.employee
-  const allowed = maySee(payload.viewer_role, f.min)
-  const present = Object.prototype.hasOwnProperty.call(emp, f.key)
-  const actionable = allowed && present && self && f.state !== 'locked'
+  const { text, restricted } = shownValue(f, payload)
+  const mode = fieldMode(f, payload, self)
+  const act = mode.kind !== 'none'
+  // Reveal only applies to the real value (HR's view); a masked PAN from self.ids is already safe.
+  const masked = f.mask && !shown && text !== NIL && !restricted && !text.includes('•')
+  const valueStyle = f.mono ? { fontFamily: MONO } : undefined
 
   let body: React.ReactNode
-  if (!allowed || !present) {
-    body = <Txt size={F.body} tone="faint" style={{ fontStyle: 'italic' }}>Restricted</Txt>
+  if (restricted) body = <Txt size={F.body} tone="faint" style={{ fontStyle: 'italic' }}>Restricted</Txt>
+  else if (masked) {
+    body = (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
+        <Txt size={F.body} w={600} style={{ letterSpacing: 2 }}>{'•'.repeat(Math.min(12, Math.max(4, text.length)))}</Txt>
+        <EyeBtn label="Reveal" onPress={() => setShown(true)} />
+      </View>
+    )
   } else {
-    const raw = emp[f.key]
-    const text = /ctc|gross/.test(f.key) ? money(raw) : pretty(raw)
-    const valueStyle = f.mono ? { fontFamily: MONO } : undefined
-    if (f.mask && !shown && text !== '-') {
-      body = (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-          <Txt size={F.body} w={600} style={{ letterSpacing: 2 }}>{'•'.repeat(Math.min(12, Math.max(4, text.length)))}</Txt>
-          <EyeBtn label="Reveal" onPress={() => setShown(true)} />
-        </View>
-      )
-    } else {
-      body = (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
-          <Txt size={F.body} w={600} style={valueStyle} selectable>{text}</Txt>
-          {f.mask && shown && <EyeBtn label="Hide" onPress={() => setShown(false)} />}
-        </View>
-      )
-    }
+    body = (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
+        {text === NIL
+          ? <Txt size={F.body} tone="faint" style={{ fontStyle: 'italic' }}>Not added</Txt>
+          : <Txt size={F.body} w={600} style={valueStyle} selectable>{text}</Txt>}
+        {f.mask && shown && <EyeBtn label="Hide" onPress={() => setShown(false)} />}
+      </View>
+    )
   }
 
   const width = cols === 1 || f.wide ? '100%' : '48.9%'
@@ -72,18 +81,18 @@ export function FieldCard({ f, payload, self, onAct, cols }: { f: ProfileField; 
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
         <Txt size={F.micro} w={700} tone="muted" upper style={{ flex: 1 }} numberOfLines={2}>{f.label}</Txt>
-        <StateText state={f.state} />
-        {actionable && <IconChevron size={14} color={C.faint} />}
+        {act ? <ModeChip mode={mode} />
+          : self && f.state === 'locked' && !restricted
+            ? <View accessibilityLabel="Maintained by HR. Ask HR to correct it."><LockGlyph color={C.faint} /></View> : null}
       </View>
       <View style={{ marginTop: 4 }}>{body}</View>
-      {!!f.hint && <Txt size={F.tiny} tone="warning" style={{ marginTop: 4 }}>{f.hint}</Txt>}
+      {!!f.hint && <Txt size={F.tiny} tone="muted" style={{ marginTop: 4 }}>{f.hint}</Txt>}
     </>
   )
-  const box = { width, padding: S.md, borderRadius: R.md, borderWidth: 1, borderColor: actionable ? C.brandEdge : C.line, backgroundColor: C.surface } as const
-  if (!actionable) return <View style={box}>{content}</View>
+  const box = { width, padding: S.md, borderRadius: R.md, borderWidth: 1, borderColor: act ? C.brandEdge : C.line, backgroundColor: C.surface } as const
+  if (!act) return <View style={box}>{content}</View>
   return (
-    <Pressable onPress={() => onAct(f)} accessibilityRole="button"
-      accessibilityHint={f.state === 'direct' ? 'Edit' : 'Request a change'}
+    <Pressable onPress={() => onAct(f)} accessibilityRole="button" accessibilityHint={mode.label}
       style={({ pressed }) => [box, pressed && { backgroundColor: C.brandTint }]}>
       {content}
     </Pressable>
@@ -100,12 +109,16 @@ function EyeBtn({ label, onPress }: { label: string; onPress: () => void }) {
   )
 }
 
-export function FieldGroups({ groups, payload, self, onAct }: { groups: FieldGroup[]; payload: ProfilePayload; self: boolean; onAct: (f: ProfileField) => void }) {
+export function FieldGroups({ groups, payload, self, onAct, rightOf }: {
+  groups: FieldGroup[]; payload: ProfilePayload; self: boolean; onAct: (f: ProfileField) => void
+  /** Something on a group's heading row (the Salary account's button). */
+  rightOf?: (g: FieldGroup) => React.ReactNode
+}) {
   const cols = useCols()
   return (
     <>
       {groups.map(g => (
-        <Section title={g.title} key={g.title}>
+        <Section title={g.title} key={g.title} right={rightOf?.(g)}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
             {g.fields.map(f => <FieldCard key={f.key} f={f} payload={payload} self={self} onAct={onAct} cols={cols} />)}
           </View>
@@ -115,12 +128,19 @@ export function FieldGroups({ groups, payload, self, onAct }: { groups: FieldGro
   )
 }
 
-/** A label/value cell used by the Overview "Employment" card and Growth "Performance". */
-export function PlainField({ k, v }: { k: string; v: string }) {
+/** Profile360 KV: a definition list — label left, value right. */
+export function KVList({ rows }: { rows: [string, React.ReactNode][] }) {
+  const { C } = useTheme()
   return (
-    <View style={{ width: '48.9%', paddingVertical: 6 }}>
-      <Txt size={F.micro} w={700} tone="muted" upper>{k}</Txt>
-      <Txt size={F.body} w={600} style={{ marginTop: 2 }}>{v}</Txt>
+    <View>
+      {rows.map(([k, v], i) => (
+        <View key={k} style={{ flexDirection: 'row', gap: S.md, paddingVertical: 7, borderTopWidth: i ? 1 : 0, borderTopColor: C.line, alignItems: 'center' }}>
+          <Txt size={F.small} tone="muted" style={{ width: 118 }}>{k}</Txt>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {typeof v === 'string' || typeof v === 'number' ? <Txt size={F.small} w={600}>{v}</Txt> : v}
+          </View>
+        </View>
+      ))}
     </View>
   )
 }

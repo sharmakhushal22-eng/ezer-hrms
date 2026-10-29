@@ -12,7 +12,7 @@ import { Avatar, IconButton } from '@/ui/primitives'
 import { Logo } from '@/ui/Logo'
 import { IconBell } from '@/ui/icons'
 import Svg, { Circle, Path } from 'react-native-svg'
-import { NotificationsSheet, useUnreadCount } from './notifications'
+import { openBell, useUnreadCount } from './notifications'
 
 // lib/ui/ThemeToggle.tsx: light → dark → system → light, each with its own fill.
 const NEXT: Record<ThemeMode, ThemeMode> = { light: 'dark', dark: 'system', system: 'light' }
@@ -53,19 +53,17 @@ export function TopBar() {
   const insets = useSafeAreaInsets()
   const { emp } = useEmployee()
   const unread = useUnreadCount()
-  const [bell, setBell] = React.useState(false)
   return (
     <View style={{ paddingTop: insets.top + 6, paddingBottom: 8, paddingHorizontal: S.lg, flexDirection: 'row', alignItems: 'center', gap: S.sm, backgroundColor: C.canvas, borderBottomWidth: 1, borderBottomColor: C.hair }}>
       <Logo height={20} />
       <View style={{ flex: 1 }} />
       <ThemeButton />
-      <IconButton label="Notifications" badge={unread} onPress={() => setBell(true)}>
+      <IconButton label="Notifications" badge={unread} onPress={openBell}>
         <IconBell size={20} color={C.muted} />
       </IconButton>
       <Pressable onPress={() => router.push('/profile')} accessibilityLabel="My profile">
         <Avatar name={emp?.full_name} uri={emp?.profile_photo} size={32} />
       </Pressable>
-      <NotificationsSheet visible={bell} onClose={() => setBell(false)} />
     </View>
   )
 }

@@ -12,7 +12,7 @@
 //   LocBtn      button.locb                a "choose a place" row
 //   Stepper     div.stepper                minus / number / plus
 //   SheetToast  .toasts > .toast.err       the planner's own in-sheet toast
-//   Crumb       span.fpath                 "Step 3 of 3 · Local trip › Plan a trip"
+//   Crumb       span.fpath                 "Local trip › Plan a trip" (the step counter was dropped in v2)
 import * as React from 'react'
 import { Pressable, View, type StyleProp, type ViewStyle } from 'react-native'
 import { useTheme } from '@/ui/ThemeProvider'
@@ -224,12 +224,8 @@ export function SheetToast({ text }: { text: string }) {
 
 // ── entry-flow crumb ────────────────────────────────────────────────────────
 export function Crumb({ kind, way }: { kind: string; way: string }) {
-  const { C } = useTheme()
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: R.pill, backgroundColor: C.brandTint }}>
-        <Txt size={F.micro} w={700} tone="brand">Step 3 of 3</Txt>
-      </View>
       <Txt size={F.tiny} w={600} tone="soft">{kind}<Txt size={F.tiny} tone="muted"> › </Txt>{way}</Txt>
     </View>
   )

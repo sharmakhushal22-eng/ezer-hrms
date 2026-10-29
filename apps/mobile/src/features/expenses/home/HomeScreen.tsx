@@ -5,6 +5,8 @@
 //   TeLiveBar when one of my journeys is running
 //   hero    "Hello, <first name>" · "Where are you travelling today?" · 3 KPIs
 //   tiles   Local / Domestic / International → step 2 sheet; Other expense → the expense form
+//   the trip that still wants something (OnTripCard) — under way, or back with the claim not sent
+//   "Trip drafts" under the tiles (TeDrafts kind trip; resumes the planner on ?draft=)
 //   "Needs you" (only when something is waiting): sent-back claims, unclaimed bills, queue rows
 // Deep link: /expenses?tab=claims&ref=<claim uuid> (the website's
 // /ess/travel?tab=claims&ref=, written by migration 147) opens that claim.
@@ -13,7 +15,7 @@ import { Pressable, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
-import type { Snapshot, TeQueueRow } from '@web/te/types'
+import type { Snapshot, TeQueueRow, TripScope } from '@web/te/types'
 import { useTheme } from '@/ui/ThemeProvider'
 import { elevation, F, R, S, SERIF } from '@/ui/theme'
 import { Txt } from '@/ui/primitives'
@@ -25,6 +27,8 @@ import { TeIcon } from '../ui/TeIcon'
 import { ListCard, Li, Ico } from '../ui/kit'
 import { SnapState, TeScreen } from '../ui/TeScreen'
 import { KindTiles } from './KindTiles'
+import { OnTripCard } from './OnTripCard'
+import { DraftsCard } from '../drafts/DraftsCard'
 
 /** The module's own header bar (TeHome header.top). */
 function ModuleHeader({ snap }: { snap: Snapshot | undefined }) {
@@ -147,7 +151,15 @@ export default function HomeScreen() {
       {q.data ? (
         <>
           <Hero snap={q.data} />
+          <OnTripCard snap={q.data} />
           <KindTiles snap={q.data} onPick={k => open(k === 'other' ? teHref.expense() : teHref.kind(k))} />
+          <View style={{ marginTop: S.lg }}>
+            <DraftsCard kind="trip" title="Trip drafts" onResume={d => {
+              // The scope and "already travelled" live in the draft body (the planner's own form state).
+              const body = d.body as { scope?: TripScope; origin?: string }
+              open(teHref.plan({ kind: body.scope ?? 'domestic', past: body.origin === 'POST_FACTO', draft: d.id }))
+            }} />
+          </View>
           <NeedsYou snap={q.data} queue={queue} />
         </>
       ) : <SnapState error={q.error} onRetry={() => void q.refetch()} />}

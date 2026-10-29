@@ -1,32 +1,54 @@
-// src/features/performance/EmpTabsA.tsx — My Dashboard, My KRAs, One-to-One Log
-// (website: components/pms/EmployeeTabs.tsx §3.1–3.3). Tables become one card
-// per row; every rule comes from lib/pms (checkKras, canAdd, canDelete, meter,
-// suggestSplit, logRows, gates), imported, never restated.
+// src/features/performance/EmpTabsA.tsx — the chain banner, My Dashboard and
+// My KRAs (website: components/pms/EmployeeTabs.tsx ChainBanner, §3.1–3.2).
+// Tables become one card per row; every rule comes from lib/pms (checkKras,
+// canAdd, canDelete, meter, suggestSplit, bandFor), imported, never restated.
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
-import { STAGES, DEFAULT_RULES, humanDate, type StageKey, type StageState } from '@web/pms/cycle'
+import { STAGES, DEFAULT_RULES, type Rules, type StageKey, type StageState } from '@web/pms/cycle'
 import { checkKras, canAdd, canDelete, meter, suggestSplit, CATEGORIES, CATEGORY_LABEL, type Kra, type Category } from '@web/pms/kra'
-import { logRows, canLockWeightage, canPublishResult, TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL, type Log, type DiscussionType, type Mode } from '@web/pms/oneToOne'
-import { bandFor } from '@web/pms/scoring'
+import { bandFor, DEFAULT_BANDS, type Band } from '@web/pms/scoring'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Input, PickerField, Txt } from '@/ui/primitives'
-import { DateSheet, SelectSheet } from '@/ui/overlays'
-import { B, Banner, EmptyBlock, K, PCard, Pill, PStat, StatGrid, type PillKind } from './ui'
+import { SelectSheet } from '@/ui/overlays'
+import { B, Banner, EmptyBlock, K, PCard, PStat, StatGrid } from './ui'
 import type { Who } from './data'
+import type { KraSelf } from './actions'
+
+// ── where it is in the chain, and why it came back ───────────────────────
+const WITH: Record<string, string> = {
+  RM_L1: 'your reporting manager', RM_L2: 'your second-level manager',
+  HOD: 'your head of department', HR: 'HR, to publish',
+}
+export function ChainBanner({ stage, sentBackReason, sentBackAt }: { stage?: string | null; sentBackReason?: string | null; sentBackAt?: string | null }) {
+  if (!stage || stage === 'DONE') return null
+  if (stage === 'EMPLOYEE' && sentBackReason) {
+    return (
+      <Banner tone="red" glyph="↩️">
+        <B>Sent back to you{sentBackAt ? ` on ${sentBackAt.slice(0, 10)}` : ''}.</B> Change what is asked for below and send it again.
+        {'\n'}<Txt size={F.tiny} tone="critical" style={{ fontStyle: 'italic' }}>“{sentBackReason}”</Txt>
+      </Banner>
+    )
+  }
+  if (stage === 'EMPLOYEE') {
+    return <Banner tone="amber" glyph="↩️">This is back with you. No reason was recorded — ask your manager what they want changed.</Banner>
+  }
+  return <Banner tone="blue" glyph="⏳">Your KRAs and ratings are with {WITH[stage] ?? stage} for approval.</Banner>
+}
 
 // ── §3.1 My Dashboard ────────────────────────────────────────────────────
-export function DashboardTab({ who, stages, current, kraCount, weightage, frequency, periodLabel, lastRating, lastScore, actionLabel, actionNote }: {
+export function DashboardTab({ who, stages, current, kraCount, weightage, frequency, periodLabel, lastRating, lastScore, actionLabel, actionNote, bands = DEFAULT_BANDS, rules = DEFAULT_RULES }: {
   who: Who
   stages: { key: StageKey; state: StageState; detail?: string }[]
   current: StageKey
   kraCount: number; weightage: number; frequency: string; periodLabel: string
   lastRating: number | null; lastScore: number | null
   actionLabel: string; actionNote: string
+  bands?: Band[]; rules?: Rules
 }) {
   const { C } = useTheme()
-  const setOk = kraCount >= DEFAULT_RULES.minKra && weightage === DEFAULT_RULES.totalWeightage
-  const band = bandFor(lastRating)
+  const setOk = kraCount >= rules.minKra && weightage === rules.totalWeightage
+  const band = bandFor(lastRating, bands)
   return (
     <>
       <PCard title={`${who.name} · ${who.code}`} sub={[who.designation].filter(Boolean).join(' · ')}>
@@ -53,7 +75,7 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
         <PStat tone="accent" label="Owed from you" value={actionLabel} note={actionNote} />
         <PStat label="My KRAs" value={kraCount} tone={setOk ? undefined : 'warn'}
           note={setOk ? `Totalling ${weightage}. The set is valid`
-            : `Totalling ${weightage}. Needs ${DEFAULT_RULES.minKra}–${DEFAULT_RULES.maxKra} KRAs at exactly ${DEFAULT_RULES.totalWeightage}`} />
+            : `Totalling ${weightage}. Needs ${rules.minKra}–${rules.maxKra} KRAs at exactly ${rules.totalWeightage}`} />
         <PStat label="How often" value={frequency} note={periodLabel} />
         <PStat label="Last time" value={lastRating === null ? '-' : `${lastRating}${band ? ` · ${band.label}` : ''}`}
           note={lastScore === null ? 'No previous period on record' : `Weighted score ${lastScore}`} />
@@ -67,10 +89,13 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
 }
 
 // ── §3.2 My KRAs ─────────────────────────────────────────────────────────
-function KraRow({ k, i, locked, thin, canRemove, removeWhy, onSet, onRemove, onPickCategory }: {
+interface RowProps {
   k: Kra; i: number; locked: boolean; thin: boolean; canRemove: boolean; removeWhy?: string
   onSet: (i: number, patch: Partial<Kra>) => void; onRemove: (i: number) => void; onPickCategory: (i: number) => void
-}) {
+  /** §3's merge — rated beside the KRA it belongs to. */
+  self?: KraSelf; onSelf?: (seq: number, patch: Partial<KraSelf>) => void; selfLocked: boolean; bands: Band[]
+}
+function KraRow({ k, i, locked, thin, canRemove, removeWhy, onSet, onRemove, onPickCategory, self, onSelf, selfLocked, bands }: RowProps) {
   const { C } = useTheme()
   return (
     <View style={{ borderWidth: 1, borderColor: C.line, borderRadius: R.md, padding: S.md, marginBottom: S.md, backgroundColor: C.surface }}>
@@ -97,23 +122,59 @@ function KraRow({ k, i, locked, thin, canRemove, removeWhy, onSet, onRemove, onP
           accessibilityLabel={`KRA ${i + 1} weightage`} error={thin ? ' ' : undefined}
           onChangeText={t => onSet(i, { weightage: Number(t.replace(/[^0-9.]/g, '')) || 0 })} />
       </View>
+      {!!onSelf && (
+        <View style={{ borderTopWidth: 1, borderTopColor: C.line, paddingTop: S.md, marginTop: 2 }}>
+          <Input label="What you delivered" value={self?.achievement ?? ''} editable={!selfLocked} placeholder="The number you actually hit"
+            accessibilityLabel={`Achievement for KRA ${i + 1}`} onChangeText={t => onSelf(k.seq_no, { achievement: t })} />
+          <Input value={self?.comment ?? ''} editable={!selfLocked} placeholder="Evidence a manager could check"
+            accessibilityLabel={`Comment for KRA ${i + 1}`} onChangeText={t => onSelf(k.seq_no, { comment: t })} />
+          <Txt size={F.micro} w={700} tone="muted" upper style={{ marginBottom: 6 }}>Your rating</Txt>
+          <View accessibilityRole="radiogroup" accessibilityLabel={`Your rating for KRA ${i + 1}`} style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {bands.map(b => {
+              const on = self?.rating === b.value
+              return (
+                <Pressable key={b.value} disabled={selfLocked} onPress={() => onSelf(k.seq_no, { rating: b.value })}
+                  accessibilityRole="radio" accessibilityState={{ checked: on, disabled: selfLocked }} accessibilityLabel={`${b.value}: ${b.label}`}
+                  style={{ minWidth: 44, height: 44, borderRadius: R.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center',
+                    borderColor: on ? C.brand : C.line, backgroundColor: on ? C.brand : C.surface, opacity: selfLocked && !on ? 0.6 : 1 }}>
+                  <Txt size={F.small} w={800} color={on ? C.onAccent : C.brand}>{b.value}</Txt>
+                </Pressable>
+              )
+            })}
+          </View>
+        </View>
+      )}
     </View>
   )
 }
 
-export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
+export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rules = DEFAULT_RULES, carriedFrom, self, onSelfChange, bands = DEFAULT_BANDS, rateRequired = false, selfSubmitted = false }: {
   kras: Kra[]; onChange: (next: Kra[]) => void; locked: boolean
   lockGate: { open: boolean; because: string }; onSubmit: () => void; saving?: boolean
+  rules?: Rules; carriedFrom?: string | null
+  self?: Record<number, KraSelf>; onSelfChange?: (seq: number, patch: Partial<KraSelf>) => void
+  bands?: Band[]; rateRequired?: boolean; selfSubmitted?: boolean
 }) {
   const { C } = useTheme()
   const [catFor, setCatFor] = React.useState<number | null>(null)
+  // As on the website: checkKras / canAdd / canDelete / meter are called without the policy rules.
   const check = checkKras(kras)
+  const unrated = rateRequired ? kras.filter(k => (self?.[k.seq_no]?.rating ?? null) === null).length : 0
+  const canGo = check.canSubmit && unrated === 0
   const m = meter(check)
   const add = canAdd(kras)
   const del = canDelete(kras)
   const set = (i: number, patch: Partial<Kra>) => onChange(kras.map((k, j) => j === i ? { ...k, ...patch } : k))
   const remove = (i: number) => onChange(kras.filter((_, j) => j !== i).map((x, j) => ({ ...x, seq_no: j + 1 })))
   const meterColour = m.tone === 'good' ? C.positive : m.tone === 'bad' ? C.critical : C.warning
+  const rateLeft = `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+  const submitTitle = saving ? 'Saving…'
+    : selfSubmitted ? 'Already sent'
+    : locked ? (unrated > 0 ? rateLeft : 'Send my ratings to my manager')
+    : !check.canSubmit ? `Cannot send yet: ${check.faults.length} to fix`
+    : unrated > 0 ? rateLeft
+    : rateRequired ? 'Send KRAs and my ratings to my manager'
+    : 'Send to my manager'
 
   return (
     <>
@@ -134,7 +195,7 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
             <View accessibilityRole="progressbar" accessibilityLabel="Total weightage" style={{ height: 8, borderRadius: 4, backgroundColor: C.surface, overflow: 'hidden' }}>
               <View style={{ width: `${m.pct}%`, height: '100%', backgroundColor: meterColour, borderRadius: 4 }} />
             </View>
-            <K>{m.says} · {check.count} {check.count === 1 ? 'KRA' : 'KRAs'} (minimum {DEFAULT_RULES.minKra}, maximum {DEFAULT_RULES.maxKra})</K>
+            <K>{m.says} · {check.count} {check.count === 1 ? 'KRA' : 'KRAs'} (minimum {rules.minKra}, maximum {rules.maxKra})</K>
           </View>
         </View>
         {!locked && (
@@ -146,12 +207,18 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
         )}
       </View>
 
-      <PCard title="My KRAs" sub={`At least ${DEFAULT_RULES.minKra}, at most ${DEFAULT_RULES.maxKra}, and the weightages must total exactly ${DEFAULT_RULES.totalWeightage}.`}>
+      <PCard title="My KRAs" sub={`At least ${rules.minKra}, at most ${rules.maxKra}, and the weightages must total exactly ${rules.totalWeightage}.`}>
+        {!!carriedFrom && (
+          <Banner tone="blue" glyph="↻">
+            These are your KRAs from <B>{carriedFrom}</B>, carried forward as the starting point. Change whatever the new quarter needs — and anything the two of you agree in the one-to-one gets recorded there, including the weightage moves. Nothing is saved until you send it to your manager.
+          </Banner>
+        )}
         {kras.length === 0 ? (
-          <EmptyBlock title="Nothing written yet" note={`Add ${DEFAULT_RULES.minKra} to ${DEFAULT_RULES.maxKra} KRAs. They are what your rating will be measured against, so they are worth the time.`} />
+          <EmptyBlock title="Nothing written yet" note={`Add ${rules.minKra} to ${rules.maxKra} KRAs. They are what your rating will be measured against, so they are worth the time.`} />
         ) : kras.map((k, i) => (
           <KraRow key={i} k={k} i={i} locked={locked} thin={check.thin.includes(k.seq_no)} canRemove={del.allowed} removeWhy={del.reason}
-            onSet={set} onRemove={remove} onPickCategory={setCatFor} />
+            onSet={set} onRemove={remove} onPickCategory={setCatFor}
+            self={self?.[k.seq_no]} onSelf={onSelfChange} selfLocked={selfSubmitted} bands={bands} />
         ))}
 
         {check.faults.length > 0 && (
@@ -165,12 +232,11 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
           </Banner>
         )}
 
-        {!locked && (
+        {(!locked || !selfSubmitted) && (
           <View style={{ gap: S.sm, marginTop: S.lg }}>
-            <Button full disabled={!check.canSubmit || saving} onPress={onSubmit}
-              title={saving ? 'Saving…' : check.canSubmit ? 'Send to my manager' : `Cannot send yet: ${check.faults.length} to fix`} />
-            {check.total !== DEFAULT_RULES.totalWeightage && kras.length > 0 && (
-              <Button full variant="ghost" title={`Split ${DEFAULT_RULES.totalWeightage} evenly`}
+            <Button full disabled={(locked ? unrated > 0 : !canGo) || selfSubmitted || saving} onPress={onSubmit} title={submitTitle} />
+            {check.total !== rules.totalWeightage && kras.length > 0 && (
+              <Button full variant="ghost" title={`Split ${rules.totalWeightage} evenly`}
                 onPress={() => onChange(kras.map((k, i) => ({ ...k, weightage: suggestSplit(kras.length)[i] })))} />
             )}
           </View>
@@ -181,69 +247,6 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving }: {
         options={CATEGORIES.map(c => ({ value: c, label: CATEGORY_LABEL[c] }))}
         value={catFor !== null ? kras[catFor]?.category : undefined}
         onPick={v => { if (catFor !== null) set(catFor, { category: v as Category }) }} />
-    </>
-  )
-}
-
-// ── §3.3 One-to-One Log ──────────────────────────────────────────────────
-const TYPE_PILL: Record<DiscussionType, PillKind> = { KRA_SETTING: 'brand', MID_PERIOD: 'blue', FINAL_REVIEW: 'amber', ADHOC: 'grey' }
-const Ack = ({ on }: { on?: boolean | null }) => on ? <Pill kind="green" label="✓ acknowledged" /> : <Pill kind="grey" label="not yet" />
-
-export function OneToOneTab({ logs, managerName, onLog, saving }: { logs: Log[]; managerName: string; onLog: (l: Log) => void; saving?: boolean }) {
-  const { C } = useTheme()
-  const [type, setType] = React.useState<DiscussionType>('KRA_SETTING')
-  const [date, setDate] = React.useState('')
-  const [mode, setMode] = React.useState<Mode>('IN_PERSON')
-  const [points, setPoints] = React.useState('')
-  const [sheet, setSheet] = React.useState<null | 'date' | 'type' | 'mode'>(null)
-  const lock = canLockWeightage(logs)
-  const publish = canPublishResult(logs)
-  const rows = logRows(logs)
-
-  return (
-    <>
-      {lock.open
-        ? <Banner tone="green" glyph="✓">The KRA one-to-one is acknowledged by both of you, so your <B>weightages are locked</B>.</Banner>
-        : <Banner tone="amber" glyph="⚠️">Your weightages are <B>not locked yet</B>. {lock.because}</Banner>}
-
-      <PCard title="One-to-one discussion log" sub="Every discussion stays on record: KRA setting, mid-period, and the final review.">
-        {rows.map((l, i) => (
-          <View key={i} style={{ paddingVertical: S.md, borderTopWidth: i ? 1 : 0, borderTopColor: C.line, gap: 6 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
-              <Pill kind={TYPE_PILL[l.discussion_type]} label={TYPE_LABEL[l.discussion_type]} />
-              <Txt size={F.tiny} tone="muted">{l.discussion_date ? humanDate(l.discussion_date) : '-'} · with {managerName || '-'}</Txt>
-            </View>
-            {l.placeholder ? <K>{TYPE_PURPOSE[l.discussion_type]}</K> : <Txt size={F.tiny}>{l.discussion_points || '-'}</Txt>}
-            <View style={{ flexDirection: 'row', gap: S.lg, flexWrap: 'wrap' }}>
-              <View style={{ gap: 3 }}><K>You</K><Ack on={l.employee_ack} /></View>
-              <View style={{ gap: 3 }}><K>Manager</K><Ack on={l.manager_ack} /></View>
-            </View>
-          </View>
-        ))}
-        <K style={{ marginTop: 10 }}>
-          Both sides have to acknowledge. One tick on its own is a manager asserting a conversation happened; two is a record worth relying on later.
-          {!publish.open ? ` ${publish.because}` : ''}
-        </K>
-      </PCard>
-
-      <PCard title="Log a discussion" sub="Recorded against this period, and shown to your manager to acknowledge.">
-        <PickerField label="Date" value={date ? humanDate(date) : ''} placeholder="Pick a date" onPress={() => setSheet('date')} />
-        <PickerField label="Type" value={TYPE_LABEL[type]} onPress={() => setSheet('type')} />
-        <PickerField label="How" value={MODE_LABEL[mode]} onPress={() => setSheet('mode')} />
-        <Input label="What was discussed" value={points} onChangeText={setPoints} multiline
-          placeholder="Weightage changes and why, targets agreed, support asked for" />
-        <K>{TYPE_PURPOSE[type]}</K>
-        <View style={{ marginTop: S.lg }}>
-          <Button full disabled={!date || !points.trim() || saving} title={saving ? 'Saving…' : 'Log it and acknowledge'}
-            onPress={() => { onLog({ discussion_type: type, discussion_date: date, mode, discussion_points: points, employee_ack: true }); setPoints(''); setDate('') }} />
-        </View>
-      </PCard>
-
-      <DateSheet visible={sheet === 'date'} onClose={() => setSheet(null)} value={date || null} onPick={setDate} title="Date" />
-      <SelectSheet visible={sheet === 'type'} onClose={() => setSheet(null)} title="Type" value={type}
-        options={DISCUSSION_TYPES.map(t => ({ value: t, label: TYPE_LABEL[t] }))} onPick={v => setType(v as DiscussionType)} />
-      <SelectSheet visible={sheet === 'mode'} onClose={() => setSheet(null)} title="How" value={mode}
-        options={MODES.map(m => ({ value: m, label: MODE_LABEL[m] }))} onPick={v => setMode(v as Mode)} />
     </>
   )
 }

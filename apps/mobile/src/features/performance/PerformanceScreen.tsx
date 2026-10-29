@@ -17,7 +17,7 @@ import { Screen } from '@/ui/Screen'
 import { loadRoles, probeModule } from './data'
 import { CycleHeader } from './CycleHeader'
 import { EMP_TABS, MySide, type EmpTab } from './MySide'
-import { DeptSide, HOD_TABS, MGR_TABS, TeamSide, type HodTab, type MgrTab } from './HodTabs'
+import { DeptSide, HOD_TABS, MGR_TABS, TeamSide, type HodTab, type MgrTab } from './Sides'
 import { ModulePending } from './Pending'
 import { K, TabStrip } from './ui'
 

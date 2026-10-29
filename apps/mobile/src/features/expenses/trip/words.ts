@@ -37,3 +37,13 @@ export function platformOf(url: string): string | null {
   const host = m[1].toLowerCase().replace(/^www\./, '')
   return host || null
 }
+
+/** TeTripDetail STEP_WORD / STEP_TONE: an approval step's status. 'auto' = passed by the workflow itself. */
+export const STEP_WORD: Record<string, string> = {
+  approved: 'Approved', auto: 'Approved automatically', pending: 'Pending',
+  rejected: 'Rejected', sent_back: 'Sent back', cancelled: 'Cancelled',
+}
+export const STEP_TONE: Record<string, 't-brand' | 't-warn' | 't-crit' | 'plain'> = {
+  approved: 't-brand', auto: 't-brand', pending: 't-warn',
+  rejected: 't-crit', sent_back: 't-warn', cancelled: 'plain',
+}

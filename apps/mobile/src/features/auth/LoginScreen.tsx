@@ -6,9 +6,8 @@
 //   changepw  "New Password"       → POST /api/ess-auth/change-password (HR-issued temp password)
 //
 // Same fields, same validation order, same messages (app/ess-login/page.tsx).
-// One deliberate difference: set-password returns no token, so on the website
-// the employee lands in a portal where every call fails until they sign in again.
-// Here a successful set-password signs in with the new password straight away.
+// set-password returns the signed token like login does (b9d6455), so it signs in
+// straight away; an older server that answers without one falls back to a login.
 import * as React from 'react'
 import { Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -100,8 +99,8 @@ export default function LoginScreen() {
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
     if (password !== confirm) { setError('Passwords do not match.'); return }
     try {
-      await api('/api/ess-auth/set-password', { method: 'POST', body: { identifier: id, password }, anonymous: true })
-      const d = await api<any>('/api/ess-auth/login', { method: 'POST', body: { identifier: id, password }, anonymous: true })
+      const r = await api<any>('/api/ess-auth/set-password', { method: 'POST', body: { identifier: id, password }, anonymous: true })
+      const d = r?.token ? r : await api<any>('/api/ess-auth/login', { method: 'POST', body: { identifier: id, password }, anonymous: true })
       await finish(d)
     } catch (e) { setError(msg(e, 'Could not set password.')) }
   })

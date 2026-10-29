@@ -17,7 +17,8 @@
 import * as React from 'react'
 import { View } from 'react-native'
 import type { ClaimPreview, Snapshot, TeExpense, TeFlag, TeTrip } from '@web/te/types'
-import { linesWaitingInTrips } from '@web/te/trips-list'
+import { linesWaitingInTrips, tripsForLine } from '@web/te/trips-list'
+import { claimDateOf, periodFor, type PeriodChoice } from '@web/te/period'
 import { isCoTraveller } from '@web/te/co-traveller'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, S } from '@/ui/theme'
@@ -27,6 +28,8 @@ import { Chip, H4, Ico, KvRow, Li, ListCard, Mono, Note, TeCard, TeEmpty } from 
 import { TeIcon } from '../ui/TeIcon'
 import { toneColors } from '../tones'
 import { ErrorFlag, FlagBlock } from './parts'
+import { MoveToTrip } from './MoveToTrip'
+import { ContactFields, type ContactValue } from '../contact/ContactFields'
 
 export interface OtherExpensesProps {
   snap: Snapshot
@@ -37,6 +40,8 @@ export interface OtherExpensesProps {
   onSubmitted: (claimId: string, message: string) => void
   onBack?: () => void
   onOpenTrip?: (tripId: string) => void
+  /** A line moved into a trip: the snapshot is stale (TeOtherExpenses onChanged). */
+  onChanged?: (message: string) => void
 }
 
 /** A line's flag chip (chip t-crit / t-warn) that wraps instead of running under the amount. */
@@ -50,9 +55,12 @@ function FlagChip({ label, block }: { label: string; block: boolean }) {
 }
 
 /** One saved line (li.click). */
-export function ExpenseLineRow({ x, catName, flags, onPress, last }: {
+export function ExpenseLineRow({ x, catName, flags, onPress, last, moveLabel, onMove }: {
   x: TeExpense; catName: Map<string, string>; flags: TeFlag[]; onPress?: () => void; last?: boolean
+  /** "Move to a trip" / "Cancel" — only on the loose bucket with somewhere to move to. */
+  moveLabel?: string; onMove?: () => void
 }) {
+  const { C } = useTheme()
   const sub = [catName.get(x.cat), x.desc, x.billNo].filter(Boolean).join(' · ')
   return (
     <Li onPress={onPress} last={last} left={<Ico name="other" />}
@@ -62,6 +70,11 @@ export function ExpenseLineRow({ x, catName, flags, onPress, last }: {
       {flags.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
           {flags.map(fl => <FlagChip key={fl.code} label={`${fl.code} ${fl.title}`} block={fl.block} />)}
+        </View>
+      ) : null}
+      {onMove && moveLabel ? (
+        <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
+          <Button size="sm" variant="outline" title={moveLabel} onPress={onMove} icon={<TeIcon name="route" size="sm" color={C.brandDeep} />} />
         </View>
       ) : null}
     </Li>
@@ -94,15 +107,17 @@ function WaitingInTrips({ rows, onOpenTrip }: { rows: { tripId: string; name: st
 }
 
 /** The aside: "This month's claim" / "This claim". */
-function ClaimReview({ trip, period, review, linesCount, declared, setDeclared, busy, error, onSubmit }: {
-  trip?: TeTrip; period?: string; review: ClaimPreview | null; linesCount: number
+function ClaimReview({ trip, period, review, linesCount, declared, setDeclared, busy, error, onSubmit, contactSlot }: {
+  trip?: TeTrip; period: PeriodChoice | null; review: ClaimPreview | null; linesCount: number
+  /** "How we reach you about this claim" — only on a claim with no trip. */
+  contactSlot?: React.ReactNode
   declared: boolean; setDeclared: (v: boolean) => void; busy: boolean
   error: { text: string; flags: TeFlag[] } | null; onSubmit: () => void
 }) {
   const stops = review ? [...review.blockers, ...review.needs] : []
   return (
     <TeCard>
-      <H4 style={{ marginTop: 0 }} right={period ? <Chip label={period} tone="t-brand" plain /> : null}>
+      <H4 style={{ marginTop: 0 }} right={period ? <Chip label={period.period.label} tone={period.isLate ? 't-warn' : 't-brand'} plain /> : null}>
         {trip ? 'This claim' : 'This month’s claim'}
       </H4>
       {review ? (
@@ -111,6 +126,9 @@ function ClaimReview({ trip, period, review, linesCount, declared, setDeclared, 
           {review.eligible !== review.claimed ? <KvRow label="Eligible under policy" value={rs(review.eligible)} /> : null}
           {review.outstanding > 0 ? <KvRow label="Advance with you" value={rs(-review.outstanding)} /> : null}
           <KvRow tot last label="Expected to be paid" value={rs(review.net)} />
+          {period?.isLate ? (
+            <Txt size={F.tiny} tone="muted" style={{ marginTop: S.sm }}>{`Its own month is closed, so this goes into ${period.period.label}.`}</Txt>
+          ) : null}
           {review.chain.length ? (
             <Txt size={F.tiny} tone="muted" style={{ marginTop: S.sm }}>Goes to {review.chain.map(c => c.name || c.role).join(', then ')}.</Txt>
           ) : null}
@@ -123,6 +141,7 @@ function ClaimReview({ trip, period, review, linesCount, declared, setDeclared, 
               {review.stop.map(s => <ErrorFlag key={s} text={s} />)}
             </View>
           ) : null}
+          {contactSlot}
           <View style={{ marginTop: S.sm }}>
             <Checkbox checked={declared} onChange={setDeclared}
               label="I confirm these expenses are genuine, were incurred for company work and have not been claimed elsewhere." />
@@ -140,7 +159,7 @@ function ClaimReview({ trip, period, review, linesCount, declared, setDeclared, 
   )
 }
 
-export function OtherExpensesView({ snap, trip, onAdd, onEdit, onSubmitted, onBack, onOpenTrip }: OtherExpensesProps) {
+export function OtherExpensesView({ snap, trip, onAdd, onEdit, onSubmitted, onBack, onOpenTrip, onChanged }: OtherExpensesProps) {
   const { C } = useTheme()
   const lines = React.useMemo(
     () => snap.expenses.filter(x => !x.other && x.status === 'UNCLAIMED' && (trip ? x.tripId === trip.id : !x.tripId)),
@@ -150,10 +169,21 @@ export function OtherExpensesView({ snap, trip, onAdd, onEdit, onSubmitted, onBa
   const waitingInTrips = React.useMemo(() => (trip ? [] : linesWaitingInTrips(snap.expenses, snap.trips)), [snap, trip])
   const [preview, setPreview] = React.useState<ClaimPreview | null>(null)
   const [declared, setDeclared] = React.useState(false)
+  // How to reach them about this claim — asked only on a claim with no trip,
+  // prefilled from ESS (snap.contact), stored on the claim, never written back.
+  const [contact, setContact] = React.useState<ContactValue>(() => ({
+    contactMobile: snap.contact?.mobile ?? '',
+    contactAltMobile: snap.contact?.altMobile ?? '',
+    contactEmail: snap.contact?.email ?? '',
+  }))
+  const [contactField, setContactField] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<{ text: string; flags: TeFlag[] } | null>(null)
+  const [moving, setMoving] = React.useState<string | null>(null)
   const signature = lines.map(x => `${x.id}:${x.claimed}:${x.reason}`).join('|')
   const tripId = trip?.id ?? null
+  /** Trips this bill could go into — only those the server would accept. */
+  const movable = React.useMemo(() => tripsForLine(snap.trips, snap.me, { exclude: tripId }), [snap.trips, snap.me, tripId])
 
   React.useEffect(() => {
     let current = true
@@ -165,19 +195,25 @@ export function OtherExpensesView({ snap, trip, onAdd, onEdit, onSubmitted, onBa
   }, [signature, tripId, snap])
 
   async function submit() {
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setContactField('')
     try {
-      const c = await te.claimSubmit(tripId ? { tripId, declared } : { declared })
+      const c = await te.claimSubmit(tripId ? { tripId, declared } : { declared, ...contact })
       onSubmitted(c.claim_id, `Claim ${c.claim_no} sent.`)
     } catch (e) {
       setError({ text: errorText(e), flags: e instanceof TeApiError ? e.flags : [] })
+      // The server names the field it refused, so the message sits under it.
+      if (e instanceof TeApiError && typeof e.field === 'string') setContactField(e.field)
     } finally {
       setBusy(false)
     }
   }
 
   const review = lines.length ? preview : null
-  const period = snap.periods.filter(p => p.status === 'OPEN').map(p => p.label)[0]
+  // The month this claim will land in (lib/te/period mirrors te_period_for). No lines, no claim: no month.
+  const period = React.useMemo(() => {
+    if (!lines.length) return null
+    return periodFor(snap.periods, claimDateOf(trip?.end, lines.map(x => x.date)), snap.today)
+  }, [snap.periods, snap.today, trip?.end, lines])
 
   return (
     <View>
@@ -206,13 +242,27 @@ export function OtherExpensesView({ snap, trip, onAdd, onEdit, onSubmitted, onBa
           </TeEmpty>
         ) : null}
         {lines.map((x, i) => (
-          <ExpenseLineRow key={x.id} x={x} catName={catName} onPress={() => onEdit(x)} last={i === lines.length - 1}
-            flags={review?.lines.find(l => l.id === x.id)?.flags ?? []} />
+          <React.Fragment key={x.id}>
+            <ExpenseLineRow x={x} catName={catName} onPress={() => onEdit(x)} last={i === lines.length - 1 && moving !== x.id}
+              flags={review?.lines.find(l => l.id === x.id)?.flags ?? []}
+              moveLabel={!trip && movable.length ? (moving === x.id ? 'Cancel' : 'Move to a trip') : undefined}
+              onMove={() => setMoving(moving === x.id ? null : x.id)} />
+            {moving === x.id ? (
+              <MoveToTrip lineId={x.id} label={x.merchant || catName.get(x.cat) || 'this bill'} trips={movable}
+                onMoved={message => { setMoving(null); onChanged?.(message) }} />
+            ) : null}
+          </React.Fragment>
         ))}
       </ListCard>
 
       <ClaimReview trip={trip} period={period} review={review} linesCount={lines.length} declared={declared}
-        setDeclared={setDeclared} busy={busy} error={error} onSubmit={() => void submit()} />
+        setDeclared={setDeclared} busy={busy} error={error} onSubmit={() => void submit()}
+        contactSlot={!tripId ? (
+          <ContactFields heading="How we reach you about this claim" value={contact}
+            prefilled={snap.contact ? { mobile: snap.contact.mobile, altMobile: snap.contact.altMobile, email: snap.contact.email } : undefined}
+            onChange={patch => { setContact(c => ({ ...c, ...patch })); setContactField('') }}
+            error={k => (contactField === k ? error?.text ?? '' : '')} />
+        ) : null} />
       <Note style={{ marginBottom: S.md }}>{`Bills older than ${snap.cfg.billAgeDays} days cannot be claimed.`}</Note>
 
       {!trip && waitingInTrips.length ? <WaitingInTrips rows={waitingInTrips} onOpenTrip={onOpenTrip} /> : null}

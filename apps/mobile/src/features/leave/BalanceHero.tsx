@@ -58,7 +58,7 @@ function Tile({ b, i, reduce }: { b: Balance; i: number; reduce: boolean }) {
   const pct = total > 0 ? Math.round(av / total * 100) : 0
   const width = Math.min(100, Math.max(0, pct))
   const bar = barClass(pct)
-  const grow = React.useRef(new Animated.Value(reduce ? 1 : 0)).current
+  const [grow] = React.useState(() => new Animated.Value(reduce ? 1 : 0))
   React.useEffect(() => {
     if (reduce) { grow.setValue(1); return }
     Animated.timing(grow, { toValue: 1, duration: 700, delay: 260 + i * 60, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start()

@@ -120,7 +120,7 @@ function PersonSheet({ person, onClose }: { person: DirectoryRow | null; onClose
             <HueAvatar name={e.full_name} size={48} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <Txt size={16} w={700}>{e.full_name}</Txt>
-              <Txt size={F.tiny} tone="muted">{e.designation || '-'} · {e.emp_code}</Txt>
+              <Txt size={F.tiny} tone="muted">{[e.designation, e.emp_code].filter(Boolean).join(' · ') || '-'}</Txt>
             </View>
             <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} style={{ padding: 8 }}>
               <IconClose size={18} color={C.muted} />

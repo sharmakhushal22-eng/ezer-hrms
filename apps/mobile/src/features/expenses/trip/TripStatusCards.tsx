@@ -12,13 +12,14 @@ import { useTheme } from '@/ui/ThemeProvider'
 import { F, S } from '@/ui/theme'
 import { Button, Input, PickerField, Txt } from '@/ui/primitives'
 import { SelectSheet } from '@/ui/overlays'
+import { needsExplanation, whyLabel, whyProblem } from '@web/te/other-reason'
 import { day, plural } from '../api'
 import { initialsOf } from '../data'
 import { modeIcon } from '../tones'
 import { TeIcon } from '../ui/TeIcon'
-import { Chip, TeCard } from '../ui/kit'
+import { Chip, FieldErr, TeCard } from '../ui/kit'
 import { Act, CardHead, IcoB } from './parts'
-import { LEG_STATE, NO_GPS } from './words'
+import { LEG_STATE, NO_GPS, STEP_TONE, STEP_WORD } from './words'
 import type { TripView } from './view'
 
 export type Busy = '' | 'answer' | 'missed' | 'cancel' | 'delete'
@@ -43,7 +44,8 @@ export function ApprovalCard({ v, busy, onEdit, onAnswer }: {
             <Txt size={F.small} style={{ flex: 1 }}>
               <Txt size={F.small} w={700}>{s.whoName || s.role}</Txt> <Txt size={F.tiny} tone="muted">{s.role}</Txt>
             </Txt>
-            <Chip label={s.status === 'approved' ? 'Approved' : 'Pending'} tone={s.status === 'approved' ? 't-brand' : 't-warn'} />
+            {/* Four outcomes, not two (TeTripDetail STEP_WORD / STEP_TONE). */}
+            <Chip label={STEP_WORD[s.status] ?? 'Pending'} tone={STEP_TONE[s.status] ?? 't-warn'} />
           </View>
         ))}
       </View>
@@ -101,9 +103,16 @@ export function MissedCard({ v, busy, onRecord }: { v: TripView; busy: Busy; onR
       <CardHead title={`Not travelled on ${day(v.t.start)}`} right={<Chip label="Missed" tone="t-warn" />} />
       <Txt size={F.tiny} tone="muted" style={{ marginBottom: S.md }}>No journey was started on the day, so there is no GPS record.</Txt>
       <PickerField label="Why was GPS not used?" value={reason} placeholder="Choose a reason" onPress={() => setPicking(true)} />
-      <Input label="What happened" value={note} onChangeText={setNote} placeholder="Needed for Other" />
+      {/* Appears on picking Other; the button stays disabled until it says something. */}
+      {needsExplanation(reason) ? (
+        <>
+          <Input label={whyLabel('gps').label} multiline autoFocus value={note} onChangeText={setNote}
+            placeholder="The tracking screen would not open on my phone" help={whyLabel('gps').hint} />
+          {note.trim() && whyProblem(reason, note) ? <View style={{ marginBottom: S.md }}><FieldErr>{whyProblem(reason, note)}</FieldErr></View> : null}
+        </>
+      ) : null}
       <Button full title={busy === 'missed' ? 'Recording…' : 'Record the journeys without GPS'}
-        disabled={!reason || busy === 'missed'} onPress={() => onRecord(reason, note.trim() || undefined)} />
+        disabled={!reason || !!whyProblem(reason, note) || busy === 'missed'} onPress={() => onRecord(reason, note.trim() || undefined)} />
       <SelectSheet visible={picking} onClose={() => setPicking(false)} title="Why was GPS not used?" searchable={false}
         value={reason} onPick={setReason} options={NO_GPS.map(r => ({ value: r, label: r }))} />
     </TeCard>

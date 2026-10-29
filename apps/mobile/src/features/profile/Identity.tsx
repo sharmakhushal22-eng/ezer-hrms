@@ -1,44 +1,37 @@
-// src/features/profile/Identity.tsx — the top of Profile360: cover actions,
-// identity card, KPI strip, and the rail's completeness and reporting-chain
-// cards (the website's ≤1040px layout stacks the rail above the tabs).
+// src/features/profile/Identity.tsx — the top of Profile360: the identity
+// header (photo, name, chips, facts and the four actions) and the side
+// column's completeness and reporting-chain cards (the website's narrow
+// layout stacks the side column above the tabs).
+//
+// The KPI strip and the Direct / Request / Locked / Event legend are gone, as
+// on the website: each field now says what pressing it does, and the rule is
+// one tap away under "How editing works".
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
 import Svg, { Circle, Path } from 'react-native-svg'
 import type { ProfilePayload } from '@web/profile/types'
+import { fixActionFor } from '@web/profile/self-service'
 import { useTheme } from '@/ui/ThemeProvider'
-import { F, R, S } from '@/ui/theme'
+import { F, S } from '@/ui/theme'
 import { Avatar, Button, Card, Hero, Txt } from '@/ui/primitives'
-import { ini, pretty, val } from './format'
-import { CardHead, Pill } from './bits'
-import { ChainRow } from './TabPanels'
-
-function CoverBtn({ label, onPress }: { label: string; onPress: () => void }) {
-  const { C } = useTheme()
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button"
-      style={({ pressed }) => ({ minHeight: 36, paddingHorizontal: S.md, borderRadius: R.pill, justifyContent: 'center', borderWidth: 1, borderColor: C.brandEdge, backgroundColor: pressed ? C.brandTint : C.surface })}>
-      <Txt size={F.tiny} w={600} color={C.brandDeep}>{label}</Txt>
-    </Pressable>
-  )
-}
+import { ini, pretty, tidy, val } from './format'
+import { CardHead, ChainRow, Lnk, Pill } from './bits'
+import { chainOf, fixLabel } from './rules'
+import { LockGlyph } from './Fields'
 
 function Fact({ k, v }: { k: string; v: string }) {
   return <Txt size={F.tiny} tone="soft"><Txt size={F.tiny} tone="muted">{k}</Txt> {v}</Txt>
 }
 
-export function IdentityCard({ p, self, photo, onRecords, onDigitalId, onEdit, onRequest, onPhoto }: {
-  p: ProfilePayload; self: boolean; photo: string | null
-  onRecords: () => void; onDigitalId: () => void; onEdit: () => void; onRequest: () => void; onPhoto: () => void
+export function IdentityCard({ p, self, photo, pendingReqs, onEdit, onRequest, onDigitalId, onHistory, onPhoto }: {
+  p: ProfilePayload; self: boolean; photo: string | null; pendingReqs: number
+  onEdit: () => void; onRequest: () => void; onDigitalId: () => void; onHistory: () => void; onPhoto: () => void
 }) {
   const { C } = useTheme()
   const emp = p.employee
+  const name = emp.display_name && emp.display_name !== emp.full_name ? `${emp.full_name} (${String(emp.display_name)})` : emp.full_name
   return (
     <Hero>
-      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: S.sm, marginBottom: S.md }}>
-        <CoverBtn label="Records" onPress={onRecords} />
-        <CoverBtn label="Digital ID" onPress={onDigitalId} />
-      </View>
-
       <View style={{ flexDirection: 'row', gap: S.md, alignItems: 'flex-start' }}>
         <View>
           <Avatar name={String(emp.full_name || '')} uri={photo} size={76} />
@@ -54,7 +47,7 @@ export function IdentityCard({ p, self, photo, onRecords, onDigitalId, onEdit, o
           )}
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Txt size={F.title + 2} w={700}>{val(emp.full_name)}</Txt>
+          <Txt size={F.title + 2} w={700}>{val(name)}</Txt>
           <Txt size={F.small} tone="soft" style={{ marginTop: 2 }}>
             {val(emp.designation)}{emp.department_name ? <> · <Txt size={F.small} w={700} tone="soft">{val(emp.department_name)}</Txt></> : null}
           </Txt>
@@ -73,103 +66,119 @@ export function IdentityCard({ p, self, photo, onRecords, onDigitalId, onEdit, o
         {emp.company_name ? <Fact k="Company" v={val(emp.company_name)} /> : null}
         {emp.location_name ? <Fact k="Location" v={val(emp.location_name)} /> : null}
         {emp.date_of_joining ? <Fact k="Joined" v={pretty(emp.date_of_joining)} /> : null}
-        {emp.tenure_years !== undefined ? <Fact k="Tenure" v={`${val(emp.tenure_years)}y ${val(emp.tenure_months)}m`} /> : null}
-        {emp.workstation ? <Fact k="Seat" v={val(emp.workstation)} /> : null}
+        {emp.tenure_years !== undefined && emp.tenure_years !== null ? <Fact k="Tenure" v={`${val(emp.tenure_years)}y ${val(emp.tenure_months)}m`} /> : null}
       </View>
 
-      {self && (
-        <View style={{ gap: S.sm, marginTop: S.lg }}>
+      <View style={{ gap: S.sm, marginTop: S.lg }}>
+        {self && (
           <View style={{ flexDirection: 'row', gap: S.sm }}>
             <Button title="Edit profile" style={{ flex: 1 }} onPress={onEdit} />
-            <Button title="Request an update" variant="outline" style={{ flex: 1 }} onPress={onRequest} />
+            <Button title="Request a change" variant="outline" style={{ flex: 1 }} onPress={onRequest} />
           </View>
-          <Button title="Change history" variant="ghost" size="sm" onPress={onRecords} style={{ alignSelf: 'flex-start' }} />
+        )}
+        <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
+          <Button title="Digital ID" variant="outline" style={self ? { flex: 1 } : undefined} full={!self} onPress={onDigitalId} />
+          {self && (
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Lnk label={`Change history${pendingReqs ? ` · ${pendingReqs} open` : ''}`} onPress={onHistory} />
+            </View>
+          )}
         </View>
-      )}
+      </View>
     </Hero>
-  )
-}
-
-export function KpiStrip({ p }: { p: ProfilePayload }) {
-  const { C } = useTheme()
-  const emp = p.employee
-  const pending = p.completeness.pending ?? []
-  const kpis: { k: string; v: string; unit?: string; pc: number }[] = [
-    { k: 'Tenure', v: String(emp.tenure_years ?? '-'), unit: 'yrs', pc: Math.min(100, (Number(emp.tenure_years) || 0) * 10) },
-    { k: 'Profile score', v: String(p.completeness.score), unit: '%', pc: p.completeness.score },
-    { k: 'Reportees', v: String(emp.reportee_count ?? 0), unit: 'people', pc: Math.min(100, (Number(emp.reportee_count) || 0) * 20) },
-    { k: 'Open items', v: String(pending.length), unit: 'pending', pc: pending.length ? Math.min(100, pending.length * 20) : 0 },
-  ]
-  return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.md }}>
-      {kpis.map(s => (
-        <Card key={s.k} style={{ width: '48.6%', padding: S.md }}>
-          <Txt size={F.micro} w={700} tone="muted" upper>{s.k}</Txt>
-          <Txt size={F.title + 2} w={700} style={{ marginTop: 4 }}>{s.v}{!!s.unit && <Txt size={F.tiny} w={500} tone="muted"> {s.unit}</Txt>}</Txt>
-          <View style={{ height: 4, borderRadius: 2, backgroundColor: C.sunken, overflow: 'hidden', marginTop: S.sm }}>
-            <View style={{ width: `${Math.max(0, Math.min(100, s.pc))}%`, height: '100%', backgroundColor: C.brand }} />
-          </View>
-        </Card>
-      ))}
-    </View>
   )
 }
 
 function Ring({ pc }: { pc: number }) {
   const { C } = useTheme()
-  const r = 32, c = 2 * Math.PI * r
+  const r = 26, c = 2 * Math.PI * r
   return (
-    <View style={{ width: 76, height: 76, alignItems: 'center', justifyContent: 'center' }}>
-      <Svg width={76} height={76} viewBox="0 0 76 76" style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
-        <Circle cx={38} cy={38} r={r} fill="none" strokeWidth={8} stroke={C.sunken} />
-        <Circle cx={38} cy={38} r={r} fill="none" strokeWidth={8} stroke={C.brand} strokeLinecap="round"
+    <View style={{ width: 64, height: 64, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={64} height={64} viewBox="0 0 64 64" style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
+        <Circle cx={32} cy={32} r={r} fill="none" strokeWidth={7} stroke={C.sunken} />
+        <Circle cx={32} cy={32} r={r} fill="none" strokeWidth={7} stroke={C.brand} strokeLinecap="round"
           strokeDasharray={`${(c * Math.max(0, Math.min(100, pc))) / 100} ${c}`} />
       </Svg>
-      <Txt size={F.lead} w={800}>{pc}%</Txt>
-      <Txt size={9} tone="muted" style={{ marginTop: -2 }}>complete</Txt>
+      <Txt size={F.body} w={800}>{pc}%</Txt>
     </View>
   )
 }
 
-export function CompletenessCard({ p, onFix }: { p: ProfilePayload; onFix: () => void }) {
+/** A completeness to-do row (`ul.todo li`), used here and in the Edit profile sheet. */
+export function TodoRow({ sentence, first, onFix }: { sentence: string; first?: boolean; onFix?: () => void }) {
   const { C } = useTheme()
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: 6, borderTopWidth: first ? 0 : 1, borderTopColor: C.line }}>
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.warning }} />
+      <Txt size={F.small} style={{ flex: 1 }}>{tidy(sentence)}</Txt>
+      {onFix && <Button title={fixLabel(fixActionFor(sentence))} variant="soft" size="sm" onPress={onFix} />}
+    </View>
+  )
+}
+
+export function CompletenessCard({ p, self, onFix }: { p: ProfilePayload; self: boolean; onFix: (sentence: string) => void }) {
+  const [all, setAll] = React.useState(false)
   const pending = p.completeness.pending ?? []
+  const list = all ? pending : pending.slice(0, 3)
   return (
     <Card>
-      <CardHead title="Profile completeness" right={pending.length ? <Pill kind="warn" label={`${pending.length} pending`} /> : null} />
+      <CardHead title="Profile completeness" right={pending.length ? <Pill kind="warn" label={`${pending.length} to do`} /> : <Pill kind="good" label="Complete" />} />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
         <Ring pc={p.completeness.score} />
-        <Txt size={F.small} tone="soft" style={{ flex: 1 }}>Finishing these keeps payroll and statutory records clean.</Txt>
+        <Txt size={F.small} tone="soft" style={{ flex: 1 }}>
+          {pending.length ? 'A complete profile keeps payroll, PF and tax filings right.' : 'Everything payroll and statutory filings need is on file.'}
+        </Txt>
       </View>
       {pending.length > 0 && (
         <View style={{ marginTop: S.sm }}>
-          {pending.map((item, i) => (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: 6, borderTopWidth: 1, borderTopColor: C.line }}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.warning }} />
-              <Txt size={F.small} style={{ flex: 1 }}>{item}</Txt>
-              <Button title="Fix" variant="soft" size="sm" onPress={onFix} />
-            </View>
-          ))}
+          {list.map((item, i) => <TodoRow key={item} sentence={item} first={i === 0} onFix={self ? () => onFix(item) : undefined} />)}
+          {pending.length > 3 && <Lnk label={all ? 'Show fewer' : `Show all ${pending.length}`} onPress={() => setAll(x => !x)} />}
         </View>
       )}
     </Card>
   )
 }
 
-const CHAIN = [['rm_l1_name', 'Reporting Manager L1'], ['rm_l2_name', 'Reporting Manager L2'], ['hod_name', 'Head of Department'], ['md_name', 'Managing Director']] as const
-
 export function ChainCard({ p, self }: { p: ProfilePayload; self: boolean }) {
   const emp = p.employee
-  const chain = CHAIN.filter(([k]) => emp[k])
+  const people = chainOf(emp)
+  const above = people.filter(x => !x.me)
+  const myRoles = people.find(x => x.me)?.roles ?? []
+  const n = Number(emp.reportee_count) || 0
   return (
     <Card>
-      <CardHead title="Reporting chain" right={<Txt size={F.tiny} tone="muted">{val(emp.reportee_count)} reportees</Txt>} />
-      {!chain.length ? <Txt size={F.small} tone="faint">No reporting chain recorded.</Txt> : (
+      <CardHead title="Reporting chain" right={n ? <Txt size={F.tiny} tone="muted">{n} reportee{n === 1 ? '' : 's'}</Txt> : null} />
+      {!above.length && !myRoles.length ? <Txt size={F.small} tone="faint">No reporting chain recorded.</Txt> : (
         <>
-          {chain.map(([k, label], i) => <ChainRow key={k} first={i === 0} tile={ini(emp[k])} n={val(emp[k])} r={label} />)}
-          <ChainRow me tile={ini(emp.full_name)} n={val(emp.full_name)} r={`${self ? 'You' : 'Subject'} · ${val(emp.designation)}`} />
+          {above.map((x, i) => <ChainRow key={x.key} first={i === 0} tile={ini(x.name)} n={x.name} r={x.roles.join(' · ')} />)}
+          <ChainRow me first={!above.length} tile={ini(emp.full_name)} n={val(emp.full_name)}
+            r={[self ? 'You' : val(emp.designation), ...myRoles].join(' · ')} />
         </>
       )}
     </Card>
+  )
+}
+
+function HowRow({ t, tone, lock, d }: { t: string; tone: 'brand' | 'warning' | 'muted'; lock?: boolean; d: string }) {
+  const { C } = useTheme()
+  return (
+    <View style={{ paddingVertical: S.sm, borderTopWidth: 1, borderTopColor: C.line }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        {lock && <LockGlyph color={C.muted} />}
+        <Txt size={F.small} w={700} tone={tone}>{t}</Txt>
+      </View>
+      <Txt size={F.small} tone="soft" style={{ marginTop: 2 }}>{d}</Txt>
+    </View>
+  )
+}
+
+/** Profile360 HowEditing, as the body of a sheet. */
+export function HowEditingBody() {
+  return (
+    <View>
+      <HowRow t="Edit · Add" tone="brand" d="Saves straight away: contact details, emergency contacts, blood group, nominees, a missing PAN, UAN, Aadhaar or address." />
+      <HowRow t="Request change" tone="warning" d="Goes for approval and says to whom. Changing an address, spouse or marital status goes to HR; the salary account goes to Payroll." />
+      <HowRow t="Locked" tone="muted" lock d="Maintained by HR: your name, date of birth, job details. Ask HR to correct these." />
+    </View>
   )
 }

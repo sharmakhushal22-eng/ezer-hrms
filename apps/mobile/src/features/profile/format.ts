@@ -21,7 +21,7 @@ export const pretty = (v: unknown): string => {
 
 export const money = (v: unknown): string => {
   const n = Number(v)
-  return Number.isFinite(n) ? '₹' + n.toLocaleString('en-IN') : val(v)
+  return v !== null && v !== undefined && v !== '' && Number.isFinite(n) ? '₹' + n.toLocaleString('en-IN') : val(v)
 }
 
 /** policy_no -> "Policy No." */
@@ -31,23 +31,28 @@ export const titleise = (k: string) =>
 export const ini = (n: unknown) =>
   String(n || '?').split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
-/** Profile360 routeNote(): where a change request goes, and what it sets off. */
-export function routeNote(key: string): string {
-  if (/^bank|ifsc/.test(key))
-    return 'Goes to Payroll, not HR. It applies from the next salary batch, and they may ask for a cancelled cheque in the same name.'
-  if (/address/.test(key))
-    return 'Goes to HR. An address change also moves your Professional Tax state and HRA exemption from the next payroll month.'
-  if (/marital|spouse/.test(key))
-    return 'Goes to HR. It opens the family, nominee and insurance steps behind it. A nomination must total exactly 100% before it can be filed.'
-  if (/passport/.test(key))
-    return 'Goes to HR. Passport details are readable only by HR and Payroll.'
-  return 'Goes to HR. You will see the outcome in your change history.'
-}
-
-/** components/profile/ChangeRequests.tsx when() — the device locale, as on the web. */
+/** components/profile/ChangeRequests.tsx when(). */
 export const when = (iso: string) =>
-  new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+  new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 
 /** EmployeePortal.tsx fmt() — used by Letter Requests and My Letters. */
 export const fmt = (s?: string | null) =>
   s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
+
+/** Profile360 tidy(): a completeness sentence from the database may carry an
+ *  em dash ("Add a gratuity nominee — the shares must total 100%"); the app's
+ *  copy has none, so it reads as two sentences. fixActionFor() gets the original. */
+export const tidy = (s: string) => s.replace(/\s+[—–]\s+(\w)/g, (_, c: string) => `. ${c.toUpperCase()}`)
+
+/** Profile360 nextOf(): the next time a date's day and month come round. */
+export function nextOf(iso: unknown): { date: Date; days: number; years: number } | null {
+  const s = String(iso ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return null
+  const d = new Date(s); if (isNaN(d.getTime())) return null
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  const n = new Date(t.getFullYear(), d.getMonth(), d.getDate())
+  if (n < t) n.setFullYear(n.getFullYear() + 1)
+  return { date: n, days: Math.round((n.getTime() - t.getTime()) / 86400000), years: n.getFullYear() - d.getFullYear() }
+}
+export const inDays = (n: number) => n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`
+export const dm = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })

@@ -7,13 +7,13 @@ import * as React from 'react'
 import { View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/core/api'
-import { missingItems, type HeadTeam } from '@web/onboarding/checklists'
+import { confirmationsOnly, missingItems, type HeadTeam } from '@web/onboarding/checklists'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Card, Txt } from '@/ui/primitives'
 import { useOverlay } from '@/ui/overlays'
 import { errMsg, SectionTitle } from '../ui'
-import { TEAM, day, type Doc } from './formSections'
+import { TEAM, day } from './formSections'
 import { OnboardingSheet, type Approval, type OpenState } from './OnboardingSheet'
 import { afterDecision } from './shared'
 
@@ -31,9 +31,9 @@ function ItemCard({ it, busy, onOpen }: { it: Item; busy: boolean; onOpen: (it: 
           const fg = a.status === 'APPROVED' ? C.positive : a.status === 'RETURNED' ? C.critical : C.warning
           const bg = a.status === 'APPROVED' ? C.positiveTint : a.status === 'RETURNED' ? C.criticalTint : C.warningTint
           return (
-            <View key={a.team} accessibilityLabel={a.acted_by_name ? `${a.acted_by_name} · ${day(a.acted_at)}${a.remark ? ` · ${a.remark}` : ''}` : undefined}
+            <View key={a.team} accessibilityLabel={a.acted_by_name ? `${a.status === 'RETURNED' ? 'Returned' : 'Approved'} by ${a.acted_by_name} on ${day(a.acted_at)}${a.remark ? `: ${a.remark}` : ''}` : 'Not decided yet'}
               style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99, backgroundColor: bg }}>
-              <Txt size={10} w={700} color={fg}>{TEAM[a.team]} · {a.status === 'APPROVED' ? '✓' : a.status === 'RETURNED' ? 'returned' : 'pending'}</Txt>
+              <Txt size={10} w={700} color={fg}>{TEAM[a.team]} · {a.status === 'APPROVED' ? `✓ ${a.acted_by_name || 'approved'}` : a.status === 'RETURNED' ? 'returned' : 'pending'}</Txt>
             </View>
           )
         })}
@@ -67,10 +67,6 @@ export function OnboardingBlock({ employeeId }: { employeeId: string }) {
       setTeam((it.waiting_on_me[0] || d!.teams[0]) as HeadTeam)
     } catch (e) { notify(errMsg(e), 'error') } finally { setBusy(false) }
   }
-  async function refreshDocs(): Promise<Doc[] | null> {
-    if (!open) return null
-    try { const x = await fetchOpen(open.item.id); setOpen(o => o ? { ...o, documents: x.documents, openedAt: Date.now() } : o); return x.documents } catch { return null }
-  }
   const setField = (k: string, v: any) => setCheck(c => ({ ...c, [team]: { ...(c[team] || {}), [k]: v } }))
 
   async function decide(action: 'approve' | 'return' | 'save') {
@@ -82,12 +78,12 @@ export function OnboardingBlock({ employeeId }: { employeeId: string }) {
       if (!r.trim()) { notify('Say what the candidate should fix.', 'error'); return }
       remark = r
     }
-    if (action === 'approve') { const m = missingItems(team, check[team]); if (m.length) { notify(`Confirm the checklist first: ${m.join(', ')}.`, 'error'); return } }
+    if (action === 'approve') { const m = missingItems(team, check[team], open.item?.hiring_track); if (m.length) { notify(`Confirm the checklist first: ${m.join(', ')}.`, 'error'); return } }
     setBusy(true)
     try {
-      const r = await api<{ all_approved?: boolean }>('/api/ess/onboarding-approvals', { method: 'POST', employeeId, body: { onboarding_id: open.item.id, team, action, remark, checklist: check[team] || {} } })
+      const r = await api<{ all_approved?: boolean }>('/api/ess/onboarding-approvals', { method: 'POST', employeeId, body: { onboarding_id: open.item.id, team, action, remark, checklist: confirmationsOnly(team, check[team]) } })
       if (action === 'save') { notify('Checklist saved.'); setBusy(false); return }
-      if (r.all_approved) notify(`Approved for ${TEAM[team]} — IT, Admin and Payroll have all approved. The HR Manager now assigns the role and generates the employee code.`, 'success')
+      if (r.all_approved) notify(`Approved for ${TEAM[team]} — IT, Admin and Payroll have all approved. The HR Manager now generates the employee code (team, roles and the code).`, 'success')
       else notify(action === 'approve' ? `Approved for ${TEAM[team]}.` : 'Returned to the candidate with your remark.')
       setOpen(null); void afterDecision()
     } catch (e) { notify(errMsg(e), 'error') } finally { setBusy(false) }
@@ -100,10 +96,10 @@ export function OnboardingBlock({ employeeId }: { employeeId: string }) {
       <SectionTitle>{`Onboarding approvals · ${d.teams.map(t => TEAM[t]).join(' / ')}${waiting.length ? ` · ${waiting.length} waiting on you` : ''}`}</SectionTitle>
       {waiting.map(it => <ItemCard key={it.id} it={it} busy={busy} onOpen={x => void review(x)} />)}
       {others.map(it => <ItemCard key={it.id} it={it} busy={busy} onOpen={x => void review(x)} />)}
-      <Txt size={F.tiny} tone="muted" style={{ marginTop: 6, lineHeight: 18 }}>{'These forms are accepted by the HR Manager. Confirm your team\'s checklist and approve; once IT, Admin and Payroll have all approved, the HR Manager assigns the role and generates the employee code. Returning the form reopens the candidate\'s link for 48 hours.'}</Txt>
+      <Txt size={F.tiny} tone="muted" style={{ marginTop: 6, lineHeight: 18 }}>{'These forms are accepted by the HR Manager. Confirm your team\'s checklist and approve; once IT, Admin and Payroll have all approved, the HR Manager generates the employee code. Returning the form reopens the candidate\'s link for 48 hours.'}</Txt>
       {open && open.item && (
         <OnboardingSheet open={open} teams={d.teams} team={team} setTeam={setTeam} check={check} setField={setField} busy={busy}
-          onClose={() => setOpen(null)} onDecide={a => void decide(a)} onRefreshDocs={refreshDocs} />
+          onClose={() => setOpen(null)} onDecide={a => void decide(a)} />
       )}
     </Card>
   )

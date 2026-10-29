@@ -1,17 +1,21 @@
 // src/features/profile/ChangeRequests.tsx — components/profile/ChangeRequests.tsx.
 //
-// "My change requests" (with Withdraw while pending) and, only when the server
-// puts something in it, "To review" for an approver. Whether somebody is an
-// approver is the server's question (profile_change_can_act), not this file's.
+// "My change requests" (with Withdraw while pending, and who has it by name)
+// and, only when the server puts something in it, "To review" for an approver.
+// Whether somebody is an approver is the server's question
+// (profile_change_can_act), not this file's. RequestsSummary is the short card
+// in the side column; the full list opens in the Change history sheet.
 import * as React from 'react'
-import { View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { invalidate } from '@/core/query'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Card, Input, Notice, Txt } from '@/ui/primitives'
 import { cancelRequest, decideRequest, useMyRequests, useReviewQueue, type MyRequest, type QueueRequest } from './api'
 import { when } from './format'
-import { CardHead } from './bits'
+import { CardHead, Lnk } from './bits'
+
+const isPending = (s: string) => s.startsWith('pending')
 
 const toneOf = (status: string) =>
   status === 'approved' ? 'positive' : status === 'rejected' ? 'critical' : status === 'cancelled' ? 'muted' : 'warning'
@@ -72,30 +76,69 @@ function MineItem({ r, busy, onWithdraw }: { r: MyRequest; busy: boolean; onWith
         <Txt size={F.tiny} w={700} tone={toneOf(r.status)} style={{ maxWidth: '55%', textAlign: 'right' }}>{r.stage_label}</Txt>
       </View>
       <Value from={r.old_value} to={r.new_value} />
+      {r.status.startsWith('pending') && !!r.waiting_on && (
+        <Txt size={F.small} tone="soft" style={{ marginTop: 6 }}>Waiting on <Txt size={F.small} w={700}>{r.waiting_on}</Txt></Txt>
+      )}
       <Txt size={F.tiny} tone="muted" style={{ marginTop: 6 }}>
-        Asked {when(r.requested_at)}{r.decided_at ? ` · answered ${when(r.decided_at)}` : ''}
+        Asked {when(r.requested_at)}{r.decided_at ? ` · answered ${when(r.decided_at)}` : ''}{r.decided_by ? ` by ${r.decided_by}` : ''}
       </Txt>
       {!!r.remarks && <Txt size={F.small} tone="soft" style={{ marginTop: 4, fontStyle: 'italic' }}>{r.remarks}</Txt>}
-      {r.status.startsWith('pending') && (
+      {isPending(r.status) && (
         <Button title={busy ? 'Withdrawing…' : 'Withdraw'} variant="outline" size="sm" disabled={busy} onPress={onWithdraw} style={{ marginTop: S.sm, alignSelf: 'flex-start' }} />
       )}
     </View>
   )
 }
 
-export function ChangeRequests({ canSee }: { canSee: boolean }) {
+/** Both lists, loaded once for the summary card and the Change history sheet. */
+export function useChangeRequests(enabled: boolean) {
+  const mineQ = useMyRequests(enabled)
+  const queueQ = useReviewQueue(enabled)
+  return { mineQ, queueQ, mine: mineQ.data ?? [], queue: queueQ.data ?? [], loaded: mineQ.isFetched }
+}
+export type RequestsState = ReturnType<typeof useChangeRequests>
+
+/** The side-column card: what is open, and with whom. */
+export function RequestsSummary({ req, onOpen }: { req: RequestsState; onOpen: () => void }) {
   const { C } = useTheme()
-  const mineQ = useMyRequests(canSee)
-  const queueQ = useReviewQueue(canSee)
+  const open = req.mine.filter(r => isPending(r.status))
+  if (!req.loaded) return null
+  return (
+    <Card>
+      <CardHead title="Requests" right={<Lnk label="Change history" onPress={onOpen} />} />
+      {req.queue.length > 0 && (
+        <Pressable onPress={onOpen} accessibilityRole="button"
+          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', padding: S.md, marginBottom: S.sm, borderRadius: R.md, borderWidth: 1, borderColor: C.brandEdge, backgroundColor: pressed ? C.brandEdge : C.brandTint })}>
+          <Txt size={F.small} style={{ flex: 1 }} color={C.brandDeep}>
+            <Txt size={F.small} w={800} color={C.brandDeep}>{req.queue.length}</Txt> {req.queue.length === 1 ? 'request is' : 'requests are'} waiting on you
+          </Txt>
+          <Txt size={F.small} w={700} color={C.brandDeep}>→</Txt>
+        </Pressable>
+      )}
+      {open.length === 0 ? <Txt size={F.small} tone="faint">Nothing waiting for approval.</Txt> : (
+        <>
+          {open.slice(0, 3).map((r, i) => (
+            <View key={r.id} style={{ paddingVertical: 6, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
+              <Txt size={F.small} w={600}>{r.field_label}</Txt>
+              <Txt size={F.tiny} tone="muted">Waiting on {r.waiting_on ?? r.stage_label}</Txt>
+            </View>
+          ))}
+          {open.length > 3 && <Lnk label={`+${open.length - 3} more`} onPress={onOpen} />}
+        </>
+      )}
+    </Card>
+  )
+}
+
+export function ChangeRequests({ req }: { req: RequestsState }) {
+  const { C } = useTheme()
+  const { mineQ, mine, queue } = req
   const [busy, setBusy] = React.useState<string | null>(null)
   const [err, setErr] = React.useState<string | null>(null)
   const [note, setNote] = React.useState<string | null>(null)
   const [rejecting, setRejecting] = React.useState<string | null>(null)
   const [remarks, setRemarks] = React.useState('')
-  if (!canSee) return null
 
-  const mine = mineQ.data ?? []
-  const queue = queueQ.data ?? []
   const listErr = err ?? (mineQ.error instanceof Error ? mineQ.error.message : null)
   const refresh = () => invalidate('profile')
 
@@ -123,7 +166,7 @@ export function ChangeRequests({ canSee }: { canSee: boolean }) {
   const sep = (i: number) => ({ paddingVertical: S.md, borderTopWidth: i ? 1 : 0, borderTopColor: C.line })
 
   return (
-    <View style={{ marginTop: S.xl, gap: S.md }}>
+    <View style={{ gap: S.md }}>
       {!!listErr && <Notice tone="critical">{listErr}</Notice>}
       {!!note && <Notice tone="positive">{note}</Notice>}
 
@@ -144,7 +187,7 @@ export function ChangeRequests({ canSee }: { canSee: boolean }) {
         <CardHead title="My change requests" right={mine.length > 0 ? <Txt size={F.tiny} tone="muted">{mine.length}</Txt> : null} />
         {mine.length === 0 ? (
           <Txt size={F.small} tone="faint">
-            {mineQ.isLoading ? 'Loading…' : <>Nothing pending. Fields marked <Txt size={F.small} w={700} tone="faint">Request</Txt> go for approval when you change them.</>}
+            {mineQ.isLoading ? 'Loading…' : <>Nothing yet. Changes marked <Txt size={F.small} w={700} tone="faint">Needs approval</Txt> appear here, with who has them.</>}
           </Txt>
         ) : mine.map((r, i) => (
           <View key={r.id} style={sep(i)}>

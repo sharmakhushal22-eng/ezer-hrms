@@ -27,7 +27,7 @@ export function useLogController() {
   const range = React.useMemo(() => rangeFor(preset, custom, todayLocal), [preset, custom, todayLocal])
   const rangeError = rangeErrorOf(range)
   const [filter, setFilter] = React.useState<Filter>('ALL')
-  const [picked, setPicked] = React.useState<Set<string>>(new Set())
+  const [rawPicked, setPicked] = React.useState<Set<string>>(new Set())
   const [review, setReview] = React.useState(false)
 
   const q = useRange(range.from, range.to, open && !rangeError)
@@ -36,14 +36,12 @@ export function useLogController() {
   const err = !rangeError && q.error ? (q.error as Error).message || 'Could not load attendance' : ''
   const loading = !rangeError && !err && !fresh
 
-  // After each load, keep only picks that are still in range and still pickable.
-  React.useEffect(() => {
-    if (!fresh || !data) return
-    setPicked(p => {
-      const n = new Set([...p].filter(dt => data.days.some(d => d.date === dt && selectable(d, data.today).ok)))
-      return n.size === p.size ? p : n
-    })
-  }, [data, fresh])
+  // After each load, only picks that are still in range and still pickable count.
+  const picked = React.useMemo(() => {
+    if (!fresh || !data) return rawPicked
+    const n = new Set([...rawPicked].filter(dt => data.days.some(d => d.date === dt && selectable(d, data.today).ok)))
+    return n.size === rawPicked.size ? rawPicked : n
+  }, [rawPicked, data, fresh])
 
   const today = data?.today ?? todayLocal
   const days = React.useMemo(() => [...(data?.days || [])].reverse(), [data])

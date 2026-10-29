@@ -36,9 +36,11 @@ export function initFrom(d: FlexiLoad): FlexiInit {
     chosenRegime: null, userPicked: false, status: 'NEW', saved: false, defaultedByRule: null, defaultedNew: false,
   }
   const doj = d.emp?.company_doj || d.emp?.group_doj
+  // CTC, variable and DOJ always come from the record, never from the saved form: they are not
+  // the employee's to change, and a form saved before a revision holds stale pay (web 2e43849).
   const prefill = () => {
-    if (d.cm) s.f = { ...s.f, ctc: s.f.ctc || String(Math.round(d.cm.annual_ctc || 0)) || '', variable: s.f.variable || String(Math.round(d.cm.annual_variable || 0)) }
-    if (doj) s.f = { ...s.f, doj: s.f.doj || String(doj).slice(0, 10) }
+    if (d.cm) s.f = { ...s.f, ctc: String(Math.round(d.cm.annual_ctc || 0)), variable: String(Math.round(d.cm.annual_variable || 0)) }
+    if (doj) s.f = { ...s.f, doj: String(doj).slice(0, 10) }
   }
 
   // Restore a previously saved form (draft or submitted).

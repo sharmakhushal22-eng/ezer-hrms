@@ -35,14 +35,14 @@ export function TextField({ label, value, onChange, placeholder, hint, required,
 }
 
 export interface Opt { value: string; label: string }
-export function SelectField({ label, value, onChange, options, hint, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; options: Opt[]; hint?: string; placeholder?: string
+export function SelectField({ label, value, onChange, options, hint, placeholder, required }: {
+  label: string; value: string; onChange: (v: string) => void; options: Opt[]; hint?: string; placeholder?: string; required?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
   const cur = options.find(o => o.value === (value ?? ''))
   return (
     <>
-      <PickerField label={label} value={cur?.label || ''} placeholder={placeholder || options[0]?.label || 'Select…'} onPress={() => setOpen(true)} help={hint} />
+      <PickerField label={label} required={required} value={cur?.label || ''} placeholder={placeholder || options[0]?.label || 'Select…'} onPress={() => setOpen(true)} help={hint} />
       <SelectSheet visible={open} onClose={() => setOpen(false)} title={label} value={value ?? ''} options={options} onPick={v => onChange(String(v))} />
     </>
   )

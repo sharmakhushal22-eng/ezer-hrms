@@ -18,11 +18,12 @@
 //   ['te','queue']         approvals waiting for me (a failure reads as [])
 //   ['te','trip',id]       TeTripDetail
 //   ['te','claim',id]      TeClaimDetail
+//   ['te','drafts',kind]   my unfinished forms (GET /api/te/drafts?kind=)
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { invalidate, queryClient } from '@/core/query'
 import { useSession } from '@/core/session'
-import type { Snapshot, TeClaimDetail, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail, Uuid } from '@web/te/types'
+import type { Snapshot, TeClaimDetail, TeDraft, TeDraftKind, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail, Uuid } from '@web/te/types'
 import { te } from './api'
 
 export const TE = 'te'
@@ -31,6 +32,7 @@ export const qk = {
   queue: [TE, 'queue'] as const,
   trip: (id: Uuid) => [TE, 'trip', id] as const,
   claim: (id: Uuid) => [TE, 'claim', id] as const,
+  drafts: (kind?: TeDraftKind) => [TE, 'drafts', kind ?? 'all'] as const,
 }
 
 /** Queries wait for the stored session to be restored: on a cold start straight into
@@ -58,6 +60,12 @@ export function useTripDetail(id: Uuid | null | undefined) {
 /** GET /api/te/claims/:id. */
 export function useClaimDetail(id: Uuid | null | undefined) {
   return useQuery<TeClaimDetail>({ queryKey: qk.claim(id || ''), queryFn: () => te.claim(id!), enabled: useSignedIn() && !!id })
+}
+
+/** GET /api/te/drafts. Under the 'te' prefix, so reloadTe() refetches it — the web's
+ *  draftTick ("a sheet closing does not unmount Home") is this invalidation. */
+export function useDrafts(kind?: TeDraftKind) {
+  return useQuery<TeDraft[]>({ queryKey: qk.drafts(kind), queryFn: () => te.drafts.list(kind).then(r => r.drafts ?? []), enabled: useSignedIn() })
 }
 
 /** The website's reload(): read the snapshot, the queue and every open detail again.
@@ -130,4 +138,14 @@ export function findLine(snap: Snapshot | undefined, lineId: Uuid | null | undef
     ?? (o.claimId ? queryClient.getQueryData<TeClaimDetail>(qk.claim(o.claimId))?.lines.find(x => x.id === lineId) : undefined)
     ?? (o.tripId ? queryClient.getQueryData<TeTripDetail>(qk.trip(o.tripId))?.expenses.find(x => x.id === lineId) : undefined)
     ?? null
+}
+
+/** TeHome's desk probes: THE CALL SUCCEEDING IS THE PERMISSION (GET /api/te/desk and
+ *  /api/te/finance/overview?view=summary resolve desk membership in SQL). A 403 is the
+ *  normal answer for almost everybody and is never shown. */
+export function useDeskAccess() {
+  const on = useSignedIn()
+  const travel = useQuery({ queryKey: [TE, 'probe', 'travel'], queryFn: () => te.deskList().then(() => true, () => false), enabled: on, staleTime: 5 * 60_000 })
+  const finance = useQuery({ queryKey: [TE, 'probe', 'finance'], queryFn: () => te.financeSummary().then(() => true, () => false), enabled: on, staleTime: 5 * 60_000 })
+  return { travel: !!travel.data, finance: !!finance.data }
 }

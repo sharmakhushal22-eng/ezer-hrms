@@ -1,7 +1,7 @@
 // src/features/profile/IdCardScreen.tsx — the digital ID card on its own page,
-// opened from "Digital ID" on My Details. Same card, same token loop, same data
-// as the card in Profile360's rail; it opens on the QR because a phone pulled
-// out at the gate wants the code first.
+// opened from "Digital ID" on My Details (the website opens a Digital ID
+// drawer with the same card and the PDF download). It opens on the QR because
+// a phone pulled out at the gate wants the code first.
 import * as React from 'react'
 import { View } from 'react-native'
 import { invalidate } from '@/core/query'
@@ -24,10 +24,10 @@ export default function IdCardScreen() {
     body = self ? (
       <View style={{ gap: S.md }}>
         <IdCard startOnQr name={val(emp.full_name)} designation={val(emp.designation)} company={val(emp.company_name)} code={val(emp.employee_code)}
-          doj={emp.date_of_joining as string | null} blood={emp.blood_group as string | null} emergency={emp.emergency_contact_1 as string | null} />
+          doj={emp.date_of_joining as string | null} blood={emp.blood_group as string | null} emergency={emp.emergency_contact_1 as string | null} photoUrl={p.photoUrl} />
         <IdCardDownload />
       </View>
-    ) : <StaticIdCard name={val(emp.full_name)} designation={val(emp.designation)} company={val(emp.company_name)} />
+    ) : <StaticIdCard name={val(emp.full_name)} designation={val(emp.designation)} company={val(emp.company_name)} photoUrl={p.photoUrl} />
   }
-  return <Screen title="Digital ID" subtitle="My Details" onRefresh={() => invalidate('profile')}>{body}</Screen>
+  return <Screen title="Digital ID" subtitle="Show the QR at the gate. The code refreshes every few seconds." onRefresh={() => invalidate('profile')}>{body}</Screen>
 }

@@ -26,7 +26,41 @@ export const editField = (key: string, value: string) =>
   api<{ ok: true; saved: string }>('/api/ess/profile', { method: 'POST', body: { action: 'edit', key, value } })
 
 export const requestChange = (key: string, value: string, reason: string) =>
-  api<{ ok: true; request_id: string }>('/api/ess/profile', { method: 'POST', body: { action: 'request', key, value, reason } })
+  api<{ ok: true; request_id: string; status?: string; waiting_on?: string | null }>('/api/ess/profile', { method: 'POST', body: { action: 'request', key, value, reason } })
+
+// ── Self-service editors (POST /api/ess/profile/self-service) ───────────────
+// lib/profile/client.ts selfService(): multipart, `payload` = JSON, optional
+// `file` (an Aadhaar/PAN/UAN card, a cancelled cheque, a document).
+export interface SelfServiceResult { ok: true; message?: string; waiting_on?: string | null; status?: string }
+
+export async function selfService(payload: Record<string, unknown>, file?: PickedFile | null): Promise<SelfServiceResult> {
+  const form = new FormData()
+  form.append('payload', JSON.stringify(payload))
+  if (file) await appendFile(form, 'file', file)
+  try {
+    return await api<SelfServiceResult>('/api/ess/profile/self-service', { method: 'POST', form })
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 0) throw new Error('Could not reach the server.')
+      const b = e.body && typeof e.body === 'object' ? e.body : null
+      throw new Error(String(b?.error ?? `Request failed (${e.status}).`))
+    }
+    throw new Error('Could not reach the server.')
+  }
+}
+
+export interface DocOnFile {
+  id: string; doc_type: string; label: string; status: string
+  uploaded_at: string | null; remarks: string | null; source: 'profile' | 'onboarding'; url: string | null
+}
+export interface DocRequired { code: string; label: string; mandatory: boolean; hint?: string }
+
+export function useProfileDocuments() {
+  return useQuery({
+    queryKey: ['profile', 'documents'],
+    queryFn: () => api<{ ok: true; required: DocRequired[]; documents: DocOnFile[] }>('/api/ess/profile/self-service', { query: { scope: 'documents' } }),
+  })
+}
 
 // ── Change requests (migration 105) ─────────────────────────────────────────
 export interface MyRequest {
@@ -34,6 +68,10 @@ export interface MyRequest {
   old_value: string | null; new_value: string; reason: string | null
   status: string; stage_label: string; remarks: string | null
   requested_at: string; decided_at: string | null
+  /** Added by the route: "HR — Asha Rao" while pending, null once decided. */
+  waiting_on?: string | null
+  decided_by?: string | null
+  route_to?: string | null
 }
 export interface QueueRequest {
   id: string; employee_id: string; emp_code: string; employee: string
@@ -139,8 +177,13 @@ export function useMyLetters() {
   })
 }
 
-/** A 5-minute signed URL for a stored letter PDF, or null (the website then does nothing). */
-export async function signLetter(fileUrl: string): Promise<string | null> {
-  const { data } = await supabase.storage.from('generated-letters').createSignedUrl(fileUrl, 300)
-  return data?.signedUrl || null
+/** GET /api/ess/my-letter?id=…&employee_id=… — a 5-minute link signed on the
+ *  server (the bucket is private). Throws the server's sentence, or
+ *  'Could not open the letter.', as EmployeePortal.tsx MyLetters shows it. */
+export async function myLetterUrl(id: string, employeeId: string): Promise<string> {
+  let j: { url?: string } | null = null
+  try { j = await api<{ url?: string }>('/api/ess/my-letter', { query: { id }, employeeId }) }
+  catch (e) { throw new Error(e instanceof Error && e.message ? e.message : 'Could not open the letter.') }
+  if (!j?.url) throw new Error('Could not open the letter.')
+  return j.url
 }

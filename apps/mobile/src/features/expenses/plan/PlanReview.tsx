@@ -1,4 +1,4 @@
-// src/features/expenses/plan/PlanReview.tsx — step 3: the journeys, the money,
+// src/features/expenses/plan/PlanReview.tsx — step 5 (planner v2): when, the journeys, the money,
 // who approves (components/te/plan/TePlanReview.tsx).
 //
 // NOTHING IS CALCULATED HERE. Journeys, per-journey estimates, grade limits,
@@ -6,22 +6,22 @@
 // te.tripPreview. The map is the keyless schematic (ui/TripMap — the website
 // has no Maps key either) plus the "open in a map app" links.
 import * as React from 'react'
-import { View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import type { Snapshot, TripIssue, TripPreview } from '@web/te/types'
-import { blockingOn, errorFor, type PlannerDraft } from '@web/te/trip-draft'
+import { blockingOn, errorFor, LAST_STEP, visibleSteps, type PlanStep, type PlannerDraft } from '@web/te/trip-draft'
 import type { MapPlace } from '@web/te/trip-map'
-import { nightsBetween } from '@web/te/trip-stay'
+import { nightsBetween, STAY_OPTIONS_WANTED, usableStayOptions } from '@web/te/trip-stay'
+import { needsExplanation, whyLabel, whyProblem } from '@web/te/other-reason'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Input, Txt } from '@/ui/primitives'
-import { day, rs } from '../api'
+import { day, dayAt, plural, rs } from '../api'
 import { initialsOf } from '../data'
 import { TeIcon } from '../ui/TeIcon'
 import { Chip, Flag, H4, KvRow, Sunk, TeCard } from '../ui/kit'
 import { MapLinks, TripMap } from '../ui/TripMap'
 import { modeIcon } from '../tones'
 import { Ferr, SelectField } from './parts'
-import { PlanStay } from './PlanStay'
 
 const LEG_KIND: Record<string, string> = {
   first: 'to the airport or station',
@@ -30,7 +30,7 @@ const LEG_KIND: Record<string, string> = {
 }
 const NO_GPS = ['Forgot to start the travel', 'Phone battery was low', 'No network or GPS signal', 'The app did not work', 'Other']
 const NO_APPROVAL = ['Urgent client call', 'Verbal approval by my manager', 'Same-day travel', 'Other']
-const STEP_NAME = ['Trip', 'Route', 'Review']
+const STEP_NAME = ['Trip', 'Route', 'Commute', 'Stay', 'Review']
 
 type PreviewLeg = TripPreview['legs'][number]
 
@@ -52,6 +52,21 @@ function LegLine({ l, local, modeName }: { l: PreviewLeg; local: boolean; modeNa
   )
 }
 
+/** A read-only summary card with a "Change" link back to its step. */
+function Summary({ title, onChange, children }: { title: string; onChange: () => void; children: React.ReactNode }) {
+  return (
+    <TeCard tint>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm, marginBottom: S.sm }}>
+        <Txt size={F.body} w={700}>{title}</Txt>
+        <Pressable onPress={onChange} accessibilityRole="button" hitSlop={8} style={{ paddingVertical: 6, paddingHorizontal: 4 }}>
+          <Txt size={F.tiny} w={600} tone="brand">Change</Txt>
+        </Pressable>
+      </View>
+      {children}
+    </TeCard>
+  )
+}
+
 function Money({ label, value }: { label: string; value: number }) {
   if (!value) return null
   return <KvRow label={label} value={rs(value)} />
@@ -63,7 +78,7 @@ export function PlanReview({ snap, draft, issues, preview, edit, onGoStep }: {
   issues: TripIssue[]
   preview: TripPreview | null
   edit: (patch: Partial<PlannerDraft>) => void
-  onGoStep: (n: 1 | 2 | 3) => void
+  onGoStep: (n: PlanStep) => void
 }) {
   const { C } = useTheme()
   const local = draft.scope === 'local'
@@ -77,9 +92,25 @@ export function PlanReview({ snap, draft, issues, preview, edit, onGoStep }: {
   const blocking = issues.filter(i => i.block)
   const warnings = issues.filter(i => !i.block)
   const reasons = (local ? NO_GPS : NO_APPROVAL).map(r => ({ value: r, label: r }))
+  const start = draft.points[0]?.leave ? draft.points[0] : null
+  const back = draft.points.find(p => p.ret && p.arrive) ?? null
+  const usable = usableStayOptions(draft.stayOptions)
+  const nights = nightsBetween(preview?.start ?? null, preview?.end ?? null)
+  const why = whyLabel(local ? 'gps' : 'approval')
+  const pfProblem = whyProblem(draft.pfReason, draft.pfNote)
 
   return (
     <View>
+      {start ? (
+        <Summary title="When" onChange={() => onGoStep(2)}>
+          <KvRow label="Leaving" value={dayAt(start.leave, start.leaveAt)} last={!back} />
+          {back ? <KvRow label="Back at the start" value={dayAt(back.arrive, back.arriveAt)} last /> : null}
+          {!start.leaveAt || (back && !back.arriveAt)
+            ? <Txt size={F.tiny} tone="muted" style={{ marginTop: S.sm }}>No time was given for part of this, which is fine — the dates are what the plan is approved on.</Txt>
+            : null}
+        </Summary>
+      ) : null}
+
       <H4 style={{ marginTop: 0 }}>Journeys</H4>
       <Txt size={F.tiny} tone="muted" style={{ marginBottom: S.sm }}>Each journey is tracked and paid on its own: GPS on the road, check-ins at airports and abroad.</Txt>
       {legs.length ? (
@@ -99,22 +130,38 @@ export function PlanReview({ snap, draft, issues, preview, edit, onGoStep }: {
         </View>
       )}
 
-      <H4>{planning ? 'Stay, money and approval' : 'Why it was not tracked'}</H4>
+      <H4>{!planning ? 'Why it was not tracked' : draft.stayWanted === true ? 'Stay, money and approval' : 'Money and approval'}</H4>
 
       {!planning && (
         <View>
           <SelectField label={local ? 'Why was GPS not used?' : 'Why was there no prior approval?'} value={draft.pfReason}
             placeholder="Choose a reason" options={reasons} onPick={v => edit({ pfReason: v })} />
-          <Input label={local ? 'What happened' : 'Evidence, if any'} value={draft.pfNote}
-            placeholder={local ? 'Needed for Other' : 'Meeting invite, e-mail from the client'} onChangeText={v => edit({ pfNote: v })} />
+          {needsExplanation(draft.pfReason) ? (
+            <Input label={why.label} value={draft.pfNote} multiline autoFocus help={why.hint}
+              placeholder={local ? 'The tracking screen would not open on my phone' : 'The client moved the meeting to the next morning'}
+              onChangeText={v => edit({ pfNote: v })} />
+          ) : (
+            <Input label={local ? 'What happened' : 'Evidence, if any'} value={draft.pfNote}
+              placeholder={local ? 'Optional' : 'Meeting invite, e-mail from the client'} onChangeText={v => edit({ pfNote: v })} />
+          )}
           <Ferr>{err('pf')}</Ferr>
+          {draft.tried && pfProblem ? <Ferr>{pfProblem}</Ferr> : null}
         </View>
       )}
 
+      {planning && draft.stayWanted === true ? (
+        <Summary title="Stay and food" onChange={() => onGoStep(4)}>
+          <KvRow label="Hotel" value={`${usable.length} of ${STAY_OPTIONS_WANTED} hotels named${nights ? `, ${plural(nights, 'night')}` : ''}`} />
+          <KvRow label="Booked by" value={draft.stayBy === 'desk' ? 'The Travel Desk, company pays' : 'Me, I claim it later'} />
+          <KvRow label="Food" value={draft.foodWanted ? `Yes — budget ${rs(preview?.estimate.meals ?? 0)}, claimed against bills on the trip` : 'Not needed on this trip'} last />
+          {usable.length < STAY_OPTIONS_WANTED
+            ? <Txt size={F.tiny} tone="muted" style={{ marginTop: S.sm }}>{`The Travel Desk picks from the hotels you named. Fewer than ${STAY_OPTIONS_WANTED} gives them less to choose from.`}</Txt>
+            : null}
+        </Summary>
+      ) : null}
+
       {planning && (
         <View>
-          <PlanStay draft={draft} foodBudget={preview?.estimate.meals ?? 0}
-            nights={nightsBetween(preview?.start ?? null, preview?.end ?? null)} edit={edit} />
           {draft.stayWanted && (
             <SelectField label="Hotel booked by" value={draft.stayBy}
               options={[{ value: 'self', label: 'Me, I claim it later' }, { value: 'desk', label: 'Travel Desk, company pays' }]}
@@ -167,9 +214,9 @@ export function PlanReview({ snap, draft, issues, preview, edit, onGoStep }: {
         {draft.pax > 1 && <Txt size={F.tiny} tone="muted">{`${draft.pax} people travel. Each person claims their own expenses against their own limits.`}</Txt>}
 
         {blocking.length > 0 && (
-          <Flag tone={draft.tried ? 'crit' : 'info'} icon="claims" title={draft.tried ? `${blocking.length} things to fix` : 'Still to fill'}>
+          <Flag tone={draft.tried ? 'crit' : 'info'} icon="claims" title={draft.tried ? `${plural(blocking.length, 'thing')} to fix` : 'Still to fill'}>
             <View style={{ gap: 4, marginTop: 2 }}>
-              {([1, 2, 3] as const).map(n => {
+              {visibleSteps(draft).filter(n => n !== LAST_STEP).map(n => {
                 const on = blockingOn(issues, n)
                 if (!on.length) return null
                 return (
@@ -188,9 +235,11 @@ export function PlanReview({ snap, draft, issues, preview, edit, onGoStep }: {
         {preview && !blocking.length && (
           <Sunk>
             <Txt size={F.tiny} tone="muted">
-              {!planning ? 'The trip and its claim go to' : preview.needsApproval ? 'This plan goes to' : 'No approval is needed before you leave'}
+              {preview.chain.length ? (planning ? 'This plan goes to' : 'The trip and its claim go to')
+                : !planning ? 'What happens to this'
+                  : 'No approval is needed before you leave'}
             </Txt>
-            {preview.needsApproval || !planning ? (
+            {preview.chain.length ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
                 {preview.chain.map((s, i) => (
                   <View key={`${s.role}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -205,6 +254,10 @@ export function PlanReview({ snap, draft, issues, preview, edit, onGoStep }: {
                   </View>
                 ))}
               </View>
+            ) : !planning ? (
+              <Txt size={F.small} style={{ marginTop: 4 }}>
+                Saving this records the journeys; nothing is approved yet. The claim you file against this trip is what goes for approval.
+              </Txt>
             ) : (
               <Txt size={F.small} style={{ marginTop: 4 }}>
                 {/* The web says "leg 1" / "the last leg"; the UI rule (spec intro, migration 162) is "journey". */}

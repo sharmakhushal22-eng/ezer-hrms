@@ -10,6 +10,7 @@ import { F, S, SERIF } from '@/ui/theme'
 import { Input, Txt } from '@/ui/primitives'
 import { useOverlay } from '@/ui/overlays'
 import { day, errorText, plural, rs, te } from '../api'
+import { dayAt } from '@web/te/format'
 import { useTripDetail } from '../data'
 import { param } from '../nav'
 import { Chip, Flag, KvRow, Li, ListCard, Mono, Note, Seg, TeCard } from '../ui/kit'
@@ -65,7 +66,9 @@ export default function TripApprovalScreen() {
         <Txt size={F.small} tone="muted" style={{ marginTop: 4 }}>{who} · {detail.employee.code}</Txt>
         <Txt size={F.tiny} tone="muted" style={{ marginTop: 2 }}>{(t.points || []).map(p => pname(p.place) || '…').join(' → ')}</Txt>
         <Txt size={F.tiny} tone="muted" style={{ marginTop: 2 }}>
-          {t.start ? (t.start === t.end ? day(t.start) : `${day(t.start)} to ${day(t.end)}`) : 'No dates'}
+          {t.start
+            ? (t.start === t.end ? dayAt(t.start, t.points?.[0]?.leaveAt) : `${dayAt(t.start, t.points?.[0]?.leaveAt)} to ${day(t.end)}`)
+            : 'No dates'}
           {` · ${plural(legs.length, 'journey')}`}{t.purpose ? ` · ${t.purpose}` : ''}
         </Txt>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: S.sm }}>

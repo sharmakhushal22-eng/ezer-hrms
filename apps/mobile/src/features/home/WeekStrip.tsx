@@ -20,6 +20,8 @@ const CLASS_OF: Record<DayKind, string> = {
 }
 interface Cell { date: string; kind: DayKind | null; in: string | null; out: string | null; minutes: number | null; note: string | null }
 const SHIFT_H = 9
+/** Hours since `t` (the running punch's live figure). */
+const hoursSince = (t: Date) => (Date.now() - t.getTime()) / 3.6e6
 
 export function WeekStrip({ data, prefs, liveIn }: { data: TodayPayload; prefs: Prefs; liveIn: Date | null }) {
   const { C } = useTheme()
@@ -43,7 +45,7 @@ export function WeekStrip({ data, prefs, liveIn }: { data: TodayPayload; prefs: 
       <View style={{ flexDirection: 'row', gap: 5 }}>
         {cells.map(d => {
           const isToday = d.date === todayISO, future = d.date > todayISO
-          const liveHours = isToday && liveIn ? (Date.now() - liveIn.getTime()) / 3.6e6 : null
+          const liveHours = isToday && liveIn ? hoursSince(liveIn) : null
           const offDay = d.kind === 'HOLIDAY' || d.kind === 'WEEKLY_OFF' || d.kind === 'LEAVE' || d.kind === 'ABSENT'
           const w = ready && !offDay ? Math.min(100, ((liveHours ?? (d.minutes ?? 0) / 60) / SHIFT_H) * 100) : 0
 

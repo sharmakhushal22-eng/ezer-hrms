@@ -19,10 +19,10 @@ import type {
   Uuid, Snapshot, TeQueueRow, TeTripDetail, TeClaimDetail, PlaceInput, VehicleInput, TripDraft, TripPreview, TripIssue,
   TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput, LegPreview, TeLegStats, TeFlag,
   ExpenseInput, ExpensePreview, ClaimInput, ClaimPreview, ClaimStatus, ClaimStage, RiskBand, DecideInput,
-  TeUploadedFile, RcChecked,
+  TeUploadedFile, RcChecked, TeDashboard, TeDraft, TeDraftInput, TeDraftKind,
 } from '@web/te/types'
 
-export { errorText, rs, day, when, plural, claimChip, claimHolder, currentStep, flagClass, type Tone } from '@web/te/format'
+export { errorText, rs, day, dayAt, when, plural, claimChip, claimHolder, currentStep, flagClass, type Tone } from '@web/te/format'
 
 type TeErrorBody = { error?: string; code?: string | null; field?: string; flags?: TeFlag[]; issues?: TripIssue[] } | null
 
@@ -63,6 +63,10 @@ async function call<T>(method: Method, path: string, body?: unknown, query?: Que
 const get = <T>(path: string, query?: Query) => call<T>('GET', path, undefined, query)
 const post = <T>(path: string, body: unknown = {}, query?: Query) => call<T>('POST', path, body, query)
 
+/** Raw access for the staff-desk screens (src/features/expenses/desk), which keep their
+ *  own row types (lib/te/client.ts is not importable: it reads lib/auth-headers). */
+export const teCall = call
+
 // ── result shapes that are not domain types (lib/te/client.ts) ───────────────
 export type VehicleLookup =
   | { off: true; reg: string }
@@ -85,6 +89,11 @@ export const te = {
   /** Everything my own screens show. Render from this; read it again after every change. */
   me: () => get<Snapshot>('me'),
   placeAdd: (input: PlaceInput) => post<{ place_id: Uuid; matched?: true }>('places', input),
+  /** What is at this position, without saving anything (lib/te/client.ts placeLookup).
+   *  found: false means no geocoder is configured; the fields stay empty. */
+  placeLookup: (lat: number, lng: number) =>
+    get<{ found: boolean; lat: number; lng: number; name?: string; address?: string; city?: string; pin?: string; country?: string }>(
+      'places/lookup', { lat, lng }),
   stayRequest: (input: StayRequestInput) => post<{ booking_id: Uuid; booking_no: string; status: 'REQUESTED' }>('bookings/request', input),
   vehicleLookup: (reg: string) => get<VehicleLookup>('vehicles/lookup', { reg }),
   vehicleAdd: (input: VehicleInput) => post<{ vehicle_id: Uuid; vehicle_type_code: string; is_verified: boolean }>('vehicles', input),
@@ -107,9 +116,30 @@ export const te = {
   legSkip: (id: Uuid, reason: string) => post<{ leg_id: Uuid; status: 'SKIPPED'; trip_status: TripDisplayStatus }>(`legs/${id}/action`, { action: 'skip', reason }),
   legNoGps: (id: Uuid, reason: string, note?: string) => post<{ leg_id: Uuid; status: 'ENDED' }>(`legs/${id}/action`, { action: 'no-gps', reason, note }),
 
+  /** The traveller answers what a desk asked about a journey. */
+  legAnswer: (id: Uuid, text: string) => post<{ leg_id: Uuid }>(`legs/${id}/action`, { action: 'answer', text }),
+
   expensePreview: (input: ExpenseInput) => post<ExpensePreview>('expenses/preview', input),
   expenseSave: (input: ExpenseInput) => post<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>('expenses', input),
   expenseDiscard: (id: Uuid) => call<{ expense_id: Uuid; status: 'DISCARDED' }>('DELETE', `expenses/${id}`),
+  /** Move an unclaimed line into a trip's bucket; null moves it out of every trip. */
+  expenseMoveTrip: (id: Uuid, tripId: Uuid | null) =>
+    call<{ moved: boolean; expense_no: string; from_no?: string | null; trip_no: string | null }>('PATCH', `expenses/${id}`, { trip_id: tripId }),
+
+  /** Unfinished work (lib/te/client.ts te.drafts). `body` is the form's own state, stored verbatim. */
+  drafts: {
+    list: (kind?: TeDraftKind) => get<{ drafts: TeDraft[] }>('drafts', kind ? { kind } : undefined),
+    save: (d: TeDraftInput) => post<{ draft_id: Uuid; updated_at: string }>('drafts', d),
+    remove: (id: Uuid) => call<{ deleted: boolean }>('DELETE', `drafts/${id}`),
+    removeMany: (ids: Uuid[]) => call<{ deleted: number; asked: number }>('DELETE', 'drafts', { ids }),
+  },
+
+  /** Desk probes (TeHome): succeed only for members of the Travel / Finance desk. */
+  deskList: () => get<Record<string, unknown>>('desk'),
+  financeSummary: () => get<Record<string, unknown>>('finance/overview', { view: 'summary' }),
+
+  /** Reports and dashboard: every employee may call it; scoped to them and their reports. */
+  dashboard: (q?: { from?: string; to?: string }) => get<TeDashboard>('dashboard', q),
 
   /** Store a bill or an RC photo. Send the returned file back, unchanged, in `files: [file]`. */
   async upload(file: PickedFile, kind: UploadKind = 'BILL'): Promise<TeUploadedFile> {

@@ -7,6 +7,10 @@
 // Approvals except through links (spec 2.1 "Gap"). So the fifth button here is
 // "More": Trips, Approvals (n, only when the queue is non-empty), Advances,
 // My limits and rates — the rail, in its order — and "Back to ESS" (onExit).
+// Since 4a92155 the rail also has "Reports and dashboard" (everyone) and, under
+// everything personal, "Travel desk" / "Finance desk" — offered only to members
+// of that desk (useDeskAccess: the probe call succeeding IS the permission;
+// hidden, never greyed out).
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -16,15 +20,17 @@ import { Txt } from '@/ui/primitives'
 import { Sheet } from '@/ui/overlays'
 import { TeIcon } from './TeIcon'
 import { exitModule, open, swap, teHref, toHome } from '../nav'
-import { homeFigures, useQueue, useSnap } from '../data'
+import { homeFigures, useDeskAccess, useQueue, useSnap } from '../data'
 
 /** Which top-level view a screen is. */
-export type TopView = 'home' | 'expenses' | 'claims' | 'trips' | 'advances' | 'limits' | 'approvals'
+export type TopView = 'home' | 'expenses' | 'claims' | 'trips' | 'advances' | 'limits' | 'approvals' | 'dashboard' | 'traveldesk' | 'financedesk'
 
 const HREF: Record<TopView, string> = {
   home: teHref.home, expenses: teHref.other, claims: teHref.claims, trips: teHref.trips,
   advances: teHref.advances, limits: teHref.limits, approvals: teHref.approvals,
+  dashboard: teHref.dashboard, traveldesk: teHref.travelDesk, financedesk: teHref.financeDesk,
 }
+const MORE_VIEWS: TopView[] = ['trips', 'advances', 'limits', 'approvals', 'dashboard', 'traveldesk', 'financedesk']
 
 /** The rail and the tab bar both land on a view. From Home it is pushed (Back returns
  *  Home); between the other top-level views it replaces, so Back never walks through
@@ -72,11 +78,12 @@ export function ModuleTabBar({ active }: { active: TopView | 'claim' | null }) {
   const insets = useSafeAreaInsets()
   const snap = useSnap().data
   const queue = useQueue().data ?? []
+  const desks = useDeskAccess()
   const [more, setMore] = React.useState(false)
   const f = snap ? homeFigures(snap) : null
   const from: TopView = active === 'claim' || active === null ? 'claims' : active
   const go = (t: TopView) => { setMore(false); goTop(t, active === null ? 'home' : from) }
-  const onMore = active === 'trips' || active === 'advances' || active === 'limits' || active === 'approvals'
+  const onMore = !!active && MORE_VIEWS.includes(active as TopView)
 
   return (
     <>
@@ -101,6 +108,9 @@ export function ModuleTabBar({ active }: { active: TopView | 'claim' | null }) {
         {queue.length > 0 && <MoreRow label="Approvals" icon="check" count={queue.length} active={active === 'approvals'} onPress={() => go('approvals')} />}
         <MoreRow label="Advances" icon="advances" active={active === 'advances'} onPress={() => go('advances')} />
         <MoreRow label="My limits and rates" icon="limits" active={active === 'limits'} onPress={() => go('limits')} />
+        <MoreRow label="Reports and dashboard" icon="history" active={active === 'dashboard'} onPress={() => go('dashboard')} />
+        {desks.travel && <MoreRow label="Travel desk" icon="plane" active={active === 'traveldesk'} onPress={() => go('traveldesk')} />}
+        {desks.finance && <MoreRow label="Finance desk" icon="claims" active={active === 'financedesk'} onPress={() => go('financedesk')} />}
         <MoreRow label="Back to ESS" icon="back" onPress={() => { setMore(false); exitModule() }} />
         <View style={{ height: S.sm, borderRadius: R.sm }} />
       </Sheet>

@@ -29,6 +29,8 @@ export interface NavItem {
   /** Website: `needs` marks a placeholder that is not built yet (renders <Placeholder/>). */
   needs?: string
   phase?: number
+  /** One-line hint under the label (website: HrisShell TABS[].hint). */
+  hint?: string
 }
 export interface Feature { icon: string; name: string; note: string }
 export interface NavSection {
@@ -46,6 +48,8 @@ export const SECTIONS: NavSection[] = [
       { k: 'profile', label: 'My Details', route: '/profile' },
       { k: 'documents', label: 'Letter Requests', route: '/profile/letter-requests' },
       { k: 'letters', label: 'My Letters', route: '/profile/letters' },
+      // EZER Sign (73a2e17): components/esign/MyDocumentsToSign on the website.
+      { k: 'to-sign', label: 'Documents to sign', route: '/esign' },
     ] },
 
   { k: 'team', label: 'Team', short: 'Team', status: 'ready', desc: 'Your manager, your peers and the people who report to you',
@@ -81,10 +85,10 @@ export const SECTIONS: NavSection[] = [
 
   { k: 'hris', label: 'HR Services', short: 'HR', status: 'partial', desc: 'Directory, requests, approvals and the exit process',
     items: [
-      { k: 'directory', label: 'Team Directory', route: '/hris/directory' },
-      { k: 'requests', label: 'Raise a Request', route: '/hris/requests' },
-      { k: 'approvals', label: 'Tasks & Approvals', route: '/hris/approvals' },
-      { k: 'exit', label: 'Exit Process', route: '/hris/exit' },
+      { k: 'directory', label: 'Team Directory', route: '/hris/directory', hint: 'Find a colleague' },
+      { k: 'requests', label: 'Raise a Request', route: '/hris/requests', hint: 'Ask HR for help' },
+      { k: 'approvals', label: 'Tasks & Approvals', route: '/hris/approvals', hint: 'What is waiting on you' },
+      { k: 'exit', label: 'Exit Process', route: '/hris/exit', hint: 'Resign or track it' },
     ] },
 
   { k: 'company', label: 'Company', short: 'Company', status: 'ready', desc: 'Headcount, attrition and tax-regime trends across the company',

@@ -242,7 +242,7 @@ function PunchButton({ kind, T, live, busy, onPress, label, sub }: {
 
 /** today.css .pulse.go — a green ripple off the dial after a punch in. Decorative. */
 function Pulse({ k }: { k: number }) {
-  const v = React.useRef(new Animated.Value(0)).current
+  const [v] = React.useState(() => new Animated.Value(0))
   React.useEffect(() => {
     if (!k) return
     v.setValue(0)
@@ -259,12 +259,16 @@ function Pulse({ k }: { k: number }) {
 }
 
 /** A light stand-in for the website's canvas confetti: a burst from the Punch in button, 1.3 s. Decorative. */
-function Confetti({ k }: { k: number }) {
-  const v = React.useRef(new Animated.Value(0)).current
-  const parts = React.useMemo(() => Array.from({ length: 36 }, () => {
+/** 36 random particles — a new burst for every punch in (k). */
+function burst(_k: number) {
+  return Array.from({ length: 36 }, () => {
     const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 110
     return { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 70, s: 4 + Math.random() * 5, c: CONFETTI[(Math.random() * CONFETTI.length) | 0], r: (Math.random() - 0.5) * 720 }
-  }), [k]) // eslint-disable-line react-hooks/exhaustive-deps
+  })
+}
+function Confetti({ k }: { k: number }) {
+  const [v] = React.useState(() => new Animated.Value(0))
+  const parts = React.useMemo(() => burst(k), [k])
   React.useEffect(() => {
     if (!k) return
     v.setValue(0)

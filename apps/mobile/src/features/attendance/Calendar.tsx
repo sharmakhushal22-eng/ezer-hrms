@@ -43,7 +43,7 @@ function Legend() {
 /** 35 pulsing cells while the month loads (web: brandTint shimmer). */
 export function CalendarShimmer() {
   const { C } = useTheme()
-  const a = React.useRef(new Animated.Value(0.55)).current
+  const [a] = React.useState(() => new Animated.Value(0.55))
   const [w, setW] = React.useState(0)
   React.useEffect(() => {
     const loop = Animated.loop(Animated.sequence([

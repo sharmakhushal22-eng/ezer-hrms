@@ -9,6 +9,7 @@
 import * as React from 'react'
 import { AppState, Pressable, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
+import { Image } from 'expo-image'
 import { openWebsite } from '@/core/links'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
@@ -42,11 +43,12 @@ function Dig({ company, children }: { company: string; children: React.ReactNode
   )
 }
 
-function Face({ name, designation }: { name: string; designation: string }) {
+function Face({ name, designation, photoUrl }: { name: string; designation: string; photoUrl?: string | null }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
-      <View style={{ width: 52, height: 52, borderRadius: R.lg, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
-        <Txt size={F.lead + 1} w={700} tone="onAccent">{ini(name)}</Txt>
+      <View style={{ width: 52, height: 52, borderRadius: R.lg, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
+        {photoUrl ? <Image source={{ uri: photoUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+          : <Txt size={F.lead + 1} w={700} tone="onAccent">{ini(name)}</Txt>}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt size={F.lead} w={700} tone="onAccent" numberOfLines={2}>{name}</Txt>
@@ -101,9 +103,11 @@ function useGateToken(on: boolean) {
   return { tok, err, left }
 }
 
-export function IdCard({ name, designation, company, code, doj, blood, emergency, startOnQr }: {
+export function IdCard({ name, designation, company, code, doj, blood, emergency, photoUrl, startOnQr }: {
   name: string; designation: string; company: string
   code: string; doj?: string | null; blood?: string | null; emergency?: string | null
+  /** The signed avatar URL the profile already holds; initials when there is none. */
+  photoUrl?: string | null
   /** The full-screen Digital ID page opens straight on the QR. */
   startOnQr?: boolean
 }) {
@@ -114,7 +118,7 @@ export function IdCard({ name, designation, company, code, doj, blood, emergency
     <Dig company={company}>
       {!back ? (
         <>
-          <Face name={name} designation={designation} />
+          <Face name={name} designation={designation} photoUrl={photoUrl} />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: S.md }}>
             <Cell lb="Employee code" vv={code} />
             <Cell lb="Date of joining" vv={prettyDoj(doj)} />
@@ -154,10 +158,10 @@ export function IdCard({ name, designation, company, code, doj, blood, emergency
 }
 
 /** Profile360's card for a colleague's profile: a face and nothing more. */
-export function StaticIdCard({ name, designation, company }: { name: string; designation: string; company: string }) {
+export function StaticIdCard({ name, designation, company, photoUrl }: { name: string; designation: string; company: string; photoUrl?: string | null }) {
   return (
     <Dig company={company}>
-      <Face name={name} designation={designation} />
+      <Face name={name} designation={designation} photoUrl={photoUrl} />
       <Txt size={F.tiny} tone="onAccent" style={{ marginTop: S.md, opacity: 0.9 }}>A gate code can only be issued for your own card.</Txt>
     </Dig>
   )

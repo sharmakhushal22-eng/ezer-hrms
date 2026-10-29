@@ -6,15 +6,28 @@
 // answer and arrives as an issue on `pax`.
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
-import type { Snapshot, TripIssue, TripScope } from '@web/te/types'
+import type { Snapshot, TripIssue, TripPreview, TripScope } from '@web/te/types'
 import { errorFor, MAX_NAME, MAX_PEOPLE, PURPOSES, type DraftPerson, type PlannerDraft } from '@web/te/trip-draft'
+import { needsExplanation, whyLabel, whyProblem } from '@web/te/other-reason'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Input, Txt } from '@/ui/primitives'
 import { TeIcon } from '../ui/TeIcon'
 import { Chip, H4, KindSquare, LinkBtn, Opt } from '../ui/kit'
 import { MONO } from '../tones'
+import { ContactFields, type ContactValue } from '../contact/ContactFields'
 import { Ferr, Sec, Stepper } from './parts'
+
+type Found = { name: string; grade: string } | null
+/** Is this employee code somebody? The preview first (it resolves exactly the codes
+ *  in this draft), then the snapshot (TePlanTrip.lookup). */
+export function lookupPerson(snap: Snapshot, preview: TripPreview | null, code: string): Found {
+  const up = code.trim().toUpperCase()
+  const said = preview?.people?.find(q => (q.code || '').trim().toUpperCase() === up)
+  if (said) return said.id ? { name: said.name, grade: said.grade } : null
+  const id = snap.codes[up]
+  return id ? snap.emp[id] ?? null : null
+}
 
 export type Edit = (patch: Partial<PlannerDraft> | ((d: PlannerDraft) => PlannerDraft)) => void
 
@@ -45,13 +58,12 @@ function ScopeCard({ s, on, onPress }: { s: TripScope; on: boolean; onPress: () 
   )
 }
 
-function PersonRow({ i, p, snap, onSet, onRemove }: {
-  i: number; p: DraftPerson; snap: Snapshot; onSet: (patch: { id?: string; name?: string }) => void; onRemove: () => void
+function PersonRow({ i, p, snap, preview, onSet, onRemove }: {
+  i: number; p: DraftPerson; snap: Snapshot; preview: TripPreview | null; onSet: (patch: { id?: string; name?: string }) => void; onRemove: () => void
 }) {
   const { C } = useTheme()
   const code = (p.id || '').trim().toUpperCase()
-  const id = code ? snap.codes[code] : undefined
-  const found = id ? snap.emp[id] ?? null : null
+  const found = code ? lookupPerson(snap, preview, code) : null
   const isMe = !!code && code === snap.emp[snap.me]?.code
   return (
     <View style={{ paddingVertical: S.sm, borderTopWidth: 1, borderTopColor: C.line }}>
@@ -82,22 +94,49 @@ function PersonRow({ i, p, snap, onSet, onRemove }: {
   )
 }
 
-export function PlanTrip({ snap, draft, issues, edit, setScope }: {
+/** One of the two step-1 questions (div.askq): a heading, a hint, Yes / No. */
+function AskQ({ icon, title, hint, value, bad, missing, onYes, onNo }: {
+  icon: string; title: string; hint: string; value: boolean | undefined; bad: boolean; missing: string; onYes: () => void; onNo: () => void
+}) {
+  const { C } = useTheme()
+  return (
+    <View style={{ borderRadius: R.lg, borderWidth: 1, borderColor: bad ? C.critical : C.line, padding: S.md, backgroundColor: C.surface, gap: S.sm }}>
+      <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+        <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: C.brandTint }}>
+          <TeIcon name={icon} color={C.brand} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Txt size={F.small} w={700}>{title}</Txt>
+          <Txt size={F.tiny} tone="muted">{hint}</Txt>
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flex: 1 }}><Opt label="Yes" on={value === true} onPress={onYes} /></View>
+        <View style={{ flex: 1 }}><Opt label="No" on={value === false} onPress={onNo} /></View>
+      </View>
+      {bad ? <Ferr>{missing}</Ferr> : null}
+    </View>
+  )
+}
+
+export function PlanTrip({ snap, draft, issues, edit, setScope, preview, offersHub }: {
   snap: Snapshot
   draft: PlannerDraft
   issues: TripIssue[]
   edit: Edit
   setScope: (s: TripScope) => void
+  preview: TripPreview | null
+  offersHub: boolean
 }) {
   const { C } = useTheme()
   const k = KIND[draft.scope]
   const err = (key: string) => errorFor(issues, key, draft.tried)
   const me = snap.emp[snap.me]
 
-  const lookup = (code: string) => {
-    const id = snap.codes[code.trim().toUpperCase()]
-    return id ? snap.emp[id] ?? null : null
-  }
+  const lookup = (code: string) => lookupPerson(snap, preview, code)
+  const tried = !!draft.tried
+  const why = whyLabel('purpose')
+  const purposeProblem = whyProblem(draft.purpose, draft.purposeNote)
   const setPerson = (i: number, patch: { id?: string; name?: string }) => edit(d => {
     const people = [...d.people]
     const was = people[i] ?? { id: '', name: '' }
@@ -150,6 +189,13 @@ export function PlanTrip({ snap, draft, issues, edit, setScope }: {
           {PURPOSES.map(p => <Opt key={p} label={p} on={draft.purpose === p} onPress={() => edit({ purpose: p })} />)}
         </View>
         <Ferr>{err('purpose')}</Ferr>
+        {needsExplanation(draft.purpose) ? (
+          <View style={{ marginTop: S.md }}>
+            <Input label={why.label} value={draft.purposeNote} multiline autoFocus placeholder="Supplier arbitration hearing in Indore"
+              onChangeText={v => edit({ purposeNote: v })} help={why.hint} style={{ marginBottom: 4 }} />
+            {tried && purposeProblem ? <Ferr>{purposeProblem}</Ferr> : null}
+          </View>
+        ) : null}
         <Input label="Client or project" value={draft.project} placeholder="Optional" onChangeText={v => edit({ project: v })} style={{ marginTop: S.md }} />
       </Sec>
 
@@ -177,7 +223,7 @@ export function PlanTrip({ snap, draft, issues, edit, setScope }: {
             <Chip label="You" tone="t-brand" plain />
           </View>
           {draft.people.map((p, i) => (
-            <PersonRow key={i} i={i} p={p} snap={snap} onSet={patch => setPerson(i, patch)}
+            <PersonRow key={i} i={i} p={p} snap={snap} preview={preview} onSet={patch => setPerson(i, patch)}
               onRemove={() => edit(d => ({ ...d, people: d.people.filter((_, j) => j !== i), pax: Math.max(1, d.pax - 1) }))} />
           ))}
           <View style={{ borderTopWidth: 1, borderTopColor: C.line, paddingTop: 4 }}>
@@ -185,6 +231,33 @@ export function PlanTrip({ snap, draft, issues, edit, setScope }: {
           </View>
         </View>
         <Ferr>{err('pax')}</Ferr>
+      </Sec>
+
+      <ContactFields
+        value={draft}
+        prefilled={snap.contact ? { mobile: snap.contact.mobile, altMobile: snap.contact.altMobile, email: snap.contact.email } : undefined}
+        onChange={patch => edit(patch as Partial<PlannerDraft>)}
+        error={(k: keyof ContactValue) => err(k)}
+      />
+
+      <Sec style={{ marginTop: S.lg }}>
+        <View style={{ gap: S.sm }}>
+          <AskQ icon="home"
+            title={draft.origin === 'POST_FACTO' ? 'Did you stay overnight, or spend on food?' : 'Do you need a hotel or a food allowance?'}
+            hint={draft.origin === 'POST_FACTO'
+              ? 'Say no for a trip out and back the same day. Saying yes lets you claim the hotel and food bills against this trip.'
+              : 'Say no for a trip out and back the same day. Saying yes adds a step for the hotels you would accept.'}
+            value={draft.stayWanted} bad={draft.stayWanted === undefined && tried}
+            missing="Say whether you need a hotel or a food allowance."
+            onYes={() => edit({ stayWanted: true })} onNo={() => edit({ stayWanted: false, foodWanted: false })} />
+          {offersHub ? (
+            <AskQ icon="plane" title="Is a flight or a train part of this trip?"
+              hint="Saying no leaves them out of how you travel, so you are not offered a ticket you are not taking."
+              value={draft.flightOrTrain} bad={draft.flightOrTrain === undefined && tried}
+              missing="Say whether a flight or a train is part of this trip."
+              onYes={() => edit({ flightOrTrain: true })} onNo={() => edit({ flightOrTrain: false })} />
+          ) : null}
+        </View>
       </Sec>
     </View>
   )

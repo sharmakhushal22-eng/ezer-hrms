@@ -1,18 +1,24 @@
 // src/features/performance/MySide.tsx — the employee's own side (website:
 // components/ess/Performance.tsx MySide). Same reads, same derived values, same
-// three writes (KRA insert, one-to-one insert, SELF review upsert), same banner.
+// writes (actions.ts): the merged KRAs + self rating submission into the chain,
+// the one-to-one log with duration and weightage changes, acknowledging a
+// discussion somebody else logged, the Self Rating tab, and acknowledging a
+// published result.
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { DEFAULT_RULES, STAGES, currentStage, settled, stageStates, type Progress, type StageKey } from '@web/pms/cycle'
+import { DEFAULT_RULES, STAGES, currentStage, settled, stageStates, type Progress, type Rules, type StageKey } from '@web/pms/cycle'
 import { canLockWeightage, canPublishResult, type Log } from '@web/pms/oneToOne'
+import { reached, WORKFLOW } from '@web/pms/status'
 import type { Kra, Category } from '@web/pms/kra'
 import type { Line } from '@web/pms/scoring'
 import { invalidate } from '@/core/query'
 import { useOverlay } from '@/ui/overlays'
 import { Loading } from '@/ui/primitives'
-import { loadPeriod, loadPeriodData, loadWho, localToday, logDiscussion, submitKras, submitSelf, type SelfRow } from './data'
+import { bandsOrDefault, loadPeriod, loadPeriodData, loadWho, localToday } from './data'
+import { acknowledgeDiscussion, acknowledgeResult, logDiscussion, submitKras, submitSelf, type KraSelf, type SelfRow } from './actions'
 import { Banner, K } from './ui'
-import { DashboardTab, KraTab, OneToOneTab } from './EmpTabsA'
+import { ChainBanner, DashboardTab, KraTab } from './EmpTabsA'
+import { OneToOneTab } from './EmpOneToOne'
 import { AnalyticsTab, ResultTab, SelfRatingTab } from './EmpTabsB'
 import { NoPeriod } from './Pending'
 
@@ -32,28 +38,38 @@ const ACTION_LABEL: Record<StageKey, string> = {
   kra: 'Write your KRAs', oneToOne: 'The KRA discussion', lock: 'Waiting on your manager', self: 'Your self rating',
   review: 'With your manager', finalise: 'With the HOD', result: 'Read your result',
 }
-const ACTION_NOTE: Record<StageKey, string> = {
-  kra: `${DEFAULT_RULES.minKra} to ${DEFAULT_RULES.maxKra}, totalling ${DEFAULT_RULES.totalWeightage}`,
+/** A function because the KRA note quotes the policy's numbers. */
+const actionNotes = (rules: Rules): Record<StageKey, string> => ({
+  kra: `${rules.minKra} to ${rules.maxKra}, totalling ${rules.totalWeightage}`,
   oneToOne: 'Both of you have to acknowledge it', lock: 'They lock the weightages once acknowledged',
   self: 'Rate every KRA, then submit (it locks)', review: 'Nothing owed from you right now',
   finalise: 'Nothing owed from you right now', result: 'Acknowledge once you have read it',
-}
+})
+const EMPTY_SELF: KraSelf = { achievement: '', rating: null, comment: '' }
 
 export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const { notify } = useOverlay()
   const periodQ = useQuery({ queryKey: ['pms', 'period', employeeId], queryFn: () => loadPeriod(employeeId), enabled: !!employeeId })
   const whoQ = useQuery({ queryKey: ['pms', 'who', employeeId], queryFn: () => loadWho(employeeId), enabled: !!employeeId })
-  const period = periodQ.data?.period ?? null
-  const overall = periodQ.data?.overall ?? null
-  const dataQ = useQuery({ queryKey: ['pms', 'periodData', employeeId, period?.id], queryFn: () => loadPeriodData(employeeId, period!.id), enabled: !!period })
-  const goals = dataQ.data?.goals ?? []
+  const ctx = periodQ.data
+  const period = ctx?.period ?? null
+  const overall = ctx?.overall ?? null
+  const rules = ctx?.rules
+  const bands = bandsOrDefault(ctx?.bands)
+  const dataQ = useQuery({
+    queryKey: ['pms', 'periodData', employeeId, period?.id, ctx?.policy?.carry_forward_kras],
+    queryFn: () => loadPeriodData(employeeId, ctx!), enabled: !!period,
+  })
+  const goals = React.useMemo(() => dataQ.data?.goals ?? [], [dataQ.data])
+  const reviews = React.useMemo(() => dataQ.data?.reviews ?? [], [dataQ.data])
   const logs: Log[] = dataQ.data?.logs ?? []
-  const reviews = dataQ.data?.reviews ?? []
   const feedback = dataQ.data?.feedback ?? null
+  const carried = dataQ.data?.carried ?? null
   const who = whoQ.data ?? { name: '', code: '' }
 
   const [draftKras, setDraftKras] = React.useState<Kra[] | null>(null)
   const [selfDraft, setSelfDraft] = React.useState<SelfRow[] | null>(null)
+  const [selfBySeq, setSelfBySeq] = React.useState<Record<number, KraSelf> | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [msg, setMsg] = React.useState<string | null>(null)
   const today = localToday()
@@ -63,13 +79,16 @@ export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab })
         seq_no: Number(g.seq_no), kra_title: String(g.kra_title ?? ''), kpi_metric: String(g.kpi_metric ?? ''),
         target_value: String(g.target_value ?? ''), category: String(g.category ?? 'BUSINESS') as Category, weightage: Number(g.weightage) || 0,
       }))
-    : Array.from({ length: DEFAULT_RULES.minKra }, (_, i) => blankKra(i + 1)))
+    : carried?.kras.length ? carried.kras
+    : Array.from({ length: rules?.minKra ?? DEFAULT_RULES.minKra }, (_, i) => blankKra(i + 1)))
 
   const lockGate = canLockWeightage(logs)
   const publishGate = canPublishResult(logs)
   const locked = goals.length > 0 && goals.every(g => g.status === 'LOCKED')
   const selfSubmitted = !!(overall?.workflow_status && overall.workflow_status !== 'NOT_STARTED' && overall.self_score != null)
-  const published = !!feedback?.visible_to_employee || overall?.final_rating != null
+  // Publication is an event: the workflow ladder, not "a final rating exists".
+  const published = reached(overall?.workflow_status, WORKFLOW.PUBLISHED)
+  const feedbackVisible = published && !!feedback?.visible_to_employee
 
   const ratingOf = (goalId: string, role: string) => {
     const row = reviews.find(r => String(r.goal_id) === goalId && r.rater_role === role)
@@ -81,14 +100,25 @@ export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab })
     self: ratingOf(String(g.id), 'SELF'), rmL1: ratingOf(String(g.id), 'RM_L1'), rmL2: ratingOf(String(g.id), 'RM_L2'),
     final: ratingOf(String(g.id), 'HOD') ?? ratingOf(String(g.id), 'RM_L2') ?? ratingOf(String(g.id), 'RM_L1'),
   }))
+  // seq_no → the employee's saved SELF review (the KRA form works in seq_no).
+  const selfSeeded = React.useMemo(() => {
+    const out: Record<number, KraSelf> = {}
+    for (const g of goals) {
+      const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
+      out[Number(g.seq_no)] = {
+        achievement: String(row?.achievement_value ?? ''),
+        rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
+        comment: String(row?.comments ?? ''),
+      }
+    }
+    return out
+  }, [goals, reviews])
+  const selfForKras = selfBySeq ?? selfSeeded
   const selfRows: SelfRow[] = selfDraft ?? goals.map(g => {
-    const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
+    const s = selfSeeded[Number(g.seq_no)] ?? EMPTY_SELF
     return {
       goalId: String(g.id), title: String(g.kra_title ?? ''), weightage: Number(g.weightage) || 0,
-      category: String(g.category ?? 'BUSINESS') as Category,
-      achievement: String(row?.achievement_value ?? ''),
-      rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
-      comment: String(row?.comments ?? ''),
+      category: String(g.category ?? 'BUSINESS') as Category, achievement: s.achievement, rating: s.rating, comment: s.comment,
     }
   })
   const progress: Progress = settled({
@@ -99,59 +129,66 @@ export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab })
     finalised: overall?.final_rating != null, published,
   })
   const stage = currentStage(progress)
-  // No windows passed, exactly as the website's inner stepper.
   const states = stageStates({ label: period?.period_code ?? '' }, progress, today)
 
   if (periodQ.isLoading || (period && dataQ.isLoading)) return <Loading />
-  if (!period) return <NoPeriod />
+  if (!period || !ctx) return <NoPeriod />
 
-  const done = async (text: string | null, ok: boolean) => {
+  const show = (text: string | null, ok: boolean) => {
     setMsg(text)
     if (text) notify(text, ok ? 'success' : 'error')
-    if (ok) await invalidate('pms')
   }
-  const onSubmitKras = async () => {
+  const run = async (fn: () => Promise<{ ok: boolean; msg: string | null }>, after?: () => void) => {
     setSaving(true); setMsg(null)
-    const r = await submitKras(employeeId, period.id, kras)
-    setSaving(false)
-    if (r.ok) setDraftKras(null)
-    await done(r.msg, r.ok)
+    try {
+      const r = await fn()
+      show(r.msg, r.ok)
+      if (r.ok) { after?.(); await invalidate('pms') }
+    } finally { setSaving(false) }
   }
-  const onSubmitSelf = async () => {
-    setSaving(true); setMsg(null)
-    const err = await submitSelf(employeeId, period.id, selfRows)
-    setSaving(false)
-    if (err) { await done(err, false); return }
-    setSelfDraft(null)
-    await invalidate('pms')
-  }
-  const onLog = async (l: Log) => {
-    setSaving(true)
-    const err = await logDiscussion(employeeId, period.id, l)
-    setSaving(false)
-    if (err) await done(err, false); else await invalidate('pms')
-  }
+  const onSubmitKras = () => run(
+    () => submitKras({ employeeId, periodId: period.id, companyId: ctx.companyId, goals, kras, self: selfForKras }),
+    () => { setDraftKras(null); setSelfBySeq(null) })
+  const onSubmitSelf = () => run(() => submitSelf(employeeId, period.id, ctx.companyId, selfRows), () => setSelfDraft(null))
+  const onLog = (l: Log) => run(() => logDiscussion({ employeeId, periodId: period.id, companyId: ctx.companyId, managerId: ctx.managerId, l }))
+  const onAckLog = (logId: string) => run(() => acknowledgeDiscussion(employeeId, logId))
+  const onAckResult = () => { if (published) void run(() => acknowledgeResult(employeeId, period.id)) }
+  const onSelfChange = (seq: number, patch: Partial<KraSelf>) => setSelfBySeq(prev => {
+    const base = prev ?? selfSeeded
+    return { ...base, [seq]: { ...(base[seq] ?? EMPTY_SELF), ...patch } }
+  })
 
   return (
     <>
       {!!msg && <Banner tone="blue" glyph="ℹ️">{msg}</Banner>}
+      <ChainBanner stage={overall?.chain_stage} sentBackReason={overall?.sent_back_reason} sentBackAt={overall?.sent_back_at} />
       {tab === 'dashboard' && (
-        <DashboardTab who={who}
+        <DashboardTab rules={ctx.rules} bands={bands} who={who}
           stages={STAGE_KEYS.map(k => ({ key: k, state: states[k], detail: k === 'kra' && goals.length ? `${goals.length} KRAs` : '' }))}
           current={stage} kraCount={goals.length} weightage={kras.reduce((s, k) => s + k.weightage, 0)}
           frequency="This period" periodLabel={period.period_code}
           lastRating={overall?.final_rating ?? null} lastScore={overall?.self_score ?? null}
-          actionLabel={ACTION_LABEL[stage] ?? 'Nothing right now'} actionNote={ACTION_NOTE[stage] ?? ''} />
+          actionLabel={ACTION_LABEL[stage] ?? 'Nothing right now'} actionNote={actionNotes(ctx.rules)[stage] ?? ''} />
       )}
-      {tab === 'kras' && <KraTab kras={kras} onChange={setDraftKras} locked={locked} lockGate={lockGate} onSubmit={onSubmitKras} saving={saving} />}
-      {tab === 'oneToOne' && <OneToOneTab logs={logs} managerName="your manager" onLog={onLog} saving={saving} />}
+      {tab === 'kras' && (
+        <KraTab rules={ctx.rules} carriedFrom={!goals.length && carried ? carried.fromPeriodCode : null} bands={bands}
+          self={selfForKras} onSelfChange={onSelfChange} selfSubmitted={selfSubmitted}
+          rateRequired={logs.some(l => l.discussion_type === 'KRA_SETTING' && (l.employee_ack || l.manager_ack))}
+          kras={kras} onChange={setDraftKras} locked={locked} lockGate={lockGate} onSubmit={onSubmitKras} saving={saving} />
+      )}
+      {tab === 'oneToOne' && (
+        <OneToOneTab kras={kras.map(k => ({ seq_no: k.seq_no, kra_title: k.kra_title, weightage: k.weightage }))}
+          logs={logs} managerName="your manager" onLog={onLog} onAcknowledge={onAckLog} saving={saving} />
+      )}
       {tab === 'self' && (!locked
         ? <Banner tone="amber" glyph="🔒">Self rating opens once your weightages are locked. {lockGate.because}</Banner>
-        : <SelfRatingTab rows={selfRows} onChange={setSelfDraft} submitted={selfSubmitted} onSubmit={onSubmitSelf} saving={saving} />)}
+        : <SelfRatingTab bands={bands} rows={selfRows} onChange={setSelfDraft} submitted={selfSubmitted} onSubmit={onSubmitSelf} saving={saving} />)}
       {tab === 'result' && (
-        <ResultTab published={published} lines={lines} finalRating={overall?.final_rating ?? null}
-          appreciation={feedback?.appreciation_remark as string | undefined}
-          improvement={feedback?.improvement_feedback as string | undefined} publishGate={publishGate} />
+        <ResultTab bands={bands} published={published} lines={lines} finalRating={overall?.final_rating ?? null}
+          onAcknowledge={onAckResult} acknowledged={overall?.workflow_status === WORKFLOW.ACKNOWLEDGED} saving={saving}
+          appreciation={feedbackVisible ? (feedback?.appreciation_remark as string | undefined) : undefined}
+          improvement={feedbackVisible ? (feedback?.improvement_feedback as string | undefined) : undefined}
+          benefits={feedbackVisible ? dataQ.data?.benefits ?? [] : []} publishGate={publishGate} />
       )}
       {tab === 'analytics' && <AnalyticsTab lines={lines} published={published} />}
       {dataQ.isError && <K>{(dataQ.error as Error).message}</K>}
