@@ -15,4 +15,5 @@ export { DashboardView } from './views/DashboardView';
 export { MrfListView } from './views/MrfListView';
 export { PipelineView } from './views/PipelineView';
 export { JobStatusView } from './views/JobStatusView';
+export { ReportsView } from './views/ReportsView';
 export type { Standing } from './views/JobStatusView';
