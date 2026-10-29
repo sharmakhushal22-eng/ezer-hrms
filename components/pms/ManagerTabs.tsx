@@ -20,7 +20,7 @@
 // reason is printed on the row, rather than left as a colour somebody has to
 // know how to read.
 
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import './pms.css'
 import { teamQueue, finaliseQueue, teamStats, distribution, initials,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
@@ -873,6 +873,75 @@ function RatingSummary({ s, onJump }: {
   )
 }
 
+/**
+ * The rating control, as a radiogroup the keyboard can actually use.
+ *
+ * It was five buttons, each its own tab stop: five presses to cross one
+ * KRA and twenty to cross a set of four, before you reach the reason box.
+ * That is not what role="radiogroup" promises, and a screen reader
+ * announces the promise either way.
+ *
+ * ROVING TABINDEX: the group holds ONE tab stop — the chosen chip, or the
+ * first when nothing is chosen — and the arrows move between them, which is
+ * the pattern every radio group on the platform uses. Home and End jump to
+ * the ends because a five-point scale is short enough that "worst" and
+ * "best" are the two people reach for.
+ *
+ * Arrow keys SELECT as they move, which is what native radios do: moving
+ * through a radio group changes the value. There is no separate confirm
+ * step to forget.
+ */
+function RatingChips({ bands, value, onPick, label }: {
+  bands: Band[]
+  value: number | null
+  onPick: (v: number) => void
+  /** Names the group for a screen reader — "Your rating for <KRA>". */
+  label: string
+}) {
+  const idx = bands.findIndex(b => b.value === value)
+  // Nothing chosen yet: the first chip is the way in.
+  const stop = idx < 0 ? 0 : idx
+
+  const move = (to: number, e: React.KeyboardEvent) => {
+    const i = Math.max(0, Math.min(bands.length - 1, to))
+    e.preventDefault()
+    onPick(bands[i].value)
+    // The DOM is the source of focus here rather than a ref array: the
+    // chips are siblings, so the group element already knows where they
+    // are, and a ref per band would have to be rebuilt whenever a policy
+    // changes its scale.
+    const group = e.currentTarget.parentElement
+    ;(group?.children[i] as HTMLElement | undefined)?.focus()
+  }
+
+  return (
+    <div className="chips" role="radiogroup" aria-label={label}>
+      {bands.map((bd, i) => {
+        const on = value === bd.value
+        return (
+          <button key={bd.value} type="button" role="radio"
+                  aria-checked={on}
+                  tabIndex={i === stop ? 0 : -1}
+                  // COLOURED ONLY ONCE CHOSEN. Painting all five turns the
+                  // control into a traffic light and pulls the eye to the
+                  // green one, which is a thumb on the scale.
+                  className={on ? `chip sel b${bd.value}` : 'chip'}
+                  title={bd.label}
+                  onKeyDown={e => {
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') move(i + 1, e)
+                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') move(i - 1, e)
+                    else if (e.key === 'Home') move(0, e)
+                    else if (e.key === 'End') move(bands.length - 1, e)
+                  }}
+                  onClick={() => onPick(bd.value)}>
+            {bd.value}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export interface KraLine {
   /**
    * The goal's own id. pms_reviews is UNIQUE on
@@ -995,8 +1064,73 @@ export function KraDetail({ member, lines, loading, onClose,
 
   const rating = myRung && onApprove
 
+  /**
+   * HOW MUCH WORK CLOSING WOULD THROW AWAY.
+   *
+   * The draft lives in the parent's state and does not survive the panel —
+   * onClose clears it. Until now the only way out was a ghost button at the
+   * bottom of 1900px, which is hard to hit by accident; a round red × in
+   * the corner is not, so the guard arrives with it.
+   */
+  const unsaved = cmp.lines.filter(l => l.mine != null || l.hasReason).length
+  const [asking, setAsking] = useState(false)
+  const close = () => { setAsking(false); onClose?.() }
+  /** The × asks only when there is something to lose. A confirmation on an
+   *  untouched panel is a dialog that teaches people to dismiss dialogs. */
+  const tryClose = () => (unsaved > 0 && rating ? setAsking(true) : close())
+
+  // ESCAPE CLOSES IT, through the same guard — so the key that people
+  // expect to dismiss a panel cannot be the one that loses their ratings.
+  // Bound to the document because focus may be anywhere inside, including
+  // in a textarea that would otherwise swallow it.
+  useEffect(() => {
+    if (!onClose) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      // A second Escape while the question is up means "no, keep editing" —
+      // never "yes, discard". Escape must not be able to destroy work.
+      if (asking) setAsking(false)
+      else tryClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  })
+
   return (
     <Card>
+      {/* THE WAY OUT, where people look for it. The action bar's Close is
+          still there and still pinned; this is the corner one, and it is
+          red because it is the only control on this panel that throws work
+          away. */}
+      {onClose && (
+        <button type="button" className="xclose" onClick={tryClose}
+                aria-label={unsaved > 0 && rating
+                  ? `Close without saving ${unsaved} rated KRA${unsaved === 1 ? '' : 's'}`
+                  : 'Close this review'}
+                title="Close">
+          <span aria-hidden="true">×</span>
+        </button>
+      )}
+      {asking && (
+        <div className="closeask" role="alertdialog" aria-label="Discard this review?">
+          <div className="t">Discard this review?</div>
+          <div className="k">
+            {unsaved === 1
+              ? 'One KRA has your rating or your reason on it.'
+              : `${unsaved} KRAs have your rating or your reason on them.`}
+            {' '}Nothing here is saved until you send it on.
+          </div>
+          <div className="row">
+            <button className="btn red sm" type="button" onClick={close}>
+              Discard
+            </button>
+            <button className="btn ghost sm" type="button" autoFocus
+                    onClick={() => setAsking(false)}>
+              Keep editing
+            </button>
+          </div>
+        </div>
+      )}
       {/* WHO, WHICH RUNG, AND HOW THE TWO SCORES STAND, before any KRA. The
           panel used to open straight onto KRA 1 with the person's name in a
           card title and their score nowhere — orientation the reader had to
@@ -1233,24 +1367,12 @@ export function KraDetail({ member, lines, loading, onClose,
                   {rating && onRate && l.goalId ? (
                     <div className="side" style={{ minWidth: 0 }}>
                       <div className="l">Your rating</div>
-                      <div className="chips" role="radiogroup"
-                           aria-label={`Your rating for ${l.title}`}>
-                        {bands.map(bd => {
-                          const on = rate?.[l.goalId!]?.rating === bd.value
-                          return (
-                            <button key={bd.value} type="button" role="radio"
-                                    aria-checked={on}
-                                    // COLOURED ONLY ONCE CHOSEN. Painting all
-                                    // five turns the control into a traffic
-                                    // light and pulls the eye to the green
-                                    // one, which is a thumb on the scale.
-                                    className={on ? `chip sel b${bd.value}` : 'chip'}
-                                    title={bd.label}
-                                    onClick={() => onRate(l.goalId!, { rating: bd.value })}>
-                              {bd.value}
-                            </button>
-                          )
-                        })}
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap',
+                                    alignItems: 'center' }}>
+                        <RatingChips bands={bands}
+                                     value={rate?.[l.goalId!]?.rating ?? null}
+                                     label={`Your rating for ${l.title}`}
+                                     onPick={v => onRate(l.goalId!, { rating: v })} />
                         {/* WHAT THE NUMBER MEANS, in words, next to it. The
                             band labels existed only in a title attribute:
                             invisible on touch, and on a desktop visible only
@@ -1269,7 +1391,8 @@ export function KraDetail({ member, lines, loading, onClose,
                           </span>
                         )}
                       </div>
-                      <input style={{ marginTop: 8 }} id={whyId(l.goalId)}
+                      <textarea className="why" rows={1} id={whyId(l.goalId)}
+                             style={{ marginTop: 8 }}
                              aria-label={`Why you rated ${l.title} this way`}
                              placeholder={
                                // The ask changes when the numbers disagree,
@@ -1313,17 +1436,29 @@ export function KraDetail({ member, lines, loading, onClose,
           </div>
 
           {onConfirm && (
-            <label className="checkline" style={{ marginTop: 14 }}
-                   title={CONFIRM_LABEL[myRung]}>
-              <input type="checkbox"
-                     checked={alreadyConfirmed || !!confirmed}
-                     disabled={alreadyConfirmed}
-                     onChange={e => onConfirm(e.target.checked)} />
-              <div>
-                <b>{CONFIRM_LABEL[myRung]}</b>
-                <div className="k" style={{ marginTop: 3 }}>{CONFIRM_WHY[myRung]}</div>
-              </div>
-            </label>
+            // A STEP, NOT A STRAY CHECKBOX. It is one of the four things
+            // the approval gate checks, and it used to float unframed
+            // between two cards looking like a footnote. The box turns
+            // green when it is ticked so the state reads without finding
+            // the tick itself.
+            <div className={`step1on1${alreadyConfirmed || confirmed ? ' on' : ''}`}>
+              <label className="checkline" title={CONFIRM_LABEL[myRung]}>
+                <input type="checkbox"
+                       checked={alreadyConfirmed || !!confirmed}
+                       disabled={alreadyConfirmed}
+                       onChange={e => onConfirm(e.target.checked)} />
+                <div>
+                  <b>{CONFIRM_LABEL[myRung]}</b>
+                  <div className="k" style={{ marginTop: 3 }}>{CONFIRM_WHY[myRung]}</div>
+                  {alreadyConfirmed && (
+                    <div className="k" style={{ marginTop: 4, color: 'var(--ez-positive)',
+                                                fontWeight: 600 }}>
+                      Already on record — you confirmed this earlier.
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
           )}
 
           {(() => {
@@ -1386,7 +1521,9 @@ export function KraDetail({ member, lines, loading, onClose,
                           "Not ready to send on" being a button that refuses
                           without saying why. */}
                       {!allRated && <span className="b">{total - rated.length} still unrated</span>}
-                      {!reasoned && <span className="b">{cmp.missingReasons.length} need a reason</span>}
+                      {!reasoned && <span className="b">
+                        {cmp.missingReasons.length} need{cmp.missingReasons.length === 1 ? 's' : ''} a reason
+                      </span>}
                       {!ticked && <span className="b">Confirm the one-to-one</span>}
                       {!frOk && <span className="b">Final rating missing</span>}
                     </div>
@@ -1408,7 +1545,10 @@ export function KraDetail({ member, lines, loading, onClose,
                     )}
                     <div className="grow" />
                     {onClose && (
-                      <button className="btn ghost" type="button" onClick={onClose}>Close</button>
+                      // THE SAME GUARD as the corner ×. Two ways out that
+                      // behave differently about losing work is worse than
+                      // either one alone.
+                      <button className="btn ghost" type="button" onClick={tryClose}>Close</button>
                     )}
                     <button className="btn" type="button" disabled={!ready || saving}
                             onClick={() => onApprove(finalises ? fr ?? undefined : undefined)}>
@@ -1425,9 +1565,9 @@ export function KraDetail({ member, lines, loading, onClose,
         </>
       )}
 
-      {!(myRung && onApprove) && onClose && (
+      {!rating && onClose && (
         <div className="btnrow">
-          <button className="btn ghost sm" type="button" onClick={onClose}>Close</button>
+          <button className="btn ghost sm" type="button" onClick={close}>Close</button>
         </div>
       )}
     </Card>

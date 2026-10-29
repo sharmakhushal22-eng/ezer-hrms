@@ -324,6 +324,11 @@
 
 .pms .chips { display: flex; gap: 4px; flex-wrap: wrap; }
 .pms .chip {
+  /* The radius here is INERT — see the note on .xclose. A runtime sheet
+   * forces 10px on every button and this file cannot outrank it without
+   * !important. Left as written: 8px and 10px are close enough that
+   * fighting for it would be noise, and if that global rule ever goes,
+   * this is the intent. */
   min-width: 27px; height: 27px; border-radius: 8px;
   border: 1px solid var(--ez-line); background: var(--ez-surface);
   font-weight: 800; font-size: 12px; color: var(--ez-muted);
@@ -738,3 +743,91 @@
 .pms .blockers .b {
   background: var(--ez-warning-tint); border-radius: 20px; padding: 2px 9px;
 }
+
+/* ── closing the review panel ─────────────────────────────────────────────
+ *
+ * A panel this tall needs a way out that does not depend on scrolling to
+ * the bottom of it. The ghost "Close" in the action bar is still there and
+ * still pinned; this is the one in the corner, where a person looks for it.
+ *
+ * RED, AND GLOWING ON HOVER, because it is the only control here that
+ * throws work away — unsaved ratings live in the parent's state and do not
+ * survive it. The glow is the warning; the confirmation step beside it is
+ * the actual protection.
+ */
+.pms .card { position: relative; }
+.pms .xclose {
+  /* The scale in theme.css, not a number: the × must clear the sticky
+   * progress bar, and the question it opens must clear the ×. */
+  position: absolute; top: 12px; right: 12px; z-index: var(--ez-z-local-1);
+  width: 30px; height: 30px; padding: 0;
+  /* !important, AND THAT IS NOT DECORATION. UIKeyframes in lib/ui/index.tsx
+   * injects `button { border-radius: 10px !important }` at runtime, which
+   * outranks any selector here however specific. MEASURED, not assumed:
+   * every button radius in this file is inert — .btn asks for 9px, .chip
+   * for 8px, .kstep for 7px, and all three render at 10px. Those are close
+   * enough to their intent to leave alone; a round button is not, so this
+   * one has to fight back. social.css and recruitment.redesign.css carry
+   * the same workaround and the same note. */
+  border-radius: 50% !important;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 17px; line-height: 1; font-family: inherit; cursor: pointer;
+  background: var(--ez-critical-tint); color: var(--ez-critical);
+  border: 1px solid var(--ez-critical-edge);
+  transition: background .15s ease, color .15s ease,
+              box-shadow .15s ease, transform .15s ease;
+}
+.pms .xclose:hover {
+  background: var(--ez-critical); color: var(--ez-on-accent);
+  border-color: var(--ez-critical);
+  /* The glow. Two rings rather than one: the inner is the halo, the outer
+   * is what makes it read as lit rather than merely shadowed. */
+  box-shadow: 0 0 0 4px var(--ez-critical-tint),
+              0 0 14px 2px var(--ez-critical);
+  transform: rotate(90deg);
+}
+.pms .xclose:focus-visible {
+  box-shadow: 0 0 0 4px var(--ez-critical-tint), 0 0 14px 2px var(--ez-critical);
+}
+
+/* The second press, when there is work to lose. Inline rather than a
+ * browser confirm(): a modal dialog blocks the page, cannot be styled, and
+ * says "Leave site?" in language that belongs to the browser, not to the
+ * appraisal somebody just spent five minutes on. */
+.pms .closeask {
+  position: absolute; top: 48px; right: 12px; z-index: var(--ez-z-local-2);
+  width: 250px; max-width: calc(100% - 24px);
+  padding: 12px; border-radius: 11px;
+  background: var(--ez-surface); border: 1px solid var(--ez-critical);
+  box-shadow: 0 8px 26px var(--ez-critical-tint);
+}
+.pms .closeask .t { font-size: 12px; font-weight: 700; color: var(--ez-ink); }
+.pms .closeask .k { margin: 4px 0 10px; }
+.pms .closeask .row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ── the reason, as something you can read back ───────────────────────────
+ *
+ * It was an <input>: one line, no wrapping, so a two-sentence reason could
+ * be typed and then only ever seen sixty characters at a time. The employee
+ * reads the whole thing; the person writing it should be able to as well.
+ */
+.pms textarea.why {
+  min-height: 38px; height: 38px; padding: 8px 10px;
+  font-size: 13px; line-height: 1.45; resize: vertical;
+}
+
+/* The one-to-one tick is a step, not a stray checkbox between two cards. */
+.pms .step1on1 {
+  margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  transition: background .2s ease, border-color .2s ease;
+}
+.pms .step1on1.on {
+  background: var(--ez-positive-tint); border-color: var(--ez-positive-edge);
+}
+
+/* A chip that is the keyboard's current stop inside the group. The group is
+ * one tab stop and the arrows move within it, which is what a radiogroup is
+ * supposed to do — every chip being its own tab stop meant five presses to
+ * cross one KRA and twenty to cross a set. */
+.pms .chip:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 2px; }
