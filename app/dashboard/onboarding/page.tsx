@@ -11,6 +11,7 @@ import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/reso
 // send-magic-link / resend-link are guarded server-side now, so the session goes along.
 import { authHeaders } from '@/lib/auth-headers'
 import GenerateCodeModal from '@/components/onboarding/GenerateCodeModal'
+import AppointmentLetterModal from '@/components/onboarding/AppointmentLetterModal'
 import { TRACKS, requiredDocCodes, trackOf } from '@/lib/onboarding/hiring-track'
 import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
@@ -318,6 +319,7 @@ export default function OnboardingDashboard() {
   // Modal state
   const [linkModal,    setLinkModal]  = useState(false)
   const [codeModal,    setCodeModal]  = useState<Candidate|null>(null)   // Generate code — team, roles, code (GenerateCodeModal)
+  const [apptFor,      setApptFor]    = useState<Candidate|null>(null)   // Letter of Appointment, once the code exists (AppointmentLetterModal)
   const [saving,       setSaving]     = useState(false)
   const [dateModal,    setDateModal]  = useState<Candidate|null>(null)
   const [dateVal,      setDateVal]    = useState('')
@@ -957,6 +959,7 @@ export default function OnboardingDashboard() {
         break
       }
       case 'EMPLOYEE_CREATED':
+        out.push({ label:'Appointment letter', kind:'primary', icon:'send', onClick:()=>setApptFor(c), hint:'Auto-filled Letter of Appointment: edit it if needed and mail it to the candidate' })
         out.push(viewForm(c))
         assets()
         break
@@ -1630,6 +1633,13 @@ export default function OnboardingDashboard() {
           candidate={{ ...codeModal, approvals: ['HR_MANAGER','IT','ADMIN','PAYROLL'].map(team => ({ team, status: (codeModal.approvals||[]).find(a=>a.team===team)?.status || 'PENDING' })) }}
           onClose={() => setCodeModal(null)}
           onDone={(m,t)=>{ showToast(m,t); load() }} />
+      )}
+
+      {/* ── LETTER OF APPOINTMENT (after the code): auto-filled, editable, mailed to the candidate ── */}
+      {apptFor && (
+        <AppointmentLetterModal onboardingId={apptFor.id} name={apptFor.full_name}
+          onClose={() => setApptFor(null)}
+          onDone={(m,t)=>{ showToast(m,t) }} />
       )}
 
       {/* ── HR MANAGER REVIEW (Review form / View form on the card) ── */}
