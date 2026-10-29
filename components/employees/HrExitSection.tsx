@@ -11,9 +11,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { authHeaders } from '@/lib/auth-headers'
 import { Button, Badge as Chip, C, F, W, S, R, E, inputStyle } from '@/lib/ui'
+import { stepWords, type ChainStep } from '@/lib/exit/hr-exit'
 
 type Person = { id: string; emp_code: string | null; full_name: string }
-type Step = { stage: string; label: string; status: 'WAITING' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'SKIPPED'; approvers: Person[]; acted_by?: Person | null; acted_at?: string | null; note?: string | null }
+type Step = { stage: string; label: string; status: 'WAITING' | 'PENDING' | 'HOLD' | 'APPROVED' | 'REJECTED' | 'SKIPPED'; approvers: Person[]; acted_by?: Person | null; acted_at?: string | null; note?: string | null; action?: string | null; lwd?: string | null }
 type Doc = { name: string; path: string; size: number; uploaded_at: string; uploaded_by: string | null }
 type Req = { id: string; reason_code: string; reason_label: string; sub_reason: string | null; last_working_day: string; remarks: string | null; status: 'PENDING' | 'APPROVED' | 'REJECTED'; chain: Step[]; initiated_by_name: string | null; created_at: string; decided_at: string | null
   documents: Doc[]; abscond_stage: 'REMINDING' | 'READY' | null; reminders_sent: number; last_reminder_at: string | null; destination_company: string | null }
@@ -50,6 +51,7 @@ const STATUS: Record<Req['status'], { label: string; t: 'warning' | 'positive' |
 const STEP: Record<Step['status'], { label: string; dot: string }> = {
   APPROVED: { label: 'Approved', dot: C.positive },
   PENDING: { label: 'Waiting', dot: C.warning },
+  HOLD: { label: 'Retention requested', dot: C.warning },
   REJECTED: { label: 'Rejected', dot: C.critical },
   SKIPPED: { label: 'Skipped', dot: C.faint },
   WAITING: { label: 'Not reached yet', dot: C.lineStrong },
@@ -102,14 +104,14 @@ function Flow({ req }: { req: Req }) {
           <div style={{ fontSize: F.small, minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <b>{s.label}</b>
-              <Chip t={s.status === 'APPROVED' ? 'positive' : s.status === 'REJECTED' ? 'critical' : s.status === 'PENDING' ? 'warning' : undefined}>{STEP[s.status].label}</Chip>
+              <Chip t={s.status === 'APPROVED' ? 'positive' : s.status === 'REJECTED' ? 'critical' : s.status === 'PENDING' || s.status === 'HOLD' ? 'warning' : undefined}>{stepWords(s as ChainStep)}{s.lwd ? `: ${fmt(s.lwd)}` : ''}</Chip>
             </div>
             {s.approvers.length > 0 && (
               <div style={{ color: C.muted, marginTop: 3, lineHeight: 1.6 }}>
                 Approvers: {s.approvers.map(p => <span key={p.id} style={{ display: 'inline-block', marginRight: 8, color: C.inkSoft }}>{code(p)}</span>)}
               </div>
             )}
-            {s.acted_by && <div style={{ color: C.muted, marginTop: 2 }}>{s.status === 'REJECTED' ? 'Rejected' : 'Approved'} by {code(s.acted_by)} <span style={{ color: C.faint }}>· {fmtT(s.acted_at)}</span></div>}
+            {s.acted_by && s.action !== 'STARTED' && <div style={{ color: C.muted, marginTop: 2 }}>{s.status === 'REJECTED' ? 'Rejected' : stepWords(s as ChainStep)} by {code(s.acted_by)} <span style={{ color: C.faint }}>· {fmtT(s.acted_at)}</span></div>}
             {s.note && <div style={{ color: s.status === 'REJECTED' ? C.critical : C.muted, marginTop: 2 }}>{s.status === 'REJECTED' ? 'Reason: ' : ''}{s.note}</div>}
           </div>
         </li>
@@ -173,7 +175,7 @@ function StartForm({ reasons, companies, busy, onStart }: { reasons: Reason[]; c
       {r && (
         <div style={{ marginTop: S.md, fontSize: F.small, color: C.inkSoft, background: C.sunken, border: `1px solid ${C.line}`, borderRadius: R.md, padding: `${S.sm}px ${S.md}px`, lineHeight: 1.6 }}>
           {r.code === 'ABSCOND' && <>Three reminders go to the employee a week apart (the first now); after 21 days with no response the approval starts. </>}
-          Approval flow: <b>{r.chain.join(' → ')}</b>. Nothing changes for the employee until the last approval.{r.rehire ? ` Rehire flag: ${r.rehire}.` : ''}{r.code === 'TRANSFER' ? ' Group date of joining is kept; the new company onboards them from the day after.' : ''}{r.code === 'DEATH' ? ' Nothing is sent to the employee’s own bell or mail; gratuity (no minimum service), the F&F and the PF / EDLI claim go to the nominee.' : ''}
+          Approval flow, the same as a resignation: <b>{r.chain.length ? r.chain.join(' → ') : 'nobody resolved: HR sets the final last working day'}</b>. The managers acknowledge it, accept it with their date or request retention; the HR Manager sets the final last working day, and only then does anything change for the employee.{r.rehire ? ` Rehire flag: ${r.rehire}.` : ''}{r.code === 'TRANSFER' ? ' Group date of joining is kept; the new company onboards them from the day after.' : ''}{r.code === 'DEATH' ? ' Nothing is sent to the employee’s own bell or mail; gratuity (no minimum service), the F&F and the PF / EDLI claim go to the nominee.' : ''}
         </div>
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: S.lg }}>

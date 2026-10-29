@@ -9,7 +9,7 @@ import { roleHolders } from '@/lib/recruitment/offer-approval-notify'
 import { sendMail, mailConfigured } from '@/lib/mail/send'
 import { CLEARANCE_FORMS, DEPTS, isCleared, recoveryOf, payableOf, clearanceEscalation, type Dept } from './clearance'
 import { gratuityOf, pendingSalaryOf, noticeShortfallOf, fnfTotals, lettersFor, WITHHOLD_GRATUITY, NO_NOTICE_RECOVERY, NO_EL_ENCASHMENT, rupees, type FnfLine } from './fnf'
-import { STAGES, reasonOf, isSilent, type ChainStep } from './hr-exit'
+import { advance, reasonOf, isSilent, type ChainStep } from './hr-exit'
 import { effectiveNoticeDays } from './notice'
 import { revokeAccess } from '@/lib/offboarding/run'
 
@@ -275,9 +275,10 @@ export async function runExitDaily(sb: Sb, now = new Date()): Promise<ExitDaily>
       .eq('status', 'PENDING').not('current_step', 'is', null).lte('step_started_at', cutoff).is('step_escalated_at', null)
     for (const r of (data || []) as any[]) {
       const chain = (r.chain || []) as ChainStep[]
-      const cur = chain[r.current_step]; if (!cur) continue
-      const later = chain.slice(r.current_step + 1).find(s => s.approvers.length)
-      const to = later ? later.approvers.map(p => p.id) : (await roleHolders(sb as any, r.company_id, STAGES.HR_HEAD.roles)).map(p => p.id)
+      // A stage on retention hold is waiting by choice, not overdue.
+      const cur = chain[r.current_step]; if (!cur || cur.status !== 'PENDING') continue
+      const later = chain.slice(r.current_step + 1).find(s => s.approvers.length && s.status === 'WAITING')
+      const to = later ? later.approvers.map(p => p.id) : (await roleHolders(sb as any, r.company_id, ['HR_HEAD'])).map(p => p.id)
       await Promise.all(to.map(id => bell(sb, id, `Exit approval overdue: ${who(r.employees)}`, `The ${r.reason_label} exit has waited 48 hours on the ${cur.label} (${cur.approvers.map(p => p.emp_code).join(', ')}).`, APPROVALS_LINK)))
       await Promise.all(cur.approvers.map(p => bell(sb, p.id, `Reminder: exit approval waiting on you`, `${who(r.employees)} · ${r.reason_label}. It has been escalated after 48 hours.`, APPROVALS_LINK)))
       await sb.from('hr_exit_requests').update({ step_escalated_at: now.toISOString() }).eq('id', r.id)
@@ -311,10 +312,9 @@ export async function sendAbscondReminder(sb: Sb, r: any, now = new Date()) {
 
 /** After the third reminder and 21 days with no response: the approval chain begins. */
 async function startAbscondChain(sb: Sb, r: any, now: Date) {
-  const chain = ((r.chain || []) as ChainStep[]).map(s => ({ ...s }))
-  const i = chain.findIndex(s => s.status === 'WAITING')
-  if (i >= 0) chain[i].status = 'PENDING'
-  const done = i < 0 && !chain.some(s => s.status === 'REJECTED')
+  // The same stamping as every other exit: skips an approver who already acted.
+  const { chain, current, done } = advance((r.chain || []) as ChainStep[], now.toISOString())
+  const i = current ?? -1
   await sb.from('hr_exit_requests').update({ abscond_stage: 'READY', chain, current_step: i >= 0 ? i : null, step_started_at: now.toISOString(), updated_at: now.toISOString(), ...(done ? { status: 'APPROVED', decided_at: now.toISOString() } : {}) }).eq('id', r.id)
   const { data: e } = await sb.from('employees').select('full_name, emp_code').eq('id', r.employee_id).maybeSingle()
   if (done) {
@@ -322,7 +322,7 @@ async function startAbscondChain(sb: Sb, r: any, now: Date) {
     const last = [...chain].reverse().find(s => s.acted_by)?.acted_by as Person | undefined
     if (row) await applyCompanyExit(sb, row, last || { id: row.initiated_by, emp_code: null, full_name: row.initiated_by_name || 'HR' })
   }
-  if (i >= 0) await Promise.all(chain[i].approvers.map(p => bell(sb, p.id, `Exit approval: ${who(e)}`, `Abscond: three reminders sent over 21 days with no response. Approve the discontinuation as ${chain[i].label} in Tasks & Approvals.`, APPROVALS_LINK)))
+  if (i >= 0) await Promise.all(chain[i].approvers.map(p => bell(sb, p.id, `Exit approval: ${who(e)}`, `Abscond: three reminders sent over 21 days with no response. ${chain[i].stage === 'HR_MANAGER' ? 'Set the final last working day' : 'Acknowledge it, accept it with your date, or request retention'} as ${chain[i].label} in Tasks & Approvals.`, APPROVALS_LINK)))
   return done
 }
 

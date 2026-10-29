@@ -77,6 +77,6 @@ test('death in service: gratuity with no minimum service, no notice recovery, th
   assert.equal(gratuityOf(30000, '2024-01-01', '2026-10-31').eligible, false)
   assert.ok(NO_NOTICE_RECOVERY.includes('DEATH'))
   assert.deepEqual(lettersFor('DEATH'), ['FNF_STATEMENT', 'PF_GUIDANCE'])
-  assert.deepEqual(reasonOf('DEATH')!.chain, ['HR_MANAGER', 'HR_HEAD'])
+  assert.equal(reasonOf('DEATH')!.lwd, 'TODAY')
   assert.ok(isSilent('DEATH') && !isSilent('LAYOFF'))
 })

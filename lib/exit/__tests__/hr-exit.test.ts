@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { canExitOthers, EXIT_ROLES, HR_EXIT_REASONS, startProblems, suggestedLwd, buildChain, advance, decide, waitingOn, type Person } from '../hr-exit.ts'
+import { canExitOthers, EXIT_ROLES, HR_EXIT_REASONS, STAGE_ORDER, startProblems, suggestedLwd, buildChain, advance, act, actionsFor, proposedLwd, waitingOn, type Person } from '../hr-exit.ts'
 
 const P = (id: string, code = id.toUpperCase()): Person => ({ id, emp_code: code, full_name: `Name ${id}` })
 const NOW = '2026-10-28T10:00:00.000Z'
@@ -15,24 +15,20 @@ test('the hiring and HR roles may exit others; everyone else may not', () => {
   assert.equal(EXIT_ROLES.length, 6)
 })
 
-test('the company reasons and their chains follow the spec', () => {
+test('the company reasons; every one walks the resignation chain', () => {
   assert.deepEqual(HR_EXIT_REASONS.map(r => r.code), ['ABSCOND', 'FRAUD', 'LAYOFF', 'TERMINATION', 'DISCONTINUE', 'TRANSFER', 'DEATH'])
-  const by = Object.fromEntries(HR_EXIT_REASONS.map(r => [r.code, r]))
-  assert.deepEqual(by.ABSCOND.chain, ['HR_MANAGER', 'HR_HEAD'])
-  assert.deepEqual(by.FRAUD.chain, ['HR_MANAGER', 'LEGAL', 'HR_HEAD', 'MD'])
-  for (const c of ['LAYOFF', 'TERMINATION', 'DISCONTINUE']) assert.deepEqual(by[c].chain, ['HR_MANAGER', 'HR_HEAD', 'MD'], c)
   assert.ok(HR_EXIT_REASONS.every(r => r.subReasons.length > 0))
-  assert.deepEqual(by.TRANSFER.chain, ['HR_MANAGER', 'DEST_HR_MANAGER', 'HR_HEAD'])
+  // The same four stages, in the same order, as 071's fn_resignation_advance.
+  assert.deepEqual(STAGE_ORDER, ['RM_L1', 'RM_L2', 'HOD', 'HR_MANAGER'])
+  const sql = readFileSync('supabase/migrations/071_ess_access_reconciliation.sql', 'utf8')
+  assert.ok(sql.includes("stages TEXT[] := ARRAY['RM_L1','RM_L2','HOD','HR_MANAGER']"), 'the resignation chain is still these four stages')
 })
 
-test('a transfer needs another company; its receiving HR Manager is the destination’s', () => {
+test('a transfer needs another company', () => {
   const ok = { employeeId: 'e1', reasonCode: 'TRANSFER', subReason: 'Different Company Same Group', lwd: '2026-11-30', remarks: 'Moving to the group company.', sourceCompanyId: 'A' }
   assert.ok(startProblems(ok, { self: 'me' })[0].startsWith('Pick the company'))
   assert.ok(startProblems({ ...ok, destinationCompanyId: 'A' }, { self: 'me' })[0].startsWith('A transfer goes to another company'))
   assert.deepEqual(startProblems({ ...ok, destinationCompanyId: 'B' }, { self: 'me' }), [])
-  const chain = buildChain('TRANSFER', { holders: { HR_MANAGER: [P('srcHm')], 'DEST:HR_MANAGER': [P('dstHm')], HR_HEAD: [P('hh')] }, initiator: P('srcHm'), initiatorRoles: ['HR_MANAGER'], employeeId: 'e1', now: NOW })
-  assert.deepEqual(chain.map(s => s.status), ['APPROVED', 'WAITING', 'WAITING'])
-  assert.deepEqual(chain[1].approvers.map(p => p.id), ['dstHm'])
 })
 
 test('the last working day is suggested per reason', () => {
@@ -54,37 +50,50 @@ test('reason, sub-reason, date and additional information are required; nobody e
   assert.ok(startProblems({ ...ok, reasonCode: 'SELF' }, { self: 'me' })[0].includes('not one HR can start'))
 })
 
-test('the chain: the initiator’s own stage is approved, an empty stage skipped, the exited employee never an approver', () => {
-  const holders = { HR_MANAGER: [P('hm1'), P('hm2')], HR_HEAD: [P('hh'), P('emp')] }
-  const chain = buildChain('TERMINATION', { holders, initiator: P('hm1'), initiatorRoles: ['HR_MANAGER'], employeeId: 'emp', now: NOW })
-  assert.deepEqual(chain.map(s => s.status), ['APPROVED', 'WAITING', 'SKIPPED'])
-  assert.deepEqual(chain[1].approvers.map(p => p.id), ['hh'])
-  assert.match(chain[2].note!, /Nobody holds the MD/)
+const appr = { RM_L1: P('l1'), RM_L2: P('l2'), HOD: P('hod'), HR_MANAGER: P('hr') }
+
+test('the chain: one approver per stage from the employee’s record; skips as a resignation’s', () => {
+  const chain = buildChain({ approvers: { ...appr, RM_L2: null, HOD: P('emp') }, initiator: P('rec'), employeeId: 'emp', now: NOW })
+  assert.deepEqual(chain.map(s => s.status), ['WAITING', 'SKIPPED', 'SKIPPED', 'WAITING'])
+  assert.equal(chain[1].note, 'No approver resolved'); assert.equal(chain[2].note, 'Resolves to the employee being exited')
   const a = advance(chain)
-  assert.equal(a.current, 1); assert.equal(a.done, false); assert.ok(waitingOn(a.chain, 'hh')); assert.ok(!waitingOn(a.chain, 'hm2'))
+  assert.equal(a.current, 0); assert.ok(waitingOn(a.chain, 'l1')); assert.ok(!waitingOn(a.chain, 'hr'))
 })
 
-test('approvals walk the chain; a rejection stops it; only the stage approvers may act', () => {
-  const holders = { HR_MANAGER: [P('hm')], HR_HEAD: [P('hh')], MD: [P('md')] }
-  let { chain } = advance(buildChain('LAYOFF', { holders, initiator: P('rec'), initiatorRoles: ['RECRUITER'], employeeId: 'emp', now: NOW }))
-  assert.throws(() => decide(chain, { actor: P('hh'), approve: true, now: NOW }), /waiting on the HR Manager/)
-  chain = decide(chain, { actor: P('hm'), approve: true, now: NOW })
-  let a = advance(chain); assert.equal(a.current, 1)
-  assert.throws(() => decide(a.chain, { actor: P('hh'), approve: false, now: NOW }), /reason for rejecting/)
-  const rejected = decide(a.chain, { actor: P('hh'), approve: false, note: 'Not yet', now: NOW })
-  assert.equal(rejected[1].status, 'REJECTED'); assert.equal(advance(rejected).current, null)
-  chain = decide(a.chain, { actor: P('hh'), approve: true, now: NOW }); a = advance(chain)
-  chain = decide(a.chain, { actor: P('md'), approve: true, now: NOW })
-  assert.equal(advance(chain).done, true)
+test('the initiator’s own manager stage is done by starting it, never the HR Manager’s', () => {
+  const asL1 = buildChain({ approvers: appr, initiator: P('l1'), employeeId: 'emp', now: NOW })
+  assert.equal(asL1[0].status, 'APPROVED'); assert.equal(asL1[0].action, 'STARTED')
+  const asHr = buildChain({ approvers: appr, initiator: P('hr'), employeeId: 'emp', now: NOW })
+  assert.equal(asHr[3].status, 'WAITING', 'the HR Manager still sets the final LWD')
 })
 
-test('one person on two steps approves once', () => {
-  const holders = { HR_MANAGER: [P('rn')], HR_HEAD: [P('rn')] }
-  let { chain, current } = advance(buildChain('ABSCOND', { holders, initiator: P('rj'), initiatorRoles: ['RECRUITER'], employeeId: 'emp', now: NOW }), NOW)
+test('managers acknowledge / accept with a date / request retention; HR sets the final LWD', () => {
+  let { chain } = advance(buildChain({ approvers: appr, initiator: P('rec'), employeeId: 'emp', now: NOW }))
+  assert.deepEqual(actionsFor(chain[0]), ['ACKNOWLEDGED', 'ACCEPTED_WITH_DATE', 'REQUESTED_RETENTION'])
+  assert.throws(() => act(chain, { actor: P('l2'), action: 'ACKNOWLEDGED', now: NOW }), /waiting on the Reporting Manager/)
+  assert.throws(() => act(chain, { actor: P('l1'), action: 'FINAL_LWD_SET', lwd: '2026-11-30', now: NOW }), /Only the HR Manager stage sets/)
+  chain = advance(act(chain, { actor: P('l1'), action: 'Acknowledge & forward', now: NOW }).chain).chain   // the label works too
+  assert.throws(() => act(chain, { actor: P('l2'), action: 'ACCEPTED_WITH_DATE', now: NOW }), /Enter the last working day you accept/)
+  chain = advance(act(chain, { actor: P('l2'), action: 'ACCEPTED_WITH_DATE', lwd: '2026-12-15', now: NOW }).chain).chain
+  assert.equal(proposedLwd(chain), '2026-12-15')
+  // Retention: the stage holds until its approver resumes it.
+  const held = act(chain, { actor: P('hod'), action: 'REQUESTED_RETENTION', note: 'Key person', now: NOW })
+  assert.equal(held.hold, true); assert.equal(held.chain[2].status, 'HOLD'); assert.deepEqual(actionsFor(held.chain[2]), ['RESUMED'])
+  assert.equal(advance(held.chain).current, 2, 'a hold does not move the chain')
+  assert.throws(() => act(held.chain, { actor: P('hod'), action: 'ACKNOWLEDGED', now: NOW }), /retention hold/)
+  chain = act(held.chain, { actor: P('hod'), action: 'RESUMED', now: NOW }).chain
+  chain = advance(act(chain, { actor: P('hod'), action: 'ACKNOWLEDGED', now: NOW }).chain).chain
+  assert.deepEqual(actionsFor(chain[3]), ['FINAL_LWD_SET'])
+  const fin = act(chain, { actor: P('hr'), action: 'FINAL_LWD_SET', lwd: '2026-12-10', now: NOW })
+  assert.equal(fin.finalLwd, '2026-12-10'); assert.equal(advance(fin.chain).done, true)
+})
+
+test('a manager who already acted is skipped at a later stage; the HR Manager never is', () => {
+  let { chain, current } = advance(buildChain({ approvers: { RM_L1: P('m'), RM_L2: P('m'), HOD: P('m'), HR_MANAGER: P('m') }, initiator: P('rec'), employeeId: 'emp', now: NOW }), NOW)
   assert.equal(current, 0)
-  chain = decide(chain, { actor: P('rn'), approve: true, now: NOW })
-  const a = advance(chain, NOW)
-  assert.equal(a.done, true); assert.equal(a.chain[1].status, 'APPROVED'); assert.match(a.chain[1].note!, /earlier step/)
+  const a = advance(act(chain, { actor: P('m'), action: 'ACKNOWLEDGED', now: NOW }).chain, NOW)
+  assert.deepEqual(a.chain.map(s => s.status), ['APPROVED', 'SKIPPED', 'SKIPPED', 'PENDING'])
+  assert.match(a.chain[1].note!, /Already acted at an earlier stage/)
 })
 
 test('the route guards before writing and takes effect only on the last approval', () => {
@@ -93,8 +102,9 @@ test('the route guards before writing and takes effect only on the last approval
   for (const g of ["forbidden('Only the HR team and Hiring Managers can exit an employee.')", 'startProblems({ ...x', "forbidden('This employee belongs to another company.')", 'already has an exit', 'already has a resignation in progress']) {
     const i = src.indexOf(g); assert.ok(i !== -1 && i < insert, g)
   }
-  assert.ok(/if \(done\) \{\s*applied = await applyCompanyExit/.test(src), 'started fully approved → applied')
-  assert.ok(/if \(status === 'APPROVED'\) \{\s*applied = await applyCompanyExit/.test(src), 'last approval → applied')
+  assert.ok(/if \(done\) \{\s*applied = await applyCompanyExit/.test(src), 'started with nobody to act → applied')
+  assert.ok(/if \(done\) applied = await applyCompanyExit\(sb as any, upd\[0\], actor\)/.test(src), 'final LWD set → applied')
+  assert.ok(/fn_resignation_stage_approver/.test(src) && /ess_effective_approver/.test(src), 'approvers resolve as a resignation’s do')
   assert.ok(/abscond \? \{ chain: built, current: null, done: false \}/.test(src), 'abscond waits for the reminders')
   assert.ok(/body\.target_id/.test(src) && !/body\.employee_id/.test(src), 'the target is target_id, never employee_id (lib/ess/asked)')
   assert.ok(/\.eq\('status', 'PENDING'\)\.eq\('current_step', row\.current_step\)/.test(src), 'two approvers cannot both act')
