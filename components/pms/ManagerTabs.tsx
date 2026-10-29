@@ -568,6 +568,30 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
 
 // ── the form the employee actually filled ────────────────────────────────
 
+/**
+ * Text that must break rather than push its container.
+ *
+ * MEASURED, not guessed. At 1432px the detail panel is clean; below 700px it
+ * gives way, and at 360px the panel escapes its container by 160px. Every
+ * offender was the same thing — a long UNBROKEN token with the default
+ * overflow-wrap: normal, which has nowhere legal to break:
+ *
+ *   a snake_case KRA title   Reconciliation_automation_programme_phase_two…
+ *   a camelCase KPI          ReconciliationBreaksClosedWithinSLAPercentage…
+ *   a URL in the achievement https://internal.example.com/reports/…
+ *
+ * None of those are contrived. The live rows top out at 48 characters WITH
+ * spaces, which is why this did not show on real data at desktop width — and
+ * an employee pasting a dashboard link into "what I delivered" is an ordinary
+ * thing to do.
+ *
+ * `anywhere` rather than `break-word`: break-word will not shrink an element's
+ * intrinsic minimum, so a flex or grid child still pushes its parent. minWidth
+ * 0 is the other half — without it a flex child refuses to shrink below its
+ * content regardless of how the text wraps.
+ */
+const BREAK = { overflowWrap: 'anywhere' as const, minWidth: 0 }
+
 export interface KraLine {
   seqNo: number
   title: string
@@ -623,7 +647,7 @@ export function KraDetail({ member, lines, loading, onClose }: {
               <div key={l.seqNo} className="card" style={{ margin: 0 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline',
                               flexWrap: 'wrap', marginBottom: 6 }}>
-                  <b>{l.seqNo}. {l.title || <span className="k">untitled</span>}</b>
+                  <b style={BREAK}>{l.seqNo}. {l.title || <span className="k">untitled</span>}</b>
                   <span className="pill p-brand">{l.weightage}%</span>
                   {l.category && <span className="pill p-grey">{l.category.toLowerCase()}</span>}
                   {l.status && <span className={`pill ${l.status === 'LOCKED' ? 'p-green' : 'p-amber'}`}>
@@ -638,23 +662,24 @@ export function KraDetail({ member, lines, loading, onClose }: {
                 <div className="grid g2" style={{ gap: 8 }}>
                   <div>
                     <div className="lbl">How it is measured</div>
-                    <div className="k">{l.kpi || '—'}</div>
+                    <div className="k" style={BREAK}>{l.kpi || '—'}</div>
                   </div>
                   <div>
                     <div className="lbl">Target</div>
-                    <div className="k">{l.target || '—'}</div>
+                    <div className="k" style={BREAK}>{l.target || '—'}</div>
                   </div>
                 </div>
                 <div style={{ marginTop: 8 }}>
                   <div className="lbl">What they say they delivered</div>
-                  <div className="k">{l.achievement || <i>Nothing recorded.</i>}</div>
+                  <div className="k" style={BREAK}>{l.achievement || <i>Nothing recorded.</i>}</div>
                 </div>
-                <div style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                <div style={{ marginTop: 8, display: 'flex', gap: 10,
+                              alignItems: 'baseline', flexWrap: 'wrap' }}>
                   <div className="lbl" style={{ margin: 0 }}>Their rating</div>
                   {l.selfRating == null
                     ? <span className="k">not rated</span>
                     : <b>{l.selfRating}</b>}
-                  {l.selfComment && <span className="k">— {l.selfComment}</span>}
+                  {l.selfComment && <span className="k" style={BREAK}>— {l.selfComment}</span>}
                 </div>
               </div>
             ))}

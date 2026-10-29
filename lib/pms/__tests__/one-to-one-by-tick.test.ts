@@ -216,3 +216,66 @@ test('no block element is nested inside an inline one', () => {
   assert.ok(!/<span>\s*\n?\s*<b>[\s\S]{0,200}<div/.test(label),
     'a div is nested inside a span in the checkbox label')
 })
+
+// ── the KRA detail panel fits its container ─────────────────────────────
+
+test('every free-text field in the detail panel can break', () => {
+  // REPORTED and then MEASURED IN A BROWSER rather than reasoned about: at
+  // 1432px the panel is clean; below 700px it gives way, and at 360px it
+  // escaped its container by 160px. Every offender was the same thing — a
+  // long UNBROKEN token with the default overflow-wrap: normal, which has
+  // nowhere legal to break:
+  //
+  //   a snake_case title   Reconciliation_automation_programme_phase_two…
+  //   a camelCase KPI      ReconciliationBreaksClosedWithinSLAPercentage…
+  //   a URL in achievement https://internal.example.com/reports/…
+  //
+  // None contrived: the live rows top out at 48 characters WITH spaces, which
+  // is why it did not show on real data at desktop width, and pasting a
+  // dashboard link into "what I delivered" is an ordinary thing to do.
+  const v = MGR.slice(MGR.indexOf('export function KraDetail'),
+                      MGR.indexOf('// ── §4.3 Rate My Team'))
+  assert.ok(v.length > 800, 'could not isolate the detail view')
+
+  // `anywhere`, not `break-word`: break-word does not shrink an element's
+  // intrinsic minimum, so a flex or grid child still pushes its parent.
+  assert.match(MGR, /const BREAK = \{ overflowWrap: 'anywhere' as const, minWidth: 0 \}/,
+    'there is no breakable-text style, or it uses break-word')
+
+  // Every field the employee can type into has to carry it. A missed one is
+  // the whole bug back.
+  // CHECKED FORWARDS from each BREAK element, not backwards from the field.
+  // Looking backwards found the wrong tag for anything inside a conditional:
+  // `{l.selfComment && <span style={BREAK}>` puts the field name BEFORE the
+  // element that carries the style, so the test failed against correct code.
+  const covered = [...v.matchAll(/style=\{BREAK\}>([\s\S]{0,80})/g)]
+    .map(m => m[1]).join(' | ')
+  for (const field of ['l.title', 'l.kpi', 'l.target', 'l.achievement', 'l.selfComment']) {
+    assert.ok(v.includes(field), `${field} is not rendered at all`)
+    assert.ok(covered.includes(field),
+      `${field} is rendered without BREAK, so a long token will push the panel`)
+  }
+})
+
+test('the rating row wraps rather than pushing', () => {
+  // The self comment sits in a flex row beside the rating. Without wrapping,
+  // a sentence there widens the card.
+  const v = MGR.slice(MGR.indexOf('export function KraDetail'),
+                      MGR.indexOf('// ── §4.3 Rate My Team'))
+  assert.match(v, /display: 'flex', gap: 10,\s*\n?\s*alignItems: 'baseline', flexWrap: 'wrap'/,
+    'the rating row cannot wrap')
+})
+
+test('the preview harness carries content harder than the real data', () => {
+  // A preview case is only worth having if it is harder than production. The
+  // live maximum is a 48-character field with spaces; these are the shapes
+  // that actually break layout.
+  const prev = read('app/pms-preview/page.tsx')
+  assert.match(prev, /<KraDetail key="kd"/, 'the detail panel has no preview case')
+  assert.match(prev, /Reconciliation_automation_programme_phase_two/,
+    'no long unbroken snake_case token in the fixture')
+  assert.match(prev, /ReconciliationBreaksClosedWithinSLAPercentage/,
+    'no long unbroken camelCase token in the fixture')
+  assert.match(prev, /https:\/\/internal\.example\.com/,
+    'no URL in the fixture — the commonest real cause')
+})

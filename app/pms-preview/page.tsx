@@ -20,7 +20,7 @@ import { ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
 import { DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
          AnalyticsTab } from '@/components/pms/EmployeeTabs'
 import { TeamTab, ApproveTab, RateTab, PipRequestTab, TeamAnalyticsTab,
-         FinaliseTab, FeedbackTab } from '@/components/pms/ManagerTabs'
+         FinaliseTab, FeedbackTab, KraDetail } from '@/components/pms/ManagerTabs'
 import { STAGES } from '@/lib/pms/cycle'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Kra } from '@/lib/pms/kra'
@@ -181,6 +181,33 @@ const CASES: [string, React.ReactNode][] = [
       chain="SELF_RM1_RM2_HOD" whoCanFinalise="RM1_RM2_HOD" deptName="Finance & Accounts" />],
   ['hod-feedback', <FeedbackTab key="hb" member={TEAM[0]} rating={2}
       appreciation="" improvement="" benefits={[]} logs={LOGS} onChange={() => {}} />],
+  /**
+   * The detailed KRA form, with DELIBERATELY LONG CONTENT.
+   *
+   * A preview case is only worth having if it is harder than the real data.
+   * The live rows top out around a 48-character field, which is comfortably
+   * inside any sane column — so an overflow bug would not show here on
+   * realistic text. These lines carry a long unbroken token, a long sentence,
+   * and a long self comment, which is where the layout actually gives way.
+   */
+  ['kra-detail', <KraDetail key="kd" member={TEAM[0]} onClose={() => {}}
+      lines={[
+        { seqNo: 1, title: 'Close the month-end books within three working days of period end, including inter-company eliminations',
+          kpi: 'Days from period end to signed-off trial balance, measured against the group reporting calendar',
+          target: '<=3 working days every month for the whole quarter, no exceptions',
+          category: 'BUSINESS', weightage: 40, status: 'LOCKED', source: 'CARRIED_FORWARD',
+          achievement: 'Closed in 2.6 days on average across the quarter, with the October close landing on day two despite the ERP migration running in parallel.',
+          selfRating: 4,
+          selfComment: 'The ERP migration overlapped the September close and we still held the three-day commitment, which I think is the strongest single result of the quarter.' },
+        { seqNo: 2, title: 'Reconciliation_automation_programme_phase_two_deliverables_and_signoff',
+          kpi: 'ReconciliationBreaksClosedWithinSLAPercentageAcrossAllLedgers',
+          target: '>=98%', category: 'PROCESS', weightage: 35, status: 'LOCKED', source: 'MANUAL',
+          achievement: 'https://internal.example.com/reports/reconciliation/q2-fy2026-27/breaks-by-ledger-and-age?view=summary',
+          selfRating: 3, selfComment: 'Short note.' },
+        { seqNo: 3, title: 'Mentoring', kpi: 'Sessions', target: '6', category: 'PEOPLE',
+          weightage: 25, status: 'DRAFT', source: 'MANUAL',
+          achievement: null, selfRating: null, selfComment: null },
+      ]} />],
 ]
 
 export default function PmsPreview() {
