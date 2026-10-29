@@ -117,5 +117,8 @@ export const MODULE_TABS: Record<string, ModuleTab[]> = {
     { key: 'offers',        label: 'Offers',         screen: 'recruitment.offers',        keywords: 'offer accepted backout revision signed' },
     { key: 'preonboarding', label: 'Pre-onboarding', screen: 'recruitment.preonboarding', keywords: 'joining doj pre onboarding' },
     { key: 'jobstatus',     label: 'Job Status',     screen: 'recruitment.jobstatus',     keywords: 'job status openings' },
+    // Every recruitment report as an Excel download (app/api/recruitment/reports). Seeded for
+    // RECRUITER by migration 201; HR Head / HR Manager see it unconfigured, like every tab.
+    { key: 'reports',       label: 'Reports',        screen: 'recruitment.reports',       keywords: 'reports excel download mrf hiring interviews negotiation offers documents joining recruiter' },
   ],
 }

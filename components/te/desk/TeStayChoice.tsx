@@ -29,10 +29,14 @@ import { platformOf, rejectReady } from '@/lib/te/trip-stay'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 
-export default function TeStayChoice({ stays, onDone }: {
+export default function TeStayChoice({ stays, onDone, onOpenTrip }: {
   stays: DeskStay[]
   /** Reload the desk and say what happened. */
   onDone: (message: string) => void
+  /** Open the whole trip. Choosing a hotel is a decision about somebody's
+   *  trip, and the dates, the route and what else has been booked on it are
+   *  all on the trip — not on this row. */
+  onOpenTrip?: (tripId: string) => void
 }) {
   // Which trip is open, which row is picked in it, and the remark being typed.
   // Kept per trip so switching between two does not carry one's note into the
@@ -88,7 +92,13 @@ export default function TeStayChoice({ stays, onDone }: {
               <div className="grow">
                 <div className="b">{s.name}</div>
                 <div className="small muted">
-                  {s.full_name ?? '—'} {s.emp_code ? `· ${s.emp_code}` : ''} · <span className="mono">{s.trip_no}</span>
+                  {s.full_name ?? '—'} {s.emp_code ? `· ${s.emp_code}` : ''} ·{' '}
+                  {onOpenTrip ? (
+                    <button type="button" className="link small mono" onClick={() => onOpenTrip(s.id)}
+                      title="Everything on this trip: the dates, the route, and what else is booked">
+                      {s.trip_no}
+                    </button>
+                  ) : <span className="mono">{s.trip_no}</span>}
                 </div>
                 <div className="small muted">
                   {s.start_date ? day(s.start_date) : 'No dates'}{s.end_date && s.end_date !== s.start_date ? ` to ${day(s.end_date)}` : ''}

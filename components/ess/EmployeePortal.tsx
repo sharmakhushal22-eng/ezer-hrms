@@ -29,6 +29,7 @@ import { hasAdminAccess } from '@/lib/rms/resolve'
 import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
+import { authHeaders } from '@/lib/auth-headers'
 import Celebrations from '@/components/ess/Celebrations'
 // Today is the landing tab, so it stays a static import. Splitting it would
 // trade bundle size for a spinner on the one screen everybody sees first.
@@ -3082,13 +3083,23 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
     supabase.from('my_generated_letters').select('*').eq('employee_id', emp.id).order('letter_date', { ascending: false })
       .then(({ data }) => { setRows(data || []); setLoading(false) }, () => setLoading(false))
   }, [emp.id])
-  async function download(fileUrl: string) {
-    const { data } = await supabase.storage.from('generated-letters').createSignedUrl(fileUrl, 300)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  const [err, setErr] = useState('')
+  // Signed on the server (/api/ess/my-letter): the bucket is private. The tab is opened first so
+  // the browser does not treat it as a popup once the link arrives.
+  async function download(id: string) {
+    setErr('')
+    const w = window.open('', '_blank')
+    try {
+      const r = await fetch(`/api/ess/my-letter?id=${encodeURIComponent(id)}&employee_id=${encodeURIComponent(emp.id)}`, { headers: await authHeaders(), cache: 'no-store' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.url) throw new Error(j.error || 'Could not open the letter.')
+      if (w) w.location.href = j.url; else window.open(j.url, '_blank')
+    } catch (e: any) { w?.close(); setErr(e.message) }
   }
   return (
     <div style={T.card}>
       <div style={T.section}>My Letters</div>
+      {err && <div style={{ fontSize:12, color:C.critical, marginBottom:8 }}>{err}</div>}
       {loading ? <div style={{ fontSize:12, color:C.faint }}>Loading…</div> :
         rows.length === 0 ? <div style={{ fontSize:12, color:C.faint }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
         rows.map(r => (
@@ -3098,7 +3109,7 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
               <div style={{ fontSize:13, fontWeight:600 }}>{r.letter_name}</div>
               <div style={{ fontSize:11, color:C.faint }}>{new Date(r.letter_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
             </div>
-            <button onClick={() => download(r.file_url)} style={{ ...T.btnO }}>⬇ Download</button>
+            <button onClick={() => download(r.id)} style={{ ...T.btnO }}>⬇ Download</button>
           </div>
         ))}
     </div>
@@ -3243,8 +3254,6 @@ const SECTIONS: NavSection[] = [
       // Raise MRF removed from HRIS — an MRF is now raised from Recruitment → MRF tab
       // (the same auto-filling form), so it no longer appears here.
       { k:'exit',        label:'Exit Process' },
-      // Clearance forms, exits in progress and F&F — only for canExitFnf (see sectionItems).
-      { k:'exit-fnf',    label:'Exit Clearance & F&F' },
     ]},
 
   // ── Role-wise tabs (071) — shown only when /api/ess/menu says so ──
@@ -3347,13 +3356,31 @@ function SectionButton({ s, active, href, onClick }: { s: NavSection; active: bo
       {href && <span className="ess-ext" aria-hidden>↗</span>}
     </>
   )
-  // A section that is a page of its own is a real link, not a scripted popup:
-  // ctrl/cmd-click, middle click, "Open in new tab" and the address on hover all
-  // work. No onClick — the anchor's default opens the tab.
+  // A section that is a page of its own is a real link, not a scripted popup.
+  // That buys the browser's own behaviour for free: the address on hover, and
+  // ctrl/cmd-click or middle-click for anyone who DOES want a second tab. No
+  // onClick — the anchor's default navigation is the whole behaviour, and
+  // calling go() as well would do it twice.
+  //
+  // IT STAYS IN THIS TAB. This used to carry target="_blank", which spawned a
+  // browser tab every time somebody opened Travel & Expenses and left them with
+  // two tabs of the same portal to keep straight. The module still gets the
+  // whole viewport — it is its own full-screen page at its own address, which is
+  // the point of it being a page rather than a panel — and its own "ESS" button
+  // comes back here. A new tab was never part of that; it was just how the link
+  // happened to be written.
+  //
+  // So: no target. A plain anchor navigates in the tab it was clicked in, and
+  // the person who wants a second tab can still ask for one. The title says the
+  // label alone for the same reason — promising "opens in a new tab" when it no
+  // longer does is worse than saying nothing.
+  //
+  // The class rather than an inline style is the rail's own convention: hover
+  // and the active marker live in portal.css (.ess-item), which an inline style
+  // cannot express.
   if (href) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="ess-item" data-on="0"
-        title={`${s.label} (opens in a new tab)`}>
+      <a href={href} className="ess-item" data-on="0" title={s.label}>
         {inner}
       </a>
     )
@@ -3559,7 +3586,7 @@ const ESS_KEYWORDS: Record<string, string> = {
   attendance: 'attendance punch regularise regularize', leave: 'leave apply holiday time off',
   inbox: 'messages notifications mail', directory: 'team directory people colleagues employees',
   requests: 'raise request helpdesk ticket', approvals: 'tasks approvals pending approve leave travel resignation offers interviews',
-  exit: 'resign resignation exit separation', 'exit-fnf': 'exit clearance full and final fnf f&f settlement relieving experience letter no dues', company: 'company headcount attrition', reports: 'reports export',
+  exit: 'resign resignation exit separation', company: 'company headcount attrition', reports: 'reports export',
   performance: 'pms performance goals kra appraisal review', social: 'social wall fame appreciate', funzone: 'games fun zone',
 }
 
@@ -3756,7 +3783,6 @@ function NotificationBell({ unread, open, onToggle }: { unread: number; open: bo
 /** Every employee screen the portal can show — the SECTIONS items plus the views reached only
  *  by a link or a button (declaration, directory…). Used to read /ess/<view> from the address. */
 /** Who gets HR Services → Exit Clearance & F&F (beside managers, who clear as HOD). */
-const EXIT_FNF_ROLES = ['IT', 'ADMIN_COMPANY', 'ADMIN_SUPER', 'FINANCE_EXECUTIVE', 'PAYROLL', 'PAYROLL_ADMIN', 'CFO', 'HR_MANAGER', 'HR_HEAD', 'CHRO', 'HR_EXECUTIVE', 'BRANCH_HR', 'RECRUITER']
 const VIEW_KEYS: Set<string> = new Set([
   ...SECTIONS.flatMap(s => s.items.map(i => i.k)),
   'home', 'profile', 'leave', 'inbox', 'vpf', 'nps', 'loans', 'flexi', 'declaration', 'proofs', 'flexiclaims', 'claims', 'attendance',
@@ -3863,21 +3889,31 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // Every move writes the address (a history entry), so Back returns to the previous screen
   // and a refresh stays on this one. The sync is skipped when this portal is not at /ess.
   const sync = !!urlSync && atEss()
-  const go = (k: string) => {
+  // `replace` is for an arrival nobody clicked — the deep-link effect below
+  // calls go() on load. Leaving a history entry there would trap Back: the
+  // person presses it, lands on the address that redirects, and is sent
+  // straight back to where they were trying to leave. A click is the opposite
+  // case and must leave the portal in history.
+  const go = (k: string, opts?: { replace?: boolean }) => {
     // A tab that is a page of its own leaves the portal instead of becoming a
-    // view, and it opens in a tab of its own so the portal stays where it was.
+    // view: it needs the whole viewport and has its own navigation, so it is a
+    // full-screen page at its own address rather than a panel inside this
+    // portal's chrome.
     //
-    // The fallback is not defensive padding. window.open is only permitted
-    // during the click that asked for it, and go() is ALSO called from the
-    // ?tab= deep-link effect below — no gesture there, so the browser returns
-    // null and this tab is the right place to land: the intent of a deep link
-    // is to arrive at the module, not to spawn a second window. A popup
-    // blocker gets the same treatment.
+    // IN THIS TAB. This used to be window.open(away, '_blank') with a
+    // same-tab fallback, so every route into Travel & Expenses — the rail, a
+    // sub-item, a deep link — left the person with two tabs of the same portal.
+    // Full screen and a new browser tab are different things, and only the
+    // first one was ever wanted.
+    //
+    // assign for a click, so the portal stays in history and the browser's Back
+    // button returns to it just as the module's own "ESS" button does; replace
+    // for an arrival nobody asked for, so Back does not land on a redirect.
     const away = AWAY[k]
     if (away) {
       setBellOpen(false); setMoreOpen(false)
-      const opened = window.open(away, '_blank', 'noopener,noreferrer')
-      if (!opened) window.location.href = away
+      if (opts?.replace) window.location.replace(away)
+      else window.location.assign(away)
       return
     }
     setAdminKey(null); setBellOpen(false); setMoreOpen(false)
@@ -3930,7 +3966,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     if (loc.kind === 'view' && AWAY[loc.view]) { window.location.replace(AWAY[loc.view]); return }
     if (!urlSync) {
       // Embedded portal: honour a deep link, never touch the address bar.
-      if (loc.kind === 'module') setAdminKey(loc.module); else if (loc.view !== 'home') go(loc.view)
+      // replace: nobody clicked this, it is the address being honoured on load.
+      if (loc.kind === 'module') setAdminKey(loc.module); else if (loc.view !== 'home') go(loc.view, { replace: true })
       return
     }
     applyLocation(loc)
@@ -3980,10 +4017,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // widening the server instead would hand out the right to raise, which is not
   // a UI decision.
   const canRaiseMrf = essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals
-  // Exit Clearance & F&F: the clearing departments, managers (HOD clearance) and HR / Payroll /
-  // Finance. The server decides what each sees (app/api/exit/*).
-  const canExitFnf = essMenu.super_admin || essMenu.is_rm || essMenu.is_hod || essMenu.roles.some(r => EXIT_FNF_ROLES.includes(r.code))
-  const sectionItems = section.items.filter(i => (i.k !== 'raise-mrf' || canRaiseMrf) && (i.k !== 'exit-fnf' || canExitFnf))
+  const sectionItems = section.items.filter(i => i.k !== 'raise-mrf' || canRaiseMrf)
 
   // Everything the feature search may offer — only what this person can open.
   const searchEntries: SearchEntry[] = []
@@ -3992,7 +4026,6 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     for (const it of sec.items) {
       if ((it as any).needs) continue                              // not built yet — a placeholder
       if (it.k === 'raise-mrf' && !canRaiseMrf) continue
-      if (it.k === 'exit-fnf' && !canExitFnf) continue
       searchEntries.push({ id: `ess:${it.k}`, label: it.label, crumb: sec.items.length > 1 ? `${sec.label} › ${it.label}` : 'My portal', icon: sec.k,
         keywords: `${sec.label.toLowerCase()} ${ESS_KEYWORDS[it.k] || ''}`, run: () => go(it.k) })
     }
@@ -4073,11 +4106,9 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       case 'requests':
       case 'approvals':
       case 'raise-mrf':
-      case 'exit':
-      case 'exit-fnf':      return <HrisShell employeeId={emp.id} tab={view} go={go}
+      case 'exit':          return <HrisShell employeeId={emp.id} tab={view} go={go}
                                               canApprove={essMenu.can.approvals}
                                               canRaiseMrf={canRaiseMrf}
-                                              canExitFnf={canExitFnf}
                                               adminMode={adminMode}
                                               notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />

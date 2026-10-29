@@ -33,7 +33,7 @@ const STAGE_ORDER = ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_H
 const CLOSED = ['SETTLED', 'WITHDRAWN']
 
 /** HR Services → Exit: the employee's own exit. Exiting somebody else is the red Exit button on
- *  People → Employees → employee detail (components/employees/HrExitButton). */
+ *  People → Employees → employee → HR Actions (components/employees/HrExitSection). */
 export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) => Promise<any> }) {
   return <OwnExit api={api} />
 }

@@ -37,13 +37,40 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
   nights: number
   edit: (patch: Partial<PlannerDraft>) => void
 }) {
-  const note = draft.stayWanted ? stayOptionsNote(draft.stayOptions) : null
+  /** A trip being recorded after it happened. The questions here still decide
+   *  whether a hotel and a food budget are estimated for it, but everything
+   *  addressed to the Travel Desk is already in the past tense. */
+  const past = draft.origin === 'POST_FACTO'
+
+  /** How many of the three hotels were given, for the approver. Only asked for
+   *  when there is a desk to ask, so it is not computed for a past trip. */
+  const note = draft.stayWanted && !past ? stayOptionsNote(draft.stayOptions) : null
 
   const setOption = (i: number, patch: Partial<PlannerDraft['stayOptions'][number]>) =>
     edit({ stayOptions: draft.stayOptions.map((o, j) => (j === i ? { ...o, ...patch } : o)) })
 
+  /** Both questions answered, so the step can confirm it is finished rather
+   *  than leaving somebody wondering whether they missed something. */
+  const answered = draft.stayWanted !== undefined && draft.foodWanted !== undefined
+
   return (
     <div className="stack">
+      {/* THIS IS A WHOLE STEP NOW, not the block it used to be in the middle of
+          Review. So it opens by saying what the step is for — a step that
+          starts straight in on a Yes/No reads like a question with no
+          subject. */}
+      <div className="sec">
+        <h4>Stay and food</h4>
+        <p className="small muted">
+          {past
+            ? <>Two questions about a trip that is already over: the hotel you paid for goes on the
+                trip as a bill, and the food budget is what those bills are measured against.</>
+            : <>Two questions, and neither commits you to anything: the hotel is picked and booked
+                by the Travel Desk, and the food budget is only spent against bills you add while
+                the trip is on.</>}
+        </p>
+      </div>
+
       {/* ── the stay ── */}
       <div className="card flat tint">
         <div className="ch">
@@ -51,29 +78,64 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
           {nights > 0 ? <span className="chip plain">{nights === 1 ? '1 night away' : `${nights} nights away`}</span> : null}
         </div>
 
-        <div className="seg" role="group" aria-label="Do you need a stay">
-          <button type="button" aria-pressed={draft.stayWanted === true} onClick={() => edit({ stayWanted: true })}>Yes</button>
-          <button type="button" aria-pressed={draft.stayWanted === false} onClick={() => edit({ stayWanted: false })}>No</button>
+        {/* CHOICE CARDS, NOT A YES/NO TOGGLE. A bare Yes/No makes the reader
+            carry what each answer means; saying it on the card is the whole
+            difference between a form and a question somebody can answer. */}
+        <div className="qcards" role="group" aria-label="Do you need a stay">
+          <button type="button" className="qcard" aria-pressed={draft.stayWanted === true} onClick={() => edit({ stayWanted: true })}>
+            <TeIcon name="home" />
+            <span>
+              <b>{past ? 'Yes, I stayed overnight' : 'Yes, I need a hotel'}</b>
+              <small>{past ? 'Add the hotel bill to the trip' : 'Name a few and the desk books one'}</small>
+            </span>
+          </button>
+          <button type="button" className="qcard" aria-pressed={draft.stayWanted === false} onClick={() => edit({ stayWanted: false })}>
+            <TeIcon name="close" />
+            <span>
+              <b>{past ? 'No stay' : 'No stay needed'}</b>
+              <small>{past ? 'Back the same day, or stayed privately' : 'Back the same day, or staying privately'}</small>
+            </span>
+          </button>
         </div>
 
         {draft.stayWanted === false ? (
           <p className="small muted">No hotel on this trip, so none is estimated for it.</p>
         ) : null}
 
-        {draft.stayWanted ? (
+        {/* THE THREE HOTELS ARE A REQUEST TO THE DESK, so a trip that is
+            already over has nothing to put in them. Asking somebody to name
+            hotels "you would be happy with" for nights they have already slept
+            through reads as a form that has not noticed which trip it is on —
+            and on this route the desk books nothing at all: syncDraft sets
+            bookedBy to 'self', te_trip_save leaves the trip in DRAFT, and both
+            v_te_to_book and the stays room exclude it. So the question stays,
+            because it is what decides whether a hotel is estimated, and the
+            picker goes. */}
+        {draft.stayWanted && past ? (
+          <p className="small muted">
+            The hotel is already paid for, so there is nothing for the desk to book. Add the bill to
+            this trip once it is saved and it is claimed with the trip.
+          </p>
+        ) : null}
+
+        {draft.stayWanted && !past ? (
           <>
             <p className="small muted">
               Name {STAY_OPTIONS_WANTED} hotels you would be happy with and paste the page you found each on.
               The Travel Desk picks one and books it.
             </p>
 
-            <div className="stack sm">
+            {/* Three abreast where there is room. They are alternatives to each
+                other, and stacking them made the reader scroll to compare two
+                things that differ by one line. */}
+            <div className="hgrid">
               {draft.stayOptions.map((o, i) => {
                 const site = platformOf(o.url)
                 return (
-                  <div key={i} className="card flat">
-                    <div className="ch">
-                      <h4>Hotel {i + 1}{i === 0 ? ' — your first choice' : ''}</h4>
+                  <div key={i} className={`hcard ${i === 0 ? 'first' : ''}`}>
+                    <div className="hc-h">
+                      <span className="hc-n">{i + 1}</span>
+                      <b>{i === 0 ? 'Your first choice' : `Hotel ${i + 1}`}</b>
                       {site ? <span className="chip plain">{site}</span> : null}
                     </div>
                     <div className="form">
@@ -113,34 +175,60 @@ export default function TePlanStay({ draft, foodBudget, nights, edit }: {
         ) : null}
       </div>
 
+      {answered ? (
+        <div className="flag ok">
+          <TeIcon name="check" />
+          <div className="tx">
+            <b>Both answered</b>
+            <p>
+              {draft.stayWanted
+                ? 'The Travel Desk sees your hotels once the plan is approved, picks one and books it.'
+                : 'No hotel on this trip.'}
+              {draft.foodWanted ? ' Food is claimed against bills you add while the trip is on.' : ' No food budget on this trip.'}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {/* ── food ── */}
       <div className="card flat tint">
         <div className="ch"><h3>Will you spend on food?</h3></div>
 
-        <div className="seg" role="group" aria-label="Will you spend on food">
-          <button type="button" aria-pressed={draft.foodWanted === true} onClick={() => edit({ foodWanted: true })}>Yes</button>
-          <button type="button" aria-pressed={draft.foodWanted === false} onClick={() => edit({ foodWanted: false })}>No</button>
+        <div className="qcards" role="group" aria-label="Will you spend on food">
+          <button type="button" className="qcard" aria-pressed={draft.foodWanted === true} onClick={() => edit({ foodWanted: true })}>
+            <TeIcon name="receipt" />
+            <span><b>Yes, I will</b><small>Add each bill while the trip is on</small></span>
+          </button>
+          <button type="button" className="qcard" aria-pressed={draft.foodWanted === false} onClick={() => edit({ foodWanted: false })}>
+            <TeIcon name="close" />
+            <span><b>No food bills</b><small>Meals are covered, or none expected</small></span>
+          </button>
         </div>
 
         {draft.foodWanted ? (
-          <div className="note">
-            <TeIcon name="info" size="sm" />
-            <span>
-              {foodBudget > 0 ? (
-                <>
-                  {/* The explicit space survives JSX's whitespace trimming next to an element. */}
-                  <b>{rs(foodBudget)}</b>{' '}is set aside for food on this trip — your company&rsquo;s daily food limit for
-                  your grade, for each day you are away. There is nothing to fill in now. Add each food and drink bill
-                  while you are travelling, with a remark, and it comes off this budget as you go.
-                </>
-              ) : (
-                <>
-                  No food budget applies to this trip yet. It is worked out from your company&rsquo;s daily food limit
-                  once the dates and places are set.
-                </>
-              )}
-            </span>
-          </div>
+          foodBudget > 0 ? (
+            // The budget is the answer to the question, so it is shown as a
+            // figure rather than buried mid-sentence in a note.
+            <div className="card flat">
+              <div className="bigmoney">
+                <b>{rs(foodBudget)}</b>
+                <span>set aside for food on this trip</span>
+              </div>
+              <p className="small muted">
+                Your company&rsquo;s daily food limit for your grade, for each day you are away. There is nothing to
+                fill in now — add each food and drink bill while you are travelling, with a remark, and it comes off
+                this budget as you go.
+              </p>
+            </div>
+          ) : (
+            <div className="note">
+              <TeIcon name="info" size="sm" />
+              <span>
+                No food budget applies to this trip yet. It is worked out from your company&rsquo;s daily food limit
+                once the dates and places are set.
+              </span>
+            </div>
+          )
         ) : null}
 
         {draft.foodWanted === false ? (

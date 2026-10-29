@@ -32,6 +32,20 @@ export interface Kra {
   target_value: string
   category: Category
   weightage: number
+  /**
+   * WHERE THIS KRA CAME FROM. pms_employee_goals.source, which has allowed
+   * 'MANUAL' | 'LIBRARY' | 'AI_SUGGESTED' | 'CARRIED_FORWARD' since 066 and
+   * was never written by anything — every row was saved as the default
+   * MANUAL, including rows that were plainly carried over.
+   *
+   * It matters beyond bookkeeping: a carried-forward KRA arrives already
+   * agreed from last quarter, so the one-to-one is reviewing a change rather
+   * than settling something new, and the employee should be told which of
+   * their KRAs is which.
+   */
+  source?: 'MANUAL' | 'LIBRARY' | 'AI_SUGGESTED' | 'CARRIED_FORWARD'
+  /** The period it was carried from, when it was. */
+  carried_from_period_id?: string | null
 }
 
 export interface KraFault {
@@ -144,4 +158,73 @@ export function suggestSplit(n: number, r: Rules = DEFAULT_RULES): number[] {
   const out = Array(n).fill(base)
   out[0] += r.totalWeightage - base * n
   return out
+}
+
+// ── §3's change log ──────────────────────────────────────────────────────
+
+/** One row for pms_audit_log: what a KRA was, and what it became. */
+export interface KraChange {
+  action: 'ADD' | 'EDIT' | 'DELETE'
+  seq_no: number
+  /** The goal row's id, when it already existed. */
+  record_id: string | null
+  old_value: Record<string, unknown> | null
+  new_value: Record<string, unknown> | null
+}
+
+/** The fields a change is judged on. Deliberately not `status`, `locked_at`
+ *  or the HR override columns: those move for reasons that are not the
+ *  employee editing their KRA, and logging them as edits would bury the
+ *  changes that were actually agreed. */
+const TRACKED = ['kra_title', 'kpi_metric', 'target_value', 'category', 'weightage'] as const
+
+type Row = { id?: string | null; seq_no: number } & Record<string, unknown>
+
+const shape = (r: Row): Record<string, unknown> => {
+  const out: Record<string, unknown> = { seq_no: r.seq_no }
+  for (const f of TRACKED) out[f] = f === 'weightage' ? Number(r[f]) || 0 : (r[f] ?? null)
+  return out
+}
+
+const same = (a: Row, b: Row) =>
+  TRACKED.every(f => f === 'weightage'
+    ? (Number(a[f]) || 0) === (Number(b[f]) || 0)
+    : String(a[f] ?? '') === String(b[f] ?? ''))
+
+/**
+ * What changed between the saved set and the one being submitted.
+ *
+ * §3's update: "a JSON log capturing the transition from the old to the new
+ * state will be generated". Matched on seq_no, which is what
+ * UNIQUE (period_id, employee_id, seq_no) makes the identity of a KRA within
+ * a period — and what the upsert keys on, so this diff sees exactly the rows
+ * the write will touch.
+ *
+ * A shorter set leaves a tail that submitKras deletes, and those are reported
+ * as DELETE here. Without that, dropping a KRA would be the one modification
+ * the log stayed silent about, which is also the one most worth having a
+ * record of.
+ */
+export function diffKras(before: Row[], after: Row[]): KraChange[] {
+  const was = new Map(before.map(r => [Number(r.seq_no), r]))
+  const now = new Map(after.map(r => [Number(r.seq_no), r]))
+  const out: KraChange[] = []
+
+  for (const [seq, b] of now) {
+    const a = was.get(seq)
+    if (!a) {
+      out.push({ action: 'ADD', seq_no: seq, record_id: null,
+                 old_value: null, new_value: shape(b) })
+    } else if (!same(a, b)) {
+      out.push({ action: 'EDIT', seq_no: seq, record_id: (a.id as string) ?? null,
+                 old_value: shape(a), new_value: shape(b) })
+    }
+  }
+  for (const [seq, a] of was) {
+    if (!now.has(seq)) {
+      out.push({ action: 'DELETE', seq_no: seq, record_id: (a.id as string) ?? null,
+                 old_value: shape(a), new_value: null })
+    }
+  }
+  return out.sort((x, y) => x.seq_no - y.seq_no)
 }

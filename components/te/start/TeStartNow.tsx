@@ -18,15 +18,20 @@ import {
   type DraftContext, type PlannerDraft,
 } from '@/lib/te/trip-draft'
 import { errorText, plural, rs } from '@/lib/te/format'
+import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
 import TePlacePicker, { type PickTarget } from '../plan/TePlacePicker'
 
-export default function TeStartNow({ snap, onClose, onStarted }: {
+export default function TeStartNow({ snap, onClose, onStarted, onPlaceAdded }: {
   snap: Snapshot
   onClose: () => void
   /** The trip exists and its first leg is running. */
   onStarted: (tripId: Uuid, legId: Uuid, message: string) => void
+  /** A place was created inside the picker, so the snapshot this screen is
+   *  holding does not know it yet and would name the point "—". The host
+   *  refetches WITHOUT closing: the half-filled form lives in here. */
+  onPlaceAdded?: () => void
 }) {
   const ctx = useMemo<DraftContext>(() => ({
     today: snap.today,
@@ -121,6 +126,7 @@ export default function TeStartNow({ snap, onClose, onStarted }: {
         snap={snap}
         target={picking}
         onCancel={() => setPicking(null)}
+        onPlaceAdded={onPlaceAdded}
         onChosen={(placeId, pt) => {
           const at = picking
           setPicking(null)
@@ -221,6 +227,25 @@ export default function TeStartNow({ snap, onClose, onStarted }: {
           ))}
         </div>
         {err('purpose') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('purpose')}</div> : null}
+        {/* Leaving now is the most hurried way into the module, which is all
+            the more reason an unexplained Other must not get through it. */}
+        {needsExplanation(draft.purpose) ? (
+          <div className="form">
+            <label className="fld full">
+              <span>{whyLabel('purpose').label}</span>
+              <textarea
+                autoFocus
+                value={draft.purposeNote}
+                placeholder="Supplier arbitration hearing in Indore"
+                onChange={e => edit({ purposeNote: e.target.value })}
+              />
+              <small>{whyLabel('purpose').hint}</small>
+            </label>
+            {draft.tried && whyProblem(draft.purpose, draft.purposeNote)
+              ? <div className="ferr"><TeIcon name="warn" size="sm" />{whyProblem(draft.purpose, draft.purposeNote)}</div>
+              : null}
+          </div>
+        ) : null}
       </div>
 
       {/* How you travel: one choice for the whole trip, because a local there

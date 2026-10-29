@@ -24,14 +24,16 @@ import { useState } from 'react'
 import './pms.css'
 import { teamQueue, finaliseQueue, teamStats, distribution,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
-import { FLAG_LABEL } from '@/lib/pms/employment'
+import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
-         DEFAULT_BANDS, type Line } from '@/lib/pms/scoring'
+         DEFAULT_BANDS, type Band, type Line } from '@/lib/pms/scoring'
 import { canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
+import { approvalFinalises, mayReject, rejectDestination, remarkOk, MIN_REMARK,
+         rungFor, heldBy } from '@/lib/pms/chain'
 import { humanDate } from '@/lib/pms/cycle'
-import { DEFAULT_RULES } from '@/lib/pms/cycle'
+import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
 export type MgrTab = 'team' | 'approve' | 'rate' | 'pip' | 'analytics'
 export type HodTab = 'finalise' | 'feedback' | 'deptAnalytics'
@@ -119,11 +121,15 @@ function ExitBanner({ rows }: { rows: QueueRow[] }) {
   )
 }
 
-function QueueTable({ rows, extraHead, extraCell, empty }: {
+function QueueTable({ rows, extraHead, extraCell, empty, rules = DEFAULT_RULES }: {
   rows: QueueRow[]
   extraHead?: React.ReactNode
   extraCell?: (r: QueueRow) => React.ReactNode
   empty: string
+  /** Only used to colour the weightage cell, but it still has to be the
+   *  POLICY's total: on a policy with total_weightage 80, a correct set would
+   *  otherwise render red against the hardcoded 100. */
+  rules?: Rules
 }) {
   return (
     <div className="tblwrap">
@@ -152,7 +158,7 @@ function QueueTable({ rows, extraHead, extraCell, empty }: {
               <td><FlagPill r={r} /></td>
               <td className="num">{r.member.kraCount}</td>
               <td className="num">
-                <span className={r.member.totalWeightage === DEFAULT_RULES.totalWeightage ? 'ok' : 'bad'}>
+                <span className={r.member.totalWeightage === rules.totalWeightage ? 'ok' : 'bad'}>
                   {r.member.totalWeightage}
                 </span>
               </td>
@@ -181,10 +187,23 @@ const EMPTY_TEAM =
 
 // ── §4.1 Team Dashboard ──────────────────────────────────────────────────
 
-export function TeamTab({ members, today, managerName }: {
+export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
+  /** The policy's KRA rules, not the constant — a manager must be shown the
+   *  same thresholds the employee was held to. */
+  rules?: Rules
   members: TeamMember[]; today: string; managerName: string
 }) {
-  const rows = teamQueue(members, today)
+  const rows = teamQueue(members, today, flagRules)
   const s = teamStats(rows)
   return (
     <>
@@ -202,7 +221,7 @@ export function TeamTab({ members, today, managerName }: {
       </div>
       <Card title={`My team: ${managerName}`}
             sub="Ordered by whose deadline cannot move, then by what is actually owed.">
-        <QueueTable rows={rows} empty={EMPTY_TEAM} />
+        <QueueTable rules={rules} rows={rows} empty={EMPTY_TEAM} />
       </Card>
     </>
   )
@@ -210,36 +229,221 @@ export function TeamTab({ members, today, managerName }: {
 
 // ── §4.2 KRA Approval & One-to-One ───────────────────────────────────────
 
-export function ApproveTab({ members, today, onSendBack, onAcknowledge }: {
+/**
+ * §(none) — the approval chain, asked for directly.
+ *
+ * ONE CARD, NOT A TAB. The sets waiting on this manager's approval belong
+ * beside the sets waiting on their one-to-one: both answer "what is sitting
+ * with me", and splitting them across tabs means a manager who clears one
+ * screen believes they are done.
+ *
+ * WHY THE RATING INPUT APPEARS ON ONLY ONE RUNG. Approving at the last rung
+ * before HR does not pass the appraisal on, it FINALISES it — pms_chain_approve
+ * calls pms_finalise in the same statement and refuses without a number. Every
+ * other rung is passing it up, where asking for a rating would invite a manager
+ * to set a final figure they have no authority to set. So the button changes
+ * its name and grows a field exactly where the consequence changes.
+ *
+ * WHY THE REJECT BUTTON NAMES ITS DESTINATION. "Reject" reads the same to an
+ * RM L2 whose rejection reaches RM L1 and to an RM L1 whose rejection reaches
+ * the employee, and those are different decisions. The rejecter sees which one
+ * they are making before they type the remark, not after.
+ */
+function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
+                          onApprove, onReject, bands }: {
+  members: TeamMember[]; today: string
+  flagRules?: FlagRules
+  rules: Rules
+  /** The VIEWER's employee id. Their rung is worked out per row — see
+   *  rungFor. Empty means nothing renders. */
+  viewerId: string
+  /** The policy's chain, which decides which rung finalises. */
+  chain: Chain
+  onApprove?: (id: string, rating?: number) => void
+  onReject?: (id: string, remark: string) => void
+  bands?: Band[]
+}) {
+  const [remark, setRemark] = useState<Record<string, string>>({})
+  const [rating, setRating] = useState<Record<string, string>>({})
+  const [rejecting, setRejecting] = useState<Record<string, boolean>>({})
+
+  // Only what is actually with this person, on the rung they hold for THAT
+  // employee. A manager holding RM_L1 must not be offered an approval on a set
+  // that has moved up to RM_L2 — the RPC would refuse it, but offering it at
+  // all suggests the queue is theirs to clear.
+  const rows = teamQueue(members, today, flagRules)
+    .filter(r => r.member.chainStage
+              && r.member.chainStage === rungFor(r.member, viewerId))
+
+  if (!viewerId || !rows.length) return null
+
+  return (
+    <Card title="Waiting on your approval"
+          sub="Sets that have reached your rung. Approving passes them up the chain; the last rung settles the rating.">
+      <QueueTable
+        rules={rules}
+        rows={rows}
+        empty="Nothing is with you for approval."
+        extraHead={<th>Approval</th>}
+        extraCell={r => {
+          const id = r.member.employeeId
+          const myStage = rungFor(r.member, viewerId)!
+          // The HOLDERS, not just the policy's chain. On a collapsed line
+          // (190 of 395 enrolments) RM L2 is unfilled, so an RM L1's approval
+          // finalises rather than passing the set up — and the button has to
+          // say so and ask for the rating the database will demand.
+          const held = heldBy(r.member)
+          const finalises = approvalFinalises(chain, myStage, held)
+          const canReject = mayReject(myStage)
+          const rk = remark[id] ?? ''
+          const rt = rating[id] ?? ''
+          const num = Number(rt)
+          // The band list is the policy's scale, so its edges are the valid
+          // range rather than a hardcoded 1-5 that a 1-4 scale would break.
+          const lo = bands?.length ? Math.min(...bands.map(b => b.value)) : 1
+          const hi = bands?.length ? Math.max(...bands.map(b => b.value)) : 5
+          const ratingOk = !finalises || (rt !== '' && num >= lo && num <= hi)
+
+          if (rejecting[id]) {
+            return (
+              <td>
+                <div style={{ display: 'grid', gap: 4, minWidth: 220 }}>
+                  <div className="k">
+                    This goes <b>{rejectDestination(chain, myStage, held)}</b>.
+                  </div>
+                  <input placeholder="What has to change, in a sentence"
+                         aria-label={`Reason for rejecting ${r.member.name}'s appraisal`}
+                         value={rk}
+                         onChange={e => setRemark(p => ({ ...p, [id]: e.target.value }))} />
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn ghost sm" type="button"
+                            disabled={!onReject || !remarkOk(rk)}
+                            onClick={() => { onReject?.(id, rk)
+                                             setRejecting(p => ({ ...p, [id]: false })) }}>
+                      Confirm rejection
+                    </button>
+                    <button className="btn ghost sm" type="button"
+                            onClick={() => setRejecting(p => ({ ...p, [id]: false }))}>
+                      Cancel
+                    </button>
+                  </div>
+                  {!remarkOk(rk) && (
+                    <div className="k">
+                      At least {MIN_REMARK} characters. The database refuses a
+                      rejection without a reason.
+                    </div>
+                  )}
+                </div>
+              </td>
+            )
+          }
+
+          return (
+            <td>
+              <div style={{ display: 'grid', gap: 4, minWidth: 180 }}>
+                {finalises && (
+                  <input type="number" step="0.01" min={lo} max={hi}
+                         placeholder={`Final rating (${lo}–${hi})`}
+                         aria-label={`Final rating for ${r.member.name}`}
+                         value={rt}
+                         onChange={e => setRating(p => ({ ...p, [id]: e.target.value }))} />
+                )}
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn sm" type="button"
+                          disabled={!onApprove || !ratingOk}
+                          onClick={() => onApprove?.(id, finalises ? num : undefined)}>
+                    {finalises ? 'Approve & finalise' : 'Approve'}
+                  </button>
+                  {canReject && (
+                    <button className="btn ghost sm" type="button"
+                            disabled={!onReject}
+                            onClick={() => setRejecting(p => ({ ...p, [id]: true }))}>
+                      Reject
+                    </button>
+                  )}
+                </div>
+              </div>
+            </td>
+          )
+        }} />
+      <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+        A rejection goes back one rung, never straight to the employee from
+        halfway up — and it needs a reason, which they see. You can change their
+        KRAs or ratings before approving; every change is logged against your
+        name.
+      </div>
+    </Card>
+  )
+}
+
+export function ApproveTab({ members, today, onSendBack, onAcknowledge,
+                             onAcknowledgeFinalReview, rules = DEFAULT_RULES, flagRules,
+                             viewerId = '', chain = 'SELF_RM1_RM2_HOD',
+                             onApprove, bands}: {
+  /** The viewer's id and the policy's chain — see ChainApprovals. Defaulted so
+   *  a call site that has not been updated renders the tab without the
+   *  approval card rather than crashing. */
+  viewerId?: string
+  chain?: Chain
+  onApprove?: (id: string, rating?: number) => void
+  bands?: Band[]
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
+  /** The policy's KRA rules, not the constant — a manager must be shown the
+   *  same thresholds the employee was held to. */
+  rules?: Rules
   members: TeamMember[]; today: string
   onSendBack?: (id: string, reason: string) => void
   onAcknowledge?: (id: string) => void
+  /** The second tick on a FINAL_REVIEW discussion. Without it pms_finalise
+   *  refuses and the cycle cannot be closed. */
+  onAcknowledgeFinalReview?: (id: string) => void
 }) {
   const [reason, setReason] = useState<Record<string, string>>({})
-  const rows = teamQueue(members, today)
+  const rows = teamQueue(members, today, flagRules)
     .filter(r => !r.member.selfSubmitted || !r.member.oneToOneDone)
+  // Logged by the employee, still waiting on this manager's half. Not merged
+  // into the card above: that one is about getting a KRA set locked before
+  // the period runs, this one is the last thing standing between a rated
+  // employee and a settled rating. Same table, opposite ends of the cycle.
+  const finalRows = teamQueue(members, today, flagRules)
+    .filter(r => r.member.finalReviewLogged && !r.member.finalReviewDone)
 
   return (
     <>
       <div className="banner b-blue">
         <span aria-hidden="true">ℹ️</span>
         <div>
-          A set is valid at <b>{DEFAULT_RULES.minKra} to {DEFAULT_RULES.maxKra} KRAs
-          totalling exactly {DEFAULT_RULES.totalWeightage}</b>. Weightage locks only once
+          A set is valid at <b>{rules.minKra} to {rules.maxKra} KRAs
+          totalling exactly {rules.totalWeightage}</b>. Weightage locks only once
           you and they have both acknowledged the KRA one-to-one. One tick is a manager
           asserting a conversation happened, two is a record.
         </div>
       </div>
+      {/* First, because it is the only card here with a consequence that
+          cannot be undone: approving at the last rung settles the rating. */}
+      <ChainApprovals members={members} today={today} flagRules={flagRules}
+                      rules={rules} viewerId={viewerId} chain={chain}
+                      onApprove={onApprove} onReject={onSendBack} bands={bands} />
       <Card title="Waiting on the discussion"
             sub="Sets to check, and the one-to-ones that lock them.">
         <QueueTable
+          rules={rules}
           rows={rows}
           empty="Every set is settled and locked."
           extraHead={<th>Action</th>}
           extraCell={r => {
-            const valid = r.member.kraCount >= DEFAULT_RULES.minKra
-                       && r.member.kraCount <= DEFAULT_RULES.maxKra
-                       && r.member.totalWeightage === DEFAULT_RULES.totalWeightage
+            const valid = r.member.kraCount >= rules.minKra
+                       && r.member.kraCount <= rules.maxKra
+                       && r.member.totalWeightage === rules.totalWeightage
             return (
               <td>
                 {!valid ? (
@@ -268,6 +472,28 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge }: {
           employee guesses at what to change, and the set comes back wrong a second time.
         </div>
       </Card>
+      {finalRows.length > 0 && (
+        <Card title="Final review one-to-ones waiting on you"
+              sub="They have logged the conversation. The rating cannot be settled until you confirm it happened.">
+          <QueueTable
+            rules={rules}
+            rows={finalRows}
+            empty="None waiting."
+            extraHead={<th>Action</th>}
+            extraCell={r => (
+              <td>
+                <button className="btn sm" type="button" disabled={!onAcknowledgeFinalReview}
+                        onClick={() => onAcknowledgeFinalReview?.(r.member.employeeId)}>
+                  Acknowledge
+                </button>
+              </td>
+            )} />
+          <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+            Where the policy asks for a final review, the HOD cannot finalise without
+            both ticks. This is the last thing owed before the result exists.
+          </div>
+        </Card>
+      )}
     </>
   )
 }
@@ -281,7 +507,20 @@ export interface RateRow {
 }
 
 export function RateTab({ member, rows, onChange, onSubmit, saving, overallComment,
-                          onOverallComment }: {
+                          onOverallComment, bands = DEFAULT_BANDS, members, onPick, today, rules = DEFAULT_RULES, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
+  /** Passed to QueueTable so the weightage column is coloured against the
+   *  policy's total rather than a hardcoded 100. */
+  rules?: Rules
   member: TeamMember | null
   rows: RateRow[]
   onChange: (next: RateRow[]) => void
@@ -289,12 +528,55 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
   saving?: boolean
   overallComment: string
   onOverallComment: (s: string) => void
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
+  /** THE TAB CHOOSES ITS OWN SUBJECT. It used to say "choose a team member
+   *  from the dashboard" and the dashboard had nothing to click, so this tab
+   *  could never show anybody. Given the roster it asks here instead. */
+  members?: TeamMember[]
+  onPick?: (employeeId: string) => void
+  today?: string
 }) {
   if (!member) {
-    return <Card title="Pick somebody to rate">
-      <div className="k">Choose a team member from the dashboard. Their KRAs and their own
-      ratings appear here beside yours.</div>
-    </Card>
+    // The same queue the Team Dashboard shows, with one column added, rather
+    // than a second table that could drift from it — exit and notice rows stay
+    // highlighted and pinned here too.
+    const pickable = members && today ? teamQueue(members, today, flagRules) : []
+    return (
+      <Card title="Who are you rating?"
+            sub="Their KRAs and their own ratings appear beside yours once you choose.">
+        {!onPick
+          ? <div className="k">Picking is not available on this screen.</div>
+          : <QueueTable
+              rules={rules}
+              rows={pickable}
+              empty="Nobody is with you yet. A rating opens once their weightages are locked and they have submitted their own rating."
+              extraHead={<th />}
+              extraCell={r => (
+                <td>
+                  {/* A SETTLED RATING IS NOT A RATING TASK. This offered "Rate"
+                      on finalised rows beside the words "Nothing owed on this
+                      one right now", and the screen behind it accepted the
+                      submission — which recomputes the RM score the employee
+                      may already have been shown. Observed live on a published
+                      appraisal. The row says what it is instead. */}
+                  {r.member.finalised ? (
+                    <span className="pill p-green" title="Finalised. Ask HR to reopen the period if it has to change.">
+                      settled
+                    </span>
+                  ) : (
+                    <button type="button" className="btn sm"
+                            onClick={() => onPick(r.member.employeeId)}
+                            title={r.member.selfSubmitted
+                              ? `Rate ${r.member.name}`
+                              : `Open ${r.member.name} — they have not submitted their own rating yet`}>
+                      {r.member.selfSubmitted ? 'Rate' : 'Open'}
+                    </button>
+                  )}
+                </td>
+              )} />}
+      </Card>
+    )
   }
 
   const canRate = canManagerRate(member.selfSubmitted)
@@ -306,9 +588,9 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
   const theirs = score(lines, 'self')
   const g = gap(theirs, mine)
   const unrated = rows.filter(r => r.myRating === null).length
-  const band = bandFor(mine === null ? null : Math.round(mine))
+  const band = bandFor(mine === null ? null : Math.round(mine), bands)
   const fb = checkFeedback(mine === null ? null : Math.round(mine),
-                           { appreciation: overallComment })
+                           { appreciation: overallComment }, bands)
 
   const set = (i: number, patch: Partial<RateRow>) =>
     onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
@@ -365,7 +647,7 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
                         {[1, 2, 3, 4, 5].map(n => (
                           <button key={n} type="button" role="radio" aria-checked={r.myRating === n}
                                   className={r.myRating === n ? 'chip sel' : 'chip'}
-                                  title={bandFor(n)?.label}
+                                  title={bandFor(n, bands)?.label}
                                   onClick={() => set(i, { myRating: n })}>{n}</button>
                         ))}
                       </div>
@@ -409,12 +691,22 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
 
 export interface PipArea { area: string; current: string; target: string; measure: string; reviewOn: string }
 
-export function PipRequestTab({ members, today, onRaise, saving }: {
+export function PipRequestTab({ members, today, onRaise, saving, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   members: TeamMember[]; today: string
   onRaise?: (employeeId: string, areas: PipArea[], support: string) => void
   saving?: boolean
 }) {
-  const rows = teamQueue(members, today)
+  const rows = teamQueue(members, today, flagRules)
   const [who, setWho] = useState('')
   const [support, setSupport] = useState('')
   const [areas, setAreas] = useState<PipArea[]>([
@@ -508,13 +800,25 @@ export function PipRequestTab({ members, today, onRaise, saving }: {
 
 // ── §4.5 / §5.3 analytics ────────────────────────────────────────────────
 
-export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAverage, scopeLabel }: {
+export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAverage, scopeLabel, bands = DEFAULT_BANDS, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   members: TeamMember[]; today: string
   lines: Line[]
   deptAverage: number | null; companyAverage: number | null
   scopeLabel: string
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
-  const rows = teamQueue(members, today)
+  const rows = teamQueue(members, today, flagRules)
   const dist = distribution(rows)
   const rated = dist.reduce((s, d) => s + d.n, 0)
   const cats = byCategory(lines, 'final')
@@ -526,7 +830,7 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
         {rated === 0 ? (
           <div className="k">Nothing has been finalised yet, so there is no distribution to show.</div>
         ) : dist.map(d => {
-          const band = bandFor(d.rating)
+          const band = bandFor(d.rating, bands)
           return (
             <div className="abar" key={d.rating}>
               <div className="nm">{d.rating} · {band?.label ?? ''}</div>
@@ -567,16 +871,38 @@ export function TeamAnalyticsTab({ members, today, lines, deptAverage, companyAv
 
 // ── §5.1 Review & Finalise ───────────────────────────────────────────────
 
-export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName,
-                              onFinalise, onNudge, saving }: {
+export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName, bands = DEFAULT_BANDS,
+                              onFinalise, onNudge, onLogFinalReview,
+                              onAcknowledgeFinalReview, saving,
+                              finalReviewRequired = false, flagRules}: {
+  /**
+   * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
+   *
+   * §8 computes NEW_JOINER as "Date of Joining > (Period End − Cutoff Days)"
+   * and §13.2 makes the cutoff policy configuration. It was configurable in
+   * the database and in the admin screen and enforced NOWHERE: no call site
+   * ever passed FlagRules, so DEFAULT_FLAG_RULES's 30 days always won and a
+   * policy set to 45 changed nothing. Same shape as the KRA rules.
+   */
+  flagRules?: FlagRules
   members: TeamMember[]; today: string
   role: Role; chain: Chain; whoCanFinalise: Finaliser
   deptName: string
+  /** pms_policies.final_review_one_to_one, so the queue blocks on the same
+   *  condition pms_finalise does rather than discovering it on refusal. */
+  finalReviewRequired?: boolean
   onFinalise?: (id: string, rating: number) => void
   onNudge?: (id: string) => void
+  /** Create the final-review one-to-one and tick the manager's half. The gate
+   *  pms_finalise enforces had no door on this side at all — see the action
+   *  cell below. */
+  onLogFinalReview?: (id: string) => void
+  onAcknowledgeFinalReview?: (id: string) => void
   saving?: boolean
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
-  const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise })
+  const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise, finalReviewRequired, rules: flagRules })
   const [picked, setPicked] = useState<Record<string, number>>({})
   const awaiting = rows.filter(r => !r.member.finalised).length
   const done = rows.filter(r => r.member.finalised).length
@@ -642,7 +968,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                                 onChange={e => setPicked(p => ({ ...p,
                                   [r.member.employeeId]: Number(e.target.value) }))}>
                           <option value="">Choose</option>
-                          {DEFAULT_BANDS.map(b => (
+                          {bands.map(b => (
                             <option key={b.value} value={b.value}>{b.value} · {b.label}</option>
                           ))}
                         </select>}
@@ -660,6 +986,49 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                                 onClick={() => onNudge?.(r.member.employeeId)}>
                           Nudge RM L2
                         </button>
+                      ) : finalReviewRequired && !r.member.finalReviewDone && r.precedingDone ? (
+                        /* THE DEAD END THIS REPLACES. When the final-review
+                           one-to-one was the only thing blocking a rating,
+                           this cell printed insteadDo as plain text and
+                           offered nothing — and the ONLY code in the product
+                           that could create that row was the employee's own
+                           one-to-one form. A HOD with every other gate
+                           satisfied was stuck for good, and the message told
+                           them to go and ask the employee to log a meeting the
+                           HOD runs. Observed on Anil Verma (STC9030).
+
+                           §2's matrix has always granted log_one_to_one to
+                           RM L1, RM L2 and HOD. Only the button was missing.
+
+                           Three states, because one button cannot serve them:
+                           nothing logged, logged and awaiting MY tick, and
+                           logged with my tick and awaiting theirs. */
+                        !r.member.finalReviewLogged ? (
+                          /* Reached only once r.precedingDone — see the branch
+                             condition above. 199 put a trigger on
+                             pms_one_to_one that refuses an early FINAL_REVIEW
+                             with a database exception, so this button must not
+                             exist before the chain has caught up; and gating
+                             it with `disabled` instead would REPLACE the
+                             insteadDo sentence naming who is outstanding with
+                             a dead control, which is less useful than the
+                             sentence. */
+                          <button className="btn sm" type="button"
+                                  disabled={!onLogFinalReview || saving}
+                                  onClick={() => onLogFinalReview?.(r.member.employeeId)}>
+                            Log final review
+                          </button>
+                        ) : !r.member.finalReviewMgrAcked ? (
+                          <button className="btn sm" type="button"
+                                  disabled={!onAcknowledgeFinalReview || saving}
+                                  onClick={() => onAcknowledgeFinalReview?.(r.member.employeeId)}>
+                            Acknowledge it
+                          </button>
+                        ) : (
+                          <span className="k">
+                            Waiting on {r.member.name.split(' ')[0]} to acknowledge the final review
+                          </span>
+                        )
                       ) : <span className="k">{r.insteadDo}</span>}
                   </td>
                 </tr>
@@ -686,7 +1055,7 @@ export const BENEFIT_LABEL: Record<BenefitType, string> = {
   STAR_PERFORMER: 'Star performer', OTHER: 'Other',
 }
 
-export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs,
+export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs, bands = DEFAULT_BANDS,
                               onChange, onPublish, saving }: {
   member: TeamMember | null
   rating: number | null
@@ -697,15 +1066,17 @@ export function FeedbackTab({ member, rating, appreciation, improvement, benefit
                       benefits?: { type: BenefitType; note: string }[] }) => void
   onPublish?: () => void
   saving?: boolean
+  /** The configured rating scale; falls back to the built-in list. */
+  bands?: Band[]
 }) {
   if (!member) {
     return <Card title="Pick somebody">
       <div className="k">Choose a person from the finalisation queue to write their feedback.</div>
     </Card>
   }
-  const check = checkFeedback(rating, { appreciation, improvement })
+  const check = checkFeedback(rating, { appreciation, improvement }, bands)
   const publish = canPublishResult(logs)
-  const band = bandFor(rating)
+  const band = bandFor(rating, bands)
   const canPublish = check.ok && publish.open
 
   return (

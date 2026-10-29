@@ -7,14 +7,14 @@
 // whether approval is needed at all come back from te.tripPreview. This file
 // chooses the words and the order.
 import type { Snapshot, TripIssue, TripPreview } from '@/lib/te/types'
-import { blockingOn, errorFor, type PlannerDraft } from '@/lib/te/trip-draft'
-import { day, rs } from '@/lib/te/format'
+import { blockingOn, errorFor, LAST_STEP, visibleSteps, type PlanStep, type PlannerDraft } from '@/lib/te/trip-draft'
+import { day, dayAt, plural, rs } from '@/lib/te/format'
 import type { MapPlace } from '@/lib/te/trip-map'
-import { nightsBetween } from '@/lib/te/trip-stay'
+import { nightsBetween, STAY_OPTIONS_WANTED, usableStayOptions } from '@/lib/te/trip-stay'
+import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 import TeTripMap from './TeTripMap'
 import TeMapLinks from './TeMapLinks'
-import TePlanStay from './TePlanStay'
 
 const MODE_ICON: Record<string, string> = {
   own: 'car', company: 'car', cab: 'car', auto: 'car', rental: 'car',
@@ -30,7 +30,7 @@ const NO_GPS = ['Forgot to start the travel', 'Phone battery was low', 'No netwo
 /** Why there was no approval before a longer trip. */
 const NO_APPROVAL = ['Urgent client call', 'Verbal approval by my manager', 'Same-day travel', 'Other']
 
-const STEP_NAME = ['Trip', 'Route', 'Review']
+const STEP_NAME = ['Trip', 'Route', 'Commute', 'Stay', 'Review']
 
 export default function TePlanReview({ snap, draft, issues, preview, edit, onGoStep }: {
   snap: Snapshot
@@ -38,7 +38,7 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
   issues: TripIssue[]
   preview: TripPreview | null
   edit: (patch: Partial<PlannerDraft>) => void
-  onGoStep: (n: 1 | 2 | 3) => void
+  onGoStep: (n: PlanStep) => void
 }) {
   const local = draft.scope === 'local'
   const planning = draft.origin !== 'POST_FACTO'
@@ -49,11 +49,34 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
   const places = new Map<string, MapPlace>(
     snap.masters.places.map(p => [p.id, { id: p.id, s: p.s, lat: p.lat, lng: p.lng }]),
   )
+  const start = draft.points[0]?.leave ? draft.points[0] : null
+  const back = draft.points.find(p => p.ret && p.arrive) ?? null
+  const usable = usableStayOptions(draft.stayOptions)
+  const nights = nightsBetween(preview?.start ?? null, preview?.end ?? null)
   const blocking = issues.filter(i => i.block)
   const warnings = issues.filter(i => !i.block)
 
   return (
     <>
+      {/* WHEN, said once at the top. The times are collected on step 2 and
+          nothing computes on them, so Review is where they have to be visible
+          — otherwise an approver would never see the 6am they were told. */}
+      {start ? (
+        <div className="card flat tint">
+          <div className="ch">
+            <h3>When</h3>
+            <button type="button" className="link small" onClick={() => onGoStep(2)}>Change</button>
+          </div>
+          <dl className="kv">
+            <dt>Leaving</dt><dd>{dayAt(start.leave, start.leaveAt)}</dd>
+            {back ? <><dt>Back at the start</dt><dd>{dayAt(back.arrive, back.arriveAt)}</dd></> : null}
+          </dl>
+          {!start.leaveAt || (back && !back.arriveAt) ? (
+            <p className="small muted">No time was given for part of this, which is fine — the dates are what the plan is approved on.</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="sec">
         <h4>Journeys</h4>
         <p className="small muted">Each journey is tracked and paid on its own: GPS on the road, check-ins at airports and abroad.</p>
@@ -98,7 +121,10 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
       </div>
 
       <div className="sec">
-        <h4>{planning ? 'Stay, money and approval' : 'Why it was not tracked'}</h4>
+        {/* The heading names what is actually under it. On a trip with no stay
+            there is no stay block, and a heading promising one reads as a
+            section that failed to load. */}
+        <h4>{!planning ? 'Why it was not tracked' : draft.stayWanted === true ? 'Stay, money and approval' : 'Money and approval'}</h4>
 
         {!planning ? (
           <>
@@ -110,30 +136,85 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
                   {(local ? NO_GPS : NO_APPROVAL).map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </label>
-              <label className="fld">
-                <span>{local ? 'What happened' : 'Evidence, if any'}</span>
-                <input
-                  value={draft.pfNote}
-                  placeholder={local ? 'Needed for Other' : 'Meeting invite, e-mail from the client'}
-                  onChange={e => edit({ pfNote: e.target.value })}
-                />
-              </label>
+              {/* REQUIRED WHEN THE REASON IS OTHER, and a textarea rather than
+                  a one-line input then, because a reason that was not on the
+                  list takes a sentence. Otherwise it stays the optional
+                  evidence field it has always been.
+
+                  This used to be a permanently visible optional input whose
+                  placeholder read "Needed for Other" — which nobody who had
+                  already picked a listed reason ever read, and which did not
+                  stop an unexplained Other being submitted. */}
+              {needsExplanation(draft.pfReason) ? (
+                <label className="fld full">
+                  <span>{whyLabel(local ? 'gps' : 'approval').label}</span>
+                  <textarea
+                    autoFocus
+                    value={draft.pfNote}
+                    placeholder={local ? 'The tracking screen would not open on my phone' : 'The client moved the meeting to the next morning'}
+                    onChange={e => edit({ pfNote: e.target.value })}
+                  />
+                  <small>{whyLabel(local ? 'gps' : 'approval').hint}</small>
+                </label>
+              ) : (
+                <label className="fld">
+                  <span>{local ? 'What happened' : 'Evidence, if any'}</span>
+                  <input
+                    value={draft.pfNote}
+                    placeholder={local ? 'Optional' : 'Meeting invite, e-mail from the client'}
+                    onChange={e => edit({ pfNote: e.target.value })}
+                  />
+                </label>
+              )}
             </div>
             {err('pf') ? <div className="ferr"><TeIcon name="warn" size="sm" />{err('pf')}</div> : null}
+            {draft.tried && whyProblem(draft.pfReason, draft.pfNote)
+              ? <div className="ferr"><TeIcon name="warn" size="sm" />{whyProblem(draft.pfReason, draft.pfNote)}</div>
+              : null}
           </>
         ) : null}
 
-        {/* ── the stay and the food budget ──
-            Asked on every kind of trip, local included. A local trip used to
-            be defined as one day out with nowhere to sleep; a late finish near
-            the client says otherwise, and the refusal has been lifted. */}
-        {planning ? (
-          <TePlanStay
-            draft={draft}
-            foodBudget={preview?.estimate.meals ?? 0}
-            nights={nightsBetween(preview?.start ?? null, preview?.end ?? null)}
-            edit={edit}
-          />
+        {/* THE STAY IS ASKED FOR ON STEP 4 NOW, not here. It used to be a
+            block in the middle of Review, which is the one screen somebody
+            arrives at expecting to read rather than to answer — so the hotel
+            question was the easiest thing in the planner to miss. What is
+            left here is what was decided, read-only, with a way back. */}
+        {/* GONE, not answered with "Not needed". Saying no on step 1 took the
+            Stay step away; leaving its summary here to report two blanks puts
+            the question back in front of somebody who has already closed it,
+            and the Change button would point at a step that is not there. */}
+        {planning && draft.stayWanted === true ? (
+          <div className="card flat tint">
+            <div className="ch">
+              <h3>Stay and food</h3>
+              <button type="button" className="link small" onClick={() => onGoStep(4)}>Change</button>
+            </div>
+            <dl className="kv">
+              <dt>Hotel</dt>
+              <dd>
+                {draft.stayWanted
+                  ? `${usable.length} of ${STAY_OPTIONS_WANTED} hotels named${nights ? `, ${plural(nights, 'night')}` : ''}`
+                  : 'Not needed on this trip'}
+              </dd>
+              {draft.stayWanted ? (
+                <>
+                  <dt>Booked by</dt>
+                  <dd>{draft.stayBy === 'desk' ? 'The Travel Desk, company pays' : 'Me, I claim it later'}</dd>
+                </>
+              ) : null}
+              <dt>Food</dt>
+              <dd>
+                {draft.foodWanted
+                  ? `Yes — budget ${rs(preview?.estimate.meals ?? 0)}, claimed against bills on the trip`
+                  : 'Not needed on this trip'}
+              </dd>
+            </dl>
+            {draft.stayWanted && usable.length < STAY_OPTIONS_WANTED ? (
+              <p className="small muted">
+                The Travel Desk picks from the hotels you named. Fewer than {STAY_OPTIONS_WANTED} gives them less to choose from.
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {planning ? (
@@ -217,8 +298,12 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
             <div className={draft.tried ? 'flag crit' : 'flag info'}>
               <TeIcon name="claims" />
               <div className="tx">
-                <b>{draft.tried ? `${blocking.length} things to fix` : 'Still to fill'}</b>
-                {([1, 2, 3] as const).map(n => {
+                <b>{draft.tried ? `${plural(blocking.length, 'thing')} to fix` : 'Still to fill'}</b>
+                {/* The steps this plan actually has. Nothing routes a blocker
+                    to step 4 today, so this changes nothing yet — but a list
+                    that offers "Stay" on a plan with no Stay step is a trap
+                    waiting for the first issue that does. */}
+                {visibleSteps(draft).filter(n => n !== LAST_STEP).map(n => {
                   const on = blockingOn(issues, n)
                   if (!on.length) return null
                   return (
@@ -238,23 +323,39 @@ export default function TePlanReview({ snap, draft, issues, preview, edit, onGoS
 
           {preview && !blocking.length ? (
             <div className="sunk">
+              {/* THE HEADING FOLLOWS WHETHER THERE IS A LIST, not whether a
+                  list was expected. It used to ask `!planning` first, so a trip
+                  recorded after travel was promised "The trip and its claim go
+                  to" above an empty row: tripPreview fills `chain` only when
+                  plan.needsApproval, and a past trip needs no approval before
+                  leaving, so the array it mapped over was always []. Two
+                  conditions for one question, and they disagreed. */}
               <div className="small muted">
-                {!planning ? 'The trip and its claim go to'
-                  : preview.needsApproval ? 'This plan goes to'
+                {preview.chain.length ? (planning ? 'This plan goes to' : 'The trip and its claim go to')
+                  : !planning ? 'What happens to this'
                     : 'No approval is needed before you leave'}
               </div>
-              {preview.needsApproval || !planning ? (
-                <>
-                  <div className="row tight">
-                    {preview.chain.map((s, i) => (
-                      <span key={`${s.role}-${i}`} className="row tight">
-                        {i ? <TeIcon name="go" size="sm" /> : null}
-                        <span className="av sm">{initials(s.name || s.role)}</span>
-                        <span><b>{s.name || s.team || s.role}</b> <span className="muted small">{s.role}</span></span>
-                      </span>
-                    ))}
-                  </div>
-                </>
+              {preview.chain.length ? (
+                <div className="row tight">
+                  {preview.chain.map((s, i) => (
+                    <span key={`${s.role}-${i}`} className="row tight">
+                      {i ? <TeIcon name="go" size="sm" /> : null}
+                      <span className="av sm">{initials(s.name || s.role)}</span>
+                      <span><b>{s.name || s.team || s.role}</b> <span className="muted small">{s.role}</span></span>
+                    </span>
+                  ))}
+                </div>
+              ) : !planning ? (
+                /* Nothing is approved ahead of a trip that already happened —
+                   te_trip_save leaves it in DRAFT and returns before it builds
+                   any approval steps. The claim filed against it is the thing
+                   that gets approved. Whether an HOD joins that chain is a
+                   company setting, and the engine already says so in a warning
+                   just above this, so it is deliberately not repeated here. */
+                <div className="small">
+                  Saving this records the journeys; nothing is approved yet.
+                  The claim you file against this trip is what goes for approval.
+                </div>
               ) : (
                 <div className="small">
                   Local, {Math.round(legs.reduce((a, l) => a + l.km, 0))} km in all. Start leg 1 on the day.

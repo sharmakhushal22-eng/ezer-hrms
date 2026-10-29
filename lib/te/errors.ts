@@ -72,6 +72,22 @@ const BAD_VALUE = new Set(['23514', '23502', '23503', '23505', '22P02', '22007',
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const bag = (e: unknown): Record<string, unknown> => (e && typeof e === 'object' ? (e as Record<string, unknown>) : {})
 
+/**
+ * Whether a failed query means "that table, view, function or column is not
+ * there yet" rather than a real fault. A route can then carry on without the
+ * part a pending migration has not created.
+ *
+ * WHY IT IS NOT ENOUGH TO CHECK A POSTGRES CODE. A view the API has never seen
+ * comes back as PostgREST's PGRST205 ("Could not find the table ... in the
+ * schema cache"), not as Postgres's 42P01 — so a route that tested only for
+ * 42P01 would treat an unapplied migration as a crash and take the whole desk
+ * down with it. Both spellings are in MISSING_SCHEMA; this is the one place
+ * that knows them.
+ */
+export function missingSchema(e: { code?: string | null } | null | undefined): boolean {
+  return !!e?.code && MISSING_SCHEMA.has(e.code)
+}
+
 /** The TE_ code of a refusal, wherever it travels: TeError.code, or the HINT of a database error. */
 export function refusalCode(e: unknown): string | null {
   const o = bag(e)

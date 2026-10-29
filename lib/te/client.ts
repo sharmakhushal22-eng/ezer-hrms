@@ -18,11 +18,14 @@
 //     flags    the flags that block (expense, leg report, claim)
 //     issues   every problem of a trip plan
 import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
+import type { DeskKind } from './desks'
+import type { ChainStep } from './approval-chain'
 import type {
   Uuid, Snapshot, TeQueueRow, TeTripDetail, TeClaimDetail, PlaceInput, VehicleInput, TripDraft, TripPreview, TripIssue,
   TripStatus, TripDisplayStatus, GpsFix, GpsPing, StopInput, LegReportInput, ExtraLegInput, LegPreview, TeLegStats, TeFlag,
   ExpenseInput, ExpensePreview, ClaimInput, ClaimPreview, ClaimStatus, ClaimStage, RiskBand, DecideInput, PayoutRoute,
-  TeConfig, TeMasters, TeWorkflowLevel, TeChainRow, TeHealthRow, TeUploadedFile, RcChecked, TeStayOption,
+  TeConfig, TeMasters, TeWorkflowLevel, TeChainRow, TeHealthRow, TeUploadedFile, RcChecked, TeStayOption, TeDashboard,
+  TeDesksPayload, TeApproverWatch, TeDraft, TeDraftInput, TeDraftKind,
 } from './types'
 
 export class TeApiError extends Error {
@@ -148,23 +151,110 @@ export interface FinanceSummary {
   /** false = a row cap was reached, so the amounts above are a floor. */
   amountsComplete: boolean
 }
-export interface DeskToBook { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null; kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null }
+export interface DeskToBook extends DeskContact { company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; employee_id: Uuid; emp_code: string | null; full_name: string | null;
+  /** The trip's own status. Anything but APPROVED means the desk may look and
+   *  plan but not book yet: te_booking_record refuses it. Absent until
+   *  migration 177. */
+  trip_status?: TripStatus
+  kind: 'leg' | 'hotel'; leg_id: Uuid | null; point_seq: number | null; on_date: string | null; mode: string | null; from_name: string | null; to_name: string | null
+  /** What the traveller asked for, from te_trip_segments. Null on a hotel row
+   *  and on a leg added during the trip, which has no segment behind it. */
+  pref_time: string | null; pref_url: string | null; pref_note: string | null }
+/**
+ * One recorded journey as either desk reviews it (v_te_journey_review, 180).
+ *
+ * `is_subtrip` is the GPS sub-trip: a journey added during the trip, with no
+ * planned segment behind it. Those are what this list mostly holds, because
+ * they are the ones nobody saw before — a planned leg of the main route was at
+ * least visible in the booking queue while it was still unstarted.
+ */
+export interface DeskJourney extends DeskContact {
+  leg_id: Uuid; company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string; scope: string
+  employee_id: Uuid; emp_code: string | null; full_name: string | null
+  leg_no: number; kind: string; is_subtrip: boolean; leg_date: string
+  mode: string; booked_by: string; gps_mode: string
+  /** true = no trail; the traveller entered the distance and gave a reason. */
+  is_manual: boolean; no_gps_reason: string
+  /** Why the journey was added mid-trip. */
+  added_reason: string
+  from_name: string | null; to_name: string | null
+  planned_km: number | null; gps_km: number | null; route_km: number | null; payable_km: number | null
+  /** The route actually travelled, encoded. '' on a journey recorded before
+   *  migration 180 and on one that was never tracked. */
+  route_polyline: string
+  start_lat: number | null; start_lng: number | null; end_lat: number | null; end_lng: number | null
+  /** Metres between the fix and the place that was named. */
+  start_off_m: number | null; end_off_m: number | null
+  gps_points: number | null
+  expense_id: Uuid | null; claimed: number | null; eligible: number | null; category: string | null
+  /** How many bills are attached. A cab is paid on the bill, so zero matters. */
+  file_count: number
+  desk_confirmed_at: string | null; desk_confirmed_by: Uuid | null
+  fin_confirmed_at: string | null; fin_confirmed_by: Uuid | null
+  sent_back_at: string | null; sent_back_by: Uuid | null; sent_back_desk: string
+  sent_back_reason: string; review_answer: string
+  /** 'both' | 'finance' | 'desk' | 'none' — the company's setting. */
+  confirm_policy: string
+}
 /** A trip waiting for the desk to pick one of the hotels the employee named. */
-export interface DeskStay {
+export interface DeskStay extends DeskContact {
   id: Uuid; trip_no: string; name: string; employee_id: Uuid
   emp_code: string | null; full_name: string | null
   scope: string; start_date: string | null; end_date: string | null
   stay_by: 'self' | 'desk'
   stay_options: TeStayOption[]
 }
-export interface DeskVehicle { id: Uuid; employee_id: Uuid; emp_code: string | null; full_name: string | null; reg_no: string; vehicle_type_code: string; declared_type_code: string | null; ownership: string; rc_file_url: string | null; created_at: string }
+export interface DeskVehicle extends DeskContact { id: Uuid; employee_id: Uuid; emp_code: string | null; full_name: string | null; reg_no: string; vehicle_type_code: string; declared_type_code: string | null; ownership: string; rc_file_url: string | null; created_at: string }
 /** A booking the desk has already recorded. Live ones only — the one thing
  *  left to do with it is cancel it when the trip changes under it. */
-export interface DeskBooked {
+/**
+ * How to reach the traveller, joined onto every desk row.
+ *
+ * FROM THE FORM, NOT FROM THE HR RECORD. This used to read the employee record
+ * live on every request, which answers "what is on file for this person" and is
+ * the wrong answer to "how do I reach them about this trip": a traveller abroad
+ * is on a local SIM, one whose handset is in for repair is on a colleague's.
+ * They are asked on the trip or claim form, where the fields open prefilled
+ * from their ESS record and they may change any of them — and what they leave
+ * is what arrives here.
+ *
+ * `from` says which it is. A trip saved before the form asked carries nothing,
+ * so the desk falls back to the ESS record rather than showing a blank where a
+ * number should be; the screen says so, because an old number the traveller has
+ * never confirmed deserves to be read as one.
+ */
+export interface DeskContact {
+  emp_code: string | null
+  full_name: string | null
+  contact: DeskContactDetails
+}
+
+export interface DeskContactDetails {
+  mobile: string
+  altMobile: string
+  email: string
+  from: 'form' | 'record'
+}
+
+/** Travel the desk is not booking anything for. Information, not work. */
+export interface DeskWatch extends DeskContact {
+  company_id: Uuid; trip_id: Uuid; trip_no: string; trip_name: string
+  employee_id: Uuid; emp_code: string | null; full_name: string | null
+  scope: string; trip_status: TripStatus; start_date: string; end_date: string
+  stay_wanted: boolean | null; stay_by: string | null; leg_count: number
+}
+
+export interface DeskBooked extends DeskContact {
   id: Uuid; booking_no: string; trip_id: Uuid; trip_no: string; trip_name: string
   employee_id: Uuid; emp_code: string | null; full_name: string | null
   leg_id: Uuid | null; point_seq: number | null; kind: 'travel' | 'hotel' | string
   vendor: string; reference: string; amount: number; paid_by: string; status: string; booked_at: string
+  /** The ticket the desk attached. A storage path, or an http link on bookings
+   *  recorded before there was a file field. */
+  ticket_url: string | null
+  /** When the traveller was last sent it, and where. Null = never sent. */
+  emailed_at: string | null
+  emailed_to: string | null
 }
 
 export const te = {
@@ -172,6 +262,12 @@ export const te = {
   /** Everything my own screens show. Render from this; call it again after every change. */
   me: () => get<Snapshot>('me'),
   placeAdd: (input: PlaceInput) => post<{ place_id: Uuid; matched?: true }>('places', input),
+  /** What is at this position, without saving anything — so "Use my location"
+   *  can fill the address in front of the person instead of after the save.
+   *  found: false means no geocoder is configured; the fields stay empty. */
+  placeLookup: (lat: number, lng: number) =>
+    get<{ found: boolean; lat: number; lng: number; name?: string; address?: string; city?: string; pin?: string; country?: string }>(
+      'places/lookup', { lat, lng }),
   /** Ask the Travel Desk to book a stay on my own trip. Not te.desk.* — that
    *  is the desk acting on somebody else's trip and needs Travel Claims EDIT;
    *  this is the traveller asking, and the SQL checks the trip is theirs. */
@@ -197,10 +293,40 @@ export const te = {
   legFile: (id: Uuid, report: LegReportInput) => post<{ leg_id: Uuid; status: 'SUBMITTED'; expense_id: Uuid | null; trip_status: TripDisplayStatus; eligible: number; flags: TeFlag[] }>(`legs/${id}/action`, { action: 'file', report }),
   legSkip: (id: Uuid, reason: string) => post<{ leg_id: Uuid; status: 'SKIPPED'; trip_status: TripDisplayStatus }>(`legs/${id}/action`, { action: 'skip', reason }),
   legNoGps: (id: Uuid, reason: string, note?: string) => post<{ leg_id: Uuid; status: 'ENDED' }>(`legs/${id}/action`, { action: 'no-gps', reason, note }),
+  /** The traveller answers what a desk asked about a journey. Lifts the hold on
+   *  the trip's claim; does not restore the confirmation that was withdrawn. */
+  legAnswer: (id: Uuid, text: string) => post<{ leg_id: Uuid }>(`legs/${id}/action`, { action: 'answer', text }),
+  /** A desk agrees a journey happened as recorded. Separate endpoint from the
+   *  actions above because the caller is explicitly not the traveller. */
+  legConfirm: (id: Uuid, desk: DeskKind) => post<{ leg_id: Uuid; desk: string; policy: string }>(`legs/${id}/review`, { action: 'confirm', desk }),
+  /** A desk asks the traveller for something. Holds the trip's claim. */
+  legSendBack: (id: Uuid, desk: DeskKind, reason: string) => post<{ leg_id: Uuid; desk: string }>(`legs/${id}/review`, { action: 'send-back', desk, reason }),
 
   expensePreview: (input: ExpenseInput) => post<ExpensePreview>('expenses/preview', input),
   expenseSave: (input: ExpenseInput) => post<{ expense_id: Uuid; expense_no: string; status: string; eligible: number; flags: TeFlag[] }>('expenses', input),
   expenseDiscard: (id: Uuid) => call<{ expense_id: Uuid; status: 'DISCARDED' }>('DELETE', `expenses/${id}`),
+  /** Move an unclaimed line into a trip's bucket. `null` moves it out of every
+   *  trip, which is how a bill filed against the wrong trip gets home. */
+  expenseMoveTrip: (id: Uuid, tripId: Uuid | null) =>
+    call<{ moved: boolean; expense_no: string; from_no?: string | null; trip_no: string | null }>(
+      'PATCH', `expenses/${id}`, { trip_id: tripId }),
+
+  /**
+   * Unfinished work, kept so a half-planned trip or a half-typed expense can be
+   * picked up later — on another day or another device. `body` is the form's own
+   * state object, stored and returned verbatim; nothing on the server reads
+   * inside it. Drafts are private to the person who wrote them.
+   */
+  drafts: {
+    list: (kind?: TeDraftKind) => get<{ drafts: TeDraft[] }>('drafts', kind ? { kind } : undefined),
+    /** Create or update. Pass the id back to keep updating the same draft. */
+    save: (d: TeDraftInput) => post<{ draft_id: Uuid; updated_at: string }>('drafts', d),
+    /** Discard, and how a draft is cleared once the real record is saved. */
+    remove: (id: Uuid) => call<{ deleted: boolean }>('DELETE', `drafts/${id}`),
+    /** Discard several at once. `deleted` is how many actually went, which can
+     *  be fewer than were asked for when one had already gone. */
+    removeMany: (ids: Uuid[]) => call<{ deleted: number; asked: number }>('DELETE', 'drafts', { ids }),
+  },
 
   /** Store a bill or an RC photo. Send the returned file back, unchanged, in `files: [file]`. */
   async upload(file: File, kind: 'BILL' | 'TICKET' | 'TOLL_SLIP' | 'FASTAG_STATEMENT' | 'OTHER' | 'RC' = 'BILL'): Promise<TeUploadedFile> {
@@ -238,6 +364,11 @@ export const te = {
     advances: (q?: PageQuery & { status?: string }) => get<Page<Record<string, unknown>>>('finance/overview', { view: 'advances', ...q }),
     adjustments: (q?: PageQuery & { status?: string }) => get<Page<AdjustmentRow>>('finance/overview', { view: 'adjustments', ...q }),
     periods: (q?: PageQuery) => get<Page<{ id: Uuid; period_month: string; period_label: string; status: string; closed_at: string | null; locked_at: string | null }>>('finance/overview', { view: 'periods', ...q }),
+    /** Recorded journeys, including the GPS sub-trips added mid-trip.
+     *  `state`: waiting (not yet confirmed by Finance) | back (sent back to the
+     *  traveller — these hold claims) | done. Empty while 180 is unapplied. */
+    journeys: (q?: PageQuery & { state?: 'waiting' | 'back' | 'done'; employee_id?: string }) =>
+      get<Page<DeskJourney>>('finance/overview', { view: 'journeys', ...q }),
     advanceAct: (id: Uuid, action: 'pay' | 'reject' | 'refund' | 'payroll' | 'carry', o: { amount?: number; ref?: string } = {}) => post<{ advance_id: Uuid; status: string; outstanding_amount: number; carried_to: Uuid | null }>(`advances/${id}`, { action, ...o }),
     payouts: (q?: PageQuery & { status?: string }) => get<Page<PayoutBatch>>('payouts', q),
     payoutCreate: (route: PayoutRoute, claimIds?: Uuid[]) => post<{ batch_id: Uuid; batch_no: string; total_amount: number; items: number }>('payouts', { route, claim_ids: claimIds }),
@@ -257,13 +388,31 @@ export const te = {
   },
 
   // ── the Travel Desk (dashboard Travel Claims permission, edit) ─────────────
+  /** The Reports and Dashboard tab. Every employee may call it; what comes
+   *  back is scoped to them and the people who report to them. */
+  dashboard: (q?: { from?: string; to?: string }) => get<TeDashboard>('dashboard', q),
   desk: {
-    list: (q?: { company_id?: string }) => get<{ company_id: Uuid; to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[]; stays: DeskStay[] }>('desk', q),
+    /** may_book: whether this reader may spend. A desk member without it still
+     *  verifies vehicles and decides stays, so the screen keeps everything
+     *  except the booking controls. */
+    list: (q?: { company_id?: string }) => get<{
+      company_id: Uuid; may_book: boolean
+      to_book: DeskToBook[]; booked: DeskBooked[]; vehicles: DeskVehicle[]; stays: DeskStay[]; watch: DeskWatch[]
+      /** Recorded journeys waiting to be agreed, newest first. Empty while
+       *  migration 180 is unapplied — the route degrades rather than failing. */
+      journeys: DeskJourney[]
+      /** Where each request has got to, keyed by trip id. Absent for a trip
+       *  that needed no approval. Feed to chainState() in lib/te/approval-chain. */
+      chains: Record<Uuid, ChainStep[]>
+    }>('desk', q),
     /** Pick one of the hotels the employee suggested, or turn them all down. */
     stayDecide: (input: { tripId: Uuid; action: 'choose' | 'reject'; choice?: number; remark?: string }) =>
       post<{ trip_id: Uuid; status: 'CHOSEN' | 'REJECTED'; chosen: number | null; name: string }>('stay', input),
     bookingRecord: (input: BookingInput) => post<{ booking_id: Uuid; booking_no: string; expense_id: Uuid }>('bookings', input),
     bookingCancel: (id: Uuid, reason: string) => post<{ booking_id: Uuid; status: 'CANCELLED' }>(`bookings/${id}/cancel`, { reason }),
+    /** Send the traveller their ticket. Only once the booking is recorded and
+     *  standing; safe to call again when they lose the mail. */
+    bookingEmail: (id: Uuid) => post<{ sent: true; to: string; address_kind: 'work' | 'personal'; subject: string; attached: boolean }>(`bookings/${id}/email`),
     vehicleVerify: (id: Uuid, typeCode?: string) => post<{ vehicle_id: Uuid; vehicle_type_code: string }>(`vehicles/${id}/verify`, { type_code: typeCode }),
   },
 
@@ -272,6 +421,14 @@ export const te = {
     config: (q?: { company_id?: string }) => get<{ company_id: Uuid; config: TeConfig; masters: TeMasters; settings: Record<string, unknown> | null }>('admin/config', q),
     settingsSave: (patch: Record<string, unknown>) => call<{ company_id: Uuid; settings: Record<string, unknown>; config: TeConfig }>('PATCH', 'admin/settings', patch),
     mastersSave: (table: string, rows: Record<string, unknown>[]) => call<{ table: string; updated: number; inserted: number; rows: Record<string, unknown>[] }>('PUT', `admin/masters/${table}`, { rows }),
+    /** Who is on the Finance desk and the Travel desk, per company and branch. */
+    desks: () => get<TeDesksPayload>('admin/desks'),
+    /** F2 and F3: approvers who clear flagged claims within seconds, and
+     *  approver-to-employee pairings on flagged claims. */
+    approverWatch: (q?: { from?: string; to?: string }) =>
+      get<TeApproverWatch>('admin/reports/approvers', q),
+    desksSave: (kind: DeskKind, rows: Record<string, unknown>[]) =>
+      call<{ kind: DeskKind; company_id: Uuid; saved: number; rows: Record<string, unknown>[] }>('PUT', 'admin/desks', { kind, rows }),
     workflow: (code: 'claim' | 'trip') => get<{ workflow: string; levels: TeWorkflowLevel[]; fallback: Uuid | null; finance_team: Uuid[] }>(`admin/workflow/${code}`),
     workflowSave: (code: 'claim' | 'trip', levels: TeWorkflowLevel[]) => call<{ ok: true; version: number; levels: TeWorkflowLevel[] }>('PUT', `admin/workflow/${code}`, { levels }),
     workflowPreview: (code: 'claim' | 'trip', sample: WorkflowSample, levels?: TeWorkflowLevel[]) => post<{ workflow: string; chain: TeChainRow[] }>(`admin/workflow/${code}/preview`, { levels, sample }),

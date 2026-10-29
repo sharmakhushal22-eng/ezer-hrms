@@ -630,6 +630,10 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx-mc:hover .rx-mc-in{box-shadow:var(--rx-rim),var(--rx-elev-2);border-color:color-mix(in srgb,var(--st) 40%,var(--rx-edge));transition:transform .12s linear,box-shadow .35s,border-color .3s}
 .rx-mc:hover .rx-mc-in::after{opacity:.9}
 .rx-mc.flat .rx-mc-in{transform:translateY(-3px)}
+/* The whole card opens the requisition: a pointer over it, and a visible focus ring for the keyboard. */
+.rx-mc-click{cursor:pointer;outline:none;border-radius:var(--rx-r-lg,18px)}
+.rx-mc-click:focus-visible .rx-mc-in{box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 45%,transparent),var(--rx-elev-2)}
+.rx-mc-click .rx-mc-act button,.rx-mc-click .rx-mc-act a{cursor:pointer}
 .rx-mc-top{display:flex;align-items:center;justify-content:space-between;gap:8px;transform:translateZ(10px)}
 .rx-mc-code{font-size:11.5px;font-weight:600;color:var(--ez-muted);font-variant-numeric:tabular-nums;letter-spacing:.01em}
 .rx-mc-t{font-family:var(--rx-display);font-size:18px;font-weight:700;letter-spacing:-.02em;line-height:1.15;color:var(--ez-ink);transform:translateZ(16px)}

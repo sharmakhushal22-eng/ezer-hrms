@@ -51,6 +51,7 @@ import {
   CandCard, ApprovalTrail, EmptyState, metaLine, fullDate, type TrailStep,
   // MRF: the read-only approval tracker and the non-jumping wizard body.
   ApprovalTracker, trackerStepsOf, roleLabel, useWizardBody,
+  ReportsView,
 } from '@/components/recruitment/rx'
 // NOT imported: Ring and missingDocuments. Section 10 wants a documents ring
 // from document_collection_links, but PreOnboardTab reads preonboarding_links
@@ -280,8 +281,8 @@ export default function RecruitmentPage() {
   const { grant, loading: grantLoading } = useGrant()
   // The HR Head tab is for the HR Head alone (and super admin / legacy dashboard login).
   const isHrHead = grant.legacy || grant.isSuperAdmin || (grant.roles || []).some((r: any) => r.role_code === 'HR_HEAD')
-  type Tab = 'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'
-  const TAB_KEYS: Tab[] = ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus']
+  type Tab = 'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'|'reports'
+  const TAB_KEYS: Tab[] = ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus','reports']
   const [tab, setTabState] = useState<Tab>('dashboard')
   // THE TAB IS PART OF THE ADDRESS. Inside ESS it is the path (/ess/recruitment/mrf); at
   // /dashboard/recruitment it is ?tab=mrf. A click pushes a history entry (Back returns to
@@ -479,6 +480,9 @@ export default function RecruitmentPage() {
           Per Step 6 of the guide it is restyled in place inside RxPage
           rather than replaced by the view. */}
       {tab==='jobstatus' && <JobStatusTab {...props} />}
+      {/* Reports: every recruitment report as an Excel workbook, built on the server from the
+          data this viewer may see (app/api/recruitment/reports). */}
+      {tab==='reports' && <ReportsView companies={companies} canPickCompany={!!(grant.crossCompany || grant.isSuperAdmin || grant.legacy)} />}
       {/* MRF renders MrfListView, which is a genuine fit here in a way
           JobStatusView was not: it has a passthrough slot for the existing
           filter bar and its actions map one-to-one onto the tab's handlers.

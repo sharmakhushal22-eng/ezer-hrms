@@ -883,39 +883,54 @@ export function InterviewInvites({ employeeId, notify, onDone }: { employeeId: s
   )
 }
 
-// ── Exits to approve — the company-started exits (People → Employees → Exit) waiting on you
-// as HR Manager / Legal / HR Head / MD. Approve moves it to the next step; Reject needs a reason
-// and stops it. The chain itself is app/api/ess/exit-employee (lib/exit/hr-exit.ts).
+// ── Exits to approve — the company-started exits (People → Employees → HR Actions → Exit)
+// waiting on you. Same chain and same buttons as a resignation: the Reporting Manager, L2 and
+// HOD acknowledge, accept with their date or request retention (then resume); the HR Manager
+// sets the final last working day, which puts the exit into effect. The chain itself is
+// app/api/ess/exit-employee (lib/exit/hr-exit.ts).
+const fmtDay = (d?: string | null) => d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
+const stepText = (s: any) => s.status === 'HOLD' ? 'retention requested' : s.status === 'PENDING' ? 'waiting' : s.status === 'SKIPPED' ? 'skipped'
+  : s.status === 'REJECTED' ? 'rejected' : s.status === 'WAITING' ? 'next'
+  : s.action === 'STARTED' ? 'started it' : s.action === 'ACCEPTED_WITH_DATE' ? `accepted with ${fmtDay(s.lwd)}` : s.action === 'FINAL_LWD_SET' ? `final LWD ${fmtDay(s.lwd)}` : 'acknowledged'
+
 export function HrExitApprovals({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
   const [items, setItems] = useState<any[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [rejecting, setRejecting] = useState<string | null>(null)
+  // The input an action collects before it fires: a date, or a retention note.
+  const [open, setOpen] = useState<{ id: string; act: string } | null>(null)
   const [note, setNote] = useState('')
+  const [lwd, setLwd] = useState('')
   const load = useCallback(() => api('/api/ess/exit-employee?inbox=1', employeeId).then(d => setItems(d.items || [])).catch(() => setItems([])), [employeeId])
   useEffect(() => { load() }, [load])
   if (!items || items.length === 0) return null
-  const act = async (id: string, approve: boolean) => {
-    setBusy(id)
+  const fire = async (x: any, act: string) => {
+    setBusy(x.id)
     try {
-      const d = await api('/api/ess/exit-employee', employeeId, { method: 'POST', body: JSON.stringify({ action: approve ? 'approve' : 'reject', id, note: approve ? '' : note }) })
-      notify(!approve ? 'Exit rejected.' : d.request?.status === 'APPROVED' ? 'Exit approved. It is now in effect.' : 'Approved. It has moved to the next approver.')
-      setRejecting(null); setNote(''); await load()
+      const d = await api('/api/ess/exit-employee', employeeId, { method: 'POST', body: JSON.stringify({ action: 'act', id: x.id, act, note, lwd }) })
+      notify(act === 'FINAL_LWD_SET' ? `Final last working day set: ${fmtDay(lwd)}. The exit is in effect.`
+        : act === 'REQUESTED_RETENTION' ? 'Retention requested. The exit is on hold until you resume it.'
+        : act === 'RESUMED' ? 'Chain resumed.' : d.request?.status === 'APPROVED' ? 'Done. The exit is in effect.' : 'Forwarded to the next approver.')
+      setOpen(null); setNote(''); setLwd(''); await load()
     } catch (e: any) { notify(e.message, 'error') }
     setBusy(null)
   }
+  const needs = (act: string) => act === 'ACCEPTED_WITH_DATE' || act === 'FINAL_LWD_SET' || act === 'REQUESTED_RETENTION'
   return (
     <div style={S.card}>
-      <div style={S.section}>Exits to approve ({items.length})</div>
+      <div style={S.section}>Exits waiting on you ({items.length})</div>
       {items.map((x: any) => {
-        const step = (x.chain || []).find((s: any) => s.status === 'PENDING')
+        const step = (x.chain || []).find((s: any) => s.status === 'PENDING' || s.status === 'HOLD')
+        const acts: { code: string; label: string }[] = x.actions || []
+        const isOpen = open?.id === x.id
         return (
           <div key={x.id} style={{ padding: '10px 0', borderTop: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{x.employee?.full_name} <span style={{ color: C.muted, fontWeight: 500 }}>{x.employee?.emp_code}{x.employee?.designation ? ` · ${x.employee.designation}` : ''}</span>
-                  <span style={{ ...pill('dang'), marginLeft: 6 }}>{x.reason_label}{x.sub_reason ? ` · ${x.sub_reason}` : ''}</span></div>
+                  <span style={{ ...pill('dang'), marginLeft: 6 }}>{x.reason_label}{x.sub_reason ? ` · ${x.sub_reason}` : ''}</span>
+                  {step?.status === 'HOLD' && <span style={{ ...pill('warn'), marginLeft: 6 }}>Retention hold</span>}</div>
                 <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
-                  Last working day {new Date(`${x.last_working_day}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · started by {x.initiated_by_name || 'HR'} · waiting on you as {step?.label || 'approver'}
+                  Last working day {fmtDay(x.last_working_day)}{x.proposed_lwd ? ` · proposed ${fmtDay(x.proposed_lwd)}` : ''} · started by {x.initiated_by_name || 'HR'} · waiting on you as {step?.label || 'approver'}
                 </div>
                 {x.remarks && <div style={{ fontSize: 12, color: C.ink, marginTop: 4 }}>{x.remarks}</div>}
                 {(x.documents || []).length > 0 && (
@@ -925,20 +940,31 @@ export function HrExitApprovals({ employeeId, notify }: { employeeId: string; no
                   ))}</div>
                 )}
                 <div style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>
-                  {(x.chain || []).map((s: any) => `${s.label}: ${s.status === 'APPROVED' ? 'approved' : s.status === 'PENDING' ? 'waiting' : s.status === 'SKIPPED' ? 'skipped' : s.status === 'REJECTED' ? 'rejected' : 'next'}`).join(' → ')}
+                  {(x.chain || []).map((s: any) => `${s.label}: ${stepText(s)}`).join(' → ')}
                 </div>
               </div>
-              {rejecting !== x.id && <>
-                <button onClick={() => { setRejecting(x.id); setNote('') }} disabled={busy === x.id} style={S.btnD}>Reject</button>
-                <button onClick={() => act(x.id, true)} disabled={busy === x.id} style={{ ...S.btn, background: C.green, opacity: busy === x.id ? .6 : 1 }}>{busy === x.id ? '…' : 'Approve'}</button>
-              </>}
+              {!isOpen && acts.map(a => (
+                <button key={a.code} disabled={busy === x.id}
+                  onClick={() => { if (needs(a.code)) { setOpen({ id: x.id, act: a.code }); setNote(''); setLwd(a.code === 'REQUESTED_RETENTION' ? '' : (x.proposed_lwd || x.last_working_day || '')) } else void fire(x, a.code) }}
+                  style={a.code === 'REQUESTED_RETENTION' ? S.btnO : { ...S.btn, background: a.code === 'FINAL_LWD_SET' || a.code === 'ACKNOWLEDGED' || a.code === 'RESUMED' ? C.green : undefined, opacity: busy === x.id ? .6 : 1 }}>
+                  {busy === x.id ? '…' : a.label}
+                </button>
+              ))}
             </div>
-            {rejecting === x.id && (
-              <div style={{ marginTop: 8 }}>
-                <textarea style={{ ...S.input, minHeight: 56, resize: 'vertical' }} value={note} onChange={e => setNote(e.target.value)} placeholder="Reason for rejecting (required)" />
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
-                  <button onClick={() => { setRejecting(null); setNote('') }} disabled={busy === x.id} style={S.btnO}>Back</button>
-                  <button onClick={() => act(x.id, false)} disabled={busy === x.id || !note.trim()} style={{ ...S.btn, background: C.red, opacity: busy === x.id || !note.trim() ? .6 : 1 }}>{busy === x.id ? 'Rejecting…' : 'Confirm reject'}</button>
+            {isOpen && (
+              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                {open!.act !== 'REQUESTED_RETENTION' && (
+                  <label style={{ fontSize: 12, color: C.muted, display: 'grid', gap: 4, maxWidth: 240 }}>{open!.act === 'FINAL_LWD_SET' ? 'Final last working day' : 'The last working day you accept'}
+                    <input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} /></label>
+                )}
+                <textarea style={{ ...S.input, minHeight: 50, resize: 'vertical' }} value={note} onChange={e => setNote(e.target.value)}
+                  placeholder={open!.act === 'REQUESTED_RETENTION' ? 'Why the employee should be retained (optional)' : 'Note (optional)'} />
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setOpen(null); setNote(''); setLwd('') }} disabled={busy === x.id} style={S.btnO}>Back</button>
+                  <button onClick={() => fire(x, open!.act)} disabled={busy === x.id || (open!.act !== 'REQUESTED_RETENTION' && !lwd)}
+                    style={{ ...S.btn, opacity: busy === x.id || (open!.act !== 'REQUESTED_RETENTION' && !lwd) ? .6 : 1 }}>
+                    {busy === x.id ? '…' : acts.find(a => a.code === open!.act)?.label || 'Confirm'}
+                  </button>
                 </div>
               </div>
             )}

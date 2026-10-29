@@ -85,7 +85,13 @@ export const FILL_ORDER: FillStatus[] = [
 /** What each one means to somebody chasing it, in their words. */
 export const FILL_MEANING: Record<FillStatus, string> = {
   NOT_STARTED: 'Has not written a single KRA. Cannot be rated at all this period.',
-  DRAFT_SAVED: 'Started writing, nothing sent. Usually needs a nudge, not an escalation.',
+  // Covers TWO workflow states, because vw_pms_fill_status folds both here
+  // (191): KRAs written but not sent, and KRAs locked with the self rating
+  // still owed. Different stages, same answer to the only question this
+  // column is asked — whose move is it, and how hard do I push. Worded for
+  // both, because "started writing, nothing sent" is simply false about
+  // somebody whose set is agreed and frozen.
+  DRAFT_SAVED: 'The KRAs are in hand, but nothing is with a manager yet — either not sent, or locked with the self rating still owed. Needs a nudge, not an escalation.',
   SUBMITTED:   'Self rating is in. Waiting on their manager.',
   IN_REVIEW:   'A manager has rated. Waiting on the next approver or the HOD.',
   FINALISED:   'Settled. Nothing further is owed on this one.',

@@ -57,6 +57,8 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'offers', label: 'Offer Tracking' },
       { key: 'preonboarding', label: 'Pre-onboarding' },
       { key: 'jobstatus', label: 'Job Status' },
+      // Every recruitment report as an Excel download; seeded for RECRUITER by migration 201.
+      { key: 'reports', label: 'Reports' },
     ],
   },
   {
