@@ -168,12 +168,25 @@ const CASES: [string, React.ReactNode][] = [
   // RM
   ['rm-team',     <TeamTab key="rt" members={TEAM} today={TODAY} managerName="Priya Nair (RM L1)" />],
   ['rm-approve',  <ApproveTab key="ra" members={TEAM} today={TODAY} />],
-  ['rm-rate',     <RateTab key="rr" member={TEAM[0]} overallComment="" onOverallComment={() => {}}
-      onChange={() => {}} onSubmit={() => {}}
-      rows={LINES.map(l => ({ goalId: l.goalId, title: l.title, category: l.category,
-        weightage: l.weightage, achievement: '0.11% across 3 runs', selfRating: l.self ?? null,
-        selfComment: 'Checklist introduced', myRating: l.rmL1 ?? null,
-        myComment: '' }))} />],
+  /**
+   * READ-ONLY NOW. Rating happens once, while approving the KRA set; this
+   * tab is the record of what each rung scored. The case carries a chain
+   * mid-flight — RM L1 and RM L2 have rated, the HOD has not — because the
+   * blank column is the state most worth looking at.
+   */
+  ['rm-rate',     <RateTab key="rr" member={{ ...TEAM[0],
+        // A CHAIN THE MEMBER HOLDS. Without these the screen renders a Self
+        // column and nothing else — which is correct behaviour for somebody
+        // with no chain, and useless as a preview of the thing being built.
+        rmL1Id: 'rm1', rmL2Id: 'rm2', hodId: 'hod' }}
+      rows={LINES.map((l, i) => ({ goalId: l.goalId, title: l.title, category: l.category,
+        weightage: l.weightage, achievement: '0.11% across 3 runs',
+        by: {
+          SELF:  { rating: l.self ?? null, comment: 'Checklist introduced and held all quarter.' },
+          RM_L1: { rating: l.rmL1 ?? null, comment: i === 0 ? 'Agreed — the run rate held through the migration.' : '' },
+          RM_L2: { rating: l.rmL2 ?? null, comment: i === 1 ? 'Scope moved in September; scored against what was agreed.' : '' },
+        },
+      }))} />],
   ['rm-pip',      <PipRequestTab key="rp" members={TEAM} today={TODAY} />],
   ['rm-analytics',<TeamAnalyticsTab key="rn" members={TEAM} today={TODAY} lines={LINES}
       deptAverage={3.24} companyAverage={3.41} scopeLabel="your team" />],
@@ -223,6 +236,9 @@ function KraDetailReviewPreview() {
   const [rate, setRate] = useState<Record<string, { rating: number | null; comment: string }>>({})
   const [confirmed, setConfirmed] = useState(false)
   const [finalRating, setFinalRating] = useState('')
+  /** The RM's one piece of prose about the whole appraisal. It used to be
+   *  collected on the rating tab, which is a read-only record now. */
+  const [overall, setOverall] = useState('')
   return (
     <KraDetail member={TEAM[0]} myRung="RM_L1" finalises
       lines={[
@@ -243,6 +259,7 @@ function KraDetailReviewPreview() {
       })}
       confirmed={confirmed} onConfirm={setConfirmed}
       finalRating={finalRating} onFinalRating={setFinalRating}
+      overallComment={overall} onOverallComment={setOverall}
       onApprove={() => {}} onClose={() => {}} />
   )
 }

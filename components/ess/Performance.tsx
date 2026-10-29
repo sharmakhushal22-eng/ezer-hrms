@@ -41,7 +41,7 @@ import {
   AnalyticsTab, ChainBanner, type EmpTab, type Who, type SelfRow, type KraSelf,
 } from '@/components/pms/EmployeeTabs'
 import {
-  MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab,
+  MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab, CHAIN_RATERS,
   TeamAnalyticsTab, FinaliseTab, FeedbackTab, PublishedResultsTab, KraDetail,
   BENEFIT_LABEL,
   type MgrTab, type HodTab, type RateRow, type BenefitType,
@@ -56,7 +56,7 @@ import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { reached, WORKFLOW } from '@/lib/pms/status'
 import { bandsFromScale, compareRatings,
-         type Band, type Line, type ScaleRow } from '@/lib/pms/scoring'
+         type Band, type Line, type ScaleRow, type RaterRole } from '@/lib/pms/scoring'
 import { stageStates, currentStage, settled, STAGES, DEFAULT_RULES,
          type Progress, type StageKey, type Rules } from '@/lib/pms/cycle'
 import { DEFAULT_FLAG_RULES, type Flag, type FlagRules } from '@/lib/pms/employment'
@@ -1434,40 +1434,45 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       if (g.error) { logFail('could not read the KRAs to rate', g.error); return }
       const goalRows = (g.data ?? []) as Record<string, unknown>[]
 
-      // Their own rating per KRA, and the manager's own earlier one if this is
-      // a revisit — a half-finished rating must come back as it was left.
-      // RM_L2 IS READ TOO. It used to ask only for SELF and RM_L1, so an RM L2
-      // returning to a half-finished rating saw an empty form and would have
-      // started again. And "mine" is matched on rater_id rather than on a role
-      // string: the row this person authored is theirs whichever rung of the
-      // chain they are on, which needs no guess about which that is.
+      // EVERY RUNG'S RATING, not just this viewer's.
+      //
+      // It used to read SELF, RM_L1 and RM_L2 and then sort them into
+      // "mine" and "other" by rater_id, because this screen was a rating
+      // form and only one row on it was editable. It is a record now — "how
+      // much did R1, R2 and the HOD each give" is the question — so the
+      // rows are kept apart by ROLE, which is also what pms_reviews is
+      // unique on.
       const r = await supabase.from('pms_reviews')
         .select('goal_id,rater_id,rater_role,rating,comments,achievement_value')
         .eq('employee_id', picked).eq('period_id', period.id)
-        .in('rater_role', ['SELF', 'RM_L1', 'RM_L2'])
+        .in('rater_role', ['SELF', ...CHAIN_RATERS])
       if (r.error) logFail('could not read the ratings', r.error)
-      const byGoal = new Map<string, Record<string, Record<string, unknown>>>()
+      const byGoal = new Map<string, Partial<Record<RaterRole,
+        { rating: number | null; comment: string; achievement?: string }>>>()
       for (const row of (r.data ?? []) as Record<string, unknown>[]) {
         const k = String(row.goal_id)
-        const slot = String(row.rater_role) === 'SELF' ? 'SELF'
-          : String(row.rater_id) === employeeId ? 'MINE' : 'OTHER'
-        byGoal.set(k, { ...(byGoal.get(k) ?? {}), [slot]: row })
+        const role = String(row.rater_role) as RaterRole
+        byGoal.set(k, { ...(byGoal.get(k) ?? {}), [role]: {
+          rating: row.rating == null ? null : Number(row.rating),
+          comment: String(row.comments ?? ''),
+          achievement: String(row.achievement_value ?? ''),
+        } })
       }
 
       if (!live) return
       setRateRows(goalRows.map(gr => {
-        const seen = byGoal.get(String(gr.id)) ?? {}
-        const self = seen.SELF, mine = seen.MINE
+        const by = byGoal.get(String(gr.id)) ?? {}
         return {
           goalId: String(gr.id),
           title: String(gr.kra_title ?? ''),
           category: String(gr.category ?? 'BUSINESS') as Category,
           weightage: Number(gr.weightage) || 0,
-          achievement: String(self?.achievement_value ?? mine?.achievement_value ?? ''),
-          selfRating: self?.rating == null ? null : Number(self.rating),
-          selfComment: String(self?.comments ?? ''),
-          myRating: mine?.rating == null ? null : Number(mine.rating),
-          myComment: String(mine?.comments ?? ''),
+          // Whoever recorded it. The employee writes it on their own form;
+          // a rung can overwrite it on theirs, and the later one is the one
+          // worth showing.
+          achievement: by.SELF?.achievement
+            || CHAIN_RATERS.map(x => by[x]?.achievement).find(Boolean) || '',
+          by,
         }
       }))
     })()
@@ -1821,9 +1826,17 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       logFail('manager rating refused', rv.error)
       setMsg(SAVE_FAILED('rating')); return
     }
+    // The prose half, same act. Written before the approval so a failure
+    // here stops the chain moving rather than leaving the comment behind a
+    // set that has already gone up.
+    if (!(await saveOverall(id, myRung))) {
+      setSaving(false)
+      setMsg('The ratings were saved, but your overall comment was not. Try sending it again.')
+      return
+    }
     setSaving(false)
     await approveInChain(id, finalRating)
-    setKraFor(null); setKraLines(null); setKraRate({}); setKraFinal('')
+    setKraFor(null); setKraLines(null); setKraRate({}); setKraFinal(''); setOverall('')
   }
 
   const approveInChain = async (id: string, rating?: number) => {
@@ -1926,102 +1939,34 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     return null
   }, [member, employeeId])
 
-  const submitRating = async () => {
-    if (!picked) return
-    setSaving(true); setMsg(null)
-    if (!myRaterRole) {
-      setSaving(false)
-      setMsg('This period’s chain does not record you as either of their managers, so your rating has nowhere to go. Ask HR to check the chain for this period.')
-      return
-    }
-    if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
-    /**
-     * A SETTLED RATING IS NOT REWRITABLE FROM HERE.
-     *
-     * pms_reviews has no guard against this, and trg_pms_sync_role_score
-     * fires on every upsert, so re-submitting on a finalised record silently
-     * recomputes rm_l1_score — on a PUBLISHED one, that is the number the
-     * employee has already read, changing underneath them with no audit trail
-     * and nobody told. Rule 12's read-only lock only covers employees who
-     * have EXITED, so an active employee's published appraisal was wide open.
-     *
-     * Observed live: Shreya Singh's appraisal was finalised at 4 and
-     * published, and her RM's rating screen still accepted a submission and
-     * reported "Your rating has been sent."
-     *
-     * Refused here rather than hidden: the queue no longer offers the button,
-     * but a stale tab still holds one, and the honest place to say no is the
-     * write. The real fix is a DB-level guard — this is the client half.
-     */
-    if (member?.finalised) {
-      setSaving(false)
-      setMsg('Their rating has already been finalised, so it cannot be changed here. If it is wrong, ask HR to reopen the period — that keeps a record of why it changed.')
-      return
-    }
-    // An empty set would upsert nothing and report success, which is how a
-    // screen comes to lie about having saved. Nothing loads rateRows yet —
-    // there is no way to pick a reportee — so this is the honest state.
-    if (!rateRows.length) {
-      setSaving(false)
-      setMsg('Their KRAs have not loaded, so there is nothing to rate yet.')
-      return
-    }
-    const unrated = rateRows.filter(r => r.myRating == null)
-    if (unrated.length) {
-      setSaving(false)
-      setMsg(`${unrated.length} of ${rateRows.length} KRAs still have no rating from you. Rate every one before you send it.`)
-      return
-    }
-    const { error } = await supabase.from('pms_reviews').upsert(
-      rateRows.map(r => ({
-        company_id: companyId, period_id: period!.id, employee_id: picked,
-        goal_id: r.goalId, rater_id: employeeId, rater_role: myRaterRole,
-        achievement_value: r.achievement || null, rating: r.myRating,
-        comments: r.myComment || null, submitted: true,
-        submitted_at: new Date().toISOString(),
-      })),
-      { onConflict: 'period_id,employee_id,goal_id,rater_role' })
-    if (error) {
-      setSaving(false)
-      logFail('manager rating refused', error); setMsg(SAVE_FAILED('rating')); return
-    }
-
-    // THE OVERALL COMMENT HAD NOWHERE TO GO, and was being collected and
-    // dropped — the manager believed the words their reportee would read had
-    // been saved.
-    //
-    // pms_reviews holds one row per KRA, so a comment about the whole
-    // appraisal does not belong there. pms_feedback is the only table that
-    // takes prose, and it is UNIQUE (period_id, employee_id) — ONE row per
-    // person per period, with given_by and given_by_role recording the author.
-    // So the schema's own design is a single feedback record passed along the
-    // chain, and this writes the RM's half of it.
-    //
-    // visible_to_employee stays false: §3.5 says nothing is shown before the
-    // result is published, and that flag is what holds it back.
-    //
-    // IT GETS ITS OWN COLUMN (189). This used to write appreciation_remark,
-    // which §5.2 gives to the HOD. Same row, same conflict target, so whoever
-    // saved last erased the other — and since the RM comments first and the
-    // HOD publishes afterwards, the RM always lost, silently. given_by stays
-    // the HOD's; rm_overall_by records who wrote this half.
-    if (overall.trim()) {
-      const fb = await supabase.from('pms_feedback').upsert({
-        company_id: companyId, period_id: period!.id, employee_id: picked,
-        rm_overall_comment: overall.trim(),
-        rm_overall_by: employeeId, given_by_role: myRaterRole,
-        visible_to_employee: false,
-      }, { onConflict: 'period_id,employee_id' })
-      if (fb.error) {
-        setSaving(false)
-        logFail('overall comment refused', fb.error)
-        setMsg('The ratings were saved, but your overall comment was not. Try sending it again.')
-        return
-      }
-    }
-    setSaving(false)
-    setMsg('Your rating has been sent.')
-    reloadRoster()
+  /**
+   * THE RM'S OVERALL COMMENT, written where the rating now is.
+   *
+   * It used to be collected by the rating tab and saved by submitRating.
+   * That tab is a read-only record now, so this moved rather than went: the
+   * capability belongs with the act that produces it, and deleting it would
+   * have quietly dropped the one piece of prose an RM writes for their
+   * reportee.
+   *
+   * pms_feedback is UNIQUE (period_id, employee_id) — ONE row per person per
+   * period, passed along the chain — and this writes the RM's half of it.
+   * IT GETS ITS OWN COLUMN (189): this used to write appreciation_remark,
+   * which §5.2 gives to the HOD, so whoever saved last erased the other and
+   * the RM always lost, silently.
+   *
+   * visible_to_employee stays false: §3.5 shows nothing before the result is
+   * published, and that flag is what holds it back.
+   */
+  const saveOverall = async (id: string, role: string): Promise<boolean> => {
+    if (!overall.trim() || !companyId) return true
+    const fb = await supabase.from('pms_feedback').upsert({
+      company_id: companyId, period_id: period!.id, employee_id: id,
+      rm_overall_comment: overall.trim(),
+      rm_overall_by: employeeId, given_by_role: role,
+      visible_to_employee: false,
+    }, { onConflict: 'period_id,employee_id' })
+    if (fb.error) { logFail('overall comment refused', fb.error); return false }
+    return true
   }
 
   if (pLoading || loading) return <div className="k">Loading…</div>
@@ -2066,6 +2011,8 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                                     rung, held)}
                                                   finalRating={kraFinal}
                                                   onFinalRating={setKraFinal}
+                                                  overallComment={overall}
+                                                  onOverallComment={setOverall}
                                                   onApprove={fr => rateAndApprove(kraFor, fr)}
                                                   saving={saving}
                                                   onClose={() => { setKraFor(null); setKraLines(null)
@@ -2077,9 +2024,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       {tab === 'rate' && (
         <RateTab flagRules={flagRules} rules={rules} bands={bands.length ? bands : undefined}
                  members={rows} onPick={setPicked} today={today}
-                 member={member} rows={rateRows} onChange={setRateRows}
-                 onSubmit={submitRating} saving={saving} overallComment={overall}
-                 onOverallComment={setOverall} />
+                 member={member} rows={rateRows} />
       )}
       {tab === 'pip' && <PipRequestTab flagRules={flagRules} members={rows} today={today} />}
       {tab === 'analytics' && (

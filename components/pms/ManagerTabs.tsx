@@ -25,9 +25,10 @@ import './pms.css'
 import { teamQueue, finaliseQueue, teamStats, distribution, initials,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
 import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
-import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
+import { checkFeedback, score, gap, byCategory, bandFor,
          compareRatings, ratingTone, toneVars, DEFAULT_BANDS,
-         type Band, type Line, type CompareSummary } from '@/lib/pms/scoring'
+         type Band, type Line, type CompareSummary,
+         type RaterRole } from '@/lib/pms/scoring'
 import { canPublishResult, CONFIRM_LABEL, CONFIRM_WHY,
          type Log, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
@@ -44,7 +45,7 @@ export type HodTab = 'finalise' | 'feedback' | 'published' | 'deptAnalytics'
 export const MGR_TABS: { k: MgrTab; label: string; blurb: string }[] = [
   { k: 'team',      label: 'Team Dashboard',           blurb: 'who is where, worst deadline first' },
   { k: 'approve',   label: 'KRA Approval & One-to-One',blurb: 'check their sets, then log the discussion' },
-  { k: 'rate',      label: 'Rate My Team',             blurb: 'rate each KRA against what they delivered' },
+  { k: 'rate',      label: 'Team Ratings',              blurb: 'what each rung of the chain scored, read-only' },
   { k: 'pip',       label: 'PIP Request',              blurb: 'raise one, and HR decides whether it starts' },
   { k: 'analytics', label: 'Team Analytics',           blurb: 'distribution and gaps, for information' },
 ]
@@ -986,6 +987,7 @@ export function KraDetail({ member, lines, loading, onClose,
                             myRung, rate, onRate, bands = DEFAULT_BANDS,
                             confirmed, onConfirm, alreadyConfirmed,
                             finalises, finalRating, onFinalRating,
+                            overallComment, onOverallComment,
                             onApprove, saving }: {
   member: TeamMember
   lines: KraLine[] | null
@@ -1013,6 +1015,17 @@ export function KraDetail({ member, lines, loading, onClose,
   /** Rate, confirm and approve, in one act. The final rating is passed only
    *  at the rung that finalises. */
   onApprove?: (finalRating?: number) => void
+  /**
+   * The one piece of prose the whole appraisal gets from this rung, as
+   * opposed to the per-KRA reasons above it.
+   *
+   * IT CAME FROM THE RATING TAB, which is a read-only record now. Rather
+   * than delete the only overall comment an RM writes for their reportee, it
+   * moved to where the rating moved: pms_feedback takes one row per person
+   * per period and this is that rung's half of it.
+   */
+  overallComment?: string
+  onOverallComment?: (s: string) => void
   saving?: boolean
 }) {
   const total = (lines ?? []).reduce((s, l) => s + (Number(l.weightage) || 0), 0)
@@ -1443,6 +1456,19 @@ export function KraDetail({ member, lines, loading, onClose,
             }} />
           </div>
 
+          {onOverallComment && (
+            <div className="fld" style={{ marginTop: 14, marginBottom: 0 }}>
+              <label htmlFor="rm-overall">Overall comment (optional)</label>
+              <textarea id="rm-overall" value={overallComment ?? ''}
+                        onChange={e => onOverallComment(e.target.value)}
+                        placeholder="The appraisal as a whole, in your words. Evidence, not adjectives — they read this." />
+              <div className="k" style={{ marginTop: 4 }}>
+                Held back until the result is published. The per-KRA reasons
+                above are separate; this is the one line about the year.
+              </div>
+            </div>
+          )}
+
           {onConfirm && (
             // A STEP, NOT A STRAY CHECKBOX. It is one of the four things
             // the approval gate checks, and it used to float unframed
@@ -1584,14 +1610,78 @@ export function KraDetail({ member, lines, loading, onClose,
 
 // ── §4.3 Rate My Team ────────────────────────────────────────────────────
 
+/**
+ * One KRA with every rating anybody in the chain has given it.
+ *
+ * IT USED TO CARRY ONLY "MINE" — one rating, the viewer's, plus the
+ * employee's own — because this tab was where a manager rated. It is not any
+ * more: rating happens once, while approving the KRA set, and this screen
+ * exists to show what each rung actually scored. A shape with one slot for
+ * "my rating" cannot answer "what did RM L2 give this", which is the whole
+ * question now.
+ */
 export interface RateRow {
   goalId: string; title: string; category: Line['category']; weightage: number
-  achievement: string; selfRating: number | null; selfComment: string
-  myRating: number | null; myComment: string
+  achievement: string
+  /**
+   * Keyed by pms_reviews.rater_role. SELF is the employee's own; the rest are
+   * the rungs. Absent means that rung has not rated this KRA — distinct from
+   * a rating of null, which would mean they opened it and left it blank.
+   */
+  by: Partial<Record<RaterRole, { rating: number | null; comment: string }>>
 }
 
-export function RateTab({ member, rows, onChange, onSubmit, saving, overallComment,
-                          onOverallComment, bands = DEFAULT_BANDS, members, onPick, today, rules = DEFAULT_RULES, flagRules}: {
+/** The rungs this screen reports, in chain order, after the employee. */
+export const CHAIN_RATERS: RaterRole[] = ['RM_L1', 'RM_L2', 'HOD']
+
+/**
+ * One rating, on the same red-yellow-green ramp the review panel uses.
+ *
+ * Reusing ratingTone rather than a second set of colours is the point: a 2
+ * that is orange while being given must not be a different orange when it is
+ * read back here, or the two screens are quietly disagreeing about the same
+ * number.
+ *
+ * NOT RATED IS A DASH, NOT A ZERO AND NOT A COLOUR. A rung that has not got
+ * to this KRA yet has not judged it badly.
+ */
+function RatingDot({ v, bands }: { v: number | null; bands: Band[] }) {
+  if (v === null || v === undefined) return <span className="k">—</span>
+  const b = bandFor(v, bands)
+  return (
+    <span className="rdot" style={toneVars(ratingTone(v, bands))}
+          title={b ? `${v} · ${b.label}` : String(v)}>
+      {v}
+    </span>
+  )
+}
+
+/**
+ * §4.3 — WHAT THE CHAIN SCORED. Read-only, deliberately and entirely.
+ *
+ * Requested: "nobody can give a rating from Rate My Team — it is just for
+ * reference of R1, R2, HOD, to show how much rating is given by each. Rating
+ * will only be given while approving the KRA from KRA Approval &
+ * One-to-One."
+ *
+ * WHY THAT IS THE RIGHT WAY ROUND, beyond being what was asked for. Rating
+ * here and approving there were two doors into one act, and the chain kept
+ * stalling between them: 199 refuses to let a rung settle anything until
+ * every rung ahead has rated, so a manager who approved without visiting
+ * this tab passed the set up and blocked it at the next desk. Reading a KRA,
+ * scoring it and approving it are one judgement; they are now one screen,
+ * and this one is the record of what came out.
+ *
+ * It also makes the screen honest about something it could never do. A
+ * manager opening this tab for a reportee two rungs down could see a rating
+ * form they had no authority to submit — pms_reviews would have taken the
+ * row, and 197 would then have refused the approval it was for.
+ *
+ * NOTHING HERE WRITES. There is no onChange, no onSubmit and no state: the
+ * only way to change a number on this screen is to go and approve the set.
+ */
+export function RateTab({ member, rows, bands = DEFAULT_BANDS, members, onPick,
+                          today, rules = DEFAULT_RULES, flagRules }: {
   /**
    * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
    *
@@ -1607,11 +1697,6 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
   rules?: Rules
   member: TeamMember | null
   rows: RateRow[]
-  onChange: (next: RateRow[]) => void
-  onSubmit: () => void
-  saving?: boolean
-  overallComment: string
-  onOverallComment: (s: string) => void
   /** The configured rating scale; falls back to the built-in list. */
   bands?: Band[]
   /** THE TAB CHOOSES ITS OWN SUBJECT. It used to say "choose a team member
@@ -1627,145 +1712,126 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
     // highlighted and pinned here too.
     const pickable = members && today ? teamQueue(members, today, flagRules) : []
     return (
-      <Card title="Who are you rating?"
-            sub="Their KRAs and their own ratings appear beside yours once you choose.">
+      <Card title="Whose ratings do you want to see?"
+            sub="Every rating the chain has given, side by side. Nothing on this screen can be changed — ratings are given while approving the KRA set.">
         {!onPick
           ? <div className="k">Picking is not available on this screen.</div>
           : <QueueTable
               rules={rules}
               rows={pickable}
-              empty="Nobody is with you yet. A rating opens once their weightages are locked and they have submitted their own rating."
+              empty="Nobody is with you yet. Ratings appear here as the chain gives them."
               extraHead={<th />}
               extraCell={r => (
                 <td>
-                  {/* A SETTLED RATING IS NOT A RATING TASK. This offered "Rate"
-                      on finalised rows beside the words "Nothing owed on this
-                      one right now", and the screen behind it accepted the
-                      submission — which recomputes the RM score the employee
-                      may already have been shown. Observed live on a published
-                      appraisal. The row says what it is instead. */}
-                  {r.member.finalised ? (
-                    <span className="pill p-green" title="Finalised. Ask HR to reopen the period if it has to change.">
-                      settled
-                    </span>
-                  ) : (
-                    <button type="button" className="btn sm"
-                            onClick={() => onPick(r.member.employeeId)}
-                            title={r.member.selfSubmitted
-                              ? `Rate ${r.member.name}`
-                              : `Open ${r.member.name} — they have not submitted their own rating yet`}>
-                      {r.member.selfSubmitted ? 'Rate' : 'Open'}
-                    </button>
-                  )}
+                  <button type="button" className="btn ghost sm"
+                          onClick={() => onPick(r.member.employeeId)}
+                          title={`See what the chain has scored ${r.member.name}`}>
+                    View
+                  </button>
                 </td>
               )} />}
       </Card>
     )
   }
 
-  const canRate = canManagerRate(member.selfSubmitted)
-  const lines: Line[] = rows.map(r => ({
+  // Which rungs this employee actually has. A collapsed reporting line has no
+  // RM L2 for 190 of 395 enrolments, and a column of dashes headed RM L2
+  // invites the reader to wonder who is late rather than telling them nobody
+  // holds it.
+  //
+  // OR HAS RATED. Holding the rung is not the only way a rating gets into
+  // pms_reviews: the snapshot can be re-resolved, a manager can move, and a
+  // chain cleared afterwards leaves rows behind that nobody now occupies.
+  // Hiding a column because the rung is empty would hide a REAL RATING
+  // somebody gave — the one thing a record screen must never do. A column
+  // appears if the rung is held or if there is anything in it.
+  const held = heldBy(member)
+  const raters = CHAIN_RATERS.filter(
+    r => held(r as Stage) || rows.some(x => x.by[r]?.rating != null))
+  const lines = (who: RaterRole | 'SELF'): Line[] => rows.map(r => ({
     goalId: r.goalId, title: r.title, category: r.category,
-    weightage: r.weightage, self: r.selfRating, final: r.myRating,
+    weightage: r.weightage,
+    final: r.by[who as RaterRole]?.rating ?? null,
   }))
-  const mine = score(lines, 'final')
-  const theirs = score(lines, 'self')
-  const g = gap(theirs, mine)
-  const unrated = rows.filter(r => r.myRating === null).length
-  const band = bandFor(mine === null ? null : Math.round(mine), bands)
-  const fb = checkFeedback(mine === null ? null : Math.round(mine),
-                           { appreciation: overallComment }, bands)
-
-  const set = (i: number, patch: Partial<RateRow>) =>
-    onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
-
-  if (!canRate.open) {
-    return (
-      <Card title={`${member.name}: not yet`}>
-        <div className="banner b-amber" style={{ marginBottom: 0 }}>
-          <span aria-hidden="true">⏳</span><div>{canRate.because}</div>
-        </div>
-      </Card>
-    )
-  }
+  const scoreOf = (who: RaterRole | 'SELF') => score(lines(who), 'final')
+  const selfScore = scoreOf('SELF')
 
   return (
     <>
-      <div className="grid g4" style={{ marginBottom: 16 }}>
-        <Stat tone="accent" label="Rating" value={`${member.name}`} note={member.code} />
-        <Stat label="They rated themselves" value={theirs === null ? '-' : theirs.toFixed(2)} />
-        <Stat label="Your score so far" value={mine === null ? '-' : mine.toFixed(2)}
-              note={band ? band.label : `${unrated} still unrated`} />
-        <Stat tone={g.flag === 'MAJOR_GAP' ? 'warn' : undefined}
-              label="Difference" value={g.delta === null ? '-' : g.delta.toFixed(2)}
-              note={g.flag === 'MAJOR_GAP' ? 'Worth raising with them' : ''} />
+      <div className="banner b-blue">
+        <span aria-hidden="true">ℹ️</span>
+        <div>
+          <b>This screen is a record, not a form.</b> Ratings are given while
+          approving the KRA set, in <b>KRA Approval &amp; One-to-One</b> — one
+          reading, one score, one approval. What each rung settled on appears
+          here as they do it.
+        </div>
       </div>
 
-      <Card title="Rate each KRA"
-            sub="Their achievement and their own rating are shown so you are rating the same thing they did.">
+      <div className="grid g5" style={{ marginBottom: 16 }}>
+        <Stat tone="accent" label="Ratings for" value={member.name} note={member.code} />
+        <Stat label="They rated themselves"
+              value={selfScore === null ? '—' : selfScore.toFixed(2)}
+              note={bandFor(selfScore === null ? null : Math.round(selfScore), bands)?.label ?? ''} />
+        {raters.map(r => {
+          const sc = scoreOf(r)
+          const given = rows.filter(x => x.by[r]?.rating != null).length
+          return (
+            <Stat key={r} label={STAGE_SHORT[r as Stage]}
+                  value={sc === null ? '—' : sc.toFixed(2)}
+                  note={sc === null ? 'Not rated yet' : `${given} of ${rows.length} rated`} />
+          )
+        })}
+      </div>
+
+      <Card title="Every rating, KRA by KRA"
+            sub={`${rows.length} KRAs. A blank cell means that rung has not rated it yet.`}>
+        {!rows.length ? (
+          <div className="k">No KRAs on record for this period.</div>
+        ) : (
         <div className="tblwrap">
           <table>
             <thead>
               <tr>
-                <th>KRA</th><th className="num">Wt</th><th>What they delivered</th>
-                <th className="num">Theirs</th><th>Yours</th><th>Your comment</th>
+                <th>KRA</th><th className="num">Wt</th>
+                <th className="num">Self</th>
+                {raters.map(r => <th key={r} className="num">{STAGE_SHORT[r as Stage]}</th>)}
+                <th>What was said</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => {
-                const rg = gap(r.selfRating, r.myRating)
-                return (
-                  <tr key={r.goalId}>
-                    <td style={{ fontWeight: 600 }}>{r.title}</td>
-                    <td className="num">{r.weightage}</td>
-                    <td>
-                      {r.achievement || <span className="k">nothing written</span>}
-                      {r.selfComment && <div className="k">{r.selfComment}</div>}
+              {rows.map(r => (
+                <tr key={r.goalId}>
+                  <td style={{ fontWeight: 600, ...BREAK }}>{r.title}</td>
+                  <td className="num">{r.weightage}</td>
+                  <td className="num"><RatingDot v={r.by.SELF?.rating ?? null} bands={bands} /></td>
+                  {raters.map(x => (
+                    <td key={x} className="num">
+                      <RatingDot v={r.by[x]?.rating ?? null} bands={bands} />
                     </td>
-                    <td className="num">
-                      {r.selfRating ?? '-'}
-                      {rg.flag === 'MAJOR_GAP' && <span className="pill p-amber" style={{ marginLeft: 4 }}>gap</span>}
-                    </td>
-                    <td>
-                      <div className="chips" role="radiogroup" aria-label={`Your rating for ${r.title}`}>
-                        {[1, 2, 3, 4, 5].map(n => (
-                          <button key={n} type="button" role="radio" aria-checked={r.myRating === n}
-                                  className={r.myRating === n ? 'chip sel' : 'chip'}
-                                  title={bandFor(n, bands)?.label}
-                                  onClick={() => set(i, { myRating: n })}>{n}</button>
-                        ))}
-                      </div>
-                    </td>
-                    <td><input value={r.myComment} aria-label={`Your comment on ${r.title}`}
-                               placeholder="What you saw, specifically"
-                               onChange={e => set(i, { myComment: e.target.value })} /></td>
-                  </tr>
-                )
-              })}
+                  ))}
+                  <td style={BREAK}>
+                    {/* THE COMMENTS ARE THE POINT, not a footnote. A column of
+                        numbers says the chain disagreed; only the sentences
+                        say why, and this is the one screen where all of them
+                        sit together. */}
+                    {(['SELF', ...raters] as RaterRole[])
+                      .filter(w => r.by[w]?.comment?.trim())
+                      .map(w => (
+                        <div key={w} className="k" style={{ marginBottom: 3, ...BREAK }}>
+                          <b>{w === 'SELF' ? 'Them' : STAGE_SHORT[w as Stage]}:</b>{' '}
+                          {r.by[w]!.comment}
+                        </div>
+                      ))}
+                    {!(['SELF', ...raters] as RaterRole[]).some(w => r.by[w]?.comment?.trim())
+                      && <span className="k">—</span>}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-
-        <div className="fld" style={{ marginTop: 14 }}>
-          <label htmlFor="overall">Overall comment</label>
-          <textarea id="overall" value={overallComment}
-                    onChange={e => onOverallComment(e.target.value)}
-                    placeholder="Evidence, not adjectives. This is what they read." />
-        </div>
-        {!fb.ok && overallComment.trim().length > 0 && (
-          <div className="banner b-amber" style={{ marginBottom: 0 }}>
-            <span aria-hidden="true">!</span>
-            <div>{fb.faults.join(' ')}</div>
-          </div>
         )}
-
-        <div className="btnrow">
-          <button className="btn" type="button" disabled={unrated > 0 || saving} onClick={onSubmit}>
-            {saving ? 'Saving…'
-              : unrated > 0 ? `${unrated} KRA${unrated === 1 ? '' : 's'} still to rate`
-              : 'Submit my rating'}
-          </button>
-        </div>
       </Card>
     </>
   )
