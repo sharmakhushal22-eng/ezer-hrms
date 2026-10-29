@@ -591,11 +591,22 @@
    * including the left one — which is the score stripe — so a blocked card
    * rated 1, 2 or 3 all came out the same amber and the ramp was invisible
    * exactly where it mattered most. Measured in the browser: three
-   * different ratings, one identical rgb(180,83,9). */
-  border-top-color: var(--ez-warning);
-  border-right-color: var(--ez-warning);
-  border-bottom-color: var(--ez-warning);
-  box-shadow: 0 0 0 1px var(--ez-warning);
+   * different ratings, one identical rgb(180,83,9).
+   *
+   * AND BLUE, NOT AMBER. Reported: "at best rating the border of the KRA
+   * block is red." It was — --ez-warning resolves to #B45309 in daylight, a
+   * rust that reads as red, wrapped around the whole card. So a KRA scored
+   * at the TOP of the scale but still missing its reason showed a green
+   * stripe inside a red frame, and the frame wins at a glance.
+   *
+   * The rule that fixes it, and that anything added here later has to obey:
+   * RED, YELLOW AND GREEN BELONG TO THE SCORE AND TO NOTHING ELSE on this
+   * card. "Needs a reason" is not a judgement about the work — it is an
+   * errand — so it takes a hue the ramp never reaches. */
+  border-top-color: var(--ez-info);
+  border-right-color: var(--ez-info);
+  border-bottom-color: var(--ez-info);
+  box-shadow: 0 0 0 1px var(--ez-info);
 }
 /* Rated but not yet scored on the ramp — no goal id, so no rating can be
  * written at all. Neutral rather than green: nothing was judged. */
@@ -722,8 +733,10 @@
   color: var(--ez-positive);
 }
 .pms .kstep.needs {
-  background: var(--ez-warning-tint); border-color: var(--ez-warning);
-  color: var(--ez-warning);
+  /* Same errand, same colour as the ring it points at — and off the score
+   * ramp, so a jump chip can never be read as a bad rating. */
+  background: var(--ez-info-tint); border-color: var(--ez-info);
+  color: var(--ez-info);
 }
 
 /* ── one KRA ──────────────────────────────────────────────────────────── */

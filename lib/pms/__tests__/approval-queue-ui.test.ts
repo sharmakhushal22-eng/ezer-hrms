@@ -266,12 +266,26 @@ test('a blocked KRA stays visibly blocked once the card carries a score', () => 
   // And it cannot go back to using the background: a wash now means "rated
   // in the middle of the scale", so an amber card and a 3 would be the
   // same picture.
-  const needs = CSS.slice(CSS.indexOf('.pms .kcard.needs {'),
-                          CSS.indexOf('}', CSS.indexOf('.pms .kcard.needs {')))
+  // COMMENTS OUT FIRST. The rule's own comment names the colours it exists
+  // to avoid, so slicing the raw file found --ez-warning in the prose
+  // explaining why --ez-warning is not used. Second time this file has been
+  // bitten by matching a rule's explanation instead of its declarations.
+  const bare = CSS.replace(/\/\*[\s\S]*?\*\//g, ' ')
+  const needs = bare.slice(bare.indexOf('.pms .kcard.needs {'),
+                           bare.indexOf('}', bare.indexOf('.pms .kcard.needs {')))
   assert.ok(!/background/.test(needs),
     'the blocked state paints the background, which now means the score')
-  assert.match(needs, /border-top-color: var\(--ez-warning\)/,
+  assert.match(needs, /border-top-color: var\(--ez-info\)/,
     'the blocked state has no marking of its own')
+  // AND IT MUST NOT BE ON THE RAMP. Reported: at the best rating the card's
+  // border was still red. --ez-warning is #B45309 in daylight, a rust that
+  // reads red, so a KRA scored at the top of the scale and merely missing
+  // its reason showed a green stripe inside a red frame.
+  for (const ramp of ['--ez-critical', '--ez-warning', '--ez-positive',
+                      '--pms-ramp-low', '--pms-ramp-mid', '--pms-ramp-high']) {
+    assert.ok(!needs.includes(ramp),
+      `the blocked state uses ${ramp}, a colour the score ramp owns`)
+  }
   // AND IT MUST NOT USE THE SHORTHAND. `border-color` includes the left
   // edge, which is the score stripe: with it, a blocked KRA rated 1, 2 or 3
   // all rendered the same amber and the ramp vanished exactly where the
