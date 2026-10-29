@@ -11,6 +11,7 @@ import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/reso
 // send-magic-link / resend-link are guarded server-side now, so the session goes along.
 import { authHeaders } from '@/lib/auth-headers'
 import GenerateCodeModal from '@/components/onboarding/GenerateCodeModal'
+import { CODE_QUEUE_ENFORCED } from '@/lib/onboarding/code-series'
 import AppointmentLetterModal from '@/components/onboarding/AppointmentLetterModal'
 import { TRACKS, requiredDocCodes, trackOf } from '@/lib/onboarding/hiring-track'
 import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
@@ -713,7 +714,8 @@ export default function OnboardingDashboard() {
   const openCodeModal = (candidate: Candidate) => setCodeModal(candidate)
   // FIFO (lib/onboarding/code-series.ts): codes go out in the order candidates came into
   // Onboarding. Earlier arrivals of the same company still without a code block this one.
-  const aheadOf = (c: Candidate) => candidates
+  // The queue is switched off for now (CODE_QUEUE_ENFORCED): nobody waits behind anybody.
+  const aheadOf = (c: Candidate) => !CODE_QUEUE_ENFORCED ? [] : candidates
     .filter(o => !o.id.startsWith('rec_') && o.id !== c.id && o.company_id === c.company_id && o.status !== 'EMPLOYEE_CREATED' && !o.employee_code)
     .filter(o => o.created_at < c.created_at || (o.created_at === c.created_at && o.id < c.id))
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
