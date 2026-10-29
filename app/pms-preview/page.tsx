@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 // app/pms-preview/page.tsx — a test harness, not a product screen.
 //
 // The real PMS sits behind auth and behind migration 066, so neither a
@@ -20,7 +21,7 @@ import { ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
 import { DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
          AnalyticsTab } from '@/components/pms/EmployeeTabs'
 import { TeamTab, ApproveTab, RateTab, PipRequestTab, TeamAnalyticsTab,
-         FinaliseTab, FeedbackTab } from '@/components/pms/ManagerTabs'
+         FinaliseTab, FeedbackTab, KraDetail } from '@/components/pms/ManagerTabs'
 import { STAGES } from '@/lib/pms/cycle'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Kra } from '@/lib/pms/kra'
@@ -167,12 +168,25 @@ const CASES: [string, React.ReactNode][] = [
   // RM
   ['rm-team',     <TeamTab key="rt" members={TEAM} today={TODAY} managerName="Priya Nair (RM L1)" />],
   ['rm-approve',  <ApproveTab key="ra" members={TEAM} today={TODAY} />],
-  ['rm-rate',     <RateTab key="rr" member={TEAM[0]} overallComment="" onOverallComment={() => {}}
-      onChange={() => {}} onSubmit={() => {}}
-      rows={LINES.map(l => ({ goalId: l.goalId, title: l.title, category: l.category,
-        weightage: l.weightage, achievement: '0.11% across 3 runs', selfRating: l.self ?? null,
-        selfComment: 'Checklist introduced', myRating: l.rmL1 ?? null,
-        myComment: '' }))} />],
+  /**
+   * READ-ONLY NOW. Rating happens once, while approving the KRA set; this
+   * tab is the record of what each rung scored. The case carries a chain
+   * mid-flight — RM L1 and RM L2 have rated, the HOD has not — because the
+   * blank column is the state most worth looking at.
+   */
+  ['rm-rate',     <RateTab key="rr" member={{ ...TEAM[0],
+        // A CHAIN THE MEMBER HOLDS. Without these the screen renders a Self
+        // column and nothing else — which is correct behaviour for somebody
+        // with no chain, and useless as a preview of the thing being built.
+        rmL1Id: 'rm1', rmL2Id: 'rm2', hodId: 'hod' }}
+      rows={LINES.map((l, i) => ({ goalId: l.goalId, title: l.title, category: l.category,
+        weightage: l.weightage, achievement: '0.11% across 3 runs',
+        by: {
+          SELF:  { rating: l.self ?? null, comment: 'Checklist introduced and held all quarter.' },
+          RM_L1: { rating: l.rmL1 ?? null, comment: i === 0 ? 'Agreed — the run rate held through the migration.' : '' },
+          RM_L2: { rating: l.rmL2 ?? null, comment: i === 1 ? 'Scope moved in September; scored against what was agreed.' : '' },
+        },
+      }))} />],
   ['rm-pip',      <PipRequestTab key="rp" members={TEAM} today={TODAY} />],
   ['rm-analytics',<TeamAnalyticsTab key="rn" members={TEAM} today={TODAY} lines={LINES}
       deptAverage={3.24} companyAverage={3.41} scopeLabel="your team" />],
@@ -181,7 +195,74 @@ const CASES: [string, React.ReactNode][] = [
       chain="SELF_RM1_RM2_HOD" whoCanFinalise="RM1_RM2_HOD" deptName="Finance & Accounts" />],
   ['hod-feedback', <FeedbackTab key="hb" member={TEAM[0]} rating={2}
       appreciation="" improvement="" benefits={[]} logs={LOGS} onChange={() => {}} />],
+  /**
+   * The detailed KRA form, with DELIBERATELY LONG CONTENT.
+   *
+   * A preview case is only worth having if it is harder than the real data.
+   * The live rows top out around a 48-character field, which is comfortably
+   * inside any sane column — so an overflow bug would not show here on
+   * realistic text. These lines carry a long unbroken token, a long sentence,
+   * and a long self comment, which is where the layout actually gives way.
+   */
+  ['kra-detail', <KraDetail key="kd" member={TEAM[0]} onClose={() => {}}
+      lines={[
+        { goalId: 'g1', seqNo: 1, title: 'Close the month-end books within three working days of period end, including inter-company eliminations',
+          kpi: 'Days from period end to signed-off trial balance, measured against the group reporting calendar',
+          target: '<=3 working days every month for the whole quarter, no exceptions',
+          category: 'BUSINESS', weightage: 40, status: 'LOCKED', source: 'CARRIED_FORWARD',
+          achievement: 'Closed in 2.6 days on average across the quarter, with the October close landing on day two despite the ERP migration running in parallel.',
+          selfRating: 4,
+          selfComment: 'The ERP migration overlapped the September close and we still held the three-day commitment, which I think is the strongest single result of the quarter.' },
+        { goalId: 'g2', seqNo: 2, title: 'Reconciliation_automation_programme_phase_two_deliverables_and_signoff',
+          kpi: 'ReconciliationBreaksClosedWithinSLAPercentageAcrossAllLedgers',
+          target: '>=98%', category: 'PROCESS', weightage: 35, status: 'LOCKED', source: 'MANUAL',
+          achievement: 'https://internal.example.com/reports/reconciliation/q2-fy2026-27/breaks-by-ledger-and-age?view=summary',
+          selfRating: 3, selfComment: 'Short note.' },
+        { goalId: 'g3', seqNo: 3, title: 'Mentoring', kpi: 'Sessions', target: '6', category: 'PEOPLE',
+          weightage: 25, status: 'DRAFT', source: 'MANUAL',
+          achievement: null, selfRating: null, selfComment: null },
+      ]} />],
+  /**
+   * The same panel as the rung HOLDING the appraisal sees it: read the KRAs,
+   * score each one, confirm the one-to-one, approve. Rating and approving
+   * used to be two tabs and the chain stalled on its own rule, so this is the
+   * case that matters — the read-only one above is what everybody else gets.
+   */
+  ['kra-review', <KraDetailReviewPreview key="kr" />],
 ]
+
+/** Holds the draft so the preview behaves like the real thing. */
+function KraDetailReviewPreview() {
+  const [rate, setRate] = useState<Record<string, { rating: number | null; comment: string }>>({})
+  const [confirmed, setConfirmed] = useState(false)
+  const [finalRating, setFinalRating] = useState('')
+  /** The RM's one piece of prose about the whole appraisal. It used to be
+   *  collected on the rating tab, which is a read-only record now. */
+  const [overall, setOverall] = useState('')
+  return (
+    <KraDetail member={TEAM[0]} myRung="RM_L1" finalises
+      lines={[
+        { goalId: 'g1', seqNo: 1, title: 'Close the month-end books within three working days',
+          kpi: 'Days to signed-off trial balance', target: '<=3 working days',
+          category: 'BUSINESS', weightage: 60, status: 'LOCKED', source: 'CARRIED_FORWARD',
+          achievement: 'Closed in 2.6 days on average across the quarter.',
+          selfRating: 4, selfComment: 'Held the commitment through the ERP migration.' },
+        { goalId: 'g2', seqNo: 2, title: 'Reconciliation automation, phase two',
+          kpi: 'Breaks closed within SLA', target: '>=98%',
+          category: 'PROCESS', weightage: 40, status: 'LOCKED', source: 'MANUAL',
+          achievement: '97.2% across all ledgers.', selfRating: 3, selfComment: 'Short of target.' },
+      ]}
+      rate={rate}
+      onRate={(gid, patch) => setRate(p => {
+        const cur = p[gid] ?? { rating: null, comment: '' }
+        return { ...p, [gid]: { ...cur, ...patch } }
+      })}
+      confirmed={confirmed} onConfirm={setConfirmed}
+      finalRating={finalRating} onFinalRating={setFinalRating}
+      overallComment={overall} onOverallComment={setOverall}
+      onApprove={() => {}} onClose={() => {}} />
+  )
+}
 
 export default function PmsPreview() {
   if (process.env.NODE_ENV === 'production') return null

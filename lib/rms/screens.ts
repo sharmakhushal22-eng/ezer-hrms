@@ -93,6 +93,17 @@ export const SCREEN_MODULES: ScreenModule[] = [
       { key: 'policies', label: 'Policy Builder' },
       { key: 'fill', label: 'Fill Status Tracker' },
       { key: 'upload', label: 'Final Rating Upload' },
+      // Registered so they can be switched per role in Roles & Access, and
+      // so they stop borrowing a neighbour's key. Both used to ride on
+      // 'pms.upload' / 'pms.fill', which L1_MANAGER, L2_MANAGER and HOD all
+      // hold — so HR's publish workspace was reachable by every line
+      // manager. Unseeded on purpose: the roles that should keep these tabs
+      // have no PMS rows at all and are therefore default-visible, while the
+      // three that are configured get no row and lose them. Seeding rows for
+      // HR would configure the module for HR and hide everything else from
+      // them, which is the trap migration 142 documents.
+      { key: 'publish', label: 'Publish Results' },
+      { key: 'summary', label: 'Ratings Summary' },
       { key: 'pip', label: 'PIP Management' },
       { key: 'reports', label: 'Reports & Export' },
       { key: 'chain', label: 'Flow & Hierarchy' },

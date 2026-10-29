@@ -49,6 +49,43 @@ const POLICY_COLS = [
   'final_review_one_to_one', 'approval_chain', 'who_can_finalise',
   'self_rating_mandatory', 'rating_scale_type', 'new_joiner_cutoff_days',
   'include_notice_period', 'include_exited', 'is_active',
+  // §13.2(3). Allowlisted rather than assumed: this file names every column a
+  // caller may write, so a new policy field is inert until it is listed here
+  // — which is the right default for a table that decides how everybody is
+  // rated, but it does mean the list has to be kept up.
+  'carry_forward_kras',
+  // 205. Same reason again: WHO the HR Head is, so the HOD's published-results
+  // banner can name a person instead of saying "HR". Not a permission —
+  // post_final_owner and §2's matrix still decide who may act.
+  'hr_head_id',
+  // 202. Same reason as the line above: a policy column is INERT until it is
+  // named here, so the admin screen's new control would have saved silently
+  // into nothing — the precise shape of the "my configuration changes do not
+  // take effect" bug reported against this module once already.
+  'post_final_owner',
+  // 203. Inert until named here, same as every column above it.
+  'publish_scope',
+] as const
+
+/** A period's own windows, and its status.
+ *
+ *  WHY THIS EXISTS. pms_generate_periods lays the windows out from the
+ *  frequency and nothing could change them afterwards — there was no
+ *  period_update at all. So a window that was set wrongly, or one that has
+ *  simply passed, could not be corrected from the product: an employee who
+ *  missed the self-rating window saw "Ask your manager to reopen it" and
+ *  nobody, manager or admin, had any way to do it.
+ *
+ *  period_start, period_end, period_code and period_no are NOT here. Those are
+ *  the period's identity; moving them would silently re-date work already
+ *  recorded against it. Windows are scheduling, which is a different thing. */
+const PERIOD_COLS = [
+  'kra_window_from', 'kra_window_to',
+  'checkin_from', 'checkin_to',
+  'self_rating_from', 'self_rating_to',
+  'rm_review_from', 'rm_review_to',
+  'finalise_from', 'finalise_to',
+  'result_publish_date', 'status',
 ] as const
 
 const KRA_COLS = [
@@ -83,20 +120,39 @@ export async function GET(req: NextRequest) {
   const g = await gate(req)
   if ('error' in g) return g.error
 
-  const [policies, kras, scale, periods] = await Promise.all([
+  const [policies, kras, scale, periods, companies, people] = await Promise.all([
     sb.from('pms_policies').select('*').order('policy_name'),
     sb.from('pms_kra_master').select('*').order('kra_title').limit(500),
     sb.from('pms_rating_scale').select('*').order('sort_order'),
     sb.from('pms_periods').select('*').order('period_start', { ascending: true }).limit(200),
+    // EVERY COMPANY RUNS ITS OWN PERIODS, so "Q2 2026-27" appears once per
+    // company and the lists could not tell them apart. On the window editor
+    // that is confusing; on "Open a period" it is dangerous, because opening
+    // enrols everybody and cannot be undone from the screen. The name is what
+    // makes the choice legible.
+    sb.from('companies').select('id,company_name'),
+    // 205: the HR Head picker. Active employees only, with their company, so
+    // the dropdown on a policy offers that company's people rather than the
+    // whole group — three organisations share this database and the employee
+    // codes repeat across them.
+    //
+    // Non-fatal, like the company names above: if this read fails the editor
+    // still renders and the HR Head field simply has nobody to offer.
+    sb.from('employees').select('id,emp_code,full_name,company_id')
+      .is('date_of_leaving', null).order('emp_code').limit(5000),
   ])
   const firstError = [policies, kras, scale, periods].find(r => r.error)?.error
   if (firstError) return bad(firstError.message, 500)
+  if (companies.error) console.error('[pms] could not read company names:', companies.error)
+  if (people.error) console.error('[pms] could not read the employee list:', people.error)
 
   return NextResponse.json({
     policies: policies.data ?? [],
     kras:     kras.data ?? [],
     scale:    scale.data ?? [],
     periods:  periods.data ?? [],
+    companies: companies.data ?? [],
+    people: people.data ?? [],
     // The UI hides attribution-only actions when there is no employee behind
     // the session, rather than letting the button fail on click.
     actor: { employeeId: g.actor.employeeId, name: g.actor.name, legacy: g.actor.legacy },
@@ -218,6 +274,33 @@ export async function POST(req: NextRequest) {
       return r.error ? bad(r.error.message) : okay({ created: r.data })
     }
 
+    // Correcting a period's windows — including reopening one that has closed.
+    //
+    // A window that has passed is the common case: the employee's screen says
+    // "You missed the self-rating window" and offers to have it reopened, and
+    // until now that offer led nowhere. Moving a window changes who may act and
+    // when; it does not change what has already been recorded.
+    case 'period_update': {
+      const id = str('period_id') || str('id')
+      if (!id) return bad('Which period?')
+      const fields = pick(body, PERIOD_COLS)
+      if (!Object.keys(fields).length) return bad('Nothing to change.')
+      // A window has to end on or after it starts, or it is open to nobody and
+      // the screens read it as "no window configured" instead of "closed".
+      for (const [from, to, what] of [
+        ['kra_window_from', 'kra_window_to', 'KRA'],
+        ['checkin_from', 'checkin_to', 'check-in'],
+        ['self_rating_from', 'self_rating_to', 'self-rating'],
+        ['rm_review_from', 'rm_review_to', 'manager review'],
+        ['finalise_from', 'finalise_to', 'finalise'],
+      ] as const) {
+        const a = fields[from] as string | undefined, b = fields[to] as string | undefined
+        if (a && b && a > b) return bad(`The ${what} window would end before it starts.`)
+      }
+      const r = await sb.from('pms_periods').update(fields).eq('id', id).select().single()
+      return r.error ? bad(r.error.message) : okay(r.data)
+    }
+
     // Opening a period ENROLS EVERY ELIGIBLE EMPLOYEE and writes a row each.
     // There is no close_period to undo it — reversing means deleting those
     // rows by hand. So it takes an explicit confirm flag that the UI only
@@ -247,6 +330,44 @@ export async function POST(req: NextRequest) {
         p_rating: rating, p_reason: str('reason'),
       })
       return r.error ? bad(r.error.message) : okay({ message: r.data })
+    }
+
+    /**
+     * §6.4 — commit a bulk rating upload.
+     *
+     * The rows go to the database UNCHECKED by this route, deliberately.
+     * pms_commit_rating_upload re-validates every one of them against the
+     * live tables, and that is where the decision belongs: a check here would
+     * be a third copy of the same rules, able to disagree with both the
+     * browser preview and the function.
+     *
+     * One RPC, so one transaction. A loop here would be the part-applied
+     * batch the whole feature is built to prevent.
+     */
+    case 'upload_commit': {
+      const period = str('period_id')
+      if (!period) return bad('Which period is this upload for?')
+      if (!Array.isArray(body.rows)) return bad('No rows were sent.')
+      if (!body.rows.length) return bad('That file had no data rows.')
+      // Attributable or not at all — the function refuses a null actor too,
+      // but saying it here costs nothing and names the fix.
+      if (!actor.employeeId) {
+        return bad('This session is the shared dashboard login, which is not '
+                 + 'attached to an employee record. A bulk override is recorded '
+                 + 'against a named person, so sign in with your own account.')
+      }
+      const r = await sb.rpc('pms_commit_rating_upload', {
+        p_period_id: period, p_actor_id: actor.employeeId,
+        p_actor_role: str('actor_role') || 'HR_MANAGER',
+        p_rows: body.rows,
+      })
+      if (r.error) return bad(r.error.message)
+      const res = (r.data ?? {}) as { ok?: boolean; message?: string }
+      // A refused batch is not a transport failure: it returns ok:false with
+      // a sentence for the admin, and the attempt is logged either way.
+      return res.ok === false
+        ? bad(String(res.message ?? 'The upload was refused.'))
+        : okay(r.data as Record<string, unknown>)
     }
 
     default:

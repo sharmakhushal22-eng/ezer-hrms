@@ -3,7 +3,8 @@
 // booking's line is part of a claim.
 import { NextRequest } from 'next/server'
 import { tePermitFor, teRoute } from '@/lib/te/server'
-import { needText, needUuid } from '@/lib/te/errors'
+import { TeHttpError, needText, needUuid } from '@/lib/te/errors'
+import { MAY_NOT_BOOK } from '@/lib/te/desks'
 import { bookingCancel } from '@/lib/te/engine/te-service.js'
 
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = await t.body<{ reason?: string }>()
     const reason = needText(body.reason, 'reason')
     await tePermitFor(t, 'te_bookings', bookingId, 'Travel Claims', 'EDIT')
+    // Cancelling commits money too — a fee, or a seat that has to be bought
+    // again — so it needs the same right as booking. te_booking_cancel is the
+    // floor (migration 175); this is the legible refusal.
+    if (!(await t.deskMayBook())) throw new TeHttpError(403, 'TE_FORBIDDEN', MAY_NOT_BOOK)
     return bookingCancel(await t.ctx(), bookingId, reason)
   })
 }

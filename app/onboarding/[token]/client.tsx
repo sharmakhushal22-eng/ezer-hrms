@@ -833,7 +833,7 @@ function CrossDocCheck({ docs, onResolve, onMismatchChange }: {
   const pan = docs['PAN']?.ai_extracted_data || {}
 
   type FieldDef = { key: 'name' | 'dob' | 'pan'; label: string; sources: { src: string; value: string }[] }
-  const fields: FieldDef[] = [
+  const fields: FieldDef[] = ([
     { key: 'name', label: 'Name', sources: [
       { src: 'Aadhaar', value: norm(aadhaar.name) },
       { src: 'PAN', value: norm(pan.name) },
@@ -844,7 +844,7 @@ function CrossDocCheck({ docs, onResolve, onMismatchChange }: {
     { key: 'pan', label: 'PAN', sources: [
       { src: 'PAN', value: norm(pan.pan_number) },
     ] },
-  ].map(f => ({ ...f, sources: f.sources.filter(s => s.value) }))
+  ] as FieldDef[]).map(f => ({ ...f, sources: f.sources.filter(s => s.value) }))
 
   // Only fields that have at least one extracted value matter for display
   const present = fields.filter(f => f.sources.length > 0)
@@ -1365,7 +1365,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   if (submitted) {
     const ackNo = `EZR-ACK-${(token || '').slice(0, 8).toUpperCase()}`
     const generatedAt = new Date().toLocaleString('en-IN')
-    const doj = c.date_of_joining ? new Date(c.date_of_joining).toLocaleDateString('en-IN') : '—'
+    const doj = c.date_of_joining ? new Date(c.date_of_joining).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
     const ackForms = ['Form 11', 'Form 2', 'Form III', ...(esicApplicable ? ['ESIC Form 1'] : [])]
     const first = (personal.full_name || c.full_name || '').replace(/^CLAUDE TEST\s+/i, '').split(' ')[0]
     const next = [
@@ -1696,7 +1696,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <Note>Bank details are encrypted. Only the Payroll team can see them.</Note>
             <div className="ezo-g2">
               <Fld label="Account Number *"><input type="password" style={S.inp(!statutory.bank_account)} value={statutory.bank_account} onChange={e => setStatutory(s => ({ ...s, bank_account: e.target.value }))} /></Fld>
-              <Fld label="Confirm Account Number *"><input style={S.inp(statutory.bank_confirm && statutory.bank_confirm !== statutory.bank_account)} value={statutory.bank_confirm} onChange={e => setStatutory(s => ({ ...s, bank_confirm: e.target.value }))} /></Fld>
+              <Fld label="Confirm Account Number *"><input style={S.inp(!!statutory.bank_confirm && statutory.bank_confirm !== statutory.bank_account)} value={statutory.bank_confirm} onChange={e => setStatutory(s => ({ ...s, bank_confirm: e.target.value }))} /></Fld>
               <Fld label="IFSC Code *" hint="Auto-fills bank name on entry">
                 <input style={S.inp(!statutory.bank_ifsc)} value={statutory.bank_ifsc} onChange={e => { const v = e.target.value.toUpperCase(); setStatutory(s => ({ ...s, bank_ifsc: v })); lookupIfsc(v) }} maxLength={11} />
               </Fld>

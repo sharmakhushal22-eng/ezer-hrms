@@ -15,7 +15,7 @@
 // swallow. A blank page here would read as a broken feature rather than a
 // pending migration, and someone would spend an afternoon debugging the app.
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { companyFilter, canSeeScreen } from '@/lib/rms/resolve'
@@ -24,8 +24,11 @@ import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
 import { PERIOD_OPEN } from '@/lib/pms/status'
 import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
-import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
-         FlowTab, type AdminTab, type PipRow } from '@/components/pms/AdminTabs'
+import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, PublishTab, SummaryTab,
+         UploadTab, PipTab, ReportsTab, FlowTab, type AdminTab, type PipRow,
+         type PolicyConfig, type PublishRow } from '@/components/pms/AdminTabs'
+import { mayWritePostFinal, postFinalNote, pmsRoleOf,
+         type PostFinalOwner } from '@/lib/pms/postFinal'
 import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
 import { type Frequency, type Policy } from '@/lib/pms/policy'
@@ -54,11 +57,56 @@ interface Coverage {
   deptSourceReady: boolean // false until migration 067 adds the column
 }
 
+/**
+ * WHICH SEEDED SCREEN PERMISSION GOVERNS A TAB.
+ *
+ * canSeeScreen denies any key absent from the seeded screen config — line 203
+ * returns true only while a module has NO config at all, and PMS has one. So a
+ * tab introduced with a brand-new key is invisible to everybody, including
+ * admins, until somebody seeds the key. 'publish' is such a tab.
+ *
+ * Seeding a key means writing to the roles and permissions module, which is
+ * load-bearing for every other module in the product and is deliberately left
+ * alone here. So Publish Results borrows 'pms.upload' instead: that key
+ * already means "may set final ratings in bulk", which §2 grants to HR alone
+ * (bulk_upload_ratings is ✅ for HR Manager, HR Head and Admin and — for
+ * everyone else). Publishing is a strictly weaker action in the same family —
+ * it releases a rating HR cannot change — so no permission is widened by
+ * this, and nobody gains a screen they could not already reach.
+ *
+ * Everything not listed governs itself, which is every pre-existing tab.
+ */
+/**
+ * NOTHING BORROWS ANY MORE. Both entries here used to point a tab at a
+ * different tab's seeded key, because a brand-new key is denied to any role
+ * the module is configured for — and PMS is configured for L1_MANAGER,
+ * L2_MANAGER and HOD.
+ *
+ * That workaround over-granted. 'pms.upload' is held by those three roles,
+ * so Publish Results — HR's workspace, where the feedback an employee reads
+ * is written and the result released — was reachable by every line manager.
+ * 'pms.fill' did the same for the cross-company Ratings Summary.
+ *
+ * They are registered screens now (lib/rms/screens.ts), which both makes
+ * them switchable in Roles & Access and gives them their own answer:
+ *
+ *   L1 / L2 / HOD   module configured, no row for the new key  → hidden
+ *   HR Head / HR Manager / Admin   module unconfigured          → visible
+ *
+ * WHICH IS WHY NO MIGRATION SEEDS ANYTHING. The roles that should keep
+ * these tabs are the ones with no PMS rows at all, and adding rows for them
+ * would configure the module for those roles and start hiding every tab
+ * they do not have a row for — a privilege removal disguised as a grant,
+ * which is the trap migration 142 documents.
+ */
+const SCREEN_KEY: Partial<Record<Tab, string>> = {}
+const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
+
 export default function PmsPage() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<Tab>('overview')
   useEffect(() => {
-    const vis = (['overview','config','setup','policies','fill','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, 'pms.'+k))
+    const vis = (['overview','config','setup','policies','fill','publish','summary','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, screenKeyOf(k)))
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [ready, setReady] = useState<boolean | null>(null)   // null = still checking
@@ -66,10 +114,95 @@ export default function PmsPage() {
   const [cov, setCov] = useState<Coverage | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [fill, setFill] = useState<FillRow[] | null>(null)
+  /** What has reached HR's rung — see the loader. */
+  const [pubRows, setPubRows] = useState<PublishRow[] | null>(null)
+  const [publishing, setPublishing] = useState<string | null>(null)
+  /**
+   * WHICH COMPANY THE PUBLISH WORKSPACE IS ACTING IN. 203.
+   *
+   * Seeded from the newest open period's company — the one the rest of this
+   * screen already describes — so a single-company HR user never sees a
+   * chooser and a cross-company one starts somewhere sensible rather than
+   * alphabetically first.
+   */
+  const [pubCompany, setPubCompany] = useState<string | null>(null)
   const [naming, setNaming] = useState<PeriodNaming | null>(null)
+  /** The open period's id — §6.4 commits against it. */
+  const [periodId, setPeriodId] = useState<string | null>(null)
+  /** Held HERE and not in UploadTab: committing reloads, the reload unmounts
+   *  the tab block, and a banner inside it would vanish the moment it was
+   *  set — which is what happened to the first successful commit. */
+  const [commitNote, setCommitNote] = useState<string | null>(null)
+  /**
+   * §6.1's values, read from the policy rather than hardcoded — one entry per
+   * policy, because there are three and they differ. `config` below is
+   * whichever one the admin has chosen to look at.
+   */
+  const [configs, setConfigs] = useState<PolicyConfig[]>([])
+  const [configPolicyId, setConfigPolicyId] = useState<string | null>(null)
+  const [companyNames, setCompanyNames] = useState<Record<string, string>>({})
+
+  /**
+   * The policy §6.1 is describing: the one the admin chose, or the first.
+   *
+   * Named here rather than stored, so a reload cannot leave the screen
+   * describing a policy that no longer exists — and so the company name is
+   * resolved in one place instead of being baked into each entry at fetch
+   * time, when the names had not loaded yet.
+   */
+  const withCompany = useCallback((c: PolicyConfig): PolicyConfig => ({
+    ...c, companyName: c.companyId ? companyNames[c.companyId] ?? null : null,
+  }), [companyNames])
+
+  const config = useMemo(() => {
+    if (!configs.length) return null
+    const hit = configs.find(c => c.policyId === configPolicyId) ?? configs[0]
+    return withCompany(hit)
+  }, [configs, configPolicyId, withCompany])
+
+  /** Every policy, labelled, for the selector. */
+  const configChoices = useMemo(
+    () => configs.map(withCompany), [configs, withCompany])
+
+  /**
+   * The companies in scope, and which of them opted into a combined publish
+   * list. Read from each company's OWN policy: a group where two are relaxed
+   * and one is strict keeps the combined view for the two without dragging
+   * the third into it.
+   */
+  const pubCompanies = useMemo(() => {
+    const seen = new Map<string, boolean>()
+    for (const c of configChoices) {
+      const name = c.companyName
+      if (!name) continue
+      // If a company somehow has two policies, the STRICTER wins: opting in
+      // has to be unanimous within a company, or one relaxed policy would
+      // expose employees governed by the other.
+      seen.set(name, (seen.get(name) ?? true) && c.publishScope === 'ALL')
+    }
+    return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, allowsAll]) => ({ name, allowsAll }))
+  }, [configChoices])
+
+  const pubAllowAll = pubCompanies.some(c => c.allowsAll)
   const [deptNames, setDeptNames] = useState<Record<string, string>>({})
   const [freq, setFreq] = useState<Frequency>('QUARTERLY')
   const [policies, setPolicies] = useState<Policy[]>([])
+  /** §6.4's validator reads the real scale, not a constant. Defaults only
+   *  until the first load answers; an empty scale would reject every rating. */
+  const [scale, setScale] = useState<number[]>([1, 2, 3, 4, 5])
+  const [improvementAtOrBelow, setImprovementAtOrBelow] = useState<number | null>(2)
+  /**
+   * The configured scale WITH its labels, for the publish workspace and the
+   * summary distribution.
+   *
+   * `scale` above is numbers only, which §6.4's validator wants; a screen that
+   * prints "4 · Exceeds Expectations" and one that decides whether improvement
+   * feedback is mandatory both need more than the number. Same query, kept
+   * whole rather than reduced twice.
+   */
+  const [bandList, setBandList] = useState<{ value: number; label: string
+                                             improvementMandatory?: boolean }[]>([])
   // The Indian financial year. Periods are generated from it, so the preview
   // has to start where the real thing starts.
   const fyStart = `${new Date().getMonth() >= 3 ? new Date().getFullYear()
@@ -98,10 +231,32 @@ export default function PmsPage() {
             + ' status, pms_policies(frequency)')
       .in('status', PERIOD_OPEN)
     if (co) perQ = perQ.eq('company_id', co)
-    const per = await perQ
-      .order('period_start', { ascending: false }).limit(1).maybeSingle()
+    perQ = perQ.select('id, period_name, period_code, financial_year, period_no,'
+                     + ' period_start, period_end, status, company_id,'
+                     + ' pms_policies(frequency)')
+    const per = await perQ.order('period_start', { ascending: false }).limit(50)
 
-    const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null
+    /**
+     * EVERY open period in scope, not one.
+     *
+     * The page header, the frequency preview and §6.4's upload commit are all
+     * single-period ideas and still use `row` — the newest open period. But
+     * Ratings Summary and Publish Results are HR's view of the whole
+     * organisation, and an HR Head over three companies was seeing one
+     * company's cycle: companyFilter returns NULL for a cross-company caller,
+     * so the query was unfiltered and `.limit(1)` then picked whichever single
+     * period sorted first. 395 enrolments exist and the summary could reach
+     * about a third of them.
+     *
+     * Scoping is unchanged for everybody else. A company-pinned HR user still
+     * gets companyFilter's eq(), so this widens nothing: it stops narrowing
+     * where the caller was never meant to be narrowed.
+     */
+    const openPeriods = ((per.data ?? []) as unknown as
+      (Record<string, string | null> & { id: string })[])
+    const row = openPeriods[0] ?? null
+    setPeriodId(row?.id ?? null)
+    let coNames: Record<string, string> = {}
     if (row) {
       const freq = ((row as unknown as { pms_policies?: { frequency?: string } })
         .pms_policies?.frequency) ?? null
@@ -117,11 +272,24 @@ export default function PmsPage() {
       // vw_pms_fill_status already collapses ten workflow values into the five
       // states an admin chases. One CASE in SQL beats the same mapping
       // rewritten in every screen that needs it.
+      // §6.1 shows all four config groups, so all four groups have to be
+      // fetched. It was showing DEFAULT_RULES and the first entry of the
+      // CHAINS/FINALISERS arrays instead of these columns.
       let polQ = supabase.from('pms_policies')
         .select('id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
-              + ' total_weightage, min_weightage_per_kra, who_can_finalise')
+              + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
+              + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
+              + ' final_review_one_to_one, approval_chain, rating_scale_type,'
+              + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
+              + ' publish_scope,'
+              + ' include_notice_period, include_exited')
       if (co) polQ = polQ.eq('company_id', co)
-      const pol = await polQ.limit(50)
+      // ORDER BY, because "the first policy" was meaningless without one.
+      // Postgres makes no promise about unordered row order, and an UPDATE
+      // physically moves a row — so saving a policy could change which one
+      // this screen called first. Ordered by company then name, which is also
+      // the order the selector lists them in.
+      const pol = await polQ.order('company_id').order('policy_name').limit(50)
       if (!pol.error) {
         setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
           id: String(r.id), name: String(r.policy_name ?? 'Policy'),
@@ -132,14 +300,290 @@ export default function PmsPage() {
           minWeightagePerKra: Number(r.min_weightage_per_kra) || 5,
           whoCanFinalise: (r.who_can_finalise as Policy['whoCanFinalise']) ?? 'RM1_RM2_HOD',
         })))
-        const first = (pol.data ?? [])[0] as { frequency?: Frequency } | undefined
-        if (first?.frequency) setFreq(first.frequency)
+        /**
+         * ONE CONFIG PER POLICY, not one config full stop.
+         *
+         * THE BUG THIS FIXES, reported twice. Every company is seeded with a
+         * policy called "Standard Quarterly" — three of them, one per company.
+         * This screen built its config from row [0] of an UNORDERED query, and
+         * companyFilter returns NULL for a cross-company admin, so the query
+         * was unfiltered and [0] was whichever of the three Postgres handed
+         * back first. Edit Sharma Sons' policy in Setup & Controls, come back
+         * here, and you are looking at Sharma Trading's — unchanged, because
+         * it was never the one you edited. The edit DID save; the screen was
+         * reading a different row.
+         *
+         * Worse than merely arbitrary: an UPDATE rewrites a row and moves it
+         * in the heap, so [0] can change identity after a save. The screen
+         * could show you a different policy BECAUSE you saved.
+         *
+         * Two things were needed. An ORDER BY, so "first" means something
+         * stable. And a way to look at the policy you actually edited, which
+         * is what the selector below is for — companyName was already read by
+         * ConfigTab and was hardcoded null with a comment claiming it was
+         * "filled below", which nothing did.
+         */
+        const polRows = ((pol.data ?? []) as unknown as Record<string, unknown>[])
+        const toConfig = (p: Record<string, unknown>): PolicyConfig => ({
+          policyId: String(p.id),
+          policyName: (p.policy_name as string) ?? null,
+          companyName: null,   // filled in by the effect once companies load
+          companyId: (p.company_id as string) ?? null,
+          policyCount: polRows.length,
+          minKra: Number(p.min_kra_count) || 4,
+          maxKra: Number(p.max_kra_count) || 10,
+          totalWeightage: Number(p.total_weightage) || 100,
+          minWeightagePerKra: Number(p.min_weightage_per_kra) || 5,
+          kraCreatedBy: (p.kra_created_by as string) ?? null,
+          oneToOneMandatory: p.one_to_one_mandatory as boolean ?? null,
+          midPeriodCheckin: p.mid_period_checkin as boolean ?? null,
+          finalReviewOneToOne: p.final_review_one_to_one as boolean ?? null,
+          approvalChain: (p.approval_chain as string) ?? null,
+          whoCanFinalise: (p.who_can_finalise as string) ?? null,
+          ratingScaleType: (p.rating_scale_type as string) ?? null,
+          selfRatingMandatory: p.self_rating_mandatory as boolean ?? null,
+          newJoinerCutoffDays: p.new_joiner_cutoff_days == null
+            ? null : Number(p.new_joiner_cutoff_days),
+          includeNoticePeriod: p.include_notice_period as boolean ?? null,
+          includeExited: p.include_exited as boolean ?? null,
+          postFinalOwner: (p.post_final_owner as string) ?? 'HR',
+          publishScope: (p.publish_scope as string) ?? 'COMPANY',
+        })
+        setConfigs(polRows.map(toConfig))
+
+        /**
+         * THE COMPANY NAMES, which nothing had ever fetched.
+         *
+         * ConfigTab already renders `policy.companyName` beside the policy
+         * name, and PolicyConfig has carried the field all along — it was
+         * hardcoded to null with the comment "filled below once
+         * department/company names load", and there was no such code anywhere
+         * in this file. So the screen showed "Standard Quarterly" with nothing
+         * to distinguish it from the other two policies of the same name, and
+         * an admin had no way to notice they were looking at a different
+         * company's settings than the ones they had just edited.
+         */
+        let coQ = supabase.from('companies').select('id, company_name')
+        if (co) coQ = coQ.eq('id', co)
+        const cos = await coQ.limit(200)
+        if (!cos.error) {
+          // Held in a local as well as in state: the publish/summary dataset is
+          // assembled later in THIS SAME pass and needs the names now, and
+          // React state is not readable synchronously after setting it.
+          coNames = Object.fromEntries(
+            ((cos.data ?? []) as unknown as { id: string; company_name?: string }[])
+              .map(c => [String(c.id), String(c.company_name ?? '')]))
+          setCompanyNames(coNames)
+        }
+        // The frequency preview follows whichever policy is being shown, which
+        // the selector decides; seeded from the first so the screen is not
+        // blank before anything is chosen.
+        if (polRows[0]?.frequency) setFreq(polRows[0].frequency as Frequency)
       }
 
+      // §6.3's export is specified as "all columns", so the columns have to be
+      // fetched. Six were being selected and the export is expected to carry
+      // thirteen. The view does not hold rm_l1_score / rm_l2_score /
+      // hod_score at all — only self_score — so the per-rung manager ratings
+      // the spec lists cannot be exported without widening the view itself.
       const f = await supabase.from('vw_pms_fill_status')
-        .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage')
+        .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage,'
+              + 'employment_flag, one_to_one_status, self_score, final_rating, final_rating_code,'
+              + 'finalised_by_role, workflow_status, last_action_at, period_code')
         .eq('period_id', row.id).limit(2000)
       if (!f.error) setFill((f.data ?? []) as unknown as FillRow[])
+
+      /**
+       * WHAT HAS REACHED HR, for the Publish Results tab.
+       *
+       * NOT from vw_pms_fill_status, which the tab above uses. That view
+       * carries no employee_id and no chain_stage, so it cannot say who a row
+       * is or whether the chain has handed it over — and publishing needs
+       * both: an id to write against, and the stage to know it is HR's to
+       * release rather than a HOD's to finish. Widening the view would mean a
+       * migration for something two columns of a table already answer.
+       *
+       * Read on chain_stage, not workflow_status. FINALISED says a rating
+       * exists; stage HR says nobody below still holds it. DONE is included so
+       * the tab can show what it has already published — otherwise a row
+       * vanishes the instant it is released and HR cannot tell a successful
+       * publish from a failed one.
+       */
+      /**
+       * SELECTED ON workflow_status, NOT chain_stage.
+       *
+       * The first version filtered chain_stage IN ('HR','DONE'), which reads
+       * naturally and misses two whole classes of row:
+       *
+       *   * anything finalised BEFORE 197 existed has chain_stage NULL. Nikhil
+       *     Reddy (SRS9088) is finalised with a null stage, and an IN filter
+       *     does not match NULL — so his settled rating was invisible to the
+       *     only screen that can release it.
+       *   * anything finalised through a path that did not move the stage.
+       *     198 fixes that going forward, but a migration cannot reach rows
+       *     that were already wrong.
+       *
+       * workflow_status is the honest question: FINALISED means a rating
+       * exists and is settled, which is exactly when HR may publish it, and
+       * PUBLISHED/ACKNOWLEDGED are the already-released rows the tab lists
+       * underneath. chain_stage then only decides which of the two lists a row
+       * falls into, which it does correctly whether it is NULL or not.
+       */
+      // EVERY enrolment, not only the settled ones. This set now feeds two
+      // tabs: Publish Results, which filters to what is finalised, and
+      // Ratings Summary, whose whole job is "all the employees" — including
+      // the ones still in the chain, shown as such. Fetching twice would be
+      // two queries disagreeing about the same period.
+      const periodIds = openPeriods.map(x => x.id)
+      const pub = await supabase.from('pms_overall_rating')
+        .select('employee_id, period_id, company_id, final_rating, final_rating_code,'
+              + 'finalised_by_role, finalised_at, chain_stage, workflow_status, employee_ack')
+        .in('period_id', periodIds)
+        .limit(4000)
+      if (pub.error) {
+        // Before 197 is applied there is no chain_stage column at all, and
+        // that is a waiting state rather than a fault: every other tab works.
+        console.error('[pms] publish queue unavailable:', pub.error)
+        setPubRows([])
+      } else {
+        /**
+         * Cast because chain_stage is NOT in the generated database types: 197
+         * adds it, and the types are generated from the applied schema. Without
+         * this the whole row type collapses to GenericStringError and every
+         * field read below is a type error — eleven of them, which is how this
+         * was found rather than guessed. The same `as unknown as` the fill
+         * query above uses, for the same reason.
+         */
+        // Labels for the period and company each row belongs to, so a
+        // cross-company summary can say which cycle a rating came from
+        // instead of mixing three companies into one undifferentiated list.
+        const periodLabelOf = new Map(openPeriods.map(x =>
+          [String(x.id), String(x.period_code ?? x.period_name ?? '')]))
+        const companyOf = new Map(Object.entries(coNames))
+
+        const pubData = (pub.data ?? []) as unknown as {
+          employee_id: string
+          period_id: string
+          company_id?: string | null
+          final_rating?: number | string | null
+          final_rating_code?: string | null
+          finalised_by_role?: string | null
+          finalised_at?: string | null
+          chain_stage?: string | null
+          workflow_status?: string | null
+          employee_ack?: boolean | null
+        }[]
+        const ids = pubData.map(r => String(r.employee_id))
+        // Names, departments, the feedback HR writes, the recognition it
+        // awards, and whether the final review is signed. Five reads for the
+        // whole period rather than five per row — the publish workspace and
+        // the summary both need all of it, and a per-row query would be
+        // 390 x 5 against tables already keyed on (period, employee).
+        const [emps, fbs, bens, frs] = ids.length ? await Promise.all([
+          supabase.from('employees').select('id, emp_code, full_name, department_id').in('id', ids),
+          supabase.from('pms_feedback')
+            .select('employee_id, period_id, appreciation_remark, improvement_feedback')
+            .in('period_id', periodIds).in('employee_id', ids),
+          supabase.from('pms_additional_benefits')
+            .select('employee_id, period_id, benefit_type, benefit_note')
+            .in('period_id', periodIds).in('employee_id', ids),
+          supabase.from('pms_one_to_one')
+            .select('employee_id, period_id, employee_ack, manager_ack')
+            .in('period_id', periodIds).eq('discussion_type', 'FINAL_REVIEW')
+            .in('employee_id', ids),
+        ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }] as const
+        // KEYED ON (period, employee). Keying on the employee alone was safe
+        // while this read one period; across several it silently shows one
+        // period's feedback against another's rating.
+        const K = (pid: unknown, eid: unknown) => `${String(pid)}|${String(eid)}`
+        const fbBy = new Map((fbs.data ?? []).map(x => {
+          const r = x as { employee_id: string; period_id: string
+                           appreciation_remark?: string; improvement_feedback?: string }
+          return [K(r.period_id, r.employee_id), r]
+        }))
+        const benBy = new Map<string, { type: string; note: string }[]>()
+        for (const b of bens.data ?? []) {
+          const r = b as { employee_id: string; period_id: string
+                           benefit_type: string; benefit_note?: string }
+          const k = K(r.period_id, r.employee_id)
+          benBy.set(k, [...(benBy.get(k) ?? []),
+                        { type: String(r.benefit_type), note: String(r.benefit_note ?? '') }])
+        }
+        // 200's gate: BOTH acknowledgements. A row with no final review at all
+        // is NOT signed, which is the honest answer — the trigger will refuse
+        // it for exactly that reason.
+        const signed = new Set((frs.data ?? [])
+          .filter(x => (x as { employee_ack?: boolean }).employee_ack
+                    && (x as { manager_ack?: boolean }).manager_ack)
+          .map(x => { const r = x as { employee_id: string; period_id: string }
+                      return K(r.period_id, r.employee_id) }))
+        const byId = new Map((emps.data ?? []).map(e => {
+          const r = e as { id: string; emp_code?: string; full_name?: string; department_id?: string }
+          return [r.id, r]
+        }))
+        setPubRows(pubData.map(r => {
+          const e = byId.get(String(r.employee_id))
+          return {
+            employeeId: String(r.employee_id),
+            name: e?.full_name ?? 'Unknown',
+            code: e?.emp_code ?? '',
+            // PostgREST returns numeric as a STRING, so Number() is not
+            // decoration — a template literal on the raw value would read
+            // "4.50" where the rest of the screen says 4.5.
+            finalRating: r.final_rating == null ? null : Number(r.final_rating),
+            finalRatingCode: r.final_rating_code ?? null,
+            finalisedByRole: r.finalised_by_role ?? null,
+            finalisedAt: r.finalised_at ?? null,
+            departmentId: e?.department_id ?? null,
+            periodId: String(r.period_id),
+            periodLabel: periodLabelOf.get(String(r.period_id)) ?? null,
+            companyName: companyOf.get(String(r.company_id ?? '')) ?? null,
+            appreciation: fbBy.get(K(r.period_id, r.employee_id))?.appreciation_remark ?? null,
+            improvement: fbBy.get(K(r.period_id, r.employee_id))?.improvement_feedback ?? null,
+            benefits: benBy.get(K(r.period_id, r.employee_id)) ?? [],
+            signedOff: signed.has(K(r.period_id, r.employee_id)),
+            acknowledged: r.employee_ack === true,
+            // Either marker counts. The stage is what this screen moves, the
+            // status is what the employee's screen reads, and a row that has
+            // one without the other is half-published — worth showing as
+            // published so somebody looks, rather than offering the button
+            // again.
+            published: r.chain_stage === 'DONE'
+                    || r.workflow_status === 'PUBLISHED'
+                    || r.workflow_status === 'ACKNOWLEDGED',
+          }
+        }))
+      }
+
+      // THE SCALE THE COMPANY CONFIGURED, for §6.4's validator. It was
+      // hardcoded [1,2,3,4,5] with improvement mandatory at or below 2, which
+      // happens to match the seeded scale and would silently stop matching
+      // the moment an admin edited it — the same hardcoding that was removed
+      // from the rating screens. improvement_feedback_mandatory is a per-band
+      // flag, so the threshold is the HIGHEST band that still demands it.
+      let scQ = supabase.from('pms_rating_scale')
+        .select('rating_value, rating_label, improvement_feedback_mandatory, is_active, sort_order')
+      if (co) scQ = scQ.eq('company_id', co)
+      const sc = await scQ
+      if (!sc.error) {
+        const bands = ((sc.data ?? []) as unknown as {
+          rating_value: number; rating_label?: string
+          improvement_feedback_mandatory: boolean; is_active?: boolean
+        }[]).filter(b => b.is_active !== false)
+        if (bands.length) {
+          setScale(bands.map(b => Number(b.rating_value)).sort((a, b) => a - b))
+          setBandList([...bands]
+            .sort((a, b) => Number(b.rating_value) - Number(a.rating_value))
+            .map(b => ({
+              value: Number(b.rating_value),
+              label: String((b as { rating_label?: string }).rating_label ?? b.rating_value),
+              improvementMandatory: !!b.improvement_feedback_mandatory,
+            })))
+          const mandatory = bands.filter(b => b.improvement_feedback_mandatory)
+            .map(b => Number(b.rating_value))
+          setImprovementAtOrBelow(mandatory.length ? Math.max(...mandatory) : null)
+        }
+      }
     } else {
       setFill([])
     }
@@ -218,7 +662,189 @@ export default function PmsPage() {
     })()
   }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Keep the publish workspace pointed at a company that actually exists.
+   *
+   * Seeded from the newest open period's company, which is what the rest of
+   * this screen already describes. Re-checked rather than set once: a reload
+   * can change which companies are in scope, and a stale selection would
+   * leave the workspace showing an empty list with no clue why.
+   */
+  useEffect(() => {
+    if (!pubCompanies.length) return
+    const valid = pubCompany === 'ALL'
+      ? pubAllowAll
+      : pubCompanies.some(c => c.name === pubCompany)
+    if (valid) return
+    const current = pubRows?.find(r => r.periodId === periodId)?.companyName
+    setPubCompany(current ?? pubCompanies[0].name)
+  }, [pubCompanies, pubCompany, pubAllowAll, pubRows, periodId])
+
   useEffect(() => { load(); loadCoverage() }, [load, loadCoverage])
+
+  /**
+   * HR RELEASES THE RESULT. The last move in the chain, and the only one on
+   * this screen that writes.
+   *
+   * IT CHANGES NO RATING, by requirement: "hr manager and hr authorities can
+   * not change the ratings and kras set for team through out the chain, they
+   * just see it and publish it". So this touches three columns that are all
+   * about delivery, and nothing about the number.
+   *
+   * Existing feedback is made visible in the same action. pms_feedback is
+   * written by the finaliser with visible_to_employee, and the employee's
+   * screen shows feedback only when the result is published AND that flag is
+   * set — so publishing without flipping it would release a rating with the
+   * feedback still hidden, which is §8's "result + feedback" half-delivered.
+   * No row is created here: HR does not author feedback, and an upsert would
+   * let them.
+   *
+   * chain_stage goes to DONE so the stage and the status agree. Leaving the
+   * stage at HR would keep the employee's banner saying it is with HR to
+   * publish while their Result tab showed the rating.
+   */
+  /**
+   * The policy's post-finalisation owner, and whether this viewer is it.
+   *
+   * 202 defaults to 'HR', which is what was asked for: after the HOD settles
+   * the rating, HR writes the feedback, awards recognition and publishes. A
+   * company running docx Stage 6 sets FINALISER and these controls go back to
+   * the HOD — the tab stays visible either way, read-only, because HR Admin
+   * still needs to see where a cycle has got to.
+   */
+  const postFinalOwner = (config?.postFinalOwner ?? 'HR') as PostFinalOwner
+  /**
+   * THE VIEWER'S REAL ROLE, from the roles they hold.
+   *
+   * This was `grant.isSuperAdmin ? 'ADMIN' : 'HR_MGR'` — everybody who
+   * reached this page was HR Manager, so mayWritePostFinal said yes to all
+   * of them. Combined with Publish Results borrowing the seeded
+   * 'pms.upload' key, which L1_MANAGER, L2_MANAGER and HOD all hold in
+   * role_screen_access, a line manager could open HR's publish workspace,
+   * write the feedback an employee reads, and release the result.
+   *
+   * pmsRoleOf reads role_code off the grant the roles module already
+   * produces. Nothing in that module changes; this stops ignoring it.
+   */
+  const myHrRole = pmsRoleOf(grant.roles, grant.isSuperAdmin)
+  const canRunPostFinal = mayWritePostFinal(postFinalOwner, myHrRole)
+
+  /**
+   * HR writes what the employee reads.
+   *
+   * UPSERT on pms_feedback and a replace on the benefits, which is the same
+   * shape the HOD's own publish path has always used — one row of feedback per
+   * (period, employee), and recognition rows that are a set rather than a log,
+   * so editing means replacing.
+   *
+   * given_by_role records HR, not HOD. An appreciation remark written by HR
+   * and one written by the manager who held the conversation are different
+   * documents, and the column is the only place that difference survives.
+   */
+  /**
+   * IS THIS ROW INSIDE THE CHOSEN SCOPE? 203.
+   *
+   * The handlers resolve rows from the full cross-company dataset, because
+   * the summary needs it whole. Trusting the list to have narrowed it is one
+   * refactor away from being wrong, and the act is irreversible — so the rule
+   * is checked where the write happens, not only where the button is drawn.
+   */
+  const inPublishScope = useCallback((employeeId: string) => {
+    const row = pubRows?.find(r => r.employeeId === employeeId)
+    if (!row) return false
+    if (pubCompany === 'ALL') {
+      return pubCompanies.some(c => c.name === row.companyName && c.allowsAll)
+    }
+    return (row.companyName ?? '') === (pubCompany ?? '')
+  }, [pubRows, pubCompany, pubCompanies])
+
+  const saveFeedback = useCallback(async (employeeId: string, patch: {
+    appreciation: string; improvement: string
+    benefits: { type: string; note: string }[]
+  }) => {
+    if (!inPublishScope(employeeId)) {
+      setCommitNote('That employee is not in the company you are working on. '
+                  + 'Switch company above before writing their feedback.')
+      return
+    }
+    // THE ROW'S PERIOD, not the page's. HR Head spans companies and each runs
+    // its own cycle, so the page's "current period" is one of several — using
+    // it would write another company's feedback against the wrong period, or
+    // silently against nothing.
+    const periodId = pubRows?.find(r => r.employeeId === employeeId)?.periodId
+    if (!periodId) return
+    setCommitNote(null)
+    const co = companyFilter(grant, grant.companyId)
+
+    const fb = await supabase.from('pms_feedback').upsert({
+      company_id: co, period_id: periodId, employee_id: employeeId,
+      appreciation_remark: patch.appreciation.trim() || null,
+      improvement_feedback: patch.improvement.trim() || null,
+      given_by_role: 'HR_MGR',
+      // NOT visible yet. Publishing is what opens it, and that is a separate
+      // deliberate act — writing the words must not release them.
+      visible_to_employee: false,
+    }, { onConflict: 'period_id,employee_id' })
+    if (fb.error) {
+      console.error('[pms] HR feedback save refused:', fb.error)
+      setCommitNote('That feedback did not save. Try again before publishing.')
+      return
+    }
+
+    const kept = patch.benefits.filter(b => b.note.trim() || b.type)
+    await supabase.from('pms_additional_benefits')
+      .delete().eq('period_id', periodId).eq('employee_id', employeeId)
+    if (kept.length) {
+      const ben = await supabase.from('pms_additional_benefits').insert(
+        kept.map(b => ({
+          company_id: co, period_id: periodId, employee_id: employeeId,
+          benefit_type: b.type, benefit_note: b.note.trim() || null,
+        })))
+      if (ben.error) {
+        console.error('[pms] HR recognition save refused:', ben.error)
+        setCommitNote('The feedback saved but the recognition did not. Add it again before telling them it is published.')
+        return
+      }
+    }
+    setCommitNote('Saved. Not released to them until you publish.')
+    load()
+  }, [pubRows, grant, load, inPublishScope])
+
+  const publishOne = useCallback(async (employeeId: string) => {
+    // 203: a result released to the wrong person cannot be unreleased.
+    if (!inPublishScope(employeeId)) {
+      setCommitNote('That employee is not in the company you are working on. '
+                  + 'Nothing was published.')
+      return
+    }
+    const periodId = pubRows?.find(r => r.employeeId === employeeId)?.periodId
+    if (!periodId) return
+    setPublishing(employeeId)
+    setCommitNote(null)
+
+    // Not fatal on its own: a period with no feedback row still has a rating
+    // worth releasing, and `update` on no rows is a no-op rather than an error.
+    const fb = await supabase.from('pms_feedback')
+      .update({ visible_to_employee: true })
+      .eq('period_id', periodId).eq('employee_id', employeeId)
+    if (fb.error) console.error('[pms] making feedback visible failed:', fb.error)
+
+    const st = await supabase.from('pms_overall_rating')
+      .update({ workflow_status: 'PUBLISHED',
+                published_at: new Date().toISOString(),
+                chain_stage: 'DONE' })
+      .eq('period_id', periodId).eq('employee_id', employeeId)
+    setPublishing(null)
+    if (st.error) {
+      console.error('[pms] publish refused:', st.error)
+      setCommitNote('That result could not be published. Try again, and tell the developer if it keeps failing.')
+      return
+    }
+    setCommitNote(fb.error
+      ? 'Published — the employee can see their rating. The feedback could not be opened to them, though; check it before telling them it is all there.'
+      : 'Published. The employee can see their rating and feedback now.')
+    load()
+  }, [pubRows, load, inPublishScope])
 
   const roll: Rollup | null = fill ? rollUp(fill) : null
   const depts: DeptRollup[] = fill ? byDepartment(fill) : []
@@ -264,7 +890,7 @@ export default function PmsPage() {
           eight tabs, eight filled chips read as eight competing buttons; an
           underline puts the weight on the one you are in. */}
       <div className="tabs">
-        {TABS.filter(t => canSeeScreen(grant, 'pms.'+t.k)).map(t => (
+        {TABS.filter(t => canSeeScreen(grant, screenKeyOf(t.k))).map(t => (
           <button key={t.k} type="button" onClick={() => setTab(t.k)}
                   className={tab === t.k ? 'on' : undefined}
                   aria-current={tab === t.k ? 'page' : undefined}>
@@ -278,6 +904,22 @@ export default function PmsPage() {
         {TABS.find(t => t.k === tab)?.hint}
       </div>
 
+      {commitNote && (
+        <Card>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <span aria-hidden="true">✓</span>
+            <div style={{ fontSize: F.small, lineHeight: 1.6 }}>
+              {commitNote}
+              <button type="button" onClick={() => setCommitNote(null)}
+                      style={{ marginLeft: 10, background: 'none', border: 'none',
+                               color: TK.muted, cursor: 'pointer', fontSize: F.small,
+                               textDecoration: 'underline', padding: 0 }}>
+                dismiss
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
       {loading && <Card><div style={{ color: TK.muted, fontSize: F.small }}>Loading…</div></Card>}
 
       {!loading && err && (
@@ -302,12 +944,28 @@ export default function PmsPage() {
             ) : <Overview cov={cov} />
           )}
 
-          {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading} />}
-          {tab === 'config'   && <ConfigTab freq={freq} onFreq={setFreq} fyStart={fyStart}
-                                            fyLabel={fyLabel} today={localToday()} />}
+          {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading}
+                               totalWeightage={config?.totalWeightage} />}
+          {tab === 'publish'  && <PublishTab rows={pubRows} loading={loading}
+                               onPublish={publishOne} onSaveFeedback={saveFeedback}
+                               publishing={publishing} periodLabel={naming?.title}
+                               bands={bandList} canAct={canRunPostFinal}
+                               note={postFinalNote(postFinalOwner, myHrRole)}
+                               company={pubCompany} onCompany={setPubCompany}
+                               companies={pubCompanies} allowAll={pubAllowAll} />}
+          {tab === 'summary'  && <SummaryTab rows={pubRows} loading={loading}
+                               deptNames={deptNames} bands={bandList}
+                               periodLabel={naming?.title} />}
+          {tab === 'config'   && <ConfigTab policy={config} freq={freq} onFreq={setFreq} fyStart={fyStart}
+                                            fyLabel={fyLabel} today={localToday()}
+                                            choices={configChoices}
+                                            onChoosePolicy={setConfigPolicyId} />}
           {tab === 'setup'    && <AdminEditor />}
           {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}
-          {tab === 'upload'   && <UploadTab />}
+          {tab === 'upload'   && <UploadTab rows={fill} scale={scale}
+                               improvementAtOrBelow={improvementAtOrBelow}
+                               periodId={periodId} periodLabel={naming?.title}
+                               onCommitted={m => { setCommitNote(m); load() }} />}
           {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}
           {tab === 'reports'  && <ReportsTab />}
           {tab === 'chain'    && <FlowTab chainCoverage={cov ? <ChainCoverage cov={cov} /> : null} />}

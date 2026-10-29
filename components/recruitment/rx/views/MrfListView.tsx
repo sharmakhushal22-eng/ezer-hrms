@@ -6,8 +6,9 @@ import { MrfCard } from '../cards';
 import { Badge, EmptyState, Help, MRF_COLOR, MRF_LABEL, MRF_TONE, Module, NextStepLine, SearchBox, Segmented } from '../primitives';
 import type { IconName } from '../logic/types';
 
-const STATUS_ICON: Record<string, IconName> = { DRAFT: 'edit', SUBMITTED: 'send', ON_HOLD: 'hourglass', APPROVED: 'check', REJECTED: 'x', CLOSED: 'lock' };
+const STATUS_ICON: Record<string, IconName> = { DRAFT: 'edit', SUBMITTED: 'send', ON_HOLD: 'hourglass', NEEDS_REVISION: 'edit', APPROVED: 'check', REJECTED: 'x', CLOSED: 'lock' };
 import { formatINR, mrfNextStep } from '../logic/derive';
+import { trackerSummary } from '../ApprovalTracker';
 import { useListControls, useSlashFocus } from '../logic/hooks';
 import type { MrfVM } from '../logic/types';
 
@@ -30,7 +31,7 @@ import type { MrfVM } from '../logic/types';
  * outside this component.
  */
 export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form, quickHireCap, status, onStatusChange,
-  onCreate, onEdit, onView, onMore, onExport, canEdit, canDelete, candidatesNote, onReview, onCloseMrf, onReopen, onDelete }: {
+  onCreate, onEdit, onView, onMore, onExport, canEdit, canDelete, canReview, canCloseReopen, viewerId, candidatesNote, onReview, onCloseMrf, onReopen, onDelete }: {
   rail?: React.ReactNode; mrfs: MrfVM[]; companyLabel?: string; filterBar?: React.ReactNode; banner?: React.ReactNode;
   /**
    * The tab's create/edit form. It has to render INSIDE this frame, between the
@@ -48,6 +49,12 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
   /** Separate from canEdit: the assigned hiring manager may edit a requisition
    *  they are running, but only the raiser or an admin may delete it. */
   canDelete?: (m: MrfVM) => boolean;
+  /** Whether the viewer may open the approval review for this row — true only
+   *  for the approver the chain is waiting on. Omitted → nobody gets Review. */
+  canReview?: (m: MrfVM) => boolean;
+  canCloseReopen?: (m: MrfVM) => boolean;
+  /** Employee id of the viewer, so the tracker can say "Now with you". */
+  viewerId?: string | null;
   onReview?: (id: string) => void; onCloseMrf?: (id: string) => void; onReopen?: (id: string) => void; onDelete?: (id: string) => void;
 }) {
   const ctl = useListControls(mrfs, {
@@ -60,7 +67,9 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
   const search = React.useRef<HTMLInputElement>(null);
   useSlashFocus(search);
   const by = (s: string) => mrfs.filter((m) => m.status === s).length;
-  const statuses = ['DRAFT', 'SUBMITTED', 'ON_HOLD', 'APPROVED', 'REJECTED', 'CLOSED'];
+  // "Sent back" (NEEDS_REVISION) gets a tile only while something is in it, so
+  // the usual six-tile row keeps its shape.
+  const statuses = ['DRAFT', 'SUBMITTED', 'ON_HOLD', ...(by('NEEDS_REVISION') ? ['NEEDS_REVISION'] : []), 'APPROVED', 'REJECTED', 'CLOSED'];
   const openings = mrfs.reduce((a, m) => a + m.openings, 0);
   const filled = mrfs.reduce((a, m) => a + m.filled, 0);
   const cands = mrfs.reduce((a, m) => a + m.candidates, 0);
@@ -83,7 +92,7 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
             "N awaiting approval · Show them" banner sets the same filter from
             outside, and an uncontrolled hook would move the tiles without
             filtering anything. */}
-        <div className="s12 rx-ov" role="group" aria-label="Filter by status">
+        <div className="s12 rx-ov" role="group" aria-label="Filter by status" style={{ ['--rx-ov-n' as string]: statuses.length }}>
           <button type="button" className="rx-hero" aria-pressed={ctl.status === '*'} onClick={() => ctl.setStatus('*')}>
             <span className="rx-hero-l">All requisitions{companyLabel ? `, ${companyLabel}` : ''}</span>
             <span className="rx-hero-n">{mrfs.length}</span>
@@ -118,6 +127,7 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
             {ctl.visible.map((m) => (
               <div className="s4" key={m.id}>
                 <MrfCard m={m} onView={() => onView(m.id)} onEdit={() => onEdit(m.id)} onMore={onMore ? () => onMore(m.id) : undefined} canEdit={canEdit ? canEdit(m) : true} canDelete={canDelete ? canDelete(m) : true} candidatesNote={candidatesNote?.(m)}
+                  canReview={canReview ? canReview(m) : false} canCloseReopen={canCloseReopen ? canCloseReopen(m) : true} viewerId={viewerId}
                   onReview={onReview ? () => onReview(m.id) : undefined}
                   onCloseMrf={onCloseMrf ? () => onCloseMrf(m.id) : undefined}
                   onReopen={onReopen ? () => onReopen(m.id) : undefined}
@@ -129,24 +139,28 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form,
           <Module className="s12" >
             <div style={{ overflowX: 'auto' }}>
               <table className="rx-table">
-                <thead><tr><th>Requisition</th><th>Department</th><th>Lane</th><th>Status</th><th>Filled</th><th>Candidates</th><th>Recruiter</th><th>Next step</th><th><span className="sr-only">Actions</span></th></tr></thead>
+                <thead><tr><th>Requisition</th><th>Department</th><th>Lane</th><th>Status</th><th>Approval</th><th>Filled</th><th>Candidates</th><th>Recruiter</th><th>Next step</th><th><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>{ctl.visible.map((m) => (
                   <tr key={m.id} style={{ ['--st' as string]: MRF_COLOR[m.status] }}>
-                    <td><span className="rx-sdot" /><button type="button" onClick={() => onView(m.id)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 650, color: 'var(--ez-ink)', cursor: 'pointer' }}>{m.title}</button><div className="rx-meta" style={{ fontSize: 12 }}>{m.code}</div></td>
+                    <td className="rx-mt-cell-title"><span className="rx-sdot" /><button type="button" onClick={() => onView(m.id)} title={m.title} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 650, color: 'var(--ez-ink)', cursor: 'pointer', textAlign: 'left' }}>{m.title}</button><div className="rx-meta" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{m.code}</div></td>
                     <td>{m.department}</td>
                     <td><Badge tone={m.lane === 'Full MRF' ? 'brand' : 'mute'} dot={false}>{m.lane}</Badge></td>
-                    <td><Badge tone={MRF_TONE[m.status]}>{MRF_LABEL[m.status]}</Badge></td>
+                    <td><Badge tone={MRF_TONE[m.status] ?? 'mute'}>{MRF_LABEL[m.status] ?? m.status}</Badge></td>
+                    {/* Read-only: who has it now. Deciding happens in the approver's review. */}
+                    <td className="rx-mt-cell-appr">{(() => { const t = trackerSummary(m.chain, m.status, { raisedAt: m.raisedAt, raisedBy: m.raisedBy, viewerId }); return <span className={`rx-trk-mini ${t.tone}`} title={t.text}>{t.text}</span>; })()}</td>
                     <td style={{ minWidth: 120 }}><div className="rx-row" style={{ gap: 8 }}><span className="rx-num" style={{ fontWeight: 650 }}>{m.filled}/{m.openings}</span><span className="rx-mt-bar" role="progressbar" aria-label={`${m.title}: ${m.filled} of ${m.openings} filled`} aria-valuenow={m.openings ? Math.round((m.filled / m.openings) * 100) : 0} aria-valuemin={0} aria-valuemax={100} style={{ flex: 1, margin: 0 }}><i style={{ width: `${m.openings ? (m.filled / m.openings) * 100 : 0}%` }} /></span></div></td>
                     <td className="rx-num">{m.candidates}</td>
                     {/* The pre-redesign table carried a Recruiter column; keeping it
                         means the list view loses nothing to the card view. */}
-                    <td className="rx-meta">{m.recruiterEmail || (m.recruiterInitials.length ? m.recruiterInitials.join(', ') : '-')}</td>
-                    <td><NextStepLine step={mrfNextStep(m)} compact /></td>
+                    <td className="rx-meta rx-mt-cell-rec" title={m.recruiterEmail || undefined}>{m.recruiterEmail || (m.recruiterInitials.length ? m.recruiterInitials.join(', ') : '-')}</td>
+                    <td className="rx-mt-cell-next"><NextStepLine step={mrfNextStep(m)} compact /></td>
                     <td>
                       <div className="rx-row" style={{ gap: 6, justifyContent: 'flex-end' }}>
-                        {/* Review was the pre-redesign table's only action; it stays. */}
-                        {onReview && (m.status === 'SUBMITTED' || m.status === 'ON_HOLD') && (
-                          <button type="button" className="rx-btn sm p" onClick={() => onReview(m.id)}><Icon name="check" />Review</button>)}
+                        {/* Review is offered to the CURRENT APPROVER only (canReview),
+                            never to every viewer — it opens their review screen,
+                            and the server refuses anyone else. */}
+                        {onReview && canReview && canReview(m) && (
+                          <button type="button" className="rx-btn sm p" onClick={() => onReview(m.id)}>Review request</button>)}
                         {(!canEdit || canEdit(m)) && <button type="button" className="rx-btn sm" onClick={() => onEdit(m.id)}><Icon name="edit" />Edit</button>}
                       </div>
                     </td>

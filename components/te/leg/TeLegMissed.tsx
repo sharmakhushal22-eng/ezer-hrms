@@ -18,6 +18,7 @@ import { useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { Snapshot, TeLeg } from '@/lib/te/types'
 import { errorText } from '@/lib/te/format'
+import { needsExplanation, whyLabel, whyProblem } from '@/lib/te/other-reason'
 import TeIcon from '../TeIcon'
 
 /** Why the phone did not record it. The prototype's J_NOGPS. */
@@ -53,9 +54,12 @@ export default function TeLegMissed({ snap, leg, placeName, onBack, onDone }: {
 
   const manualAllowed = snap.cfg.track.manualAllowed !== false
   const reasons = choice === 'skip' ? SKIP : NO_GPS
-  // "Other" with no explanation tells the approver nothing.
-  const needsNote = reason === 'Other'
-  const ready = !!reason && (!needsNote || !!note.trim())
+  // "Other" with no explanation tells the approver nothing. This screen was
+  // already the only one that asked; the shared rule adds the floor the rest
+  // of the module now holds to, so "na" no longer counts as an explanation.
+  const needsNote = needsExplanation(reason)
+  const noteProblem = whyProblem(reason, note)
+  const ready = !!reason && !noteProblem
 
   async function go() {
     setBusy(true); setError('')
@@ -126,14 +130,30 @@ export default function TeLegMissed({ snap, leg, placeName, onBack, onDone }: {
               {reasons.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </label>
-          <label className="fld">
-            <span>{needsNote ? 'What happened' : 'Anything to add'}</span>
-            <input
-              value={note}
-              placeholder={needsNote ? 'Needed for Other' : 'Optional'}
-              onChange={e => { setNote(e.target.value); setError('') }}
-            />
-          </label>
+          {needsNote ? (
+            <>
+              <label className="fld">
+                <span>{whyLabel('journey').label}</span>
+                <textarea
+                  autoFocus
+                  value={note}
+                  placeholder="The tracking screen would not open on my phone"
+                  onChange={e => { setNote(e.target.value); setError('') }}
+                />
+                <small>{whyLabel('journey').hint}</small>
+              </label>
+              {note.trim() && noteProblem ? <div className="ferr"><TeIcon name="warn" size="sm" />{noteProblem}</div> : null}
+            </>
+          ) : (
+            <label className="fld">
+              <span>Anything to add</span>
+              <input
+                value={note}
+                placeholder="Optional"
+                onChange={e => { setNote(e.target.value); setError('') }}
+              />
+            </label>
+          )}
 
           <div className="note">
             <TeIcon name="info" size="sm" />

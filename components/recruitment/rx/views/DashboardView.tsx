@@ -95,7 +95,7 @@ export function DashboardView(props: {
                   <div className="rx-row" style={{ gap: 8 }}><span className="rx-name">{m.title}</span><Badge tone={MRF_TONE[m.status]}>{MRF_LABEL[m.status]}</Badge><Badge tone={m.lane === 'Full MRF' ? 'brand' : 'mute'} dot={false}>{m.lane}</Badge></div>
                   <div className="rx-meta" style={{ marginTop: 3 }}>{m.code} in {m.department}, {m.openings} opening{m.openings === 1 ? '' : 's'}</div>
                 </div>
-                <div className="rx-meta" style={{ textAlign: 'right' }}>{m.candidates} candidates</div>
+                <div className="rx-meta" style={{ textAlign: 'right' }}>{m.candidates} candidate{m.candidates === 1 ? '' : 's'}</div>
               </div>
             ))}
           </div>

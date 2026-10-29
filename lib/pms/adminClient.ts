@@ -34,6 +34,9 @@ export interface PmsAdminSnapshot {
   kras: Record<string, unknown>[]
   scale: Record<string, unknown>[]
   periods: Record<string, unknown>[]
+  companies: Record<string, unknown>[]
+  /** Active employees, for the HR Head picker (205). */
+  people: Record<string, unknown>[]
   actor: { employeeId: string | null; name: string | null; legacy: boolean }
 }
 

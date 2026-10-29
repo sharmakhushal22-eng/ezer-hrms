@@ -45,6 +45,27 @@
   --pms-exit-fg:         #9A3412;
   --pms-exit-bg:         #FFEDD5;
 
+  /* THE SCORE RAMP — worst red, middle yellow, best green.
+   *
+   * Two of the three are the semantic tokens; the middle one cannot be.
+   * --ez-warning is #B45309 in daylight, a dark orange-brown picked for
+   * 5.02:1 as TEXT, and a ramp built on it reads brown at the midpoint
+   * rather than yellow. These are FILLS — the card text sits on a 9% wash
+   * of them, never on the colour itself — so the midpoint is free to be
+   * the yellow the ramp needs. Same shape as the row washes above: local
+   * tokens with their own light and dark values, so the ramp still follows
+   * the theme. */
+  --pms-ramp-low:  var(--ez-critical);
+  --pms-ramp-mid:  #EAB308;
+  /* The top stop cannot be --ez-positive either, for the same reason as the
+   * middle one. #047857 is a dark desaturated teal picked for 5.48:1 as
+   * TEXT; blending yellow into it lands rating 4 on #8D9749, a drab khaki.
+   * MEASURED on the running panel across all five ratings — the ramp was
+   * red, orange, yellow, OLIVE, green, and the olive is the one a reviewer
+   * would have called broken. A brighter fill green keeps 4 a true
+   * yellow-green. */
+  --pms-ramp-high: #16A34A;
+
   font-size: 13px;
   line-height: 1.5;
   color: var(--ez-ink);
@@ -72,6 +93,9 @@
     --pms-row-notice-hover:rgba(234,179,8,.16);
     --pms-exit-fg:         #FDBA74;
     --pms-exit-bg:         rgba(249,115,22,.18);
+  /* Brighter on a dark ground, as every other state token is. */
+  --pms-ramp-mid:        #FBBF24;
+  --pms-ramp-high:       #34D399;
   }
 }
 :root[data-ez-theme="dark"] .pms {
@@ -81,6 +105,9 @@
   --pms-row-notice-hover:rgba(234,179,8,.16);
   --pms-exit-fg:         #FDBA74;
   --pms-exit-bg:         rgba(249,115,22,.18);
+  /* Brighter on a dark ground, as every other state token is. */
+  --pms-ramp-mid:        #FBBF24;
+  --pms-ramp-high:       #34D399;
 }
 
 /* ── tabs ─────────────────────────────────────────────────────────────── */
@@ -238,6 +265,35 @@
   display: block; font-size: 11px; font-weight: 700; color: var(--ez-ink-soft);
   text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px;
 }
+/* A CHECKBOX IS NOT A TEXT FIELD, and the rule below is written for text
+ * fields. width:100% made the box eat its whole row, leaving about one
+ * character of space for the label beside it — which overflow-wrap: anywhere
+ * then broke one letter per line, straight down the side of the card. The
+ * padding and border did the rest.
+ *
+ * Observed in the running app on the employee's KRA screen, not in a
+ * preview: the preview harness renders these components inside .pms too, but
+ * the case that showed it had not been added there yet. */
+.pms input[type="checkbox"], .pms input[type="radio"] {
+  width: auto; min-width: 0; flex: 0 0 auto;
+  padding: 0; margin: 0; border: 0; border-radius: 0;
+  accent-color: var(--ez-brand);
+}
+
+/* A label that captions a control sits ABOVE it, small and tracked — that is
+ * what .pms label below is for. A label that WRAPS a checkbox is a different
+ * thing: it is a sentence the person is agreeing to, and it has to read like
+ * one. Without this it inherits the caption styling and comes out uppercase,
+ * letter-spaced and 11px. */
+.pms label.checkline {
+  display: flex; gap: 9px; align-items: flex-start;
+  font-size: 12px; font-weight: 400; letter-spacing: normal;
+  text-transform: none; color: var(--ez-ink-soft);
+  margin-bottom: 0; line-height: 1.5; cursor: pointer;
+}
+.pms label.checkline > span, .pms label.checkline > div { min-width: 0; }
+.pms label.checkline b { font-weight: 700; color: var(--ez-ink); }
+
 .pms input, .pms select, .pms textarea {
   width: 100%; padding: 8px 10px; border: 1px solid var(--ez-line);
   border-radius: 9px; font-size: 13px; font-family: inherit;
@@ -295,6 +351,11 @@
 
 .pms .chips { display: flex; gap: 4px; flex-wrap: wrap; }
 .pms .chip {
+  /* The radius here is INERT — see the note on .xclose. A runtime sheet
+   * forces 10px on every button and this file cannot outrank it without
+   * !important. Left as written: 8px and 10px are close enough that
+   * fighting for it would be noise, and if that global rule ever goes,
+   * this is the intent. */
   min-width: 27px; height: 27px; border-radius: 8px;
   border: 1px solid var(--ez-line); background: var(--ez-surface);
   font-weight: 800; font-size: 12px; color: var(--ez-muted);
@@ -373,4 +434,527 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pms * { transition: none !important; animation: none !important; }
+}
+
+/* ── the approval queue, as cards ─────────────────────────────────────────
+ *
+ * WHY THIS IS NOT A TABLE. The sets waiting on a manager's approval were
+ * rendered by the same QueueTable as everything else: ten columns, in which
+ * "Anil Verma" carried exactly as much weight as "Active", "4", "100" and a
+ * tick. A table is the right shape for COMPARING rows — which is what the
+ * team dashboard does — and the wrong shape for ACTING on one, because the
+ * person and the one thing owed are the only two things that matter and they
+ * sat five columns apart.
+ *
+ * These are read one at a time and acted on one at a time, so they are laid
+ * out that way: who, how ready, what happens next, and the button.
+ */
+.pms .qcard {
+  display: grid; gap: 12px; padding: 14px;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 12px; margin-bottom: 10px; min-width: 0;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.pms .qcard:hover {
+  border-color: var(--ez-brand-edge);
+  box-shadow: 0 2px 10px var(--ez-brand-tint);
+  transform: translateY(-1px);
+}
+.pms .qcard:last-child { margin-bottom: 0; }
+/* The row washes the table had, kept so employment state still reads at a
+ * glance on the surface that replaced it. */
+.pms .qcard.exit   { background: var(--pms-row-exit); }
+.pms .qcard.notice { background: var(--pms-row-notice); }
+@media (max-width: 680px) {
+  /* The action column drops under the body rather than squeezing the name
+   * into two characters a line. */
+  .pms .qcard { grid-template-columns: auto 1fr; }
+  .pms .qcard .qact { grid-column: 1 / -1; }
+}
+
+/* Initials. A face-shaped anchor for the eye, so a queue of eight is scanned
+ * by person rather than read line by line. */
+.pms .ava {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ez-brand-tint); color: var(--ez-brand-deep);
+  font-weight: 800; font-size: 13px; letter-spacing: .3px;
+  flex: 0 0 auto; user-select: none;
+}
+.pms .qcard .nm { font-size: 14px; font-weight: 700; color: var(--ez-ink); }
+.pms .qcard .meta {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 3px; font-size: 11px; color: var(--ez-muted);
+}
+.pms .qact { display: grid; gap: 6px; justify-items: stretch; min-width: 148px; }
+
+/* ── the readiness checks ─────────────────────────────────────────────────
+ *
+ * The four things that decide whether a set can move, as four marks instead
+ * of four columns. Each says what it IS, not merely that it is green: a tick
+ * with no word beside it makes somebody hover every one of them to find the
+ * one that is wrong.
+ */
+.pms .checks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pms .chk {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px 3px 7px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  background: var(--ez-sunken); color: var(--ez-muted);
+  border: 1px solid transparent;
+}
+.pms .chk .m { font-weight: 800; font-size: 11px; line-height: 1; }
+.pms .chk.on  { background: var(--ez-positive-tint); color: var(--ez-positive); }
+.pms .chk.off { background: var(--ez-warning-tint);  color: var(--ez-warning); }
+.pms .chk.bad { background: var(--ez-critical-tint); color: var(--ez-critical); }
+
+/* ── where it sits in the chain ───────────────────────────────────────────
+ *
+ * The module's whole subject is a chain, and no manager screen drew one. A
+ * rung that says "you" between the rung it came from and the rung it goes to
+ * answers the two questions an approver actually has — who looked at this
+ * before me, and who gets it when I let go — without opening anything.
+ */
+.pms .track {
+  display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  margin-top: 9px; font-size: 10px;
+}
+.pms .track .n {
+  padding: 2px 8px; border-radius: 20px; font-weight: 700;
+  background: var(--ez-sunken); color: var(--ez-muted); white-space: nowrap;
+  text-transform: uppercase; letter-spacing: .4px;
+}
+.pms .track .n.done { background: var(--ez-positive-tint); color: var(--ez-positive); }
+.pms .track .n.now  { background: var(--ez-brand); color: var(--ez-on-accent); }
+.pms .track .sep { color: var(--ez-faint); padding: 0 4px; font-weight: 800; }
+
+/* ── a group of rows that are all stuck on the same thing ────────────────
+ *
+ * Eight rows of "No KRAs written yet. They cannot be rated at all until
+ * there are." is the sentence printed eight times and read none. Said once,
+ * over the people it applies to, it is information.
+ */
+.pms .qgroup { margin-bottom: 14px; }
+.pms .qgroup:last-child { margin-bottom: 0; }
+.pms .qgroup > .ghead {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  padding: 9px 12px; border-radius: 10px 10px 0 0;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  border-bottom: 0;
+}
+.pms .qgroup > .ghead .gt { font-size: 12px; font-weight: 800; color: var(--ez-ink); }
+.pms .qgroup > .ghead .gn {
+  font-size: 11px; font-weight: 800; color: var(--ez-brand-deep);
+  background: var(--ez-brand-tint); border-radius: 20px; padding: 1px 8px;
+}
+.pms .qgroup > .ghead .gw { font-size: 11px; color: var(--ez-muted); flex: 1 1 220px; }
+.pms .qgroup > .tblwrap { border-radius: 0 0 12px 12px; }
+
+/* ── the rating flow ──────────────────────────────────────────────────── */
+
+/* One KRA being rated. The stripe is the progress indicator: a column of
+ * grey turning green as the set is worked through, visible without reading
+ * anything. Scanning for "which one have I not done" was otherwise a matter
+ * of looking for the row of chips with none selected. */
+.pms .kcard {
+  border-left: 3px solid var(--ez-line);
+  /* border-COLOR, not border-left-color. The whole frame carries the score
+   * now, and transitioning one edge meant that on a rating change the left
+   * stripe eased while the other three snapped — caught mid-sweep as four
+   * sides briefly disagreeing. */
+  transition: border-color .2s ease, background .2s ease;
+}
+
+/* ── THE SCORE, AS COLOUR ──────────────────────────────────────────────────
+ *
+ * Requested: worst rating red, middle yellow, best green, blending through
+ * the values between — so a card answers "how did this go" before a word of
+ * it is read.
+ *
+ * The two endpoints and the blend position arrive as custom properties from
+ * ratingTone(), which normalises against the POLICY'S bands rather than
+ * assuming 1-5. color-mix does the blending here rather than JavaScript
+ * because the endpoints are --ez-* tokens: mixing them in CSS means the
+ * ramp follows the theme, and a card that is amber in daylight is the dark
+ * palette's amber at night rather than a frozen daytime swatch.
+ *
+ * oklab, not sRGB. Mixing #C0201F into #D97706 in sRGB dips through a dull
+ * brown around the midpoint; oklab holds the chroma, which is the whole
+ * point of a ramp somebody is meant to read at a glance. */
+.pms .kcard.scored {
+  --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  /* THE WHOLE BORDER, not just the stripe. Reported twice: the block's
+   * frame is what reads as "the colour of this KRA", and while only the
+   * left edge carried the score the frame was saying something else —
+   * first rust, then blue. All four edges now, with the left one still
+   * heavier so the ramp is legible when the card is folded to one line. */
+  border-color: var(--kra-tone);
+  border-left-color: var(--kra-tone);
+  /* A WASH, NOT A FILL. 9% keeps every one of --ez-ink, --ez-ink-soft and
+   * --ez-muted legible on top of it; a saturated card would make the KRA
+   * title fight its own background. */
+  background: color-mix(in oklab, var(--kra-tone) 9%, var(--ez-surface));
+}
+
+/* An unexplained difference is the one state that stops the whole set — so
+ * it has to stay visible on a card that is already carrying a colour.
+ *
+ * IT CANNOT USE THE BACKGROUND ANY MORE. It used to wash the card amber,
+ * which now means "rated in the middle of the scale": a 3 and a blocked
+ * card would have looked identical. So blocking moved to the ring, which
+ * the score never uses, and the stripe keeps saying what was scored. */
+.pms .kcard.needs {
+  /* NOTHING ON THE CARD'S BORDER. Twice now a blocking marker has been put
+   * on the frame and twice it has contradicted the score: --ez-warning read
+   * as a red box around an outstanding rating, and --ez-info then read as a
+   * blue one. The frame belongs to the score. Full stop.
+   *
+   * So the blocked state marks THE FIELD THAT IS EMPTY instead, which is
+   * also the more useful place for it: the reviewer is pointed at the box
+   * they have to type in rather than at the card as a whole. The word
+   * "needs a reason" is in the card head, the jump chip is lit, the
+   * progress bar carries a count and the action bar lists it — this is the
+   * fifth signal, not the only one. */
+  background: color-mix(in oklab, var(--kra-tone) 9%, var(--ez-surface));
+}
+.pms .kcard.needs textarea.why {
+  border-color: var(--ez-info);
+  box-shadow: 0 0 0 3px var(--ez-info-tint);
+}
+.pms .kcard.needs textarea.why::placeholder { color: var(--ez-info); opacity: 1; }
+/* And the word in the head stops being muted grey, since it is now the
+ * card-level signal rather than a caption next to a coloured ring. */
+.pms .kcard.needs .khead .fold {
+  color: var(--ez-info); font-weight: 800;
+}
+/* Rated but not yet scored on the ramp — no goal id, so no rating can be
+ * written at all. Neutral rather than green: nothing was judged. */
+.pms .kcard.rated { border-left-color: var(--ez-positive); }
+
+/* The rating chips, coloured by what the number MEANS once chosen.
+ * Unselected they stay neutral — colouring all five turns the control into a
+ * traffic light and invites the eye to the green one. */
+.pms .chip { transition: transform .12s ease, background .12s ease, border-color .12s ease; }
+.pms .chip:hover:not(.sel) { border-color: var(--ez-brand); color: var(--ez-brand); }
+.pms .chip:active { transform: scale(.94); }
+/* THE CHOSEN CHIP TAKES THE SAME RAMP as the card it scores, so the control
+ * and its consequence are never two different colours. The old rule was five
+ * fixed classes — .b1 red, .b2 amber, .b3 BLUE, .b4 blue, .b5 green — which
+ * was neither the requested ramp nor survivable: .b7 on a ten-point policy
+ * scale matched nothing and the chip rendered unselected-looking. */
+.pms .chip.sel.ramp {
+  /* A TINT AND A RING, NOT A FILL — because the ramp passes through
+   * yellow. The old rule filled the chip and inherited .chip.sel's white
+   * text, which is 5.4:1 on the red end and about 1.9:1 on a yellow one:
+   * the middle of the scale would have been the least readable chip on the
+   * screen. A 20% wash takes --ez-ink at better than 12:1 the whole way
+   * along, and the ring carries the hue at full strength.
+   *
+   * inset box-shadow rather than a 2px border: a thicker border would
+   * resize the chip by a pixel as it is chosen and nudge the row. */
+  --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  background: color-mix(in oklab, var(--kra-tone) 20%, var(--ez-surface));
+  border-color: var(--kra-tone);
+  box-shadow: inset 0 0 0 1px var(--kra-tone);
+  color: var(--ez-ink);
+}
+
+/* What the number you just picked actually means, in words, beside it. The
+ * band labels existed only in a title attribute — invisible on touch, and on
+ * a desktop only to somebody who already suspected there was something to
+ * hover. */
+.pms .bandname {
+  font-size: 12px; font-weight: 700; color: var(--ez-ink);
+  align-self: center; margin-left: 4px;
+}
+.pms .bandname .vs { font-weight: 600; color: var(--ez-muted); margin-left: 6px; }
+
+/* Progress through the set being rated, pinned to the top of the panel so it
+ * is still there at the fourth KRA. */
+.pms .ratebar {
+  /* No z-index. A sticky element already paints above the non-positioned
+   * cards that scroll under it, and a raw number here would be a value
+   * chosen by looking at what is currently on top — which is how this repo
+   * reached 37 of them. */
+  position: sticky; top: 0;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px; margin: -4px 0 12px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 11px;
+}
+.pms .ratebar .bar { flex: 1 1 160px; }
+.pms .ratebar .lead { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pms .ratebar .lead .sm { font-weight: 600; color: var(--ez-muted); }
+
+/* ── the review panel ─────────────────────────────────────────────────────
+ *
+ * MEASURED BEFORE IT WAS CHANGED: 1900px of panel in a 722px viewport for
+ * four KRAs, with the only button 1900px below the start. The policy allows
+ * ten, which is roughly five screens of scrolling to reach a control whose
+ * state you cannot see while you work.
+ *
+ * Three things made it long, and none of them was the content:
+ *   · five stacked labels per KRA, repeated — twenty label rows for four
+ *     KRAs, every one of them a word the reader already knows;
+ *   · the two numbers being compared sat ~100px apart with the achievement
+ *     text between them, when comparing them IS the task;
+ *   · nothing could be put away once it was done.
+ */
+
+/* Who this is, which rung you hold, and how the two scores stand — before
+ * any of the KRAs. The panel used to open on KRA 1 with the person's name in
+ * a card title, which is orientation you have to assemble yourself. */
+.pms .phead {
+  display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+  padding: 14px; margin-bottom: 12px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  border-radius: 12px;
+}
+.pms .phead .who { flex: 1 1 240px; min-width: 0; }
+.pms .phead .nm { font-size: 15px; font-weight: 800; color: var(--ez-ink); }
+.pms .phead .meta {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 4px; font-size: 11px; color: var(--ez-muted);
+}
+/* The two scores, side by side, at the size of a thing you are meant to
+ * compare rather than a thing you are meant to find. */
+.pms .phead .scores { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+.pms .phead .sc {
+  min-width: 92px; padding: 8px 12px; border-radius: 10px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+}
+.pms .phead .sc .l {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--ez-muted); white-space: nowrap;
+}
+.pms .phead .sc .v {
+  font-size: 19px; font-weight: 800; color: var(--ez-ink);
+  font-variant-numeric: tabular-nums; line-height: 1.25;
+}
+.pms .phead .sc.mine { border-color: var(--ez-brand-edge); background: var(--ez-brand-tint); }
+.pms .phead .sc.gap  { border-color: var(--ez-warning); background: var(--ez-warning-tint); }
+.pms .phead .sc.gap .v { color: var(--ez-warning); }
+
+/* The KRA jump chips in the sticky bar. Numbered, coloured by state, and
+ * clickable — so "which one still needs me" is answered without scrolling
+ * through the ones that do not. */
+.pms .ksteps { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.pms .kstep {
+  width: 24px; height: 24px; border-radius: 7px; padding: 0;
+  border: 1px solid var(--ez-line); background: var(--ez-surface);
+  font-weight: 800; font-size: 11px; color: var(--ez-muted);
+  font-family: inherit; cursor: pointer;
+  transition: transform .12s ease, background .12s ease, border-color .12s ease;
+}
+.pms .kstep:hover { transform: translateY(-1px); border-color: var(--ez-brand); }
+.pms .kstep.done {
+  background: var(--ez-positive-tint); border-color: var(--ez-positive-edge);
+  color: var(--ez-positive);
+}
+.pms .kstep.needs {
+  /* Same errand, same colour as the ring it points at — and off the score
+   * ramp, so a jump chip can never be read as a bad rating. */
+  background: var(--ez-info-tint); border-color: var(--ez-info);
+  color: var(--ez-info);
+}
+
+/* ── one KRA ──────────────────────────────────────────────────────────── */
+
+/* The head doubles as the fold control, so the whole row is the hit target
+ * rather than a chevron somebody has to aim at. */
+.pms .khead {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  width: 100%; background: none; border: 0; padding: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.pms .khead .fold {
+  margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ez-muted);
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.pms .khead .caret { transition: transform .18s ease; display: inline-block; }
+.pms .kcard.folded .khead .caret { transform: rotate(-90deg); }
+
+/* The evidence, as label-and-value pairs on one line each instead of five
+ * stacked blocks. The label is the narrow column because it is the part the
+ * reader stops needing after the first KRA. */
+.pms .ev { margin-top: 8px; display: grid; gap: 5px; }
+.pms .ev .row { display: grid; grid-template-columns: 116px 1fr; gap: 10px; align-items: baseline; }
+.pms .ev .row > .l {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--ez-muted); padding-top: 2px;
+}
+.pms .ev .row > .v { font-size: 12px; color: var(--ez-ink-soft); min-width: 0; }
+@media (max-width: 560px) {
+  .pms .ev .row { grid-template-columns: 1fr; gap: 1px; }
+}
+
+/* THE COMPARISON, side by side. Their number and yours were ~100px apart
+ * with the achievement text between them; putting them in one row is the
+ * whole reason this panel exists. */
+.pms .vs2 {
+  display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 12px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ez-line);
+  align-items: start;
+}
+@media (max-width: 620px) { .pms .vs2 { grid-template-columns: 1fr; } }
+.pms .vs2 .side > .l {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--ez-muted); margin-bottom: 5px;
+}
+.pms .vs2 .theirs {
+  /* WRAPS. The band label beside the number is short in the seed data and
+   * not guaranteed to be: bands are configurable per policy, and a row that
+   * cannot wrap widens the card instead. */
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 6px 10px; border-radius: 9px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+}
+.pms .vs2 .theirs .n {
+  font-size: 18px; font-weight: 800; color: var(--ez-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pms .vs2 .theirs .bl { font-size: 11px; color: var(--ez-muted); min-width: 0; }
+
+/* The folded summary: everything the open card would have told you about
+ * the decision, on one line. */
+.pms .kfold {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 6px; font-size: 12px; color: var(--ez-muted);
+}
+.pms .kfold b { color: var(--ez-ink); font-variant-numeric: tabular-nums; }
+
+/* ── the action bar ───────────────────────────────────────────────────────
+ *
+ * Pinned to the bottom of the viewport while the panel is longer than it,
+ * because the button was 1900px below the first thing you had to read, and
+ * so was every word explaining why it was disabled. The negative margins
+ * pull it out to the card's edges so it reads as a bar rather than a block
+ * that happens to be last.
+ */
+.pms .actionbar {
+  position: sticky; bottom: 0;
+  margin: 14px -18px -18px; padding: 12px 18px;
+  background: var(--ez-surface); border-top: 1px solid var(--ez-line);
+  border-radius: 0 0 13px 13px;
+  display: grid; gap: 10px;
+}
+.pms .actionbar .row {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.pms .actionbar .row .grow { flex: 1 1 auto; min-width: 0; }
+/* The blocking reasons, next to the control they block rather than above the
+ * fold. Kept to one line each: this is a reminder, and the full explanation
+ * is still in the banner the panel shows when something is wrong. */
+.pms .blockers {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  font-size: 11px; color: var(--ez-warning); font-weight: 600;
+}
+.pms .blockers .b {
+  background: var(--ez-warning-tint); border-radius: 20px; padding: 2px 9px;
+}
+
+/* ── closing the review panel ─────────────────────────────────────────────
+ *
+ * A panel this tall needs a way out that does not depend on scrolling to
+ * the bottom of it. The ghost "Close" in the action bar is still there and
+ * still pinned; this is the one in the corner, where a person looks for it.
+ *
+ * RED, AND GLOWING ON HOVER, because it is the only control here that
+ * throws work away — unsaved ratings live in the parent's state and do not
+ * survive it. The glow is the warning; the confirmation step beside it is
+ * the actual protection.
+ */
+.pms .card { position: relative; }
+.pms .xclose {
+  /* The scale in theme.css, not a number: the × must clear the sticky
+   * progress bar, and the question it opens must clear the ×. */
+  position: absolute; top: 12px; right: 12px; z-index: var(--ez-z-local-1);
+  width: 30px; height: 30px; padding: 0;
+  /* !important, AND THAT IS NOT DECORATION. UIKeyframes in lib/ui/index.tsx
+   * injects `button { border-radius: 10px !important }` at runtime, which
+   * outranks any selector here however specific. MEASURED, not assumed:
+   * every button radius in this file is inert — .btn asks for 9px, .chip
+   * for 8px, .kstep for 7px, and all three render at 10px. Those are close
+   * enough to their intent to leave alone; a round button is not, so this
+   * one has to fight back. social.css and recruitment.redesign.css carry
+   * the same workaround and the same note. */
+  border-radius: 50% !important;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 17px; line-height: 1; font-family: inherit; cursor: pointer;
+  background: var(--ez-critical-tint); color: var(--ez-critical);
+  border: 1px solid var(--ez-critical-edge);
+  transition: background .15s ease, color .15s ease,
+              box-shadow .15s ease, transform .15s ease;
+}
+.pms .xclose:hover {
+  background: var(--ez-critical); color: var(--ez-on-accent);
+  border-color: var(--ez-critical);
+  /* The glow. Two rings rather than one: the inner is the halo, the outer
+   * is what makes it read as lit rather than merely shadowed. */
+  box-shadow: 0 0 0 4px var(--ez-critical-tint),
+              0 0 14px 2px var(--ez-critical);
+  transform: rotate(90deg);
+}
+.pms .xclose:focus-visible {
+  box-shadow: 0 0 0 4px var(--ez-critical-tint), 0 0 14px 2px var(--ez-critical);
+}
+
+/* The second press, when there is work to lose. Inline rather than a
+ * browser confirm(): a modal dialog blocks the page, cannot be styled, and
+ * says "Leave site?" in language that belongs to the browser, not to the
+ * appraisal somebody just spent five minutes on. */
+.pms .closeask {
+  position: absolute; top: 48px; right: 12px; z-index: var(--ez-z-local-2);
+  width: 250px; max-width: calc(100% - 24px);
+  padding: 12px; border-radius: 11px;
+  background: var(--ez-surface); border: 1px solid var(--ez-critical);
+  box-shadow: 0 8px 26px var(--ez-critical-tint);
+}
+.pms .closeask .t { font-size: 12px; font-weight: 700; color: var(--ez-ink); }
+.pms .closeask .k { margin: 4px 0 10px; }
+.pms .closeask .row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ── the reason, as something you can read back ───────────────────────────
+ *
+ * It was an <input>: one line, no wrapping, so a two-sentence reason could
+ * be typed and then only ever seen sixty characters at a time. The employee
+ * reads the whole thing; the person writing it should be able to as well.
+ */
+.pms textarea.why {
+  min-height: 38px; height: 38px; padding: 8px 10px;
+  font-size: 13px; line-height: 1.45; resize: vertical;
+}
+
+/* The one-to-one tick is a step, not a stray checkbox between two cards. */
+.pms .step1on1 {
+  margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  transition: background .2s ease, border-color .2s ease;
+}
+.pms .step1on1.on {
+  background: var(--ez-positive-tint); border-color: var(--ez-positive-edge);
+}
+
+/* A chip that is the keyboard's current stop inside the group. The group is
+ * one tab stop and the arrows move within it, which is what a radiogroup is
+ * supposed to do — every chip being its own tab stop meant five presses to
+ * cross one KRA and twenty to cross a set. */
+.pms .chip:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 2px; }
+
+/* One rating as it is read back on the chain record. Same ramp as the review
+ * panel: a 2 that was orange while being given must not be a different
+ * orange here, or the two screens disagree about one number. */
+.pms .rdot {
+  --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 24px; padding: 0 7px; border-radius: 8px;
+  font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums;
+  /* The same tint-and-ring treatment the chips use, and for the same
+   * reason: the ramp passes through yellow, and white on yellow is about
+   * 1.9:1. A 20% wash takes --ez-ink past 12:1 the whole way along. */
+  background: color-mix(in oklab, var(--kra-tone) 20%, var(--ez-surface));
+  box-shadow: inset 0 0 0 1px var(--kra-tone);
+  color: var(--ez-ink);
 }

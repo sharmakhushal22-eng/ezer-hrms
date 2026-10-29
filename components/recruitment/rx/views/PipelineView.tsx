@@ -47,7 +47,7 @@ export function PipelineView({ rail, candidates, stages, nextStepFor, onOpen, on
         actions={<button type="button" className="rx-btn p" onClick={onAddCandidate}><Icon name="plus" />Add candidate</button>} />}>
       <div className="rx-bar rx-stag" style={{ gap: 10 }}>
         {openingSelect}
-        <SearchBox ref={search} value={ctl.query} onChange={ctl.setQuery} placeholder="Search candidate, current role or source" label="Search candidates" />
+        <SearchBox ref={search} value={ctl.query} onChange={ctl.setQuery} placeholder="Search name, role or source" label="Search candidates by name, current role or source" />
         {filterBar}
         <Segmented label="Layout" value={ctl.view} onChange={ctl.setView} options={[{ value: 'board', label: 'Board' }, { value: 'list', label: 'List' }]} />
         {onShowRejected && <button type="button" className="rx-filter" onClick={onShowRejected}>Rejected <b>{rejected}</b></button>}

@@ -6,7 +6,7 @@
 //   POST { id, assigned_hr_ids: string[], note? }
 import { NextRequest, NextResponse } from 'next/server'
 import { requireModule } from '@/lib/api-auth'
-import { rmsServiceClient as sb } from '@/lib/rms/server'
+import { rmsServiceClient as sb, grantForRequest } from '@/lib/rms/server'
 import { approveMrf, hrTeamFor } from '@/lib/recruitment/mrf-approve'
 import { cleanIds } from '@/lib/recruitment/mrf-handoff'
 
@@ -32,7 +32,15 @@ export async function POST(req: NextRequest) {
     const { data: e } = await sb.from('employees').select('full_name, emp_code').eq('id', gate.user.employeeId).maybeSingle()
     if (e) actor = { id: gate.user.employeeId, name: e.full_name, code: e.emp_code }
   }
-  const out = await approveMrf(sb as any, { id, actor, note: body.note || null, assignIds: cleanIds(body.assigned_hr_ids), mode: 'final' })
+  // Holding the Recruitment module is not the same as being an approver. Only a super admin
+  // (or the shared admin login) may decide past the chain; anyone else approves the step that
+  // is actually waiting on them, exactly as /api/ess/mrf does.
+  const grant = await grantForRequest(req)
+  const override = grant.isSuperAdmin || grant.legacy
+  const out = await approveMrf(sb as any, {
+    id, actor, note: body.note || null, assignIds: cleanIds(body.assigned_hr_ids),
+    mode: override ? 'final' : 'step', mustBeApprover: !override,
+  })
   if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status })
   return NextResponse.json(out)
 }

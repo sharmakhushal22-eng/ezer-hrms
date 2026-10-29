@@ -19,12 +19,55 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadPmsAdmin, pmsAdmin, type PmsAdminSnapshot } from '@/lib/pms/adminClient'
+import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL } from '@/lib/pms/hierarchy'
 
 type Row = Record<string, unknown>
 const s = (v: unknown) => (v === null || v === undefined) ? '' : String(v)
 const n = (v: unknown) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
 
 const FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'ANNUAL'] as const
+
+/**
+ * EVERY ONE OF THESE IS A CHECK CONSTRAINT, SO A TEXT BOX OVER IT IS A TRAP.
+ *
+ * kra_created_by, approval_chain and who_can_finalise were free-text inputs.
+ * The column accepts exactly three or four values and rejects everything else,
+ * so saving a policy failed with
+ *
+ *   new row for relation "pms_policies" violates check constraint
+ *   "pms_policies_kra_created_by_check"
+ *
+ * — reported by an admin who had done nothing wrong except type into a box
+ * the screen offered them. A correct value was reachable only by knowing the
+ * enum and spelling it in capitals. frequency was already a select; these
+ * three were not.
+ *
+ * The chain and finaliser lists come from lib/pms/hierarchy, which is the
+ * same source the review screens reason with, so the dropdown cannot offer a
+ * value the rest of the module does not understand.
+ */
+/**
+ * §13.2(1): "Rating Scale: Configurable per policy; recommended standard is a
+ * 5-point developmental maturity scale."
+ *
+ * The column has allowed these three since 066 and the admin route already
+ * accepted writes to it — there was simply no control, so the one thing the
+ * spec calls out as configurable could only be changed by calling the API by
+ * hand. Same for new_joiner_cutoff_days.
+ */
+const RATING_SCALES = ['FIVE_POINT', 'FOUR_POINT_NR', 'TEN_POINT'] as const
+const RATING_SCALE_LABEL: Record<typeof RATING_SCALES[number], string> = {
+  FIVE_POINT:    '5 point (1–5) — the recommended standard',
+  FOUR_POINT_NR: '4 point plus Not Rated',
+  TEN_POINT:     '10 point (1–10)',
+}
+
+const KRA_AUTHORS = ['EMPLOYEE', 'MANAGER', 'BOTH'] as const
+const KRA_AUTHOR_LABEL: Record<typeof KRA_AUTHORS[number], string> = {
+  EMPLOYEE: 'The employee writes their own',
+  MANAGER:  'Their manager writes them',
+  BOTH:     'Either may write them',
+}
 const CATEGORIES = ['BUSINESS', 'PROCESS', 'PEOPLE', 'CUSTOMER', 'COMPLIANCE', 'LEARNING'] as const
 
 // ── small shared pieces, matching the classes pms.css already defines ──────
@@ -82,12 +125,36 @@ function useSaver(reload: () => Promise<void>) {
 }
 
 // ══ 1. POLICIES ═══════════════════════════════════════════════════════════
-function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Promise<void> }) {
+function PolicyPanel({ policies, companies, people, reload }: {
+  policies: Row[]; companies: Row[]; people: Row[]; reload: () => Promise<void>
+}) {
   const [id, setId] = useState<string>('')
   const [draft, setDraft] = useState<Row>({})
   const { busy, error, saved, run } = useSaver(reload)
 
   const current = useMemo(() => policies.find(p => s(p.id) === id), [policies, id])
+
+  /**
+   * NAME THE COMPANY, because the name alone does not identify the policy.
+   *
+   * Every company is seeded with a policy called "Standard Quarterly", so the
+   * dropdown read "Standard Quarterly / Standard Quarterly / Standard
+   * Quarterly" and an admin had no way to tell which company they were
+   * editing. I proved how easily that goes wrong by doing it myself: three
+   * attempts to change one policy's minimum KRA count landed on three
+   * different companies' policies, leaving them at 1, 5 and 2.
+   *
+   * CyclePanel already labels its period dropdowns this way. PolicyPanel
+   * never got the same treatment, and this is the screen where it matters
+   * more — a period is obviously per company, a policy name looks global.
+   */
+  const companyName = useMemo(
+    () => new Map(companies.map(c => [s(c.id), s(c.company_name)])), [companies])
+  const policyLabel = useCallback((p: Row) => {
+    const co = companyName.get(s(p.company_id))
+    const inactive = p.is_active === false ? ' · inactive' : ''
+    return `${co ? co + ' · ' : ''}${s(p.policy_name)}${inactive}`
+  }, [companyName])
 
   useEffect(() => {
     if (!id && policies.length) setId(s(policies[0].id))
@@ -108,7 +175,7 @@ function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Prom
       <div className="grid g3">
         <Field label="Policy">
           <select value={id} onChange={e => setId(e.target.value)}>
-            {policies.map(p => <option key={s(p.id)} value={s(p.id)}>{s(p.policy_name)}</option>)}
+            {policies.map(p => <option key={s(p.id)} value={s(p.id)}>{policyLabel(p)}</option>)}
           </select>
         </Field>
         <Field label="Name"><input value={s(draft.policy_name)} onChange={e => set('policy_name', e.target.value)} /></Field>
@@ -129,9 +196,103 @@ function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Prom
 
       <div className="grid g4">
         <Field label="Minimum weightage per KRA"><input type="number" value={n(draft.min_weightage_per_kra)} onChange={e => set('min_weightage_per_kra', Number(e.target.value))} /></Field>
-        <Field label="KRAs created by"><input value={s(draft.kra_created_by)} onChange={e => set('kra_created_by', e.target.value)} /></Field>
-        <Field label="Approval chain"><input value={s(draft.approval_chain)} onChange={e => set('approval_chain', e.target.value)} /></Field>
-        <Field label="Who may finalise"><input value={s(draft.who_can_finalise)} onChange={e => set('who_can_finalise', e.target.value)} /></Field>
+        <Field label="New joiner cut-off (days)"
+               hint="§8: joined within this many days of the period end is Not Rated">
+          <input type="number" min={0} max={365} value={n(draft.new_joiner_cutoff_days)}
+                 onChange={e => set('new_joiner_cutoff_days', Number(e.target.value))} />
+        </Field>
+        <Field label="KRAs created by" hint="§0 made this the employee by default">
+          <select value={s(draft.kra_created_by) || 'EMPLOYEE'}
+                  onChange={e => set('kra_created_by', e.target.value)}>
+            {KRA_AUTHORS.map(k => <option key={k} value={k}>{KRA_AUTHOR_LABEL[k]}</option>)}
+          </select>
+        </Field>
+        <Field label="Approval chain" hint="Who rates, in order">
+          <select value={s(draft.approval_chain) || 'SELF_RM1_RM2_HOD'}
+                  onChange={e => set('approval_chain', e.target.value)}>
+            {CHAINS.map(c => <option key={c} value={c}>{CHAIN_LABEL[c]}</option>)}
+            {/* The schema also permits SELF_RM1_RM2_HOD_MD and §6.2's example
+                table uses it, but lib/pms/hierarchy has no MD step — no
+                CHAIN_STEPS entry, no finaliser, nothing in the queues. Offering
+                it would let an admin configure a chain the module cannot run,
+                which is worse than not offering it. Kept visible if it is
+                already set, so an existing value is never silently rewritten. */}
+            {s(draft.approval_chain) === 'SELF_RM1_RM2_HOD_MD' && (
+              <option value="SELF_RM1_RM2_HOD_MD">
+                Self → RM L1 → RM L2 → HOD → MD (set in the database; not supported yet)
+              </option>
+            )}
+          </select>
+        </Field>
+        <Field label="Rating scale" hint="§13.2 recommends the 5-point scale">
+          <select value={s(draft.rating_scale_type) || 'FIVE_POINT'}
+                  onChange={e => set('rating_scale_type', e.target.value)}>
+            {RATING_SCALES.map(r => <option key={r} value={r}>{RATING_SCALE_LABEL[r]}</option>)}
+          </select>
+        </Field>
+        <Field label="Who may finalise" hint="Checked again by pms_finalise">
+          <select value={s(draft.who_can_finalise) || 'RM1_RM2_HOD'}
+                  onChange={e => set('who_can_finalise', e.target.value)}>
+            {FINALISERS.map(f => <option key={f} value={f}>{FINALISER_LABEL[f]}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      {/* 202: WHO RUNS THE APPRAISAL AFTER THE RATING IS SETTLED.
+          A select and not a boolean, because neither value is the negation of
+          the other — both name a person. 'HR' is the default and diverges from
+          docx Stage 6, which gives the finaliser the appreciation remark, the
+          improvement feedback and the recognition awards along with the
+          rating; 'FINALISER' is that behaviour. Offered here so a company can
+          choose, which is the whole reason the column exists rather than the
+          split being hardcoded. */}
+      <div className="grid g2">
+        {/* 203: whether this company's employees may be published from a
+            cross-company list. Default COMPANY — the restriction, not the
+            permission, because a default that widens reach is the wrong way
+            round for an irreversible action and the employee codes repeat
+            across companies. */}
+        <Field label="Publishing across companies"
+               hint="Company only: these employees are published from their own company's list. Allow combined: they also appear when HR works on several companies at once.">
+          <select value={String(draft.publish_scope ?? 'COMPANY')}
+                  onChange={e => set('publish_scope', e.target.value)}>
+            <option value="COMPANY">Company only</option>
+            <option value="ALL">Allow a combined list</option>
+          </select>
+        </Field>
+        <Field label="After the rating is settled"
+               hint="HR: HR writes the feedback, awards recognition and publishes. Finaliser: whoever finalised does all of it, as docx Stage 6 describes.">
+          <select value={String(draft.post_final_owner ?? 'HR')}
+                  onChange={e => set('post_final_owner', e.target.value)}>
+            <option value="HR">HR writes the feedback and publishes</option>
+            <option value="FINALISER">The finaliser does all of it</option>
+          </select>
+        </Field>
+        {/* 205: WHO the HR Head is, as a person.
+            The HOD's Published Results banner said "a rating that genuinely
+            needs correcting goes through HR" — a department, on the one
+            screen where the HOD has no other control, about a result the
+            employee has already read. Nothing in the database recorded a
+            person: user_roles is empty, and the near-misses were all wrong
+            (a free-text designation match found one "Hr Executive" in one of
+            three companies; pms_feedback.given_by is the RM or the HOD).
+            Scoped to the policy's own company, because employee codes repeat
+            across the three organisations here. */}
+        <Field label="HR Head"
+               hint="Named on the HOD's published results, so a correction has somebody to go to. Leave unset and that screen says &ldquo;HR&rdquo; as before.">
+          <select value={String(draft.hr_head_id ?? '')}
+                  onChange={e => set('hr_head_id', e.target.value || null)}>
+            <option value="">Nobody named yet</option>
+            {people
+              .filter(pp => !current?.company_id
+                         || s(pp.company_id) === s(current.company_id))
+              .map(pp => (
+                <option key={s(pp.id)} value={s(pp.id)}>
+                  {s(pp.emp_code)} · {s(pp.full_name)}
+                </option>
+              ))}
+          </select>
+        </Field>
       </div>
 
       <div className="grid g4">
@@ -142,6 +303,7 @@ function PolicyPanel({ policies, reload }: { policies: Row[]; reload: () => Prom
           ['final_review_one_to_one', 'Final review is a one-to-one'],
           ['include_notice_period',   'Include people on notice'],
           ['include_exited',          'Include people who have left'],
+          ['carry_forward_kras',      'Carry KRAs forward each cycle'],
           ['applies_to_all',          'Applies to everybody'],
           ['is_active',               'Policy is active'],
         ] as const).map(([k, label]) => (
@@ -337,11 +499,36 @@ function ScalePanel({ scale, companyId, reload }: {
 }
 
 // ══ 4. CYCLE CONTROL ══════════════════════════════════════════════════════
-function CyclePanel({ policies, periods, reload }: {
-  policies: Row[]; periods: Row[]; reload: () => Promise<void>
+/** The five windows a period carries, in the order the work happens. */
+const WINDOWS: { from: string; to: string; label: string; hint: string }[] = [
+  { from: 'kra_window_from',  to: 'kra_window_to',  label: 'KRA setting',
+    hint: 'When people may write and change their KRAs' },
+  { from: 'checkin_from',     to: 'checkin_to',     label: 'Mid-period check-in',
+    hint: 'Optional, and skipped entirely on a monthly cycle' },
+  { from: 'self_rating_from', to: 'self_rating_to', label: 'Self rating',
+    hint: 'Reopening this is how somebody who missed it gets their own view on record' },
+  { from: 'rm_review_from',   to: 'rm_review_to',   label: 'Manager review',
+    hint: 'When RM L1 and RM L2 may rate' },
+  { from: 'finalise_from',    to: 'finalise_to',    label: 'Finalise',
+    hint: 'When the final rating may be set' },
+]
+
+function CyclePanel({ policies, periods, companies, reload }: {
+  policies: Row[]; periods: Row[]; companies: Row[]; reload: () => Promise<void>
 }) {
+  /** "Q2 2026-27" exists once per company, so the bare period name named three
+   *  different things. On the window editor that is confusing; on "Open a
+   *  period" it is dangerous, because opening enrols everybody and cannot be
+   *  undone from this screen. Every period option now says whose it is. */
+  const companyName = useMemo(
+    () => new Map(companies.map(c => [s(c.id), s(c.company_name)])), [companies])
+  const periodLabel = useCallback((p: Row) => {
+    const co = companyName.get(s(p.company_id))
+    return `${s(p.period_name)}${co ? ' · ' + co : ''} · ${s(p.status).toLowerCase()}`
+  }, [companyName])
   const gen = useSaver(reload)
   const open = useSaver(reload)
+  const win = useSaver(reload)
 
   const [policyId, setPolicyId] = useState('')
   const [fy, setFy] = useState('')
@@ -349,6 +536,17 @@ function CyclePanel({ policies, periods, reload }: {
 
   const [periodId, setPeriodId] = useState('')
   const [typed, setTyped] = useState('')
+
+  /** The windows of the period being edited below. Loaded from the row rather
+   *  than typed blind, so an admin nudging one date does not blank the others. */
+  const [winId, setWinId] = useState('')
+  const [winVals, setWinVals] = useState<Record<string, string>>({})
+  const winRow = useMemo(() => periods.find(p => s(p.id) === winId), [periods, winId])
+  useEffect(() => {
+    if (!winRow) { setWinVals({}); return }
+    setWinVals(Object.fromEntries(WINDOWS.flatMap(w =>
+      [[w.from, s(winRow[w.from])], [w.to, s(winRow[w.to])]])))
+  }, [winRow])
 
   useEffect(() => { if (!policyId && policies.length) setPolicyId(s(policies[0].id)) }, [policies, policyId])
 
@@ -393,7 +591,7 @@ function CyclePanel({ policies, periods, reload }: {
             <select value={periodId} onChange={e => { setPeriodId(e.target.value); setTyped('') }}>
               <option value="">Choose a period…</option>
               {openable.map(p => (
-                <option key={s(p.id)} value={s(p.id)}>{s(p.period_name)} · {s(p.status).toLowerCase()}</option>
+                <option key={s(p.id)} value={s(p.id)}>{periodLabel(p)}</option>
               ))}
             </select>
           </Field>
@@ -409,6 +607,61 @@ function CyclePanel({ policies, periods, reload }: {
                  onSave={() => open.run(
                    () => pmsAdmin<{ message: string }>('period_open', { period_id: periodId, confirm: true }),
                    'Period opened.')} />
+      </Card>
+
+      {/* THE WINDOWS WERE SET ONCE AND NEVER CORRECTABLE. pms_generate_periods
+          lays them out from the frequency, and there was no way to change one
+          afterwards — so a window set wrongly, or one that has simply passed,
+          was permanent. The employee's own screen offers "Ask your manager to
+          reopen it" for a missed self-rating window; this is the thing that
+          actually does it, and by §2's role matrix it belongs to HR Head and
+          Admin rather than to a manager. */}
+      <Card title="Change a period's windows"
+            sub="Who may act, and when. Moving a window does not change anything already recorded against the period — and reopening a closed one is how a missed self rating gets back on record.">
+        <div className="grid g3">
+          <Field label="Period">
+            <select value={winId} onChange={e => setWinId(e.target.value)}>
+              <option value="">Choose a period…</option>
+              {periods.map(p => (
+                <option key={s(p.id)} value={s(p.id)}>{periodLabel(p)}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        {!winRow ? (
+          <Note tone="warn">Choose a period to see its windows.</Note>
+        ) : (
+          <>
+            {WINDOWS.map(w => (
+              <div className="grid g3" key={w.from}>
+                <Field label={w.label} hint={w.hint}>
+                  <input type="date" value={winVals[w.from] ?? ''}
+                         onChange={e => setWinVals(v => ({ ...v, [w.from]: e.target.value }))} />
+                </Field>
+                <Field label="until">
+                  <input type="date" value={winVals[w.to] ?? ''}
+                         onChange={e => setWinVals(v => ({ ...v, [w.to]: e.target.value }))} />
+                </Field>
+              </div>
+            ))}
+            <Note tone="warn">
+              Left blank, a window counts as not configured rather than closed, and the
+              screens say so. A window that ends before it starts is refused.
+            </Note>
+            <SaveRow busy={win.busy} error={win.error} saved={win.saved} label="Save these windows"
+                     disabled={!winId}
+                     onSave={() => win.run(
+                       () => pmsAdmin('period_update', {
+                         period_id: winId,
+                         // Blank means "clear it", which the route takes as NULL;
+                         // sending '' would be a date Postgres cannot parse.
+                         ...Object.fromEntries(Object.entries(winVals)
+                           .map(([k, v]) => [k, v === '' ? null : v])),
+                       }),
+                       'Windows saved.')} />
+          </>
+        )}
       </Card>
     </>
   )
@@ -501,10 +754,11 @@ export default function AdminEditor() {
         ))}
       </div>
 
-      {section === 'policy'   && <PolicyPanel policies={snap.policies} reload={reload} />}
+      {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies}
+                                              people={snap.people ?? []} reload={reload} />}
       {section === 'kra'      && <KraPanel kras={snap.kras} companyId={companyId} reload={reload} />}
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
-      {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} reload={reload} />}
+      {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
       {section === 'finalise' && <FinalisePanel periods={snap.periods} canAttribute={!!snap.actor.employeeId} reload={reload} />}
     </>
   )

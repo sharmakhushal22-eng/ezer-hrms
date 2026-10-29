@@ -265,7 +265,7 @@ export default function CandidateInterviewModal({
   }
 
   const initials = (candidate.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
-  const subLine = [mrf?.designation || mrf?.position, candidate.designation, candidate.mrf_id ? `MRF ${(mrf?.mrf_number || '').toString()}` : null].filter(Boolean).join(' · ')
+  const subLine = [mrf?.designation || mrf?.position, candidate.designation, candidate.mrf_id && mrf?.mrf_number ? String(mrf.mrf_number) : null].filter(Boolean).join(' · ')  // mrf_number already reads "MRF-2026-…"; the old "MRF " prefix printed "MRF MRF-2026-…"
   const candMeta = { name: candidate.full_name, sub: subLine, ai_score: candidate.ai_score ?? null }
 
   // ---- feedback viewer (own overlay above the modal) ----
@@ -364,6 +364,10 @@ export default function CandidateInterviewModal({
           const isOpen = openRound === r
           const panelists = acked.filter(i => !isMain(i))
           const remark = main?.decision_remark || main?.feedback?.decision_remark || null
+          // Name the main interviewer the round is waiting on for feedback; the rows below
+          // already list every invited interviewer with their acknowledgement status.
+          const nameOf = (i: any) => i?.interviewer_name || i?.interviewer_emp_code || 'Interviewer'
+          const invitedMain = rows.find(i => isMain(i))
           return (
             <div key={r} style={{ border:`1px solid ${isOpen ? C.purple : C.line}`, borderRadius:12, overflow:'hidden' }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 13px', background: decision === 'REJECT' ? TK.criticalTint : complete ? C.okbg : C.card }}>
@@ -374,7 +378,7 @@ export default function CandidateInterviewModal({
                     {!scheduled ? (direct ? 'Feedback not recorded yet' : 'No interview scheduled yet')
                       : complete ? `Main: ${main?.interviewer_name || '-'}${panelists.length ? ` · ${panelists.length} panelist${panelists.length > 1 ? 's' : ''}` : ''}`
                       : acked.length === 0 ? `Awaiting acknowledgement from ${rows.length} invited interviewer${rows.length > 1 ? 's' : ''}`
-                      : `${acked.length} of ${rows.length} acknowledged · awaiting the main interviewer's feedback`}
+                      : `${acked.length} of ${rows.length} acknowledged · waiting on ${nameOf(main || invitedMain)} (main interviewer) for feedback`}
                   </div>
                 </div>
                 <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statBg, color: statColor }}>{statLabel}</span>

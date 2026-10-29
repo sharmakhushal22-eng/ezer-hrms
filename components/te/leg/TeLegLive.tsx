@@ -24,6 +24,7 @@ import {
   acceptFix, isGap, mergePings, readQueue, shouldFlush, silentMinutes, toPing,
   trailKm, withoutSent, writeQueue, type PingStore, type TrackRules,
 } from '@/lib/te/leg-tracking'
+import { deviceGeo, oneShotFix } from '@/lib/te/geo'
 import { errorText } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 
@@ -150,17 +151,15 @@ export default function TeLegLive({ snap, leg, placeName, onBack, onEnded, onCha
     return () => { window.removeEventListener('online', send); window.removeEventListener('pagehide', send) }
   }, [flush])
 
-  /** A fresh, accurate position — needed to end a leg or record a stop. */
-  function here(): Promise<{ lat: number; lng: number; accuracy_m?: number }> {
-    return new Promise((resolve, reject) => {
-      if (typeof navigator === 'undefined' || !('geolocation' in navigator)) { reject(new Error('This device cannot read its location.')); return }
-      navigator.geolocation.getCurrentPosition(
-        p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy_m: p.coords.accuracy }),
-        () => reject(new Error('Could not read your location. Check that location is on, then try again.')),
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-      )
-    })
-  }
+  /** A fresh, accurate position — needed to end a leg or record a stop.
+   *
+   *  THROUGH oneShotFix, NOT getCurrentPosition DIRECTLY. The option's own
+   *  `timeout` cannot be relied on: with permission already granted, and on a
+   *  machine whose location provider cannot satisfy high accuracy, it calls
+   *  neither callback and never times out. This used to hang "End the journey"
+   *  with no way forward, and a journey that cannot be ended cannot be
+   *  claimed. See lib/te/geo.ts. */
+  const here = () => oneShotFix(deviceGeo())
 
   async function run(what: string, go: () => Promise<string>) {
     setBusy(what); setError('')

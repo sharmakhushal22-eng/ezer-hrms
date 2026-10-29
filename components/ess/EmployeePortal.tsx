@@ -3332,13 +3332,31 @@ function SectionButton({ s, active, href, onClick }: { s: NavSection; active: bo
       {href && <span className="ess-ext" aria-hidden>↗</span>}
     </>
   )
-  // A section that is a page of its own is a real link, not a scripted popup:
-  // ctrl/cmd-click, middle click, "Open in new tab" and the address on hover all
-  // work. No onClick — the anchor's default opens the tab.
+  // A section that is a page of its own is a real link, not a scripted popup.
+  // That buys the browser's own behaviour for free: the address on hover, and
+  // ctrl/cmd-click or middle-click for anyone who DOES want a second tab. No
+  // onClick — the anchor's default navigation is the whole behaviour, and
+  // calling go() as well would do it twice.
+  //
+  // IT STAYS IN THIS TAB. This used to carry target="_blank", which spawned a
+  // browser tab every time somebody opened Travel & Expenses and left them with
+  // two tabs of the same portal to keep straight. The module still gets the
+  // whole viewport — it is its own full-screen page at its own address, which is
+  // the point of it being a page rather than a panel — and its own "ESS" button
+  // comes back here. A new tab was never part of that; it was just how the link
+  // happened to be written.
+  //
+  // So: no target. A plain anchor navigates in the tab it was clicked in, and
+  // the person who wants a second tab can still ask for one. The title says the
+  // label alone for the same reason — promising "opens in a new tab" when it no
+  // longer does is worse than saying nothing.
+  //
+  // The class rather than an inline style is the rail's own convention: hover
+  // and the active marker live in portal.css (.ess-item), which an inline style
+  // cannot express.
   if (href) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="ess-item" data-on="0"
-        title={`${s.label} (opens in a new tab)`}>
+      <a href={href} className="ess-item" data-on="0" title={s.label}>
         {inner}
       </a>
     )
@@ -3780,6 +3798,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   }, [])
   useEffect(() => { setLoading(true); loadEmployeeDetail(employeeId).then(e => { setEmp(e); setLoading(false) }) }, [employeeId])
   const reload = useCallback(() => loadEmployeeDetail(employeeId).then(setEmp), [employeeId])
+  // My Details (Profile360) fires this after any save — a new photo, phone or
+  // address — so the header avatar and anything else read from `emp` follows
+  // without a page reload.
+  useEffect(() => {
+    const on = () => { void reload() }
+    window.addEventListener('ez:profile-updated', on)
+    return () => window.removeEventListener('ez:profile-updated', on)
+  }, [reload])
 
   // Unread count for the bell. Refreshed on mount and whenever the open panel
   // marks something read, so the badge never disagrees with the list behind it.
@@ -3838,21 +3864,31 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // Every move writes the address (a history entry), so Back returns to the previous screen
   // and a refresh stays on this one. The sync is skipped when this portal is not at /ess.
   const sync = !!urlSync && atEss()
-  const go = (k: string) => {
+  // `replace` is for an arrival nobody clicked — the deep-link effect below
+  // calls go() on load. Leaving a history entry there would trap Back: the
+  // person presses it, lands on the address that redirects, and is sent
+  // straight back to where they were trying to leave. A click is the opposite
+  // case and must leave the portal in history.
+  const go = (k: string, opts?: { replace?: boolean }) => {
     // A tab that is a page of its own leaves the portal instead of becoming a
-    // view, and it opens in a tab of its own so the portal stays where it was.
+    // view: it needs the whole viewport and has its own navigation, so it is a
+    // full-screen page at its own address rather than a panel inside this
+    // portal's chrome.
     //
-    // The fallback is not defensive padding. window.open is only permitted
-    // during the click that asked for it, and go() is ALSO called from the
-    // ?tab= deep-link effect below — no gesture there, so the browser returns
-    // null and this tab is the right place to land: the intent of a deep link
-    // is to arrive at the module, not to spawn a second window. A popup
-    // blocker gets the same treatment.
+    // IN THIS TAB. This used to be window.open(away, '_blank') with a
+    // same-tab fallback, so every route into Travel & Expenses — the rail, a
+    // sub-item, a deep link — left the person with two tabs of the same portal.
+    // Full screen and a new browser tab are different things, and only the
+    // first one was ever wanted.
+    //
+    // assign for a click, so the portal stays in history and the browser's Back
+    // button returns to it just as the module's own "ESS" button does; replace
+    // for an arrival nobody asked for, so Back does not land on a redirect.
     const away = AWAY[k]
     if (away) {
       setBellOpen(false); setMoreOpen(false)
-      const opened = window.open(away, '_blank', 'noopener,noreferrer')
-      if (!opened) window.location.href = away
+      if (opts?.replace) window.location.replace(away)
+      else window.location.assign(away)
       return
     }
     setAdminKey(null); setBellOpen(false); setMoreOpen(false)
@@ -3905,7 +3941,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     if (loc.kind === 'view' && AWAY[loc.view]) { window.location.replace(AWAY[loc.view]); return }
     if (!urlSync) {
       // Embedded portal: honour a deep link, never touch the address bar.
-      if (loc.kind === 'module') setAdminKey(loc.module); else if (loc.view !== 'home') go(loc.view)
+      // replace: nobody clicked this, it is the address being honoured on load.
+      if (loc.kind === 'module') setAdminKey(loc.module); else if (loc.view !== 'home') go(loc.view, { replace: true })
       return
     }
     applyLocation(loc)

@@ -103,10 +103,29 @@ export interface Band {
   improvementMandatory: boolean
   /** Rule 11 — a comment this short is not a review. */
   minCommentChars: number
+  /** The score window this band owns, from pms_rating_scale. Optional because
+   *  the built-in fallback below has no ranges — see bandForScore. */
+  scoreFrom?: number
+  scoreTo?: number
+  /** pms_rating_scale.rating_code — 'O' / 'EE' / 'ME' / 'NI' / 'U' / 'NR'. */
+  code?: string
 }
 
-/** The 5-point default of §15's open question 1. Configurable per policy;
- *  this is what ships until somebody decides otherwise. */
+/**
+ * THE FALLBACK, not the configuration.
+ *
+ * These were the only bands the product ever enforced, and they did not match
+ * the ones in the database. pms_rating_scale ships seeded with 200/100/50/200/200
+ * minimum comment characters and the labels "Exceeds Expectations" / "Meets
+ * Expectations" / "Needs Improvement" / "Unsatisfactory"; this list says
+ * 40/30/30/80/120 and "Exceeds" / "Meets" / "Partially meets" / "Below
+ * expectations". So an admin raising a minimum saw it saved and saw nothing
+ * change, and two screens could name the same rating differently.
+ *
+ * Kept as the shape to fall back on when the table cannot be read, so the
+ * screens still work rather than going blank. Everything that enforces a rule
+ * should be given the real bands from `bandsFromScale`.
+ */
 export const DEFAULT_BANDS: Band[] = [
   { value: 5, label: 'Outstanding',        improvementMandatory: false, minCommentChars: 40 },
   { value: 4, label: 'Exceeds',            improvementMandatory: false, minCommentChars: 30 },
@@ -115,14 +134,77 @@ export const DEFAULT_BANDS: Band[] = [
   { value: 1, label: 'Below expectations', improvementMandatory: true,  minCommentChars: 120 },
 ]
 
+/** One pms_rating_scale row, as PostgREST returns it. */
+export interface ScaleRow {
+  rating_value: number | string
+  rating_label: string
+  rating_code?: string | null
+  min_comment_chars?: number | string | null
+  improvement_feedback_mandatory?: boolean | null
+  score_from?: number | string | null
+  score_to?: number | string | null
+  sort_order?: number | string | null
+  is_active?: boolean | null
+}
+
+/**
+ * The configured bands, highest first.
+ *
+ * Inactive rows are dropped rather than hidden in the UI: a band switched off
+ * is not a rating anybody may give. An empty or unreadable table yields an
+ * empty array, and callers fall back to DEFAULT_BANDS — saying so explicitly
+ * beats silently enforcing numbers nobody chose.
+ */
+export function bandsFromScale(rows: ScaleRow[] | null | undefined): Band[] {
+  const n = (v: unknown): number | undefined =>
+    v === null || v === undefined || v === '' ? undefined : Number(v)
+  return (rows ?? [])
+    .filter(r => r.is_active !== false)
+    .map(r => ({
+      value: Number(r.rating_value),
+      label: String(r.rating_label ?? ''),
+      code: r.rating_code ?? undefined,
+      improvementMandatory: r.improvement_feedback_mandatory === true,
+      minCommentChars: Number(r.min_comment_chars ?? 0) || 0,
+      scoreFrom: n(r.score_from),
+      scoreTo: n(r.score_to),
+    }))
+    .filter(b => Number.isFinite(b.value))
+    .sort((a, b) => b.value - a.value)
+}
+
 export function bandFor(rating: number | null | undefined, bands = DEFAULT_BANDS): Band | null {
   if (rating === null || rating === undefined) return null
   return bands.find(b => b.value === Math.round(rating)) ?? null
 }
 
-/** Score to band. Rounds to nearest, so 3.5 is a 4 rather than silently a 3. */
+/**
+ * Score to band.
+ *
+ * THE RANGES WIN WHERE THERE ARE RANGES. pms_rating_scale gives each band an
+ * explicit window — 4.51-5.00, 3.51-4.50, 2.51-3.50 and so on — and rounding
+ * disagrees with it at every boundary: a weighted score of exactly 3.50 sits
+ * in "Meets Expectations" by the table and rounds up to "Exceeds" by
+ * arithmetic. One of those is the band the admin configured.
+ *
+ * Falls back to rounding only for bands that carry no window, which is the
+ * built-in list above.
+ */
 export function bandForScore(s: number | null, bands = DEFAULT_BANDS): Band | null {
-  return s === null ? null : bandFor(Math.round(s), bands)
+  if (s === null) return null
+  const windowed = bands.find(b =>
+    b.scoreFrom !== undefined && b.scoreTo !== undefined && s >= b.scoreFrom && s <= b.scoreTo)
+  if (windowed) return windowed
+  // A score above the top window or below the bottom one still has a band:
+  // clamp rather than return nothing, or a perfect 5.00 with a 4.51-5.00 top
+  // band would be fine while 5.01 from a rounding artefact would be nameless.
+  const ranged = bands.filter(b => b.scoreFrom !== undefined && b.scoreTo !== undefined)
+  if (ranged.length) {
+    if (s > Math.max(...ranged.map(b => b.scoreTo!))) return ranged[0]
+    if (s < Math.min(...ranged.map(b => b.scoreFrom!))) return ranged[ranged.length - 1]
+    return null
+  }
+  return bandFor(Math.round(s), bands)
 }
 
 export interface FeedbackCheck { ok: boolean; faults: string[] }
@@ -175,3 +257,181 @@ export function canManagerRate(selfSubmitted: boolean): Gate {
 }
 
 export interface Gate { open: boolean; because: string }
+
+// ── the rater's own view: theirs, mine, and the distance between ─────────
+
+export interface RatingCompare {
+  goalId: string
+  title: string
+  weightage: number
+  /** What the employee said about themselves. */
+  self: number | null
+  /** What this rater is saying. */
+  mine: number | null
+  /**
+   * mine − self. POSITIVE MEANS YOU RATED THEM HIGHER than they rated
+   * themselves.
+   *
+   * The opposite sign to gap() above, which computes self − final because it
+   * speaks to the employee ("you rated yourself higher than your manager
+   * did"). Two functions with opposite conventions is a trap, so the
+   * direction is stated in both and neither is inferred from the other.
+   */
+  delta: number | null
+  flag: GapFlag
+  /**
+   * Does this line need a written reason?
+   *
+   * Any difference at all. Ratings are whole numbers on the band scale, so a
+   * delta of 1 is a whole band — "exceeds" against "meets" — and that is a
+   * judgement the employee will want explained. An unexplained downgrade is
+   * the single most common thing an appraisal is disputed over, and the
+   * cheapest moment to write the sentence is while the rating is being made.
+   */
+  needsReason: boolean
+  hasReason: boolean
+}
+
+export interface CompareSummary {
+  lines: RatingCompare[]
+  /** Weighted, on the rating scale. Null until every line is rated. */
+  selfScore: number | null
+  myScore: number | null
+  /** myScore − selfScore. Positive means you scored them higher overall. */
+  delta: number | null
+  rated: number
+  total: number
+  agreed: number
+  higher: number
+  lower: number
+  /** Lines that differ and carry no explanation. */
+  missingReasons: RatingCompare[]
+}
+
+/**
+ * Compare this rater's scores with the employee's own, line by line.
+ *
+ * Built on score() and gap() rather than recomputing: the weighted mean and
+ * the gap thresholds are already defined once, and a second definition of
+ * "major gap" that disagreed with the employee's own screen would be worse
+ * than no comparison at all.
+ */
+export function compareRatings(
+  rows: { goalId: string; title: string; weightage: number
+          self: number | null; mine: number | null; comment?: string | null }[],
+): CompareSummary {
+  const lines: RatingCompare[] = rows.map(r => {
+    const delta = r.self == null || r.mine == null
+      ? null : Math.round((r.mine - r.self) * 100) / 100
+    // gap() takes (self, final) and returns self − final, so the arguments go
+    // in that order and only the FLAG is used from it — the delta here keeps
+    // this function's own direction.
+    const flag = gap(r.self, r.mine).flag
+    const needsReason = delta !== null && delta !== 0
+    return {
+      goalId: r.goalId, title: r.title, weightage: r.weightage,
+      self: r.self, mine: r.mine, delta, flag,
+      needsReason, hasReason: !!(r.comment && r.comment.trim()),
+    }
+  })
+
+  const asLines = rows.map(r => ({
+    goalId: r.goalId, title: r.title, category: 'BUSINESS' as Category,
+    weightage: r.weightage, self: r.self, final: r.mine,
+  }))
+  const selfScore = score(asLines, 'self')
+  const myScore = score(asLines, 'final')
+
+  return {
+    lines, selfScore, myScore,
+    delta: selfScore == null || myScore == null
+      ? null : Math.round((myScore - selfScore) * 100) / 100,
+    rated: lines.filter(l => l.mine != null).length,
+    total: lines.length,
+    agreed: lines.filter(l => l.delta === 0).length,
+    higher: lines.filter(l => (l.delta ?? 0) > 0).length,
+    lower: lines.filter(l => (l.delta ?? 0) < 0).length,
+    missingReasons: lines.filter(l => l.needsReason && !l.hasReason),
+  }
+}
+
+// ── the rating ramp: red at the bottom, yellow in the middle, green at top ─
+
+/**
+ * WHERE A RATING SITS ON THE RED-YELLOW-GREEN RAMP.
+ *
+ * Requested: a KRA rated 1 shows red, 3 yellow, 5 green, and the values
+ * between them blend — so the colour of a card answers "how did this go"
+ * before a single word is read.
+ *
+ * NOT 1..5. THE SCALE IS POLICY CONFIGURATION. pms_rating_scale sets the
+ * bands per policy, bandsFromScale reads them, and a three-point or
+ * ten-point scale is a setting away. Hardcoding the midpoint at 3 would put
+ * yellow on "exceeds" for a four-point scale and on the bottom band but one
+ * for a ten-point one. So the position is normalised against the bands that
+ * are actually in play: lowest band = 0, highest = 1, and the midpoint is
+ * wherever the policy's own middle falls.
+ *
+ * TWO SEGMENTS, NOT ONE. Mixing red straight into green passes through a
+ * muddy olive at the midpoint rather than yellow, which is the opposite of
+ * what the middle band should look like. So the ramp is red→yellow for the
+ * bottom half and yellow→green for the top, and this returns which of the
+ * two segments the value is in along with how far along it sits.
+ *
+ * TOKENS, NOT COLOURS. It names --ez-* custom properties and never a hex
+ * value: that is what makes the ramp follow the theme, so a card that is
+ * amber in daylight is the dark palette's amber at night rather than a
+ * frozen daytime swatch. The mixing itself is CSS color-mix(), which is
+ * also why the endpoints are returned rather than a blended result —
+ * nothing here can resolve a custom property.
+ */
+export interface RatingTone {
+  /** The --ez-* token the segment starts at. */
+  from: string
+  /** The token it ends at. */
+  to: string
+  /** How far along that segment, 0-100, for color-mix(). */
+  mix: number
+}
+
+// The ramp's three stops, as the PMS-local tokens that define them. Two
+// forward to --ez-critical and --ez-positive; the middle one cannot, because
+// --ez-warning is a dark orange-brown in daylight (picked for text contrast)
+// and a ramp built on it reads brown where it should read yellow. See the
+// block in pms.css.
+export const TONE_LOW = '--pms-ramp-low'
+export const TONE_MID = '--pms-ramp-mid'
+export const TONE_HIGH = '--pms-ramp-high'
+
+export function ratingTone(
+  rating: number | null | undefined, bands = DEFAULT_BANDS,
+): RatingTone | null {
+  if (rating === null || rating === undefined || Number.isNaN(Number(rating))) return null
+  if (!bands.length) return null
+  const vals = bands.map(b => b.value)
+  const lo = Math.min(...vals), hi = Math.max(...vals)
+  // A single-band scale has no ramp to sit on. Neither red nor green is
+  // honest about a scale with one rung, so the card simply stays neutral.
+  if (hi === lo) return null
+  // Clamped: a rating outside the scale is a data problem, not a reason to
+  // compute a colour past the end of the ramp.
+  const t = Math.min(1, Math.max(0, (Number(rating) - lo) / (hi - lo)))
+  const pct = (x: number) => Math.round(x * 1000) / 10
+  return t <= 0.5
+    ? { from: TONE_LOW, to: TONE_MID, mix: pct(t * 2) }
+    : { from: TONE_MID, to: TONE_HIGH, mix: pct((t - 0.5) * 2) }
+}
+
+/**
+ * The same thing as inline style custom properties, which is the only shape
+ * a component can actually use. Returned as a plain object so a caller can
+ * spread it next to its own styles.
+ */
+export function toneVars(t: RatingTone | null): Record<string, string> {
+  if (!t) return {}
+  return {
+    '--kra-from': `var(${t.from})`,
+    '--kra-to': `var(${t.to})`,
+    '--kra-mix': `${t.mix}%`,
+  }
+}

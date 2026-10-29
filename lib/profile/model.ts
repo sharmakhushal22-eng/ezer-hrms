@@ -33,13 +33,17 @@ import type { FieldGroup, TabId } from './types'
 export const TABS: { id: TabId; label: string }[] = [
   { id: 'overview',  label: 'Overview' },
   { id: 'personal',  label: 'Personal' },
+  { id: 'family',    label: 'Family & nominees' },
   { id: 'job',       label: 'Employment' },
   { id: 'statutory', label: 'Statutory' },
   { id: 'payroll',   label: 'Payroll' },
-  { id: 'time',      label: 'Time & Leave' },
+  { id: 'documents', label: 'Documents' },
   { id: 'growth',    label: 'Growth' },
-  { id: 'records',   label: 'Records' },
 ]
+// 'Time & Leave' is gone: it held nothing but a note saying Time & Attendance
+// owns it, which the ESS menu already says by having a Time & Leave section.
+// 'Records' became Documents — family and nominations, which it duplicated,
+// now live in their own tab with their editors.
 
 /** Tabs whose content is field groups. The rest are card blocks built from the
  *  payload's related lists, and are rendered by the component instead. */
@@ -54,7 +58,8 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
       { label: 'Employee code',   key: 'employee_code',  state: 'locked',  source: 'employees.emp_code', mono: true },
       { label: 'Date of birth',   key: 'date_of_birth',  state: 'locked',  source: 'employees.date_of_birth', min: 'self' },
       { label: 'Gender',          key: 'gender',         state: 'locked',  source: 'employees.gender' },
-      { label: 'Blood group',     key: 'blood_group',    state: 'direct',  source: 'employees.blood_group', column: 'blood_group' },
+      { label: 'Blood group',     key: 'blood_group',    state: 'direct',  source: 'employees.blood_group', column: 'blood_group',
+        editor: 'blood_group' },
       { label: 'Marital status',  key: 'marital_status', state: 'event',   source: 'employees.marital_status',
         hint: 'Opens family, nominee and insurance steps' },
       { label: 'Anniversary',     key: 'marriage_date',  state: 'direct',  source: 'employees.marriage_date', column: 'marriage_date' },
@@ -82,13 +87,13 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
     ]},
     { title: 'Address and emergency', fields: [
       { label: 'Present address',   key: 'present_address',   state: 'request', source: 'employees.present_address',
-        wide: true, min: 'self', hint: 'Changes PT state and HRA exemption' },
+        wide: true, min: 'self', hint: 'Changes PT state and HRA exemption', editor: 'present_address' },
       { label: 'Permanent address', key: 'permanent_address', state: 'request', source: 'employees.permanent_address',
-        wide: true, min: 'self' },
+        wide: true, min: 'self', editor: 'permanent_address' },
       { label: 'Emergency contact 1', key: 'emergency_contact_1', state: 'direct',
-        source: 'employees.emergency_contact_1', column: 'emergency_contact_1', wide: true, min: 'self' },
+        source: 'employees.emergency_contact_1', column: 'emergency_contact_1', wide: true, min: 'self', editor: 'emergency1' },
       { label: 'Emergency contact 2', key: 'emergency_contact_2', state: 'direct',
-        source: 'employees.emergency_contact_2', column: 'emergency_contact_2', wide: true, min: 'self' },
+        source: 'employees.emergency_contact_2', column: 'emergency_contact_2', wide: true, min: 'self', editor: 'emergency2' },
     ]},
   ],
 
@@ -145,13 +150,16 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
     { title: 'Tax identity', fields: [
       // The full Aadhaar is deliberately absent — the view carries only the
       // last four, which is all any screen has ever needed.
+      // PAN is stripped below HR by the RPC; your own arrives masked as
+      // self.ids.pan_masked and the card shows that instead of "Restricted".
       { label: 'PAN',            key: 'pan',           state: 'locked', source: 'employees.pan',
-        mono: true, mask: true, min: 'hr' },
+        mono: true, mask: true, min: 'hr', editor: 'pan', addable: true },
       { label: 'Aadhaar last 4', key: 'aadhar_last4',  state: 'locked', source: 'employees.aadhar_last4',
-        mono: true, min: 'self' },
+        mono: true, min: 'self', editor: 'aadhaar', addable: true },
     ]},
     { title: 'Provident fund', fields: [
-      { label: 'UAN',             key: 'uan',            state: 'locked', source: 'employees.uan', mono: true, min: 'self' },
+      { label: 'UAN',             key: 'uan',            state: 'locked', source: 'employees.uan', mono: true, min: 'self',
+        editor: 'uan', addable: true },
       { label: 'PF number',       key: 'pf_number',      state: 'locked', source: 'employees.pf_number', mono: true, min: 'self' },
       { label: 'PF applicability', key: 'pf_applicable', state: 'locked', source: 'employees.pf_applicable' },
       { label: 'Voluntary PF',    key: 'vpf_amount',     state: 'direct', source: 'employees.vpf_amount', column: 'vpf_amount' },
@@ -175,11 +183,13 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
 
   payroll: [
     { title: 'Salary account', fields: [
-      { label: 'Bank name',       key: 'bank_name',         state: 'request', source: 'employees.bank_name', min: 'self' },
-      { label: 'Account last 4',  key: 'bank_last4',        state: 'locked',  source: 'employees.bank_last4',
-        mono: true, min: 'self' },
-      { label: 'IFSC',            key: 'ifsc',              state: 'request', source: 'employees.ifsc', mono: true, min: 'self' },
-      { label: 'Account holder',  key: 'bank_holder_name',  state: 'request', source: 'employees.bank_holder_name', min: 'hr' },
+      // One account is one decision: all four open the salary-account form,
+      // which goes to Payroll as a single request.
+      { label: 'Bank name',       key: 'bank_name',         state: 'request', source: 'employees.bank_name', min: 'self', editor: 'bank' },
+      { label: 'Account last 4',  key: 'bank_last4',        state: 'request', source: 'employees.bank_last4',
+        mono: true, min: 'self', editor: 'bank' },
+      { label: 'IFSC',            key: 'ifsc',              state: 'request', source: 'employees.ifsc', mono: true, min: 'self', editor: 'bank' },
+      { label: 'Account holder',  key: 'bank_holder_name',  state: 'request', source: 'employees.bank_holder_name', min: 'hr', editor: 'bank' },
       { label: 'Payment mode',    key: 'payment_mode',      state: 'locked',  source: 'employees.payment_mode' },
     ]},
     { title: 'Compensation', fields: [
@@ -189,16 +199,12 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
   ],
 }
 
-/** The related lists, and what each card is called. Driven off the payload
- *  rather than hard-coded in the component, so a list that comes back empty
- *  still gets a card saying so — an absent card reads as a missing feature. */
+/** The related lists drawn as plain tables, and the tab each sits in. Family,
+ *  nominations, insurance and documents are NOT here: they have their own
+ *  cards with editors (Family & nominees, Documents). An empty list still gets
+ *  its card saying so — an absent card reads as a missing feature. */
 export const RECORD_CARDS: { key: keyof RecordKeys; title: string; tab: TabId; empty: string }[] = [
-  { key: 'family',         title: 'Family',                    tab: 'records', empty: 'No family members recorded.' },
-  { key: 'nominations',    title: 'Nominations',               tab: 'records', empty: 'No nominee recorded. PF and gratuity both need one.' },
-  { key: 'insurance',      title: 'Insurance',                 tab: 'records', empty: 'No active policy recorded.' },
-  { key: 'documents',      title: 'Documents',                 tab: 'records', empty: 'Nothing uploaded yet.' },
-  { key: 'assets',         title: 'Assets issued',             tab: 'records', empty: 'No company assets issued.' },
-  { key: 'app_access',     title: 'Application access',        tab: 'records', empty: 'No application access recorded.' },
+  { key: 'assets',         title: 'Assets issued',             tab: 'job',     empty: 'No company assets issued.' },
   { key: 'education',      title: 'Education',                 tab: 'growth',  empty: 'No qualifications recorded.' },
   { key: 'experience',     title: 'Previous experience',       tab: 'growth',  empty: 'No previous employment recorded.' },
   { key: 'certifications', title: 'Skills and certifications', tab: 'growth',  empty: 'No certifications recorded.' },

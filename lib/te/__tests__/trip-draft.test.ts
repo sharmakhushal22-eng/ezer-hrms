@@ -6,10 +6,7 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
 import {
-  addStop, autoName, blockingOn, defaultMode, errorFor, firstOpenLine, movePoint,
-  newPlannerDraft, pointLabel, removePoint, setPattern, stepOfIssue, syncDraft,
-  toTripDraft, fromTrip, setScope,
-  type DraftContext, type PlannerDraft,
+  addStop, applyModeToAll, autoName, blockingOn, defaultMode, errorFor, firstOpenLine, fromTrip, journeysUnlike, movePoint, newPlannerDraft, pointLabel, removePoint, setPattern, setScope, stepOfIssue, syncDraft, toTripDraft, type DraftContext, type PlannerDraft,
 } from '../trip-draft.ts'
 import type { TeMode, TripIssue } from '../types.ts'
 
@@ -123,6 +120,27 @@ describe('syncDraft keeps the shape', () => {
   it('nobody books a local trip for you', () => {
     const d = syncDraft({ ...fresh('local'), segs: fresh('local').segs.map(s => ({ ...s, bookedBy: 'desk' as const })) }, ctx())
     for (const s of d.segs) assert.equal(s.bookedBy, 'self')
+  })
+
+  // Found in the browser, on a domestic post-facto trip: the journey card read
+  // "Flight · Travel Desk books" while the panel one row below it read "You are
+  // booking this yourself". The card reads bookedBy; the panel worked the rule
+  // out for itself and knew about POST_FACTO. The card was the wrong copy.
+  it('nobody books a trip that already happened, flight or not', () => {
+    const past = newPlannerDraft({ scope: 'domestic', origin: 'POST_FACTO', lastWorkday: '2026-11-13' }, ctx())
+    const d = syncDraft({ ...past, segs: past.segs.map(s => ({ ...s, mode: 'flight', bookedBy: 'desk' as const })) }, ctx())
+    assert.ok(d.segs.length > 0, 'the fixture must have a journey to assert about')
+    for (const s of d.segs) {
+      assert.equal(s.mode, 'flight', 'the mode is left alone; only who books it changes')
+      assert.equal(s.bookedBy, 'self', 'there is no ticket left to buy on a journey already flown')
+    }
+  })
+
+  // The guard above must not take the desk off a trip that has not happened
+  // yet, which is the whole point of the desk.
+  it('still lets the desk book a flight on a trip yet to come', () => {
+    const d = syncDraft({ ...fresh('domestic'), segs: fresh('domestic').segs.map(s => ({ ...s, mode: 'flight', bookedBy: 'desk' as const })) }, ctx())
+    for (const s of d.segs) assert.equal(s.bookedBy, 'desk')
   })
 
   it('mirrors the return point onto the start while retSame holds', () => {
@@ -255,27 +273,79 @@ describe('what a route line is called', () => {
     assert.equal(pointLabel(d, 2).label, 'Back to')
   })
 
-  it('numbers the stops, and only the last place is the destination', () => {
-    const two = addStop(fresh(), 1, ctx())
-    assert.equal(pointLabel(two, 1).label, 'Stop 1')
-    assert.equal(pointLabel(two, 1).isStop, true)
-    assert.equal(pointLabel(two, 2).label, 'Destination')
-    assert.equal(pointLabel(two, 2).isStop, false)
-    assert.equal(pointLabel(two, 2).last, 2)
+  // A STOP SAYS SO, rather than being worked out from where it sits. It used
+  // to be "the last place that is not the return point is the destination,
+  // everything before it is a stop", which can only ever express stops on the
+  // way out: "after the destination" and "is the destination" are the same
+  // slot in the list. A point marked as a stop can sit on either leg.
+
+  it('a stop on the way home leaves the destination alone', () => {
+    // fresh() is [start, destination, back to]; the gap after point 1 is the
+    // journey home, so this is Mumbai, then a night in Pune before coming back.
+    const back = addStop(fresh(), 1, ctx())
+    assert.equal(back.points.length, 4)
+    assert.equal(pointLabel(back, 1).label, 'Destination')
+    assert.equal(pointLabel(back, 1).isStop, false)
+    assert.equal(pointLabel(back, 2).label, 'Stop 1')
+    assert.equal(pointLabel(back, 2).isStop, true)
+    assert.equal(pointLabel(back, 3).label, 'Back to')
+    // `last` is the destination's index, which the screen uses to decide what
+    // can be reordered — it must not drift onto the stop.
+    assert.equal(pointLabel(back, 1).last, 1)
+  })
+
+  it('a stop on the way out also leaves the destination alone', () => {
+    // The gap after the start: Jaipur on the way to Mumbai.
+    const out = addStop(fresh(), 0, ctx())
+    assert.equal(pointLabel(out, 1).label, 'Stop 1')
+    assert.equal(pointLabel(out, 1).isStop, true)
+    assert.equal(pointLabel(out, 2).label, 'Destination')
+    assert.equal(pointLabel(out, 2).isStop, false)
+    assert.equal(pointLabel(out, 2).last, 2)
+  })
+
+  it('stops are numbered in the order they are passed, across both legs', () => {
+    const both = addStop(addStop(fresh(), 0, ctx()), 2, ctx())
+    // start, stop, destination, stop, back to
+    assert.deepEqual(both.points.map((_, i) => pointLabel(both, i).label),
+      ['Start', 'Stop 1', 'Destination', 'Stop 2', 'Back to'])
+  })
+
+  it('a trip saved before stops were marked reads as it always did', () => {
+    // No point carries the flag, so the old rule stands: the last place that
+    // is not the return point is where you were going. Nothing renames itself.
+    const legacy = fresh()
+    legacy.points = [legacy.points[0], { ...legacy.points[1] }, { ...legacy.points[1] }, legacy.points[2]]
+    legacy.segs = [...legacy.segs, { ...legacy.segs[0] }]
+    assert.equal(pointLabel(legacy, 1).label, 'Stop 1')
+    assert.equal(pointLabel(legacy, 2).label, 'Destination')
   })
 })
 
 describe('where a refusal belongs', () => {
   it('sends each key to the step that can fix it', () => {
     for (const k of ['scope', 'purpose', 'name', 'pax']) assert.equal(stepOfIssue(k), 1, k)
-    for (const k of ['p0', 'p12', 'm1', 'd0', 'd3', 'pr']) assert.equal(stepOfIssue(k), 2, k)
-    for (const k of ['pf', 'adv']) assert.equal(stepOfIssue(k), 3, k)
+    // Where and when — step 2 since the planner was split into five.
+    for (const k of ['p0', 'p12', 'd0', 'd3', 'pr']) assert.equal(stepOfIssue(k), 2, k)
+    // How you travel — its own step now, so a missing mode no longer sends
+    // somebody back to a screen full of places and dates.
+    for (const k of ['m0', 'm1', 's0', 's4']) assert.equal(stepOfIssue(k), 3, k)
+    for (const k of ['pf', 'adv']) assert.equal(stepOfIssue(k), 5, k)
+  })
+
+  it('routes nothing to the stay step, because the stay only ever warns', () => {
+    // trip-stay.ts warns when fewer than three hotels are named and never
+    // blocks, so the server emits no key that belongs to step 4. If that ever
+    // changes, this test is the reminder that stepOfIssue needs a case.
+    const keys = ['scope', 'purpose', 'name', 'pax', 'p0', 'd0', 'pr', 'm0', 's0', 'pf', 'adv', '', undefined]
+    assert.equal(keys.filter(k => stepOfIssue(k) === 4).length, 0)
   })
 
   it('puts a refusal with no field of its own on the last step', () => {
-    // These have nowhere to sit, so the summary on step 3 is where they show.
-    assert.equal(stepOfIssue(undefined), 3)
-    assert.equal(stepOfIssue(''), 3)
+    // These have nowhere to sit, so the summary on the last step is where they
+    // show.
+    assert.equal(stepOfIssue(undefined), 5)
+    assert.equal(stepOfIssue(''), 5)
   })
 
   it('says nothing until the person has tried to move on', () => {
@@ -300,8 +370,11 @@ describe('where a refusal belongs', () => {
       { block: true, t: 'no key at all', k: undefined },
     ]
     assert.deepEqual(blockingOn(issues, 1).map(i => i.k), ['name'])
-    assert.deepEqual(blockingOn(issues, 2).map(i => i.k), ['p1', 'm0'])
-    assert.deepEqual(blockingOn(issues, 3).map(i => i.t), ['no key at all'])
+    assert.deepEqual(blockingOn(issues, 2).map(i => i.k), ['p1'])
+    // The mode moved to its own step, so it no longer lands beside the places.
+    assert.deepEqual(blockingOn(issues, 3).map(i => i.k), ['m0'])
+    assert.deepEqual(blockingOn(issues, 4), [])
+    assert.deepEqual(blockingOn(issues, 5).map(i => i.t), ['no key at all'])
   })
 })
 
@@ -421,13 +494,26 @@ describe('opening a saved trip to change it', () => {
     assert.deepEqual(d.points.map(p => p.place), ['off', 'pune', 'off'])
   })
 
-  it('drops the arrival dates the server derived, but keeps the one that was typed', () => {
-    // This used to drop every arrival, because every arrival WAS derived. The
-    // return point's arrival is now an answer — the day you are back at your
-    // starting point — so it is the one that survives a reopen. Everything
-    // else is still the server's calculation off the legs.
+  it('keeps every arrival that was stored, not only the return point\'s', () => {
+    // This used to drop every arrival but the return's, because every other
+    // arrival WAS the server's calculation off the legs. The planner asks for
+    // all of them now, so reopening a trip has to show what was said — and
+    // `saved` here carries none, which is what a trip planned before the
+    // question existed looks like.
     const d = fromTrip(saved, ctx())
-    for (const p of d.points) if (!p.ret) assert.equal('arrive' in p, false, 'a derived arrival must not be stored')
+    // The middle point's arrival used to be thrown away here as the server's
+    // own calculation; it comes back now.
+    assert.equal(d.points[1].arrive, '2026-12-07')
+    assert.equal(d.points.find(p => p.ret)?.arrive, '2026-12-09')
+    // The start is the exception, and not because of this change: you do not
+    // arrive where you begin, and derive() clears it on every trip.
+    assert.equal(d.points[0].arrive ?? '', '')
+    // A time comes back with it.
+    const withTime = fromTrip({
+      ...saved,
+      points: saved.points.map((q, i) => (i === 1 ? { ...q, arriveAt: '06:15' } : q)),
+    }, ctx())
+    assert.equal(withTime.points[1].arriveAt, '06:15')
   })
 
   it('does not rename a trip that is reopened', () => {
@@ -456,7 +542,7 @@ describe('opening a saved trip to change it', () => {
 
   it('opens a sent-back trip on Review, where the answer is asked for', () => {
     const d = fromTrip({ ...saved, status: 'SENT_BACK' }, ctx())
-    assert.equal(d.step, 3)
+    assert.equal(d.step, 5)
     assert.equal(d.answerNeeded, true)
   })
 
@@ -469,6 +555,78 @@ describe('what gets sent to the server', () => {
   it('tidies the people: upper-case ids, trimmed names, blanks dropped', () => {
     const d = syncDraft({ ...fresh(), pax: 3, people: [{ id: ' srs0533 ', name: '  Priya Nair ' }, { id: '', name: '' }] }, ctx())
     assert.deepEqual(toTripDraft(d).people, [{ id: 'SRS0533', name: 'Priya Nair' }])
+
+  // THE BOUNDARY THAT LET A BUG THROUGH. pointLabel and the engine both knew
+  // about `stop`, and both were tested — but toTripDraft rebuilds each point
+  // field by field on the way to the server, and it did not carry the flag.
+  // So the planner labelled the trip correctly, the save dropped it, and the
+  // stored trip was named after the stop. Nothing in either unit test could
+  // see that: the gap was between them.
+  it('sends which places are only passed through', () => {
+    const d = addStop(fresh(), 1, ctx())          // a stop on the way home
+    const sent = toTripDraft(d)
+    assert.equal(sent.points.length, 4)
+    assert.equal(sent.points[1].stop, undefined, 'the destination is not a stop')
+    assert.equal(sent.points[2].stop, true, 'the stop must reach the server')
+    assert.equal(sent.points[3].ret, true)
+  })
+
+  // THE SAME BOUNDARY AGAIN. What the traveller asks the Travel Desk for is
+  // carried on the segment, and toTripDraft rebuilds segments field by field
+  // exactly as it does points — which is where the stop flag was lost. These
+  // are here so the next field added to a segment has a test watching it.
+  it('sends what the traveller asked the desk for', () => {
+    const d = fresh()
+    const withPref = { ...d, segs: d.segs.map((sg, i) => (i === 0 ? { ...sg, prefTime: '06:30', prefUrl: ' https://air.example/f/AI101 ', prefNote: 'Either the 6am or after 8pm' } : sg)) }
+    const sent = toTripDraft(withPref)
+    assert.equal(sent.segs[0].prefTime, '06:30')
+    // Trimmed: a pasted link usually arrives with a space on one end.
+    assert.equal(sent.segs[0].prefUrl, 'https://air.example/f/AI101')
+    assert.equal(sent.segs[0].prefNote, 'Either the 6am or after 8pm')
+  })
+
+  it('omits the preference keys when nothing was asked for', () => {
+    // A plan that says nothing to the desk must send exactly what it always
+    // sent, so the server's nullif() sees nothing rather than an empty string.
+    for (const sg of toTripDraft(fresh()).segs) {
+      for (const k of ['prefTime', 'prefUrl', 'prefNote']) {
+        assert.ok(!(k in sg), `unexpected ${k}: ${JSON.stringify(sg)}`)
+      }
+    }
+  })
+
+  it('sends every time of every place, not just the two it used to', () => {
+    // The arrival was derived and dropped here; the departure time was only
+    // ever sent for the first place. Both are asked for on every place now.
+    const d = fresh()
+    const withTimes = {
+      ...d,
+      points: d.points.map((q, i) => (i === 1
+        ? { ...q, arrive: '2026-11-03', arriveAt: '06:15', leaveAt: '19:00', prefNote: ' Late check-in ', prefUrl: ' https://hotel.example/x ' }
+        : q)),
+    }
+    const sent = toTripDraft(withTimes)
+    assert.equal(sent.points[1].arrive, '2026-11-03')
+    assert.equal(sent.points[1].arriveAt, '06:15')
+    assert.equal(sent.points[1].leaveAt, '19:00')
+    assert.equal(sent.points[1].prefNote, 'Late check-in')
+    assert.equal(sent.points[1].prefUrl, 'https://hotel.example/x')
+  })
+
+  it('omits every one of them when nothing was said', () => {
+    for (const q of toTripDraft(fresh()).points) {
+      for (const k of ['arrive', 'arriveAt', 'prefNote', 'prefUrl']) {
+        assert.ok(!(k in q), `unexpected ${k}: ${JSON.stringify(q)}`)
+      }
+    }
+  })
+
+  it('omits the flag entirely when nothing is a stop', () => {
+    // A trip planned before stops could be marked must send exactly what it
+    // always sent, so the server's defaults keep it reading as it did.
+    const sent = toTripDraft(fresh())
+    for (const q of sent.points) assert.ok(!('stop' in q), `unexpected stop key: ${JSON.stringify(q)}`)
+  })
   })
 
   it('a local trip has no hotel and no advance, whatever the form says', () => {
@@ -519,15 +677,17 @@ describe('the day you are back at the start', () => {
     assert.equal(ret!.arrive, '')
   })
 
-  it('sends the return arrival to the server, and only for the return point', () => {
-    // Every other point's arrival is the server's own answer, read off the
-    // legs. Sending ours back would have the planner arguing with it.
+  it('sends every arrival that was typed, on every point', () => {
+    // It used to send only the return point's: every other arrival was the
+    // server's own calculation and sending ours back would have had the
+    // planner arguing with it. The planner asks for them now, so they go.
     let d = newPlannerDraft({ scope: 'domestic', origin: 'PRE_APPROVED', lastWorkday: '2026-10-09' }, ctx())
     d = { ...d, points: d.points.map(p => (p.ret ? { ...p, arrive: '2026-10-17' } : { ...p, arrive: '2026-10-14' })) }
-    const payload = toTripDraft(d)
-    const sent = payload.points as { arrive?: string; ret?: true }[]
+    const sent = toTripDraft(d).points as { arrive?: string; ret?: true }[]
     assert.equal(sent.find(p => p.ret)?.arrive, '2026-10-17')
-    assert.equal(sent.filter(p => !p.ret).every(p => p.arrive === undefined), true)
+    // The start has no arrival to send — you begin there — and syncDraft
+    // clears it; every other point sends what was typed.
+    assert.equal(sent[1].arrive, '2026-10-14')
   })
 
   it('drops the arrival when the trip stops coming back', () => {
@@ -563,7 +723,44 @@ describe('the day you are back at the start', () => {
       segs: [{ mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: {} }, { mode: 'flight', bookedBy: 'desk', vehicleId: null, xfer: {} }],
     }, ctx())
     assert.equal(reopened.points.find(p => p.ret)?.arrive, '2026-10-17')
-    // The middle point's arrival was the server's calculation, not an answer.
-    assert.equal(reopened.points[1].arrive, undefined)
+    // And the middle point's, which used to be dropped as the server's own
+    // calculation and is now an answer the traveller can give.
+    assert.equal(reopened.points[1].arrive, '2026-10-14')
+  })
+})
+
+describe('one mode for every journey', () => {
+  const twoLegs = () => syncDraft({ ...fresh(), points: [
+    { place: 'a', pt: '', what: '', leave: '2026-04-16' },
+    { place: 'b', pt: '', what: '', leave: '' },
+    { place: 'a', pt: '', what: '', leave: '', ret: true as const },
+  ] }, ctx())
+
+  it('gives every journey the same mode', () => {
+    const d = applyModeToAll(twoLegs(), 'train', '')
+    assert.ok(d.segs.length >= 2)
+    assert.deepEqual([...new Set(d.segs.map(s => s.mode))], ['train'])
+  })
+
+  it('carries the vehicle for own, and clears it for anything else', () => {
+    const own = applyModeToAll(twoLegs(), 'own', 'VEH-1')
+    assert.deepEqual([...new Set(own.segs.map(s => s.vehicleId))], ['VEH-1'])
+    const train = applyModeToAll(own, 'train', '')
+    assert.deepEqual([...new Set(train.segs.map(s => s.vehicleId))], [''])
+  })
+
+  it('leaves who books each journey alone', () => {
+    // A flight out booked by the desk and a train back booked by the traveller
+    // is a real trip. Applying a mode must not quietly rewrite that answer.
+    const start = twoLegs()
+    const mixed = { ...start, segs: start.segs.map((s, i) => ({ ...s, bookedBy: (i === 0 ? 'desk' : 'self') as 'desk' | 'self' })) }
+    const after = applyModeToAll(mixed, 'train', '')
+    assert.deepEqual(after.segs.map(s => s.bookedBy), mixed.segs.map(s => s.bookedBy))
+  })
+
+  it('counts what is not already that mode, so the offer can hide itself', () => {
+    const d = twoLegs()
+    assert.equal(journeysUnlike(applyModeToAll(d, 'train', ''), 'train'), 0)
+    assert.ok(journeysUnlike(applyModeToAll(d, 'train', ''), 'flight') > 0)
   })
 })

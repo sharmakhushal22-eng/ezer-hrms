@@ -136,9 +136,10 @@
 .ess-icon-btn:hover { color: var(--ez-critical); border-color: var(--ez-critical-edge, var(--ez-line-strong)); background: var(--ez-critical-tint); }
 
 /* ── Top bar: the same glass ─────────────────────────────────────────────── */
+/* Solid, not frosted: page headings scrolled under an 80% glass bar stayed readable through it
+   and looked like text overlapping the menus. */
 .ess-top {
-  background: var(--ess-glass-strong);
-  backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  background: var(--ez-surface);
   border-bottom: 1px solid var(--ess-hair);
 }
 .ess-crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--ess-ink-3); white-space: nowrap; }

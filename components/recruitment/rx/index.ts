@@ -9,6 +9,7 @@ export { StageRiver } from './StageRiver';
 export { RxDialog } from './Overlay';
 export { RxToastProvider, useRxToast } from './Toast';
 export * from './cards';
+export * from './ApprovalTracker';
 export * from './form';
 export { DashboardView } from './views/DashboardView';
 export { MrfListView } from './views/MrfListView';

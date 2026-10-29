@@ -37,6 +37,7 @@ import '@/lib/ui/recruitment.redesign.css'
 // one icon and one meter would be a real cost.
 import { Icon } from '@/components/recruitment/rx/icons'
 import { LaneMeter } from '@/components/recruitment/rx/form'
+import { useWizardBody } from '@/components/recruitment/rx/logic/hooks'
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 //
@@ -435,7 +436,7 @@ export function mrfToForm(m: any): Record<string, any> {
   }
 }
 
-export default function MrfForm({ employeeId, onDone, onCancel, notify, initial, replaceId, readOnly, viewRow, onApprove, onReject, onRevise, actionBusy }: {
+export default function MrfForm({ employeeId, onDone, onCancel, notify, initial, replaceId, readOnly, viewRow, onApprove, onReject, onRevise, actionBusy, canDecide = true }: {
   employeeId: string
   onDone: () => void
   onCancel: () => void
@@ -445,10 +446,17 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   // ── read-only approval mode ──
   readOnly?: boolean                     // show the requisition filled but non-editable
   viewRow?: any | null                   // the MRF row being reviewed (its raiser gives the locked fields)
+  // The three decision buttons only SAY which decision was picked. The host
+  // (recruitment page) opens its decision dialog, which collects the remark,
+  // asks for confirmation and posts to /api/ess/mrf — the server checks that
+  // the caller is the approver the chain is waiting on. `note` is always ''
+  // from here; it stays in the signature for older hosts.
   onApprove?: () => void
   onReject?: (note: string) => void
   onRevise?: (note: string) => void      // "send back for revision"
   actionBusy?: boolean
+  /** Read-only mode: false hides the decision buttons (the viewer is not the pending approver). */
+  canDecide?: boolean
 }) {
   const [form, setForm] = useState<any>({ ...EMPTY, ...(initial || {}) })
   const [done, setDone] = useState<null | { id: string; mrf_number?: string; confidential?: boolean }>(null)   // success screen after submit
@@ -460,8 +468,6 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   const [auto, setAuto] = useState<any>(null)   // raiser autofill bundle
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [sbOpen, setSbOpen] = useState(false)   // send-back note box (read-only mode)
-  const [sbNote, setSbNote] = useState('')
   // Confidential hiring is the HR Head's alone — the toggle shows only when the raiser holds
   // HR_HEAD (the server checks the same thing). See lib/recruitment/confidential.ts.
   const [canConfidential, setCanConfidential] = useState(false)
@@ -602,6 +608,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   const [stepIdx, setStepIdx] = useState(0)
   const [maxSeen, setMaxSeen] = useState(0)
   const step = Math.min(stepIdx, STEPS.length - 1)
+  // Stable height + scroll-to-top-of-form on step change (see useWizardBody).
+  const wiz = useWizardBody(step)
   const activeId = STEPS[step].id
   const blocked = STEPS[step].gate?.() ?? null
   // Counts PRESENCE requirements only. Counting every gate read "1 of 5 done"
@@ -717,14 +725,22 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   function raiseAnother() {
     setForm({ ...EMPTY, raised_by_name: auto?.name || '', raised_by_role: auto?.role || '' })
     setReplaceRef(null); setDone(null)
+    setStepIdx(0); setMaxSeen(0)   // a fresh requisition starts at step 1, not on the last step
     reserveMrfNumber()   // a fresh number for the next requisition
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
+    showFormTop()
+  }
+  // Bring the form's own top (the stepper) into view — not the window's top,
+  // which is the portal header, nowhere near the form.
+  function showFormTop() {
+    if (typeof window === 'undefined') return
+    setTimeout(() => wiz.topRef.current?.scrollIntoView({ block: 'start' }), 0)
   }
   // Go back to editing the just-submitted one — on the next submit it is scrapped and a
   // corrected requisition is submitted in its place.
   function resubmit() {
     setReplaceRef(done?.id || null); setDone(null)
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
+    setStepIdx(0); setMaxSeen(STEPS.length - 1)   // every step was filled already — all reachable
+    showFormTop()
   }
 
   if (loading) return <div style={{ fontSize: 13, color: C.muted, padding: '10px 0' }}>Loading form…</div>
@@ -750,7 +766,11 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   )
 
   return (
-    <div className="ez-mrf" style={{ border: `1px solid ${TK.line}`, borderRadius: 20, padding: '20px 22px', marginBottom: 12, background: TK.surface, boxShadow: E.raised }}>
+    <div className="ez-mrf" style={{ border: `1px solid ${TK.line}`, borderRadius: 20, padding: '20px 22px', marginBottom: 12, background: TK.surface, boxShadow: E.raised }}
+      // Enter in a single-line field never submits or skips a step. There is no
+      // <form> here today, but this keeps it that way if one is ever added, and
+      // it stops Enter on a focused Next/Submit from double-firing via keyup.
+      onKeyDown={e => { const t = e.target as HTMLElement; if (e.key === 'Enter' && t.tagName === 'INPUT' && (t as HTMLInputElement).type !== 'checkbox') e.preventDefault() }}>
       {/* :focus and ::placeholder cannot be expressed inline, and this form
           cannot reach a stylesheet — recruitment.redesign.css is imported by
           one layout and the ESS side imports no CSS at all. One scoped block,
@@ -765,7 +785,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
 .ez-mrf input::placeholder,.ez-mrf textarea::placeholder{color:${TK.faint}}`}</style>
       {readOnly && (
         <div style={{ fontSize: 12.5, color: C.ink, background: C.greenBg, border: `1px solid ${C.green}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10, fontWeight: 600 }}>
-          Reviewing this requisition — read only. Use the buttons at the bottom to Approve, Send back, or Reject.
+          {canDecide ? 'Reviewing this requisition — read only. Use the buttons at the bottom to Approve, Send back, or Reject.' : 'Viewing this requisition — read only.'}
         </div>
       )}
       <div style={{ pointerEvents: readOnly ? 'none' : undefined }}>
@@ -799,8 +819,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
           declared inside this one would remount its subtree every render and
           steal focus from whatever field is being typed into. */}
       {!readOnly && (
-        <nav className="rx-fnav" aria-label="Form steps"
-          style={{ position: 'static', top: 'auto', flexDirection: 'row', flexWrap: 'wrap', gap: 4, margin: '12px 0 14px' }}>
+        <div ref={wiz.topRef} tabIndex={-1} className="rx-wiz-top" aria-label={`Step ${step + 1} of ${STEPS.length}: ${STEPS[step].title}`}>
+        <nav className="rx-fnav rx-fnav-row" aria-label="Form steps" style={{ margin: '12px 0 14px' }}>
           <div className="rx-row" style={{ width: '100%', justifyContent: 'space-between', margin: '2px 4px 8px' }}>
             <span className="rx-label">Step {step + 1} of {STEPS.length}</span>
             <span className="rx-meta rx-num">{requiredDone} of {requiredTotal} required done</span>
@@ -822,7 +842,14 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
             )
           })}
         </nav>
+        </div>
       )}
+
+      {/* The step body keeps the height of the tallest step seen so far, so a
+          short step after a long one does not collapse the card and drag the
+          page up to the MRF list underneath. */}
+      <div className="rx-wiz-body" style={readOnly ? undefined : { minHeight: wiz.minHeight || undefined }}>
+      <div ref={readOnly ? undefined : wiz.bodyRef}>
 
       {/* 1 · Requisition Meta */}
       {(readOnly || activeId === 'meta') && (<>
@@ -1090,34 +1117,24 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       <div style={{ fontSize: 12, color: C.faint }}>Files can be attached from the Recruitment module once the MRF is created.</div>
       </>)}
 
+      </div></div>{/* end step body */}
       </div>{/* end read-only body wrapper */}
 
       {/* Footer */}
-      {readOnly ? (
-        <div style={{ marginTop: 16 }}>
-          {sbOpen && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Remark — what should the raiser fix?</div>
-              <textarea autoFocus value={sbNote} onChange={e => setSbNote(e.target.value)} placeholder="e.g. Budget looks high for this grade — please revise the range." style={{ ...st.input, minHeight: 64, resize: 'vertical' }} />
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {sbOpen ? (
-              <>
-                <button type="button" style={st.btnO} disabled={actionBusy} onClick={() => { setSbOpen(false); setSbNote('') }}>← Back</button>
-                <button type="button" style={{ ...st.btn, background: C.amber, marginLeft: 'auto' }} disabled={actionBusy || !sbNote.trim()} onClick={() => onRevise?.(sbNote.trim())}>{actionBusy ? 'Sending…' : 'Send back for revision'}</button>
-              </>
-            ) : (
-              <>
-                <button type="button" style={{ ...st.btnO, borderColor: C.red, color: C.red }} disabled={actionBusy} onClick={() => onReject?.(sbNote)}>Reject</button>
-                <button type="button" style={{ ...st.btnO, borderColor: C.amberEdge, color: C.amber }} disabled={actionBusy} onClick={() => setSbOpen(true)}>↩ Send back</button>
-                <button type="button" style={{ ...st.btn, background: C.green, marginLeft: 'auto' }} disabled={actionBusy} onClick={() => onApprove?.()}>{actionBusy ? 'Approving…' : 'Approve'}</button>
-              </>
-            )}
+      {readOnly ? (!canDecide ? null :
+        // Sticky, so the decision is reachable without scrolling the whole
+        // read-only form. Reject used to fire on the first click with an empty
+        // remark; every button now hands over to the host's decision dialog.
+        <div className="rx-wiz-foot" style={{ ['--rx-wiz-bg' as string]: TK.surface }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button type="button" style={{ ...st.btnO, borderColor: C.redEdge, color: C.red }} disabled={actionBusy} onClick={() => onReject?.('')}>Reject…</button>
+            <button type="button" style={{ ...st.btnO, borderColor: C.amberEdge, color: C.amber }} disabled={actionBusy} onClick={() => onRevise?.('')}>↩ Send back…</button>
+            <button type="button" style={{ ...st.btn, marginLeft: 'auto' }} disabled={actionBusy} onClick={() => onApprove?.()}>{actionBusy ? 'Working…' : 'Approve…'}</button>
           </div>
         </div>
       ) : (
-        <div style={{ marginTop: 22, paddingTop: 18, borderTop: `1px solid ${C.border}` }}>
+        // Sticky: Back / Next stay on screen however long the step is.
+        <div className="rx-wiz-foot" style={{ ['--rx-wiz-bg' as string]: TK.surface }}>
           {/* Why Next is refusing, said beside the button rather than only in a
               toast — the toast is fired by goNext() for anyone who clicks. */}
           {blocked && (
