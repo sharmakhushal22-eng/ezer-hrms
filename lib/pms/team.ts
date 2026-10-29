@@ -235,6 +235,24 @@ export interface FinaliseRow<T extends TeamMember = TeamMember> extends QueueRow
    * accounts for the final review itself being done.
    */
   precedingDone: boolean
+  /**
+   * May the finaliser CHOOSE a rating yet — as opposed to settle one?
+   *
+   * THE TWO WERE THE SAME CONTROL AND THAT WAS THE BUG. The rating select
+   * was disabled on canFinalise, which is false until the final-review
+   * one-to-one is on record. So a HOD with every other gate satisfied saw a
+   * dead dropdown and read it, reasonably, as "I am not allowed to rate".
+   *
+   * It also put the cycle in the wrong order. The final review is the
+   * conversation ABOUT the rating; being made to log it before deciding the
+   * number asks somebody to minute a meeting they have not had the
+   * conclusion of yet.
+   *
+   * So: choose on precedingDone, log once a number is chosen, settle once
+   * the log exists. Same three gates the database enforces, in the order a
+   * person would actually do them.
+   */
+  canChoose: boolean
   /** What to do instead when it cannot. Null when it can. */
   insteadDo: string | null
 }
@@ -357,7 +375,10 @@ export function finaliseQueue<T extends TeamMember>(
       ...r,
       // 199's gates added. Without them this said yes to a row with no RM
       // rating at all, and the function would have accepted it.
-      canFinalise: allowed && precedingDone && !needsFinalReview
+      canFinalise: allowed && precedingDone && !needsFinalReview,
+      // Choosing is not settling: the number can be picked as soon as the
+      // chain ahead is clear, which is what makes the final review loggable.
+      canChoose: allowed && precedingDone
                    && !r.member.finalised,
       precedingDone,
       insteadDo,

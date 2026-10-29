@@ -380,9 +380,14 @@ export default function Performance({ employeeId }: { employeeId: string }) {
 
   useEffect(() => {
     (async () => {
+      // COUNTED THE SAME WAY THE ROSTER IS SELECTED. It asked for direct
+      // reportees only while the roster behind the tab now returns everyone
+      // whose chain names this person — so a HOD saw "My team (5)" over a
+      // list of eighteen. The label and the list have to be the same
+      // question or one of them is wrong.
       const { count: reportees } = await supabase
         .from('employees').select('id', { count: 'exact', head: true })
-        .or(`l1_manager_id.eq.${employeeId},l2_manager_id.eq.${employeeId}`)
+        .or(`l1_manager_id.eq.${employeeId},l2_manager_id.eq.${employeeId},hod_id.eq.${employeeId}`)
         .is('date_of_leaving', null)
 
       // departments.hod_employee_id arrives with 067. Until then only the
@@ -1243,9 +1248,26 @@ function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') 
       // them out.
       .select('employee_id,workflow_status,self_score,rm_l1_score,rm_l2_score,final_rating,rm_l1_id,rm_l2_id,hod_id,employment_flag,chain_stage,sent_back_to,sent_back_reason,published_at,employee_ack')
       .eq('period_id', period.id)
+    /**
+     * EVERYONE WHOSE CHAIN NAMES ME, not just the two RM rungs.
+     *
+     * hod_id was missing, and that is why a HOD could not finalise. The
+     * manager roster feeds KRA Approval & One-to-One, which is where rating
+     * and approving now happen — and ChainApprovals shows a row only when
+     * `chainStage === rungFor(member, viewerId)`. rungFor has always
+     * returned 'HOD'; the row never arrived for it to say so.
+     *
+     * MEASURED on Kiran Patel (STC9022): HOD on 13 appraisals, RM L1/L2 on
+     * 3, and all 13 invisible here — including Divya Singh, sitting at his
+     * HOD rung with every preceding gate satisfied. He had no screen that
+     * could rate her.
+     *
+     * The department scope is not a substitute: it exists for the HOD's own
+     * tabs, and the approval queue does not live there.
+     */
     const { data } = as === 'hod'
       ? await q.eq('hod_id', employeeId)
-      : await q.or(`rm_l1_id.eq.${employeeId},rm_l2_id.eq.${employeeId}`)
+      : await q.or(`rm_l1_id.eq.${employeeId},rm_l2_id.eq.${employeeId},hod_id.eq.${employeeId}`)
     if (!data?.length) { setRows([]); setLoading(false); return }
 
     const ids = data.map(d => d.employee_id)

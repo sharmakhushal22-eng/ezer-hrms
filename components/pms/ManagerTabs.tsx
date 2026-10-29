@@ -2113,7 +2113,13 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                     {r.member.finalised
                       ? <span className="pill p-green">{r.member.finalRating} · finalised</span>
                       : <select aria-label={`Final rating for ${r.member.name}`}
-                                disabled={!r.canFinalise}
+                                /* canCHOOSE, not canFinalise. The two were
+                                   the same control, so a HOD whose only
+                                   outstanding gate was the final-review log
+                                   saw a dead dropdown and read it as "I am
+                                   not allowed to rate". Choosing the number
+                                   is what makes the log worth writing. */
+                                disabled={!r.canChoose}
                                 value={picked[r.member.employeeId] ?? ''}
                                 onChange={e => setPicked(p => ({ ...p,
                                   [r.member.employeeId]: Number(e.target.value) }))}>
@@ -2168,11 +2174,26 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
                            requires precedingDone rather than disabling this —
                            a dead control would replace the sentence naming who
                            is still outstanding. */
-                        <button className="btn sm" type="button"
-                                disabled={!onLogFinalReview || saving}
-                                onClick={() => onLogFinalReview?.(r.member.employeeId)}>
-                          Log final review
-                        </button>
+                        /* THE RATING COMES FIRST. The final review is the
+                           conversation ABOUT the rating, so logging it
+                           before one is chosen minutes a meeting whose
+                           conclusion has not been reached. Requested
+                           directly, and it also turns the old dead-end into
+                           a sequence: choose, log, settle. */
+                        <div style={{ display: 'grid', gap: 4 }}>
+                          <button className="btn sm" type="button"
+                                  disabled={!onLogFinalReview || saving
+                                            || !picked[r.member.employeeId]}
+                                  onClick={() => onLogFinalReview?.(r.member.employeeId)}>
+                            Log final review
+                          </button>
+                          {!picked[r.member.employeeId] && (
+                            <span className="k">
+                              Choose the rating first — this records the
+                              conversation about it.
+                            </span>
+                          )}
+                        </div>
                       ) : <span className="k">{r.insteadDo}</span>}
                   </td>
                 </tr>
