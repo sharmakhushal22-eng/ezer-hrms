@@ -227,11 +227,18 @@ test('the publish list is narrowed before any count or control is computed', () 
   const admin = read('components/pms/AdminTabs.tsx')
   const tab = admin.slice(admin.indexOf('export function PublishTab'),
                           admin.indexOf('// ── the whole company, on one screen'))
+  // The chain is scoped → settled → waiting/done. `settled` was inserted
+  // between them when the queue stopped listing appraisals the chain had
+  // not finished; every count and control still hangs off the narrowed set,
+  // which is what this test is actually about.
   const scoped = tab.indexOf('const scoped = company ===')
-  for (const after of ['const waiting = scoped.filter', 'const done = scoped.filter',
+  const settled = tab.indexOf('const settled = scoped.filter')
+  assert.ok(settled > scoped && settled > 0,
+    'the settled set is not derived from the scoped one')
+  for (const after of ['const waiting = settled.filter', 'const done = settled.filter',
                        'const member = scoped.find']) {
     const at = tab.indexOf(after)
-    assert.ok(at > scoped && at > 0, `${after} is not derived from the scoped set`)
+    assert.ok(at > scoped && at > 0, `${after} is not derived from the narrowed set`)
   }
 })
 

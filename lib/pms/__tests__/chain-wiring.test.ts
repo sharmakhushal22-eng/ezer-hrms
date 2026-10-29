@@ -211,8 +211,14 @@ test('HR cannot change a rating or a KRA from the publish screen', () => {
   // What has NOT moved is the number. HR writes the words beside the rating
   // and releases it; the rating belongs to the chain, and 188's guards would
   // refuse one from here anyway.
+  // COMMENTS STRIPPED FIRST. The rule is about what the code writes, and
+  // the code that enforces it has to be able to SAY "final_rating" while
+  // explaining itself — which is exactly how this broke: a comment
+  // describing why final_rating is the marker for a settled result read as
+  // the workspace writing one.
   const tab = ADMIN.slice(ADMIN.indexOf('export function PublishTab'),
                           ADMIN.indexOf('// ── the whole company, on one screen'))
+    .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ')
   assert.ok(tab.length > 1000, 'could not isolate the publish workspace')
   assert.ok(!/type="number"/.test(tab),
     'the publish workspace offers a numeric input — HR must not set a rating')

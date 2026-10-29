@@ -871,8 +871,31 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
     ? rows.filter(r => optedIn.has(r.companyName ?? ''))
     : rows.filter(r => (r.companyName ?? '') === (company ?? ''))
 
-  const waiting = scoped.filter(r => !r.published)
-  const done = scoped.filter(r => r.published)
+  /**
+   * A RESULT HAS TO EXIST BEFORE IT CAN BE PUBLISHED.
+   *
+   * This listed every enrolment in the period that was not already
+   * published — which is almost all of them. MEASURED on the live database:
+   * 392 rows in "waiting to publish", of which 2 had a final rating. 386
+   * were NOT_STARTED. The card calls itself "finalised by the chain and now
+   * with you" and it was mostly people the chain had not begun with.
+   *
+   * That is not only noise. It is the one screen whose entire job is "which
+   * results are ready", answered with a list in which 99.5% of the rows are
+   * not — so the two that were ready were unfindable, and every count above
+   * the table was wrong.
+   *
+   * final_rating is the marker because pms_finalise is what sets it; a
+   * published row always has one, and the `|| r.published` keeps a
+   * hypothetical published row with a null rating visible rather than
+   * vanishing it from the record.
+   */
+  const settled = scoped.filter(r => r.finalRating !== null || r.published)
+  const waiting = settled.filter(r => !r.published)
+  const done = settled.filter(r => r.published)
+  /** Counted, not listed. Saying nothing about them would make a shrunken
+   *  list look like data loss to somebody who saw the old one. */
+  const stillInChain = scoped.length - settled.length
   const member = scoped.find(r => r.employeeId === picked) ?? null
 
   // Seeded from the row, so re-picking somebody shows what is actually on
@@ -940,10 +963,14 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
       </div>
 
       <Card title={`Waiting to publish (${waiting.length})`}
-            sub="Finalised by the chain and now with you.">
+            sub={`Finalised by the chain and now with you.${
+              stillInChain ? ` ${stillInChain} other${stillInChain === 1 ? ' appraisal is' : ' appraisals are'}`
+                + ' still with the chain and will appear here once settled.' : ''}`}>
         {!waiting.length
           ? <Empty what="Nothing is waiting"
-                   why="A rating reaches this list once the last approver in the chain has settled it." />
+                   why={stillInChain
+                     ? `A rating reaches this list once the last approver in the chain has settled it. ${stillInChain} ${stillInChain === 1 ? 'appraisal is' : 'appraisals are'} still in the chain.`
+                     : 'A rating reaches this list once the last approver in the chain has settled it.'} />
           : (
             <div className="tblwrap">
               <table>
