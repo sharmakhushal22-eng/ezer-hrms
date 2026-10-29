@@ -27,7 +27,7 @@ import { teamQueue, finaliseQueue, teamStats, distribution,
 import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
          DEFAULT_BANDS, type Band, type Line } from '@/lib/pms/scoring'
-import { canPublishResult, CONFIRM_LABEL, CONFIRM_WHY,
+import { canPublishResult, CONFIRM_LABEL, CONFIRM_SHORT, CONFIRM_WHY,
          type Log, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
@@ -332,7 +332,7 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
           if (rejecting[id]) {
             return (
               <td>
-                <div style={{ display: 'grid', gap: 4, minWidth: 220 }}>
+                <div style={{ display: 'grid', gap: 4, width: 230, maxWidth: '100%' }}>
                   <div className="k">
                     This goes <b>{rejectDestination(chain, myStage, held)}</b>.
                   </div>
@@ -365,7 +365,7 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
 
           return (
             <td>
-              <div style={{ display: 'grid', gap: 4, minWidth: 180 }}>
+              <div style={{ display: 'grid', gap: 5, width: 200, maxWidth: '100%' }}>
                 {finalises && (
                   <input type="number" step="0.01" min={lo} max={hi}
                          placeholder={`Final rating (${lo}–${hi})`}
@@ -378,14 +378,26 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
                     disabled rather than hiding it, so the manager can see the
                     confirmation stands rather than wondering whether it
                     saved. */}
-                <label style={{ display: 'flex', gap: 7, alignItems: 'flex-start',
+                {/* SHORT LABEL, FULL SENTENCE IN THE TITLE. The assertion is
+                    a sentence and belongs in full on a form; in the action
+                    column of a ten-column queue it forced the table wider
+                    than its container and the whole thing scrolled sideways.
+
+                    minWidth: 0 on the text is what actually lets it wrap: a
+                    flex child will not shrink below its content's intrinsic
+                    width without it, so the cell grew instead of the words
+                    breaking. */}
+                <label title={CONFIRM_LABEL[myStage as ConfirmStage]}
+                        style={{ display: 'flex', gap: 7, alignItems: 'flex-start',
                                 cursor: alreadyConfirmed ? 'default' : 'pointer',
-                                lineHeight: 1.5 }}>
-                  <input type="checkbox" style={{ marginTop: 2, flex: '0 0 auto' }}
+                                lineHeight: 1.45 }}>
+                  <input type="checkbox" style={{ marginTop: 1, flex: '0 0 auto' }}
                          checked={alreadyConfirmed || !!confirmed[id]}
                          disabled={alreadyConfirmed}
                          onChange={e => setConfirmed(p => ({ ...p, [id]: e.target.checked }))} />
-                  <span className="k">{CONFIRM_LABEL[myStage as ConfirmStage]}</span>
+                  <span className="k" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                    {CONFIRM_SHORT[myStage as ConfirmStage]}
+                  </span>
                 </label>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <button className="btn sm" type="button"
@@ -503,7 +515,7 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
             return (
               <td>
                 {!valid ? (
-                  <div style={{ display: 'grid', gap: 4, minWidth: 180 }}>
+                  <div style={{ display: 'grid', gap: 5, width: 200, maxWidth: '100%' }}>
                     <input placeholder="What they need to change"
                            aria-label={`Reason for sending ${r.member.name}'s KRAs back`}
                            value={reason[r.member.employeeId] ?? ''}

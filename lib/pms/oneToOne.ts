@@ -130,6 +130,25 @@ export const CONFIRM_LABEL: Record<ConfirmStage, string> = {
   HOD:      'I have held the final review one-to-one with this employee.',
 }
 
+/**
+ * The same assertion, short enough for a table cell.
+ *
+ * CONFIRM_LABEL is a full sentence because it is what the person is
+ * asserting, and that belongs on a form where there is room for it. Dropped
+ * into the action column of a ten-column queue it forced the table wider than
+ * its container and the whole thing scrolled sideways — so the queue gets
+ * three words and carries the full sentence as its title.
+ *
+ * The record is unaffected either way: what lands in discussion_points is
+ * autoLogFor's text, not the label.
+ */
+export const CONFIRM_SHORT: Record<ConfirmStage, string> = {
+  EMPLOYEE: 'One-to-one held',
+  RM_L1:    'One-to-one held',
+  RM_L2:    'Discussed with them',
+  HOD:      'Final review held',
+}
+
 /** Why it cannot be skipped, for the line under the checkbox. */
 export const CONFIRM_WHY: Record<ConfirmStage, string> = {
   EMPLOYEE: 'Your weightages cannot be locked until both of you confirm it, and nothing can be rated until they are locked.',

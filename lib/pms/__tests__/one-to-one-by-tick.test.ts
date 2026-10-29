@@ -14,7 +14,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { autoLogFor, CONFIRM_STAGES, CONFIRM_LABEL, CONFIRM_WHY,
+import { autoLogFor, CONFIRM_STAGES, CONFIRM_LABEL, CONFIRM_SHORT, CONFIRM_WHY,
          DISCUSSION_TYPES } from '../oneToOne.ts'
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
@@ -155,4 +155,64 @@ test('the detailed view is read-only', () => {
   for (const bad of ['<input', '<textarea', '<select', 'onChange']) {
     assert.ok(!v.includes(bad), `the detail view offers ${bad}`)
   }
+})
+
+// ── the checkbox has to fit where it is put ──────────────────────────────
+
+test('the queue uses the SHORT label, not the full sentence', () => {
+  // REPORTED: the checkbox content overflowed. CONFIRM_LABEL is a full
+  // sentence — right on a form, and in the action column of a ten-column
+  // queue it forced the table wider than its container, so the whole table
+  // scrolled sideways.
+  // Anchored on the label element, not on a fixed window after mayApprove —
+  // the first version sliced 3000 characters from that declaration and the
+  // JSX it was looking for sits further down, so it failed against correct
+  // code.
+  const i = MGR.indexOf('title={CONFIRM_LABEL[myStage as ConfirmStage]}')
+  assert.ok(i > 0, 'the full assertion is no longer available as the title')
+  const cell = MGR.slice(i, i + 900)
+  assert.match(cell, /CONFIRM_SHORT\[myStage as ConfirmStage\]/,
+    'the queue renders the full sentence in a table cell')
+  // Short enough to mean it: a label over ~24 characters defeats the purpose.
+  for (const [k, v] of Object.entries(CONFIRM_SHORT)) {
+    assert.ok(v.length <= 24, `CONFIRM_SHORT.${k} is ${v.length} chars — too long for a cell`)
+  }
+})
+
+test('both checkbox labels can actually wrap', () => {
+  // THE REAL CAUSE, in both places: a flex child will not shrink below its
+  // content's intrinsic width without min-width: 0, so a long sentence pushes
+  // its container instead of breaking. Neither label had it.
+  for (const [file, src] of [['ManagerTabs', MGR], ['EmployeeTabs', EMP]] as const) {
+    const i = src.indexOf("alignItems: 'flex-start'")
+    assert.ok(i > 0, `${file}: could not find the checkbox label`)
+    const label = src.slice(i, i + 700)
+    assert.match(label, /minWidth: 0/,
+      `${file}: the label's text is a flex child with no minWidth: 0, so it cannot wrap`)
+    assert.match(label, /flex: '0 0 auto'/,
+      `${file}: the checkbox itself is not pinned, so it will squash`)
+  }
+})
+
+test('the action cell is bounded, not merely given a minimum', () => {
+  // minWidth alone lets the cell grow without limit, which is what widened
+  // the table. A width caps it and lets the text wrap inside.
+  // BOTH action cells. The first attempt at this fix replaced by string and
+  // the two cells turned out to have different indentation, so it bounded the
+  // Finalise queue's cell and left the one actually holding the checkbox
+  // unbounded — the reported bug, untouched, with a passing-looking edit.
+  assert.ok(!/minWidth: 180/.test(MGR),
+    'an action cell still only sets a minimum width, so it can widen the table')
+  const bounded = MGR.match(/display: 'grid', gap: 5, width: 200, maxWidth: '100%'/g) ?? []
+  assert.equal(bounded.length, 2,
+    `expected both action cells bounded, found ${bounded.length}`)
+})
+
+test('no block element is nested inside an inline one', () => {
+  // The employee's label had a <div> inside a <span> — invalid markup that
+  // browsers paper over differently, and one of the ways it differs is layout.
+  const i = EMP.indexOf("alignItems: 'flex-start'")
+  const label = EMP.slice(i, i + 700)
+  assert.ok(!/<span>\s*\n?\s*<b>[\s\S]{0,200}<div/.test(label),
+    'a div is nested inside a span in the checkbox label')
 })

@@ -505,10 +505,16 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
               <input type="checkbox" checked={!!confirmOneToOne}
                      style={{ marginTop: 3, flex: '0 0 auto' }}
                      onChange={e => onConfirmOneToOne(e.target.checked)} />
-              <span>
+              {/* A div, not a span: it contains a block, and a block inside
+                  an inline element is invalid markup that browsers paper over
+                  differently. minWidth: 0 is what lets it wrap at all — a flex
+                  child will not shrink below its content's intrinsic width
+                  without it, so a long sentence pushed the card instead of
+                  breaking. */}
+              <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                 <b>{CONFIRM_LABEL.EMPLOYEE}</b>
                 <div className="k" style={{ marginTop: 4 }}>{CONFIRM_WHY.EMPLOYEE}</div>
-              </span>
+              </div>
             </label>
           </div>
         )}
