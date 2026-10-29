@@ -20,6 +20,8 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { ratingTone, toneVars, TONE_LOW, TONE_MID, TONE_HIGH,
          DEFAULT_BANDS, type Band } from '../scoring.ts'
 
@@ -188,5 +190,46 @@ test('the mix never exceeds a hundred percent', () => {
   for (let v = 0; v <= 6; v += 0.1) {
     const t = ratingTone(v, DEFAULT_BANDS)!
     assert.ok(t.mix >= 0 && t.mix <= 100, `${v} gives mix ${t.mix}`)
+  }
+})
+
+// ── the ramp's endpoints are FILLS, not text colours ─────────────────────
+
+test('the ramp does not reuse the text-contrast tokens for its stops', () => {
+  // MEASURED ON THE RUNNING PANEL, sweeping all five ratings. The semantic
+  // tokens are chosen for contrast as TEXT and both of the ones this ramp
+  // wanted are too dark and too desaturated to blend:
+  //
+  //   --ez-warning  #B45309  a dark orange-brown; the midpoint read brown
+  //   --ez-positive #047857  a dark teal; rating 4 landed on #8D9749, khaki
+  //
+  // The ramp was red, orange, yellow, OLIVE, green — and the olive is the
+  // one a reviewer would have called broken. These stops are fills: the
+  // card's text sits on a 9% wash of them, never on the colour itself, so
+  // they are free to be bright.
+  const css = readFileSync(join(process.cwd(), 'components/pms/pms.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  const root = css.slice(css.indexOf('.pms {'), css.indexOf('}', css.indexOf('.pms {')))
+  assert.match(root, /--pms-ramp-mid:\s*#EAB308/i,
+    'the midpoint is not the bright yellow — it will read brown in daylight')
+  assert.match(root, /--pms-ramp-high:\s*#16A34A/i,
+    'the top stop is not the bright green — rating 4 will land on khaki')
+  for (const dull of ['--pms-ramp-mid:  var(--ez-warning)',
+                      '--pms-ramp-high: var(--ez-positive)']) {
+    assert.ok(!root.includes(dull), `${dull} reintroduces the muddy blend`)
+  }
+})
+
+test('both themes define every ramp stop they override', () => {
+  // A stop defined only in the light block keeps its daylight value on a
+  // dark card, which is the exact bug the tokens exist to prevent.
+  const css = readFileSync(join(process.cwd(), 'components/pms/pms.css'), 'utf8')
+  const darkBlocks = css.split(/:root\[data-ez-theme="dark"\]|prefers-color-scheme: dark/).slice(1)
+  assert.ok(darkBlocks.length >= 2, 'the dark overrides moved')
+  for (const b of darkBlocks) {
+    const head = b.slice(0, 900)
+    for (const stop of ['--pms-ramp-mid', '--pms-ramp-high']) {
+      assert.ok(head.includes(stop), `${stop} has no dark value`)
+    }
   }
 })

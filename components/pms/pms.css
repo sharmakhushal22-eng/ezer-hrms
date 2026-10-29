@@ -57,7 +57,14 @@
    * the theme. */
   --pms-ramp-low:  var(--ez-critical);
   --pms-ramp-mid:  #EAB308;
-  --pms-ramp-high: var(--ez-positive);
+  /* The top stop cannot be --ez-positive either, for the same reason as the
+   * middle one. #047857 is a dark desaturated teal picked for 5.48:1 as
+   * TEXT; blending yellow into it lands rating 4 on #8D9749, a drab khaki.
+   * MEASURED on the running panel across all five ratings — the ramp was
+   * red, orange, yellow, OLIVE, green, and the olive is the one a reviewer
+   * would have called broken. A brighter fill green keeps 4 a true
+   * yellow-green. */
+  --pms-ramp-high: #16A34A;
 
   font-size: 13px;
   line-height: 1.5;
@@ -88,6 +95,7 @@
     --pms-exit-bg:         rgba(249,115,22,.18);
   /* Brighter on a dark ground, as every other state token is. */
   --pms-ramp-mid:        #FBBF24;
+  --pms-ramp-high:       #34D399;
   }
 }
 :root[data-ez-theme="dark"] .pms {
@@ -99,6 +107,7 @@
   --pms-exit-bg:         rgba(249,115,22,.18);
   /* Brighter on a dark ground, as every other state token is. */
   --pms-ramp-mid:        #FBBF24;
+  --pms-ramp-high:       #34D399;
 }
 
 /* ── tabs ─────────────────────────────────────────────────────────────── */
@@ -551,7 +560,11 @@
  * of looking for the row of chips with none selected. */
 .pms .kcard {
   border-left: 3px solid var(--ez-line);
-  transition: border-left-color .2s ease, background .2s ease;
+  /* border-COLOR, not border-left-color. The whole frame carries the score
+   * now, and transitioning one edge meant that on a rating change the left
+   * stripe eased while the other three snapped — caught mid-sweep as four
+   * sides briefly disagreeing. */
+  transition: border-color .2s ease, background .2s ease;
 }
 
 /* ── THE SCORE, AS COLOUR ──────────────────────────────────────────────────
@@ -572,6 +585,12 @@
  * point of a ramp somebody is meant to read at a glance. */
 .pms .kcard.scored {
   --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  /* THE WHOLE BORDER, not just the stripe. Reported twice: the block's
+   * frame is what reads as "the colour of this KRA", and while only the
+   * left edge carried the score the frame was saying something else —
+   * first rust, then blue. All four edges now, with the left one still
+   * heavier so the ramp is legible when the card is folded to one line. */
+  border-color: var(--kra-tone);
   border-left-color: var(--kra-tone);
   /* A WASH, NOT A FILL. 9% keeps every one of --ez-ink, --ez-ink-soft and
    * --ez-muted legible on top of it; a saturated card would make the KRA
@@ -587,26 +606,28 @@
  * card would have looked identical. So blocking moved to the ring, which
  * the score never uses, and the stripe keeps saying what was scored. */
 .pms .kcard.needs {
-  /* THREE SIDES, NOT THE SHORTHAND. `border-color` sets all four edges
-   * including the left one — which is the score stripe — so a blocked card
-   * rated 1, 2 or 3 all came out the same amber and the ramp was invisible
-   * exactly where it mattered most. Measured in the browser: three
-   * different ratings, one identical rgb(180,83,9).
+  /* NOTHING ON THE CARD'S BORDER. Twice now a blocking marker has been put
+   * on the frame and twice it has contradicted the score: --ez-warning read
+   * as a red box around an outstanding rating, and --ez-info then read as a
+   * blue one. The frame belongs to the score. Full stop.
    *
-   * AND BLUE, NOT AMBER. Reported: "at best rating the border of the KRA
-   * block is red." It was — --ez-warning resolves to #B45309 in daylight, a
-   * rust that reads as red, wrapped around the whole card. So a KRA scored
-   * at the TOP of the scale but still missing its reason showed a green
-   * stripe inside a red frame, and the frame wins at a glance.
-   *
-   * The rule that fixes it, and that anything added here later has to obey:
-   * RED, YELLOW AND GREEN BELONG TO THE SCORE AND TO NOTHING ELSE on this
-   * card. "Needs a reason" is not a judgement about the work — it is an
-   * errand — so it takes a hue the ramp never reaches. */
-  border-top-color: var(--ez-info);
-  border-right-color: var(--ez-info);
-  border-bottom-color: var(--ez-info);
-  box-shadow: 0 0 0 1px var(--ez-info);
+   * So the blocked state marks THE FIELD THAT IS EMPTY instead, which is
+   * also the more useful place for it: the reviewer is pointed at the box
+   * they have to type in rather than at the card as a whole. The word
+   * "needs a reason" is in the card head, the jump chip is lit, the
+   * progress bar carries a count and the action bar lists it — this is the
+   * fifth signal, not the only one. */
+  background: color-mix(in oklab, var(--kra-tone) 9%, var(--ez-surface));
+}
+.pms .kcard.needs textarea.why {
+  border-color: var(--ez-info);
+  box-shadow: 0 0 0 3px var(--ez-info-tint);
+}
+.pms .kcard.needs textarea.why::placeholder { color: var(--ez-info); opacity: 1; }
+/* And the word in the head stops being muted grey, since it is now the
+ * card-level signal rather than a caption next to a coloured ring. */
+.pms .kcard.needs .khead .fold {
+  color: var(--ez-info); font-weight: 800;
 }
 /* Rated but not yet scored on the ramp — no goal id, so no rating can be
  * written at all. Neutral rather than green: nothing was judged. */

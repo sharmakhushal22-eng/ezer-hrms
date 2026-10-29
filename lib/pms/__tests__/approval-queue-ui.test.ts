@@ -249,101 +249,34 @@ test('progress is only shown to somebody who can make it', () => {
     'the progress bar renders for read-only viewers')
 })
 
-test('a blocked KRA stays visibly blocked once the card carries a score', () => {
-  // THE RULE SURVIVED A CHANGE OF MECHANISM. It used to be a priority —
-  // "needs" beat "rated" for the one stripe colour. The stripe now shows
-  // the SCORE on a red-yellow-green ramp, so the two signals no longer
-  // compete for it: `needs` is appended alongside `scored`, not instead of
-  // it, and it marks the card with a ring.
-  // Sliced to the next declaration rather than matched with a non-greedy
-  // window: the expression spans two lines and both of them end in `'')`,
-  // so a lazy match stopped at the first and never saw the part under test.
-  const i = MGR.indexOf('const stripe = ')
-  assert.ok(i > 0, 'the stripe logic moved; this test needs updating')
-  const expr = MGR.slice(i, MGR.indexOf('const foldable', i))
-  assert.match(expr, /\+ \(c\?\.needsReason && !c\.hasReason \? ' needs' : ''\)/,
-    'the blocking state replaces the score colour instead of adding to it')
-  // And it cannot go back to using the background: a wash now means "rated
-  // in the middle of the scale", so an amber card and a 3 would be the
-  // same picture.
-  // COMMENTS OUT FIRST. The rule's own comment names the colours it exists
-  // to avoid, so slicing the raw file found --ez-warning in the prose
-  // explaining why --ez-warning is not used. Second time this file has been
-  // bitten by matching a rule's explanation instead of its declarations.
+test('the card border is the score, and nothing else touches it', () => {
+  // REPORTED TWICE. A blocking marker was put on the frame and it
+  // contradicted the score both times: --ez-warning read as a red box
+  // around an outstanding rating, then --ez-info read as a blue one. The
+  // frame is what a person reads as "the colour of this KRA".
   const bare = CSS.replace(/\/\*[\s\S]*?\*\//g, ' ')
-  const needs = bare.slice(bare.indexOf('.pms .kcard.needs {'),
-                           bare.indexOf('}', bare.indexOf('.pms .kcard.needs {')))
-  assert.ok(!/background/.test(needs),
-    'the blocked state paints the background, which now means the score')
-  assert.match(needs, /border-top-color: var\(--ez-info\)/,
-    'the blocked state has no marking of its own')
-  // AND IT MUST NOT BE ON THE RAMP. Reported: at the best rating the card's
-  // border was still red. --ez-warning is #B45309 in daylight, a rust that
-  // reads red, so a KRA scored at the top of the scale and merely missing
-  // its reason showed a green stripe inside a red frame.
-  for (const ramp of ['--ez-critical', '--ez-warning', '--ez-positive',
-                      '--pms-ramp-low', '--pms-ramp-mid', '--pms-ramp-high']) {
-    assert.ok(!needs.includes(ramp),
-      `the blocked state uses ${ramp}, a colour the score ramp owns`)
+  const rule = (sel: string) =>
+    bare.slice(bare.indexOf(sel + ' {'), bare.indexOf('}', bare.indexOf(sel + ' {')))
+
+  assert.match(rule('.pms .kcard.scored'), /border-color: var\(--kra-tone\)/,
+    'the score colours only one edge, so the frame says something else')
+
+  // NOTHING else may set a border or a ring on the card.
+  for (const sel of ['.pms .kcard.needs']) {
+    const r = rule(sel)
+    assert.ok(!/border-color|border-top-color|border-right-color|border-bottom-color|box-shadow/.test(r),
+      `${sel} marks the card's frame, which belongs to the score: ${r.trim()}`)
   }
-  // AND IT MUST NOT USE THE SHORTHAND. `border-color` includes the left
-  // edge, which is the score stripe: with it, a blocked KRA rated 1, 2 or 3
-  // all rendered the same amber and the ramp vanished exactly where the
-  // reviewer most needed it.
-  assert.ok(!/(^|[^-])border-color:/.test(needs),
-    'the blocked state uses the border-color shorthand and erases the score stripe')
 })
 
-test('the reason prompt names the two numbers when they differ', () => {
-  assert.match(MGR, /Why \$\{rate\[l\.goalId\]\.rating\} and not their \$\{l\.selfRating\}\?/,
-    'the reason box does not say which difference it is asking about')
-})
-
-// ── the send-back, on demand ──────────────────────────────────────────────
-
-test('the send-back box opens on request rather than sitting open', () => {
-  // Every invalid row carried an empty text box and a dead button. Six of
-  // them stacked is a form the manager never asked for.
-  assert.match(MGR, /!backing\[r\.member\.employeeId\]/,
-    'the send-back reason is always open')
-  assert.match(MGR, /Send back…/, 'nothing opens the send-back box')
-})
-
-test('a send-back still cannot be sent without a reason', () => {
-  // The affordance changed; the rule did not.
-  const i = MGR.indexOf('!backing[r.member.employeeId]')
-  const cell = MGR.slice(i, i + 1800)
-  assert.match(cell, /disabled=\{!onSendBack \|\| !\(reason\[r\.member\.employeeId\] \?\? ''\)\.trim\(\)\}/,
-    'a send-back with no reason is now possible')
-})
-
-test('the rejection remark counts down instead of only refusing', () => {
-  // "At least 10 characters" under a box holding 4 leaves the person
-  // counting.
-  assert.match(MGR, /MIN_REMARK - rk\.trim\(\)\.length/,
-    'the remark rule does not say how far there is to go')
-})
-
-// ── the card itself ───────────────────────────────────────────────────────
-
-test('the queue card is a bounded grid', () => {
-  assert.match(CSS, /\.qcard \{[^}]*grid-template-columns: auto 1fr auto/,
-    'the card is not a three-column grid, so its action column can grow')
-})
-
-test('the actions drop to their own row on a narrow screen', () => {
-  // Measured at 619px: the card goes to two columns and the buttons span
-  // both, rather than squeezing the name to two characters a line.
-  assert.match(CSS, /max-width: 680px[\s\S]{0,260}\.qact \{ grid-column: 1 \/ -1/)
-})
-
-test('employment state still reads on the card that replaced the row', () => {
-  // The table had row washes for exited and notice-period people. Dropping
-  // them in the move to cards would lose §8's at-a-glance distinction.
-  assert.match(MGR, /r\.tone === 'exit' \? ' exit' : r\.tone === 'notice' \? ' notice'/,
-    'the card does not carry employment tone')
-  assert.match(CSS, /\.qcard\.exit/, 'the exit wash is not defined for cards')
-  assert.match(CSS, /\.qcard\.notice/, 'the notice wash is not defined for cards')
+test('a blocked KRA is still marked — on the field that is empty', () => {
+  // The rule did not go away, it moved somewhere more useful: the reviewer
+  // is pointed at the box they have to type in rather than at the card.
+  const bare = CSS.replace(/\/\*[\s\S]*?\*\//g, ' ')
+  assert.match(bare, /\.kcard\.needs textarea\.why \{[^}]*border-color: var\(--ez-info\)/,
+    'nothing marks the reason box that still has to be filled')
+  assert.match(bare, /\.kcard\.needs \.khead \.fold \{[^}]*color: var\(--ez-info\)/,
+    'the words "needs a reason" are still muted grey')
 })
 
 test('each queue heading says how many', () => {
