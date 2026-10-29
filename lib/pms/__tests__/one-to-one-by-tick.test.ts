@@ -21,6 +21,7 @@ const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 const PERF = read('components/ess/Performance.tsx')
 const MGR = read('components/pms/ManagerTabs.tsx')
 const EMP = read('components/pms/EmployeeTabs.tsx')
+const CSS = read('components/pms/pms.css')
 
 test('the employee and RM L1 land on the SAME row', () => {
   // One conversation, two acknowledgements — which is exactly what
@@ -118,11 +119,17 @@ test('rejecting does NOT require a confirmation', () => {
   // Sending a set back with a remark is not a claim that a conversation
   // happened, and demanding one would stop a manager returning an obviously
   // wrong set until they had held a meeting about it.
-  const cell = MGR.slice(MGR.indexOf('if (rejecting[id])'),
-                         MGR.indexOf('if (rejecting[id])') + 1800)
-  assert.ok(cell.length > 500, 'could not isolate the rejection branch')
+  // The branch used to be an early `if (rejecting[id]) return <td>…`
+  // returning a table cell. The approval queue is cards now, so it is a
+  // conditional block inside one — same rule, different anchor.
+  const i = MGR.indexOf('{rejecting[id] && (')
+  assert.ok(i > 0, 'could not find the rejection branch')
+  const cell = MGR.slice(i, i + 1800)
   assert.ok(!/mayApprove|confirmed\[id\]/.test(cell),
     'the rejection path is gated on the one-to-one confirmation')
+  // And it still refuses without a remark the employee can act on.
+  assert.match(cell, /remarkOk\(rk\)/,
+    'the rejection no longer requires a remark')
 })
 
 test('each stage is recorded as its own stage', () => {
@@ -217,9 +224,20 @@ test('the action cell is bounded, not merely given a minimum', () => {
   // unbounded — the reported bug, untouched, with a passing-looking edit.
   assert.ok(!/minWidth: 180/.test(MGR),
     'an action cell still only sets a minimum width, so it can widen the table')
+  // ONE OF THE TWO LEFT THE TABLE. The approval queue is cards now, so its
+  // actions sit in a grid column of .qcard rather than a <td>, where an
+  // unbounded width cannot widen anything — the card's middle column is 1fr
+  // and absorbs the space, and under 680px the actions drop to their own
+  // row. What is asserted for it is that it is still inside that grid.
   const bounded = MGR.match(/display: 'grid', gap: 5, width: 200, maxWidth: '100%'/g) ?? []
-  assert.equal(bounded.length, 2,
-    `expected both action cells bounded, found ${bounded.length}`)
+  assert.equal(bounded.length, 1,
+    `expected the remaining table action cell bounded, found ${bounded.length}`)
+  assert.match(MGR, /<div className="qact">/,
+    'the approval actions are no longer in the card grid column')
+  assert.match(CSS, /\.qcard \{[^}]*grid-template-columns: auto 1fr auto/,
+    'the queue card is not a three-column grid, so its action column can grow')
+  assert.match(CSS, /max-width: 680px[\s\S]{0,220}\.qact \{ grid-column: 1 \/ -1/,
+    'the actions do not drop to their own row on a narrow screen')
 })
 
 test('no block element is nested inside an inline one', () => {

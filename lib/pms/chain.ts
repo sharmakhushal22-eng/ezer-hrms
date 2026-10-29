@@ -49,6 +49,23 @@ export const STAGE_LABEL: Record<Stage, string> = {
 }
 
 /**
+ * The same stages named in two or three characters, for drawing the chain
+ * itself rather than describing where something sits.
+ *
+ * STAGE_LABEL is a sentence — "With RM L1" — which is right in a status cell
+ * and wrong repeated five times across a track, where the words "With" and
+ * "the" are four fifths of the pixels and none of the information.
+ */
+export const STAGE_SHORT: Record<Stage, string> = {
+  EMPLOYEE: 'Employee',
+  RM_L1:    'RM L1',
+  RM_L2:    'RM L2',
+  HOD:      'HOD',
+  HR:       'HR',
+  DONE:     'Done',
+}
+
+/**
  * The rungs an appraisal passes through for one chain, in order, HR last.
  *
  * The employee is not a rung: they are where it starts and where a first

@@ -20,9 +20,9 @@
 // reason is printed on the row, rather than left as a colour somebody has to
 // know how to read.
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import './pms.css'
-import { teamQueue, finaliseQueue, teamStats, distribution,
+import { teamQueue, finaliseQueue, teamStats, distribution, initials,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
 import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
@@ -33,7 +33,8 @@ import { canPublishResult, CONFIRM_LABEL, CONFIRM_WHY,
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
 import { approvalFinalises, mayReject, rejectDestination, remarkOk, MIN_REMARK,
-         rungFor, heldBy } from '@/lib/pms/chain'
+         rungFor, heldBy, rungs, nextRung, STAGE_SHORT,
+         type Stage } from '@/lib/pms/chain'
 import { humanDate } from '@/lib/pms/cycle'
 import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
@@ -124,11 +125,21 @@ function ExitBanner({ rows }: { rows: QueueRow[] }) {
   )
 }
 
-function QueueTable({ rows, extraHead, extraCell, empty, rules = DEFAULT_RULES }: {
+function QueueTable({ rows, extraHead, extraCell, empty, rules = DEFAULT_RULES,
+                     grouped }: {
   rows: QueueRow[]
   extraHead?: React.ReactNode
   extraCell?: (r: QueueRow) => React.ReactNode
   empty: string
+  /**
+   * Inside a GroupedQueue, where every row in the table is stuck on the same
+   * thing and the group's own heading has already said what that is.
+   *
+   * Drops the "What is owed" column, which would otherwise repeat one
+   * sentence down the whole table — the deadline note that shared that cell
+   * moves under the name, where a last working day belongs anyway.
+   */
+  grouped?: boolean
   /** Only used to colour the weightage cell, but it still has to be the
    *  POLICY's total: on a policy with total_weightage 80, a correct set would
    *  otherwise render red against the hardcoded 100. */
@@ -142,13 +153,13 @@ function QueueTable({ rows, extraHead, extraCell, empty, rules = DEFAULT_RULES }
             <th>Code</th><th>Employee</th><th>Employment</th>
             <th className="num">KRAs</th><th className="num">Wt</th>
             <th>1-on-1</th><th>Self</th><th className="num">Self score</th>
-            <th>What is owed</th>
+            {!grouped && <th>What is owed</th>}
             {extraHead}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={extraHead ? 10 : 9}
+            <tr><td colSpan={(extraHead ? 10 : 9) - (grouped ? 1 : 0)}
                     style={{ textAlign: 'center', padding: '22px 14px' }}>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Nobody here yet</div>
               <div className="k">{empty}</div>
@@ -157,7 +168,18 @@ function QueueTable({ rows, extraHead, extraCell, empty, rules = DEFAULT_RULES }
             <tr key={r.member.employeeId}
                 className={r.tone === 'exit' ? 'exitrow' : r.tone === 'notice' ? 'noticerow' : undefined}>
               <td>{r.member.code}</td>
-              <td style={{ fontWeight: 600 }}>{r.member.name}</td>
+              <td style={{ fontWeight: 600 }}>
+                {r.member.name}
+                {/* The deadline rides with the person in grouped mode. It
+                    shared a cell with "what is owed", and that cell is gone
+                    — losing it would hide the one thing on this screen that
+                    genuinely cannot wait. */}
+                {grouped && r.priorityNote && (
+                  <div className="k" style={{ color: 'var(--ez-warning)', fontWeight: 600 }}>
+                    {r.priorityNote}
+                  </div>
+                )}
+              </td>
               <td><FlagPill r={r} /></td>
               <td className="num">{r.member.kraCount}</td>
               <td className="num">
@@ -172,16 +194,147 @@ function QueueTable({ rows, extraHead, extraCell, empty, rules = DEFAULT_RULES }
                 ? <span className="pill p-green">submitted</span>
                 : <span className="pill p-amber">waiting</span>}</td>
               <td className="num">{r.member.selfScore === null ? '-' : r.member.selfScore.toFixed(2)}</td>
-              <td className="k">
-                {r.next}
-                {r.priorityNote && <><br /><b>{r.priorityNote}</b></>}
-              </td>
+              {!grouped && (
+                <td className="k">
+                  {r.next}
+                  {r.priorityNote && <><br /><b>{r.priorityNote}</b></>}
+                </td>
+              )}
               {extraCell?.(r)}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+/**
+ * WHERE THIS SET IS IN THE CHAIN, drawn.
+ *
+ * The module's entire subject is a chain and no manager screen ever drew one.
+ * An approver has two questions the queue could not answer — who looked at
+ * this before me, and who gets it when I let go — and both were answerable
+ * only by knowing the policy by heart.
+ *
+ * Built from the rungs somebody actually OCCUPIES, not the policy's list: on
+ * a collapsed reporting line RM L2 is empty for 190 of 395 enrolments, and
+ * drawing a rung that will be skipped tells the approver their set goes
+ * somewhere it will not.
+ */
+function ChainTrack({ chain, held, now }: {
+  chain: Chain
+  held: (s: Stage) => boolean
+  /** The rung holding it — rendered as "you", because on this card it is. */
+  now: Stage
+}) {
+  const steps: Stage[] = ['EMPLOYEE', ...rungs(chain).filter(held)]
+  const at = steps.indexOf(now)
+  return (
+    <div className="track" aria-label="Where this sits in the approval chain">
+      {steps.map((s, i) => (
+        <Fragment key={s}>
+          {i > 0 && <span className="sep" aria-hidden="true">›</span>}
+          <span className={i < at ? 'n done' : i === at ? 'n now' : 'n'}>
+            {i === at ? `${STAGE_SHORT[s]} · you` : STAGE_SHORT[s]}
+          </span>
+        </Fragment>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The four things that decide whether a set can move, as four marks.
+ *
+ * They were four columns of a ten-column table — KRAS, WT, 1-ON-1, SELF —
+ * which is the right shape for comparing people and the wrong one for
+ * checking a person. Each mark says what it IS rather than merely being
+ * green: a row of bare ticks makes somebody hover every one to find the
+ * single one that is wrong.
+ */
+function ReadyChecks({ r, rules }: { r: QueueRow; rules: Rules }) {
+  const m = r.member
+  const countOk = m.kraCount >= rules.minKra && m.kraCount <= rules.maxKra
+  const wtOk = m.totalWeightage === rules.totalWeightage
+  const marks: { cls: string; mark: string; text: string }[] = [
+    { cls: countOk ? 'on' : 'bad', mark: countOk ? '✓' : '!',
+      text: `${m.kraCount} KRA${m.kraCount === 1 ? '' : 's'}` },
+    { cls: wtOk ? 'on' : 'bad', mark: wtOk ? '✓' : '!',
+      text: `Weightage ${m.totalWeightage}` },
+    { cls: m.selfSubmitted ? 'on' : 'off', mark: m.selfSubmitted ? '✓' : '○',
+      text: m.selfSubmitted ? 'Self rating in' : 'Self rating waiting' },
+    { cls: m.oneToOneDone ? 'on' : 'off', mark: m.oneToOneDone ? '✓' : '○',
+      text: m.oneToOneDone ? 'One-to-one logged' : 'One-to-one not yet' },
+  ]
+  return (
+    <div className="checks">
+      {marks.map(x => (
+        <span key={x.text} className={`chk ${x.cls}`}>
+          <span className="m" aria-hidden="true">{x.mark}</span>{x.text}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * ROWS THAT ARE ALL STUCK ON THE SAME THING, said once.
+ *
+ * Observed on the live screen: eight people in "Waiting on the discussion",
+ * every one of them carrying the identical sentence "No KRAs written yet.
+ * They cannot be rated at all until there are." That is the sentence printed
+ * eight times and read none — and it crowded out the rows that said
+ * something different, which were the only ones worth finding.
+ *
+ * Grouping is on r.next, which teamQueue already computes as the single
+ * thing owed on that row. The first sentence of it becomes the heading and
+ * the rest becomes the explanation, so the wording stays owned by team.ts
+ * rather than being restated here and drifting.
+ *
+ * ORDER IS PRESERVED. teamQueue sorts by whose deadline cannot move; taking
+ * groups in order of first appearance keeps the most urgent group first
+ * instead of re-sorting by something arbitrary like group size.
+ */
+function GroupedQueue({ rows, rules, empty, extraHead, extraCell }: {
+  rows: QueueRow[]
+  rules: Rules
+  empty: string
+  extraHead?: React.ReactNode
+  extraCell?: (r: QueueRow) => React.ReactNode
+}) {
+  if (!rows.length) {
+    return <QueueTable rows={rows} rules={rules} empty={empty}
+                       extraHead={extraHead} extraCell={extraCell} />
+  }
+  const groups: { key: string; rows: QueueRow[] }[] = []
+  for (const r of rows) {
+    const g = groups.find(x => x.key === r.next)
+    if (g) g.rows.push(r)
+    else groups.push({ key: r.next, rows: [r] })
+  }
+  return (
+    <>
+      {groups.map(g => {
+        // Split on the first sentence end. A sentence that has no full stop
+        // becomes the heading whole, which is the right fallback: better a
+        // long heading than an empty one.
+        const cut = g.key.indexOf('. ')
+        const head = cut < 0 ? g.key : g.key.slice(0, cut + 1)
+        const why = cut < 0 ? '' : g.key.slice(cut + 2)
+        return (
+          <div className="qgroup" key={g.key}>
+            <div className="ghead">
+              <span className="gt">{head}</span>
+              <span className="gn">{g.rows.length}</span>
+              {why && <span className="gw">{why}</span>}
+            </div>
+            <QueueTable grouped rows={g.rows} rules={rules} empty={empty}
+                        extraHead={extraHead} extraCell={extraCell} />
+          </div>
+        )
+      })}
+    </>
   )
 }
 
@@ -295,37 +448,67 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
   if (!viewerId || !rows.length) return null
 
   return (
-    <Card title="Waiting on your approval"
+    <Card title={`Waiting on your approval · ${rows.length}`}
           sub="Sets that have reached your rung. Approving passes them up the chain; the last rung settles the rating.">
-      <QueueTable
-        rules={rules}
-        rows={rows}
-        empty="Nothing is with you for approval."
-        extraHead={<th>Approval</th>}
-        extraCell={r => {
-          const id = r.member.employeeId
-          const myStage = rungFor(r.member, viewerId)!
-          // The HOLDERS, not just the policy's chain. On a collapsed line
-          // (190 of 395 enrolments) RM L2 is unfilled, so an RM L1's approval
-          // finalises rather than passing the set up — and the button has to
-          // say so and ask for the rating the database will demand.
-          const held = heldBy(r.member)
-          const finalises = approvalFinalises(chain, myStage, held)
-          const canReject = mayReject(myStage)
-          // Already on record: RM L1's tick completes the KRA one-to-one the
-          // employee started, so for them "confirmed" means the row carries
-          // the manager's half. The later rungs have their own rows.
-          const alreadyConfirmed = myStage === 'RM_L1'
-            ? r.member.oneToOneDone === true
-            : myStage === 'HOD' ? r.member.finalReviewMgrAcked === true
-            : r.member.rmL2ConfirmedOneToOne === true
-          const mayApprove = alreadyConfirmed || !!confirmed[id]
-          const rk = remark[id] ?? ''
+      {rows.map(r => {
+        const id = r.member.employeeId
+        const myStage = rungFor(r.member, viewerId)!
+        // The HOLDERS, not just the policy's chain. On a collapsed line
+        // (190 of 395 enrolments) RM L2 is unfilled, so an RM L1's approval
+        // finalises rather than passing the set up — and the button has to
+        // say so and ask for the rating the database will demand.
+        const held = heldBy(r.member)
+        const finalises = approvalFinalises(chain, myStage, held)
+        const canReject = mayReject(myStage)
+        // Already on record: RM L1's tick completes the KRA one-to-one the
+        // employee started, so for them "confirmed" means the row carries
+        // the manager's half. The later rungs have their own rows.
+        const alreadyConfirmed = myStage === 'RM_L1'
+          ? r.member.oneToOneDone === true
+          : myStage === 'HOD' ? r.member.finalReviewMgrAcked === true
+          : r.member.rmL2ConfirmedOneToOne === true
+        const rk = remark[id] ?? ''
 
-          if (rejecting[id]) {
-            return (
-              <td>
-                <div style={{ display: 'grid', gap: 4, width: 230, maxWidth: '100%' }}>
+        return (
+          <div key={id}
+               className={`qcard${r.tone === 'exit' ? ' exit' : r.tone === 'notice' ? ' notice' : ''}`}>
+            <div className="ava" aria-hidden="true">{initials(r.member.name)}</div>
+
+            <div style={{ minWidth: 0 }}>
+              <div className="nm" style={BREAK}>{r.member.name}</div>
+              <div className="meta">
+                <span>{r.member.code}</span>
+                <FlagPill r={r} />
+                {/* The number this rung is reacting to. It was a column
+                    headed SELF SCORE five cells from the name; here it sits
+                    with the person it belongs to. */}
+                {r.member.selfScore !== null && (
+                  <span>Self score <b style={{ color: 'var(--ez-ink)' }}>
+                    {r.member.selfScore.toFixed(2)}</b></span>
+                )}
+              </div>
+
+              <ReadyChecks r={r} rules={rules} />
+              <ChainTrack chain={chain} held={held} now={myStage} />
+
+              <div className="k" style={{ marginTop: 9, lineHeight: 1.6, ...BREAK }}>
+                {r.next}
+                {r.priorityNote && <> <b>{r.priorityNote}</b></>}
+                {/* WHAT APPROVING DOES, on the card rather than in a
+                    paragraph under the table. "Approve" means two different
+                    things one rung apart — passing it up, or settling the
+                    rating for good — and only one of them is reversible. */}
+                {' '}
+                {finalises
+                  ? <b>Yours is the last review: approving settles the rating.</b>
+                  : <>Approving sends it to <b>{STAGE_SHORT[nextRung(chain, myStage, held) ?? 'HR']}</b>.</>}
+              </div>
+
+              {rejecting[id] && (
+                <div style={{ display: 'grid', gap: 6, marginTop: 10,
+                              padding: 10, borderRadius: 10,
+                              background: 'var(--ez-critical-tint)',
+                              border: '1px solid var(--ez-critical-edge)' }}>
                   <div className="k">
                     This goes <b>{rejectDestination(chain, myStage, held)}</b>.
                   </div>
@@ -333,8 +516,8 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
                          aria-label={`Reason for rejecting ${r.member.name}'s appraisal`}
                          value={rk}
                          onChange={e => setRemark(p => ({ ...p, [id]: e.target.value }))} />
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button className="btn ghost sm" type="button"
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="btn red sm" type="button"
                             disabled={!onReject || !remarkOk(rk)}
                             onClick={() => { onReject?.(id, rk)
                                              setRejecting(p => ({ ...p, [id]: false })) }}>
@@ -344,50 +527,48 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
                             onClick={() => setRejecting(p => ({ ...p, [id]: false }))}>
                       Cancel
                     </button>
+                    {/* COUNTS DOWN rather than only refusing. "At least 10
+                        characters" under a box with 4 in it leaves the
+                        person counting; the number says how far there is to
+                        go and disappears when there is none. */}
+                    {!remarkOk(rk) && (
+                      <span className="k" style={{ alignSelf: 'center' }}>
+                        {MIN_REMARK - rk.trim().length} more character
+                        {MIN_REMARK - rk.trim().length === 1 ? '' : 's'} — they read this.
+                      </span>
+                    )}
                   </div>
-                  {!remarkOk(rk) && (
-                    <div className="k">
-                      At least {MIN_REMARK} characters. The database refuses a
-                      rejection without a reason.
-                    </div>
-                  )}
                 </div>
-              </td>
-            )
-          }
+              )}
+            </div>
 
-          return (
-            <td>
-              <div style={{ display: 'grid', gap: 5, width: 200, maxWidth: '100%' }}>
-                {/* APPROVING MOVED INTO THE PANEL. It needs this rater's
-                    score on every KRA — 199 will not let the next rung settle
-                    anything without it — and a per-KRA rating cannot live in
-                    a table cell. Rejecting stays here: it needs a remark, not
-                    ratings, and a manager returning an obviously wrong set
-                    should not have to score it first. */}
-                <button className="btn sm" type="button"
-                        disabled={!onOpenKras}
-                        onClick={() => onOpenKras?.(id)}>
-                  {alreadyConfirmed ? 'Review & send on' : 'Review, rate & approve'}
+            <div className="qact">
+              {/* APPROVING MOVED INTO THE PANEL. It needs this rater's score
+                  on every KRA — 199 will not let the next rung settle
+                  anything without it — and a per-KRA rating cannot live in a
+                  table cell. Rejecting stays here: it needs a remark, not
+                  ratings, and a manager returning an obviously wrong set
+                  should not have to score it first. */}
+              <button className="btn" type="button"
+                      disabled={!onOpenKras}
+                      onClick={() => onOpenKras?.(id)}>
+                {alreadyConfirmed ? 'Review & send on' : 'Review, rate & approve'}
+              </button>
+              {canReject && !rejecting[id] && (
+                <button className="btn ghost sm" type="button"
+                        disabled={!onReject}
+                        onClick={() => setRejecting(p => ({ ...p, [id]: true }))}>
+                  Send back
                 </button>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {canReject && (
-                    <button className="btn ghost sm" type="button"
-                            disabled={!onReject}
-                            onClick={() => setRejecting(p => ({ ...p, [id]: true }))}>
-                      Reject
-                    </button>
-                  )}
-                </div>
-              </div>
-            </td>
-          )
-        }} />
+              )}
+            </div>
+          </div>
+        )
+      })}
       <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
-        A rejection goes back one rung, never straight to the employee from
-        halfway up — and it needs a reason, which they see. You can change their
-        KRAs or ratings before approving; every change is logged against your
-        name.
+        Sending back goes one rung, never straight to the employee from halfway
+        up — and it needs a reason, which they see. You can change their KRAs or
+        ratings before approving; every change is logged against your name.
       </div>
     </Card>
   )
@@ -429,6 +610,8 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
   onAcknowledgeFinalReview?: (id: string) => void
 }) {
   const [reason, setReason] = useState<Record<string, string>>({})
+  /** Which rows have opened the send-back box. See the cell below. */
+  const [backing, setBacking] = useState<Record<string, boolean>>({})
   const rows = teamQueue(members, today, flagRules)
     .filter(r => !r.member.selfSubmitted || !r.member.oneToOneDone)
   // Logged by the employee, still waiting on this manager's half. Not merged
@@ -456,9 +639,9 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
                       onApprove={onApprove} onReject={onSendBack}
                       onOpenKras={onOpenKras} bands={bands} />
       {kraDetail}
-      <Card title="Waiting on the discussion"
-            sub="Sets to check, and the one-to-ones that lock them.">
-        <QueueTable
+      <Card title={`Waiting on the discussion · ${rows.length}`}
+            sub="Sets to check, and the one-to-ones that lock them. Grouped by what each one is waiting for.">
+        <GroupedQueue
           rules={rules}
           rows={rows}
           empty="Every set is settled and locked."
@@ -470,16 +653,39 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
             return (
               <td>
                 {!valid ? (
+                  // ON DEMAND, not always open. Every invalid row carried an
+                  // empty text box and a dead button: six of them stacked is
+                  // a form the manager has not asked for, and a disabled
+                  // control with no explanation reads as broken rather than
+                  // as waiting. Same reveal as the approval card's send-back,
+                  // so the two behave alike.
                   <div style={{ display: 'grid', gap: 5, width: 200, maxWidth: '100%' }}>
-                    <input placeholder="What they need to change"
-                           aria-label={`Reason for sending ${r.member.name}'s KRAs back`}
-                           value={reason[r.member.employeeId] ?? ''}
-                           onChange={e => setReason(p => ({ ...p, [r.member.employeeId]: e.target.value }))} />
-                    <button className="btn ghost sm" type="button"
-                            disabled={!onSendBack || !(reason[r.member.employeeId] ?? '').trim()}
-                            onClick={() => onSendBack?.(r.member.employeeId, reason[r.member.employeeId])}>
-                      Send back
-                    </button>
+                    {!backing[r.member.employeeId] ? (
+                      <button className="btn ghost sm" type="button"
+                              disabled={!onSendBack}
+                              onClick={() => setBacking(p => ({ ...p, [r.member.employeeId]: true }))}>
+                        Send back…
+                      </button>
+                    ) : (
+                      <>
+                        <input placeholder="What they need to change"
+                               autoFocus
+                               aria-label={`Reason for sending ${r.member.name}'s KRAs back`}
+                               value={reason[r.member.employeeId] ?? ''}
+                               onChange={e => setReason(p => ({ ...p, [r.member.employeeId]: e.target.value }))} />
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                          <button className="btn sm" type="button"
+                                  disabled={!onSendBack || !(reason[r.member.employeeId] ?? '').trim()}
+                                  onClick={() => onSendBack?.(r.member.employeeId, reason[r.member.employeeId])}>
+                            Send back
+                          </button>
+                          <button className="btn ghost sm" type="button"
+                                  onClick={() => setBacking(p => ({ ...p, [r.member.employeeId]: false }))}>
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ) : !r.member.oneToOneDone ? (
                   <button className="btn sm" type="button" disabled={!onAcknowledge}
@@ -496,7 +702,7 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
         </div>
       </Card>
       {finalRows.length > 0 && (
-        <Card title="Final review one-to-ones waiting on you"
+        <Card title={`Final review one-to-ones waiting on you · ${finalRows.length}`}
               sub="They have logged the conversation. The rating cannot be settled until you confirm it happened.">
           <QueueTable
             rules={rules}
@@ -764,6 +970,28 @@ export function KraDetail({ member, lines, loading, onClose,
   return (
     <Card title={`${member.name} — ${member.code}`}
           sub={`The KRA form as they filled it. ${lines?.length ?? 0} KRAs, weightage ${total}, ${rated} self-rated.`}>
+      {/* HOW FAR THROUGH THIS IS, pinned so it is still there at the fourth
+          KRA. The only progress signal used to be the blocker banner at the
+          very bottom — which means the answer to "how much is left" was
+          below the thing you were asking it about. Rendered only while there
+          is rating to do: a read-only viewer has no progress to make. */}
+      {myRung && onApprove && cmp.total > 0 && (
+        <div className="ratebar">
+          <div className="lead">
+            {cmp.rated === cmp.total
+              ? <>All {cmp.total} rated <span className="sm">· check the comparison below</span></>
+              : <>{cmp.rated} of {cmp.total} rated <span className="sm">· {cmp.total - cmp.rated} to go</span></>}
+          </div>
+          <div className={`bar${cmp.rated === cmp.total ? ' green' : ''}`}>
+            <span style={{ width: `${(cmp.rated / cmp.total) * 100}%` }} />
+          </div>
+          {cmp.missingReasons.length > 0 && (
+            <span className="pill p-amber">
+              {cmp.missingReasons.length} need{cmp.missingReasons.length === 1 ? 's' : ''} a reason
+            </span>
+          )}
+        </div>
+      )}
       {loading || lines === null ? <div className="k">Loading their form…</div>
         : !lines.length ? (
           <div style={{ padding: '18px 14px', textAlign: 'center' }}>
@@ -772,8 +1000,18 @@ export function KraDetail({ member, lines, loading, onClose,
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
-            {lines.map(l => (
-              <div key={l.seqNo} className="card" style={{ margin: 0 }}>
+            {lines.map(l => {
+              // The line's own place in the comparison, so the card can show
+              // its state without each piece re-deriving it.
+              const c = l.goalId ? cmp.lines.find(x => x.goalId === l.goalId) : undefined
+              const mine = l.goalId ? rate?.[l.goalId]?.rating ?? null : null
+              // "needs" outranks "rated": a rating whose difference is
+              // unexplained is the state that stops the whole set, so it is
+              // the one the stripe should be showing.
+              const stripe = c?.needsReason && !c.hasReason ? ' needs'
+                           : mine != null ? ' rated' : ''
+              return (
+              <div key={l.seqNo} className={`card kcard${stripe}`} style={{ margin: 0 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline',
                               flexWrap: 'wrap', marginBottom: 6 }}>
                   <b style={BREAK}>{l.seqNo}. {l.title || <span className="k">untitled</span>}</b>
@@ -829,13 +1067,35 @@ export function KraDetail({ member, lines, loading, onClose,
                         const on = rate?.[l.goalId!]?.rating === bd.value
                         return (
                           <button key={bd.value} type="button" role="radio"
-                                  aria-checked={on} className={on ? 'chip sel' : 'chip'}
+                                  aria-checked={on}
+                                  // COLOURED ONLY ONCE CHOSEN. Painting all
+                                  // five turns the control into a traffic
+                                  // light and pulls the eye to the green
+                                  // one, which is a thumb on the scale.
+                                  className={on ? `chip sel b${bd.value}` : 'chip'}
                                   title={bd.label}
                                   onClick={() => onRate(l.goalId!, { rating: bd.value })}>
                             {bd.value}
                           </button>
                         )
                       })}
+                      {/* WHAT THE NUMBER MEANS, in words, next to it. The
+                          band labels existed only in a title attribute:
+                          invisible on touch, and on a desktop visible only
+                          to somebody who already suspected there was
+                          something to hover. A manager choosing between 3
+                          and 4 is choosing between two words, not two
+                          digits. */}
+                      {mine != null && (
+                        <span className="bandname">
+                          {bandFor(mine, bands)?.label ?? ''}
+                          {c?.delta != null && c.delta !== 0 && (
+                            <span className="vs">
+                              {c.delta > 0 ? `${c.delta} above` : `${-c.delta} below`} their own
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </div>
                     <input style={{ marginTop: 6 }} id={whyId(l.goalId)}
                            aria-label={`Why you rated ${l.title} this way`}
@@ -852,7 +1112,8 @@ export function KraDetail({ member, lines, loading, onClose,
                   </div>
                 )}
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       {/* THE TICK AND THE APPROVAL, under the thing they are about. A manager

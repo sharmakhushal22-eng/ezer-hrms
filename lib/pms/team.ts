@@ -401,3 +401,19 @@ export function distribution(rows: QueueRow[]): { rating: number; n: number }[] 
 }
 
 export { FLAG_LABEL }
+
+/**
+ * Initials, for the avatar on a queue card.
+ *
+ * First and last of however many words there are, so "Anil Verma" is AV and
+ * a single-word name still gets a letter rather than an empty circle. Indian
+ * names in this database run to four words; taking the first two would make
+ * half a department share initials.
+ */
+export function initials(name: string): string {
+  const w = (name || '').trim().split(/\s+/).filter(Boolean)
+  if (!w.length) return '—'
+  const first = w[0][0] ?? ''
+  const last = w.length > 1 ? w[w.length - 1][0] ?? '' : ''
+  return (first + last).toUpperCase()
+}

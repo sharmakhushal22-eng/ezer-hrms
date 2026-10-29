@@ -403,3 +403,173 @@
 @media (prefers-reduced-motion: reduce) {
   .pms * { transition: none !important; animation: none !important; }
 }
+
+/* ── the approval queue, as cards ─────────────────────────────────────────
+ *
+ * WHY THIS IS NOT A TABLE. The sets waiting on a manager's approval were
+ * rendered by the same QueueTable as everything else: ten columns, in which
+ * "Anil Verma" carried exactly as much weight as "Active", "4", "100" and a
+ * tick. A table is the right shape for COMPARING rows — which is what the
+ * team dashboard does — and the wrong shape for ACTING on one, because the
+ * person and the one thing owed are the only two things that matter and they
+ * sat five columns apart.
+ *
+ * These are read one at a time and acted on one at a time, so they are laid
+ * out that way: who, how ready, what happens next, and the button.
+ */
+.pms .qcard {
+  display: grid; gap: 12px; padding: 14px;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 12px; margin-bottom: 10px; min-width: 0;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.pms .qcard:hover {
+  border-color: var(--ez-brand-edge);
+  box-shadow: 0 2px 10px var(--ez-brand-tint);
+  transform: translateY(-1px);
+}
+.pms .qcard:last-child { margin-bottom: 0; }
+/* The row washes the table had, kept so employment state still reads at a
+ * glance on the surface that replaced it. */
+.pms .qcard.exit   { background: var(--pms-row-exit); }
+.pms .qcard.notice { background: var(--pms-row-notice); }
+@media (max-width: 680px) {
+  /* The action column drops under the body rather than squeezing the name
+   * into two characters a line. */
+  .pms .qcard { grid-template-columns: auto 1fr; }
+  .pms .qcard .qact { grid-column: 1 / -1; }
+}
+
+/* Initials. A face-shaped anchor for the eye, so a queue of eight is scanned
+ * by person rather than read line by line. */
+.pms .ava {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ez-brand-tint); color: var(--ez-brand-deep);
+  font-weight: 800; font-size: 13px; letter-spacing: .3px;
+  flex: 0 0 auto; user-select: none;
+}
+.pms .qcard .nm { font-size: 14px; font-weight: 700; color: var(--ez-ink); }
+.pms .qcard .meta {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 3px; font-size: 11px; color: var(--ez-muted);
+}
+.pms .qact { display: grid; gap: 6px; justify-items: stretch; min-width: 148px; }
+
+/* ── the readiness checks ─────────────────────────────────────────────────
+ *
+ * The four things that decide whether a set can move, as four marks instead
+ * of four columns. Each says what it IS, not merely that it is green: a tick
+ * with no word beside it makes somebody hover every one of them to find the
+ * one that is wrong.
+ */
+.pms .checks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pms .chk {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px 3px 7px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  background: var(--ez-sunken); color: var(--ez-muted);
+  border: 1px solid transparent;
+}
+.pms .chk .m { font-weight: 800; font-size: 11px; line-height: 1; }
+.pms .chk.on  { background: var(--ez-positive-tint); color: var(--ez-positive); }
+.pms .chk.off { background: var(--ez-warning-tint);  color: var(--ez-warning); }
+.pms .chk.bad { background: var(--ez-critical-tint); color: var(--ez-critical); }
+
+/* ── where it sits in the chain ───────────────────────────────────────────
+ *
+ * The module's whole subject is a chain, and no manager screen drew one. A
+ * rung that says "you" between the rung it came from and the rung it goes to
+ * answers the two questions an approver actually has — who looked at this
+ * before me, and who gets it when I let go — without opening anything.
+ */
+.pms .track {
+  display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  margin-top: 9px; font-size: 10px;
+}
+.pms .track .n {
+  padding: 2px 8px; border-radius: 20px; font-weight: 700;
+  background: var(--ez-sunken); color: var(--ez-muted); white-space: nowrap;
+  text-transform: uppercase; letter-spacing: .4px;
+}
+.pms .track .n.done { background: var(--ez-positive-tint); color: var(--ez-positive); }
+.pms .track .n.now  { background: var(--ez-brand); color: var(--ez-on-accent); }
+.pms .track .sep { color: var(--ez-faint); padding: 0 4px; font-weight: 800; }
+
+/* ── a group of rows that are all stuck on the same thing ────────────────
+ *
+ * Eight rows of "No KRAs written yet. They cannot be rated at all until
+ * there are." is the sentence printed eight times and read none. Said once,
+ * over the people it applies to, it is information.
+ */
+.pms .qgroup { margin-bottom: 14px; }
+.pms .qgroup:last-child { margin-bottom: 0; }
+.pms .qgroup > .ghead {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  padding: 9px 12px; border-radius: 10px 10px 0 0;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  border-bottom: 0;
+}
+.pms .qgroup > .ghead .gt { font-size: 12px; font-weight: 800; color: var(--ez-ink); }
+.pms .qgroup > .ghead .gn {
+  font-size: 11px; font-weight: 800; color: var(--ez-brand-deep);
+  background: var(--ez-brand-tint); border-radius: 20px; padding: 1px 8px;
+}
+.pms .qgroup > .ghead .gw { font-size: 11px; color: var(--ez-muted); flex: 1 1 220px; }
+.pms .qgroup > .tblwrap { border-radius: 0 0 12px 12px; }
+
+/* ── the rating flow ──────────────────────────────────────────────────── */
+
+/* One KRA being rated. The stripe is the progress indicator: a column of
+ * grey turning green as the set is worked through, visible without reading
+ * anything. Scanning for "which one have I not done" was otherwise a matter
+ * of looking for the row of chips with none selected. */
+.pms .kcard {
+  border-left: 3px solid var(--ez-line);
+  transition: border-left-color .2s ease, background .2s ease;
+}
+.pms .kcard.rated { border-left-color: var(--ez-positive); }
+/* An unexplained difference from the employee's own rating is the one state
+ * that stops the whole set, so it outranks "rated" on the stripe. */
+.pms .kcard.needs { border-left-color: var(--ez-warning); background: var(--ez-warning-tint); }
+
+/* The rating chips, coloured by what the number MEANS once chosen.
+ * Unselected they stay neutral — colouring all five turns the control into a
+ * traffic light and invites the eye to the green one. */
+.pms .chip { transition: transform .12s ease, background .12s ease, border-color .12s ease; }
+.pms .chip:hover:not(.sel) { border-color: var(--ez-brand); color: var(--ez-brand); }
+.pms .chip:active { transform: scale(.94); }
+.pms .chip.sel.b5 { background: var(--ez-positive);   border-color: var(--ez-positive); }
+.pms .chip.sel.b4 { background: var(--ez-brand);      border-color: var(--ez-brand); }
+.pms .chip.sel.b3 { background: var(--ez-brand-deep); border-color: var(--ez-brand-deep); }
+.pms .chip.sel.b2 { background: var(--ez-warning);    border-color: var(--ez-warning); }
+.pms .chip.sel.b1 { background: var(--ez-critical);   border-color: var(--ez-critical); }
+
+/* What the number you just picked actually means, in words, beside it. The
+ * band labels existed only in a title attribute — invisible on touch, and on
+ * a desktop only to somebody who already suspected there was something to
+ * hover. */
+.pms .bandname {
+  font-size: 12px; font-weight: 700; color: var(--ez-ink);
+  align-self: center; margin-left: 4px;
+}
+.pms .bandname .vs { font-weight: 600; color: var(--ez-muted); margin-left: 6px; }
+
+/* Progress through the set being rated, pinned to the top of the panel so it
+ * is still there at the fourth KRA. */
+.pms .ratebar {
+  /* No z-index. A sticky element already paints above the non-positioned
+   * cards that scroll under it, and a raw number here would be a value
+   * chosen by looking at what is currently on top — which is how this repo
+   * reached 37 of them. */
+  position: sticky; top: 0;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px; margin: -4px 0 12px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 11px;
+}
+.pms .ratebar .bar { flex: 1 1 160px; }
+.pms .ratebar .lead { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pms .ratebar .lead .sm { font-weight: 600; color: var(--ez-muted); }
