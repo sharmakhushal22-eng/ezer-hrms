@@ -208,7 +208,7 @@ function usePeriod(employeeId: string) {
               + 'new_joiner_cutoff_days,carry_forward_kras,post_final_owner,'
               + 'one_to_one_mandatory')
         .eq('id', pid).maybeSingle()
-      if (po.error) console.error('[pms] could not read the policy:', po.error)
+      if (po.error) logFail('could not read the policy', po.error)
       setPolicy(po.error ? null : (po.data as Policy | null))
     } else {
       setPolicy(null)
@@ -226,7 +226,7 @@ function usePeriod(employeeId: string) {
       const sc = await supabase.from('pms_rating_scale')
         .select('rating_value,rating_code,rating_label,score_from,score_to,min_comment_chars,improvement_feedback_mandatory,sort_order,is_active')
         .eq('company_id', companyId)
-      if (sc.error) console.error('[pms] could not read the rating scale:', sc.error)
+      if (sc.error) logFail('could not read the rating scale', sc.error)
       setBands(sc.error ? [] : bandsFromScale(sc.data as ScaleRow[]))
     }
     setLoading(false)
@@ -262,6 +262,25 @@ function usePeriod(employeeId: string) {
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
  *  yesterday for anybody east of Greenwich after 05:30 IST, and these dates
  *  decide whether a window is open. */
+/**
+ * Log a Supabase failure so the message actually reaches the console.
+ *
+ * `console.error('…', error)` on a PostgrestError prints `{}` in the Next
+ * dev overlay — the fields do not survive its serialisation — so a real
+ * refusal arrived as an empty object with no cause and no code. That is
+ * exactly what happened to a final-review acknowledgement blocked by 199's
+ * trigger: a P0001 with a full sentence explaining itself, reported as `{}`.
+ *
+ * code and message are what identify a Postgres refusal; details and hint
+ * carry the rest when there is any.
+ */
+function logFail(where: string, e: unknown) {
+  const x = (e ?? {}) as { message?: string; code?: string; details?: string; hint?: string }
+  console.error(`[pms] ${where}:`,
+    x.code ? `[${x.code}] ` : '', x.message ?? String(e),
+    x.details ? `| ${x.details}` : '', x.hint ? `| hint: ${x.hint}` : '')
+}
+
 /**
  * Record the one-to-one for a stage, from a tick.
  *
@@ -317,7 +336,7 @@ async function recordOneToOne(o: {
     const up = await supabase.from('pms_one_to_one')
       .update({ [ackCol]: true, [atCol]: new Date().toISOString() })
       .eq('id', String(row.id))
-    if (up.error) { console.error('[pms] one-to-one ack refused:', up.error); return 'ERROR' }
+    if (up.error) { logFail('one-to-one ack refused', up.error); return 'ERROR' }
     return 'RECORDED'
   }
 
@@ -336,7 +355,7 @@ async function recordOneToOne(o: {
     discussion_points: spec.discussion_points,
     [ackCol]: true, [atCol]: new Date().toISOString(),
   })
-  if (ins.error) { console.error('[pms] one-to-one insert refused:', ins.error); return 'ERROR' }
+  if (ins.error) { logFail('one-to-one insert refused', ins.error); return 'ERROR' }
   return 'RECORDED'
 }
 
@@ -610,7 +629,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     const bn = await supabase.from('pms_additional_benefits')
       .select('benefit_type,benefit_note')
       .eq('employee_id', employeeId).eq('period_id', period.id)
-    if (bn.error) console.error('[pms] could not read recognition:', bn.error)
+    if (bn.error) logFail('could not read recognition', bn.error)
     setBenefits((bn.data ?? []).map(b => ({
       // The label, not the enum: the result screen prints this verbatim and
       // 'TRAINING_NOMINATION' is a column value, not something to show anybody.
@@ -697,7 +716,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       .eq('employee_id', employeeId).eq('period_id', period.id)
     setSaving(false)
     if (error) {
-      console.error('[pms] acknowledgement refused:', error)
+      logFail('acknowledgement refused', error)
       setMsg(SAVE_FAILED('acknowledgement')); return
     }
     loadPeriodData(); reload()
@@ -868,7 +887,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       const tail = await supabase.from('pms_employee_goals').delete()
         .eq('employee_id', employeeId).eq('period_id', period.id)
         .gt('seq_no', kras.length).neq('status', 'LOCKED')
-      if (tail.error) console.error('[pms] could not remove trailing KRAs:', tail.error)
+      if (tail.error) logFail('could not remove trailing KRAs', tail.error)
     }
     /**
      * §3's merge: the self rating goes with the KRAs, in the same submission.
@@ -905,7 +924,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
           })),
           { onConflict: 'period_id,employee_id,goal_id,rater_role' })
         if (rv.error) {
-          console.error('[pms] self rating refused:', rv.error)
+          logFail('self rating refused', rv.error)
           ratingWarning = ' Your ratings did not save, though — send it again.'
         }
       }
@@ -925,7 +944,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
         // Not fatal: the KRAs are the thing that had to be saved. But a silent
         // failure would leave the audit trail with a hole in it and nobody
         // aware, so it is said out loud.
-        console.error('[pms] KRA change log refused:', audit.error)
+        logFail('KRA change log refused', audit.error)
         logWarning = ' The change log could not be written, though — tell HR.'
       }
     }
@@ -984,7 +1003,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       const ch = await supabase.rpc('pms_chain_submit',
         { p_employee_id: employeeId, p_period_id: period.id })
       if (ch.error) {
-        console.error('[pms] pms_chain_submit failed:', ch.error)
+        logFail('pms_chain_submit failed', ch.error)
         chainWarning = ' It is saved, but could not be sent on for approval — try again.'
       } else if (typeof ch.data === 'string' && ch.data.startsWith('BLOCKED')) {
         chainWarning = ' It is saved, but not sent on yet — '
@@ -995,7 +1014,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     setMsg(error
       ? ((error as { code?: string }).code === MISSING_TABLE
           ? 'The performance module is not live yet: migration 066 has not been applied.'
-          : (console.error('[pms] KRA insert refused:', error), SAVE_FAILED('KRAs')))
+          : (logFail('KRA insert refused', error), SAVE_FAILED('KRAs')))
       : [
           kraLocked ? 'Your ratings are in with your manager.'
                     : 'Sent to your reporting manager.',
@@ -1021,7 +1040,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     const { error } = await supabase.from('pms_reviews')
       .upsert(rows, { onConflict: 'period_id,employee_id,goal_id,rater_role' })
     setSaving(false)
-    if (error) { console.error('[pms] self rating refused:', error); setMsg(SAVE_FAILED('self rating')); return }
+    if (error) { logFail('self rating refused', error); setMsg(SAVE_FAILED('self rating')); return }
 
     // The separate Self Rating tab submits too — it is the same event as the
     // merged step's submission, so it enters the chain the same way. Without
@@ -1031,7 +1050,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     const ch = await supabase.rpc('pms_chain_submit',
       { p_employee_id: employeeId, p_period_id: period.id })
     if (ch.error) {
-      console.error('[pms] pms_chain_submit failed:', ch.error)
+      logFail('pms_chain_submit failed', ch.error)
       setMsg('Your ratings are saved, but could not be sent on for approval — try again.')
     } else if (typeof ch.data === 'string' && ch.data.startsWith('BLOCKED')) {
       setMsg('Your ratings are saved, but not sent on yet — '
@@ -1070,7 +1089,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       employee_ack: true, employee_ack_at: new Date().toISOString(),
     })
     setSaving(false)
-    if (error) { console.error('[pms] one-to-one insert refused:', error); setMsg(SAVE_FAILED('discussion')); return }
+    if (error) { logFail('one-to-one insert refused', error); setMsg(SAVE_FAILED('discussion')); return }
     loadPeriodData()
   }
 
@@ -1094,7 +1113,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
       .eq('id', logId).eq('employee_id', employeeId)
     setSaving(false)
     if (error) {
-      console.error('[pms] discussion acknowledge refused:', error)
+      logFail('discussion acknowledge refused', error)
       setMsg(SAVE_FAILED('acknowledgement')); return
     }
     setMsg('Acknowledged.')
@@ -1411,7 +1430,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
         .select('id,seq_no,kra_title,category,weightage')
         .eq('employee_id', picked).eq('period_id', period.id)
         .neq('status', 'SENT_BACK').order('seq_no')
-      if (g.error) { console.error('[pms] could not read the KRAs to rate:', g.error); return }
+      if (g.error) { logFail('could not read the KRAs to rate', g.error); return }
       const goalRows = (g.data ?? []) as Record<string, unknown>[]
 
       // Their own rating per KRA, and the manager's own earlier one if this is
@@ -1425,7 +1444,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
         .select('goal_id,rater_id,rater_role,rating,comments,achievement_value')
         .eq('employee_id', picked).eq('period_id', period.id)
         .in('rater_role', ['SELF', 'RM_L1', 'RM_L2'])
-      if (r.error) console.error('[pms] could not read the ratings:', r.error)
+      if (r.error) logFail('could not read the ratings', r.error)
       const byGoal = new Map<string, Record<string, Record<string, unknown>>>()
       for (const row of (r.data ?? []) as Record<string, unknown>[]) {
         const k = String(row.goal_id)
@@ -1495,7 +1514,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       { p_employee_id: id, p_period_id: period!.id, p_manager_id: employeeId })
     setSaving(false)
     if (lock.error) {
-      console.error('[pms] pms_lock_kras failed:', lock.error)
+      logFail('pms_lock_kras failed', lock.error)
       setMsg('Acknowledged, but the weightages could not be locked. Try again, and tell HR if it keeps happening.')
     } else if (typeof lock.data === 'string' && lock.data.startsWith('BLOCKED')) {
       // The reason is written for a manager, so it is worth showing verbatim.
@@ -1570,7 +1589,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       .select('id')
     setSaving(false)
     if (ack.error) {
-      console.error('[pms] final review acknowledge refused:', ack.error)
+      logFail('final review acknowledge refused', ack.error)
       setMsg(SAVE_FAILED('acknowledgement')); return
     }
     if (!ack.data?.length) {
@@ -1674,7 +1693,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       })
       setSaving(false)
       if (r.error) {
-        console.error('[pms] pms_chain_reject failed:', r.error)
+        logFail('pms_chain_reject failed', r.error)
         setMsg(SAVE_FAILED('rejection')); return
       }
       const out = String(r.data ?? '')
@@ -1695,7 +1714,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       .update({ status: 'SENT_BACK', sent_back_reason: reason })
       .eq('employee_id', id).eq('period_id', period!.id)
     setSaving(false)
-    if (error) { console.error('[pms] send back refused:', error); setMsg(SAVE_FAILED('note')); return }
+    if (error) { logFail('send back refused', error); setMsg(SAVE_FAILED('note')); return }
     setMsg('Sent back, with your reason.')
     reloadRoster()
   }
@@ -1751,7 +1770,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     })
     setSaving(false)
     if (r.error) {
-      console.error('[pms] pms_chain_approve failed:', r.error)
+      logFail('pms_chain_approve failed', r.error)
       setMsg(SAVE_FAILED('approval')); return
     }
     const out = String(r.data ?? '')
@@ -1867,7 +1886,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       { onConflict: 'period_id,employee_id,goal_id,rater_role' })
     if (error) {
       setSaving(false)
-      console.error('[pms] manager rating refused:', error); setMsg(SAVE_FAILED('rating')); return
+      logFail('manager rating refused', error); setMsg(SAVE_FAILED('rating')); return
     }
 
     // THE OVERALL COMMENT HAD NOWHERE TO GO, and was being collected and
@@ -1898,7 +1917,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       }, { onConflict: 'period_id,employee_id' })
       if (fb.error) {
         setSaving(false)
-        console.error('[pms] overall comment refused:', fb.error)
+        logFail('overall comment refused', fb.error)
         setMsg('The ratings were saved, but your overall comment was not. Try sending it again.')
         return
       }
@@ -1988,7 +2007,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
       .select('id')
     setSaving(false)
     if (ack.error) {
-      console.error('[pms] final review acknowledge refused:', ack.error)
+      logFail('final review acknowledge refused', ack.error)
       setMsg(SAVE_FAILED('acknowledgement')); return
     }
     if (!ack.data?.length) {
@@ -2109,7 +2128,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
     })
     setSaving(false)
     if (r.error) {
-      console.error('[pms] pms_finalise failed:', r.error)
+      logFail('pms_finalise failed', r.error)
       setMsg(SAVE_FAILED('final rating')); return
     }
     // 188 returns a sentence written for the person reading this screen —
@@ -2152,7 +2171,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
     }, { onConflict: 'period_id,employee_id' })
     if (fb.error) {
       setSaving(false)
-      console.error('[pms] feedback publish refused:', fb.error)
+      logFail('feedback publish refused', fb.error)
       setMsg(SAVE_FAILED('feedback')); return
     }
 
@@ -2167,7 +2186,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
         })))
       if (ben.error) {
         setSaving(false)
-        console.error('[pms] recognition refused:', ben.error)
+        logFail('recognition refused', ben.error)
         setMsg('The feedback saved, but the recognition rows did not. Add them again before telling them it is published.')
         return
       }
@@ -2195,7 +2214,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
       .eq('employee_id', picked).eq('period_id', period.id)
     setSaving(false)
     if (st.error) {
-      console.error('[pms] publish status refused:', st.error)
+      logFail('publish status refused', st.error)
       setMsg('The feedback saved but the result was not opened to them. Try publishing again.'); return
     }
     setMsg(`Published. ${member.name} can see their rating and feedback now.`)
