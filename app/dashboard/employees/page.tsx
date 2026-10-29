@@ -917,6 +917,10 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: {
 export default function EmployeeMaster() {
   const { grant, loading: grantLoading } = useGrant()
   const [employees, setEmployees] = useState<Employee[]>([])
+  // Exits still running for the employees on this page (a company exit in its approval chain, or
+  // the employee's own resignation): the employee stays Active until the final LWD, and the
+  // row says so.
+  const [exiting, setExiting] = useState<Record<string, { label: string; lwd: string | null }>>({})
   const [companies, setCompanies] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [departments, setDepts]   = useState<any[]>([])
@@ -1033,6 +1037,23 @@ export default function EmployeeMaster() {
       const { data, error:err, count } = await q
       if (err) throw err
       setEmployees((data as any[])||[]); setTotal(count||0)
+      const ids = ((data as any[]) || []).map(e => e.id)
+      if (ids.length) {
+        const [hx, rs] = await Promise.all([
+          supabase.from('hr_exit_requests').select('employee_id, status, reason_label, last_working_day, chain').in('employee_id', ids).in('status', ['PENDING', 'APPROVED']),
+          supabase.from('employee_resignation').select('employee_id, status, current_stage, final_lwd, lwd_as_per_policy').in('employee_id', ids)
+            .in('status', ['INITIATED', 'PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER', 'RETENTION_HOLD', 'RECOVERY_PENDING']),
+        ])
+        const map: Record<string, { label: string; lwd: string | null }> = {}
+        for (const r of (rs.data as any[]) || []) map[r.employee_id] = {
+          label: r.status === 'RETENTION_HOLD' ? 'Resignation · retention hold' : r.current_stage ? `Resignation · with ${String(r.current_stage).replace('RM_', '').replace('_', ' ')}` : 'Resignation',
+          lwd: r.final_lwd || r.lwd_as_per_policy || null }
+        for (const r of (hx.data as any[]) || []) {
+          const step = (r.chain || []).find((s: any) => s.status === 'PENDING' || s.status === 'HOLD')
+          map[r.employee_id] = { label: r.status === 'APPROVED' ? `${r.reason_label} · leaving` : `${r.reason_label} · ${step ? (step.status === 'HOLD' ? 'retention hold' : `with ${step.label}`) : 'reminders'}`, lwd: r.last_working_day || null }
+        }
+        setExiting(map)
+      } else setExiting({})
     } catch(e:any) { setError(e.message||'Load failed') }
     finally { setLoading(false) }
   }, [search,filterCompany,filterLocation,filterDept,filterType,filterStatus,filterGrade,page,grant]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1463,6 +1484,12 @@ export default function EmployeeMaster() {
                         {emp.employment_status==='Resigned' && emp.last_working_date && (
                           <div style={{ fontSize:F.micro, color:C.critical, marginTop:3, ...numeric }}>
                             LWD {fmtDate(emp.last_working_date)}
+                          </div>
+                        )}
+                        {emp.employment_status!=='Resigned' && exiting[emp.id] && (
+                          <div title={`Exit in progress: ${exiting[emp.id].label}`} style={{ marginTop:4, display:'inline-flex', flexDirection:'column', gap:1, padding:'2px 8px', borderRadius:R.sm, background:C.warningTint, border:`1px solid ${C.warningEdge}`, maxWidth:190 }}>
+                            <span style={{ fontSize:F.micro, fontWeight:W.semi, color:C.warning, whiteSpace:'nowrap' }}>Exit in progress</span>
+                            <span style={{ fontSize:F.micro, color:C.inkSoft, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{exiting[emp.id].label}{exiting[emp.id].lwd ? ` · LWD ${fmtDate(exiting[emp.id].lwd as string)}` : ''}</span>
                           </div>
                         )}
                       </Td>
