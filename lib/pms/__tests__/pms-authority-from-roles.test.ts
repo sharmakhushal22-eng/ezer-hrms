@@ -178,3 +178,44 @@ test('every PMS tab the page renders is a registered screen', () => {
       `pms.${t} is rendered but not registered, so it cannot be set per role`)
   }
 })
+
+// ── finalisation stays where it is, on purpose ───────────────────────────
+//
+// Asked whether finalisation should become switchable from Roles & Access
+// alongside the screen permissions. Answered: no — option 1, leave it chain
+// and policy driven.
+//
+// Pinned here because the opposite looks obviously right. The authority to
+// finalise ONE appraisal is three things at once: the policy's
+// who_can_finalise, §2's matrix for the role, and holding that employee's
+// rung in the frozen chain. Only the last decides whether a particular HOD
+// may settle a particular person — a HOD is the HOD of their own department
+// and nobody else's — and a global role toggle cannot say that. 199's
+// trigger refuses anybody the chain does not name, so such a toggle would
+// appear to grant something, change nothing, and then fail at the database.
+
+test('finalising is not gated by a screen permission', () => {
+  // If this ever fails, read the note on canFinalise in hierarchy.ts before
+  // changing it back: the toggle would be a control that lies.
+  const hierarchy = read('lib/pms/hierarchy.ts')
+  const fn = hierarchy.slice(hierarchy.indexOf('export function canFinalise'),
+                             hierarchy.indexOf('// ── the approval chain'))
+  assert.ok(!/screenAllow|canSeeScreen|role_screen/.test(fn),
+    'finalisation now consults the screen registry, which cannot express '
+    + 'whose chain the viewer is on')
+})
+
+test('there is no pms.finalise screen key', () => {
+  // Registering one would put a toggle in Roles & Access that grants
+  // nothing: no page gates on it, and 199 would still refuse.
+  const pms = SCREENS.slice(SCREENS.indexOf("moduleKey: 'pms'"),
+                            SCREENS.indexOf("moduleKey: 'attendance'"))
+  assert.ok(!/key: 'finalise'/.test(pms),
+    'a finalise screen key exists; see the note on canFinalise in hierarchy.ts')
+})
+
+test('the decision is written down where it would be undone', () => {
+  const hierarchy = read('lib/pms/hierarchy.ts')
+  assert.match(hierarchy, /FINALISATION IS NOT A ROLE PERMISSION, AND THAT IS A DECISION/,
+    'the reasoning is not recorded next to the function somebody would change')
+})

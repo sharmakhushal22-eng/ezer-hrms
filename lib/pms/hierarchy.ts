@@ -130,6 +130,31 @@ const FINALISER_ROLES: Record<Finaliser, Role[]> = {
  * Resolves the ⚙️ cell. HR roles finalise regardless of the setting — the
  * matrix gives them a plain ✅, because who_can_finalise picks which *line
  * manager* signs off, not whether HR can correct a stuck record.
+ *
+ * ── FINALISATION IS NOT A ROLE PERMISSION, AND THAT IS A DECISION ─────────
+ *
+ * Asked directly: should finalisation be switchable from Roles & Access,
+ * alongside the PMS screen permissions? Answered: no, leave it here.
+ *
+ * Recorded because the opposite looks obviously right and is not. The
+ * authority to finalise ONE appraisal is three things at once:
+ *
+ *   · this policy's who_can_finalise  — the setting below;
+ *   · §2's matrix for the role        — may(role, 'finalise_rating');
+ *   · HOLDING THAT EMPLOYEE'S RUNG    — the frozen chain in
+ *     pms_overall_rating, which is per employee and per period.
+ *
+ * Only the third decides whether a particular HOD may settle a particular
+ * person, and a role permission cannot express it: a HOD is the HOD of
+ * their own department and nobody else's. 199's trigger enforces exactly
+ * that in SQL and would refuse anybody the chain does not name — so a
+ * global "may finalise" toggle would appear to grant something, change
+ * nothing, and then fail at the database with a message about the chain.
+ * A control that lies about what it does is worse than its absence.
+ *
+ * What IS role-switchable is the admin screens — pms.publish, pms.summary
+ * and the rest of the registry in lib/rms/screens.ts. Those gate a TAB,
+ * which is the kind of thing a role can own.
  */
 export function canFinalise(role: Role, setting: Finaliser): boolean {
   const cell = may(role, 'finalise_rating')
