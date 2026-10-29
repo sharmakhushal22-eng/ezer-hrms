@@ -169,9 +169,16 @@ test('the panel is read-only for anyone who is not the acting rung', () => {
   const v = MGR.slice(MGR.indexOf('export function KraDetail'),
                       MGR.indexOf('// ── §4.3 Rate My Team'))
   assert.ok(v.length > 800, 'could not isolate the panel')
-  // Every control is behind myRung.
-  assert.match(v, /\{myRung && onRate && l\.goalId && \(/,
+  // Every control is behind the rung. The gate is named once now —
+  // `rating` — and reused, which is stricter than the old inline test
+  // because it also requires an onApprove handler: a panel that can rate
+  // but not send on would strand the set.
+  assert.match(v, /const rating = myRung && onApprove/,
+    'the rating gate is no longer defined from the rung')
+  assert.match(v, /\{rating && onRate && l\.goalId \?/,
     'the rating controls are not gated on holding the rung')
+  assert.ok(!/\{onRate && l\.goalId/.test(v),
+    'a rating control is rendered without checking the rung')
   assert.match(v, /\{myRung && onApprove && \(/,
     'the approve footer is not gated on holding the rung')
   // And the caller must only pass myRung when the stage is actually theirs.
@@ -280,7 +287,11 @@ test('every free-text field in the detail panel can break', () => {
   // Looking backwards found the wrong tag for anything inside a conditional:
   // `{l.selfComment && <span style={BREAK}>` puts the field name BEFORE the
   // element that carries the style, so the test failed against correct code.
-  const covered = [...v.matchAll(/style=\{BREAK\}>([\s\S]{0,80})/g)]
+  // BOTH FORMS COUNT. A field can carry it as `style={BREAK}` or spread into
+  // a style object that also sets a margin — `style={{ marginTop: 5,
+  // ...BREAK }}`. The first version of this matched only the literal form
+  // and failed against correct code that used the spread.
+  const covered = [...v.matchAll(/style=\{(?:BREAK|\{[^}]*\.\.\.BREAK[^}]*\})\}[^>]*>([\s\S]{0,80})/g)]
     .map(m => m[1]).join(' | ')
   for (const field of ['l.title', 'l.kpi', 'l.target', 'l.achievement', 'l.selfComment']) {
     assert.ok(v.includes(field), `${field} is not rendered at all`)
@@ -290,12 +301,19 @@ test('every free-text field in the detail panel can break', () => {
 })
 
 test('the rating row wraps rather than pushing', () => {
-  // The self comment sits in a flex row beside the rating. Without wrapping,
-  // a sentence there widens the card.
-  const v = MGR.slice(MGR.indexOf('export function KraDetail'),
-                      MGR.indexOf('// ── §4.3 Rate My Team'))
-  assert.match(v, /display: 'flex', gap: 10,\s*\n?\s*alignItems: 'baseline', flexWrap: 'wrap'/,
+  // THE ROW BECAME A GRID. Their rating and yours used to sit ~100px apart
+  // with the achievement text between them; they are side by side now, in
+  // .vs2. The rule did not change — nothing in that row may push the card
+  // wider — so it is asserted against the CSS that now enforces it.
+  const CSS = read('components/pms/pms.css')
+  assert.match(CSS, /\.vs2 \{[^}]*grid-template-columns: minmax\(130px, 200px\) 1fr/,
+    'the comparison row is not a bounded grid')
+  assert.match(CSS, /max-width: 620px\) \{ \.pms \.vs2 \{ grid-template-columns: 1fr/,
+    'the comparison row does not stack on a narrow screen')
+  assert.match(CSS, /\.vs2 \.theirs \{[^}]*flex-wrap: wrap/,
     'the rating row cannot wrap')
+  assert.match(CSS, /\.vs2 \.theirs \.bl \{[^}]*min-width: 0/,
+    'the band label cannot shrink, so a long one widens the card')
 })
 
 test('the preview harness carries content harder than the real data', () => {

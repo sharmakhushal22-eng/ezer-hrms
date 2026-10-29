@@ -798,24 +798,20 @@ function RatingSummary({ s, onJump }: {
     d === null ? '' : d > 0 ? `+${d} up` : d < 0 ? `${d} down` : 'same'
 
   return (
-    <Card title="Your rating against theirs"
+    <Card title="Line by line against theirs"
           sub={s.rated === 0
             ? 'Fills in as you rate. They will see this same comparison.'
-            : `${s.rated} of ${s.total} rated · ${s.agreed} the same, ${s.higher} higher, ${s.lower} lower than they said.`}>
-      <div className="grid g3">
-        <Stat label="They rated themselves" value={nf(s.selfScore)}
-              note="Weighted, their own numbers" />
-        <Stat label="You rate them" value={nf(s.myScore)}
-              note={s.rated < s.total ? `${s.total - s.rated} still unrated` : 'All KRAs rated'} />
-        <Stat tone={s.lines.some(l => l.flag === 'MAJOR_GAP') ? 'warn' : undefined}
-              label="Difference" value={s.delta === null ? '—' : arrow(s.delta)}
-              note={s.delta === null ? 'Rate every KRA to compare'
-                    : s.delta === 0 ? 'You read the period the same way'
-                    : s.delta < 0 ? 'You are scoring them below their own reading'
-                    : 'You are scoring them above their own reading'} />
-      </div>
-
-      <div className="tblwrap" style={{ marginTop: 12 }}>
+            : `${s.rated} of ${s.total} rated · ${s.agreed} the same, ${s.higher} higher, ${s.lower} lower than they said.`
+              + (s.delta === null ? ''
+                 : s.delta === 0 ? ' Overall you agree.'
+                 : ` Overall ${s.delta > 0 ? '+' : ''}${s.delta} against their own score.`)}>
+      {/* THE THREE TOTALS ARE NOT REPEATED HERE. They moved to the panel
+          header, where they are visible before the first KRA rather than
+          after the last one — and showing them twice on one screen made the
+          panel longer while telling the reader nothing they had not just
+          read. What this card is for is the LINE BY LINE, which the header
+          cannot show. */}
+      <div className="tblwrap">
         <table>
           <thead>
             <tr>
@@ -967,15 +963,90 @@ export function KraDetail({ member, lines, loading, onClose,
     comment: rate?.[l.goalId!]?.comment ?? null,
   })))
 
+  /**
+   * WHICH KRAs ARE FOLDED AWAY, by goal id.
+   *
+   * Explicit, never automatic. Folding a card the moment it is complete
+   * sounds helpful and is not: the completing keystroke is usually the last
+   * character of the reason, so the card would collapse under the cursor
+   * mid-sentence. Everything here is folded by the reader or by the one
+   * button that says what it will fold.
+   */
+  const [folded, setFolded] = useState<Record<string, boolean>>({})
+  const fold = (id: string, v: boolean) => setFolded(p => ({ ...p, [id]: v }))
+
+  /** Done means rated AND explained — the two conditions the approval gate
+   *  checks — so "hide the done ones" never hides something still blocking. */
+  const doneIds = cmp.lines
+    .filter(l => l.mine != null && !(l.needsReason && !l.hasReason))
+    .map(l => l.goalId)
+  const foldableLeft = doneIds.filter(id => !folded[id]).length
+
+  const jump = (goalId: string) => {
+    fold(goalId, false)
+    // The id is on the reason box, which is the bottom of the card; block
+    // 'center' brings the whole KRA into view rather than parking its last
+    // line at the top edge.
+    requestAnimationFrame(() => {
+      document.getElementById(whyId(goalId))
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+
+  const rating = myRung && onApprove
+
   return (
-    <Card title={`${member.name} — ${member.code}`}
-          sub={`The KRA form as they filled it. ${lines?.length ?? 0} KRAs, weightage ${total}, ${rated} self-rated.`}>
+    <Card>
+      {/* WHO, WHICH RUNG, AND HOW THE TWO SCORES STAND, before any KRA. The
+          panel used to open straight onto KRA 1 with the person's name in a
+          card title and their score nowhere — orientation the reader had to
+          assemble from four separate places. */}
+      <div className="phead">
+        <div className="ava" aria-hidden="true">{initials(member.name)}</div>
+        <div className="who">
+          <div className="nm" style={BREAK}>{member.name}</div>
+          <div className="meta">
+            <span>{member.code}</span>
+            <span>·</span>
+            <span>{lines?.length ?? 0} KRAs, weightage {total}</span>
+            {myRung && <><span>·</span><span>You are <b>{STAGE_SHORT[myRung]}</b> on this</span></>}
+          </div>
+          <div className="k" style={{ marginTop: 6, lineHeight: 1.6 }}>
+            {!rating
+              ? 'The KRA form as they filled it, read-only.'
+              : finalises
+                ? 'Yours is the last review. What you settle here is the rating they are told.'
+                : 'Read it, score it, and send it up the chain.'}
+          </div>
+        </div>
+        {cmp.total > 0 && (
+          <div className="scores">
+            <div className="sc">
+              <div className="l">They said</div>
+              <div className="v">{cmp.selfScore === null ? '—' : cmp.selfScore.toFixed(2)}</div>
+            </div>
+            {rating && (
+              <div className="sc mine">
+                <div className="l">You say</div>
+                <div className="v">{cmp.myScore === null ? '—' : cmp.myScore.toFixed(2)}</div>
+              </div>
+            )}
+            {rating && cmp.delta !== null && cmp.delta !== 0 && (
+              <div className="sc gap">
+                <div className="l">Difference</div>
+                <div className="v">{cmp.delta > 0 ? `+${cmp.delta}` : cmp.delta}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* HOW FAR THROUGH THIS IS, pinned so it is still there at the fourth
           KRA. The only progress signal used to be the blocker banner at the
           very bottom — which means the answer to "how much is left" was
           below the thing you were asking it about. Rendered only while there
           is rating to do: a read-only viewer has no progress to make. */}
-      {myRung && onApprove && cmp.total > 0 && (
+      {rating && cmp.total > 0 && (
         <div className="ratebar">
           <div className="lead">
             {cmp.rated === cmp.total
@@ -985,10 +1056,40 @@ export function KraDetail({ member, lines, loading, onClose,
           <div className={`bar${cmp.rated === cmp.total ? ' green' : ''}`}>
             <span style={{ width: `${(cmp.rated / cmp.total) * 100}%` }} />
           </div>
+          {/* ONE CHIP PER KRA, coloured by state and clickable. "Which one
+              still needs me" was a question you answered by scrolling past
+              the ones that did not. */}
+          <div className="ksteps" role="group" aria-label="Jump to a KRA">
+            {cmp.lines.map((l, i) => {
+              const needs = l.needsReason && !l.hasReason
+              const done = l.mine != null && !needs
+              return (
+                <button key={l.goalId} type="button"
+                        className={`kstep${done ? ' done' : needs ? ' needs' : ''}`}
+                        title={`${l.title}${done ? ' — done' : needs ? ' — needs a reason' : ' — not rated'}`}
+                        aria-label={`Go to ${l.title}`}
+                        onClick={() => jump(l.goalId)}>
+                  {i + 1}
+                </button>
+              )
+            })}
+          </div>
           {cmp.missingReasons.length > 0 && (
             <span className="pill p-amber">
               {cmp.missingReasons.length} need{cmp.missingReasons.length === 1 ? 's' : ''} a reason
             </span>
+          )}
+          {/* FOLDING IS OFFERED, NOT DONE. One button, saying exactly how
+              many cards it will put away. */}
+          {foldableLeft > 0 && (
+            <button className="btn ghost sm" type="button"
+                    onClick={() => setFolded(p => {
+                      const n = { ...p }
+                      for (const id of doneIds) n[id] = true
+                      return n
+                    })}>
+              Hide the {foldableLeft} done
+            </button>
           )}
         </div>
       )}
@@ -1010,106 +1111,180 @@ export function KraDetail({ member, lines, loading, onClose,
               // the one the stripe should be showing.
               const stripe = c?.needsReason && !c.hasReason ? ' needs'
                            : mine != null ? ' rated' : ''
+              const foldable = !!(rating && l.goalId)
+              const isFolded = !!(l.goalId && folded[l.goalId])
+              const bl = l.selfRating == null ? null : bandFor(l.selfRating, bands)
               return (
-              <div key={l.seqNo} className={`card kcard${stripe}`} style={{ margin: 0 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline',
-                              flexWrap: 'wrap', marginBottom: 6 }}>
-                  <b style={BREAK}>{l.seqNo}. {l.title || <span className="k">untitled</span>}</b>
-                  <span className="pill p-brand">{l.weightage}%</span>
-                  {l.category && <span className="pill p-grey">{l.category.toLowerCase()}</span>}
-                  {l.status && <span className={`pill ${l.status === 'LOCKED' ? 'p-green' : 'p-amber'}`}>
-                    {l.status.replace(/_/g, ' ').toLowerCase()}
-                  </span>}
-                  {/* CARRIED_FORWARD is worth surfacing: a set that is last
-                      quarter's, unchanged, is a different thing to approve
-                      than one written fresh. */}
-                  {l.source === 'CARRIED_FORWARD' &&
-                    <span className="pill p-blue">carried forward</span>}
-                </div>
-                <div className="grid g2" style={{ gap: 8 }}>
-                  <div>
-                    <div className="lbl">How it is measured</div>
-                    <div className="k" style={BREAK}>{l.kpi || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="lbl">Target</div>
-                    <div className="k" style={BREAK}>{l.target || '—'}</div>
-                  </div>
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <div className="lbl">What they say they delivered</div>
-                  <div className="k" style={BREAK}>{l.achievement || <i>Nothing recorded.</i>}</div>
-                </div>
-                <div style={{ marginTop: 8, display: 'flex', gap: 10,
-                              alignItems: 'baseline', flexWrap: 'wrap' }}>
-                  <div className="lbl" style={{ margin: 0 }}>Their rating</div>
-                  {l.selfRating == null
-                    ? <span className="k">not rated</span>
-                    : <b>{l.selfRating}</b>}
-                  {l.selfComment && <span className="k" style={BREAK}>— {l.selfComment}</span>}
-                </div>
-
-                {/* YOUR RATING, ON THE SAME SCREEN AS THE APPROVAL.
-                    Rating and approving used to be two tabs, and the chain
-                    then stalled on its own rule: 199 will not let the HOD
-                    settle a rating until every rung ahead has rated, so a
-                    manager who approved without visiting Rate My Team passed
-                    the set up and blocked it there. Reading the KRA, scoring
-                    it and approving are one judgement, so they are one
-                    screen. */}
-                {myRung && onRate && l.goalId && (
-                  <div style={{ marginTop: 10, paddingTop: 10,
-                                borderTop: '1px solid var(--ez-line)' }}>
-                    <div className="lbl">Your rating</div>
-                    <div className="chips" role="radiogroup"
-                         aria-label={`Your rating for ${l.title}`}>
-                      {bands.map(bd => {
-                        const on = rate?.[l.goalId!]?.rating === bd.value
-                        return (
-                          <button key={bd.value} type="button" role="radio"
-                                  aria-checked={on}
-                                  // COLOURED ONLY ONCE CHOSEN. Painting all
-                                  // five turns the control into a traffic
-                                  // light and pulls the eye to the green
-                                  // one, which is a thumb on the scale.
-                                  className={on ? `chip sel b${bd.value}` : 'chip'}
-                                  title={bd.label}
-                                  onClick={() => onRate(l.goalId!, { rating: bd.value })}>
-                            {bd.value}
-                          </button>
-                        )
-                      })}
-                      {/* WHAT THE NUMBER MEANS, in words, next to it. The
-                          band labels existed only in a title attribute:
-                          invisible on touch, and on a desktop visible only
-                          to somebody who already suspected there was
-                          something to hover. A manager choosing between 3
-                          and 4 is choosing between two words, not two
-                          digits. */}
-                      {mine != null && (
-                        <span className="bandname">
-                          {bandFor(mine, bands)?.label ?? ''}
-                          {c?.delta != null && c.delta !== 0 && (
-                            <span className="vs">
-                              {c.delta > 0 ? `${c.delta} above` : `${-c.delta} below`} their own
-                            </span>
-                          )}
+              <div key={l.seqNo} className={`card kcard${stripe}${isFolded ? ' folded' : ''}`}
+                   style={{ margin: 0 }}>
+                {/* THE HEAD IS THE FOLD CONTROL. The whole row is the hit
+                    target rather than a chevron somebody has to aim at —
+                    and when there is nothing to fold (a read-only viewer,
+                    or a KRA with no goal id to key the state on) it is a
+                    plain div, not a button that does nothing. */}
+                {/* THE HEAD IS THE FOLD CONTROL when there is something
+                    to fold. The whole row is the hit target rather than a
+                    chevron somebody has to aim at — and for a read-only
+                    viewer, or a KRA with no goal id to key the fold state
+                    on, it stays a plain row rather than a button that does
+                    nothing when pressed. */}
+                {(() => {
+                  const head = (
+                    <>
+                      <b style={BREAK}>{l.seqNo}. {l.title || <span className="k">untitled</span>}</b>
+                      <span className="pill p-brand">{l.weightage}%</span>
+                      {l.category && <span className="pill p-grey">{l.category.toLowerCase()}</span>}
+                      {l.status && <span className={`pill ${l.status === 'LOCKED' ? 'p-green' : 'p-amber'}`}>
+                        {l.status.replace(/_/g, ' ').toLowerCase()}
+                      </span>}
+                      {/* CARRIED_FORWARD is worth surfacing: a set that is
+                          last quarter's, unchanged, is a different thing to
+                          approve than one written fresh. */}
+                      {l.source === 'CARRIED_FORWARD' &&
+                        <span className="pill p-blue">carried forward</span>}
+                      {foldable && (
+                        <span className="fold">
+                          {/* The state in a word, so a folded row still says
+                              whether it is finished or still owed. */}
+                          {c?.needsReason && !c.hasReason ? 'needs a reason'
+                            : mine != null ? 'done' : 'not rated'}
+                          <span className="caret" aria-hidden="true">▾</span>
                         </span>
                       )}
-                    </div>
-                    <input style={{ marginTop: 6 }} id={whyId(l.goalId)}
-                           aria-label={`Why you rated ${l.title} this way`}
-                           placeholder={
-                             // The ask changes when the numbers disagree,
-                             // because that is when the sentence matters.
-                             rate?.[l.goalId]?.rating != null
-                             && l.selfRating != null
-                             && rate[l.goalId].rating !== l.selfRating
-                               ? `Why ${rate[l.goalId].rating} and not their ${l.selfRating}? They will read this.`
-                               : 'A line on why — they will read this.'}
-                           value={rate?.[l.goalId!]?.comment ?? ''}
-                           onChange={e => onRate(l.goalId!, { comment: e.target.value })} />
+                    </>
+                  )
+                  return foldable ? (
+                    <button type="button" className="khead" aria-expanded={!isFolded}
+                            onClick={() => fold(l.goalId!, !isFolded)}>
+                      {head}
+                    </button>
+                  ) : (
+                    <div className="khead" style={{ cursor: 'default' }}>{head}</div>
+                  )
+                })()}
+
+                {isFolded ? (
+                  // Everything the open card would have said about the
+                  // decision, on one line — so folding loses the evidence,
+                  // never the judgement.
+                  <div className="kfold">
+                    <span>They said <b>{l.selfRating ?? '—'}</b></span>
+                    <span aria-hidden="true">·</span>
+                    <span>You said <b>{mine ?? '—'}</b></span>
+                    {c?.delta != null && c.delta !== 0 && (
+                      <span className={`pill ${c.flag === 'MAJOR_GAP' ? 'p-amber' : 'p-blue'}`}>
+                        {c.delta > 0 ? `+${c.delta}` : c.delta}
+                      </span>
+                    )}
+                    {c?.hasReason && <span className="pill p-green">reason given</span>}
                   </div>
+                ) : (
+                <>
+                {/* THE EVIDENCE, as label-and-value rows rather than five
+                    stacked blocks. Twenty label rows for four KRAs was most
+                    of the panel's height and none of its information. */}
+                <div className="ev">
+                  <div className="row">
+                    <div className="l">How it is measured</div>
+                    <div className="v" style={BREAK}>{l.kpi || '—'}</div>
+                  </div>
+                  <div className="row">
+                    <div className="l">Target</div>
+                    <div className="v" style={BREAK}>{l.target || '—'}</div>
+                  </div>
+                  <div className="row">
+                    <div className="l">They delivered</div>
+                    <div className="v" style={BREAK}>
+                      {l.achievement || <i className="k">Nothing recorded.</i>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* THE TWO RATINGS, SIDE BY SIDE. Theirs sat above the
+                    achievement text and yours below it — about 100px apart
+                    with prose in between, when comparing the two IS the
+                    task. */}
+                <div className="vs2">
+                  <div className="side">
+                    <div className="l">They rated themselves</div>
+                    <div className="theirs">
+                      {l.selfRating == null
+                        ? <span className="k">Not rated</span>
+                        : <>
+                            <span className="n">{l.selfRating}</span>
+                            {bl && <span className="bl">{bl.label}</span>}
+                          </>}
+                    </div>
+                    {l.selfComment && (
+                      <div className="k" style={{ marginTop: 5, ...BREAK }}>
+                        &ldquo;{l.selfComment}&rdquo;
+                      </div>
+                    )}
+                  </div>
+
+                  {/* YOUR RATING, ON THE SAME SCREEN AS THE APPROVAL.
+                      Rating and approving used to be two tabs, and the chain
+                      then stalled on its own rule: 199 will not let the HOD
+                      settle a rating until every rung ahead has rated, so a
+                      manager who approved without visiting Rate My Team
+                      passed the set up and blocked it there. Reading the
+                      KRA, scoring it and approving are one judgement, so
+                      they are one screen. */}
+                  {rating && onRate && l.goalId ? (
+                    <div className="side" style={{ minWidth: 0 }}>
+                      <div className="l">Your rating</div>
+                      <div className="chips" role="radiogroup"
+                           aria-label={`Your rating for ${l.title}`}>
+                        {bands.map(bd => {
+                          const on = rate?.[l.goalId!]?.rating === bd.value
+                          return (
+                            <button key={bd.value} type="button" role="radio"
+                                    aria-checked={on}
+                                    // COLOURED ONLY ONCE CHOSEN. Painting all
+                                    // five turns the control into a traffic
+                                    // light and pulls the eye to the green
+                                    // one, which is a thumb on the scale.
+                                    className={on ? `chip sel b${bd.value}` : 'chip'}
+                                    title={bd.label}
+                                    onClick={() => onRate(l.goalId!, { rating: bd.value })}>
+                              {bd.value}
+                            </button>
+                          )
+                        })}
+                        {/* WHAT THE NUMBER MEANS, in words, next to it. The
+                            band labels existed only in a title attribute:
+                            invisible on touch, and on a desktop visible only
+                            to somebody who already suspected there was
+                            something to hover. A manager choosing between 3
+                            and 4 is choosing between two words, not two
+                            digits. */}
+                        {mine != null && (
+                          <span className="bandname">
+                            {bandFor(mine, bands)?.label ?? ''}
+                            {c?.delta != null && c.delta !== 0 && (
+                              <span className="vs">
+                                {c.delta > 0 ? `${c.delta} above` : `${-c.delta} below`} their own
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      <input style={{ marginTop: 8 }} id={whyId(l.goalId)}
+                             aria-label={`Why you rated ${l.title} this way`}
+                             placeholder={
+                               // The ask changes when the numbers disagree,
+                               // because that is when the sentence matters.
+                               rate?.[l.goalId]?.rating != null
+                               && l.selfRating != null
+                               && rate[l.goalId].rating !== l.selfRating
+                                 ? `Why ${rate[l.goalId].rating} and not their ${l.selfRating}? They will read this.`
+                                 : 'A line on why — they will read this.'}
+                             value={rate?.[l.goalId!]?.comment ?? ''}
+                             onChange={e => onRate(l.goalId!, { comment: e.target.value })} />
+                    </div>
+                  ) : null}
+                </div>
+                </>
                 )}
               </div>
               )
@@ -1198,31 +1373,51 @@ export function KraDetail({ member, lines, loading, onClose,
                     </div>
                   </div>
                 )}
-                {finalises && (
-                  <div className="fld" style={{ maxWidth: 260, marginTop: 12 }}>
-                    <label htmlFor="pf-final">Final rating</label>
-                    <select id="pf-final" value={finalRating ?? ''}
-                            onChange={e => onFinalRating?.(e.target.value)}>
-                      <option value="">Choose…</option>
-                      {bands.map(bd => (
-                        <option key={bd.value} value={bd.value}>
-                          {bd.value} · {bd.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="btnrow">
-                  <button className="btn" type="button" disabled={!ready || saving}
-                          onClick={() => onApprove(finalises ? fr ?? undefined : undefined)}>
-                    {saving ? 'Sending…'
-                      : !ready ? 'Not ready to send on'
-                      : finalises ? 'Rate, confirm and finalise'
-                      : 'Rate, confirm and approve'}
-                  </button>
-                  {onClose && (
-                    <button className="btn ghost" type="button" onClick={onClose}>Close</button>
+                {/* THE ACTION, PINNED. It used to sit 1900px below the
+                    first thing the reviewer had to read — and so did every
+                    word explaining why it was disabled, which is the half
+                    that matters when it is. Sticky to the bottom of the
+                    viewport for as long as the panel is taller than it. */}
+                <div className="actionbar">
+                  {!ready && (
+                    <div className="blockers">
+                      {/* The short form of the banner above, beside the
+                          control it blocks. Naming them here is what stops
+                          "Not ready to send on" being a button that refuses
+                          without saying why. */}
+                      {!allRated && <span className="b">{total - rated.length} still unrated</span>}
+                      {!reasoned && <span className="b">{cmp.missingReasons.length} need a reason</span>}
+                      {!ticked && <span className="b">Confirm the one-to-one</span>}
+                      {!frOk && <span className="b">Final rating missing</span>}
+                    </div>
                   )}
+                  <div className="row">
+                    {finalises && (
+                      <div className="fld" style={{ margin: 0, maxWidth: 250 }}>
+                        <label htmlFor="pf-final">Final rating</label>
+                        <select id="pf-final" value={finalRating ?? ''}
+                                onChange={e => onFinalRating?.(e.target.value)}>
+                          <option value="">Choose…</option>
+                          {bands.map(bd => (
+                            <option key={bd.value} value={bd.value}>
+                              {bd.value} · {bd.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="grow" />
+                    {onClose && (
+                      <button className="btn ghost" type="button" onClick={onClose}>Close</button>
+                    )}
+                    <button className="btn" type="button" disabled={!ready || saving}
+                            onClick={() => onApprove(finalises ? fr ?? undefined : undefined)}>
+                      {saving ? 'Sending…'
+                        : !ready ? 'Not ready to send on'
+                        : finalises ? 'Rate, confirm and finalise'
+                        : 'Rate, confirm and approve'}
+                    </button>
+                  </div>
                 </div>
               </>
             )

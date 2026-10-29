@@ -573,3 +573,168 @@
 .pms .ratebar .bar { flex: 1 1 160px; }
 .pms .ratebar .lead { font-size: 12px; font-weight: 700; white-space: nowrap; }
 .pms .ratebar .lead .sm { font-weight: 600; color: var(--ez-muted); }
+
+/* ── the review panel ─────────────────────────────────────────────────────
+ *
+ * MEASURED BEFORE IT WAS CHANGED: 1900px of panel in a 722px viewport for
+ * four KRAs, with the only button 1900px below the start. The policy allows
+ * ten, which is roughly five screens of scrolling to reach a control whose
+ * state you cannot see while you work.
+ *
+ * Three things made it long, and none of them was the content:
+ *   · five stacked labels per KRA, repeated — twenty label rows for four
+ *     KRAs, every one of them a word the reader already knows;
+ *   · the two numbers being compared sat ~100px apart with the achievement
+ *     text between them, when comparing them IS the task;
+ *   · nothing could be put away once it was done.
+ */
+
+/* Who this is, which rung you hold, and how the two scores stand — before
+ * any of the KRAs. The panel used to open on KRA 1 with the person's name in
+ * a card title, which is orientation you have to assemble yourself. */
+.pms .phead {
+  display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+  padding: 14px; margin-bottom: 12px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  border-radius: 12px;
+}
+.pms .phead .who { flex: 1 1 240px; min-width: 0; }
+.pms .phead .nm { font-size: 15px; font-weight: 800; color: var(--ez-ink); }
+.pms .phead .meta {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 4px; font-size: 11px; color: var(--ez-muted);
+}
+/* The two scores, side by side, at the size of a thing you are meant to
+ * compare rather than a thing you are meant to find. */
+.pms .phead .scores { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+.pms .phead .sc {
+  min-width: 92px; padding: 8px 12px; border-radius: 10px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+}
+.pms .phead .sc .l {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--ez-muted); white-space: nowrap;
+}
+.pms .phead .sc .v {
+  font-size: 19px; font-weight: 800; color: var(--ez-ink);
+  font-variant-numeric: tabular-nums; line-height: 1.25;
+}
+.pms .phead .sc.mine { border-color: var(--ez-brand-edge); background: var(--ez-brand-tint); }
+.pms .phead .sc.gap  { border-color: var(--ez-warning); background: var(--ez-warning-tint); }
+.pms .phead .sc.gap .v { color: var(--ez-warning); }
+
+/* The KRA jump chips in the sticky bar. Numbered, coloured by state, and
+ * clickable — so "which one still needs me" is answered without scrolling
+ * through the ones that do not. */
+.pms .ksteps { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.pms .kstep {
+  width: 24px; height: 24px; border-radius: 7px; padding: 0;
+  border: 1px solid var(--ez-line); background: var(--ez-surface);
+  font-weight: 800; font-size: 11px; color: var(--ez-muted);
+  font-family: inherit; cursor: pointer;
+  transition: transform .12s ease, background .12s ease, border-color .12s ease;
+}
+.pms .kstep:hover { transform: translateY(-1px); border-color: var(--ez-brand); }
+.pms .kstep.done {
+  background: var(--ez-positive-tint); border-color: var(--ez-positive-edge);
+  color: var(--ez-positive);
+}
+.pms .kstep.needs {
+  background: var(--ez-warning-tint); border-color: var(--ez-warning);
+  color: var(--ez-warning);
+}
+
+/* ── one KRA ──────────────────────────────────────────────────────────── */
+
+/* The head doubles as the fold control, so the whole row is the hit target
+ * rather than a chevron somebody has to aim at. */
+.pms .khead {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  width: 100%; background: none; border: 0; padding: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.pms .khead .fold {
+  margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ez-muted);
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.pms .khead .caret { transition: transform .18s ease; display: inline-block; }
+.pms .kcard.folded .khead .caret { transform: rotate(-90deg); }
+
+/* The evidence, as label-and-value pairs on one line each instead of five
+ * stacked blocks. The label is the narrow column because it is the part the
+ * reader stops needing after the first KRA. */
+.pms .ev { margin-top: 8px; display: grid; gap: 5px; }
+.pms .ev .row { display: grid; grid-template-columns: 116px 1fr; gap: 10px; align-items: baseline; }
+.pms .ev .row > .l {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--ez-muted); padding-top: 2px;
+}
+.pms .ev .row > .v { font-size: 12px; color: var(--ez-ink-soft); min-width: 0; }
+@media (max-width: 560px) {
+  .pms .ev .row { grid-template-columns: 1fr; gap: 1px; }
+}
+
+/* THE COMPARISON, side by side. Their number and yours were ~100px apart
+ * with the achievement text between them; putting them in one row is the
+ * whole reason this panel exists. */
+.pms .vs2 {
+  display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 12px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ez-line);
+  align-items: start;
+}
+@media (max-width: 620px) { .pms .vs2 { grid-template-columns: 1fr; } }
+.pms .vs2 .side > .l {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--ez-muted); margin-bottom: 5px;
+}
+.pms .vs2 .theirs {
+  /* WRAPS. The band label beside the number is short in the seed data and
+   * not guaranteed to be: bands are configurable per policy, and a row that
+   * cannot wrap widens the card instead. */
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 6px 10px; border-radius: 9px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+}
+.pms .vs2 .theirs .n {
+  font-size: 18px; font-weight: 800; color: var(--ez-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pms .vs2 .theirs .bl { font-size: 11px; color: var(--ez-muted); min-width: 0; }
+
+/* The folded summary: everything the open card would have told you about
+ * the decision, on one line. */
+.pms .kfold {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 6px; font-size: 12px; color: var(--ez-muted);
+}
+.pms .kfold b { color: var(--ez-ink); font-variant-numeric: tabular-nums; }
+
+/* ── the action bar ───────────────────────────────────────────────────────
+ *
+ * Pinned to the bottom of the viewport while the panel is longer than it,
+ * because the button was 1900px below the first thing you had to read, and
+ * so was every word explaining why it was disabled. The negative margins
+ * pull it out to the card's edges so it reads as a bar rather than a block
+ * that happens to be last.
+ */
+.pms .actionbar {
+  position: sticky; bottom: 0;
+  margin: 14px -18px -18px; padding: 12px 18px;
+  background: var(--ez-surface); border-top: 1px solid var(--ez-line);
+  border-radius: 0 0 13px 13px;
+  display: grid; gap: 10px;
+}
+.pms .actionbar .row {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.pms .actionbar .row .grow { flex: 1 1 auto; min-width: 0; }
+/* The blocking reasons, next to the control they block rather than above the
+ * fold. Kept to one line each: this is a reminder, and the full explanation
+ * is still in the banner the panel shows when something is wrong. */
+.pms .blockers {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  font-size: 11px; color: var(--ez-warning); font-weight: 600;
+}
+.pms .blockers .b {
+  background: var(--ez-warning-tint); border-radius: 20px; padding: 2px 9px;
+}

@@ -232,7 +232,9 @@ test('progress through the set is shown while rating, not after', () => {
 test('progress is only shown to somebody who can make it', () => {
   // A read-only viewer has no progress to make, and a bar at 0 of 4 would
   // read as something they had failed to do.
-  assert.match(MGR, /\{myRung && onApprove && cmp\.total > 0 && \(/,
+  assert.match(MGR, /const rating = myRung && onApprove/,
+    'the rating gate is no longer derived from the rung and the handler')
+  assert.match(MGR, /\{rating && cmp\.total > 0 && \(/,
     'the progress bar renders for read-only viewers')
 })
 
