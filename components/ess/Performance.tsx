@@ -49,7 +49,7 @@ import {
 } from '@/components/pms/ManagerTabs'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
-import { rungFor } from '@/lib/pms/chain'
+import { rungFor, heldBy, approvalFinalises } from '@/lib/pms/chain'
 import { showFinaliserFeedbackTab, type PostFinalOwner } from '@/lib/pms/postFinal'
 import { autoLogFor, CONFIRM_LABEL, CONFIRM_WHY, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
@@ -1629,6 +1629,17 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    */
   const [kraFor, setKraFor] = useState<string | null>(null)
   const [kraLines, setKraLines] = useState<KraLine[] | null>(null)
+  /**
+   * THIS RATER'S SCORES, while the panel is open.
+   *
+   * Seeded from what they have already written, so reopening shows their own
+   * work rather than an empty form — and a second visit after a send-back is
+   * an edit, not a restart.
+   */
+  const [kraRate, setKraRate] = useState<Record<string, { rating: number | null; comment: string }>>({})
+  const [kraFinal, setKraFinal] = useState('')
+  /** The one-to-one tick, for the employee whose panel is open. */
+  const [confirmKra, setConfirmKra] = useState(false)
   const openKras = useCallback(async (id: string) => {
     setKraFor(id); setKraLines(null)
     if (!period) return
@@ -1642,6 +1653,19 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
         .select('goal_id,achievement_value,rating,comments')
         .eq('employee_id', id).eq('period_id', period.id).eq('rater_role', 'SELF'),
     ])
+    // What this rater has already said about each KRA. Loaded alongside the
+    // employee's own ratings, in the same round trip.
+    const mine = chainRoleFor(id)
+    const mineRows = mine ? await supabase.from('pms_reviews')
+      .select('goal_id,rating,comments')
+      .eq('employee_id', id).eq('period_id', period.id).eq('rater_role', mine) : null
+    setKraRate(Object.fromEntries((mineRows?.data ?? []).map(r => {
+      const x = r as { goal_id: string; rating?: number; comments?: string }
+      return [String(x.goal_id),
+              { rating: x.rating == null ? null : Number(x.rating), comment: x.comments ?? '' }]
+    })))
+    setKraFinal('')
+
     const selfBy = new Map((rv.data ?? []).map(r => {
       const x = r as { goal_id: string; achievement_value?: string; rating?: number; comments?: string }
       return [String(x.goal_id), x]
@@ -1650,6 +1674,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       const x = row as Record<string, unknown>
       const s = selfBy.get(String(x.id))
       return {
+        goalId: String(x.id),
         seqNo: Number(x.seq_no), title: String(x.kra_title ?? ''),
         kpi: (x.kpi_metric as string) ?? null, target: (x.target_value as string) ?? null,
         category: (x.category as string) ?? null,
@@ -1729,6 +1754,59 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    * that finalises; everywhere else it is ignored, and passing it would be a
    * lie about who set the number.
    */
+  /**
+   * RATE, CONFIRM AND APPROVE — one act, in this order.
+   *
+   * They used to be two tabs, and the chain then stalled on its own rule:
+   * 199 will not let a rung settle anything until every rung ahead has rated,
+   * so a manager who approved without visiting Rate My Team passed the set up
+   * and blocked it there with no sign of why.
+   *
+   * THE ORDER IS LOAD-BEARING TWICE OVER. The ratings go first because
+   * trg_pms_sync_role_score turns them into rm_l1_score / rm_l2_score /
+   * hod_score, and 199 reads those scores — written after the approval, the
+   * approval would be refused for want of a number that is about to exist.
+   * The one-to-one then precedes the approval for the same reason at RM L1,
+   * where pms_lock_kras counts a row carrying both acknowledgements.
+   *
+   * A failure at any step stops the next. Half of this is worse than none of
+   * it: a rating recorded against an appraisal that did not move is a number
+   * the employee cannot see and the chain will not use.
+   */
+  const rateAndApprove = async (id: string, finalRating?: number) => {
+    const myRung = chainRoleFor(id)
+    if (!myRung) {
+      setMsg('You are not recorded in this employee\u2019s chain for this period, so you cannot approve it.')
+      return
+    }
+    if (!companyId) { setMsg(NO_COMPANY); return }
+    const lines = kraLines ?? []
+    const missing = lines.filter(l => l.goalId && kraRate[l.goalId]?.rating == null)
+    if (!lines.length || missing.length) {
+      setMsg(`Rate every KRA before sending it on — ${missing.length} of ${lines.length} still have no rating from you.`)
+      return
+    }
+
+    setSaving(true); setMsg(null)
+    const rv = await supabase.from('pms_reviews').upsert(
+      lines.map(l => ({
+        company_id: companyId, period_id: period!.id, employee_id: id,
+        goal_id: l.goalId, rater_id: employeeId, rater_role: myRung,
+        rating: kraRate[l.goalId!]!.rating,
+        comments: kraRate[l.goalId!]!.comment || null,
+        submitted: true, submitted_at: new Date().toISOString(),
+      })),
+      { onConflict: 'period_id,employee_id,goal_id,rater_role' })
+    if (rv.error) {
+      setSaving(false)
+      logFail('manager rating refused', rv.error)
+      setMsg(SAVE_FAILED('rating')); return
+    }
+    setSaving(false)
+    await approveInChain(id, finalRating)
+    setKraFor(null); setKraLines(null); setKraRate({}); setKraFinal('')
+  }
+
   const approveInChain = async (id: string, rating?: number) => {
     const myRung = chainRoleFor(id)
     if (!myRung) {
@@ -1942,9 +2020,39 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                         onApprove={approveInChain}
                                         onOpenKras={openKras}
                                         kraDetail={kraFor && rows.find(r => r.employeeId === kraFor)
-                                          ? <KraDetail member={rows.find(r => r.employeeId === kraFor)!}
-                                                       lines={kraLines}
-                                                       onClose={() => { setKraFor(null); setKraLines(null) }} />
+                                          ? (() => {
+                                              const m = rows.find(r => r.employeeId === kraFor)!
+                                              const rung = chainRoleFor(kraFor)
+                                              // Only the rung HOLDING it may rate and approve;
+                                              // anyone else gets the read-only record.
+                                              const mine = rung && m.chainStage === rung
+                                              const held = heldBy(m)
+                                              return (
+                                                <KraDetail member={m} lines={kraLines}
+                                                  myRung={mine ? rung : null}
+                                                  rate={kraRate}
+                                                  onRate={(gid, patch) => setKraRate(p => {
+                                                    const cur = p[gid] ?? { rating: null, comment: '' }
+                                                    return { ...p, [gid]: { ...cur, ...patch } }
+                                                  })}
+                                                  bands={bands.length ? bands : undefined}
+                                                  confirmed={confirmKra}
+                                                  onConfirm={setConfirmKra}
+                                                  alreadyConfirmed={
+                                                    rung === 'RM_L1' ? m.oneToOneDone === true
+                                                    : rung === 'HOD' ? m.finalReviewMgrAcked === true
+                                                    : m.rmL2ConfirmedOneToOne === true}
+                                                  finalises={!!rung && approvalFinalises(
+                                                    (policy?.approval_chain as Chain | undefined) ?? 'SELF_RM1_RM2_HOD',
+                                                    rung, held)}
+                                                  finalRating={kraFinal}
+                                                  onFinalRating={setKraFinal}
+                                                  onApprove={fr => rateAndApprove(kraFor, fr)}
+                                                  saving={saving}
+                                                  onClose={() => { setKraFor(null); setKraLines(null)
+                                                                   setKraRate({}); setKraFinal('') }} />
+                                              )
+                                            })()
                                           : null}
                                         bands={bands.length ? bands : undefined} />}
       {tab === 'rate' && (

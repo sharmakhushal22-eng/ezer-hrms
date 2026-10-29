@@ -92,19 +92,25 @@ test('the approval queue filters on the viewer\'s own rung', () => {
 })
 
 test('the rating field appears only where approval finalises', () => {
-  // Asking every rung for a final rating invites a manager to set a number
-  // they have no authority to set; asking none means the last rung's approval
-  // is refused for want of one.
-  assert.match(MGR, /finalises\s*&&\s*\(\s*<input type="number"/)
-  assert.match(MGR, /finalises \? 'Approve & finalise' : 'Approve'/)
+  // THE RULE SURVIVED; THE PLACE CHANGED. The final rating used to be a
+  // number box in the queue's action column. Rating and approving are one act
+  // now, so it is a select in the review panel — offered after the manager
+  // has read and scored every KRA, which is when the judgement is actually
+  // made.
+  //
+  // What must still hold: it appears ONLY at the rung that settles the
+  // rating. Asking every rung for one invites a manager to set a number they
+  // have no authority to set; asking none means the last rung's approval is
+  // refused for want of it.
+  assert.match(MGR, /\{finalises && \(\s*\n?\s*<div className="fld"/,
+    'the final rating is not gated on this rung being the one that finalises')
+  assert.match(MGR, /<select id="pf-final"/, 'there is no final rating control')
+  assert.match(MGR, /finalises \? 'Rate, confirm and finalise'/,
+    'the button does not say that this approval settles the rating')
   // AND IT MUST ASK ABOUT THE HOLDERS, not just the policy's chain. On a
   // collapsed line — 190 of 395 enrolments — RM L2 is unfilled, so the RM L1's
-  // approval finalises. Computed from the chain alone the button would say
-  // "Approve", offer no rating field, and the database would answer "a final
-  // rating is needed to finalise" with nowhere to type one.
-  assert.match(MGR, /const held = heldBy\(r\.member\)/,
-    'the approval card does not resolve who actually fills each rung')
-  assert.match(MGR, /approvalFinalises\(chain, myStage, held\)/,
+  // approval finalises.
+  assert.match(PERF, /approvalFinalises\(\s*\n?\s*\(policy\?\.approval_chain as Chain \| undefined\) \?\? 'SELF_RM1_RM2_HOD',\s*\n?\s*rung, held\)/,
     'whether approval finalises is computed without the rung holders')
 })
 

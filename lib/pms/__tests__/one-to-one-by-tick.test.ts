@@ -14,7 +14,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { autoLogFor, CONFIRM_STAGES, CONFIRM_LABEL, CONFIRM_SHORT, CONFIRM_WHY,
+import { autoLogFor, CONFIRM_STAGES, CONFIRM_LABEL, CONFIRM_WHY,
          DISCUSSION_TYPES } from '../oneToOne.ts'
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
@@ -101,10 +101,14 @@ test('the employee cannot submit without ticking it', () => {
 })
 
 test('a manager cannot approve without ticking it', () => {
-  assert.match(MGR, /const mayApprove = alreadyConfirmed \|\| !!confirmed\[id\]/,
-    'approval is not gated on the confirmation')
-  assert.match(MGR, /disabled=\{!onApprove \|\| !ratingOk \|\| !mayApprove\}/)
-  assert.match(MGR, /Confirm the one-to-one first/)
+  // THE GATE MOVED WITH THE BUTTON. Approving used to be a queue control, so
+  // this read the queue cell; rating and approving are one act now, so both
+  // live in the review panel and the tick gates it there.
+  assert.match(MGR, /const ticked = alreadyConfirmed \|\| !!confirmed/,
+    'the panel does not track the confirmation')
+  assert.match(MGR, /const ready = allRated && ticked && frOk/,
+    'approving is not gated on the confirmation')
+  assert.match(MGR, /disabled=\{!ready \|\| saving\}/)
   // Already-confirmed rows show it ticked and disabled, so a manager can see
   // the confirmation stands rather than wondering whether it saved.
   assert.match(MGR, /disabled=\{alreadyConfirmed\}/)
@@ -133,50 +137,57 @@ test('each stage is recorded as its own stage', () => {
 
 test('L1, L2 and the HOD can read the form the employee filled', () => {
   assert.match(MGR, /export function KraDetail/, 'there is no detailed view')
-  assert.match(MGR, /View their form/, 'nothing opens it')
+  assert.match(MGR, /Review, rate & approve/, 'nothing opens it')
   assert.match(PERF, /const openKras = useCallback/, 'nothing loads it')
   // The employee's OWN rating is the half a manager most needs before
   // approving — rater_role SELF, not their own rating of them.
   assert.match(PERF, /\.eq\('rater_role', 'SELF'\)/,
     'the detail view does not load the employee\'s self rating')
+  // And the goal id, without which no rating can be written at all:
+  // pms_reviews is UNIQUE on (period, employee, goal, rater_role).
+  assert.match(PERF, /goalId: String\(x\.id\)/,
+    'the lines carry no goal id, so the ratings cannot be saved')
   // Loaded on demand: a manager with 30 reportees must not pull 30 KRA sets
   // to render a table of counts.
   assert.ok(!/select\('id,seq_no,kra_title[\s\S]{0,400}\.in\('employee_id'/.test(PERF),
     'the KRA detail is loaded for the whole roster rather than on demand')
 })
 
-test('the detailed view is read-only', () => {
-  // Editing a reportee's KRA changes what somebody is measured against after
-  // they agreed it. That belongs behind its own control, not inside a view
-  // opened to have a look — the chain's edit path is the send-back.
+test('the panel is read-only for anyone who is not the acting rung', () => {
+  // IT USED TO BE READ-ONLY FULL STOP, and that was the right rule while
+  // rating lived on its own tab. Rating and approving are one act now, so the
+  // rung HOLDING the appraisal rates here — and everybody else still gets the
+  // record, because editing what somebody is measured against is not
+  // something to offer a passer-by.
   const v = MGR.slice(MGR.indexOf('export function KraDetail'),
                       MGR.indexOf('// ── §4.3 Rate My Team'))
-  assert.ok(v.length > 800, 'could not isolate the detail view')
-  for (const bad of ['<input', '<textarea', '<select', 'onChange']) {
-    assert.ok(!v.includes(bad), `the detail view offers ${bad}`)
-  }
+  assert.ok(v.length > 800, 'could not isolate the panel')
+  // Every control is behind myRung.
+  assert.match(v, /\{myRung && onRate && l\.goalId && \(/,
+    'the rating controls are not gated on holding the rung')
+  assert.match(v, /\{myRung && onApprove && \(/,
+    'the approve footer is not gated on holding the rung')
+  // And the caller must only pass myRung when the stage is actually theirs.
+  assert.match(PERF, /const mine = rung && m\.chainStage === rung/,
+    'the panel is given a rung without checking the appraisal is at it')
+  assert.match(PERF, /myRung=\{mine \? rung : null\}/)
 })
 
 // ── the checkbox has to fit where it is put ──────────────────────────────
 
-test('the queue uses the SHORT label, not the full sentence', () => {
-  // REPORTED: the checkbox content overflowed. CONFIRM_LABEL is a full
-  // sentence — right on a form, and in the action column of a ten-column
-  // queue it forced the table wider than its container, so the whole table
-  // scrolled sideways.
-  // Anchored on the label element, not on a fixed window after mayApprove —
-  // the first version sliced 3000 characters from that declaration and the
-  // JSX it was looking for sits further down, so it failed against correct
-  // code.
-  const i = MGR.indexOf('title={CONFIRM_LABEL[myStage as ConfirmStage]}')
-  assert.ok(i > 0, 'the full assertion is no longer available as the title')
-  const cell = MGR.slice(i, i + 900)
-  assert.match(cell, /CONFIRM_SHORT\[myStage as ConfirmStage\]/,
-    'the queue renders the full sentence in a table cell')
-  // Short enough to mean it: a label over ~24 characters defeats the purpose.
-  for (const [k, v] of Object.entries(CONFIRM_SHORT)) {
-    assert.ok(v.length <= 24, `CONFIRM_SHORT.${k} is ${v.length} chars — too long for a cell`)
-  }
+test('the short label is gone with the cramped cell it existed for', () => {
+  // CONFIRM_SHORT was added when the checkbox sat in the action column of a
+  // ten-column queue and a full sentence pushed the table sideways. The tick
+  // moved into the review panel, where the whole assertion fits — so the
+  // short form is dead, and dead constants are how a codebase accumulates
+  // two ways to say one thing.
+  const one = read('lib/pms/oneToOne.ts')
+  assert.ok(!one.includes('CONFIRM_SHORT'),
+    'CONFIRM_SHORT is still exported but nothing renders it')
+  assert.ok(!MGR.includes('CONFIRM_SHORT'), 'ManagerTabs still imports it')
+  // The panel shows the full assertion, which is what the person is agreeing to.
+  assert.match(MGR, /<b>\{CONFIRM_LABEL\[myRung\]\}<\/b>/,
+    'the panel does not show the full assertion')
 })
 
 test('both checkbox labels can actually wrap', () => {
@@ -336,4 +347,59 @@ test('every PMS checkbox uses it — there are only two, and both must', () => {
     assert.match(before, /<label className="checkline"/,
       `${name}: the checkbox is not inside a label.checkline`)
   }
+})
+
+// ── rating and approving are one act ────────────────────────────────────
+
+test('approving requires a rating on EVERY KRA', () => {
+  // THE BUG THIS CLOSES: 199 will not let a rung settle anything until every
+  // rung ahead has rated, so a manager who approved without visiting Rate My
+  // Team passed the set up and blocked it there — with no sign of why, since
+  // the block surfaced two rungs later on somebody else's screen.
+  assert.match(MGR, /const allRated = total > 0 && rated\.length === total/,
+    'the panel does not require every KRA to be rated')
+  assert.match(MGR, /Rate every KRA — \{rated\.length\} of \{total\} done/,
+    'an unrated set gives no count of what is outstanding')
+  // And the write side refuses too, not just the button.
+  assert.match(PERF, /Rate every KRA before sending it on/,
+    'the handler accepts a partial set')
+  assert.match(PERF, /const missing = lines\.filter\(l => l\.goalId && kraRate\[l\.goalId\]\?\.rating == null\)/)
+})
+
+test('the ratings are written BEFORE the approval', () => {
+  // trg_pms_sync_role_score turns the per-KRA rows into rm_l1_score /
+  // rm_l2_score / hod_score, and 199 reads those scores. Written after the
+  // approval, the approval is refused for want of a number that is about to
+  // exist — the same ordering trap as the one-to-one at RM L1.
+  const fn = PERF.slice(PERF.indexOf('const rateAndApprove'),
+                        PERF.indexOf('const approveInChain'))
+  assert.ok(fn.length > 400, 'could not isolate the collective action')
+  const write = fn.indexOf("from('pms_reviews').upsert")
+  const approve = fn.indexOf('approveInChain(id')
+  assert.ok(write > 0 && approve > 0 && write < approve,
+    'the approval runs before the ratings are written, so 199 will refuse it')
+  // A failed write must stop the approval: half of this is worse than none,
+  // because a rating against an appraisal that did not move is invisible.
+  assert.match(fn, /if \(rv\.error\) \{[\s\S]{0,200}return\s*\n?\s*\}/,
+    'a failed rating write does not stop the approval')
+})
+
+test('each rater writes under their OWN rung', () => {
+  // pms_reviews is UNIQUE on (period, employee, goal, rater_role). Writing an
+  // RM L2's rating under RM_L1 does not mislabel it — it overwrites the L1's.
+  const fn = PERF.slice(PERF.indexOf('const rateAndApprove'),
+                        PERF.indexOf('const approveInChain'))
+  assert.match(fn, /rater_role: myRung/, 'the rung is hardcoded or assumed')
+  assert.match(fn, /const myRung = chainRoleFor\(id\)/,
+    'the rung is not resolved per employee')
+  assert.match(fn, /onConflict: 'period_id,employee_id,goal_id,rater_role'/,
+    'the upsert does not match the table\'s unique key')
+})
+
+test('the panel seeds from what this rater already wrote', () => {
+  // Reopening after a send-back is an edit, not a restart. An empty form
+  // would quietly discard their earlier judgement on save.
+  assert.match(PERF, /\.eq\('rater_role', mine\)/,
+    'the panel does not load this rater\'s existing scores')
+  assert.match(PERF, /setKraRate\(Object\.fromEntries/)
 })

@@ -27,7 +27,7 @@ import { teamQueue, finaliseQueue, teamStats, distribution,
 import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
 import { canManagerRate, checkFeedback, score, gap, byCategory, bandFor,
          DEFAULT_BANDS, type Band, type Line } from '@/lib/pms/scoring'
-import { canPublishResult, CONFIRM_LABEL, CONFIRM_SHORT, CONFIRM_WHY,
+import { canPublishResult, CONFIRM_LABEL, CONFIRM_WHY,
          type Log, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
@@ -268,7 +268,6 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
   bands?: Band[]
 }) {
   const [remark, setRemark] = useState<Record<string, string>>({})
-  const [rating, setRating] = useState<Record<string, string>>({})
   const [rejecting, setRejecting] = useState<Record<string, boolean>>({})
   /**
    * THE ONE-TO-ONE TICK, per row.
@@ -321,13 +320,6 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
             : r.member.rmL2ConfirmedOneToOne === true
           const mayApprove = alreadyConfirmed || !!confirmed[id]
           const rk = remark[id] ?? ''
-          const rt = rating[id] ?? ''
-          const num = Number(rt)
-          // The band list is the policy's scale, so its edges are the valid
-          // range rather than a hardcoded 1-5 that a 1-4 scale would break.
-          const lo = bands?.length ? Math.min(...bands.map(b => b.value)) : 1
-          const hi = bands?.length ? Math.max(...bands.map(b => b.value)) : 5
-          const ratingOk = !finalises || (rt !== '' && num >= lo && num <= hi)
 
           if (rejecting[id]) {
             return (
@@ -366,60 +358,23 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
           return (
             <td>
               <div style={{ display: 'grid', gap: 5, width: 200, maxWidth: '100%' }}>
-                {finalises && (
-                  <input type="number" step="0.01" min={lo} max={hi}
-                         placeholder={`Final rating (${lo}–${hi})`}
-                         aria-label={`Final rating for ${r.member.name}`}
-                         value={rt}
-                         onChange={e => setRating(p => ({ ...p, [id]: e.target.value }))} />
-                )}
-                {/* Ticking this is what records the log — see
-                    recordOneToOne. Already-confirmed rows show it ticked and
-                    disabled rather than hiding it, so the manager can see the
-                    confirmation stands rather than wondering whether it
-                    saved. */}
-                {/* SHORT LABEL, FULL SENTENCE IN THE TITLE. The assertion is
-                    a sentence and belongs in full on a form; in the action
-                    column of a ten-column queue it forced the table wider
-                    than its container and the whole thing scrolled sideways.
-
-                    minWidth: 0 on the text is what actually lets it wrap: a
-                    flex child will not shrink below its content's intrinsic
-                    width without it, so the cell grew instead of the words
-                    breaking. */}
-                <label className="checkline"
-                       title={CONFIRM_LABEL[myStage as ConfirmStage]}
-                       style={{ cursor: alreadyConfirmed ? 'default' : 'pointer' }}>
-                  <input type="checkbox" style={{ marginTop: 1 }}
-                         checked={alreadyConfirmed || !!confirmed[id]}
-                         disabled={alreadyConfirmed}
-                         onChange={e => setConfirmed(p => ({ ...p, [id]: e.target.checked }))} />
-                  <span className="k" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-                    {CONFIRM_SHORT[myStage as ConfirmStage]}
-                  </span>
-                </label>
+                {/* APPROVING MOVED INTO THE PANEL. It needs this rater's
+                    score on every KRA — 199 will not let the next rung settle
+                    anything without it — and a per-KRA rating cannot live in
+                    a table cell. Rejecting stays here: it needs a remark, not
+                    ratings, and a manager returning an obviously wrong set
+                    should not have to score it first. */}
+                <button className="btn sm" type="button"
+                        disabled={!onOpenKras}
+                        onClick={() => onOpenKras?.(id)}>
+                  {alreadyConfirmed ? 'Review & send on' : 'Review, rate & approve'}
+                </button>
                 <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="btn sm" type="button"
-                          disabled={!onApprove || !ratingOk || !mayApprove}
-                          title={mayApprove ? undefined : CONFIRM_WHY[myStage as ConfirmStage]}
-                          onClick={() => onApprove?.(id, finalises ? num : undefined)}>
-                    {!mayApprove ? 'Confirm the one-to-one first'
-                      : finalises ? 'Approve & finalise' : 'Approve'}
-                  </button>
                   {canReject && (
                     <button className="btn ghost sm" type="button"
                             disabled={!onReject}
                             onClick={() => setRejecting(p => ({ ...p, [id]: true }))}>
                       Reject
-                    </button>
-                  )}
-                  {/* Read what you are approving. The queue shows counts; the
-                      text of the KRAs lived only on Rate My Team, which an L2
-                      and a HOD do not use. */}
-                  {onOpenKras && (
-                    <button className="btn ghost sm" type="button"
-                            onClick={() => onOpenKras(id)}>
-                      View their form
                     </button>
                   )}
                 </div>
@@ -592,6 +547,12 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
 const BREAK = { overflowWrap: 'anywhere' as const, minWidth: 0 }
 
 export interface KraLine {
+  /**
+   * The goal's own id. pms_reviews is UNIQUE on
+   * (period, employee, goal, rater_role), so a rating cannot be written
+   * without it — seq_no identifies the row to a human, not to the table.
+   */
+  goalId?: string
   seqNo: number
   title: string
   kpi?: string | null
@@ -622,11 +583,38 @@ export interface KraLine {
  * they agreed it — and it belongs behind its own control, not inside a view
  * opened to have a look. The chain's edit path is the send-back with a remark.
  */
-export function KraDetail({ member, lines, loading, onClose }: {
+export function KraDetail({ member, lines, loading, onClose,
+                            myRung, rate, onRate, bands = DEFAULT_BANDS,
+                            confirmed, onConfirm, alreadyConfirmed,
+                            finalises, finalRating, onFinalRating,
+                            onApprove, saving }: {
   member: TeamMember
   lines: KraLine[] | null
   loading?: boolean
   onClose?: () => void
+  /**
+   * WHICH RUNG THE VIEWER HOLDS. Absent means they are only reading — the
+   * panel stays the read-only record it started as, which is what HR and a
+   * manager looking at somebody else's reportee get.
+   */
+  myRung?: ConfirmStage | null
+  /** This rater's rating and comment per KRA, keyed on goalId. */
+  rate?: Record<string, { rating: number | null; comment: string }>
+  onRate?: (goalId: string, patch: { rating?: number | null; comment?: string }) => void
+  bands?: Band[]
+  confirmed?: boolean
+  onConfirm?: (v: boolean) => void
+  alreadyConfirmed?: boolean
+  /** Whether approving here settles the rating rather than passing it on. */
+  finalises?: boolean
+  /** The overall final rating, held by the caller so it survives a reload of
+   *  the lines. Only meaningful when `finalises`. */
+  finalRating?: string
+  onFinalRating?: (v: string) => void
+  /** Rate, confirm and approve, in one act. The final rating is passed only
+   *  at the rung that finalises. */
+  onApprove?: (finalRating?: number) => void
+  saving?: boolean
 }) {
   const total = (lines ?? []).reduce((s, l) => s + (Number(l.weightage) || 0), 0)
   const rated = (lines ?? []).filter(l => l.selfRating != null).length
@@ -680,11 +668,131 @@ export function KraDetail({ member, lines, loading, onClose }: {
                     : <b>{l.selfRating}</b>}
                   {l.selfComment && <span className="k" style={BREAK}>— {l.selfComment}</span>}
                 </div>
+
+                {/* YOUR RATING, ON THE SAME SCREEN AS THE APPROVAL.
+                    Rating and approving used to be two tabs, and the chain
+                    then stalled on its own rule: 199 will not let the HOD
+                    settle a rating until every rung ahead has rated, so a
+                    manager who approved without visiting Rate My Team passed
+                    the set up and blocked it there. Reading the KRA, scoring
+                    it and approving are one judgement, so they are one
+                    screen. */}
+                {myRung && onRate && l.goalId && (
+                  <div style={{ marginTop: 10, paddingTop: 10,
+                                borderTop: '1px solid var(--ez-line)' }}>
+                    <div className="lbl">Your rating</div>
+                    <div className="chips" role="radiogroup"
+                         aria-label={`Your rating for ${l.title}`}>
+                      {bands.map(bd => {
+                        const on = rate?.[l.goalId!]?.rating === bd.value
+                        return (
+                          <button key={bd.value} type="button" role="radio"
+                                  aria-checked={on} className={on ? 'chip sel' : 'chip'}
+                                  title={bd.label}
+                                  onClick={() => onRate(l.goalId!, { rating: bd.value })}>
+                            {bd.value}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <input style={{ marginTop: 6 }}
+                           placeholder="A line on why — they will read this."
+                           value={rate?.[l.goalId!]?.comment ?? ''}
+                           onChange={e => onRate(l.goalId!, { comment: e.target.value })} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
-      {onClose && (
+      {/* THE TICK AND THE APPROVAL, under the thing they are about. A manager
+          who has just read and scored every KRA is in the right place to say
+          the conversation happened and send it on; making them go back to a
+          queue to do it is how the two came apart in the first place. */}
+      {myRung && onApprove && (
+        <>
+          {onConfirm && (
+            <label className="checkline" style={{ marginTop: 14 }}
+                   title={CONFIRM_LABEL[myRung]}>
+              <input type="checkbox"
+                     checked={alreadyConfirmed || !!confirmed}
+                     disabled={alreadyConfirmed}
+                     onChange={e => onConfirm(e.target.checked)} />
+              <div>
+                <b>{CONFIRM_LABEL[myRung]}</b>
+                <div className="k" style={{ marginTop: 3 }}>{CONFIRM_WHY[myRung]}</div>
+              </div>
+            </label>
+          )}
+
+          {(() => {
+            const rated = (lines ?? []).filter(l => l.goalId && rate?.[l.goalId]?.rating != null)
+            const total = (lines ?? []).length
+            const allRated = total > 0 && rated.length === total
+            const ticked = alreadyConfirmed || !!confirmed
+            // THE FINAL RATING, only at the rung that settles it. pms_finalise
+            // takes it explicitly — docx Stage 6 has the finaliser submit it —
+            // so it is a judgement, not the per-KRA average. It is offered
+            // here rather than in the queue because it is made after reading
+            // and scoring every KRA, which is what this panel is.
+            const lo = bands.length ? Math.min(...bands.map(x => x.value)) : 1
+            const hi = bands.length ? Math.max(...bands.map(x => x.value)) : 5
+            const fr = finalRating === '' ? null : Number(finalRating)
+            const frOk = !finalises || (fr !== null && fr >= lo && fr <= hi)
+            const ready = allRated && ticked && frOk
+            return (
+              <>
+                {!ready && (
+                  <div className="banner b-amber" style={{ marginTop: 12 }}>
+                    <span aria-hidden="true">!</span>
+                    <div>
+                      <b>Before this can go on:</b>
+                      <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                        {!allRated && (
+                          <li>Rate every KRA — {rated.length} of {total} done. The
+                            next rung cannot settle anything until yours are in.</li>
+                        )}
+                        {!ticked && <li>Confirm the one-to-one above.</li>}
+                        {!frOk && <li>Give the final rating ({lo}&ndash;{hi}).
+                          Yours is the last approval, so this is the number
+                          they are told.</li>}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                {finalises && (
+                  <div className="fld" style={{ maxWidth: 260, marginTop: 12 }}>
+                    <label htmlFor="pf-final">Final rating</label>
+                    <select id="pf-final" value={finalRating ?? ''}
+                            onChange={e => onFinalRating?.(e.target.value)}>
+                      <option value="">Choose…</option>
+                      {bands.map(bd => (
+                        <option key={bd.value} value={bd.value}>
+                          {bd.value} · {bd.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="btnrow">
+                  <button className="btn" type="button" disabled={!ready || saving}
+                          onClick={() => onApprove(finalises ? fr ?? undefined : undefined)}>
+                    {saving ? 'Sending…'
+                      : !ready ? 'Not ready to send on'
+                      : finalises ? 'Rate, confirm and finalise'
+                      : 'Rate, confirm and approve'}
+                  </button>
+                  {onClose && (
+                    <button className="btn ghost" type="button" onClick={onClose}>Close</button>
+                  )}
+                </div>
+              </>
+            )
+          })()}
+        </>
+      )}
+
+      {!(myRung && onApprove) && onClose && (
         <div className="btnrow">
           <button className="btn ghost sm" type="button" onClick={onClose}>Close</button>
         </div>
