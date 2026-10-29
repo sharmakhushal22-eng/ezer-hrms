@@ -125,8 +125,8 @@ function useSaver(reload: () => Promise<void>) {
 }
 
 // ══ 1. POLICIES ═══════════════════════════════════════════════════════════
-function PolicyPanel({ policies, companies, reload }: {
-  policies: Row[]; companies: Row[]; reload: () => Promise<void>
+function PolicyPanel({ policies, companies, people, reload }: {
+  policies: Row[]; companies: Row[]; people: Row[]; reload: () => Promise<void>
 }) {
   const [id, setId] = useState<string>('')
   const [draft, setDraft] = useState<Row>({})
@@ -266,6 +266,31 @@ function PolicyPanel({ policies, companies, reload }: {
                   onChange={e => set('post_final_owner', e.target.value)}>
             <option value="HR">HR writes the feedback and publishes</option>
             <option value="FINALISER">The finaliser does all of it</option>
+          </select>
+        </Field>
+        {/* 205: WHO the HR Head is, as a person.
+            The HOD's Published Results banner said "a rating that genuinely
+            needs correcting goes through HR" — a department, on the one
+            screen where the HOD has no other control, about a result the
+            employee has already read. Nothing in the database recorded a
+            person: user_roles is empty, and the near-misses were all wrong
+            (a free-text designation match found one "Hr Executive" in one of
+            three companies; pms_feedback.given_by is the RM or the HOD).
+            Scoped to the policy's own company, because employee codes repeat
+            across the three organisations here. */}
+        <Field label="HR Head"
+               hint="Named on the HOD's published results, so a correction has somebody to go to. Leave unset and that screen says &ldquo;HR&rdquo; as before.">
+          <select value={String(draft.hr_head_id ?? '')}
+                  onChange={e => set('hr_head_id', e.target.value || null)}>
+            <option value="">Nobody named yet</option>
+            {people
+              .filter(pp => !current?.company_id
+                         || s(pp.company_id) === s(current.company_id))
+              .map(pp => (
+                <option key={s(pp.id)} value={s(pp.id)}>
+                  {s(pp.emp_code)} · {s(pp.full_name)}
+                </option>
+              ))}
           </select>
         </Field>
       </div>
@@ -729,7 +754,8 @@ export default function AdminEditor() {
         ))}
       </div>
 
-      {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies} reload={reload} />}
+      {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies}
+                                              people={snap.people ?? []} reload={reload} />}
       {section === 'kra'      && <KraPanel kras={snap.kras} companyId={companyId} reload={reload} />}
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}

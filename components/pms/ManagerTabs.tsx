@@ -2250,12 +2250,26 @@ export interface PublishedResult {
  * still be typed into.
  */
 export function PublishedResultsTab({ members, bands = DEFAULT_BANDS, results = [],
-                                      deptName }: {
+                                      deptName, hrHead }: {
   members: TeamMember[]
   bands?: Band[]
   /** The feedback and recognition that went out with each result. */
   results?: PublishedResult[]
   deptName?: string
+  /**
+   * The HR Head this company has named (205), if it has named one.
+   *
+   * THE BANNER USED TO SAY "goes through HR", which names a department and
+   * leaves the HOD to go and find out who — on the one screen where they
+   * have no other control, about a result somebody has already read.
+   *
+   * NULL IS AN ORDINARY ANSWER and has to read as one. Nothing in the
+   * database recorded an HR Head before 205, so the honest fallback is the
+   * sentence as it was: naming the wrong person is worse than naming none,
+   * and the obvious candidates were all wrong — a free-text designation
+   * match, or pms_feedback.given_by, which is the RM or the HOD.
+   */
+  hrHead?: { name: string; code: string } | null
 }) {
   const rows = members
     .filter(m => m.published)
@@ -2273,7 +2287,12 @@ export function PublishedResultsTab({ members, bands = DEFAULT_BANDS, results = 
           These results are out. {deptName ? `${deptName}'s ` : 'Your department’s '}
           record of what each person was told, and nothing here can be changed —
           the employee has already read it. A rating that genuinely needs
-          correcting goes through HR.
+          correcting goes through{' '}
+          {hrHead?.name
+            ? <>the HR Head, <b>{hrHead.name}</b>
+                {hrHead.code ? <> ({hrHead.code})</> : null}.</>
+            : <>HR &mdash; no HR Head is named for this company yet, so ask an
+                administrator to set one in Setup &amp; Controls.</>}
         </div>
       </div>
 

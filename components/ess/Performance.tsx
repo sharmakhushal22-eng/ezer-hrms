@@ -260,6 +260,49 @@ function usePeriod(employeeId: string) {
   return { period, overall, loading, reload, companyId, managerId, bands, policy, rules, flagRules }
 }
 
+/**
+ * WHO THE HR HEAD IS, when a company has named one.
+ *
+ * Asked for on the HOD's Published Results banner: it said "a rating that
+ * genuinely needs correcting goes through HR", which names a department and
+ * leaves the HOD to find out who. 205 records the person; this reads them.
+ *
+ * TOLERANT OF 205 NOT BEING APPLIED. The column does not exist until the
+ * migration is run, and PostgREST fails the WHOLE query on an unknown
+ * column — so this is its own request rather than another field on the
+ * policy select, which every review screen depends on. A failure here means
+ * "nobody named yet", the screens fall back to saying "HR", and nothing
+ * else on the page notices. Same waiting-state handling the publish queue
+ * uses for chain_stage before 197.
+ *
+ * Null is the ordinary answer on the day 205 lands: all three companies
+ * have no HR Head named, and saying "HR" is honest where inventing a name
+ * from a job title would not be.
+ */
+function useHrHead(policyId: string | null | undefined) {
+  const [head, setHead] = useState<{ name: string; code: string } | null>(null)
+  useEffect(() => {
+    if (!policyId) { setHead(null); return }
+    let live = true
+    ;(async () => {
+      const p = await supabase.from('pms_policies')
+        .select('hr_head_id').eq('id', policyId).maybeSingle()
+      // Not logged as a failure: before 205 this is the expected answer.
+      if (p.error || !p.data) { if (live) setHead(null); return }
+      const id = (p.data as { hr_head_id?: string | null }).hr_head_id
+      if (!id) { if (live) setHead(null); return }
+      const e = await supabase.from('employees')
+        .select('full_name,emp_code').eq('id', id).maybeSingle()
+      if (!live) return
+      if (e.error || !e.data) { setHead(null); return }
+      const r = e.data as { full_name?: string; emp_code?: string }
+      setHead({ name: String(r.full_name ?? ''), code: String(r.emp_code ?? '') })
+    })()
+    return () => { live = false }
+  }, [policyId])
+  return head
+}
+
 /** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
  *  yesterday for anybody east of Greenwich after 05:30 IST, and these dates
  *  decide whether a window is open. */
@@ -2061,6 +2104,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
 function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
   const { period, loading: pLoading, bands, policy, companyId, flagRules } = usePeriod(employeeId)
   const { rows, loading, reload: reloadRoster } = useRoster(employeeId, period, 'hod')
+  const hrHead = useHrHead(period?.policy_id)
   const [picked, setPicked] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -2425,7 +2469,8 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
       )}
       {tab === 'published' && (
         <PublishedResultsTab members={rows} bands={bands.length ? bands : undefined}
-                             results={published} deptName="Your department" />
+                             results={published} deptName="Your department"
+                             hrHead={hrHead} />
       )}
       {tab === 'deptAnalytics' && (
         <TeamAnalyticsTab flagRules={flagRules} bands={bands.length ? bands : undefined}

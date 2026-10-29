@@ -54,6 +54,10 @@ const POLICY_COLS = [
   // — which is the right default for a table that decides how everybody is
   // rated, but it does mean the list has to be kept up.
   'carry_forward_kras',
+  // 205. Same reason again: WHO the HR Head is, so the HOD's published-results
+  // banner can name a person instead of saying "HR". Not a permission —
+  // post_final_owner and §2's matrix still decide who may act.
+  'hr_head_id',
   // 202. Same reason as the line above: a policy column is INERT until it is
   // named here, so the admin screen's new control would have saved silently
   // into nothing — the precise shape of the "my configuration changes do not
@@ -116,7 +120,7 @@ export async function GET(req: NextRequest) {
   const g = await gate(req)
   if ('error' in g) return g.error
 
-  const [policies, kras, scale, periods, companies] = await Promise.all([
+  const [policies, kras, scale, periods, companies, people] = await Promise.all([
     sb.from('pms_policies').select('*').order('policy_name'),
     sb.from('pms_kra_master').select('*').order('kra_title').limit(500),
     sb.from('pms_rating_scale').select('*').order('sort_order'),
@@ -127,10 +131,20 @@ export async function GET(req: NextRequest) {
     // enrols everybody and cannot be undone from the screen. The name is what
     // makes the choice legible.
     sb.from('companies').select('id,company_name'),
+    // 205: the HR Head picker. Active employees only, with their company, so
+    // the dropdown on a policy offers that company's people rather than the
+    // whole group — three organisations share this database and the employee
+    // codes repeat across them.
+    //
+    // Non-fatal, like the company names above: if this read fails the editor
+    // still renders and the HR Head field simply has nobody to offer.
+    sb.from('employees').select('id,emp_code,full_name,company_id')
+      .is('date_of_leaving', null).order('emp_code').limit(5000),
   ])
   const firstError = [policies, kras, scale, periods].find(r => r.error)?.error
   if (firstError) return bad(firstError.message, 500)
   if (companies.error) console.error('[pms] could not read company names:', companies.error)
+  if (people.error) console.error('[pms] could not read the employee list:', people.error)
 
   return NextResponse.json({
     policies: policies.data ?? [],
@@ -138,6 +152,7 @@ export async function GET(req: NextRequest) {
     scale:    scale.data ?? [],
     periods:  periods.data ?? [],
     companies: companies.data ?? [],
+    people: people.data ?? [],
     // The UI hides attribution-only actions when there is no employee behind
     // the session, rather than letting the button fail on click.
     actor: { employeeId: g.actor.employeeId, name: g.actor.name, legacy: g.actor.legacy },
