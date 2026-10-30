@@ -1,6 +1,6 @@
 # EZER HRMS — Android app ↔ ESS website feature parity
 
-Compared against website commit `30ca34b` (origin/NayanAhuja, 30 Oct 2026).
+Compared against website commit `379a058` (origin/NayanAhuja, 30 Oct 2026).
 How to re-sync after the website changes: `docs/mobile-app-architecture.md` §4.1.
 
 Status: ✅ same as the website · 🟡 present, with the noted difference · ⏳ "Soon" on the website too · ✖ not in the app (reason given).

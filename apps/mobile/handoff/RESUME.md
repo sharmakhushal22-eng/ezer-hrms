@@ -4,7 +4,7 @@ Branch **`feat/mobile-app`**. App in `apps/mobile/` (Expo SDK 57, React Native).
 employee self-service portal (`/ess`), same backend, admin excluded.
 
 ## State (30 Oct 2026)
-* All modules built, ported to the website as of commit `30ca34b` (origin/NayanAhuja), and tested in the
+* All modules built, ported to the website as of commit `379a058` (origin/NayanAhuja), and tested in the
   browser harness as Rohan / Kiran / Shreya. `npm run check` (typecheck + shared-code + tests), `npx eslint src`
   and `npx expo-doctor` all pass.
 * Feature table: `docs/mobile-feature-parity.md`. Architecture + **the routine for re-syncing with the website**:
@@ -25,7 +25,7 @@ employee self-service portal (`/ess`), same backend, admin excluded.
    a shared `TimeSheet` in `@/ui/overlays`, `Button` `accessibilityLabel`.
 5. Server/data issues found (not app bugs): Rohan (ordinary employee) passes the Travel/Finance desk checks;
    `employee_badges`↔`badge_master` FK missing. Security findings in the architecture doc §6.
-6. PR `feat/mobile-app` → `NayanAhuja`; clean up test records in `TEST-RECORDS.md` (offer deletion to the user).
+6. Test records from the app work are deleted (`TEST-RECORDS.md`). 11 older "CLAUDE TEST" leave rows from website testing (11–12 Oct) remain, awaiting the user's decision.
 
 ## Testing setup (browser harness — the app's web build against the live API)
 - Node: `export PATH="$HOME/.local/node/bin:$PATH"` (Node 22 in `~/.local/node`).

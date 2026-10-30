@@ -150,15 +150,15 @@ If the website only changes the *rules* of an existing screen (a validation, a l
 
 The app records the last website commit it was compared against:
 
-> **Last synced website commit: `30ca34b`** (origin/NayanAhuja, 30 Oct 2026).
+> **Last synced website commit: `379a058`** (origin/NayanAhuja, 30 Oct 2026).
 
 To bring the app up to date after the website changes:
 
 1. `git checkout feat/mobile-app && git merge origin/NayanAhuja` (or the branch the website now lives on). The app's `@web/*` imports pick up every pure `lib/` change automatically.
 2. `cd apps/mobile && npm run check`. A type error here is usually a website type that changed shape (e.g. a field became nullable); fix the app screen that uses it.
 3. List what an employee would see differently:
-   `git log --oneline 30ca34b..HEAD -- components/ess components/profile components/te components/pms components/esign app/api/ess app/api/te app/api/pms app/api/exit app/api/esign lib`
-   and for each module `git diff 30ca34b HEAD -- <its website files>`. The module → website-file map is in `docs/mobile-feature-parity.md`.
+   `git log --oneline 379a058..HEAD -- components/ess components/profile components/te components/pms components/esign app/api/ess app/api/te app/api/pms app/api/exit app/api/esign lib`
+   and for each module `git diff 379a058 HEAD -- <its website files>`. The module → website-file map is in `docs/mobile-feature-parity.md`.
 4. Port each employee-facing change into `src/features/<module>/`, following §4. Admin-only changes need nothing.
 5. Update the "Last synced" commit above and the parity table, bump `version` and `android.versionCode` in `app.config.ts`, then build a new APK (§5).
 
