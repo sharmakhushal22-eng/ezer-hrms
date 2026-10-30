@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden } from '@/lib/ess/session'
+import { allowedCompanies } from '@/lib/rms/resolve'
 import { canExitOthers } from '@/lib/exit/hr-exit'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,7 @@ async function guard(req: NextRequest, requestId: string | null) {
   const { data: row } = await sb.from('hr_exit_requests').select('id, company_id, documents, chain').eq('id', requestId).maybeSingle()
   if (!row) return { error: bad('Exit not found.', 404) }
   const hr = canExitOthers(ctx.menu.roles || [], !!ctx.grant.isSuperAdmin)
-  const scoped = ctx.grant.isSuperAdmin || ctx.grant.crossCompany || row.company_id === ctx.companyId
+  const scoped = ctx.grant.isSuperAdmin || ctx.grant.crossCompany || allowedCompanies(ctx.grant, null).includes(row.company_id)
   if (!((hr && scoped) || await approver(row))) return { error: forbidden('Only the HR team, Hiring Managers and this exit’s approvers can see its documents.') }
   return { ctx, row, hr: hr && scoped }
 }

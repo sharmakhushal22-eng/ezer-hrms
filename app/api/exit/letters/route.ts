@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden } from '@/lib/ess/session'
+import { allowedCompanies } from '@/lib/rms/resolve'
 import { exitLetterPdf } from '@/lib/exit/letters-pdf'
 import { exitReasonOf } from '@/lib/exit/case'
 import type { LetterKind } from '@/lib/exit/fnf'
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
     .eq('id', res.employee_id).maybeSingle()
   if (!emp) return bad('Employee not found.', 404)
   const roles = (ctx.menu.roles || []).map((x: string) => String(x).toUpperCase())
-  const hr = (ctx.grant.isSuperAdmin || roles.some((c: string) => VIEW.includes(c))) && (ctx.grant.isSuperAdmin || ctx.grant.crossCompany || emp.company_id === ctx.companyId)
+  const hr = (ctx.grant.isSuperAdmin || roles.some((c: string) => VIEW.includes(c))) && (ctx.grant.isSuperAdmin || ctx.grant.crossCompany || allowedCompanies(ctx.grant, null).includes(emp.company_id))
   const own = emp.id === ctx.caller.employeeId
   if (!hr && !own) return forbidden('You cannot open this letter.')
 

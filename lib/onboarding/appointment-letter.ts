@@ -70,9 +70,12 @@ export function apptProblems(f: ApptFields): string[] {
   const out: string[] = []
   if (!f.name.trim()) out.push('the name')
   if (!f.designation.trim()) out.push('the designation')
+  if (!f.department.trim()) out.push('the function / department')
   if (!f.doj) out.push('the date of joining')
   if (!f.place.trim()) out.push('the place of posting')
   if (!(f.ctc_annual > 0)) out.push('the annual CTC')
+  if (!f.company_name.trim()) out.push('the company')
+  if (!f.emp_code.trim()) out.push('the employee code')
   if (f.jb_total > 0 && Math.round(f.jb_first + f.jb_second) !== Math.round(f.jb_total)) out.push('joining bonus instalments that add up to the total')
   return out
 }

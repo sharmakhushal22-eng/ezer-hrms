@@ -22,7 +22,12 @@ export interface EssUser {
   date_of_resignation: string | null; last_working_date: string | null
   account: EssAccount | null
   roles: EssRole[]
+  /** role id → the companies that role is valid in for this person (null = own company). */
+  role_companies?: Record<string, string[] | null>
 }
+
+/** Roles that never leave the employee's own company, whatever scope is chosen. */
+export const OWN_COMPANY_ROLE_CODES = ['EMPLOYEE', 'L1_MANAGER', 'L2_MANAGER', 'HOD']
 // Org-unit lookups for the cascading role-assignment flow.
 export interface OrgUnit { id: string; name: string; company_id?: string }
 export interface AuditRow {
@@ -96,16 +101,22 @@ export async function loadUsers(): Promise<EssUser[]> {
       .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments!employees_department_id_fkey(dept_name), companies!employees_company_id_fkey(company_name), locations!location_id(location_name)')
       .order('emp_code'),
     supabase.from('ess_accounts').select('*'),
-    supabase.from('ess_user_roles').select('ess_account_id, role_id').eq('is_active', true),
+    // With each role's company scope (migration 203); without it while that column is missing.
+    supabase.from('ess_user_roles').select('ess_account_id, role_id, company_ids').eq('is_active', true)
+      .then(r => r.error ? supabase.from('ess_user_roles').select('ess_account_id, role_id').eq('is_active', true) : r),
     supabase.from('ess_roles').select('*'),
   ])
   const acctByEmp = new Map<string, any>((accts || []).map((a: any) => [a.employee_id, a]))
   const roleById = new Map<string, any>((roles || []).map((r: any) => [r.id, r]))
   const rolesByAcct = new Map<string, EssRole[]>()
-  for (const x of ur || []) {
+  const scopeByAcct = new Map<string, Record<string, string[] | null>>()
+  for (const x of (ur || []) as any[]) {
     const arr = rolesByAcct.get(x.ess_account_id) || []
     const r = roleById.get(x.role_id); if (r) arr.push(r)
     rolesByAcct.set(x.ess_account_id, arr)
+    const sc = scopeByAcct.get(x.ess_account_id) || {}
+    sc[x.role_id] = Array.isArray(x.company_ids) ? x.company_ids : null
+    scopeByAcct.set(x.ess_account_id, sc)
   }
   return (emps || []).map((e: any) => {
     const account = acctByEmp.get(e.id) || null
@@ -116,6 +127,7 @@ export async function loadUsers(): Promise<EssUser[]> {
       company_id: e.company_id || null, location_id: e.location_id || null, department_id: e.department_id || null,
       date_of_resignation: e.date_of_resignation, last_working_date: e.last_working_date,
       account, roles: account ? (rolesByAcct.get(account.id) || []) : [],
+      role_companies: account ? (scopeByAcct.get(account.id) || {}) : {},
     } as EssUser
   })
 }
@@ -150,7 +162,9 @@ export async function setStatus(u: EssUser, status: 'ACTIVE' | 'INACTIVE', opts:
 }
 
 // Replace the user's roles with exactly the selected set. Auto-creates an account if needed.
-export async function assignRoles(u: EssUser, roleIds: string[], byName?: string) {
+// `companyIds`: the companies the roles are valid in (role scope, migration 203) — given, it is
+// set on every role except the own-company ones; left out, each kept role keeps its scope.
+export async function assignRoles(u: EssUser, roleIds: string[], byName?: string, companyIds?: string[]) {
   let acctId = u.account?.id
   if (!acctId) {
     const { data } = await supabase.from('ess_accounts')
@@ -159,15 +173,25 @@ export async function assignRoles(u: EssUser, roleIds: string[], byName?: string
     acctId = data?.id
   }
   if (!acctId) return { error: { message: 'Could not create ESS account' } }
+  // A role kept in the new set keeps the companies it was scoped to (migration 203); read
+  // before the rows are replaced. Without that column, nothing to carry.
+  const { data: before, error: readErr } = await supabase.from('ess_user_roles').select('role_id, company_ids').eq('ess_account_id', acctId)
+  const scopeOf = new Map<string, string[] | null>(readErr ? [] : ((before as any[]) || []).map(r => [r.role_id, r.company_ids || null]))
+  if (companyIds) {
+    const { data: rs } = await supabase.from('ess_roles').select('id, role_code').in('id', roleIds.length ? roleIds : ['00000000-0000-0000-0000-000000000000'])
+    const own = new Set(((rs as any[]) || []).filter(r => OWN_COMPANY_ROLE_CODES.includes(r.role_code)).map(r => r.id))
+    const scope = [...new Set([u.company_id, ...companyIds].filter(Boolean))] as string[]
+    for (const rid of roleIds) scopeOf.set(rid, own.has(rid) || scope.length <= 1 ? null : scope)
+  }
   await supabase.from('ess_user_roles').delete().eq('ess_account_id', acctId)
   if (roleIds.length) {
-    const rows = roleIds.map(rid => ({ ess_account_id: acctId, role_id: rid }))
+    const rows = roleIds.map(rid => ({ ess_account_id: acctId, role_id: rid, ...(!readErr ? { company_ids: scopeOf.get(rid) || null } : {}) }))
     const { error } = await supabase.from('ess_user_roles').insert(rows)
     if (error) return { error }
   }
   await supabase.from('ess_access_audit').insert({
     ess_account_id: acctId, action: 'ROLE_ASSIGN', performed_by_name: byName || null,
-    details: { emp_code: u.emp_code, role_count: roleIds.length },
+    details: { emp_code: u.emp_code, role_count: roleIds.length, ...(companyIds ? { companies: companyIds } : {}) },
   })
   return { ok: true }
 }

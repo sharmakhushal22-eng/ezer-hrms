@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const gate = await requireModule(req, 'Onboarding')
   if (gate.error) return gate.error
   const grant = await grantForRequest(req)
-  const pinned = companyFilter(grant, null)
+  const pinned = companyFilter(grant, null, 'Onboarding')
   const asked = String(req.nextUrl.searchParams.get('company_ids') || '').split(',').map(s => s.trim()).filter(Boolean)
   const companies = [...new Set(pinned ? asked.filter(c => c === pinned) : asked)].slice(0, 50)
   if (!companies.length) return NextResponse.json({ holders: {} })

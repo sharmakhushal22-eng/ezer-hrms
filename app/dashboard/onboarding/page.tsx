@@ -28,7 +28,7 @@ import './onboarding-hr.css'
 // ── Types ─────────────────────────────────────────────────────────
 type Stage = 'NOT_INVITED'|'INVITED'|'IN_PROGRESS'|'SUBMITTED'|'HR_REVIEW'|'APPROVED'|'EMPLOYEE_CREATED'
 type RiskLevel = 'LOW'|'MEDIUM'|'HIGH'
-type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
+type Tab = 'overview'|'candidates'|'appointment'|'pending'|'insights'|'compliance'
 type Holders = Record<string, Partial<Record<TrailTeam, Holder[]>>>
 
 interface Candidate {
@@ -307,7 +307,7 @@ export default function OnboardingDashboard() {
   const [tab,          setTab]        = useState<Tab>('overview')
   // Role-wise tab visibility (Roles → Screen Access). Bounce off a hidden tab.
   useEffect(() => {
-    const vis = (['overview','candidates','pending','insights','compliance'] as Tab[]).filter(k => canSeeScreen(grant, 'onboarding.'+k))
+    const vis = (['overview','candidates','appointment','pending','insights','compliance'] as Tab[]).filter(k => canSeeScreen(grant, 'onboarding.'+k))
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [candidates,   setCandidates] = useState<Candidate[]>([])
@@ -323,7 +323,7 @@ export default function OnboardingDashboard() {
   const [apptFor,      setApptFor]    = useState<Candidate|null>(null)   // Letter of Appointment, once the code exists (AppointmentLetterModal)
   // Joiners whose Letter of Appointment has gone out (onboarding_audit_log APPOINTMENT_LETTER_SENT).
   // A coded joiner stays on the default list, with the letter as their next step, until it has.
-  const [apptSent,     setApptSent]   = useState<Set<string>>(new Set())
+  const [apptSent,     setApptSent]   = useState<Map<string, { at: string; to: string | null; by: string | null }>>(new Map())
   const [saving,       setSaving]     = useState(false)
   const [dateModal,    setDateModal]  = useState<Candidate|null>(null)
   const [dateVal,      setDateVal]    = useState('')
@@ -402,8 +402,8 @@ export default function OnboardingDashboard() {
     }
     // Which coded joiners have had their Letter of Appointment sent.
     const codedIds = (cands || []).filter((c: any) => c.status === 'EMPLOYEE_CREATED').map((c: any) => c.id)
-    void Promise.all(chunk(codedIds, 150).map(part => supabase.from('onboarding_audit_log').select('onboarding_id').eq('action', 'APPOINTMENT_LETTER_SENT').in('onboarding_id', part)))
-      .then(parts => setApptSent(new Set(parts.flatMap(p => ((p.data as any[]) || []).map(r => r.onboarding_id)))))
+    void Promise.all(chunk(codedIds, 150).map(part => supabase.from('onboarding_audit_log').select('onboarding_id, created_at, details').eq('action', 'APPOINTMENT_LETTER_SENT').in('onboarding_id', part).order('created_at')))
+      .then(parts => setApptSent(new Map(parts.flatMap(p => ((p.data as any[]) || []).map(r => [r.onboarding_id, { at: r.created_at, to: r.details?.to || null, by: r.details?.by_name || null }] as const)))))
     const [allDocs, allForms, allAssets, allApprovals, allAcks] = await Promise.all([
       fetchAll('onboarding_documents',       'onboarding_id,doc_code,ai_status,hr_verified'),
       fetchAll('onboarding_statutory_forms', 'onboarding_id,form_type'),
@@ -750,8 +750,9 @@ export default function OnboardingDashboard() {
   const awaitingReview = candidates.filter(c=>c.status==='SUBMITTED').length
   const highRisk    = candidates.filter(c=>c.ai_risk==='HIGH').length
   const joined      = candidates.filter(c=>c.status==='EMPLOYEE_CREATED').length
-  // Hidden from the default list: coded and their appointment letter sent.
-  const doneHidden  = candidates.filter(c=>c.status==='EMPLOYEE_CREATED' && apptSent.has(c.id)).length
+  // Hidden from the default list: coded (they are on the Send appointment letter tab).
+  const doneHidden  = joined
+  const apptPending = candidates.filter(c=>c.status==='EMPLOYEE_CREATED' && !apptSent.has(c.id)).length
   const thisWeek    = candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).length
   const notInvitedCount = candidates.filter(c=>c.status==='NOT_INVITED').length
   /** Open All candidates with exactly these filters (the rest cleared). */
@@ -761,10 +762,9 @@ export default function OnboardingDashboard() {
 
   // ── Filter candidates ─────────────────────────────────────────
   const filtered = candidates.filter(c=>{
-    // Once the employee code is generated AND the Letter of Appointment has gone out, drop the
-    // card from the default list — still reachable by explicitly filtering the stage. Until the
-    // letter is sent, the row stays: its Appointment letter button is the next step.
-    if (c.status==='EMPLOYEE_CREATED' && apptSent.has(c.id) && filterStage!=='EMPLOYEE_CREATED') return false
+    // Once the employee code is generated the joiner moves to the "Send appointment letter" tab;
+    // here they are reachable only by filtering the stage explicitly.
+    if (c.status==='EMPLOYEE_CREATED' && filterStage!=='EMPLOYEE_CREATED') return false
     if (filterStage!=='ALL' && c.status!==filterStage) return false
     if (filterRisk!=='ALL'  && c.ai_risk!==filterRisk)  return false
     if (joinWindow!=='all') {
@@ -1159,13 +1159,49 @@ export default function OnboardingDashboard() {
       </div>
       <div style={{fontSize:12,color:TK.muted,marginTop:10,lineHeight:1.6}}>
         The HR Manager reviews the submitted form, IT, Admin and Payroll then confirm their checklists (ESS → HRIS → Tasks &amp; Approvals), and the HR Manager generates the code. Hover or click a row&apos;s approvals to see who has it.
-        {filterStage!=='EMPLOYEE_CREATED' && doneHidden>0 && <> Completed onboardings (code generated and appointment letter sent) are hidden: <button type="button" onClick={()=>setFilterStage('EMPLOYEE_CREATED')} style={{border:'none',background:'none',padding:0,color:TK.brand,fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit'}}>show {doneHidden}</button>.</>}
+        {filterStage!=='EMPLOYEE_CREATED' && doneHidden>0 && <> Joiners with an employee code are on the <button type="button" onClick={()=>setTab('appointment')} style={{border:'none',background:'none',padding:0,color:TK.brand,fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit'}}>Send appointment letter</button> tab ({doneHidden}).</>}
       </div>
     </div>
     )
   }
 
   // ── PENDING ACTIONS TAB ────────────────────────────────────────
+  // ── SEND APPOINTMENT LETTER TAB ────────────────────────────────
+  // Every joiner whose employee code is generated: the letter still to send first, then the
+  // ones already sent (with when, to whom and by whom). Send opens the auto-filled, editable
+  // letter (AppointmentLetterModal); it is mailed and saved to the employee's ESS documents.
+  const AppointmentTab = () => {
+    const coded = candidates.filter(c=>c.status==='EMPLOYEE_CREATED')
+      .sort((a,b)=>Number(apptSent.has(a.id))-Number(apptSent.has(b.id)) || String(a.date_of_joining||'').localeCompare(String(b.date_of_joining||'')))
+    return (
+      <div>
+        <SH title="Send appointment letter" sub="Joiners whose employee code is generated. Send each one their Letter of Appointment: it is filled in from their record, you can edit it, and it is mailed to them and saved in their ESS documents."/>
+        {coded.length===0
+          ? <Empty icon="circle-check" tone="ok" text="Nobody is waiting: a joiner appears here as soon as their employee code is generated."/>
+          : <div style={{display:'grid',gap:10}}>{coded.map(c=>{
+              const sent = apptSent.get(c.id)
+              return (
+                <div key={c.id} style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',padding:'14px 16px',background:TK.surface,borderRadius:14,border:`1px solid ${TK.line}`,borderLeft:`4px solid ${sent?TK.positive:TK.warning}`,boxShadow:'0 1px 2px rgba(16,24,40,.04)'}}>
+                  <Avatar name={c.full_name}/>
+                  <div style={{flex:'1 1 240px',minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:650,color:TK.ink}}>{c.full_name} <span style={{color:TK.muted,fontWeight:500}}>· {c.employee_code}</span></div>
+                    <div style={{fontSize:12.5,color:TK.muted,marginTop:2}}>{c.designation || 'No designation'} · {c.date_of_joining ? `Joins ${fmt(c.date_of_joining)}` : 'No joining date'}{c.email ? ` · ${c.email}` : ''}</div>
+                  </div>
+                  <div style={{fontSize:12.5,minWidth:200}}>
+                    {sent
+                      ? <span style={{color:TK.positive,fontWeight:600}}><Ti n="circle-check" s={13}/> Sent {fmt(sent.at)}{sent.to ? ` to ${sent.to}` : ''}{sent.by ? <span style={{color:TK.muted,fontWeight:500}}> · by {sent.by}</span> : null}</span>
+                      : <span style={{color:TK.warning,fontWeight:600}}><Ti n="clock" s={13}/> Not sent yet</span>}
+                  </div>
+                  <button className="ezob-btn" onClick={()=>setApptFor(c)} style={{...btnSm(sent?'ghost':'primary'),height:36}}>
+                    <Ti n="send" s={13}/>{sent ? 'View or send again' : 'Send appointment letter'}
+                  </button>
+                </div>
+              )
+            })}</div>}
+      </div>
+    )
+  }
+
   const PendingTab = () => {
     const groups: Record<string, typeof pendingActions> = {
       HIGH:   pendingActions.filter(a=>a.priority==='HIGH'),
@@ -1444,6 +1480,7 @@ export default function OnboardingDashboard() {
   const TABS: {key:Tab; icon:string; label:string; badge?:number}[] = [
     {key:'overview',    icon:'home',        label:'Overview'},
     {key:'candidates',  icon:'users',       label:'All candidates', badge:total-joined},
+    {key:'appointment', icon:'send',        label:'Send appointment letter', badge:apptPending||undefined},
     {key:'pending',     icon:'list-check',  label:'Pending actions', badge:pendingActions.filter(a=>a.priority==='HIGH').length||undefined},
     {key:'insights',    icon:'brain',       label:'AI insights',    badge:highRisk||undefined},
     {key:'compliance',  icon:'shield-check',label:'Compliance'},
@@ -1507,6 +1544,7 @@ export default function OnboardingDashboard() {
                 remount on every keystroke — keeps search-input focus. */}
             {tab==='overview'    && OverviewTab()}
             {tab==='candidates'  && CandidatesTab()}
+            {tab==='appointment' && AppointmentTab()}
             {tab==='pending'     && PendingTab()}
             {tab==='insights'    && InsightsTab()}
             {tab==='compliance'  && ComplianceTab()}
@@ -1658,7 +1696,7 @@ export default function OnboardingDashboard() {
           candidate={{ ...codeModal, approvals: ['HR_MANAGER','IT','ADMIN','PAYROLL'].map(team => ({ team, status: (codeModal.approvals||[]).find(a=>a.team===team)?.status || 'PENDING' })) }}
           onClose={() => setCodeModal(null)}
           onDone={(m,t)=>{ showToast(m,t); load() }}
-          onGenerated={() => { const c = codeModal; if (c) setApptFor({ ...c, status: 'EMPLOYEE_CREATED' }) }} />
+          onGenerated={() => setTab('appointment')} />
       )}
 
       {/* ── LETTER OF APPOINTMENT (after the code): auto-filled, editable, mailed to the candidate ── */}

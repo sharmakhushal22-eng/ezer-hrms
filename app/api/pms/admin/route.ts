@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
         const r = await sb.from('pms_kra_master').update(fields).eq('id', id).select().single()
         return r.error ? bad(r.error.message) : okay(r.data)
       }
-      const company = companyFilter(g.grant, str('company_id'))
+      const company = companyFilter(g.grant, str('company_id'), 'Performance')
       if (!company) return bad('Which company is this KRA for?')
       const r = await sb.from('pms_kra_master')
         .insert({ ...fields, company_id: company }).select().single()
@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
         const r = await sb.from('pms_rating_scale').update(fields).eq('id', id).select().single()
         return r.error ? bad(r.error.message) : okay(r.data)
       }
-      const company = companyFilter(g.grant, str('company_id'))
+      const company = companyFilter(g.grant, str('company_id'), 'Performance')
       if (!company) return bad('Which company is this band for?')
       const r = await sb.from('pms_rating_scale')
         .insert({ ...fields, company_id: company }).select().single()

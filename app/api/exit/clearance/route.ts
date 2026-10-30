@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden, audit } from '@/lib/ess/session'
+import { allowedCompanies } from '@/lib/rms/resolve'
 import { CLEARANCE_FORMS, clearanceProblems, recoveryOf, payableOf, type Dept } from '@/lib/exit/clearance'
 import { canExitOthers } from '@/lib/exit/hr-exit'
 import { startClearance, computeFnf } from '@/lib/exit/case'
@@ -20,7 +21,8 @@ const HR_HEADS = ['HR_HEAD', 'CHRO']
 const FULL_VIEW = ['HR_MANAGER', 'HR_HEAD', 'CHRO', 'PAYROLL', 'PAYROLL_ADMIN', 'HR_EXECUTIVE', 'BRANCH_HR']
 
 const roleSet = (ctx: any) => new Set<string>((ctx.menu.roles || []).map((r: string) => String(r).toUpperCase()))
-const scoped = (ctx: any, companyId: string | null) => ctx.grant.isSuperAdmin || ctx.grant.crossCompany || !companyId || companyId === ctx.companyId
+// Own company, or one the caller's roles were scoped to (migration 203).
+const scoped = (ctx: any, companyId: string | null) => ctx.grant.isSuperAdmin || ctx.grant.crossCompany || !companyId || allowedCompanies(ctx.grant, null).includes(companyId)
 
 export async function GET(req: NextRequest) {
   const r = await essRoute(req); if (r.error) return r.error

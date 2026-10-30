@@ -22,6 +22,7 @@ import {
   buildChain, advance, act, actionsFor, proposedLwd, waitingOn, type ChainStep, type Person, type StageKey,
 } from '@/lib/exit/hr-exit'
 import { effectiveNoticeDays } from '@/lib/exit/notice'
+import { allowedCompanies } from '@/lib/rms/resolve'
 import { applyCompanyExit, sendAbscondReminder } from '@/lib/exit/case'
 
 export const dynamic = 'force-dynamic'
@@ -33,7 +34,9 @@ const APPROVALS_LINK = '/ess?tab=approvals'
 
 const allowedFor = (ctx: any) => canExitOthers(ctx.menu.roles || [], !!ctx.grant.isSuperAdmin)
 /** The company the caller may exit people in (null = any: super admin / cross-company). */
-const scopeOf = (ctx: any): string | null => (ctx.grant.isSuperAdmin || ctx.grant.crossCompany) ? null : (ctx.companyId || null)
+/** The companies the caller may act in (null = any: super admin / cross-company): their own,
+ *  plus any their roles were scoped to (ess_user_roles.company_ids, migration 203). */
+const scopeOf = (ctx: any): string[] | null => (ctx.grant.isSuperAdmin || ctx.grant.crossCompany) ? null : allowedCompanies(ctx.grant, null)
 const who = (p: Person) => `${p.full_name}${p.emp_code ? ` (${p.emp_code})` : ''}`
 
 async function personOf(id: string): Promise<Person> {
@@ -101,7 +104,7 @@ export async function GET(req: NextRequest) {
     .eq('id', target).maybeSingle()
   if (!emp) return bad('Employee not found.', 404)
   const co = scopeOf(ctx)
-  if (co && emp.company_id !== co) return forbidden('This employee belongs to another company.')
+  if (co && !co.includes(emp.company_id)) return forbidden('This employee belongs to another company.')
 
   const [{ data: reqs }, { data: open }, { data: att }] = await Promise.all([
     sb.from('hr_exit_requests').select('*').eq('employee_id', emp.id).in('status', SHOWN_STATUSES).order('created_at', { ascending: false }).limit(1),
@@ -160,7 +163,7 @@ export async function POST(req: NextRequest) {
     if (problems.length) return bad(problems.join(' '))
     if (!emp) return bad('Employee not found.', 404)
     const co = scopeOf(ctx)
-    if (co && emp.company_id !== co) return forbidden('This employee belongs to another company.')
+    if (co && !co.includes(emp.company_id)) return forbidden('This employee belongs to another company.')
     if (emp.access_revoked_at || emp.employment_status === 'Resigned') return bad(`${who(emp as any)} has already left.`, 409)
     const [{ data: live }, { data: open }] = await Promise.all([
       sb.from('hr_exit_requests').select('id, status').eq('employee_id', emp.id).in('status', SHOWN_STATUSES).limit(1),
@@ -246,7 +249,7 @@ export async function POST(req: NextRequest) {
   if (action === 'cancel' || action === 'reset') {
     if (!allowedFor(ctx)) return forbidden('Only the HR team and Hiring Managers can do this.')
     const co = scopeOf(ctx)
-    if (co && row.company_id !== co) return forbidden('This employee belongs to another company.')
+    if (co && !co.includes(row.company_id)) return forbidden('This employee belongs to another company.')
     if (action === 'reset' && row.status !== 'REJECTED') return bad('Only a rejected exit is reset. A running one is cancelled.', 409)
     if (action === 'cancel' && !['PENDING', 'APPROVED'].includes(row.status)) return bad(`This exit is ${String(row.status).toLowerCase()}; there is nothing to cancel.`, 409)
     if (action === 'cancel' && row.status === 'APPROVED' && emp?.access_revoked_at) return bad(`${who(target)} has already left on ${day(row.last_working_day)}, so the exit cannot be cancelled here.`, 409)

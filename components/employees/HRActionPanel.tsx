@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import * as HR from '@/lib/employees/hr-actions'
 import HrExitSection from './HrExitSection'
 import { supabase } from '@/lib/supabase'
+import { authHeaders } from '@/lib/auth-headers'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK, F, W, S, R, E, Z, tone, numeric, eyebrow, inputStyle, Badge, type Tone } from '@/lib/ui'
@@ -329,15 +330,63 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
 }
 
 // ── Documents tab (all docs submitted by the employee) ─────────────
-function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
+/** Letters HR has issued to the employee (generated_letters released to ESS: the Letter of
+ *  Appointment and any letter from HR Letters). Shown on the Documents tab of the record —
+ *  People → Employees → employee, and the employee's own ESS profile. */
+function IssuedLetters({ employeeId }: { employeeId: string }) {
+  const [rows, setRows] = useState<{ id: string; letter_name: string; letter_date: string }[] | null>(null)
+  const [busy, setBusy] = useState('')
+  useEffect(() => {
+    let alive = true
+    supabase.from('my_generated_letters').select('id, letter_name, letter_date').eq('employee_id', employeeId).order('letter_date', { ascending: false })
+      .then(({ data }) => { if (alive) setRows((data as any[]) || []) }, () => { if (alive) setRows([]) })
+    return () => { alive = false }
+  }, [employeeId])
+  async function open(id: string) {
+    setBusy(id)
+    // Opened first, so the browser does not treat it as a popup once the signed link arrives.
+    const w = window.open('', '_blank')
+    try {
+      const r = await fetch(`/api/ess/my-letter?id=${encodeURIComponent(id)}&employee_id=${encodeURIComponent(employeeId)}`, { headers: await authHeaders(), cache: 'no-store' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.url) throw new Error(j.error || 'Could not open the letter.')
+      if (w) w.location.href = j.url; else window.open(j.url, '_blank')
+    } catch (e: any) { w?.close(); alert(e.message) }
+    setBusy('')
+  }
+  if (!rows || rows.length === 0) return null
+  return (
+    <div style={C.card}>
+      <div style={C.sec}>Letters issued <Badge t="neutral" size="sm">{rows.length}</Badge></div>
+      {rows.map((l, i) => (
+        <div key={l.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:S.md, flexWrap:'wrap', padding:'10px 0', borderTop: i ? `1px solid ${TK.line}` : 'none', fontSize:F.small }}>
+          <div style={{ minWidth:0, flex:'1 1 200px' }}>
+            <div style={{ fontWeight:W.semi, color:TK.ink }}>{l.letter_name}</div>
+            <div style={{ fontSize:F.tiny, color:TK.muted }}>Issued {fmt(l.letter_date)}</div>
+          </div>
+          <button style={C.out} disabled={busy === l.id} onClick={() => open(l.id)}>{busy === l.id ? 'Opening…' : 'Download'}</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DocumentsView({ onb, employeeId }: { onb: HR.OnboardingInfo | null; employeeId: string }) {
   async function download(path: string | null) {
     if (!path) return
     const { data } = await supabase.storage.from('onboarding-docs').createSignedUrl(path, 120)
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
     else alert('Could not open the file.')
   }
-  if (!onb || onb.documents.length === 0) return <EmptyCard title="No documents yet" hint="Nothing has been submitted by this employee." />
+  if (!onb || onb.documents.length === 0) return (
+    <div>
+      <IssuedLetters employeeId={employeeId} />
+      <EmptyCard title="No documents yet" hint="Nothing has been submitted by this employee." />
+    </div>
+  )
   return (
+    <div>
+    <IssuedLetters employeeId={employeeId} />
     <div style={C.card}>
       <div style={C.sec}>Documents submitted <Badge t="neutral" size="sm">{onb.documents.length}</Badge></div>
       {onb.documents.map((d, i) => (
@@ -352,6 +401,7 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
           </div>
         </div>
       ))}
+    </div>
     </div>
   )
 }
@@ -529,7 +579,7 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
   }
 
   if (activeTab === 'onboarding') return (<div style={{ position:'relative' }}><OnboardingTab onb={onb} />{toast && <Toast t={toast} />}</div>)
-  if (activeTab === 'documents') return <DocumentsView onb={onb} />
+  if (activeTab === 'documents') return <DocumentsView onb={onb} employeeId={employee.id} />
   if (activeTab === 'salary') return <SalaryView salary={salary} employee={employee} />
 
   if (activeTab === 'history') {
