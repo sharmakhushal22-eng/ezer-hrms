@@ -34,17 +34,19 @@ function Num({ value, onChange }: { value: number; onChange: (n: number) => void
 
 function DetailsTab({ f, set }: { f: ApptFields; set: <K extends keyof ApptFields>(k: K, v: ApptFields[K]) => void }) {
   const t = (k: keyof ApptFields) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => set(k, e.target.value as any)
+  // A required detail the records did not have: outlined red until it is filled in.
+  const need = (v: string | number) => (typeof v === 'number' ? !(v > 0) : !String(v || '').trim()) ? { ...inp, borderColor: TK.critical, background: TK.criticalTint } : inp
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(210px,1fr))', gap: 12 }}>
       <Field label="Salutation"><select value={f.salutation} onChange={t('salutation')} style={inp}><option>Mr.</option><option>Ms.</option><option>Mrs.</option><option>Dr.</option></select></Field>
-      <Field label="Name"><input value={f.name} onChange={t('name')} style={inp} /></Field>
-      <Field label="Employee code"><input value={f.emp_code} onChange={t('emp_code')} style={inp} /></Field>
+      <Field label="Name"><input value={f.name} onChange={t('name')} style={need(f.name)} /></Field>
+      <Field label="Employee code"><input value={f.emp_code} onChange={t('emp_code')} style={need(f.emp_code)} /></Field>
       <Field label="Letter date"><input type="date" value={f.letter_date} onChange={t('letter_date')} style={inp} /></Field>
-      <Field label="Designation"><input value={f.designation} onChange={t('designation')} style={inp} /></Field>
-      <Field label="Function / department"><input value={f.department} onChange={t('department')} style={inp} /></Field>
-      <Field label="Company"><input value={f.company_name} onChange={t('company_name')} style={inp} /></Field>
-      <Field label="Date of joining"><input type="date" value={f.doj} onChange={t('doj')} style={inp} /></Field>
-      <Field label="Place of posting"><input value={f.place} onChange={t('place')} placeholder="e.g. Gurugram" style={{ ...inp, borderColor: f.place.trim() ? TK.lineStrong : TK.criticalEdge }} /></Field>
+      <Field label="Designation"><input value={f.designation} onChange={t('designation')} style={need(f.designation)} /></Field>
+      <Field label="Function / department"><input value={f.department} onChange={t('department')} style={need(f.department)} /></Field>
+      <Field label="Company"><input value={f.company_name} onChange={t('company_name')} style={need(f.company_name)} /></Field>
+      <Field label="Date of joining"><input type="date" value={f.doj} onChange={t('doj')} style={need(f.doj)} /></Field>
+      <Field label="Place of posting"><input value={f.place} onChange={t('place')} placeholder="e.g. Gurugram" style={need(f.place)} /></Field>
       <Field label="Total CTC (INR / year)"><Num value={f.ctc_annual} onChange={v => set('ctc_annual', v)} /></Field>
       <Field label="Joining bonus — total"><Num value={f.jb_total} onChange={v => { const split = f.jb_second > 0; set('jb_total', v); set('jb_first', split ? Math.round(v / 2) : v); set('jb_second', split ? v - Math.round(v / 2) : 0) }} /></Field>
       <Field label="… paid with first salary"><Num value={f.jb_first} onChange={v => set('jb_first', v)} /></Field>
@@ -216,7 +218,10 @@ export default function AppointmentLetterModal({ onboardingId, name, onClose, on
             </div>
             <div style={{ padding: '18px 22px', maxHeight: '62vh', overflowY: 'auto' }}>
               {tab === 'details' && <>
-                <div style={{ fontSize: 12.5, color: TK.muted, marginBottom: 12 }}>Filled from the employee record, the approved offer and the CTC structure. Changing a detail updates every section you have not edited by hand.</div>
+                <div style={{ fontSize: 12.5, color: TK.muted, marginBottom: 12 }}>Filled from the employee record, the onboarding form, the MRF, the approved offer and the CTC structure. Changing a detail updates every section you have not edited by hand.</div>
+                {problems.length > 0 && <div style={{ fontSize: 12.5, color: TK.ink, background: TK.criticalTint, border: `1px solid ${TK.criticalEdge}`, borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>
+                  <b>Not on record for this joiner:</b> {problems.join(', ')}. Fill {problems.length === 1 ? 'it' : 'them'} in below (outlined in red); the letter cannot go out with a blank.
+                </div>}
                 <DetailsTab f={draft.fields} set={setField} />
               </>}
               {tab === 'letter' && <div style={{ display: 'grid', gap: 10 }}>

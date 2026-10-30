@@ -28,22 +28,39 @@ export async function loadAppointment(sb: any, onboardingId: string): Promise<Ap
     .select('id, status, company_id, candidate_id, employee_id, employee_code, full_name, email, designation, department, department_id, location_id, date_of_joining, offered_ctc, annual_ctc, pt_state, form_data, notice_period_days')
     .eq('id', onboardingId).maybeSingle()
   if (!oc) return null
+  // The CTC on the payroll master, for joiners whose CTC was never on the onboarding record.
+  const { data: cm } = oc.employee_id
+    ? await sb.from('ctc_master').select('annual_ctc').eq('employee_id', oc.employee_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    : { data: null as any }
+  const masterCtc = Number(cm?.annual_ctc) || null
   const [{ data: emp }, { data: company }, offerRes, salary] = await Promise.all([
     oc.employee_id ? sb.from('employees').select('full_name, emp_code, gender, designation, department_id, location_id, company_doj, personal_email, office_email, notice_period_days').eq('id', oc.employee_id).maybeSingle() : Promise.resolve({ data: null }),
     sb.from('companies').select('*').eq('id', oc.company_id).maybeSingle(),
     oc.candidate_id ? sb.from('offer_approval_requests').select('joining_bonus, joining_bonus_freq, esop_value, esop_vesting, offered_ctc, proposed_doj, status, manpower_requisitions(designation), candidates(designation)').eq('candidate_id', oc.candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
-    loadSalaryBreakdown(sb, oc, Number(oc.annual_ctc) || null).catch(() => null),
+    // The negotiation / offer structure first; the payroll master's CTC only when there is none.
+    loadSalaryBreakdown(sb, oc, Number(oc.annual_ctc) || null)
+      .then(b => (b.source === 'none' && masterCtc ? loadSalaryBreakdown(sb, oc, masterCtc) : b)).catch(() => null),
   ])
   const offer: any = offerRes?.data || null
-  const deptId = emp?.department_id || oc.department_id
-  const locId = emp?.location_id || oc.location_id
-  const [{ data: dept }, { data: loc }] = await Promise.all([
+  // The requisition and the offer letter the joiner was hired against: they carry the department,
+  // the location and the role when the employee / onboarding records were left without them.
+  const { data: cand } = oc.candidate_id ? await sb.from('candidates').select('mrf_id, designation').eq('id', oc.candidate_id).maybeSingle() : { data: null as any }
+  const [{ data: mrf }, { data: ol }] = await Promise.all([
+    cand?.mrf_id ? sb.from('manpower_requisitions').select('department_id, location_id, job_title, position, designation, business_unit').eq('id', cand.mrf_id).maybeSingle() : Promise.resolve({ data: null }),
+    oc.candidate_id ? sb.from('offer_letters').select('department, location, designation, date_of_joining, annual_ctc').eq('candidate_id', oc.candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+  ])
+  const deptId = emp?.department_id || oc.department_id || (mrf as any)?.department_id || null
+  const locId = emp?.location_id || oc.location_id || (mrf as any)?.location_id || null
+  const [{ data: dept }, { data: loc }, { data: hq }] = await Promise.all([
     deptId ? sb.from('departments').select('dept_name').eq('id', deptId).maybeSingle() : Promise.resolve({ data: null }),
     locId ? sb.from('locations').select('location_name, city').eq('id', locId).maybeSingle() : Promise.resolve({ data: null }),
+    // Last resort for the place of posting: the company's head office (else its first location).
+    sb.from('locations').select('location_name, city, location_type').eq('company_id', oc.company_id).order('location_name').limit(50),
   ])
+  const head = ((hq as any[]) || []).find(l => /head|hq|corporate|corp/i.test(`${l.location_type || ''} ${l.location_name || ''}`)) || ((hq as any[]) || [])[0] || null
   const step1 = oc.form_data?.step_1 || {}
   const ann = annexureFrom(salary?.rows || [])
-  const ctc = Number(salary?.annual_ctc) || Number(oc.annual_ctc) || Number(oc.offered_ctc) || Number(offer?.offered_ctc) || 0
+  const ctc = Number(salary?.annual_ctc) || Number(oc.annual_ctc) || Number(oc.offered_ctc) || Number(offer?.offered_ctc) || masterCtc || 0
   const basicAnnual = ann.annexure.find(r => /^basic/i.test(r.label))?.annual || 0
   const jb = splitJoiningBonus(Number(offer?.joining_bonus) || 0, offer?.joining_bonus_freq)
 
@@ -52,15 +69,16 @@ export async function loadAppointment(sb: any, onboardingId: string): Promise<Ap
     name: emp?.full_name || oc.full_name || '',
     emp_code: emp?.emp_code || oc.employee_code || '',
     letter_date: today(),
-    designation: emp?.designation || oc.designation || offer?.candidates?.designation || offer?.manpower_requisitions?.designation || '',
-    department: dept?.dept_name || oc.department || '',
+    designation: emp?.designation || oc.designation || (ol as any)?.designation || cand?.designation || offer?.candidates?.designation
+      || (mrf as any)?.job_title || (mrf as any)?.designation || (mrf as any)?.position || offer?.manpower_requisitions?.designation || '',
+    department: dept?.dept_name || oc.department || (ol as any)?.department || (mrf as any)?.business_unit || '',
     company_name: company?.company_name || '',
-    doj: String(emp?.company_doj || oc.date_of_joining || offer?.proposed_doj || '').slice(0, 10),
-    place: loc?.city || loc?.location_name || '',
-    ctc_annual: Math.round(ctc),
+    doj: String(emp?.company_doj || oc.date_of_joining || (ol as any)?.date_of_joining || offer?.proposed_doj || '').slice(0, 10),
+    place: loc?.city || loc?.location_name || (ol as any)?.location || head?.city || head?.location_name || '',
+    ctc_annual: Math.round(ctc || Number((ol as any)?.annual_ctc) || 0),
     jb_total: jb.first + jb.second, jb_first: jb.first, jb_second: jb.second,
     esop_value: Math.round(Number(offer?.esop_value) || 0),
-    esop_vesting: offer?.esop_vesting || '',
+    esop_vesting: offer?.esop_vesting || (Number(offer?.esop_value) > 0 ? '4-year vesting with 1 year cliff' : ''),
     probation_notice_days: 30,
     notice_days: Number(company?.notice_period_days) || 90,
     jurisdiction: 'Gurugram',
