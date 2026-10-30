@@ -24,9 +24,11 @@ export async function GET(req: NextRequest) {
   // who they report to, the same facts the ESS Team tab and the inbox directory
   // already show. The diagnostics stay behind the Employees module: orphans and
   // span-of-control are HR's problem list, not a colleague directory.
-  const gate = view === 'tree'
-    ? await requireDashboardUser(req)
-    : await requireModule(req, 'Employees')
+  // Your OWN team-mates (ESS → My Team) are the same kind of fact as the tree: anyone signed
+  // in may see who shares their L1 manager. Somebody else's peers stay behind Employees.
+  const signedIn = view === 'tree' || view === 'peers' ? await requireDashboardUser(req) : null
+  const ownPeers = view === 'peers' && !!signedIn?.user?.employeeId && url.searchParams.get('employee_id') === signedIn.user.employeeId
+  const gate = view === 'tree' || ownPeers ? signedIn! : await requireModule(req, 'Employees')
   if (gate.error) return gate.error
 
   // Force the company to the caller's own unless they are a cross-company (super-admin)
