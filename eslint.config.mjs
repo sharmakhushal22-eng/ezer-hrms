@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Android app (Expo) has its own lint, tsconfig and node_modules.
+    "apps/**",
   ]),
 ]);
 
