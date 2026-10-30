@@ -11,6 +11,7 @@
 // APIs: /api/onboarding/managers (options), /api/onboarding/team-plan, /api/onboarding/generate-code.
 import { useEffect, useMemo, useState } from 'react'
 import { authHeaders } from '@/lib/auth-headers'
+import { useGrant } from '@/lib/rms/client'
 import { C as TK, Z, E } from '@/lib/ui'
 import { PersonPicker, Avatar, PICKER_CSS, describe, type Emp } from './PeoplePicker'
 import { parseCodes, autoRoleCodes, MANAGER_ROLE_CODES, NEW } from '@/lib/onboarding/team-plan'
@@ -22,7 +23,7 @@ type Role = { id: string; role_code: string; role_name: string; scope: string | 
 type Chain = { l1: string | null; l2: string | null; hod: string | null }
 type Member = { id: string; emp_code: string; full_name: string; designation: string | null; department: string | null; level: number; via: string | null; before: Chain; after: Chain; changed: ('L1' | 'L2' | 'HOD')[] }
 type Plan = { joiner: { l1: Ref; l2: Ref; hod: Ref }; direct: Emp[]; unknown: string[]; members: Member[]; problems: string[]; warnings?: string[]; summary: string; names: Record<string, { name: string; emp_code: string | null }> }
-type Options = { candidate: any; managers: { l1: Ref; l2: Ref; hod: Ref }; employees: Emp[]; roles: Role[] }
+type Options = { candidate: any; managers: { l1: Ref; l2: Ref; hod: Ref }; employees: Emp[]; roles: Role[]; companies?: { id: string; name: string; own: boolean }[] }
 type Approval = { team: string; status: string }
 
 const LABEL: Record<string, string> = { IT: 'IT', ADMIN: 'Admin', PAYROLL: 'Payroll', HR_MANAGER: 'HR Manager' }
@@ -172,6 +173,9 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
   const [plan, setPlan] = useState<Plan | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
   const [roleIds, setRoleIds] = useState<Set<string>>(new Set())
+  // Role scope: the companies the ticked roles are valid in (the joiner's own is always in).
+  const [companyIds, setCompanyIds] = useState<Set<string>>(new Set())
+  const { grant } = useGrant()
   const [busy, setBusy] = useState(false)
   const name = candidate.full_name, fname = first(name)
 
@@ -191,6 +195,8 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
         if (Array.isArray(a.team?.exclude)) setExclude(new Set(a.team.exclude))
         const prev: string[] = Array.isArray(a.roles) ? a.roles.map((r: any) => r.role_id) : a.role_id ? [a.role_id] : []
         setRoleIds(new Set(prev.filter((id: string) => o.roles.some(r => r.id === id && !isManagerRole(r.role_code)))))
+        const ownCo = (o.companies || []).find(c => c.own)?.id
+        setCompanyIds(new Set([...(ownCo ? [ownCo] : []), ...(Array.isArray(a.company_ids) ? a.company_ids : [])]))
         setCode(c.suggested || ''); setCodeType(c.employment_type || ''); setAfter(c.after || null); setAhead(Array.isArray(c.fifo_ahead) ? c.fifo_ahead : [])
       } catch (e: any) { if (alive) setErr(e.message) } finally { if (alive) setCodeLoading(false) }
     })()
@@ -251,7 +257,7 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
     if (!chosenRoles.length) { setStep(2); onDone('Tick at least one role.', 'err'); return }
     setBusy(true)
     try {
-      const body = { onboarding_id: onboardingId, date_of_joining: doj, role_ids: chosenRoles.map(r => r.id), team: { direct: (plan?.direct || []).map(d => d.id), exclude: [...exclude] } }
+      const body = { onboarding_id: onboardingId, date_of_joining: doj, role_ids: chosenRoles.map(r => r.id), company_ids: [...companyIds], team: { direct: (plan?.direct || []).map(d => d.id), exclude: [...exclude] } }
       const post = async (force: boolean) => { const r = await fetch('/api/onboarding/generate-code', { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, force }) }); return { r, d: await r.json() } }
       let { r, d } = await post(false)
       if (r.status === 409 && Array.isArray(d.pending) && d.pending.length) {
@@ -374,8 +380,35 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
                     </button>) })}
                   {roles.length === 0 && <div className="gc-note">No roles are set up yet — add them under Roles & access.</div>}
                 </div>
+                {(opts.companies || []).length > 1 && (() => {
+                  // Only companies the person assigning works in may be given (the server checks too).
+                  const mine = new Set(grant.crossCompany || grant.isSuperAdmin || grant.legacy ? (opts.companies || []).map(c => c.id) : (grant.companyIds?.length ? grant.companyIds : grant.companyId ? [grant.companyId] : []))
+                  const picked = (opts.companies || []).filter(c => companyIds.has(c.id))
+                  const handPicked = chosenRoles.filter(r => !isManagerRole(r.role_code) && r.role_code !== 'EMPLOYEE')
+                  return (
+                    <div>
+                      <div className="gc-sub">Valid in companies · {picked.length} selected</div>
+                      <div className="gc-p" style={{ marginBottom: 8 }}>The companies the roles ticked above apply in: {fname} can open their modules for every company selected here. L1 Manager, L2 Manager, HOD and the employee portal always stay with {fname}'s own company.</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {(opts.companies || []).map(c => {
+                          const on = companyIds.has(c.id), locked = c.own, allowed = c.own || mine.has(c.id)
+                          return (
+                            <button key={c.id} type="button" aria-pressed={on} disabled={locked || !allowed}
+                              title={locked ? `${fname}'s own company: always included` : !allowed ? 'You can only give a scope in companies you work in yourself' : undefined}
+                              onClick={() => setCompanyIds(s => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n })}
+                              className={`gc-role${on ? ' on' : ''}`} style={{ padding: '8px 12px', display: 'inline-flex', alignItems: 'center', gap: 8, width: 'auto', opacity: !allowed ? .5 : 1, cursor: locked || !allowed ? 'not-allowed' : 'pointer' }}>
+                              <span className={`gc-tick${on ? ' on' : ''}`}>{on ? '✓' : ''}</span>
+                              <span className="t">{c.name}{locked && <span className="gc-pill" style={{ marginLeft: 6, color: TK.muted, background: TK.sunken }}>own</span>}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {picked.length > 1 && handPicked.length === 0 && <div className="gc-note" style={{ marginTop: 6 }}>Tick a role above: the company scope applies to the roles you pick, not to the manager roles.</div>}
+                    </div>
+                  )
+                })()}
                 <div>
-                  <div className="gc-sub">What {fname} will be able to open{chosenRoles.length ? ` · ${chosenRoles.map(r => r.role_name).join(' + ')}` : ''}</div>
+                  <div className="gc-sub">What {fname} will be able to open{chosenRoles.length ? ` · ${chosenRoles.map(r => r.role_name).join(' + ')}` : ''}{companyIds.size > 1 ? ` · in ${companyIds.size} companies` : ''}</div>
                   {chosenRoles.length === 0 ? <div className="gc-note">Tick a role above to see its modules.</div>
                     : union.length === 0 ? <div className="gc-note">The employee portal only — no admin module.</div>
                     : <div className="gc-perms">{union.map(([mod, lv]) => { const L = LEVEL[lv] || { label: lv, color: TK.muted, bg: TK.sunken }; return <div key={mod} className="gc-perm"><span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mod}</span><span className="gc-pill" style={{ color: L.color, background: L.bg }}>{L.label}</span></div> })}</div>}

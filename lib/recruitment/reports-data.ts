@@ -29,7 +29,7 @@ async function allIn(ids: string[], q: (chunk: string[]) => any): Promise<any[]>
 
 /** The dataset every report is built from, scoped to what `grant` may see. */
 export async function loadReportData(sb: any, grant: Grant, company: string | null): Promise<{ ds: Dataset; scope: string }> {
-  const co = companyFilter(grant, company)
+  const co = companyFilter(grant, company, 'Recruitment')
   const scoped = (t: string, sel = '*', order = 'created_at') => () => { let q = sb.from(t).select(sel).order(order, { ascending: false }); if (co) q = q.eq('company_id', co); return q }
   let [mrfs, candidates] = await Promise.all([all(scoped('manpower_requisitions')), all(scoped('candidates'))])
 

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden, audit, notify } from '@/lib/ess/session'
+import { allowedCompanies } from '@/lib/rms/resolve'
 import { DEPTS } from '@/lib/exit/clearance'
 import { fnfTotals, lettersFor, rupees, LETTER_LABEL, type FnfLine } from '@/lib/exit/fnf'
 import { computeFnf, exitReasonOf } from '@/lib/exit/case'
@@ -33,7 +34,9 @@ function abilities(ctx: any) {
   const has = (l: string[]) => sa || l.some(c => roles.has(c))
   return { view: has(VIEW), review: has(PAYROLL), approve: has(HR_APPROVE), pay: has(FINANCE), startClearance: has(['HR_MANAGER', 'HR_HEAD', 'CHRO', 'HR_EXECUTIVE', 'BRANCH_HR', 'RECRUITER']) }
 }
-const scopeOf = (ctx: any): string | null => (ctx.grant.isSuperAdmin || ctx.grant.crossCompany) ? null : (ctx.companyId || null)
+/** The companies the caller may act in (null = any: super admin / cross-company): their own,
+ *  plus any their roles were scoped to (ess_user_roles.company_ids, migration 203). */
+const scopeOf = (ctx: any): string[] | null => (ctx.grant.isSuperAdmin || ctx.grant.crossCompany) ? null : allowedCompanies(ctx.grant, null)
 
 export async function GET(req: NextRequest) {
   const r = await essRoute(req); if (r.error) return r.error
@@ -48,7 +51,7 @@ export async function GET(req: NextRequest) {
     let q = sb.from('employee_resignation')
       .select('id, employee_id, status, final_lwd, lwd_as_per_policy, date_of_resignation, submitted_by_employee, employees!employee_resignation_employee_id_fkey!inner(full_name, emp_code, designation, company_id, access_revoked_at)')
       .not('status', 'eq', 'WITHDRAWN').or(`final_lwd.gte.${since},final_lwd.is.null`).order('final_lwd', { ascending: true, nullsFirst: false }).limit(300)
-    if (co) q = q.eq('employees.company_id', co)
+    if (co) q = q.in('employees.company_id', co)
     const { data: res, error } = await q
     if (error) return bad(error.message, 500)
     const ids = (res || []).map((x: any) => x.id)
@@ -71,7 +74,7 @@ export async function GET(req: NextRequest) {
   if (!res) return bad('Exit not found.', 404)
   const emp = (res as any).employees
   const own = emp?.id === ctx.caller.employeeId
-  if (!own && !(can.view && (!co || emp?.company_id === co))) return forbidden('You cannot see this exit.')
+  if (!own && !(can.view && (!co || co.includes(emp?.company_id)))) return forbidden('You cannot see this exit.')
   const [{ data: fnf }, reason] = await Promise.all([
     sb.from('fnf_settlements').select('*').eq('resignation_id', resId).maybeSingle(),
     exitReasonOf(sb as any, resId),
@@ -110,7 +113,7 @@ export async function POST(req: NextRequest) {
   const { data: f } = await sb.from('fnf_settlements').select('*, employees!fnf_settlements_employee_id_fkey(full_name, emp_code, company_id, personal_email, office_email)').eq('id', String(body.id || '')).maybeSingle()
   if (!f) return bad('F&F statement not found.', 404)
   const emp = (f as any).employees
-  if (co && emp?.company_id !== co) return forbidden('This employee belongs to another company.')
+  if (co && !co.includes(emp?.company_id)) return forbidden('This employee belongs to another company.')
   const move = async (from: string, patch: Record<string, unknown>) => {
     const { data } = await sb.from('fnf_settlements').update({ ...patch, updated_at: now }).eq('id', f.id).eq('status', from).select('*')
     return data?.[0] || null

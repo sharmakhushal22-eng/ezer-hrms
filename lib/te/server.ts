@@ -382,7 +382,7 @@ async function resolveCompany(t: TeCall): Promise<string> {
 
   // Somebody else's company, or a caller with none of their own: the roles decide.
   // companyFilter() is the repo's single choke-point for this (lib/rms/resolve.ts).
-  const allowed = companyFilter(await t.grant(), asked)
+  const allowed = companyFilter(await t.grant(), asked, 'Travel Claims')
   if (allowed && (!asked || allowed === asked)) return allowed
 
   // A GROUP-SCOPED DESK MEMBER may work in any company of their own group.
@@ -504,7 +504,7 @@ export async function teStaffFor(
   if (error) throw rpcError(error, table)
   if (!data) return false
   const recordCo = data.company_id as string
-  if (companyFilter(await t.grant(), recordCo) === recordCo) return true
+  if (companyFilter(await t.grant(), recordCo, 'Travel Claims') === recordCo) return true
 
   // A GROUP-SCOPED DESK MEMBER reaches the rest of their own group. The same
   // flag resolveCompany honours for reading: without this the Travel Desk

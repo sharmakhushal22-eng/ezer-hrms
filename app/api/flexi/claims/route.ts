@@ -157,7 +157,7 @@ export async function GET(req: NextRequest) {
     // Pin to the caller's own company unless a cross-company (super-admin) role. A
     // non-cross caller asking for another company — or 'ALL' — is forced back to theirs.
     const grant = await grantForRequest(req)
-    const company = companyFilter(grant, compId)
+    const company = companyFilter(grant, compId, 'Flexi Claims')
     let q = supa.from('flexi_claims')
       .select('*, employees(emp_code, full_name, department_id, location_id, company_id, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)), flexi_claim_files(id, file_name, file_type, file_url)')
     if (company) q = q.eq('company_id', company)

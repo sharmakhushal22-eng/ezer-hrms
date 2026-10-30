@@ -159,9 +159,13 @@ export async function assignRoles(u: EssUser, roleIds: string[], byName?: string
     acctId = data?.id
   }
   if (!acctId) return { error: { message: 'Could not create ESS account' } }
+  // A role kept in the new set keeps the companies it was scoped to (migration 203); read
+  // before the rows are replaced. Without that column, nothing to carry.
+  const { data: before, error: readErr } = await supabase.from('ess_user_roles').select('role_id, company_ids').eq('ess_account_id', acctId)
+  const scopeOf = new Map<string, string[] | null>(readErr ? [] : ((before as any[]) || []).map(r => [r.role_id, r.company_ids || null]))
   await supabase.from('ess_user_roles').delete().eq('ess_account_id', acctId)
   if (roleIds.length) {
-    const rows = roleIds.map(rid => ({ ess_account_id: acctId, role_id: rid }))
+    const rows = roleIds.map(rid => ({ ess_account_id: acctId, role_id: rid, ...(scopeOf.get(rid) ? { company_ids: scopeOf.get(rid) } : {}) }))
     const { error } = await supabase.from('ess_user_roles').insert(rows)
     if (error) return { error }
   }

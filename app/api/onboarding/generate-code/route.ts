@@ -1,7 +1,8 @@
 // app/api/onboarding/generate-code/route.ts — the last step on the onboarding card.
 //
 //   GET  ?onboarding_id=…   the next type-wise code, suggested (nothing is consumed)
-//   POST { onboarding_id, employee_code?, role_ids: string[], team: { direct: string[], exclude: string[] }, force? }
+//   POST { onboarding_id, employee_code?, role_ids: string[], company_ids?: string[], team: { direct: string[], exclude: string[] }, force? }
+//        company_ids: the companies the picked roles are valid in (role scope, migration 203)
 //        Generate code: records the roles and the team plan (lib/onboarding/hr-assignment.ts),
 //        reserves the code atomically, writes the employees row, applies the reporting line
 //        (the joiner's and their team's), opens the ESS account with the roles and mails the
@@ -11,7 +12,7 @@
 // on the review sheet (400 needs_managers) and at least one role (400 needs_role).
 // Guarded by the Onboarding module (EDIT to generate).
 import { NextRequest, NextResponse } from 'next/server'
-import { rmsServiceClient as sb } from '@/lib/rms/server'
+import { rmsServiceClient as sb, grantForRequest } from '@/lib/rms/server'
 import { requireModule } from '@/lib/api-auth'
 import { createEmployeeFromOnboarding } from '@/lib/onboarding/create-employee'
 import { nextCompanyCode, queueAheadOf } from '@/lib/onboarding/code-series'
@@ -73,8 +74,17 @@ export async function POST(req: NextRequest) {
       if (error) return NextResponse.json({ error: `Could not save the date of joining: ${error.message}` }, { status: 500 })
     }
     if (!typedDoj && !dojRow?.date_of_joining) return NextResponse.json({ error: 'Set the date of joining first — it is on the wizard\'s Code step.', needs_doj: true }, { status: 400 })
+    // The companies the picked roles are valid in. Only companies the person assigning may act
+    // in themself (a super admin / cross-company caller: any).
+    const askedCos = Array.isArray(body.company_ids) ? [...new Set(body.company_ids.map(String).filter(Boolean))] as string[] : []
+    if (askedCos.length) {
+      const g = await grantForRequest(req)
+      const mayGive = g.crossCompany || g.isSuperAdmin || g.legacy ? null : new Set(g.companyIds || (g.companyId ? [g.companyId] : []))
+      const bad = mayGive ? askedCos.filter(c => !mayGive.has(c)) : []
+      if (bad.length) return NextResponse.json({ error: 'You can only give a role scope in companies you work in yourself.' }, { status: 403 })
+    }
     const saved = await saveCodeAssignment(sb as any, {
-      onboardingId: onboarding_id,
+      onboardingId: onboarding_id, companyIds: askedCos,
       roleIds: Array.isArray(body.role_ids) ? body.role_ids.map(String) : body.role_id ? [String(body.role_id)] : [],
       team: { direct: Array.isArray(body.team?.direct) ? body.team.direct.map(String) : [], exclude: Array.isArray(body.team?.exclude) ? body.team.exclude.map(String) : [] },
       actorId: user.employeeId, actorName: me?.full_name || user.email || null,

@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   // theirs; a cross caller may narrow to a pick or, with none, see every company (null).
   const grant = await grantForRequest(req)
   const requested = url.searchParams.get('company_id')
-  const companyId = companyFilter(grant, requested) || undefined
+  const companyId = companyFilter(grant, requested, 'Employees') || undefined
 
   if (view === 'peers') {
     const employeeId = url.searchParams.get('employee_id')
