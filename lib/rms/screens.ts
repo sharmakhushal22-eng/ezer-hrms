@@ -66,8 +66,6 @@ export const SCREEN_MODULES: ScreenModule[] = [
     screens: [
       { key: 'overview', label: 'Overview' },
       { key: 'candidates', label: 'All candidates' },
-      // Joiners with an employee code, until their Letter of Appointment is sent.
-      { key: 'appointment', label: 'Send appointment letter' },
       { key: 'pending', label: 'Pending actions' },
       { key: 'insights', label: 'AI insights' },
       { key: 'compliance', label: 'Compliance' },

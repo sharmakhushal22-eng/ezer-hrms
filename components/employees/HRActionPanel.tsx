@@ -330,16 +330,22 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
 }
 
 // ── Documents tab (all docs submitted by the employee) ─────────────
-/** Letters HR has issued to the employee (generated_letters released to ESS: the Letter of
- *  Appointment and any letter from HR Letters). Shown on the Documents tab of the record —
- *  People → Employees → employee, and the employee's own ESS profile. */
+/** Letters issued to the employee (generated_letters: People → Letters, the Letter of Appointment,
+ *  HR Letters templates), on the Documents tab of the record — People → Employees → employee and
+ *  the employee's own ESS profile. HR sees every letter, the ones kept out of ESS marked; the
+ *  employee only the ones released to ESS (app/api/letters/employee decides). */
 function IssuedLetters({ employeeId }: { employeeId: string }) {
-  const [rows, setRows] = useState<{ id: string; letter_name: string; letter_date: string }[] | null>(null)
+  const [rows, setRows] = useState<{ id: string; name: string; doc_id: string | null; date: string; in_ess: boolean; sent_to: string | null; by: string | null }[] | null>(null)
   const [busy, setBusy] = useState('')
   useEffect(() => {
     let alive = true
-    supabase.from('my_generated_letters').select('id, letter_name, letter_date').eq('employee_id', employeeId).order('letter_date', { ascending: false })
-      .then(({ data }) => { if (alive) setRows((data as any[]) || []) }, () => { if (alive) setRows([]) })
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/letters/employee?employee_id=${encodeURIComponent(employeeId)}`, { headers: await authHeaders(), cache: 'no-store' })
+        const j = await r.json().catch(() => ({}))
+        if (alive) setRows(r.ok ? (j.letters || []) : [])
+      } catch { if (alive) setRows([]) }
+    })()
     return () => { alive = false }
   }, [employeeId])
   async function open(id: string) {
@@ -347,7 +353,7 @@ function IssuedLetters({ employeeId }: { employeeId: string }) {
     // Opened first, so the browser does not treat it as a popup once the signed link arrives.
     const w = window.open('', '_blank')
     try {
-      const r = await fetch(`/api/ess/my-letter?id=${encodeURIComponent(id)}&employee_id=${encodeURIComponent(employeeId)}`, { headers: await authHeaders(), cache: 'no-store' })
+      const r = await fetch(`/api/letters/employee?employee_id=${encodeURIComponent(employeeId)}&file=${encodeURIComponent(id)}`, { headers: await authHeaders(), cache: 'no-store' })
       const j = await r.json().catch(() => ({}))
       if (!r.ok || !j.url) throw new Error(j.error || 'Could not open the letter.')
       if (w) w.location.href = j.url; else window.open(j.url, '_blank')
@@ -360,9 +366,9 @@ function IssuedLetters({ employeeId }: { employeeId: string }) {
       <div style={C.sec}>Letters issued <Badge t="neutral" size="sm">{rows.length}</Badge></div>
       {rows.map((l, i) => (
         <div key={l.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:S.md, flexWrap:'wrap', padding:'10px 0', borderTop: i ? `1px solid ${TK.line}` : 'none', fontSize:F.small }}>
-          <div style={{ minWidth:0, flex:'1 1 200px' }}>
-            <div style={{ fontWeight:W.semi, color:TK.ink }}>{l.letter_name}</div>
-            <div style={{ fontSize:F.tiny, color:TK.muted }}>Issued {fmt(l.letter_date)}</div>
+          <div style={{ minWidth:0, flex:'1 1 220px' }}>
+            <div style={{ fontWeight:W.semi, color:TK.ink, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>{l.name}{!l.in_ess && <Badge t="warning" size="sm">Not in ESS</Badge>}</div>
+            <div style={{ fontSize:F.tiny, color:TK.muted, overflowWrap:'anywhere' }}>{[l.doc_id, `Issued ${fmt(l.date)}`, l.sent_to ? `mailed to ${l.sent_to}` : null, l.by ? `by ${l.by}` : null].filter(Boolean).join(' · ')}</div>
           </div>
           <button style={C.out} disabled={busy === l.id} onClick={() => open(l.id)}>{busy === l.id ? 'Opening…' : 'Download'}</button>
         </div>

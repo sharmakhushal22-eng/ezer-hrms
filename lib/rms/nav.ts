@@ -47,6 +47,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { key: 'org-chart',         label: 'Org Chart',               href: '/dashboard/org-chart',       module: 'Employees' },
     { key: 'bulk-upload',       label: 'Bulk Uploader',           href: '/dashboard/bulk-upload',     module: 'Bulk Upload' },
     { key: 'transfer',          label: 'Transfer',                href: '/dashboard/transfer',        module: 'Transfer' },
+    // Pending appointment letters and the twenty HR letters (EZER Letters & Documents spec).
+    { key: 'employee-letters',  label: 'Letters',                 href: '/dashboard/employee-letters', module: 'HR Letters' },
   ]},
   { group: 'Time & Attendance', items: [
     { key: 'attendance',        label: 'Attendance & Leave',      href: '/dashboard/attendance',         module: 'Attendance' },

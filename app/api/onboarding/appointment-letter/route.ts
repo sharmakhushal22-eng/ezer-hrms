@@ -17,6 +17,7 @@ import { requireModule } from '@/lib/api-auth'
 import { sendMail, MAIL_NOT_CONFIGURED } from '@/lib/mail/send'
 import { loadAppointment, appointmentLetterPdf } from '@/lib/onboarding/appointment-letter-server'
 import { apptProblems, defaultEmail, type ApptDraft, type ApptFields } from '@/lib/onboarding/appointment-letter'
+import { docIdFor } from '@/lib/letters/catalog'
 
 export const runtime = 'nodejs' // pdfkit + nodemailer
 export const dynamic = 'force-dynamic'
@@ -27,17 +28,22 @@ const LETTER_NAME = 'Letter of Appointment'
 
 /** The sent letter into the employee's ESS → My Letters. Never blocks the send: what went
  *  wrong is reported back to the popup instead. */
-async function saveToEss(o: { employeeId: string; companyId: string | null; pdf: { name: string; content: Buffer }; by: string | null }): Promise<string | null> {
+async function saveToEss(o: { employeeId: string; companyId: string | null; pdf: { name: string; content: Buffer }; by: string | null; byName?: string | null; to?: string | null; companyCode?: string | null; empCode?: string | null; fields?: unknown }): Promise<string | null> {
   const now = new Date().toISOString()
   const path = `appointment/${o.employeeId}/${Date.now()}_${o.pdf.name}`
   const up = await sb.storage.from('generated-letters').upload(path, o.pdf.content, { contentType: 'application/pdf', upsert: false })
   if (up.error) return `the PDF could not be stored (${up.error.message})`
   // Only the latest appointment letter stays in My Letters.
   await sb.from('generated_letters').update({ published_to_ess_at: null }).eq('employee_id', o.employeeId).eq('letter_name', LETTER_NAME).not('published_to_ess_at', 'is', null)
-  const { error } = await sb.from('generated_letters').insert({
+  const row = {
     template_id: null, letter_name: LETTER_NAME, employee_id: o.employeeId, company_id: o.companyId, file_url: path,
     letter_date: now.slice(0, 10), generated_by: o.by, generated_at: now, emailed_at: now, published_to_ess_at: now,
-  })
+  }
+  // With the People → Letters columns (migration 204): APT and its document ID; without them before that.
+  const prefix = docIdFor('APT', o.companyCode || '', o.empCode || '', now, 0).replace(/-000$/, '')
+  const { count } = await sb.from('generated_letters').select('id', { count: 'exact', head: true }).like('doc_id', `${prefix}-%`)
+  let { error } = await sb.from('generated_letters').insert({ ...row, letter_type: 'APT', doc_id: docIdFor('APT', o.companyCode || '', o.empCode || '', now, (count || 0) + 1), sent_to: o.to || null, generated_by_name: o.byName || null, fields: o.fields ?? null })
+  if (error && /letter_type|doc_id|sent_to|generated_by_name|fields/.test(error.message)) ({ error } = await sb.from('generated_letters').insert(row))
   if (error) {
     await sb.storage.from('generated-letters').remove([path]).then(() => null, () => null)
     return /letter_name|template_id|null value/i.test(error.message) ? 'run migration 200_appointment_letter_in_ess.sql in Supabase' : error.message
@@ -128,7 +134,8 @@ export async function POST(req: NextRequest) {
     details: { to, cc, by_name: byName, employee_code: ctx.onboarding.employee_code, ctc_annual: draft.fields.ctc_annual, doj: draft.fields.doj },
   }).then(() => null, () => null)
   const essError = ctx.onboarding.employee_id
-    ? await saveToEss({ employeeId: ctx.onboarding.employee_id, companyId: ctx.company?.id || null, pdf, by: user.employeeId || null }).catch((e: any) => e?.message || 'could not save')
+    ? await saveToEss({ employeeId: ctx.onboarding.employee_id, companyId: ctx.company?.id || null, pdf, by: user.employeeId || null, byName, to,
+        companyCode: ctx.company?.company_code || null, empCode: ctx.onboarding.employee_code, fields: draft.fields }).catch((e: any) => e?.message || 'could not save')
     : 'there is no employee record yet'
   return NextResponse.json({ ok: true, sent_to: to, ess_saved: !essError, ess_error: essError, last_sent: { at: new Date().toISOString(), to, by: byName } })
 }
