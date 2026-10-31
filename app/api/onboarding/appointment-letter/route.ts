@@ -10,7 +10,8 @@
 // onboarding_notifications and onboarding_audit_log, so the popup can say when it last went,
 // and saved to the employee's ESS → Profile → My Letters (generated_letters, migration 200) with
 // a bell notification; a re-send replaces the copy there.
-// Guarded by the Onboarding module (VIEW to read, EDIT to preview or send).
+// Guarded by the Onboarding module or the HR Letters module (People → Letters → Pending letters):
+// VIEW to read, EDIT to preview or send.
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { requireModule } from '@/lib/api-auth'
@@ -52,6 +53,15 @@ async function saveToEss(o: { employeeId: string; companyId: string | null; pdf:
   return null
 }
 
+/** Either module lets the caller in: Onboarding (the onboarding team) or HR Letters (People →
+ *  Letters — the HR Head sends letters without being given the rest of onboarding). */
+async function gateFor(req: NextRequest, level: 'VIEW' | 'EDIT') {
+  const a = await requireModule(req, 'Onboarding', level)
+  if (!a.error) return a
+  const b = await requireModule(req, 'HR Letters', level)
+  return b.error ? a : b
+}
+
 async function lastSent(onboardingId: string) {
   const { data } = await sb.from('onboarding_audit_log').select('created_at, details').eq('onboarding_id', onboardingId).eq('action', 'APPOINTMENT_LETTER_SENT').order('created_at', { ascending: false }).limit(1).maybeSingle()
   return data ? { at: data.created_at, to: (data.details as any)?.to || null, by: (data.details as any)?.by_name || null } : null
@@ -79,7 +89,7 @@ function cleanDraft(raw: any, base: ApptDraft): ApptDraft {
 }
 
 export async function GET(req: NextRequest) {
-  const gate = await requireModule(req, 'Onboarding')
+  const gate = await gateFor(req, 'VIEW')
   if (gate.error) return gate.error
   const id = req.nextUrl.searchParams.get('onboarding_id') || ''
   if (!id) return bad('onboarding_id required')
@@ -90,7 +100,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await requireModule(req, 'Onboarding', 'EDIT')
+  const gate = await gateFor(req, 'EDIT')
   if (gate.error) return gate.error
   const b = await req.json().catch(() => ({}))
   const id = String(b.onboarding_id || '')
