@@ -284,7 +284,7 @@ export default function LettersStudio() {
   const [pending, setPending] = useState<Pending[] | null>(null)
   const [issued, setIssued] = useState<Issued[] | null>(null)
   const [listErr, setListErr] = useState('')
-  const [apptFor, setApptFor] = useState<{ id: string; name: string } | null>(null)
+  const [apptFor, setApptFor] = useState<{ onboardingId?: string | null; employeeId?: string | null; name: string } | null>(null)
   const [toast, setToast] = useState<{ msg: string; tone: 'ok' | 'err' } | null>(null)
   const [pq, setPq] = useState('')
   const [iq, setIq] = useState('')
@@ -331,7 +331,7 @@ export default function LettersStudio() {
   useEffect(() => { setPdfUrl(''); setPdfName('') }, [def, emp])
 
   const missing = useMemo(() => def ? missingFields(def, vals) : [], [def, vals])
-  const ready = !!def && !!emp && !loadingEmp && missing.length === 0
+  const ready = !!def && def.code !== 'APT' && !!emp && !loadingEmp && missing.length === 0
   const autoCount = def ? def.fields.filter(f => record[f.key] && vals[f.key] === record[f.key]).length : 0
 
   const notify = (msg: string, tone: 'ok' | 'err' = 'ok') => { setToast({ msg, tone }); setTimeout(() => setToast(null), 6000) }
@@ -441,7 +441,7 @@ export default function LettersStudio() {
                       <td style={{ ...td, color: C.inkSoft }}>{p.designation || '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{day(p.date_of_joining)}</td>
                       <td style={{ ...td, color: p.email ? C.inkSoft : C.critical }}>{p.email || 'No email'}</td>
-                      <td style={{ ...td, textAlign: 'right' }}><button style={btn('primary', true)} onClick={() => setApptFor({ id: p.id, name: p.full_name })}><Icon name="send" size={14} />Send letter</button></td>
+                      <td style={{ ...td, textAlign: 'right' }}><button style={btn('primary', true)} onClick={() => setApptFor({ onboardingId: p.id, name: p.full_name })}><Icon name="send" size={14} />Send letter</button></td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -461,16 +461,20 @@ export default function LettersStudio() {
               </Section>
               <Section step={3} title="Letter details" done={ready}
                 hint={def && emp && !loadingEmp ? `${autoCount} of ${def.fields.length} fields filled from the record` : 'Auto-filled from the employee record'}
-                right={def && emp && !loadingEmp && (missing.length ? <span style={pill(C.critical, C.criticalTint)}>{missing.length} required</span> : <span style={pill(C.positive, C.positiveTint)}><Icon name="check" size={12} />Complete</span>)}>
+                right={def && emp && !loadingEmp && def.code !== 'APT' && (missing.length ? <span style={pill(C.critical, C.criticalTint)}>{missing.length} required</span> : <span style={pill(C.positive, C.positiveTint)}><Icon name="check" size={12} />Complete</span>)}>
                 {!def || !emp ? <div style={{ fontSize: 13, color: C.faint }}>Select an employee and a letter type — details on record fill in automatically.</div>
+                  : def.code === 'APT' ? (
+                    <div style={{ padding: '14px 16px', borderRadius: R.md, background: C.brandTint, border: `1px solid ${C.brandEdge}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                      <span style={{ color: C.brand, display: 'flex' }}><Icon name="file" size={22} /></span>
+                      <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: W.semi, color: C.ink }}>Full appointment letter (employment contract)</div>
+                        <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 2 }}>All 20 sections, signatures and Annexures A (salary, as negotiated), B (leave) and C (code of conduct), filled from {emp.full_name}’s record. Review, preview and send from the letter window.</div>
+                      </div>
+                      <button style={btn('primary')} onClick={() => setApptFor(onboardingId ? { onboardingId, name: emp.full_name } : { employeeId: emp.id, name: emp.full_name })}><Icon name="file" />Open appointment letter</button>
+                    </div>
+                  )
                   : loadingEmp ? <div style={{ fontSize: 13, color: C.faint }}>Loading {emp.full_name}’s record…</div>
                   : <>
-                    {def.code === 'APT' && onboardingId && (
-                      <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: R.md, background: C.infoTint, border: `1px solid ${C.infoEdge}`, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ flex: 1, minWidth: 200 }}>{emp.full_name} joined through onboarding — the full appointment letter with the CTC annexure is available.</span>
-                        <button style={btn('secondary', true)} onClick={() => setApptFor({ id: onboardingId, name: emp.full_name })}>Open full letter</button>
-                      </div>
-                    )}
                     {missing.length > 0 && <div style={{ marginBottom: 14, padding: '9px 12px', borderRadius: R.md, background: C.criticalTint, border: `1px solid ${C.criticalEdge}`, fontSize: 12.5, display: 'flex', gap: 8 }}>
                       <Icon name="alert" color={C.critical} /><span><b>Not on record:</b> {missing.join(', ')}. Please fill in.</span></div>}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(200px, 100%), 1fr))', gap: 14 }}>
@@ -485,7 +489,7 @@ export default function LettersStudio() {
               </Section>
               {err && <div style={{ padding: '10px 12px', borderRadius: R.md, background: C.criticalTint, border: `1px solid ${C.criticalEdge}`, fontSize: 13, display: 'flex', gap: 8 }}><Icon name="alert" color={C.critical} />{err}</div>}
               <div style={{ ...panel, padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', position: 'sticky', bottom: 12, zIndex: Z.raised, boxShadow: E.floating }}>
-                <span style={{ flex: '1 1 160px', fontSize: 12.5, color: C.muted }}>{!emp ? 'Select an employee' : !def ? 'Select a letter type' : missing.length ? `${missing.length} required field${missing.length > 1 ? 's' : ''} left` : pdfUrl ? 'Preview ready' : 'Ready — preview before sending'}</span>
+                <span style={{ flex: '1 1 160px', fontSize: 12.5, color: C.muted }}>{!emp ? 'Select an employee' : !def ? 'Select a letter type' : def.code === 'APT' ? 'Use “Open appointment letter” above' : missing.length ? `${missing.length} required field${missing.length > 1 ? 's' : ''} left` : pdfUrl ? 'Preview ready' : 'Ready — preview before sending'}</span>
                 <button style={{ ...btn('secondary'), opacity: ready && !busy ? 1 : .5 }} disabled={!ready || !!busy} onClick={preview}><Icon name="eye" />{busy === 'preview' ? 'Generating…' : 'Preview'}</button>
                 <button style={{ ...btn('secondary'), opacity: pdfUrl && !busy ? 1 : .5 }} disabled={!pdfUrl || !!busy} onClick={download}><Icon name="download" />Download</button>
                 <button style={{ ...btn('primary'), opacity: ready && to.trim() && !busy ? 1 : .5 }} disabled={!ready || !to.trim() || !!busy} onClick={send}><Icon name="send" size={15} />{busy === 'send' ? 'Sending…' : 'Send letter'}</button>
@@ -538,7 +542,7 @@ export default function LettersStudio() {
         )}
       </div>
 
-      {apptFor && <AppointmentLetterModal onboardingId={apptFor.id} name={apptFor.name} onClose={() => setApptFor(null)}
+      {apptFor && <AppointmentLetterModal onboardingId={apptFor.onboardingId} employeeId={apptFor.employeeId} name={apptFor.name} onClose={() => setApptFor(null)}
         onDone={(m, t) => { notify(m, t === 'err' ? 'err' : 'ok'); setApptFor(null); void loadLists() }} />}
     </div>
   )
