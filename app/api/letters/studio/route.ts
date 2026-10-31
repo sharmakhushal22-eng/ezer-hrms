@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     const q = String(sp.get('search') || '').trim().replace(/[%,()]/g, ' ')
     if (q.length < 2) return NextResponse.json({ employees: [] })
     let qq = sb.from('employees').select('id, emp_code, full_name, designation, employment_status, company_id, companies!employees_company_id_fkey(company_name)')
-      .or(`emp_code.ilike.%${q}%,full_name.ilike.%${q}%`).neq('is_test', true).order('emp_code').limit(15)
+      .or(`emp_code.ilike.%${q}%,full_name.ilike.%${q}%`).not('is_test', 'is', true).order('emp_code').limit(20)
     if (scope) qq = qq.in('company_id', scope)
     const { data } = await qq
     return NextResponse.json({ employees: ((data as any[]) || []).map(e => ({ id: e.id, emp_code: e.emp_code, full_name: e.full_name, designation: e.designation, status: e.employment_status, company: e.companies?.company_name || null })) })
@@ -73,11 +73,15 @@ export async function GET(req: NextRequest) {
   }
 
   if (sp.get('recent')) {
-    let q = sb.from('generated_letters').select('id, letter_name, letter_type, doc_id, letter_date, generated_at, emailed_at, published_to_ess_at, sent_to, generated_by_name, company_id, employees!generated_letters_employee_id_fkey(full_name, emp_code)')
-      .order('generated_at', { ascending: false }).limit(40)
+    let q = sb.from('generated_letters').select('id, employee_id, letter_name, letter_type, doc_id, letter_date, generated_at, emailed_at, published_to_ess_at, sent_to, generated_by_name, company_id, employees!generated_letters_employee_id_fkey(full_name, emp_code)')
+      .order('generated_at', { ascending: false }).limit(200)
     if (scope) q = q.in('company_id', scope)
     let { data, error } = await q
-    if (error) ({ data } = await sb.from('generated_letters').select('id, letter_name, letter_date, generated_at, emailed_at, published_to_ess_at, company_id').order('generated_at', { ascending: false }).limit(40) as any)
+    if (error) {
+      let q2 = sb.from('generated_letters').select('id, employee_id, letter_name, letter_date, generated_at, emailed_at, published_to_ess_at, company_id').order('generated_at', { ascending: false }).limit(200)
+      if (scope) q2 = q2.in('company_id', scope)
+      ;({ data } = await q2 as any)
+    }
     return NextResponse.json({ items: data || [] })
   }
   return bad('Say what to fetch.')
