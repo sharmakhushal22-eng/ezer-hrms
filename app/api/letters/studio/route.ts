@@ -5,7 +5,9 @@
 //   GET ?pending=1                        -> { items }   coded joiners whose appointment letter has not gone out
 //   GET ?recent=1                         -> { items }   the letters issued lately
 //   POST { action: 'preview', type, employee_id, values }        -> application/pdf (nothing saved)
-//   POST { action: 'send', type, employee_id, values, to? }      -> { ok, doc_id, ess, sent_to }
+//   POST { action: 'send', type, employee_id, values, to?, save_to_record? } -> { ok, doc_id, ess, sent_to, record_saved }
+//        save_to_record writes the details HR filled in that the record lacked to the employee
+//        (lib/letters/record-save — never over a value already there).
 //
 // The letters and their wording are lib/letters/catalog.ts; the record's details
 // lib/letters/facts.ts; the PDF lib/letters/render-pdf.ts. A sent letter is stored (bucket
@@ -20,6 +22,7 @@ import { allowedCompanies } from '@/lib/rms/resolve'
 import { sendMail } from '@/lib/mail/send'
 import { LETTER_BY_CODE, missingFields, docIdFor, type Values } from '@/lib/letters/catalog'
 import { employeeFacts } from '@/lib/letters/facts'
+import { saveFilledToRecord } from '@/lib/letters/record-save'
 import { letterPdf } from '@/lib/letters/render-pdf'
 
 export const runtime = 'nodejs'
@@ -149,5 +152,9 @@ export async function POST(req: NextRequest) {
     await sb.from('onboarding_audit_log').insert({ onboarding_id: f.onboardingId, action: 'APPOINTMENT_LETTER_SENT', actor_type: 'HR', actor_id: user.employeeId || null, details: { to, by_name: byName, doc_id: docId, via: 'People → Letters' } }).then(() => null, () => null)
   }
   await sb.from('ess_access_audit').insert({ action: 'LETTER_ISSUED', performed_by: user.employeeId || null, performed_by_name: byName, reason: def.name, details: { employee_id: f.employee.id, emp_code: f.employee.emp_code, doc_id: docId, letter_type: def.code, sent_to: to, emailed: mail.sent } }).then(() => null, () => null)
-  return NextResponse.json({ ok: true, doc_id: docId, id: ins!.id, ess: def.ess, sent_to: to, emailed: !!mail.sent, mail_error: mail.sent ? null : (mail.error || mail.skipped || 'not sent') })
+  const record = b.save_to_record
+    ? await saveFilledToRecord(sb, f.employee.id, f.values, values).catch((e: any) => ({ saved: [] as string[], skipped: [String(e?.message || 'could not save')] }))
+    : { saved: [] as string[], skipped: [] as string[] }
+  if (record.saved.length) await sb.from('ess_access_audit').insert({ action: 'EMPLOYEE_UPDATED_FROM_LETTER', performed_by: user.employeeId || null, performed_by_name: byName, reason: def.name, details: { employee_id: f.employee.id, emp_code: f.employee.emp_code, saved: record.saved } }).then(() => null, () => null)
+  return NextResponse.json({ ok: true, record_saved: record.saved, record_skipped: record.skipped, doc_id: docId, id: ins!.id, ess: def.ess, sent_to: to, emailed: !!mail.sent, mail_error: mail.sent ? null : (mail.error || mail.skipped || 'not sent') })
 }

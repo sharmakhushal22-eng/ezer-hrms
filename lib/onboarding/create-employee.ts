@@ -14,6 +14,7 @@
 
 import { onboardingToEmployee } from './to-employee'
 import { applyAssignment } from './hr-assignment'
+import { writeCtcMaster } from './ctc-master'
 import { isValidEmpCode } from '@/lib/employee-code'
 import { nextCompanyCode, queueAheadOf, type Blocker } from './code-series'
 import { sendAckEmail } from './ack-email'
@@ -87,6 +88,12 @@ export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId:
     if (applied.warnings.length) console.error('assignment warnings', o.onboardingId, applied.warnings)
   }
   await supa.from('onboarding_statutory_enrollment').update({ enrolled_at: new Date().toISOString(), enrolled_by: o.by || null }).eq('onboarding_id', o.onboardingId)
+  // The payroll CTC (ctc_master) from the agreed salary — payroll and ESS Flexi read it from
+  // there (lib/onboarding/ctc-master.ts). Best effort: reported, never blocking.
+  if (sync.employee_id) {
+    const ctc = await writeCtcMaster(supa, o.onboardingId, sync.employee_id).catch((e: any) => ({ ok: false, error: e?.message || 'failed' }))
+    if (!ctc.ok) applied.warnings.push(`Payroll CTC not recorded: ${(ctc as any).error}`)
+  }
 
   const scope = await onboardingScope(o.onboardingId).catch(() => ({ companyId: cand.company_id, locationId: null }))
   const companyName = company?.company_name || ''

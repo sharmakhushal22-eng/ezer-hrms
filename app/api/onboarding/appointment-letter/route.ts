@@ -3,7 +3,10 @@
 //
 //   GET  ?onboarding_id=… | ?employee_id=…   -> { draft, to, email, salary_source, last_sent }   the letter, auto-filled
 //   POST { onboarding_id | employee_id, draft, action: 'preview' }                  -> application/pdf
-//   POST { onboarding_id | employee_id, draft, action: 'send', to, cc?, subject, body } -> { ok, sent_to, doc_id }
+//   POST { onboarding_id | employee_id, draft, action: 'send', to, cc?, subject, body, save_to_record? } -> { ok, sent_to, doc_id, record_saved }
+//
+// save_to_record: the details HR filled in that the record lacked are written to the employee
+// (lib/letters/record-save — never over a value already there).
 //
 // employee_id is for People → Letters → Issue a letter: the same full letter for an employee,
 // through their onboarding record when they have one, from the employee record alone when not.
@@ -24,6 +27,7 @@ import { sendMail, MAIL_NOT_CONFIGURED } from '@/lib/mail/send'
 import { loadAppointment, appointmentLetterPdf } from '@/lib/onboarding/appointment-letter-server'
 import { apptProblems, defaultEmail, type ApptDraft, type ApptFields } from '@/lib/onboarding/appointment-letter'
 import { docIdFor } from '@/lib/letters/catalog'
+import { saveFilledToRecord } from '@/lib/letters/record-save'
 
 export const runtime = 'nodejs' // pdfkit + nodemailer
 export const dynamic = 'force-dynamic'
@@ -172,5 +176,10 @@ export async function POST(req: NextRequest) {
     ? await saveToEss({ employeeId: ctx.onboarding.employee_id, companyId: ctx.company?.id || null, pdf, by: user.employeeId || null, byName, to, docId,
         companyCode: ctx.company?.company_code || null, empCode: ctx.onboarding.employee_code, fields: draft.fields }).catch((e: any) => e?.message || 'could not save')
     : 'there is no employee record yet'
-  return NextResponse.json({ ok: true, sent_to: to, doc_id: docId, ess_saved: !essError, ess_error: essError, last_sent: { at: new Date().toISOString(), to, by: byName } })
+  // The details HR filled in, back to the employee record when they ticked the box.
+  const record = b.save_to_record && ctx.onboarding.employee_id
+    ? await saveFilledToRecord(sb, ctx.onboarding.employee_id, ctx.draft.fields as any, draft.fields as any).catch((e: any) => ({ saved: [] as string[], skipped: [String(e?.message || 'could not save')] }))
+    : { saved: [] as string[], skipped: [] as string[] }
+  if (record.saved.length) await sb.from('ess_access_audit').insert({ action: 'EMPLOYEE_UPDATED_FROM_LETTER', performed_by: user.employeeId || null, performed_by_name: byName, reason: LETTER_NAME, details: { employee_id: ctx.onboarding.employee_id, emp_code: ctx.onboarding.employee_code, saved: record.saved } }).then(() => null, () => null)
+  return NextResponse.json({ ok: true, sent_to: to, doc_id: docId, record_saved: record.saved, record_skipped: record.skipped, ess_saved: !essError, ess_error: essError, last_sent: { at: new Date().toISOString(), to, by: byName } })
 }

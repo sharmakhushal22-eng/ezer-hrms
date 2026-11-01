@@ -12,6 +12,7 @@ import {
   buildSections, apptProblems, apptWarnings, inrNum, longDate,
   type ApptDraft, type ApptFields, type ApptSection, type AnnexRow,
 } from '@/lib/onboarding/appointment-letter'
+import { filledMissing, RECORD_FIELDS } from '@/lib/letters/record-save'
 
 type Tab = 'details' | 'letter' | 'annexure' | 'send' | 'preview'
 type LastSent = { at: string; to: string | null; by: string | null } | null
@@ -47,9 +48,9 @@ function Group({ title, hint, children }: { title: string; hint?: string; childr
 function DetailsTab({ f, set }: { f: ApptFields; set: SetF }) {
   const t = (k: keyof ApptFields) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => set(k, e.target.value as any)
   // A required detail the records did not have: outlined red until it is filled in.
-  const need = (v: string | number) => (typeof v === 'number' ? !(v > 0) : !String(v || '').trim()) ? { ...inp, borderColor: TK.critical, background: TK.criticalTint } : inp
+  const need = (v: string | number) => (typeof v === 'number' ? !(v > 0) : !String(v || '').trim()) ? { ...inp, border: `1px solid ${TK.critical}`, background: TK.criticalTint } : inp
   // A detail the letter reads better with: outlined amber when blank.
-  const want = (v: string) => !String(v || '').trim() ? { ...inp, borderColor: TK.warning } : inp
+  const want = (v: string) => !String(v || '').trim() ? { ...inp, border: `1px solid ${TK.warning}` } : inp
   const txt = (k: keyof ApptFields, o: { req?: boolean; soft?: boolean; ph?: string } = {}) =>
     <input value={String(f[k] ?? '')} onChange={t(k)} placeholder={o.ph} style={o.req ? need(String(f[k] ?? '')) : o.soft ? want(String(f[k] ?? '')) : inp} />
   const num = (k: keyof ApptFields) => <Num value={Number(f[k]) || 0} onChange={v => set(k, v as any)} />
@@ -193,6 +194,9 @@ export default function AppointmentLetterModal({ onboardingId, employeeId, name,
   const [err, setErr] = useState('')
   const [tab, setTab] = useState<Tab>('details')
   const [draft, setDraft] = useState<ApptDraft | null>(null)
+  // The details as loaded, to tell what HR filled in that the record lacked.
+  const [orig, setOrig] = useState<ApptFields | null>(null)
+  const [saveToRecord, setSaveToRecord] = useState(false)
   const [edited, setEdited] = useState<Set<string>>(new Set())
   const [mail, setMail] = useState({ to: '', cc: '', subject: '', body: '' })
   const [source, setSource] = useState('')
@@ -210,7 +214,7 @@ export default function AppointmentLetterModal({ onboardingId, employeeId, name,
         const d = await res.json()
         if (!res.ok) throw new Error(d.error || 'Could not load the letter')
         if (!alive) return
-        setDraft(d.draft); setSource(d.salary_source || ''); setLastSent(d.last_sent || null)
+        setDraft(d.draft); setOrig(d.draft?.fields || null); setSource(d.salary_source || ''); setLastSent(d.last_sent || null)
         setMail({ to: d.to || '', cc: '', subject: d.email?.subject || '', body: d.email?.body || '' })
       } catch (e: any) { if (alive) setErr(e.message) } finally { if (alive) setLoading(false) }
     })()
@@ -235,12 +239,13 @@ export default function AppointmentLetterModal({ onboardingId, employeeId, name,
 
   const problems = useMemo(() => draft ? apptProblems(draft.fields) : [], [draft])
   const warnings = useMemo(() => draft ? apptWarnings(draft.fields) : [], [draft])
+  const fillable = useMemo(() => draft && orig ? filledMissing(orig as any, draft.fields as any) : [], [draft, orig])
 
   const post = async (action: 'preview' | 'send') => {
     if (!draft) return null
     return fetch('/api/onboarding/appointment-letter', {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-      body: JSON.stringify({ ...(onboardingId ? { onboarding_id: onboardingId } : { employee_id: employeeId }), draft, action, ...(action === 'send' ? mail : {}) }),
+      body: JSON.stringify({ ...(onboardingId ? { onboarding_id: onboardingId } : { employee_id: employeeId }), draft, action, ...(action === 'send' ? { ...mail, save_to_record: saveToRecord && fillable.length > 0 } : {}) }),
     })
   }
   const preview = async () => {
@@ -264,7 +269,9 @@ export default function AppointmentLetterModal({ onboardingId, employeeId, name,
       const d = await res.json()
       if (!res.ok) throw new Error(d.error || 'Send failed')
       setLastSent(d.last_sent || null)
-      onDone(d.ess_saved ? `Letter of Appointment ${d.doc_id || ''} mailed to ${d.sent_to} and saved in their ESS → My Letters` : `Letter of Appointment mailed to ${d.sent_to}, but NOT saved in ESS: ${d.ess_error}`, d.ess_saved ? 'ok' : 'err')
+      const rec = d.record_saved?.length ? ` Saved to the employee record: ${d.record_saved.join(', ')}.` : ''
+      const recSkip = d.record_skipped?.length ? ` Not saved to the record: ${d.record_skipped.join('; ')}.` : ''
+      onDone((d.ess_saved ? `Letter of Appointment ${d.doc_id || ''} mailed to ${d.sent_to} and saved in their ESS → My Letters.` : `Letter of Appointment mailed to ${d.sent_to}, but NOT saved in ESS: ${d.ess_error}.`) + rec + recSkip, d.ess_saved ? 'ok' : 'err')
       onClose()
     } catch (e: any) { setErr(e.message) } finally { setBusy('') }
   }
@@ -324,6 +331,15 @@ export default function AppointmentLetterModal({ onboardingId, employeeId, name,
               </div>}
               {tab === 'preview' && pdfUrl && <iframe src={pdfUrl} title="Appointment letter preview" style={{ width: '100%', height: '60vh', border: `1px solid ${TK.line}`, borderRadius: 8 }} />}
             </div>
+            {fillable.length > 0 && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 22px', borderTop: `1px solid ${TK.line}`, background: saveToRecord ? TK.brandTint : TK.surface, cursor: 'pointer' }}>
+                <input type="checkbox" checked={saveToRecord} onChange={e => setSaveToRecord(e.target.checked)} style={{ width: 17, height: 17, marginTop: 1, accentColor: TK.brand }} />
+                <span style={{ fontSize: 12.5, color: TK.ink, lineHeight: 1.45 }}>
+                  <b>Save the details I filled in to the employee record</b>
+                  <span style={{ display: 'block', color: TK.muted }}>{fillable.map(k => RECORD_FIELDS[k].label).join(', ')} — written on send, only where the record is empty. Unticked, they stay in this letter only.</span>
+                </span>
+              </label>
+            )}
             <div style={{ padding: '14px 22px', borderTop: `1px solid ${TK.line}`, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: TK.sunken }}>
               <div style={{ flex: 1, minWidth: 200, fontSize: 12.5, color: err || problems.length ? TK.critical : TK.muted }}>
                 {err || (problems.length ? `Fill in ${problems.join(', ')}.` : `To ${mail.to || '—'}`)}

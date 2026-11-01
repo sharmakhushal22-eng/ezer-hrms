@@ -13,8 +13,7 @@
 import PDFDocument from 'pdfkit'
 import { PDFDocument as LibDoc, StandardFonts, rgb } from 'pdf-lib'
 import { loadLetterhead, loadSignatory, drawBuiltin, stampOnLetterhead, clean } from '@/lib/letterhead/pdf-letter'
-import { loadSalaryBreakdown, stipendBreakdown } from '@/lib/onboarding/salary-breakdown'
-import { linkStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
+import { loadSalaryBreakdown, negotiatedSalary } from '@/lib/onboarding/salary-breakdown'
 import {
   annexureFrom, buildSections, benefitsOf, leaveRows, inrNum, longDate, salutationFor, relationFor, splitJoiningBonus,
   type ApptDraft, type ApptFields,
@@ -31,37 +30,14 @@ const hhmm = (t: any) => {
   return `${((h + 11) % 12) + 1}:${m[2]} ${ap}`
 }
 
+export { negotiatedSalary }
+
 export interface ApptContext {
   draft: ApptDraft
   company: any
   onboarding: { id: string | null; status: string | null; employee_id: string | null; employee_code: string | null; company_id: string | null }
   to: string
   salary_source: string
-}
-
-/** The salary as the recruitment negotiation shows it: the candidate's statement from the
- *  HR Head's revision of the offer, else the negotiated calculation (the same choice as the
- *  offer file, lib/recruitment/offer-dossier), with the offer's one-time payments. */
-export async function negotiatedSalary(sb: any, candidateId: string): Promise<{ rows: StmtRow[]; extras: [string, number][]; ctc: number; label: string; offer: any } | null> {
-  const { data: req } = await sb.from('offer_approval_requests').select('*').eq('candidate_id', candidateId).order('created_at', { ascending: false }).limit(1).maybeSingle()
-  const { data: neg } = req?.ctc_negotiation_id
-    ? await sb.from('ctc_negotiations').select('*').eq('id', req.ctc_negotiation_id).maybeSingle()
-    : await sb.from('ctc_negotiations').select('*').eq('candidate_id', candidateId).order('created_at', { ascending: false }).limit(1).maybeSingle()
-  if (!neg) return null
-  const extras: [string, number][] = []
-  if (Number(req?.joining_bonus) > 0) extras.push([`Joining bonus${req.joining_bonus_freq ? ` (${req.joining_bonus_freq})` : ''}`, Number(req.joining_bonus)])
-  if (Number(req?.retention_bonus) > 0) extras.push(['Retention bonus', Number(req.retention_bonus)])
-  if (Number(req?.esop_value) > 0) extras.push([`ESOP${req.esop_vesting ? ` (${req.esop_vesting})` : ''}`, Number(req.esop_value)])
-  const when = (d: any) => d ? ` · ${new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
-  if (neg.is_stipend || neg.calculation_data?.is_stipend) {
-    const b = stipendBreakdown({ ...(neg.calculation_data || {}), stipend_monthly: neg.stipend_monthly ?? neg.calculation_data?.stipend_monthly, tds_applicable: neg.tds_applicable ?? neg.calculation_data?.tds_applicable, tds_pct: neg.tds_pct ?? neg.calculation_data?.tds_pct })
-    return { rows: b.rows, extras, ctc: b.annual_ctc, label: `Recruitment negotiation (stipend)${when(neg.created_at)}`, offer: req }
-  }
-  const calc = req?.revised_calculation || neg.calculation_data || {}
-  const offered = Number(req?.offered_ctc ?? neg.offered_ctc) || Number(calc.ctcAnnual) || 0
-  const link = linkStatementRows(calc, offered)
-  if (!link) return null
-  return { rows: link.rows, extras, ctc: offered, label: `Recruitment negotiation${req?.revised_calculation ? ' · HR Head revision' : ''}${when(req?.updated_at || neg.created_at)}`, offer: req }
 }
 
 /** Everything the letter is filled from. Null when neither record exists. */

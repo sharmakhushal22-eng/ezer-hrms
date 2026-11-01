@@ -41,9 +41,15 @@ export async function loadActivationData(onboardingId: string): Promise<{ cand: 
   if (cand && !cand.annual_ctc && !cand.offered_ctc && cand.candidate_id) {
     let ctc: number | null = null
     try {
-      const neg = await supabase.from('ctc_negotiations').select('offered_ctc')
+      // The offer as approved (the HR Head's revision included) first, else the negotiation.
+      const req = await supabase.from('offer_approval_requests').select('offered_ctc')
         .eq('candidate_id', cand.candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
-      ctc = (neg.data as any)?.offered_ctc ?? null
+      ctc = (req.data as any)?.offered_ctc ?? null
+      if (ctc == null) {
+        const neg = await supabase.from('ctc_negotiations').select('offered_ctc')
+          .eq('candidate_id', cand.candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+        ctc = (neg.data as any)?.offered_ctc ?? null
+      }
     } catch { /* table optional */ }
     if (ctc == null) {
       const c = await supabase.from('candidates').select('offered_ctc, ctc').eq('id', cand.candidate_id).maybeSingle()

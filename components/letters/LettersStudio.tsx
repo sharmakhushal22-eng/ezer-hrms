@@ -17,6 +17,7 @@ import { authHeaders } from '@/lib/auth-headers'
 import { C, W, E, R, Z } from '@/lib/ui'
 import { LETTERS, LETTER_BY_CODE, STAGE_ORDER, missingFields, type LetterDef, type LetterField, type Values } from '@/lib/letters/catalog'
 import AppointmentLetterModal from '@/components/onboarding/AppointmentLetterModal'
+import { filledMissing, RECORD_FIELDS } from '@/lib/letters/record-save'
 
 type Emp = { id: string; emp_code: string | null; full_name: string; designation: string | null; status?: string | null; company?: string | null; email?: string | null }
 type Pending = { id: string; full_name: string; employee_code: string | null; designation: string | null; date_of_joining: string | null; email: string | null }
@@ -253,7 +254,7 @@ function LetterPicker({ value, onPick }: { value: LetterDef | null; onPick: (d: 
 function FieldInput({ f, value, fromRecord, onChange }: { f: LetterField; value: string; fromRecord: boolean; onChange: (v: string) => void }) {
   const missing = f.required && !value.trim()
   const style: React.CSSProperties = { ...input, ...(f.type === 'textarea' ? { height: 'auto', minHeight: 84, padding: '9px 11px', lineHeight: 1.5, resize: 'vertical' } : {}),
-    ...(missing ? { borderColor: C.critical } : {}) }
+    ...(missing ? { border: `1px solid ${C.critical}` } : {}) }
   return (
     <div style={{ gridColumn: f.wide || f.type === 'textarea' ? '1 / -1' : undefined }}>
       <label style={{ ...label, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -302,6 +303,7 @@ export default function LettersStudio() {
   const [pdfUrl, setPdfUrl] = useState('')
   const [pdfName, setPdfName] = useState('')
   const [err, setErr] = useState('')
+  const [saveToRecord, setSaveToRecord] = useState(false)
   const urlRef = useRef('')
 
   const loadLists = useCallback(async () => {
@@ -328,10 +330,12 @@ export default function LettersStudio() {
     return () => { alive = false }
   }, [emp])
   // A new letter or employee invalidates the preview.
-  useEffect(() => { setPdfUrl(''); setPdfName('') }, [def, emp])
+  useEffect(() => { setPdfUrl(''); setPdfName(''); setSaveToRecord(false) }, [def, emp])
 
   const missing = useMemo(() => def ? missingFields(def, vals) : [], [def, vals])
   const ready = !!def && def.code !== 'APT' && !!emp && !loadingEmp && missing.length === 0
+  // What HR typed that the record lacked: offered for saving back to the employee.
+  const fillable = useMemo(() => def ? filledMissing(record, vals).filter(k => def.fields.some(f => f.key === k)) : [], [def, record, vals])
   const autoCount = def ? def.fields.filter(f => record[f.key] && vals[f.key] === record[f.key]).length : 0
 
   const notify = (msg: string, tone: 'ok' | 'err' = 'ok') => { setToast({ msg, tone }); setTimeout(() => setToast(null), 6000) }
@@ -358,10 +362,13 @@ export default function LettersStudio() {
     if (!window.confirm(`Send the ${def.name} to ${emp.full_name} at ${to || 'their registered email'}?${def.ess ? ' It will also appear in their ESS.' : ''}`)) return
     setBusy('send'); setErr('')
     try {
-      const r = await api('/api/letters/studio', { method: 'POST', body: JSON.stringify({ action: 'send', type: def.code, employee_id: emp.id, values: vals, to }) })
+      const r = await api('/api/letters/studio', { method: 'POST', body: JSON.stringify({ action: 'send', type: def.code, employee_id: emp.id, values: vals, to, save_to_record: saveToRecord && fillable.length > 0 }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not send the letter.')
-      notify(j.emailed ? `${def.name} (${j.doc_id}) sent to ${j.sent_to}${j.ess ? ' and saved in their ESS' : ''}.` : `${def.name} (${j.doc_id}) saved${j.ess ? ' to their ESS' : ''}, but the email did not go: ${j.mail_error}.`, j.emailed ? 'ok' : 'err')
+      const rec = j.record_saved?.length ? ` Saved to the employee record: ${j.record_saved.join(', ')}.` : ''
+      const recSkip = j.record_skipped?.length ? ` Not saved to the record: ${j.record_skipped.join('; ')}.` : ''
+      notify((j.emailed ? `${def.name} (${j.doc_id}) sent to ${j.sent_to}${j.ess ? ' and saved in their ESS' : ''}.` : `${def.name} (${j.doc_id}) saved${j.ess ? ' to their ESS' : ''}, but the email did not go: ${j.mail_error}.`) + rec + recSkip, j.emailed ? 'ok' : 'err')
+      if (j.record_saved?.length) setRecord(r => ({ ...r, ...Object.fromEntries(fillable.map(k => [k, vals[k]])) }))
       void loadLists()
     } catch (e: any) { setErr(e.message) }
     setBusy('')
@@ -482,9 +489,18 @@ export default function LettersStudio() {
                     </div>
                     <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
                       <label style={label}>Send to <span style={{ color: C.critical }}>*</span></label>
-                      <input style={{ ...input, ...(to.trim() ? {} : { borderColor: C.critical }) }} value={to} onChange={e => setTo(e.target.value)} placeholder="employee@company.com" />
+                      <input style={{ ...input, ...(to.trim() ? {} : { border: `1px solid ${C.critical}` }) }} value={to} onChange={e => setTo(e.target.value)} placeholder="employee@company.com" />
                       <div style={{ fontSize: 11.5, color: C.faint, marginTop: 4 }}>Registered email from the employee record.</div>
                     </div>
+                    {fillable.length > 0 && (
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 14, padding: '10px 12px', borderRadius: R.md, cursor: 'pointer', border: `1px solid ${saveToRecord ? C.brandEdge : C.line}`, background: saveToRecord ? C.brandTint : C.sunken }}>
+                        <input type="checkbox" checked={saveToRecord} onChange={e => setSaveToRecord(e.target.checked)} style={{ width: 17, height: 17, marginTop: 1, accentColor: C.brand }} />
+                        <span style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.45 }}>
+                          <b>Save the details I filled in to the employee record</b>
+                          <span style={{ display: 'block', color: C.muted }}>{fillable.map(k => RECORD_FIELDS[k].label).join(', ')} — written on send, only where the record is empty. Unticked, they stay in this letter only.</span>
+                        </span>
+                      </label>
+                    )}
                   </>}
               </Section>
               {err && <div style={{ padding: '10px 12px', borderRadius: R.md, background: C.criticalTint, border: `1px solid ${C.criticalEdge}`, fontSize: 13, display: 'flex', gap: 8 }}><Icon name="alert" color={C.critical} />{err}</div>}
