@@ -25,7 +25,10 @@ export default function IdCardScreen() {
       <View style={{ gap: S.md }}>
         <IdCard startOnQr name={val(emp.full_name)} designation={val(emp.designation)} company={val(emp.company_name)} code={val(emp.employee_code)}
           doj={emp.date_of_joining as string | null} blood={emp.blood_group as string | null} emergency={emp.emergency_contact_1 as string | null} photoUrl={p.photoUrl} />
-        <IdCardDownload />
+        <IdCardDownload emergency={emp.emergency_contact_1 as string | null} photoUrl={p.photoUrl}
+          card={{ name: val(emp.full_name), code: val(emp.employee_code), company: val(emp.company_name),
+            designation: emp.designation as string | null, department: emp.department_name as string | null,
+            location: emp.location_name as string | null, doj: emp.date_of_joining as string | null, blood: emp.blood_group as string | null }} />
       </View>
     ) : <StaticIdCard name={val(emp.full_name)} designation={val(emp.designation)} company={val(emp.company_name)} photoUrl={p.photoUrl} />
   }

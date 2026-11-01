@@ -13,7 +13,7 @@ Status: ✅ same as the website · 🟡 present, with the noted difference · �
 | Profile → Letter Requests | `/ess/documents` | everyone | `/profile/letter-requests` | `features/profile` | ✅ |
 | Profile → My Letters | `/ess/letters` | everyone | `/profile/letters` | `features/profile` | ✅ signed download link; appointment letters appear here |
 | Profile → Documents to sign (EZER Sign) | `/ess/to-sign` | everyone | `/esign` | `features/esign` | 🟡 list is native; signing opens the website's `/sign/<token>` page in an in-app browser (OTP, PDF, signature pad) |
-| Digital ID card | Profile drawer | everyone | `/profile/id-card` | `features/profile` | 🟡 a page instead of a drawer; the PDF opens the website |
+| Digital ID card | Profile drawer | everyone | `/profile/id-card` | `features/profile` | 🟡 a page instead of a drawer; the PDF is built on the phone (brand blue; the website PDF still prints purple) |
 | Team | `/ess/team` | everyone | `/team` | `features/team` | ✅ |
 | Org Chart | `/ess/orgchart` | everyone | `/orgchart` | `features/orgchart` | ✅ |
 | Payroll → Salary Slip | `/ess/payslip` | — | `/payroll/payslip` | `features/shell` | ⏳ placeholder, as on the website |

@@ -8,8 +8,12 @@
 // Same fields, same validation order, same messages (app/ess-login/page.tsx).
 // set-password returns the signed token like login does (b9d6455), so it signs in
 // straight away; an older server that answers without one falls back to a login.
+//
+// This is the lobby at the end of the entrance (features/intro): the logo block sits
+// exactly where the intro left it, and the card comes up as the doors let you in.
 import * as React from 'react'
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native'
+import Animated, { useAnimatedStyle } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, ApiError } from '@/core/api'
 import { useSession } from '@/core/session'
@@ -17,8 +21,10 @@ import { useTheme } from '@/ui/ThemeProvider'
 import { useFieldAboveKeyboard } from '@/ui/keyboard'
 import { elevation, F, R, S } from '@/ui/theme'
 import { Button, Gap, Input, Notice, Txt } from '@/ui/primitives'
-import { Logo } from '@/ui/Logo'
 import { IconEye, IconEyeOff } from '@/ui/icons'
+import { greeting } from '@web/today/format'
+import { LobbyBackdrop, LobbyHeader } from '@/features/intro/Lobby'
+import { headerGap, reveal } from '@/features/intro/state'
 
 type Step = 'email' | 'login' | 'setpw' | 'changepw'
 const TITLE: Record<Step, string> = { email: 'Employee Sign In', login: 'Enter Password', setpw: 'Create Password', changepw: 'New Password' }
@@ -48,8 +54,11 @@ const msg = (e: unknown, fallback: string) => e instanceof ApiError ? (e.status 
 export default function LoginScreen() {
   const { C } = useTheme()
   const insets = useSafeAreaInsets()
+  const { height: H } = useWindowDimensions()
   const scroller = React.useRef<ScrollView>(null)
   useFieldAboveKeyboard(scroller)
+  const headerIn = useAnimatedStyle(() => ({ opacity: reveal.get() }))
+  const cardIn = useAnimatedStyle(() => ({ opacity: reveal.get(), transform: [{ translateY: (1 - reveal.get()) * 56 }] }))
   const { adopt, notice } = useSession()
   const [step, setStep] = React.useState<Step>('email')
   const [identifier, setIdentifier] = React.useState('')
@@ -119,11 +128,12 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.canvas, paddingTop: insets.top }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+    <LobbyBackdrop />
     <ScrollView ref={scroller} style={{ flex: 1 }} keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: S.lg, paddingTop: S.xl, paddingBottom: insets.bottom + S.xl }}>
-      <View style={{ alignItems: 'center', marginBottom: S.xl }}><Logo height={30} tagline /></View>
+      contentContainerStyle={{ flexGrow: 1, padding: S.lg, paddingTop: headerGap(), paddingBottom: insets.bottom + S.lg }}>
+      <Animated.View style={[{ marginBottom: Math.max(S.lg, H * 0.04) }, headerIn]}><LobbyHeader line={greeting(new Date().getHours())} /></Animated.View>
 
-      <View style={{ backgroundColor: C.surface, borderRadius: R.xl, padding: S.xl, borderWidth: 1, borderColor: C.hair, ...elevation(C, 2) }}>
+      <Animated.View style={[{ backgroundColor: C.surface, borderRadius: R.xl, padding: S.xl, borderWidth: 1, borderColor: C.hair, ...elevation(C, 2) }, cardIn]}>
         {/* Two-segment progress, as on the web: the first step, then everything after it. */}
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: S.lg }}>
           {[0, 1].map(i => <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i <= (step === 'email' ? 0 : 1) ? C.brand : C.brandTint }} />)}
@@ -136,7 +146,7 @@ export default function LoginScreen() {
         {step === 'email' && (
           <>
             <Input label="Email or Employee Code" value={identifier} onChangeText={setIdentifier} placeholder="you@company.com · SRS0001"
-              autoFocus autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="username" returnKeyType="next" onSubmitEditing={checkEmail} />
+              autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="username" returnKeyType="next" onSubmitEditing={checkEmail} />
             <Button title={busy ? 'Checking…' : 'Continue →'} loading={busy} onPress={checkEmail} full />
           </>
         )}
@@ -173,7 +183,7 @@ export default function LoginScreen() {
             <Txt size={F.small} w={600} tone="brand">Use a different email / code</Txt>
           </Pressable>
         )}
-      </View>
+      </Animated.View>
       <Gap h={S.lg} />
       <Txt size={F.tiny} tone="faint" center>Need help? Contact your HR team.</Txt>
     </ScrollView>

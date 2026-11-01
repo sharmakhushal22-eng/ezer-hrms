@@ -61,18 +61,19 @@ export function Emblem({ size = 40, id = 'ezl' }: { size?: number; id?: string }
 }
 
 /** Emblem + EZER / HRMS lockup. `height` is the wordmark's type size, as on the web. */
-export function Logo({ height = 28, tagline = false }: { height?: number; tagline?: boolean }) {
+export function Logo({ height = 28, tagline = false, ink, inkSoft }: { height?: number; tagline?: boolean; ink?: string; inkSoft?: string }) {
   const { C } = useTheme()
+  const word = ink || C.logoWord, soft = inkSoft || C.logoWordSoft
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: height * 0.22 }} accessibilityRole="image" accessibilityLabel="EZER HRMS">
       <Emblem size={height * 1.32} />
       <View>
-        <Txt size={height * 0.86} w={800} color={C.logoWord} style={{ letterSpacing: -0.6, lineHeight: height * 0.92 }}>EZER</Txt>
+        <Txt size={height * 0.86} w={800} color={word} style={{ letterSpacing: -0.6, lineHeight: height * 0.92 }}>EZER</Txt>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: height * 0.13, marginTop: height * 0.06 }}>
-          <Txt size={height * 0.34} w={700} color={C.logoWordSoft} style={{ letterSpacing: height * 0.34 * 0.34, lineHeight: height * 0.4 }}>HRMS</Txt>
-          <View style={{ height: 1, width: height * 0.5, backgroundColor: C.logoWordSoft, opacity: 0.6 }} />
+          <Txt size={height * 0.34} w={700} color={soft} style={{ letterSpacing: height * 0.34 * 0.34, lineHeight: height * 0.4 }}>HRMS</Txt>
+          <View style={{ height: 1, width: height * 0.5, backgroundColor: soft, opacity: 0.6 }} />
         </View>
-        {tagline && <Txt size={height * 0.21} w={600} color={C.logoWordSoft} style={{ letterSpacing: height * 0.04, marginTop: height * 0.14 }}>PEOPLE · PROCESS · PERFORMANCE</Txt>}
+        {tagline && <Txt size={height * 0.21} w={600} color={soft} style={{ letterSpacing: height * 0.04, marginTop: height * 0.14 }}>PEOPLE · PROCESS · PERFORMANCE</Txt>}
       </View>
     </View>
   )

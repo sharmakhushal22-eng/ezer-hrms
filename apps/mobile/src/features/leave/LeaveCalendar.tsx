@@ -4,13 +4,15 @@
 // weekly-off red, holiday amber + bar, struck-through non-working days inside
 // the band, past days disabled, the legend. Dropped (web-only decoration, per
 // the spec): hover preview, roving arrow-key focus, sweep/slide animations.
+// Added for the phone: what the attendance record says about each past day, so
+// an absence or a half day can be seen here and claimed straight from the grid.
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
 import { useTheme } from '@/ui/ThemeProvider'
-import { F, R, S } from '@/ui/theme'
+import { F, R, S, type Palette } from '@/ui/theme'
 import { Txt } from '@/ui/primitives'
 import { IconChevron } from '@/ui/icons'
-import { cellLabel, DOW, fromIso, MONTHS, monthWeeks, type DayRules, type LeaveForm } from './logic'
+import { cellLabel, DOW, fromIso, MARK_WORD, MONTHS, monthWeeks, plural, type DayMark, type DayMarks, type DayRules, type LeaveForm } from './logic'
 
 // The website paints selected-day text in a literal white (.ezlv-day.is-sel { color:#fff }).
 // In dark the band is a light blue, where white is unreadable, so dark uses onAccent.
@@ -18,10 +20,20 @@ const SEL_INK_LIGHT = '#FFFFFF'
 
 interface CellProps {
   k: string; rules: DayRules; floor: string; today: string; from: string; to: string
+  mark?: DayMark
   onPick: (key: string) => void
 }
 
-function DayCell({ k, rules, floor, today, from, to, onPick }: CellProps) {
+/** A mark's fill: a whole cell for a whole day, half a cell for half a day. */
+function markTone(C: Palette, mark: DayMark) {
+  if (mark === 'ABSENT') return { fill: C.criticalTint, edge: C.criticalEdge, ink: C.critical }
+  if (mark === 'HALF_DAY') return { fill: C.warningTint, edge: C.warningEdge, ink: C.warning }
+  if (mark === 'REQUESTED') return { fill: C.infoTint, edge: C.infoEdge, ink: C.info }
+  return { fill: C.positiveTint, edge: C.positiveEdge, ink: C.positive }
+}
+const isHalf = (m: DayMark) => m === 'HALF_DAY' || m === 'HALF_LEAVE'
+
+function DayCell({ k, rules, floor, today, from, to, mark, onPick }: CellProps) {
   const { C, isDark } = useTheme()
   const SEL_INK = isDark ? C.onAccent : SEL_INK_LIGHT
   const h = rules.holByDate.get(k)
@@ -43,6 +55,8 @@ function DayCell({ k, rules, floor, today, from, to, onPick }: CellProps) {
   if (h && !sel) { fg = C.warning; weight = 700 }
   if (past) fg = C.faint
   if (isToday) weight = 700
+  const tone = mark && !sel ? markTone(C, mark) : null
+  if (tone) { fg = tone.ink; weight = 700 }
   if (sel) { bg = C.brand; fg = SEL_INK; weight = 700 }
   if (sel && noCount && !isEdge) { bg = C.brandEdge; fg = C.brandDeep; weight = 600; strike = true }
   if (isEdge) { bg = C.brandDeep; fg = SEL_INK; weight = 700 }
@@ -54,15 +68,17 @@ function DayCell({ k, rules, floor, today, from, to, onPick }: CellProps) {
       onPress={() => onPick(k)}
       accessibilityRole="button"
       accessibilityState={{ selected: sel, disabled: past }}
-      accessibilityLabel={`${cellLabel(k)}${h ? `, ${h.description}` : ''}${past ? ', already passed' : ''}`}
+      accessibilityLabel={`${cellLabel(k)}${h ? `, ${h.description}` : ''}${mark ? `, ${MARK_WORD[mark]}` : ''}${past ? ', already passed' : ''}`}
       style={({ pressed }) => ({
         flex: 1, height: 42, alignItems: 'center', justifyContent: 'center',
-        backgroundColor: bg, opacity: past ? 0.55 : 1,
+        backgroundColor: tone && !isHalf(mark!) ? tone.fill : bg, opacity: past ? 0.55 : 1,
         borderTopLeftRadius: sel ? (rs ? R.sm : 0) : R.sm, borderBottomLeftRadius: sel ? (rs ? R.sm : 0) : R.sm,
         borderTopRightRadius: sel ? (re ? R.sm : 0) : R.sm, borderBottomRightRadius: sel ? (re ? R.sm : 0) : R.sm,
-        borderWidth: ring ? 2 : 0, borderColor: isEdge ? C.surface : C.brand,
+        borderWidth: ring ? 2 : tone ? 1 : 0, borderColor: ring ? (isEdge ? C.surface : C.brand) : tone?.edge,
+        overflow: 'hidden',
         transform: [{ scale: pressed ? 0.88 : isEdge ? 1.1 : 1 }], zIndex: isEdge ? 1 : 0,
       })}>
+      {tone && isHalf(mark!) && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '50%', backgroundColor: tone.fill }} />}
       <Txt size={13} w={weight} color={fg} style={strike ? { textDecorationLine: 'line-through' } : undefined}>{fromIso(k).getDate()}</Txt>
       {!!h && <View style={{ position: 'absolute', bottom: 4, width: 11, height: 2, borderRadius: 1, backgroundColor: past ? C.faint : isEdge || (sel && !noCount) ? fg : C.warning }} />}
     </Pressable>
@@ -78,9 +94,19 @@ function LegendItem({ swatch, label }: { swatch?: React.ReactNode; label: string
   )
 }
 
-export function LeaveCalendar({ cursor, onCursor, floor, today, form, rules, onPick }: {
+function MarkSwatch({ mark }: { mark: DayMark }) {
+  const { C } = useTheme()
+  const t = markTone(C, mark)
+  return (
+    <View style={{ width: 12, height: 12, borderRadius: 3, borderWidth: 1, borderColor: t.edge, overflow: 'hidden', backgroundColor: isHalf(mark) ? 'transparent' : t.fill }}>
+      {isHalf(mark) && <View style={{ width: '50%', height: '100%', backgroundColor: t.fill }} />}
+    </View>
+  )
+}
+
+export function LeaveCalendar({ cursor, onCursor, floor, today, form, rules, marks, onPick }: {
   cursor: Date; onCursor: (d: Date) => void; floor: string; today: string
-  form: LeaveForm; rules: DayRules; onPick: (key: string) => void
+  form: LeaveForm; rules: DayRules; marks: DayMarks; onPick: (key: string) => void
 }) {
   const { C } = useTheme()
   const floorDate = fromIso(floor)
@@ -88,6 +114,14 @@ export function LeaveCalendar({ cursor, onCursor, floor, today, form, rules, onP
   const weeks = React.useMemo(() => monthWeeks(cursor), [cursor])
   const from = form.from_date, to = form.to_date
   const inSel = (k: string) => !!from && !!to && k >= from && k <= to
+  // Which of this month's days still have no leave against them.
+  const open = weeks.flat().reduce((n, k) => {
+    const m = k ? marks.get(k) : undefined
+    if (m === 'ABSENT') n.absent++
+    if (m === 'HALF_DAY') n.half++
+    return n
+  }, { absent: 0, half: 0 })
+  const openWords = [open.absent ? `${open.absent} absent day${plural(open.absent)}` : '', open.half ? `${open.half} half day${plural(open.half)}` : ''].filter(Boolean).join(' and ')
 
   return (
     <View style={{ marginTop: S.md }}>
@@ -130,17 +164,24 @@ export function LeaveCalendar({ cursor, onCursor, floor, today, form, rules, onP
             backgroundColor: week.some(k => !!k && inSel(k)) ? C.brandTint : 'transparent',
           }}>
             {week.map((k, i) => k
-              ? <DayCell key={k} k={k} rules={rules} floor={floor} today={today} from={from} to={to} onPick={onPick} />
+              ? <DayCell key={k} k={k} rules={rules} floor={floor} today={today} from={from} to={to} mark={marks.get(k)} onPick={onPick} />
               : <View key={`b${wi}-${i}`} style={{ flex: 1, height: 42 }} />)}
           </View>
         ))}
       </View>
+
+      {!!openWords && (
+        <Txt size={F.tiny} w={600} tone="critical" style={{ marginTop: S.sm }}>
+          {openWords} with no leave this month. Tap a day to apply for it.
+        </Txt>
+      )}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 4, marginTop: S.sm }}>
         <LegendItem swatch={<View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: C.brand }} />} label="Selected" />
         <LegendItem swatch={<View style={{ width: 10, height: 10, borderRadius: 3, borderWidth: 2, borderColor: C.brand }} />} label="Today" />
         <LegendItem swatch={<Txt size={F.micro} w={700} color={C.critical}>7</Txt>} label="Weekly off" />
         <LegendItem swatch={<Txt size={F.micro} w={700} color={C.warning}>7</Txt>} label="Holiday" />
+        {(['ABSENT', 'HALF_DAY', 'LEAVE', 'REQUESTED'] as const).map(m => <LegendItem key={m} swatch={<MarkSwatch mark={m} />} label={MARK_WORD[m]} />)}
         <LegendItem label="Struck-through days sit inside your dates but are not counted" />
         <LegendItem label="Tap again to clear · a later day extends · an earlier one starts over" />
       </View>

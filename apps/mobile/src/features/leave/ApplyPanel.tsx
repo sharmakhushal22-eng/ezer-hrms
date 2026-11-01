@@ -9,10 +9,11 @@ import { Button, Card, Input, Notice, Txt } from '@/ui/primitives'
 import { DateSheet, useOverlay } from '@/ui/overlays'
 import { IconCalendar } from '@/ui/icons'
 import { useEmployeeId } from '@/core/session'
+import { useMonth } from '@/features/attendance/api'
 import { applyLeave, afterLeaveWrite } from './data'
 import { LeaveCalendar } from './LeaveCalendar'
 import {
-  balanceAfterOf, BLANK, dayLong, endInto, estimateOf, fmtSlot, fromIso, pickInto, plural, rangeLabel, startInto,
+  balanceAfterOf, BLANK, dayLong, dayMarks, endInto, estimateOf, fmtSlot, fromIso, markedTaken, pickInto, plural, rangeLabel, startInto, withMonthOffs,
   type DayRules, type Estimate, type LeaveForm, type LeaveType, type Payload, type SplitOffer,
 } from './logic'
 
@@ -115,7 +116,7 @@ function SegBtn({ label, on, onPress }: { label: string; on: boolean; onPress: (
   )
 }
 
-export function ApplyPanel({ data, rules, today, floor, busy, setBusy }: {
+export function ApplyPanel({ data, rules: baseRules, today, floor, busy, setBusy }: {
   data: Payload; rules: DayRules; today: string; floor: string
   busy: boolean; setBusy: (b: boolean) => void
 }) {
@@ -128,6 +129,13 @@ export function ApplyPanel({ data, rules, today, floor, busy, setBusy }: {
   const [cursor, setCursor] = React.useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
   const [picker, setPicker] = React.useState<'' | 'start' | 'end'>('')
 
+  // The month on show, from attendance: which days were missed, and the exact
+  // weekly offs (the leave payload only carries those from today onwards).
+  const month = useMonth(cursor.getFullYear(), cursor.getMonth() + 1)
+  const monthKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`
+  const rules = React.useMemo(() => (month.data ? withMonthOffs(baseRules, month.data.weekoffSet, monthKey, today) : baseRules), [baseRules, month.data, monthKey, today])
+  const marks = React.useMemo(() => dayMarks(month.data ? [...month.data.dayMap.values()] : [], data.applications || []), [month.data, data.applications])
+
   const types = data.types || []
   const sel = types.find(t => t.id === form.leave_type_id) || null
   const est = React.useMemo(() => estimateOf(form, rules), [form, rules])
@@ -136,8 +144,12 @@ export function ApplyPanel({ data, rules, today, floor, busy, setBusy }: {
   const chooseType = (t: LeaveType) => {
     if (!t.eligible) { setTypeNote(`${t.name}: ${t.reason || 'not available to you'}.`); return }
     setTypeNote('')
-    // Switching type clears any half-day flag, so a stale half day never survives.
-    setForm(f => ({ ...f, leave_type_id: t.id, half_day: false, half_session: '' }))
+    // Switching type clears any half-day flag, so a stale half day never survives,
+    // unless the one day chosen is a day attendance marked as a half day.
+    setForm(f => {
+      const half = t.allow_half_day && !!f.from_date && f.from_date === f.to_date && marks.get(f.from_date) === 'HALF_DAY'
+      return { ...f, leave_type_id: t.id, half_day: half, half_session: half ? f.half_session : '' }
+    })
   }
 
   const pickDay = (key: string) => {
@@ -148,8 +160,19 @@ export function ApplyPanel({ data, rules, today, floor, busy, setBusy }: {
       setTypeNote(`${dayLong(key)} is ${h ? h.description : 'a weekly off'}. Leave cannot start or end on it.`)
       return
     }
+    const taken = markedTaken(marks.get(key), key)
+    if (taken) { setTypeNote(taken); return }
     setTypeNote('')
-    setForm(f => pickInto(f, key))
+    // A day attendance marked as a half day asks for half a day of leave; a range
+    // cannot be a half day at all.
+    const canHalf = !sel || sel.allow_half_day
+    setForm(f => {
+      const next = pickInto(f, key)
+      const one = !!next.from_date && next.from_date === next.to_date
+      const half = one && canHalf && (marks.get(next.from_date) === 'HALF_DAY' || (next.half_day && next.from_date === f.from_date))
+      return { ...next, half_day: half, half_session: half ? next.half_session : '' }
+    })
+    if (marks.get(key) === 'HALF_DAY') setTypeNote(`You were marked half day on ${dayLong(key)}. Choose the half you missed.`)
   }
 
   const showMonthOf = (d: string) => {
@@ -226,7 +249,7 @@ export function ApplyPanel({ data, rules, today, floor, busy, setBusy }: {
           <DateSlot label="Start" value={form.from_date} onPress={() => setPicker('start')} first />
           <DateSlot label="End" value={form.to_date} onPress={() => setPicker('end')} />
         </View>
-        <LeaveCalendar cursor={cursor} onCursor={setCursor} floor={floor} today={today} form={form} rules={rules} onPick={pickDay} />
+        <LeaveCalendar cursor={cursor} onCursor={setCursor} floor={floor} today={today} form={form} rules={rules} marks={marks} onPick={pickDay} />
       </View>
 
       <View style={{ marginBottom: S.lg }}>

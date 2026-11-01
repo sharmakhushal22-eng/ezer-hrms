@@ -1,6 +1,6 @@
 // src/features/profile/IdCard.tsx — components/profile/IdCard.tsx: the digital
 // ID card with a live gate QR, plus the static card for someone else's profile
-// and the printable-PDF entry (IdCardDownload.tsx).
+// and the printable-PDF entry (idCardPdf.ts builds the PDF).
 //
 // THE ROTATION IS THE POINT (website comment): a token lives 30 s and the card
 // asks for a fresh one every 15 s, only while the QR side is showing. The web
@@ -10,12 +10,12 @@ import * as React from 'react'
 import { AppState, Pressable, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Image } from 'expo-image'
-import { openWebsite } from '@/core/links'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Card, Txt } from '@/ui/primitives'
 import { IconDownload } from '@/ui/icons'
 import { fetchIdToken, type Issued } from './api'
+import { downloadIdCard, parseEmergency, type IdCardData } from './idCardPdf'
 import { ini } from './format'
 import { QrSvg } from './QrSvg'
 
@@ -167,26 +167,31 @@ export function StaticIdCard({ name, designation, company, photoUrl }: { name: s
   )
 }
 
-/** IdCardDownload.tsx. The PDF is drawn on a browser canvas with pdf-lib, which
- *  React Native cannot run, so the button opens My Details on the website,
- *  where the same button builds the same two-page PDF. */
-export function IdCardDownload() {
+/** IdCardDownload.tsx. Built on the phone (idCardPdf.ts), then the share sheet saves or sends it. */
+export function IdCardDownload({ card, emergency, photoUrl }: {
+  card: Omit<IdCardData, 'photoDataUrl' | 'cardNo' | 'validTill' | 'emergencyName' | 'emergencyRelation' | 'emergencyPhone'>
+  emergency?: string | null; photoUrl?: string | null
+}) {
   const { C } = useTheme()
   const [busy, setBusy] = React.useState(false)
   const [err, setErr] = React.useState<string | null>(null)
   return (
     <Card>
-      <Button title={busy ? 'Preparing…' : 'Download ID card (PDF)'} variant="outline" full loading={busy}
+      <Button title={busy ? 'Preparing…' : 'Download ID card (PDF)'} variant="outline" full loading={busy} disabled={busy}
         icon={<IconDownload size={16} color={C.brandDeep} />}
         onPress={async () => {
           setBusy(true); setErr(null)
-          try { await openWebsite('/ess/profile') } catch (e) { setErr(e instanceof Error ? e.message : 'Could not build the PDF.') }
+          try {
+            // Card number and expiry come with a gate code; a card prints without them.
+            const issued = await fetchIdToken().catch(() => null)
+            await downloadIdCard({ ...card, ...parseEmergency(emergency), cardNo: issued?.cardNo ?? null, validTill: issued?.validTill ?? null }, photoUrl)
+          } catch (e) { setErr(e instanceof Error ? e.message : 'Could not build the PDF.') }
           finally { setBusy(false) }
         }} />
       <Txt size={F.tiny} tone="muted" style={{ marginTop: S.sm }}>
         Two pages, front and back. Print at 100% and cut the rounded outline for a 54 × 85.6 mm card. For identification only. Scan at the gate from your digital ID above.
       </Txt>
-      <Txt size={F.tiny} tone="faint" style={{ marginTop: 4 }}>Opens My Details on the EZER website, where the PDF is built.</Txt>
+      <Txt size={F.tiny} tone="faint" style={{ marginTop: 4 }}>Choose Drive, Files or any app on the next screen to save it.</Txt>
       {!!err && <Txt size={F.tiny} tone="critical" style={{ marginTop: 4 }}>{err}</Txt>}
     </Card>
   )

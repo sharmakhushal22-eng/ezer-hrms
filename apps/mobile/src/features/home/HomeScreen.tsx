@@ -21,7 +21,7 @@ import { useTheme } from '@/ui/ThemeProvider'
 import { Txt } from '@/ui/primitives'
 import { useOverlay } from '@/ui/overlays'
 import { todayKey, usePrefs, useToday, type PunchStateLite, type TodayPayload } from './data'
-import { HeroPanel, heroTheme } from './HeroPanel'
+import { HeroFacts, HeroPanel, heroTheme } from './HeroPanel'
 import { PunchDial } from './PunchDial'
 import { StatTiles } from './StatTiles'
 import { WeekStrip } from './WeekStrip'
@@ -75,7 +75,8 @@ export default function HomeScreen() {
       ) : (
         <>
           <HeroPanel data={data} prefs={prefs} onPrefs={update}>
-            <PunchDial data={data} prefs={prefs} hero={hero} onToast={toast} onState={onState} onPunched={onPunched} />
+            <PunchDial data={data} prefs={prefs} hero={hero} onToast={toast} onState={onState} onPunched={onPunched}
+              beside={<HeroFacts data={data} prefs={prefs} hero={hero} />} />
           </HeroPanel>
           <StatTiles data={data} />
           <WeekStrip data={data} prefs={prefs} liveIn={liveIn} />

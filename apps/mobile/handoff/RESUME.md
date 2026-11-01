@@ -1,7 +1,15 @@
-# Resume here — EZER HRMS Android app (updated 1 Nov 2026)
+# Resume here — EZER HRMS Android app (updated 1 Nov 2026, evening)
 
 Branch **`feat/mobile-app`**. App in `apps/mobile/` (Expo SDK 57, React Native). It mirrors the website's
 employee self-service portal (`/ess`), same backend, admin excluded.
+
+## Round after the phone UI pass (1 Nov 2026, version 1.2.0 / versionCode 3)
+* Entrance on cold start: `features/intro/` (2.6 s, one UI-thread clock, tap skips, reduced motion = logo hold + fade, skipped on deep links, not replayed after sign-out). The doorway is a real hole in the scene, so the next screen shows through it. The login screen is the lobby (`LobbyHeader`, `LobbyBackdrop`).
+* Home hero: boxed tiles gone; `HeroFacts` sits beside a smaller dial.
+* Leave calendar: attendance marks (`dayMarks`), tap a past day to apply, exact weekly offs for a past month (`withMonthOffs`).
+  **Previous months need `leave_backdate_config`:** the table was empty on 1 Nov, so `backdate_days` is 0 and the server refuses past dates. HR sets it on the website: Attendance & Shifts → Leave Rules. Until then the arrow stays disabled.
+* ID card PDF is built on the phone (`features/profile/idCardPdf.ts`, SVG → expo-print → share sheet). The old link opened the website with no session. Other `openWebsite` callers (MRF, offer, loan agreement print) go the same way and are untested.
+* T&E GPS audit, not fixed: see the open list below.
 
 ## Phone UI pass (1 Nov 2026, version 1.1.0 / versionCode 2)
 Rebuilt the app's frame on the phone patterns of the website's `feat/mobile-ess` branch (PR #13). That branch is CSS and
@@ -27,6 +35,7 @@ layout for the website, so nothing was merged from it; its ideas were rebuilt na
   Stage them with `git add -f apps/mobile/<path>` (never `.env.local` or `node_modules`).
 
 ## Open items
+0. T&E GPS (audited 1 Nov, no changes made): recording stops when the screen locks (`expo-keep-awake` is installed but unused, no background service); "Distance so far" sums only unsent fixes so it stays near 0; a running journey cannot end without a GPS fix (`te_leg_no_gps` takes PLANNED only) and the denied banner promises an exit that does not exist; End can drop queued fixes; `is_mock` is stored but no check reads it; `te_routes` is empty and places are unnamed, so server geocoding is not working.
 1. Verify on a real phone (from the APK): camera/file uploads (profile photo, bills, proofs), GPS journey recording,
    letter PDF download/share, e-sign in-app browser, punch with location.
 2. Untested for lack of data: PMS approval card at a chain stage, exit clearance inbox / settled-exit letters,

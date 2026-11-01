@@ -24,7 +24,7 @@ import type { HeroTheme } from './HeroPanel'
 
 const NATIVE = Platform.OS !== 'web'
 const RR = 101, CC = 112, CIRC = 2 * Math.PI * RR
-const DIAL = 156, FACE = 112 // today.css v3 block: .dial 156px, .face 112px
+const DIAL = 140, FACE = 100 // today.css v3 block, a size down: the dial shares its row with the day's facts
 /** PunchDial.tsx confetti colours. */
 const CONFETTI = ['#2563EB', '#60A5FA', '#7DD3FC', '#34D399', '#FCD34D', '#FFFFFF']
 
@@ -55,9 +55,11 @@ export interface PunchDialProps {
   onPunched: (kind: 'in' | 'out', at: Date) => void
   /** The server's punch state after any attempt — success or refusal. */
   onState: (s: PunchStateLite) => void
+  /** Sits beside the dial: the day's facts. */
+  beside?: React.ReactNode
 }
 
-export function PunchDial({ data, prefs, hero, onToast, onPunched, onState }: PunchDialProps) {
+export function PunchDial({ data, prefs, hero, onToast, onPunched, onState, beside }: PunchDialProps) {
   const { C, isDark } = useTheme()
   const T = dialTheme(isDark)
   const reduce = useReducedMotion()
@@ -120,7 +122,8 @@ export function PunchDial({ data, prefs, hero, onToast, onPunched, onState }: Pu
   if (outAt && t0?.punch_in) { const ms = outAt.getTime() - new Date(t0.punch_in).getTime(); dayDone = `${Math.floor(ms / 3.6e6)}h ${two(Math.floor(ms / 6e4) % 60)}m` }
 
   return (
-    <View style={{ alignItems: 'center', gap: 10 }}>
+    <View style={{ alignItems: 'center', gap: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: 14 }}>
       <View style={{ width: DIAL, height: DIAL, alignItems: 'center', justifyContent: 'center' }}>
         <Svg width={DIAL} height={DIAL} viewBox="0 0 224 224" style={{ position: 'absolute', left: 0, top: 0 }}>
           <Defs>
@@ -162,18 +165,20 @@ export function PunchDial({ data, prefs, hero, onToast, onPunched, onState }: Pu
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFFFFF' }} />
               <Txt size={8.5} w={700} color={faceSoft} upper>Working</Txt>
             </View>
-            <Txt size={18} w={700} color={faceInk} style={{ fontVariant: ['tabular-nums'] }}>{two(h)}:{two(m)}:{two(s)}</Txt>
-            <Txt size={9.5} w={600} color={faceSoft}>since {fmtClock(inAt, prefs.time_format)}</Txt>
+            <Txt size={16} w={700} color={faceInk} style={{ fontVariant: ['tabular-nums'] }}>{two(h)}:{two(m)}:{two(s)}</Txt>
+            <Txt size={8.5} w={600} color={faceSoft}>since {fmtClock(inAt, prefs.time_format)}</Txt>
           </> : outAt ? <>
             <Txt size={8.5} w={700} color={faceSoft} upper>Day done</Txt>
-            <Txt size={18} w={700} color={faceInk} style={{ fontVariant: ['tabular-nums'] }}>{dayDone}</Txt>
-            <Txt size={9.5} w={600} color={faceSoft}>out at {fmtClock(outAt, prefs.time_format)}</Txt>
+            <Txt size={16} w={700} color={faceInk} style={{ fontVariant: ['tabular-nums'] }}>{dayDone}</Txt>
+            <Txt size={8.5} w={600} color={faceSoft}>out at {fmtClock(outAt, prefs.time_format)}</Txt>
           </> : <>
-            <Txt size={8.5} w={700} color={faceSoft} upper>Not punched in</Txt>
-            <Txt size={17} w={700} color={faceInk} style={{ fontVariant: ['tabular-nums'] }}>{fmtClock(now, prefs.time_format)}</Txt>
-            <Txt size={9.5} w={600} color={faceSoft}>shift {data.shift.start}–{data.shift.end}</Txt>
+            <Txt size={7.5} w={700} color={faceSoft} upper>Not punched in</Txt>
+            <Txt size={15} w={700} color={faceInk} style={{ fontVariant: ['tabular-nums'] }}>{fmtClock(now, prefs.time_format)}</Txt>
+            <Txt size={8.5} w={600} color={faceSoft}>shift {data.shift.start}–{data.shift.end}</Txt>
           </>}
         </View>
+      </View>
+      {!!beside && <View style={{ flex: 1, minWidth: 0 }}>{beside}</View>}
       </View>
 
       {/* Two actions, each its own button. Only the one that applies is live. */}

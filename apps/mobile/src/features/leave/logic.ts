@@ -143,6 +143,42 @@ export function dayRules(data: Payload | null | undefined, today: string): DayRu
   return { holByDate, isWeeklyOff, isNonWorking }
 }
 
+// ── What the attendance record says about a day ────────────────────────────
+/**
+ * The marks the calendar paints, so someone can see what still needs a leave
+ * request. ABSENT and HALF_DAY come straight from /api/ess/attendance; LEAVE and
+ * HALF_LEAVE are approved leave; REQUESTED is a request still waiting.
+ */
+export type DayMark = 'ABSENT' | 'HALF_DAY' | 'LEAVE' | 'HALF_LEAVE' | 'REQUESTED'
+export type DayMarks = Map<string, DayMark>
+export const MARK_WORD: Record<DayMark, string> = {
+  ABSENT: 'Absent', HALF_DAY: 'Half day', LEAVE: 'On leave', HALF_LEAVE: 'Half-day leave', REQUESTED: 'Leave requested',
+}
+
+/** A day's kind (attendance) plus the requests still open (the leave payload). */
+export function dayMarks(days: { date: string; kind: string }[], apps: Application[]): DayMarks {
+  const out: DayMarks = new Map()
+  for (const d of days) {
+    if (d.kind === 'ABSENT' || d.kind === 'HALF_DAY' || d.kind === 'LEAVE' || d.kind === 'HALF_LEAVE') out.set(d.date, d.kind)
+  }
+  // A waiting request outranks ABSENT: the day already has its answer on the way.
+  const seen = new Set(days.map(d => d.date))
+  for (const a of apps) {
+    if (statusKey(a.status) !== 'PENDING') continue
+    const end = a.to_date || a.from_date
+    for (let d = fromIso(a.from_date), k = a.from_date; k <= end; d = addDays(d, 1), k = iso(d)) {
+      if (seen.has(k) && out.get(k) !== 'LEAVE') out.set(k, 'REQUESTED')
+    }
+  }
+  return out
+}
+
+/** The month's exact weekly offs, over the weekday guess used for a past month. */
+export function withMonthOffs(rules: DayRules, offs: Set<string>, monthKey: string, today: string): DayRules {
+  const isWeeklyOff = (key: string) => (key.startsWith(monthKey) && key < today ? offs.has(key) : rules.isWeeklyOff(key))
+  return { ...rules, isWeeklyOff, isNonWorking: key => isWeeklyOff(key) || rules.holByDate.has(key) }
+}
+
 // ── Range estimate — display only ────────────────────────────────────────────
 export interface Estimate { span: number; offs: number; hols: Holiday[]; working: number }
 export function estimateOf(form: LeaveForm, rules: DayRules): Estimate | null {
@@ -170,6 +206,13 @@ export function balanceAfterOf(sel: LeaveType | null, est: Estimate | null): num
 }
 
 // ── Form transitions (pickDay / setStart / setEnd) ───────────────────────────
+/** Leave cannot be filed twice for a day; null means the day is free to pick. */
+export function markedTaken(mark: DayMark | undefined, key: string): string | null {
+  if (mark === 'LEAVE') return `You are already on approved leave on ${dayLong(key)}.`
+  if (mark === 'REQUESTED') return `A leave request for ${dayLong(key)} is already waiting for approval.`
+  return null
+}
+
 /** Tap rule: the one chosen day → clear; nothing chosen or earlier → that day; else extend. */
 export function pickInto(f: LeaveForm, key: string): LeaveForm {
   if (f.from_date === key && f.to_date === key) return { ...f, from_date: '', to_date: '' }
