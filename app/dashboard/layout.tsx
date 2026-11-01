@@ -936,7 +936,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         flex: 1, marginLeft: open ? OPEN_W : SHUT_W,
         transition: `margin-left ${M.slow}`, minWidth: 0,
       }}>
-        {blocked ? <NoAccess module={current as Module} grant={grant} /> : (
+        {blocked ? <NoAccess module={modulesForPath(path)[0] as Module} grant={grant} /> : (
           <>
             {/* A route can take a moment to resolve, and in that gap the old page
                 is still on screen with nothing to say it is working. */}

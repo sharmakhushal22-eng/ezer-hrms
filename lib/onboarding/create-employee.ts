@@ -88,6 +88,16 @@ export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId:
   }
   await supa.from('onboarding_statutory_enrollment').update({ enrolled_at: new Date().toISOString(), enrolled_by: o.by || null }).eq('onboarding_id', o.onboardingId)
 
+  // Pre-joining learning carries over, and onboarding courses follow. Best effort, with a
+  // dynamic import so this path loads nothing of the LMS until it is needed: the employee
+  // record is the outcome here, and the LMS daily job picks up anything this misses.
+  if (sync.employee_id) {
+    try {
+      const { onEmployeeCreated } = await import('@/lib/lms/preboarding')
+      await onEmployeeCreated(o.onboardingId, sync.employee_id)
+    } catch (e: any) { console.warn('lms join hook', e?.message) }
+  }
+
   const scope = await onboardingScope(o.onboardingId).catch(() => ({ companyId: cand.company_id, locationId: null }))
   const companyName = company?.company_name || ''
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.ezerhrms.com'

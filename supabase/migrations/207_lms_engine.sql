@@ -85,6 +85,22 @@ RETURNS SETOF UUID LANGUAGE sql STABLE AS $$
      AND NOT EXISTS (SELECT 1 FROM t WHERE t.exclude AND lms_target_hit(e, t.kind, t.value))
 $$;
 
+-- What the assign form shows before anything is saved. An aggregate, because a SETOF would
+-- be capped at PostgREST's 1,000 rows and a company-wide count would read as exactly 1,000.
+CREATE OR REPLACE FUNCTION lms_audience_preview(p_company UUID, p_targets JSONB, p_joined_since DATE DEFAULT NULL, p_location UUID DEFAULT NULL)
+RETURNS JSONB LANGUAGE sql STABLE AS $$
+  WITH m AS (
+    SELECT e.id, e.emp_code, e.full_name, e.designation, e.location_id
+      FROM employees e
+     WHERE e.id IN (SELECT lms_match_employees(p_company, p_targets, p_joined_since))
+       AND (p_location IS NULL OR e.location_id = p_location)
+  )
+  SELECT jsonb_build_object(
+    'count', (SELECT count(*) FROM m),
+    'sample', COALESCE((SELECT jsonb_agg(x) FROM (SELECT emp_code, full_name, designation FROM m ORDER BY full_name LIMIT 12) x), '[]'::jsonb)
+  )
+$$;
+
 -- Pre-joining candidates have no employee row, so only what is known about them can be
 -- matched: everyone, department or designation.
 CREATE OR REPLACE FUNCTION lms_match_candidates(p_company UUID, p_targets JSONB, p_learner UUID DEFAULT NULL)
@@ -514,6 +530,8 @@ BEGIN
 END $$;
 
 -- The nightly pass. Each step is isolated so one bad assignment cannot stop the rest.
+-- Scheduled publishing is not here: it has to re-run the publish checks, which live in
+-- lib/lms/core.ts, so lib/lms/daily.ts does it first and then calls this.
 CREATE OR REPLACE FUNCTION lms_daily_sweep() RETURNS JSONB
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -525,27 +543,7 @@ DECLARE
   v_lapsed   INTEGER;
   v_left     INTEGER;
   v_retired  INTEGER;
-  v_published INTEGER := 0;
-  v          RECORD;
 BEGIN
-  -- Scheduled publishing.
-  FOR v IN
-    SELECT cv.id, c.created_by_name
-      FROM lms_courses c
-      JOIN lms_course_versions cv ON cv.course_id = c.id AND cv.status IN ('DRAFT','IN_REVIEW')
-     WHERE c.publish_at IS NOT NULL AND c.publish_at <= now() AND c.status <> 'ARCHIVED'
-       -- A scheduled publish must have passed the same checks as a manual one; the
-       -- publish route sets publish_at only after they pass.
-       AND EXISTS (SELECT 1 FROM lms_lessons l WHERE l.version_id = cv.id)
-  LOOP
-    BEGIN
-      PERFORM lms_publish_version(v.id, 'Scheduled publish');
-      v_published := v_published + 1;
-    EXCEPTION WHEN OTHERS THEN
-      v_errors := v_errors || jsonb_build_object('version', v.id, 'error', SQLERRM);
-    END;
-  END LOOP;
-
   -- Course expiry.
   UPDATE lms_courses SET status = 'ARCHIVED', archived_at = now()
    WHERE retire_at IS NOT NULL AND retire_at <= now() AND status = 'PUBLISHED';
@@ -613,7 +611,7 @@ BEGIN
      AND e.status IN ('PENDING_APPROVAL','NOT_STARTED','IN_PROGRESS');
   GET DIAGNOSTICS v_left = ROW_COUNT;
 
-  RETURN jsonb_build_object('assignments_applied', v_applied, 'enrolled', v_enrolled, 'published', v_published,
+  RETURN jsonb_build_object('assignments_applied', v_applied, 'enrolled', v_enrolled,
                             'retired', v_retired, 'renewed', v_renewed, 'lapsed', v_lapsed, 'leavers_closed', v_left,
                             'errors', v_errors);
 END $$;
