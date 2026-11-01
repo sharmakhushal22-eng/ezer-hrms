@@ -332,6 +332,11 @@ describe('course completion', () => {
     const s = courseState(rules(), list, quizzes, map(prog('a', { quiz_passed: true, quiz_best_pct: 60 }), prog('f', { quiz_passed: true, quiz_best_pct: 90 })))
     assert.equal(s.scorePct, 90)
   })
+  it('scores add up even if numerics arrive as strings', () => {
+    const list = [lesson('a', 'm', 0, { quiz_id: 'q1' }), lesson('b', 'm', 1, { quiz_id: 'qf' })]
+    const p = map(prog('a', { quiz_passed: true, quiz_best_pct: '50' as any }), prog('b', { quiz_passed: true, quiz_best_pct: '100' as any }))
+    assert.equal(courseState(rules(), list, quizzes, p).scorePct, 75)
+  })
   it('an empty course never completes', () => {
     assert.equal(courseState(rules(), [], quizzes, new Map()).complete, false)
   })

@@ -395,7 +395,12 @@ export function courseState(
 
   const finals = lessons.filter(l => l.is_final)
   const withQuiz = lessons.filter(l => l.quiz_id)
-  const best = (l: LessonLite) => progress.get(l.id)?.quiz_best_pct ?? null
+  // Number(): Postgres numerics are not guaranteed to arrive as JSON numbers, and adding
+  // two strings would quietly print a score of 7080%.
+  const best = (l: LessonLite) => {
+    const v = progress.get(l.id)?.quiz_best_pct
+    return v == null ? null : Number(v)
+  }
   const scored = (list: LessonLite[]) => list.map(best).filter((n): n is number => n != null)
 
   const finalScores = scored(finals)

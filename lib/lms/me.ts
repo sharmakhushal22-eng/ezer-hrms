@@ -62,6 +62,14 @@ export async function catalogue(l: Learner) {
     l.facts.department_id && ids.length ? peerCounts(l.companyId, l.facts.department_id, ids) : new Map<string, number>(),
     sb.from('lms_paths').select('id, title, summary, order_mode, enrolment_mode, visibility').eq('company_id', l.companyId).eq('status', 'PUBLISHED').eq('visibility', 'EVERYONE'),
   ])
+  const pathRows = ((paths as any).data || []) as any[]
+  const pathIds = pathRows.map(p => p.id)
+  const [{ data: pathItems }, { data: minePaths }] = await Promise.all([
+    pathIds.length ? sb.from('lms_path_items').select('path_id, course_id, position, is_required').in('path_id', pathIds).order('position') : Promise.resolve({ data: [] as any[] }),
+    pathIds.length ? sb.from('lms_path_enrollments').select('path_id, status, progress_pct').in('learner_id', l.allIds).in('path_id', pathIds).in('status', ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED']) : Promise.resolve({ data: [] as any[] }),
+  ])
+  const pathCourseIds = [...new Set((pathItems || []).map((i: any) => i.course_id))]
+  const { data: pathCourses } = pathCourseIds.length ? await sb.from('lms_courses').select('id, title').in('id', pathCourseIds) : { data: [] as any[] }
   const mine = new Map<string, any>()
   for (const e of ((enrols as any).data || []) as any[]) if (!['CANCELLED', 'REJECTED'].includes(e.status) && !mine.has(e.course_id)) mine.set(e.course_id, e)
   const doneSkills = new Set(rows.filter(r => mine.get(r.id)?.status === 'COMPLETED').flatMap(r => r.skills || []))
@@ -72,7 +80,11 @@ export async function catalogue(l: Learner) {
     const score = (r.is_featured ? 3 : 0) + Math.min(3, (peers as Map<string, number>).get(r.id) || 0) + (doneCats.has(r.category_id) && r.category_id ? 1 : 0) + ((r.skills || []).some((s: string) => doneSkills.has(s)) ? 1 : 0)
     return { ...r, thumbnail: thumbs.get(r.thumbnail_asset_id) || null, rating: rs.length ? Math.round((rs.reduce((a: number, b: number) => a + b, 0) / rs.length) * 10) / 10 : null, ratings: rs.length, mine: mine.get(r.id) || null, recommended_score: mine.has(r.id) ? 0 : score }
   })
-  return { courses, categories: (cats as any).data || [], recommended: [...courses].filter(c => c.recommended_score > 0).sort((a, b) => b.recommended_score - a.recommended_score).slice(0, 6), paths: (paths as any).data || [] }
+  return { courses, categories: (cats as any).data || [], recommended: [...courses].filter(c => c.recommended_score > 0).sort((a, b) => b.recommended_score - a.recommended_score).slice(0, 6), paths: pathRows.map(p => ({
+    ...p,
+    mine: (minePaths || []).find((m: any) => m.path_id === p.id) || null,
+    courses: (pathItems || []).filter((i: any) => i.path_id === p.id).map((i: any) => ({ id: i.course_id, title: (pathCourses || []).find((c: any) => c.id === i.course_id)?.title || 'Course', is_required: i.is_required })),
+  })) }
 }
 
 async function peerCounts(company: string, department: string, courseIds: string[]) {

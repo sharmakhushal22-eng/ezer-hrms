@@ -90,7 +90,7 @@ export async function courseGate(e: any, allIds: string[]): Promise<string | nul
   return null
 }
 
-function lessonForClient(l: any, lock: { locked: boolean; reason?: string; unlocksAt?: string } | undefined, p: any, quiz: any, last: string | null, now: number) {
+function lessonForClient(l: any, lock: { locked: boolean; reason?: string; unlocksAt?: string } | undefined, p: any, quiz: any, last: string | null, now: number, openAttempt: boolean) {
   const q = quiz ? quizAvailability(l, quiz, p, last, now) : null
   return {
     id: l.id, module_id: l.module_id, title: l.title, summary: l.summary, kind: l.kind, position: l.position,
@@ -104,6 +104,8 @@ function lessonForClient(l: any, lock: { locked: boolean; reason?: string; unloc
       id: quiz.id, title: quiz.title, instructions: quiz.instructions, pass_pct: quiz.pass_pct, required: l.quiz_required,
       time_limit_minutes: quiz.time_limit_minutes, max_attempts: quiz.max_attempts, gate: q!.gate, attempts_left: q!.attemptsLeft,
       retry_at: q!.retryAt || null, best_pct: p?.quiz_best_pct ?? null, passed: !!p?.quiz_passed, on_exhausted: quiz.on_exhausted,
+      // A paper already open can be resumed, even on the last attempt, whose gate reads LOCKED.
+      open_attempt: openAttempt,
     } : null,
   }
 }
@@ -112,10 +114,11 @@ function lessonForClient(l: any, lock: { locked: boolean; reason?: string; unloc
  *  when a lesson is actually opened. */
 export async function playerView(l: Learner, enrollmentId: string, now = Date.now()) {
   const e = await myEnrollment(l, enrollmentId)
-  const [tree, progress, attempts, { data: course }, feedback] = await Promise.all([
+  const [tree, progress, attempts, opened, { data: course }, feedback] = await Promise.all([
     loadTree(e.version_id),
     loadProgress(e.id),
     sb.from('lms_quiz_attempts').select('lesson_id, submitted_at').eq('enrollment_id', e.id).neq('status', 'IN_PROGRESS').order('submitted_at', { ascending: false }),
+    sb.from('lms_quiz_attempts').select('lesson_id, expires_at').eq('enrollment_id', e.id).eq('status', 'IN_PROGRESS'),
     sb.from('lms_courses').select('id, code, title, summary, description, certificate_enabled').eq('id', e.course_id).single(),
     sb.from('lms_feedback').select('rating, comment').eq('enrollment_id', e.id).maybeSingle(),
   ])
@@ -125,7 +128,9 @@ export async function playerView(l: Learner, enrollmentId: string, now = Date.no
   const quizById = new Map(tree.quizzes.map(q => [q.id, q]))
   const lastByLesson = new Map<string, string>()
   for (const a of (attempts.data || []) as any[]) if (a.submitted_at && !lastByLesson.has(a.lesson_id)) lastByLesson.set(a.lesson_id, a.submitted_at)
-  const lessons = ordered.map(x => lessonForClient(x, locks.get(x.id), pm.get(x.id), x.quiz_id ? quizById.get(x.quiz_id) : null, lastByLesson.get(x.id) || null, now))
+  const openIds = new Set(((opened.data || []) as any[])
+    .filter(a => !a.expires_at || new Date(a.expires_at).getTime() + SUBMIT_GRACE_S * 1000 >= now).map(a => a.lesson_id))
+  const lessons = ordered.map(x => lessonForClient(x, locks.get(x.id), pm.get(x.id), x.quiz_id ? quizById.get(x.quiz_id) : null, lastByLesson.get(x.id) || null, now, openIds.has(x.id)))
   const state = courseState(tree.rules, tree.lessons, quizById, pm)
   const { data: cert } = await sb.from('lms_certificates').select('id, cert_no').eq('enrollment_id', e.id).maybeSingle()
 
@@ -218,6 +223,8 @@ export async function openLesson(l: Learner, enrollmentId: string, lessonId: str
     body: lesson.body, external_url: lesson.external_url, resources,
     position_s: Number(row?.position_s || 0),
     watched_ranges: (row?.watched_ranges || []) as Range[],
+    // What is left of the minimum time, so a return visit does not start the countdown over.
+    dwell_left_s: row?.opened_at ? Math.max(0, Math.ceil(lesson.min_seconds - (now - new Date(row.opened_at).getTime()) / 1000)) : lesson.min_seconds,
   }
 }
 
