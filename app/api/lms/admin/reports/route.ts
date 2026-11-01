@@ -2,16 +2,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { lmsAdmin, readCompanies } from '@/lib/lms/access'
 import { exportXlsx, reportPage, type ReportFilter } from '@/lib/lms/reports'
-import { errorResponse, must, sb } from '@/lib/lms/server'
+import { errorResponse, LmsError, must, sb } from '@/lib/lms/server'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
-  const { actor, error } = await lmsAdmin(req, 'reports')
+  // Assigning people need the enrolment list to act on it. Reports and exports are not theirs.
+  const { actor, error } = await lmsAdmin(req, ['reports', 'assign'])
   if (error) return error
   try {
     const sp = req.nextUrl.searchParams
+    if (!actor.caps.reports && (sp.get('format') === 'xlsx' || sp.get('kind') === 'quizzes')) throw new LmsError('Reports are not part of your access.', 403)
     const f: ReportFilter = {
       companies: await readCompanies(actor, sp.get('company')), location: sp.get('location'), department: sp.get('department'), course: sp.get('course'),
       status: sp.get('status'), mandatory: sp.get('mandatory') === 'true' ? true : sp.get('mandatory') === 'false' ? false : null,

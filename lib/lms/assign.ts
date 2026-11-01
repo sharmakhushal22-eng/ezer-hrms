@@ -147,8 +147,20 @@ async function mailNewEnrolments(assignmentId: string) {
   await sb.from('lms_enrollments').update({ notified_at: new Date().toISOString() }).in('id', ids)
 }
 
-export async function listAssignments(companies: string[]) {
-  const rows = must(await sb.from('lms_assignments').select('*').in('company_id', companies).order('created_at', { ascending: false }).limit(500)) as any[]
+/** Is this assignment inside a branch-limited person's reach? Their own always carry their
+ *  location as a target (scopeTargets), and that is how the rest are told apart. */
+async function assignmentsInBranch(locationId: string, ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set()
+  const { data } = await sb.from('lms_assignment_targets').select('assignment_id').in('assignment_id', ids).eq('kind', 'LOCATION').eq('value', locationId).eq('exclude', false)
+  return new Set((data || []).map((t: any) => t.assignment_id))
+}
+
+export async function listAssignments(a: LmsActor, companies: string[]) {
+  let rows = must(await sb.from('lms_assignments').select('*').in('company_id', companies).order('created_at', { ascending: false }).limit(500)) as any[]
+  if (a.locationId) {
+    const mine = await assignmentsInBranch(a.locationId, rows.map(r => r.id))
+    rows = rows.filter(r => mine.has(r.id))
+  }
   const ids = rows.map(r => r.id)
   if (!ids.length) return []
   const [items, targets] = await Promise.all([
@@ -173,6 +185,7 @@ export async function assignmentAction(a: LmsActor, id: string, action: string, 
   const { data: x } = await sb.from('lms_assignments').select('*').eq('id', id).maybeSingle()
   if (!x) throw notFound('That assignment')
   inScope(a, x.company_id, 'That assignment')
+  if (a.locationId && !(await assignmentsInBranch(a.locationId, [id])).has(id)) throw notFound('That assignment')
   const log = (act: string, detail: Record<string, unknown> = {}) => audit({ companyId: x.company_id, actorId: a.employeeId, actorLabel: a.label, action: act, entity: 'assignment', entityId: id, detail })
   switch (action) {
     case 'pause':
@@ -271,6 +284,33 @@ export async function enrollmentAction(a: LmsActor, id: string, action: string, 
     default:
       throw new LmsError('Unknown action.')
   }
+}
+
+/** The quizzes one person has sat on an enrolment: what they scored and what they have left.
+ *  grant_attempts needs a lesson_id, and report rows carry none. */
+export async function enrollmentQuizzes(a: LmsActor, id: string) {
+  const { data: e } = await sb.from('lms_enrollments').select('id, company_id, learner_id, version_id').eq('id', id).maybeSingle()
+  if (!e) throw notFound('That enrolment')
+  inScope(a, e.company_id, 'That enrolment')
+  if (a.locationId) {
+    const { data: l } = await sb.from('lms_learners').select('employee_id').eq('id', e.learner_id).maybeSingle()
+    const { data: emp } = l?.employee_id ? await sb.from('employees').select('location_id').eq('id', l.employee_id).maybeSingle() : { data: null as any }
+    if (emp?.location_id !== a.locationId) throw notFound('That enrolment')
+  }
+  const [{ data: lessons }, { data: quizzes }, { data: progress }] = await Promise.all([
+    sb.from('lms_lessons').select('id, title, quiz_id, quiz_required').eq('version_id', e.version_id).not('quiz_id', 'is', null),
+    sb.from('lms_quizzes').select('id, title, max_attempts, pass_pct').eq('version_id', e.version_id),
+    sb.from('lms_lesson_progress').select('lesson_id, quiz_passed, quiz_best_pct, attempts_used, extra_attempts').eq('enrollment_id', id),
+  ])
+  const quizBy = new Map((quizzes || []).map((q: any) => [q.id, q]))
+  const progressBy = new Map((progress || []).map((p: any) => [p.lesson_id, p]))
+  return (lessons || []).flatMap((l: any) => {
+    const q: any = quizBy.get(l.quiz_id), p: any = progressBy.get(l.id)
+    // No progress row means they never reached it, and there is nothing to grant on.
+    if (!q || !p) return []
+    const allowed = q.max_attempts == null ? null : q.max_attempts + (p.extra_attempts || 0)
+    return [{ lesson_id: l.id, lesson_title: l.title, quiz_title: q.title, required: l.quiz_required, pass_pct: q.pass_pct, passed: !!p.quiz_passed, best_pct: p.quiz_best_pct, attempts_used: p.attempts_used || 0, attempts_allowed: allowed, locked: allowed != null && !p.quiz_passed && (p.attempts_used || 0) >= allowed }]
+  })
 }
 
 export interface ImportRow { emp_code?: unknown; course_code?: unknown; due_date?: unknown; mandatory?: unknown }

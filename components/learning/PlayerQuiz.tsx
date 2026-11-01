@@ -5,7 +5,7 @@
 // the browser is the learner's own unsent answers (sessionStorage, by attempt), so a refresh
 // mid-paper does not lose them. The review comes back with the result and is held in state.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { C, F, W, S, R, E, Badge, Button, Card, Input, numeric, IconAlert, IconCheck, IconClock, IconClose, IconLock } from '@/lib/ui'
+import { Z, C, F, W, S, R, E, Badge, Button, Card, Input, numeric, IconAlert, IconCheck, IconClock, IconClose, IconLock } from '@/lib/ui'
 import { IconQuiz, ProgressBar, errorWords, plural, timeWords, type PlayerQuiz, type QuizOutcome, type QuizPaper } from './shared'
 
 type Answers = Record<string, string | string[]>
@@ -181,7 +181,7 @@ export function QuizRunner({ paper, onSubmit, onLeave }: { paper: QuizPaper; onS
 
   return (
     <div style={{ display: 'grid', gap: S.md }}>
-      <div className="ezl-quizbar" style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg, boxShadow: E.raised, padding: `${S.sm + 2}px ${S.md}px`, display: 'grid', gap: 8 }}>
+      <div className="ezl-quizbar" style={{ zIndex: Z.raised, background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg, boxShadow: E.raised, padding: `${S.sm + 2}px ${S.md}px`, display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 160px', minWidth: 0 }}>
             <div style={{ fontWeight: W.semi, fontSize: F.body, lineHeight: 1.25 }}>{paper.title}</div>

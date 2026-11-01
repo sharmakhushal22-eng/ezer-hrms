@@ -234,6 +234,14 @@ await t('11 completes the course and receives a certificate, verifiable in publi
   assert.equal(v.status, 'VALID'); assert.equal(v.recipient, 'Dev One')
   assert.ok(!JSON.stringify(v).includes('emp_code') && !JSON.stringify(v).includes('@'))
 })
+await t('   scores are real percentages everywhere they are stored', async () => {
+  const bad = await sql(`SELECT score_pct FROM lms_enrollments WHERE score_pct > 100 OR score_pct < 0`)
+  assert.equal(bad.length, 0, JSON.stringify(bad))
+  const e = (await sql(`SELECT score_pct FROM lms_enrollments WHERE id=$1`, [S.e1]))[0]
+  assert.equal(Number(e.score_pct), 100)
+  const by = (await ok('head', '/api/lms/admin/overview')).overview.by_course.find(c => c.course_id === S.course)
+  assert.ok(Number(by.avg_score) <= 100, `avg ${by.avg_score}`)
+})
 await t('   completion lands on the employee profile too', async () => {
   assert.equal((await sql(`SELECT count(*)::int c FROM employee_trainings WHERE employee_id=$1`, [emp('dev1')]))[0].c, 1)
   assert.equal((await sql(`SELECT count(*)::int c FROM employee_certifications WHERE employee_id=$1`, [emp('dev1')]))[0].c, 1)
@@ -311,6 +319,7 @@ await t('14 a candidate gets limited access through a link and one-time code', a
   assert.ok(list.pending.some(p => p.onboarding_candidate_id === ob))
   const inv = await ok('exec', '/api/lms/admin/preboarding', { action: 'invite', full_name: 'Cara Candidate', email: 'cara@example.test', onboarding_candidate_id: ob, date_of_joining: new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10), department_id: dept('acme', 'eng'), designation: 'Software Engineer', items: [{ course_id: S.c4 }] })
   assert.equal(inv.enrolled, 1)
+  assert.equal((await sql(`SELECT enrolled_count FROM lms_assignments WHERE name='Pre-joining: Cara Candidate'`))[0].enrolled_count, 1)
   S.learner = inv.learner_id
   S.link = inv.link.split('/learn/')[1]
   assert.ok((await sql(`SELECT token_hash FROM lms_candidate_access WHERE learner_id=$1`, [S.learner]))[0].token_hash !== S.link, 'only the hash is stored')
@@ -453,9 +462,9 @@ await t('   an HR Head of another company cannot read this company\'s learners t
   await deny(403, 'bhead', `/api/lms/me/dashboard?employee_id=${emp('dev1')}`)
   await deny(403, 'bhead', `/api/lms/team?employee_id=${emp('lead')}`)
 })
-await t('   a recruiter-style admin with no learning oversight cannot either, but the manager can', async () => {
+await t('   an admin with no learning oversight cannot either, and a manager uses Team, not the portal', async () => {
   await deny(403, 'author', `/api/lms/me/dashboard?employee_id=${emp('dev1')}`)
-  assert.equal((await call('lead', `/api/lms/me/dashboard?employee_id=${emp('dev1')}`)).status, 200)
+  await deny(403, 'lead', `/api/lms/me/dashboard?employee_id=${emp('dev1')}`)
 })
 await t('   viewing a lesson as someone else leaves no mark on their record', async () => {
   const e = await enrolOf('sale1', S.c3)
@@ -471,6 +480,24 @@ await t('   a content author sees how much content exists, and nobody\'s results
 await t('   the course list counts every course, not just the top 25', async () => {
   const c = (await ok('head', '/api/lms/admin/courses')).courses.find(x => x.id === S.c3)
   assert.ok(c.enrolled >= 13, String(c.enrolled))
+})
+await t('   Branch HR cannot see or touch another branch\'s assignment, audit log or people', async () => {
+  const company = await ok('head', '/api/lms/admin/assignments', { items: [{ course_id: S.c2 }], targets: [{ kind: 'EMPLOYEE', value: emp('sale2') }], due_mode: 'NONE', include_completed: true })
+  const list = (await ok('branch', '/api/lms/admin/assignments')).assignments
+  assert.ok(list.length > 0 && !list.some(a => a.id === company.id) && !list.some(a => a.id === S.a1), 'other branches hidden')
+  await deny(404, 'branch', `/api/lms/admin/assignments/${company.id}`, { action: 'cancel' })
+  await deny(403, 'branch', '/api/lms/admin/audit')
+  const certs = (await ok('branch', '/api/lms/admin/certificates')).certificates
+  assert.ok(!certs.some(c => c.recipient_name === 'Dev One'), 'Dev One sits in Pune')
+  const e = (await enrolOf('sale2', S.c3)).id
+  await deny(404, 'branch', `/api/lms/admin/enrollments/${e}`, { action: 'waive', reason: 'x' })
+})
+await t('   a coordinator holding no Reports could still list enrolments to act on, but not export', async () => {
+  await sql(`DELETE FROM role_permissions WHERE module='Learning Reports' AND role_id=(SELECT id FROM ess_roles WHERE role_code='LMS_COORDINATOR')`)
+  assert.equal((await call('coord', '/api/lms/admin/reports')).status, 200)
+  await deny(403, 'coord', '/api/lms/admin/reports?format=xlsx')
+  await deny(403, 'coord', '/api/lms/admin/reports?kind=quizzes')
+  await sql(`INSERT INTO role_permissions (role_id, module, access_level) SELECT id, 'Learning Reports', 'VIEW' FROM ess_roles WHERE role_code='LMS_COORDINATOR'`)
 })
 await t('   the audit log cannot be altered', async () => { await assert.rejects(sql(`DELETE FROM lms_audit_log`), /append-only/) })
 

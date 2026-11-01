@@ -64,8 +64,14 @@ export async function auditTrail(companies: string[], page: number) {
   return must(await sb.from('lms_audit_log').select('*').in('company_id', companies).order('created_at', { ascending: false }).range(from, from + size - 1))
 }
 
-export async function certificatesFor(companies: string[]) {
-  return must(await sb.from('lms_certificates').select('id, company_id, cert_no, recipient_name, title, score_pct, issued_at, expires_at, revoked_at, revoke_reason').in('company_id', companies).order('issued_at', { ascending: false }).limit(500))
+export async function certificatesFor(a: LmsActor, companies: string[]) {
+  let q = sb.from('lms_certificates').select('id, company_id, learner_id, cert_no, recipient_name, title, score_pct, issued_at, expires_at, revoked_at, revoke_reason').in('company_id', companies).order('issued_at', { ascending: false }).limit(500)
+  if (a.locationId) {
+    const { data: emps } = await sb.from('employees').select('id').eq('location_id', a.locationId).in('company_id', companies)
+    const { data: ls } = await sb.from('lms_learners').select('id').in('employee_id', (emps || []).map((e: any) => e.id))
+    q = q.in('learner_id', (ls || []).map((l: any) => l.id))
+  }
+  return must(await q)
 }
 
 export async function revokeCertificate(a: LmsActor, id: string, reason: string) {

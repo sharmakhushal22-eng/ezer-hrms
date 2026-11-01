@@ -159,7 +159,7 @@ const CSS = `
 .ezl-navrow{transition:background .14s ease}
 .ezl-navrow:hover:not(:disabled){background:var(--ez-sunken)}
 .ezl-pdf{max-height:72vh;overflow:auto}
-.ezl-quizbar{position:sticky;top:var(--ezl-top);z-index:2}
+.ezl-quizbar{position:sticky;top:var(--ezl-top)}
 
 @media (max-width:980px){
   .ezl-dash{display:flex;flex-direction:column;align-items:stretch}

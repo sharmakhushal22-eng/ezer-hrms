@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 const uniq = (rows: any[], k: string) => [...new Set(rows.map(r => r[k]).filter((v: any) => v && String(v).trim()))].sort()
 
 export async function GET(req: NextRequest) {
-  const { actor, error } = await lmsAdmin(req, ['assign', 'viewAssignments', 'editContent'])
+  const { actor, error } = await lmsAdmin(req, ['assign', 'viewAssignments', 'editContent', 'reports'])
   if (error) return error
   try {
     const [company] = await readCompanies(actor, req.nextUrl.searchParams.get('company'))

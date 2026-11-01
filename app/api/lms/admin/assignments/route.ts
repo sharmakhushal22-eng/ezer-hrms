@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 export async function GET(req: NextRequest) {
   const { actor, error } = await lmsAdmin(req, 'viewAssignments')
   if (error) return error
-  try { return NextResponse.json({ assignments: await listAssignments(await readCompanies(actor, req.nextUrl.searchParams.get('company'))) }) }
+  try { return NextResponse.json({ assignments: await listAssignments(actor, await readCompanies(actor, req.nextUrl.searchParams.get('company'))) }) }
   catch (e) { return errorResponse(e) }
 }
 

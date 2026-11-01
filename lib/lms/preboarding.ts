@@ -24,32 +24,39 @@ const mask = (e: string | null) => {
 }
 
 /** Everyone HR could invite: those in onboarding, and accepted offers not there yet. */
-export async function listCandidates(companies: string[]) {
+export async function listCandidates(companies: string[], locationId: string | null = null) {
   const [{ data: ob }, joiners, learners] = await Promise.all([
-    sb.from('onboarding_candidates').select('id, candidate_id, company_id, full_name, email, designation, department_id, date_of_joining, status').in('company_id', companies).order('date_of_joining', { ascending: true }).limit(500),
+    sb.from('onboarding_candidates').select('id, candidate_id, company_id, location_id, full_name, email, designation, department_id, date_of_joining, status').in('company_id', companies).order('date_of_joining', { ascending: true }).limit(500),
     loadJoiners(sb).catch(() => ({ joiners: [] as any[] })),
     sb.from('lms_learners').select('id, full_name, email, kind, status, onboarding_candidate_id, recruit_candidate_id, date_of_joining, designation, company_id, converted_at').in('company_id', companies).or('kind.eq.CANDIDATE,converted_at.not.is.null').limit(1000),
   ])
-  const ls = (learners.data || []) as any[]
-  const ids = ls.map(l => l.id)
+  // A branch-limited person sees joiners of their branch. A candidate with no location on
+  // record can only be someone they invited themselves, so those rest on invited_by below.
+  const inBranch = (obId: string | null) => !locationId || (ob || []).some((c: any) => c.id === obId && c.location_id === locationId)
+  const allLearners = (learners.data || []) as any[]
+  const ids = allLearners.map(l => l.id)
   const [{ data: access }, { data: enrols }] = await Promise.all([
-    ids.length ? sb.from('lms_candidate_access').select('learner_id, invited_at, last_login_at, token_expires_at, revoked_at').in('learner_id', ids) : Promise.resolve({ data: [] as any[] }),
+    ids.length ? sb.from('lms_candidate_access').select('learner_id, invited_at, invited_by_name, last_login_at, token_expires_at, revoked_at').in('learner_id', ids) : Promise.resolve({ data: [] as any[] }),
     ids.length ? sb.from('lms_enrollments').select('learner_id, status').in('learner_id', ids).not('status', 'in', '(CANCELLED,REJECTED)') : Promise.resolve({ data: [] as any[] }),
   ])
+  const ls = locationId
+    ? allLearners.filter(l => inBranch(l.onboarding_candidate_id))
+    : allLearners
   const invited = ls.map(l => {
     const acc = (access || []).find((a: any) => a.learner_id === l.id)
     const mine = (enrols || []).filter((e: any) => e.learner_id === l.id)
     return { ...l, invited_at: acc?.invited_at || null, last_login_at: acc?.last_login_at || null, token_expires_at: acc?.token_expires_at || null, revoked_at: acc?.revoked_at || null, assigned: mine.length, completed: mine.filter((e: any) => e.status === 'COMPLETED').length }
   })
-  const has = (onb?: string | null, rec?: string | null) => ls.some(l => (onb && l.onboarding_candidate_id === onb) || (rec && l.recruit_candidate_id === rec))
+  const has = (onb?: string | null, rec?: string | null) => allLearners.some(l => (onb && l.onboarding_candidate_id === onb) || (rec && l.recruit_candidate_id === rec))
   const pending: any[] = []
   for (const c of (ob || []) as any[]) {
-    if (CLOSED.includes(c.status) || has(c.id, c.candidate_id)) continue
+    if (CLOSED.includes(c.status) || has(c.id, c.candidate_id) || !inBranch(c.id)) continue
     pending.push({ source: 'ONBOARDING', onboarding_candidate_id: c.id, recruit_candidate_id: c.candidate_id, company_id: c.company_id, full_name: c.full_name, email: c.email, designation: c.designation, department_id: c.department_id, date_of_joining: c.date_of_joining })
   }
   const inOb = new Set((ob || []).map((c: any) => c.candidate_id).filter(Boolean))
   for (const j of (joiners.joiners || []) as any[]) {
     if (!j.companyId || !companies.includes(j.companyId) || inOb.has(j.cand.id) || has(null, j.cand.id)) continue
+    if (locationId && j.mrf?.location_id !== locationId) continue
     pending.push({ source: 'OFFER', onboarding_candidate_id: null, recruit_candidate_id: j.cand.id, company_id: j.companyId, full_name: j.cand.full_name, email: j.cand.email, designation: j.role, department_id: j.mrf?.department_id || null, date_of_joining: j.doj })
   }
   return { invited, pending }
@@ -112,8 +119,9 @@ export async function inviteCandidate(a: LmsActor, company: string, b: any) {
       company_id: company, name: `Pre-joining: ${name}`, trigger_type: 'ONCE', mandatory: b?.mandatory ?? true, due_mode: b?.date_of_joining ? 'BEFORE_JOIN' : 'AFTER_ASSIGN', due_days: b?.date_of_joining ? 1 : s.default_due_days, created_by_id: a.employeeId, created_by_name: a.label, last_applied_at: new Date().toISOString(),
     }).select('id').single()) as any
     must(await sb.from('lms_assignment_items').insert(items.map((i: any, n: number) => ({ company_id: company, assignment_id: asg.id, course_id: i.course_id || null, path_id: i.path_id || null, position: n }))).select('id'))
-    const n = must(await sb.rpc('lms_enrol_learners', { p_assignment: asg.id, p_learners: [learnerId] }))
-    enrolled += Number(n) || 0
+    const n = Number(must(await sb.rpc('lms_enrol_learners', { p_assignment: asg.id, p_learners: [learnerId] }))) || 0
+    if (n) await sb.from('lms_assignments').update({ enrolled_count: n }).eq('id', asg.id)
+    enrolled += n
   }
   const sent = await mailInvite({ full_name: name, email }, company, link, expires)
   await audit({ companyId: company, actorId: a.employeeId, actorLabel: a.label, action: 'CANDIDATE_INVITED', entity: 'learner', entityId: learnerId, detail: { enrolled, mailed: !!(sent as any).sent } })
@@ -126,6 +134,12 @@ async function candidateOf(a: LmsActor, learnerId: string) {
   const { data: l } = await sb.from('lms_learners').select('*').eq('id', learnerId).maybeSingle()
   if (!l || l.kind !== 'CANDIDATE') throw notFound('That candidate')
   inScope(a, l.company_id, 'That candidate')
+  if (a.locationId) {
+    const { data: ob } = l.onboarding_candidate_id
+      ? await sb.from('onboarding_candidates').select('location_id').eq('id', l.onboarding_candidate_id).maybeSingle()
+      : { data: null as any }
+    if (ob?.location_id !== a.locationId) throw notFound('That candidate')
+  }
   return l
 }
 
